@@ -12,8 +12,8 @@ had motivations that could not move it.
 
 This module closes that loop. :class:`DriveBiasedActionSelectionPolicy`
 subsumes the default user-communication handling and, additionally, turns a
-drive crossing that reached the (non-inhibited) conscious coalition into an
-intent — the paper's framing that executive inhibition is what "prevents the
+drive crossing that reached the (non-inhibited) accessed coalition into an
+intent - the paper's framing that executive inhibition is what "prevents the
 system from acting on every impulse" (§37): a drive crossing is an impulse,
 and only one that was *selected* into the coalition and *not inhibited* can
 move the entity.
@@ -31,7 +31,7 @@ Guards (all inherited from the executive design, never bypassing it):
     social-drive initiative (the single speak answers the user).
   - Separate one-in-flight guards for ``speak`` and ``think`` prevent storms;
     each clears when the entity's corresponding own output
-    (``lingua.external`` / ``lingua.internal``) next becomes conscious, reusing
+    (``lingua.external`` / ``lingua.internal``) next is accessed, reusing
     the keystone's realization-observed pattern.
   - The entity never responds to its own output (source ``lingua``).
 
@@ -105,16 +105,16 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
             self._think_armed_at = now
 
     def _clear_guards_on_own_output(self, snapshot: WorkspaceSnapshot) -> None:
-        """Clear each guard when the entity's matching output is now conscious.
+        """Clear each guard when the entity's matching output is now accessed.
 
         ``lingua.external`` realizes a prior ``speak``; ``lingua.internal``
         realizes a prior ``think``. We key on the event *type* (channel) rather
         than just the source so a private monologue does not spuriously clear
         the external-speech guard, and vice versa.
         """
-        # C3 belt-and-suspenders: refractory-scaled guard timeouts — a guard
+        # C3 belt-and-suspenders: refractory-scaled guard timeouts - a guard
         # armed longer than the window without the entity's matching output
-        # becoming conscious is cleared, so a failed realization cannot
+        # being accessed is cleared, so a failed realization cannot
         # permanently mute the entity through the drive policy.
         self._apply_guard_timeouts()
         for _, event in snapshot.selected_events:
@@ -168,7 +168,7 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
 
     def __call__(self, snapshot: WorkspaceSnapshot) -> list[Intent]:
         # Realization-observed: clear the speak/think guards independently when
-        # the corresponding own output becomes conscious.
+        # the corresponding own output is accessed.
         self._clear_guards_on_own_output(snapshot)
 
         intents: list[Intent] = []

@@ -257,6 +257,7 @@ async def test_disabled_warmup_accrues_full_fatigue(bus: AsyncBus):
     # Full accrual crosses the threshold.
     assert soma_off._fatigue.value >= soma_off._fatigue.threshold
     assert await _events_on(bus, "soma.fatigue")
+    assert all(e.payload["alert"] is True for e in await _events_on(bus, "soma.fatigue"))
     # No warm-up markers when disabled.
     assert not await _events_on(bus, "soma.warmup.started")
     reports = await _events_on(bus, "soma.report")

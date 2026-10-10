@@ -380,7 +380,7 @@ class Thymos(BaseModule):
         for crossing in crossings:
             await self.publish(
                 "thymos.drive",
-                {"drive": crossing.name, "value": crossing.value},
+                {"drive": crossing.name, "value": crossing.value, "alert": True},
                 salience=self._alert_salience,
             )
         adj = await self._regulation.suggest(self._state)
@@ -406,6 +406,7 @@ class Thymos(BaseModule):
                 "thymos.emotion",
                 {
                     "emotion": emotion.value,
+                    "alert": emotion != CategoricalEmotion.NEUTRAL,
                     "scores": scores.as_tuple(),
                     "state": self._state.to_dict(),
                     # norm_compatibility is hardcoded 0.0 until Eidolon norm
@@ -814,6 +815,7 @@ class Thymos(BaseModule):
                 "drives": self._drives.to_dict(),
                 "emotion": self._last_emotion.value,
                 "reset": True,
+                "alert": True,
             },
             salience=self._alert_salience,
         )

@@ -13,9 +13,9 @@ in :mod:`kaine.lifecycle.decommission`.
 
 The flow implements the CAL Article 4.2 care duties ("Do Not Shut Them Down
 Without Care") and 4.3 (privacy). It mirrors the cycle's operator-present env
-gate. Copy is firm and factual about the duties and options — never shaming.
+gate. Copy is firm and factual about the duties and options - never shaming.
 The gate is intentionally bypassable; there is no anti-tamper and no operator
-monitoring (that would violate the privacy/sovereignty ethos).
+monitoring (that would violate privacy).
 
 Exit codes
 ----------

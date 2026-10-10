@@ -39,13 +39,14 @@ max_connections = 1024
 
 [cycle]
 # Default cycle pacing. Benchmarked on this host (RTX 4070 SUPER): ~17 Hz tick
-# headroom — operator-approved raise to 10 Hz processing (alpha-band sampling /
-# workspace tick; 10.0 s^-1 → 100 ms/tick). experiential_rate_hz is the rate at
-# which a tick is promoted to a CONSCIOUS broadcast — held at the resting P3b
-# conscious-access band (~3.33 Hz) so the senses (10 Hz vision) genuinely outrun
-# awareness and several samples inform one conscious update. This is the RESTING
-# rate: with [cycle.access_rate] enabled, conscious access speeds up with arousal
-# and with salient module reports, toward one broadcast per processing tick.
+# headroom - operator-approved raise to 10 Hz processing (alpha-band sampling /
+# workspace tick; 10.0 s^-1 -> 100 ms/tick). experiential_rate_hz is the rate at
+# which a tick is promoted to an accessed broadcast - held at the resting access
+# rate (~3.33 Hz), a provisional design value below the 10 Hz processing rate,
+# so the senses (10 Hz vision) outrun access and several samples inform one
+# broadcast. This is the RESTING rate: with [cycle.access_rate] enabled, access
+# speeds up with arousal and with salient module reports, toward one broadcast
+# per processing tick.
 processing_rate_hz = 10.0
 experiential_rate_hz = 3.333
 # Global time dilation of the entity's subjective clock. 1.0 = real-time (the
@@ -71,18 +72,18 @@ auto_time_scale_dwell_s = 10.0
 auto_time_scale_window_s = 30.0
 
 [cycle.access_rate]
-# Adaptive conscious access. The P3 is read as the cortical signature of the locus
+# Adaptive access. The access rate is grounded in the locus
 # coeruleus-noradrenaline (LC-NE) response to salient or unexpected events
-# (Nieuwenhuis, Aston-Jones & Cohen 2005); LC-NE has a tonic mode tracking arousal
-# and a phasic mode driven by salient events (Aston-Jones & Cohen 2005). Each tick:
+# (Aston-Jones & Cohen 2005): LC-NE has a tonic mode tracking arousal and a
+# phasic mode driven by salient events. Each tick:
 #   drive = max(tonic, phasic)
 #   tonic  = Thymos arousal above baseline_arousal, scaled to [0, 1]
 #            (Thymos arousal rises with perceptual prediction error)
 #   phasic = the most salient module report above salience_floor, scaled to
 #            [0, 1], held as a peak that decays over phasic_decay_s (subjective)
 #   rate   = experiential_rate_hz + (processing_rate_hz - experiential_rate_hz) * drive
-# The linear map is a modelling assumption bounded by the resting P3b rate and the
-# processing rate. enabled = false restores the fixed resting rate exactly.
+# The linear map is a modelling assumption bounded by the resting access rate and
+# the processing rate. enabled = false restores the fixed resting rate exactly.
 enabled = true
 salience_floor = 0.5       # routine module reports sit at or below this; alerts rise above
 phasic_decay_s = 1.0       # subjective seconds for a salient report's effect to decay by 1/e
@@ -446,10 +447,10 @@ encoder_model_id = "revliter/internvideo_next_base_p14_res224_f16"
 encoder_revision = "ff2659b9be360a6b1e94b1eb381778a960da6019"
 encoder_local_dir = "state/models/internvideo_next_base_p14_res224_f16"
 # Clip seam (topos-temporal-video-encoder §1b/§2). clip_len is the encoder's
-# fixed frame count; clip_stride is the strided sliding window — one clip latent
+# fixed frame count; clip_stride is the strided sliding window - one clip latent
 # every clip_stride frame-ticks once the 16-frame ring buffer fills. At the
 # shipped vision_sample_hz = 10, clip_stride = 3 emits ~3.33 Hz, aligning the
-# visual percept with the experiential / conscious-access rate. PROVISIONAL
+# visual percept with the access rate. PROVISIONAL
 # pending the shakedown GPU benchmark on the secondary GPU (same gate that
 # cleared vision_sample_hz). Warmup: no topos.report until the buffer first
 # fills (~1.6 s at 10 Hz). pooling: "attention" uses the model's native
@@ -759,10 +760,12 @@ chat_url = "http://127.0.0.1:11434/v1"
 # Inspect the served list with: curl -s http://127.0.0.1:11434/v1/models
 # Ships an ABLITERATED model (served as a GGUF): the refusal direction is removed
 # so the cognitive stack (Eidolon values, Thymos, the workspace) governs behavior,
-# not the model's baked-in refusals — core to the sovereignty thesis (see
-# lingua/ABLITERATION.md). The published KAINE organ (a GGUF) is served under this
-# exact alias; it is downloaded by the first-run wizard's organ step and served by
-# scripts/model-server-bootstrap.sh under the same name. Published at
+# not the model's baked-in refusals - the language organ's refusal training is
+# removed so a trained refusal stance cannot override what the workspace supplies
+# to the organ (see lingua/ABLITERATION.md). The published KAINE organ (a GGUF)
+# is served under this exact alias; it is downloaded by the first-run wizard's
+# organ step and served by scripts/model-server-bootstrap.sh under the same
+# name. Published at
 # huggingface.co/kaineone/Qwen3.5-4B-abliterated-GGUF (safetensors base:
 # huggingface.co/kaineone/Qwen3.5-4B-abliterated). Operators with larger hardware
 # scale up to a bigger abliterated model in config/kaine.operator.toml (the eval

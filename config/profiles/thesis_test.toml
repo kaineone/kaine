@@ -84,7 +84,7 @@ temperature = 0.0
 
 [volition]
 # Self-initiated voice: speech comes from the entity's OWN precision-weighted
-# surprise (a report threshold above the conscious threshold, novelty- and
+# surprise (a report threshold above the access threshold, novelty- and
 # refractory-gated), never from a user utterance. No chatbot trigger.
 policy = "self_initiated_report"
 drive_initiative = false
