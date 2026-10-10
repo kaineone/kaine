@@ -24,12 +24,12 @@ def _refusal_rows() -> dict[str, str]:
 def test_refusal_table_keeps_2_and_5_and_adds_6():
     rows = _refusal_rows()
     assert rows["2"] == (
-        "| `2` | Operator-present gate: neither `KAINE_CYCLE_OPERATOR_PRESENT=1` "
-        "nor research mode |"
+        "| `2` | Operator-present gate: none of `KAINE_CYCLE_OPERATOR_PRESENT=1`, "
+        "research mode or unattended mode |"
     )
     assert rows["5"] == (
         "| `5` | Research safety net not live and verified "
-        "(one or more of the five conditions failed) |"
+        "(one or more of the six conditions failed) |"
     )
     assert "unattended" in rows["6"].lower()
     # The organ content gate and the individuation refusal have their own codes.
