@@ -40,6 +40,18 @@ This page shows the engineering work in flight, the operator and on-device steps
 | thymos-rate-invariant-timely-state | 6/6 (100%) | Make Thymos's appraisal independent of the broadcast rate and its published state timely. |
 | thymos-research-affect | 13/13 (100%) | Setpoint drive dynamics with relief, grounded in the affect literature. |
 | topos-tile-precision-real-clips | 5/5 (100%) | Per-tile precision in Topos's spatial saliency, tested on real clips. |
+| broadcast-context | 6/7 (86%) | Broadcast context for Topos, Audition and Soma, with a null context and a per-report information gain. |
+| gestation-progress-persists | 4/4 (100%) | Gestation progress persists across restarts. |
+| ignition-first-round-six | 3/3 (100%) | The module-addition study's first round adds six held modules by default. |
+| categorical-alerts-all-modules | 2/2 (100%) | Every module's alert-level events count as categorical alerts for the access rate. |
+| sleep-pauses-feed | 3/3 (100%) | Sleep pauses the perceptual feed for its whole duration. |
+| familiarity-and-reply-window | 4/4 (100%) | Familiarity reaches Thymos's coupling; Lingua accepts the reply-window key. |
+| access-wording-in-code | 2/2 (100%) | Code comments use the paper's access terms. |
+| context-age-from-publication | 4/4 (100%) | Context age is entity time since the broadcast's publication. |
+| research-log-access-fields | 4/4 (100%) | The research log carries the access and context fields the planned test reads. |
+| awake-time-excludes-sleep | 4/4 (100%) | Awake time excludes sleep as well as freezes. |
+| gestation-progress-in-bundles | 3/3 (100%) | Gestation progress travels in preservation bundles. |
+| footprint-test-spawn-timeout | 1/1 (100%) | Give the footprint test's spawned child time to report. |
 
 ## Open operator and device steps
 
@@ -60,7 +72,7 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 34 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 46 active changes, 268 archived changes and 104 capability specs.
 
 The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 
