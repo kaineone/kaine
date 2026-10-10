@@ -136,6 +136,8 @@ class Syneidesis:
         ranked = sorted(scored, key=lambda item: item[0], reverse=True)
         top = ranked[: self._top_k]
         top_score = top[0][0] if top else 0.0
+        # Modules need the threshold to decide which coalition members were accessed.
+        metadata = {**metadata, "access_threshold": self._threshold}
         return WorkspaceSnapshot(
             tick_index=tick_index,
             selected_events=[(entry_id, event) for (_, entry_id, event) in top],
