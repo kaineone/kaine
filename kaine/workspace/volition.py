@@ -3,10 +3,10 @@
 
 """Executive action selection ("Volition").
 
-KAINE's global workspace (Syneidesis) decides *what is conscious* and flags
+KAINE's global workspace (Syneidesis) decides *what is accessed* and flags
 executive inhibition (`WorkspaceSnapshot.inhibited`) when the winning coalition
 fails to clear the publication threshold. Per the paper (§37, §147) a winning
-coalition must clear that threshold *before reaching the action layer* — "the
+coalition must clear that threshold *before reaching the action layer* - "the
 system can consider speaking and decide that silence is the better choice."
 
 This module is that action layer. Each experiential tick the cognitive cycle
@@ -87,7 +87,7 @@ class Intent:
     """An explicit decision to act, produced by action selection.
 
     ``kind`` is one of ``speak`` / ``think`` / ``act``. ``about`` references the
-    conscious content the intent concerns: a short textual summary the realizing
+    accessed content the intent concerns: a short textual summary the realizing
     effector can use as a prompt. ``entry_id`` carries the broadcast entry id of
     the referenced coalition member when there is one (for audit/traceability).
     For ``act`` intents, ``effector`` names the Praxis effector and ``params``
@@ -190,8 +190,8 @@ class DefaultActionSelectionPolicy:
     """
 
     # C3: refractory-scaled guard timeout (6x the report speak refractory of
-    # 8s ~= 48s) — a speak guard armed this long without the entity's own
-    # output becoming conscious is cleared, so a failed realization cannot
+    # 8s ~= 48s) - a speak guard armed this long without the entity's own
+    # output being accessed is cleared, so a failed realization cannot
     # permanently mute the entity.
     _GUARD_TIMEOUT_S = 48.0
 
@@ -286,7 +286,7 @@ class DefaultActionSelectionPolicy:
                 self._speak_armed_at = float("-inf")
                 break
         # C3 belt-and-suspenders: a guard armed longer than the timeout window
-        # without the entity's own output becoming conscious is cleared, so a
+        # without the entity's own output being accessed is cleared, so a
         # failed realization (LLM error, dead organ) can never permanently
         # mute the entity. Uses the injected clock (subjective time in tests).
         if (

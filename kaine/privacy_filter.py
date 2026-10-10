@@ -83,8 +83,8 @@ CONTENT_FIELDS: frozenset[str] = frozenset(
         # Retired field removed: Nous no longer emits the pre-pymdp-swap field.
         "transcription",
         # Lingua's external-speech events carry these for the A/B evaluation
-        # observers (raw bus access). They are content — the triggering user
-        # utterance and the rendered conscious-workspace block — so they must be
+        # observers (raw bus access). They are content - the triggering user
+        # utterance and the rendered workspace-access block - so they must be
         # scrubbed from the diagnostics surface.
         "user_input",
         "faithful_rendering",

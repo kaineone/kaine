@@ -4,7 +4,7 @@
 """Nous proposal realization for Volition.
 
 This module implements the Volition side of ``nous-drives-action``: a policy
-wrapper that considers the most salient ``nous.proposal`` in the conscious
+wrapper that considers the most salient ``nous.proposal`` in the accessed
 coalition and, when appropriate, emits an intent with ``origin: "nous"``. For
 every proposal it sees it records a content-free outcome payload that Volition
 publishes to ``volition_feedback.out`` so Nous can learn from what actually
@@ -45,7 +45,7 @@ THYMOS_DRIVE_TYPE = "thymos.drive"
 
 
 class NousProposalSource:
-    """Policy wrapper that realizes conscious Nous proposals.
+    """Policy wrapper that realizes accessed Nous proposals.
 
     Runs the wrapped ``inner`` policy first. For each kind the wrapped policy
     guards itself (it exposes ``<kind>_in_flight`` and implements

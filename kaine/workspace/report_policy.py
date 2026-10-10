@@ -6,13 +6,13 @@
 The default policy answers a *user utterance*; the drive-biased policy adds
 *drive*-initiated intents. Both need something external (a transcript) or Thymos
 to move the entity. The base-thesis configuration has neither — no chatbot input
-path, Thymos gated off — so nothing would make the entity speak.
+path, Thymos gated off - so nothing would make the entity speak.
 
 This policy closes that without any input trigger: the entity reports **its own
-state**. It treats "worth saying" as a higher bar than "conscious" — a report
-threshold ABOVE the workspace publication (conscious) threshold — driven by the
+state**. It treats "worth saying" as a higher bar than "access" - a report
+threshold ABOVE the workspace publication (access) threshold - driven by the
 coalition's own precision-weighted surprise (the top selected member's precision-
-weighted prediction error expressed as salience). Consciousness at 3-10 Hz is far
+weighted prediction error expressed as salience). Workspace access at 3-10 Hz is far
 broader than report; only a rare, high-surprise, novel coalition crosses into
 external speech.
 
@@ -53,9 +53,9 @@ class SelfInitiatedReportPolicy:
 
     ``report_threshold`` / ``think_threshold`` are the two report bars; both should
     sit ABOVE the workspace publication threshold so report is rarer than
-    consciousness. ``interrupt_threshold`` (optional, strictly above the report
+    workspace access. ``interrupt_threshold`` (optional, strictly above the report
     bar) is a third, higher bar: a coalition crossing it while a ``speak`` is in
-    flight — with different content from what is being said — emits a preempting,
+    flight - with different content from what is being said - emits a preempting,
     interrupt-marked ``speak`` that redirects the utterance mid-stream. Absent, an
     in-flight utterance always runs to completion (opt-in interruption).
     ``*_refractory_s`` are minimum intervals between reports, read off the injected
@@ -65,7 +65,7 @@ class SelfInitiatedReportPolicy:
     """
 
     # C3: the same guard timeout as the default and drive policies. A guard
-    # armed this long without the entity's matching output becoming conscious
+    # armed this long without the entity's matching output being accessed
     # is cleared, so a failed realization cannot permanently mute the entity.
     _GUARD_TIMEOUT_S = 48.0
 
@@ -175,7 +175,7 @@ class SelfInitiatedReportPolicy:
         return getattr(event, "source", None) == OWN_EXTERNAL_SPEECH_SOURCE
 
     def _clear_guards_on_own_output(self, snapshot: WorkspaceSnapshot) -> None:
-        """Clear each guard when the entity's matching output is now conscious —
+        """Clear each guard when the entity's matching output is now accessed -
         ``lingua.external`` realizes a prior ``speak``, ``lingua.internal`` a prior
         ``think`` (keyed on channel so one does not clear the other)."""
         for _, event in snapshot.selected_events:
@@ -189,7 +189,7 @@ class SelfInitiatedReportPolicy:
                 self._think_armed_at = float("-inf")
 
         # C3 belt-and-suspenders: a guard armed longer than the timeout window
-        # without the entity's own output becoming conscious is cleared, so a
+        # without the entity's own output being accessed is cleared, so a
         # failed realization (LLM error, dead organ) can never permanently
         # mute the entity. Uses the wall-time guard_clock so a failed
         # realization recovers after real seconds.
