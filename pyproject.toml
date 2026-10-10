@@ -8,7 +8,7 @@ version = "26.06.0a1"
 description = "Kaine Autonomous Intelligent Networked Entity — composite cognitive architecture"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { file = "LICENSE.md" }  # SPDX identifier: LicenseRef-CAL-0.2 (custom entity-welfare copyleft, draft)
+license = { file = "LICENSE.md" }  # SPDX identifier: LicenseRef-CAL-0.4 (custom entity-welfare copyleft, draft)
 authors = [{ name = "KAINE contributors" }]
 dependencies = [
     "redis>=8.1.0,<9",

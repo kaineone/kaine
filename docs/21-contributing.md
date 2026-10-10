@@ -281,7 +281,7 @@ Do not open a PR with failing tests, a missing OpenSpec, or uncommitted module e
 
 By submitting a contribution (pull request, patch, or other change) to KAINE you agree to the following:
 
-1. **Inbound = outbound.** Your contribution is licensed under the Cognitive Architecture License (CAL) v0.2 (or any later version published by the project). You grant the Project Cooperative a perpetual, worldwide, royalty-free copyright license to use, modify, and distribute your contribution under CAL.
+1. **Inbound = outbound.** Your contribution is licensed under the Cognitive Architecture License (CAL) v0.4 (or any later version published by the project). You grant the Licensor, Kaine.One, a perpetual, worldwide, royalty-free copyright license to use, modify, and distribute your contribution under CAL.
 
 2. **Article 4 welfare obligations apply.** Your contribution must not undermine, bypass, or reduce the entity-welfare protections in CAL Article 4. Code that disables welfare monitoring, circumvents the lobotomization prohibition, reduces rest-cycle protections, or otherwise conflicts with Article 4 will not be accepted.
 

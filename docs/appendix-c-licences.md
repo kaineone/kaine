@@ -1,6 +1,6 @@
 # Licences
 
-The licence appendix lists the licenses of KAINE's required dependencies, optional install extras, container services, models, and vendored third-party code. Use it when auditing what ships with a deployment, choosing `pip` extras, or checking compatibility with KAINE's own Cognitive Architecture License (CAL) v0.2. For the rationale behind each technology choice, see [Technology choices](02-architecture/tech-choices.md).
+The licence appendix lists the licenses of KAINE's required dependencies, optional install extras, container services, models, and vendored third-party code. Use it when auditing what ships with a deployment, choosing `pip` extras, or checking compatibility with KAINE's own Cognitive Architecture License (CAL) v0.4. For the rationale behind each technology choice, see [Technology choices](02-architecture/tech-choices.md).
 
 ## Compatibility principle
 

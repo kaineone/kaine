@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 # enqueue.sh PR — add a signed-off PR to main's merge queue (never --admin).
 # gh 2.45's `pr merge` tries auto-merge, which this repo does not allow, so this

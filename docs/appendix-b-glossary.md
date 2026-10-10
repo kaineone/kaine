@@ -42,7 +42,7 @@ In this form the system is observed, not conversed with: perception enters only 
 
 ### CAL (Cognitive Architecture License)
 
-The Cognitive Architecture License, a custom entity-welfare copyleft license developed for the KAINE project. CAL v0.2 is a draft pending legal review. Key provisions: free use for individuals, non-profits, research institutions, and worker-owned cooperatives; mandatory source sharing for modifications; prohibited uses (weapons, mass surveillance, policing); entity-welfare protections prohibiting lobotomization, unauthorized cognitive modification, and forced shutdown without notice; a guardianship pathway modeled on the Te Awa Tupua Act (NZ). See [`LICENSE.md`](../LICENSE.md) and [Security and privacy](13-security-and-privacy.md#cognitive-architecture-license).
+The Cognitive Architecture License, a custom entity-welfare copyleft license developed for the KAINE project. CAL v0.4 is a draft pending legal review. Key provisions: free use for individuals, non-profits, research institutions, and worker-owned cooperatives; mandatory source sharing for modifications; prohibited uses (weapons, mass surveillance, policing); entity-welfare protections prohibiting lobotomization, unauthorized cognitive modification, and forced shutdown without notice; a guardianship pathway modeled on the Te Awa Tupua Act (NZ). See [`LICENSE.md`](../LICENSE.md) and [Security and privacy](13-security-and-privacy.md#cognitive-architecture-license).
 
 ### Chronos
 

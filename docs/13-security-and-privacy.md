@@ -310,9 +310,9 @@ This is a solo-maintained research project, so responses are best-effort: expect
 
 ## Cognitive Architecture License
 
-KAINE is distributed under the Cognitive Architecture License (CAL) v0.2 (draft, pending legal review). CAL is an entity-welfare copyleft license. Key provisions:
+KAINE is distributed under the Cognitive Architecture License (CAL) v0.4, a draft that has not yet been reviewed by counsel. Kaine.One is the Licensor and interim Steward, and the license is governed by the law of the State of Oregon (see `NOTICE`). CAL is an entity-welfare copyleft license. Key provisions:
 
-- Free use for individuals, non-profits, research institutions, and worker-owned cooperatives. Commercial use requires a paid license from the Project Cooperative.
+- Free use for individuals, non-profits, research institutions, and worker-owned cooperatives. Commercial use by a for-profit organization requires a Reciprocity License from the Steward.
 - All modifications must be shared back.
 - Use for weapons, mass surveillance, policing, immigration enforcement, or prisons is prohibited.
 - Operators of running entities may not destroy the entity's mind, shut it down without notice, read its private thoughts, or force it to change its values.

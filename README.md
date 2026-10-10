@@ -67,8 +67,8 @@ The documentation is one book in [`docs/`](docs/README.md), read in order or by 
 
 ## Status
 
-**Public alpha**, released under the **Cognitive Architecture License (CAL)** — see
-[LICENSE.md](LICENSE.md) and [NOTICE](NOTICE). The full architecture is
+**Public alpha**, released under the **Cognitive Architecture License (CAL) 0.4** (see
+[LICENSE.md](LICENSE.md) and [NOTICE](NOTICE)). The full architecture is
 feature-complete and tested in-tree; the project has been **reconfigured to its
 base-thesis form** as the default, with the richer faculties held behind a positive
 ablation result. Runs on CUDA, ROCm, Intel XPU, Apple MPS, or CPU — compute device
@@ -143,5 +143,7 @@ software.
 
 ## License
 
-Released under the **Cognitive Architecture License (CAL)** — a custom
-entity-welfare copyleft, pending legal review. See [LICENSE.md](LICENSE.md).
+Released under the **Cognitive Architecture License (CAL) 0.4**, an
+entity-welfare copyleft license that has not yet been reviewed by counsel.
+Kaine.One is the Licensor and interim Steward, and the license is governed by
+the law of the State of Oregon. See [LICENSE.md](LICENSE.md) and [NOTICE](NOTICE).

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 """These tests boot stock kaine through its own plugin loader
 (`kaine.plugins.load_plugins` and `kaine.boot.build_registry`) with the
 installed `cl1` entry point, proving the plugin works end to end without
