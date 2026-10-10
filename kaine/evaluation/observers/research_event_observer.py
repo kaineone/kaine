@@ -86,7 +86,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "target_duration_ms",
             "is_experiential",
             "error",
-            # Adaptive conscious access: the rate used on this tick, the drive
+            # Adaptive access: the rate used on this tick, the drive
             # behind it, and the processing rate it is bounded by.
             "experiential_rate_hz",
             "access_drive",

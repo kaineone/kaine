@@ -253,7 +253,7 @@ async def test_roundtrip_chronos(bus: AsyncBus, tmp_path: Path) -> None:
     for key in ("last_interaction_at", "time_since_last_interaction_s"):
         g = got.pop(key)
         w = want.pop(key)
-        assert g == pytest.approx(w, abs=1.0)
+        assert g == pytest.approx(w, abs=10.0)  # CI runners can take seconds between save and restore
     assert got == want
 
 
@@ -984,7 +984,7 @@ async def test_study_order_revive_chain(
                     for key in ("last_interaction_at", "time_since_last_interaction_s"):
                         g = got.pop(key, None)
                         w = want.pop(key, None)
-                        assert (g is None and w is None) or g == pytest.approx(w, abs=1.0)
+                        assert (g is None and w is None) or g == pytest.approx(w, abs=10.0)  # the revive chain runs for seconds on slow CI runners
                     assert got == want, f"step {i} module {n} mismatch"
                 else:
                     assert got == want, f"step {i} module {n} mismatch"

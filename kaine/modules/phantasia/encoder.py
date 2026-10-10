@@ -4,7 +4,7 @@
 """Workspace-snapshot -> fixed-width observation vector.
 
 Phantasia's world model does NOT see pixels or audio. Its "observation" is a
-small fixed-width vector of DERIVED NUMERIC SUMMARIES of the access-conscious
+small fixed-width vector of DERIVED NUMERIC SUMMARIES of the accessed
 content of one :class:`WorkspaceSnapshot`:
 
   * a per-source salience-weighted coalition bucket (one float per known

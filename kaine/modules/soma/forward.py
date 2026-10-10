@@ -31,10 +31,10 @@ pattern)
   hidden state is ephemeral runtime context and is never persisted.
 - Non-finite guard: adaptation is skipped when the loss or any gradient is
   non-finite. Soma's feature vectors come from raw host-sensor reads (unlike
-  Chronos's already-curated featurizer output) and can glitch, so a
-  non-finite *input* vector also skips the recurrent-state commit for that
-  tick entirely — protecting the CfC's persistent hidden state from being
-  permanently corrupted by a single bad sensor read.
+  Chronos's already-curated featurizer output) and can glitch, so a non-finite
+  *input* vector also skips the recurrent-state commit for that tick entirely
+  — protecting the CfC's persistent hidden state from being permanently
+  corrupted by a single bad sensor read.
 - Adaptation can be suspended externally (e.g. during Hypnos sleep) by
   setting ``suspended = True``.
 - Backend selection: ``backend="numpy"`` (default) needs no torch/ncps and is
@@ -47,6 +47,8 @@ from __future__ import annotations
 import logging
 import math
 from typing import Any, Optional
+
+import numpy as np
 
 from kaine.cfc_numpy import draw_reservoir_seed, load_reservoir_into_ncps
 
@@ -76,6 +78,11 @@ class SubstrateForwardModel:
     maps that hidden state to a feature prediction and adapts online via
     SGD, exactly like Chronos's `ForwardPredictionHead`.
 
+    When a ``context_dim`` is provided, the broadcast context vector is
+    concatenated to the hidden state before the readout, so Soma can
+    condition its substrate predictions on the global broadcast context.
+    The reservoir remains frozen; only the readout learns.
+
     The reservoir is generated in NumPy and, when ``backend="torch"``, copied
     into the ncps module.  Both backends therefore start from exactly the
     same weights and stay within 1e-5 of each other through training.
@@ -89,6 +96,7 @@ class SubstrateForwardModel:
         lr: float = _DEFAULT_LR,
         seed: Optional[int] = None,
         backend: str = "numpy",
+        context_dim: int = 0,
     ) -> None:
         if feature_dim <= 0:
             raise ValueError("feature_dim must be positive")
@@ -98,6 +106,8 @@ class SubstrateForwardModel:
             raise ValueError("lr must be positive")
         if backend not in ("numpy", "torch"):
             raise ValueError("backend must be 'numpy' or 'torch'")
+        if context_dim < 0:
+            raise ValueError("context_dim must be non-negative")
 
         if seed is None:
             seed = draw_reservoir_seed()
@@ -105,6 +115,7 @@ class SubstrateForwardModel:
         self._backend = backend
         self._feature_dim = int(feature_dim)
         self._units = int(units)
+        self._context_dim = int(context_dim)
         self._lr = float(lr)
         self.reservoir_seed = int(seed)
 
@@ -143,16 +154,36 @@ class SubstrateForwardModel:
             for p in self._cfc.parameters():
                 p.requires_grad_(False)
 
-            self._readout = nn.Linear(self._units, self._feature_dim)
+            self._readout = nn.Linear(self._units + self._context_dim, self._feature_dim)
             with torch.no_grad():
-                self._readout.weight.copy_(torch.from_numpy(readout_init.W))
+                if self._context_dim > 0:
+                    context_zeros = torch.zeros(
+                        self._feature_dim, self._context_dim, dtype=torch.float32
+                    )
+                    self._readout.weight.copy_(
+                        torch.cat([torch.from_numpy(readout_init.W), context_zeros], dim=1)
+                    )
+                else:
+                    self._readout.weight.copy_(torch.from_numpy(readout_init.W))
                 self._readout.bias.copy_(torch.from_numpy(readout_init.b))
             self._readout.train()
             self._optim = torch.optim.SGD(self._readout.parameters(), lr=self._lr)
         else:
             self._torch = None
             self._device = "cpu"
-            self._readout = NumpyReadout.from_arrays(readout_init.W, readout_init.b)
+            if self._context_dim > 0:
+                extended_W = np.hstack(
+                    [
+                        readout_init.W,
+                        np.zeros(
+                            (self._feature_dim, self._context_dim),
+                            dtype=readout_init.W.dtype,
+                        ),
+                    ]
+                )
+                self._readout = NumpyReadout.from_arrays(extended_W, readout_init.b)
+            else:
+                self._readout = NumpyReadout.from_arrays(readout_init.W, readout_init.b)
             self._cfc = None  # not used in numpy mode
 
         # Count of real online-adaptation steps taken (one SGD step per tick
@@ -170,6 +201,12 @@ class SubstrateForwardModel:
         self._last_prediction: Optional[list[float]] = None
         self._last_residuals: Optional[tuple[float, ...]] = None
 
+        # Context bookkeeping for information-gain reporting.
+        self.last_null_error: Optional[float] = None
+        self.last_scored_had_context: bool = False
+        self._last_input_context: Optional[list[float]] = None
+        self._last_null_prediction: Optional[list[float]] = None
+
         self.suspended: bool = False
 
     # ------------------------------------------------------------------
@@ -183,6 +220,10 @@ class SubstrateForwardModel:
     @property
     def units(self) -> int:
         return self._units
+
+    @property
+    def context_dim(self) -> int:
+        return self._context_dim
 
     @property
     def lr(self) -> float:
@@ -252,6 +293,10 @@ class SubstrateForwardModel:
         self._last_hidden = None
         self._last_prediction = None
         self._last_residuals = None
+        self._last_input_context = None
+        self._last_null_prediction = None
+        self.last_null_error = None
+        self.last_scored_had_context = False
 
     accepts_timespan: bool = True
 
@@ -298,13 +343,36 @@ class SubstrateForwardModel:
             self._hx = hx
         return hidden
 
-    def _readout_predict(self, hidden: list[float]) -> list[float]:
+    def _readout_input(
+        self,
+        hidden: list[float],
+        context: Optional[list[float]] = None,
+    ) -> list[float]:
+        if self._context_dim == 0:
+            return list(hidden)
+
+        if context is None:
+            context = [0.0] * self._context_dim
+        if len(context) != self._context_dim:
+            raise ValueError(
+                f"expected context vector of length {self._context_dim}, "
+                f"got {len(context)}"
+            )
+
+        return list(hidden) + list(context)
+
+    def _readout_predict(
+        self,
+        hidden: list[float],
+        context: Optional[list[float]] = None,
+    ) -> list[float]:
+        x = self._readout_input(hidden, context)
         if self._backend == "numpy":
-            return self._readout.predict(hidden)
+            return self._readout.predict(x)
 
         torch = self._torch
         with torch.no_grad():
-            h = torch.tensor(hidden, dtype=torch.float32)
+            h = torch.tensor(x, dtype=torch.float32)
             pred = self._readout(h)
         return [float(v) for v in pred.tolist()]
 
@@ -312,6 +380,7 @@ class SubstrateForwardModel:
         self,
         feature: list[float],
         timespan: float = 1.0,
+        context: Optional[list[float]] = None,
     ) -> list[float]:
         """Predict the next feature vector given the current feature.
 
@@ -324,12 +393,14 @@ class SubstrateForwardModel:
                 f"expected {self._feature_dim}-dim input, got {len(feature)}"
             )
         hidden = self._tick(feature, commit=False, timespan=timespan)
-        return self._readout_predict(hidden)
+        return self._readout_predict(hidden, context)
 
     def step(
         self,
         feature: list[float],
         timespan: float = 1.0,
+        context: Optional[list[float]] = None,
+        null_context: Optional[list[float]] = None,
     ) -> float:
         """Full online step for one tick.
 
@@ -339,6 +410,10 @@ class SubstrateForwardModel:
         3. Advances the CfC's recurrent state by ticking on *feature*.
         4. Makes a new prediction for the NEXT tick from the now-current
            hidden state.
+
+        When ``context_dim > 0`` and ``null_context`` is supplied, the null
+        prediction is recorded so Soma can report the information gain of the
+        broadcast context.
 
         Returns the L2 prediction error ``||feature - last_prediction||``
         (0.0 on the very first tick when there is no prior prediction, and
@@ -361,6 +436,8 @@ class SubstrateForwardModel:
         if self._last_prediction is None:
             prediction_error = 0.0
             self._last_residuals = None
+            self.last_null_error = None
+            self.last_scored_had_context = False
         else:
             diffs = [(a - b) ** 2 for a, b in zip(feature, self._last_prediction)]
             prediction_error = math.sqrt(sum(diffs))
@@ -368,28 +445,49 @@ class SubstrateForwardModel:
                 a - b for a, b in zip(feature, self._last_prediction)
             )
 
+            if self._last_null_prediction is not None:
+                null_diffs = [
+                    (a - b) ** 2
+                    for a, b in zip(feature, self._last_null_prediction)
+                ]
+                self.last_null_error = math.sqrt(sum(null_diffs))
+            else:
+                self.last_null_error = None
+            self.last_scored_had_context = self._last_input_context is not None
+
         # 2. Adapt the readout toward this feature, using the hidden state
         # that produced the prior prediction (before this tick advances it).
         if not self.suspended and self._last_hidden is not None:
-            self._adapt_toward(self._last_hidden, feature)
+            self._adapt_toward(self._last_hidden, feature, self._last_input_context)
             self._adaptation_steps += 1
 
         # 3. Advance recurrent state by ticking on the observed feature.
         hidden = self._tick(feature, commit=True, timespan=timespan)
 
         # 4. Predict the NEXT feature from the now-current hidden state.
-        self._last_prediction = self._readout_predict(hidden)
+        self._last_prediction = self._readout_predict(hidden, context)
+        self._last_input_context = context
+        if null_context is not None and self._context_dim > 0:
+            self._last_null_prediction = self._readout_predict(hidden, null_context)
+        else:
+            self._last_null_prediction = None
         self._last_hidden = hidden
 
         return prediction_error
 
-    def _adapt_toward(self, hidden: list[float], target_feature: list[float]) -> float:
+    def _adapt_toward(
+        self,
+        hidden: list[float],
+        target_feature: list[float],
+        context: Optional[list[float]] = None,
+    ) -> float:
         """One SGD step toward target_feature from `hidden`; returns MSE loss.
 
         Skips the update if the loss or any gradient is non-finite.
         """
+        x = self._readout_input(hidden, context)
         if self._backend == "numpy":
-            loss = self._readout.sgd_step(hidden, target_feature, self._lr)
+            loss = self._readout.sgd_step(x, target_feature, self._lr)
             if not math.isfinite(loss):
                 log.warning(
                     "SubstrateForwardModel: non-finite loss or gradient; skipping update"
@@ -398,7 +496,7 @@ class SubstrateForwardModel:
             return loss
 
         torch = self._torch
-        h = torch.tensor(hidden, dtype=torch.float32)
+        h = torch.tensor(x, dtype=torch.float32)
         t = torch.tensor(target_feature, dtype=torch.float32)
 
         self._optim.zero_grad()
@@ -475,12 +573,35 @@ class SubstrateForwardModel:
         }
 
     def load_state_dict(self, state: dict[str, Any]) -> None:
-        """Restore readout weights from a ``state_dict()`` snapshot."""
+        """Restore readout weights from a ``state_dict()`` snapshot.
+
+        Legacy snapshots saved without a context column are padded with zeros
+        so the old readout continues to predict identically while the new
+        context weights learn.
+        """
         if self._backend == "numpy":
+            W = np.asarray(state["weight"])
+            if W.shape[1] == self._units and self._context_dim > 0:
+                W = np.hstack(
+                    [
+                        W,
+                        np.zeros(
+                            (self._feature_dim, self._context_dim),
+                            dtype=W.dtype,
+                        ),
+                    ]
+                )
+                state = {**state, "weight": W.tolist()}
             self._readout.load_state_dict(state)
             return
+
         torch = self._torch
-        weight = torch.tensor(state["weight"], dtype=torch.float32)
+        weight_rows = state["weight"]
+        if len(weight_rows[0]) == self._units and self._context_dim > 0:
+            weight_rows = [
+                row + [0.0] * self._context_dim for row in weight_rows
+            ]
+        weight = torch.tensor(weight_rows, dtype=torch.float32)
         bias = torch.tensor(state["bias"], dtype=torch.float32)
         with torch.no_grad():
             self._readout.weight.copy_(weight)

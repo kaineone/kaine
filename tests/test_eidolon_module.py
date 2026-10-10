@@ -123,7 +123,9 @@ async def test_workspace_above_threshold_publishes_diagnostics_only(bus: AsyncBu
             "historical_count",
             "reference_count",
             "top_drifted_sources",
+            "alert",
         }
+        assert ev.payload["alert"] is True
         assert ev.salience == pytest.approx(eidolon._alert_salience)
     finally:
         await eidolon.shutdown()

@@ -8,8 +8,10 @@ import logging
 from typing import Any, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
+from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
+from kaine.modules.context import CONTEXT_DIM, BroadcastContext
 from kaine.modules.intensity import graded_intensity
 from kaine.modules.topos.change import ChangeDetector, CosineChangeDetector
 from kaine.modules.topos.encoder import (
@@ -156,6 +158,8 @@ class Topos(BaseModule):
         self._capture_enabled = bool(capture_enabled)
         self._source_factory = source_factory
         self._clock = entity_clock or EntityClock()
+        # Adopted accessed broadcasts provide Topos's prediction context (Appendix A.1).
+        self._context = BroadcastContext(self._clock.now)
         self._live_camera: Optional[LiveCamera] = None
         if self._capture_enabled or live_camera is not None:
             self._live_camera = live_camera or self._build_default_live_camera(live_camera_config)
@@ -262,6 +266,7 @@ class Topos(BaseModule):
                 latent_dim=self._encoder.latent_dim,
                 units=self._forward_model_units,
                 visual_buffer_size=self._visual_buffer_size,
+                context_dim=CONTEXT_DIM,
             )
 
         # Seed the hypnos cursor from the stream tail before starting the loop,
@@ -522,12 +527,20 @@ class Topos(BaseModule):
 
         # Forward-prediction salience path.
         prediction_error: float = 0.0
+        context_gain: Optional[float] = None
         normalised_error: float = 0.0  # exposed on the report for the affect coupling
         if self._forward_prediction and self._forward_model is not None:
             self._forward_model.suspended = self._in_hypnos
             # Offload the MLP forward/backward step to a thread so the event loop
             # stays responsive during vision processing (performance-test-coverage).
-            prediction_error = await asyncio.to_thread(self._forward_model.step, embedding)
+            if getattr(self._forward_model, "context_dim", 0) > 0:
+                ctx = self._context.vector()
+                null = self._context.null_vector(("topos",)) if ctx is not None else None
+                prediction_error = await asyncio.to_thread(
+                    self._forward_model.step, embedding, ctx, null
+                )
+            else:
+                prediction_error = await asyncio.to_thread(self._forward_model.step, embedding)
             self._pred_errors.append(prediction_error)
 
             # Normalise error against the rolling window mean so a steady,
@@ -536,8 +549,18 @@ class Topos(BaseModule):
                 mean_err = sum(self._pred_errors) / len(self._pred_errors)
                 normalised = prediction_error / mean_err if mean_err > 0 else 0.0
             else:
+                mean_err = 0.0
                 normalised = 0.0
             normalised_error = normalised
+
+            # Cross-module broadcast information gain (Appendix A.8).
+            if (
+                getattr(self._forward_model, "last_scored_had_context", False)
+                and getattr(self._forward_model, "last_null_error", None) is not None
+                and mean_err > 0
+            ):
+                context_gain = (self._forward_model.last_null_error - prediction_error) / mean_err
+
             # Alert on EITHER a surprising forward-model prediction error OR a
             # self-calibrating perceptual discontinuity — both relative to their
             # own rolling baselines (the Chronos `normalised >= 2.0` convention),
@@ -582,6 +605,9 @@ class Topos(BaseModule):
             # quantity the alert criterion uses). Exposed so the affect layer can
             # scale arousal by perceptual surprise (perception→arousal coupling).
             "normalised_error": normalised_error,
+            # Cross-module broadcast information gain and context age (Appendix A.8).
+            "context_gain": context_gain,
+            "context_age_s": self._context.age_s(),
             # Whether this report crossed alert level (perception-drives-salience):
             # lets the Nexus perception panel and off-bus analysis count stimulus-
             # driven perceptual events without re-deriving the salience decision.
@@ -612,6 +638,10 @@ class Topos(BaseModule):
             report,
             salience=salience,
         )
+
+    async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
+        # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).
+        self._context.observe(snapshot)
 
     async def _hypnos_loop(self) -> None:
         """Subscribe to hypnos.out to gate adaptation during sleep."""

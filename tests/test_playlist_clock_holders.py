@@ -1,4 +1,5 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """Tests for per-holder playlist-clock pauses and freeze-driven programme pause.
 
 Uses an injectable monotonic clock so no real time passes. The freeze-watch

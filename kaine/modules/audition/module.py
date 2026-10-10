@@ -5,10 +5,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections import deque
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
+from kaine.cycle.types import WorkspaceSnapshot
+from kaine.modules.context import CONTEXT_DIM, BroadcastContext
 from kaine.modules.intensity import graded_intensity
 
 if TYPE_CHECKING:
@@ -162,6 +165,7 @@ class Audition(BaseModule):
             feature_dim=FEATURE_DIM,
             units=int(forward_model_units),
             auditory_buffer_size=int(auditory_buffer_size),
+            context_dim=CONTEXT_DIM,
         )
         self._prediction_error_window_size = max(1, int(prediction_error_window))
         self._prediction_errors: deque[float] = deque(maxlen=self._prediction_error_window_size)
@@ -197,6 +201,7 @@ class Audition(BaseModule):
                 feature_dim=self._acoustic_encoder.embedding_dim,
                 units=int(forward_model_units),
                 auditory_buffer_size=int(auditory_buffer_size),
+                context_dim=CONTEXT_DIM,
             )
         # Arousal seam (wired at boot, like the topos-arousal / affect seams): a
         # zero-arg callable returning the current Thymos arousal in [0, 1] that
@@ -207,6 +212,8 @@ class Audition(BaseModule):
         # Hypnos sleep suspension state.
         self._in_hypnos: bool = False
         self._hypnos_cursor: str = "$"
+        # Audition has no entity clock; context age is wall time, equal to entity time at default scale.
+        self._context = BroadcastContext(time.monotonic)
 
         # Carried-forward acoustic forward-model snapshots for encoders that are
         # not currently running. They are keyed by encoder model_id and never
@@ -272,9 +279,15 @@ class Audition(BaseModule):
         embedding = await asyncio.to_thread(self._acoustic_encoder.embed, attended_bytes, sample_rate)
         change = cosine_change(embedding, self._prev_acoustic_embedding)
         self._prev_acoustic_embedding = embedding
+        context_gain: Optional[float] = None
         # Pause adaptation during Hypnos sleep, mirroring Topos.
         self._acoustic_forward_model.suspended = self._in_hypnos
-        prediction_error = self._acoustic_forward_model.step(embedding)
+        if getattr(self._acoustic_forward_model, "context_dim", 0) > 0:
+            ctx = self._context.vector()
+            null = self._context.null_vector(("audition",)) if ctx is not None else None
+            prediction_error = self._acoustic_forward_model.step(embedding, ctx, null)
+        else:
+            prediction_error = self._acoustic_forward_model.step(embedding)
         self._acoustic_errors.append(prediction_error)
         # Normalise the error against its rolling mean (Chronos/Topos convention):
         # steady, predictable sound stays low-salience even at non-zero error.
@@ -284,6 +297,15 @@ class Audition(BaseModule):
             else 0.0
         )
         normalised = prediction_error / mean_err if mean_err > 0 else 0.0
+
+        # Cross-module broadcast information gain (Appendix A.8).
+        if (
+            getattr(self._acoustic_forward_model, "last_scored_had_context", False)
+            and getattr(self._acoustic_forward_model, "last_null_error", None) is not None
+            and mean_err > 0
+        ):
+            context_gain = (self._acoustic_forward_model.last_null_error - prediction_error) / mean_err
+
         # Self-calibrating change alert (perception-drives-salience): the change is
         # judged RELATIVE to its own rolling baseline, not against an absolute
         # constant mis-scaled for one encoder, with the threshold surviving as a
@@ -317,6 +339,9 @@ class Audition(BaseModule):
             # exposed so the affect layer can scale arousal by acoustic surprise
             # (perception→arousal coupling).
             "normalised_error": normalised,
+            # Cross-module broadcast information gain and context age (Appendix A.8).
+            "context_gain": context_gain,
+            "context_age_s": self._context.age_s(),
             "encoder_model_id": self._acoustic_encoder.model_id,
             "attended_window": window,
             "attended_seconds": attended_seconds,
@@ -388,6 +413,10 @@ class Audition(BaseModule):
                     await asyncio.sleep(0.1)
         except asyncio.CancelledError:
             raise
+
+    async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
+        # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).
+        self._context.observe(snapshot)
 
     async def initialize(self) -> None:
         await super().initialize()
@@ -543,7 +572,11 @@ class Audition(BaseModule):
 
         # Pause adaptation during Hypnos sleep, mirroring Topos.
         self._forward_model.suspended = self._in_hypnos
-        prediction_error = self._forward_model.step(feature_vec)
+        if getattr(self._forward_model, "context_dim", 0) > 0:
+            ctx = self._context.vector()
+            prediction_error = self._forward_model.step(feature_vec, ctx)
+        else:
+            prediction_error = self._forward_model.step(feature_vec)
         self._prediction_errors.append(prediction_error)
         error_window = list(self._prediction_errors)
 
@@ -708,6 +741,7 @@ class Audition(BaseModule):
                 "latency_ms": 0.0,
                 "error": f"{type(exc).__name__}: {exc}",
                 "backend": self._backend,
+                "alert": True,
             },
             salience=self._alert_salience,
         )
@@ -755,6 +789,7 @@ class Audition(BaseModule):
             "audition.emotion",
             {
                 "category": "neutral",
+                "alert": True,
                 "confidence": 0.0,
                 "scores": {c: (1.0 if c == "neutral" else 0.0) for c in CATEGORIES},
                 "model": self._emotion_classifier.model_id,
