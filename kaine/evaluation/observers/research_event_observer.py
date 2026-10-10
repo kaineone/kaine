@@ -116,7 +116,18 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     # started/completed/abandoned; reason is a fixed code on abandon.
     "perception.transition": frozenset({"phase", "transition_seconds", "reason"}),
     # --- Prediction / precision ---
-    "soma.report": frozenset({"prediction_error", "unexpected_error", "wellness", "fatigue_value", "alerts"}),
+    "soma.report": frozenset(
+        {
+            "prediction_error",
+            "unexpected_error",
+            "wellness",
+            "fatigue_value",
+            "alerts",
+            "alert",
+            "context_gain",
+            "context_age_s",
+        }
+    ),
     "topos.report": frozenset(
         {
             "prediction_error",
@@ -124,6 +135,8 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "change_score",
             "habituation_score",
             "alert",
+            "context_gain",
+            "context_age_s",
         }
     ),
     # Chronos report (kaine/modules/chronos/module.py) — content-free
@@ -136,6 +149,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "rumination_detected",
             "temporal_prediction_error",
             "time_since_last_interaction_s",
+            "alert",
         }
     ),
     "phantasia.world_error": frozenset({"error"}),
@@ -155,12 +169,26 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     "thymos.state": frozenset(
         {"state", "drives", "emotion", "emotion_category", "valence", "arousal", "dominance"}
     ),
-    "thymos.emotion": frozenset({"emotion", "scores", "norm_compatibility_available"}),
-    "thymos.drive": frozenset({"drive", "value"}),
+    "thymos.emotion": frozenset({"emotion", "scores", "norm_compatibility_available", "alert"}),
+    "thymos.drive": frozenset({"drive", "value", "alert"}),
     "thymos.goal": frozenset({"action", "goal_id"}),
     # --- Perception (derived only) ---
     "audition.emotion": frozenset({"category", "confidence", "scores"}),
     "audition.prosody": frozenset({"f0_mean_hz", "f0_std_hz"}),
+    # Acoustic report (base-thesis hearing path): numeric fields only; the playlist item title is not logged.
+    "audition.perception": frozenset(
+        {
+            "prediction_error",
+            "normalised_error",
+            "change_score",
+            "energy_dbfs",
+            "attended_window",
+            "attended_seconds",
+            "alert",
+            "context_gain",
+            "context_age_s",
+        }
+    ),
     # NOTE: `audition.transcription` is intentionally ABSENT — never logged.
     # --- Memory / sleep ---
     "mnemos.recall": frozenset(
@@ -169,7 +197,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     "mnemos.replay": frozenset({"memory_ids", "max_affect_intensity", "selection_scores", "count"}),
     "hypnos.sleep.started": frozenset({"started_at"}),
     "hypnos.sleep.completed": frozenset(
-        {"phases_completed", "replay_count", "consolidation_summary_counts"}
+        {"phases_completed", "replay_count", "consolidation_summary_counts", "alert"}
     ),
     # Organ-level consolidation divergence (content-free aggregates only):
     # breadth (rate) + depth (magnitude) of how the entity's conditioned output
@@ -562,6 +590,9 @@ def _workspace_metadata_record(snapshot: dict[str, Any]) -> dict[str, Any]:
     Reads the `selected` key (written by kaine/cycle/engine.py) — per-entry
     metadata ONLY ({source, type, salience, causal_parent}), never the entry
     `payload`/content field.
+
+    Also copies `access_threshold` from `metadata` and `published_at`
+    from the snapshot when present.
     """
     record: dict[str, Any] = {
         "ts": _iso_now(),
@@ -574,6 +605,12 @@ def _workspace_metadata_record(snapshot: dict[str, Any]) -> dict[str, Any]:
         record["inhibited"] = bool(snapshot.get("inhibited"))
     if "salience_scores" in snapshot:
         record["salience_scores"] = snapshot.get("salience_scores")
+
+    metadata = snapshot.get("metadata")
+    if isinstance(metadata, dict) and "access_threshold" in metadata:
+        record["access_threshold"] = metadata["access_threshold"]
+    if "published_at" in snapshot:
+        record["published_at"] = snapshot.get("published_at")
 
     entries_meta: list[dict[str, Any]] = []
     for entry in snapshot.get("selected", []) or []:

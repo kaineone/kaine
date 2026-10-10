@@ -58,7 +58,7 @@ _SOURCES: list[tuple[str, frozenset[str], str]] = [
     ),
     (
         "audition.out",
-        frozenset({"audition.transcription", "audition.emotion"}),
+        frozenset({"audition.transcription", "audition.emotion", "audition.perception"}),
         "prediction_error",
     ),
     (
