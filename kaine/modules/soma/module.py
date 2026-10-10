@@ -574,6 +574,7 @@ class Soma(BaseModule):
                     "value": self._fatigue.value,
                     "threshold": self._fatigue.threshold,
                     "crossed": True,
+                    "alert": True,
                 },
                 salience=self._alert_salience,
             )
@@ -586,7 +587,7 @@ class Soma(BaseModule):
         if advisory is not None:
             await self.publish(
                 "soma.regulation",
-                advisory,
+                {**advisory, "alert": True},
                 salience=self._alert_salience,
             )
 

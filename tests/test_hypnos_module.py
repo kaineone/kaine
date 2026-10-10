@@ -310,6 +310,7 @@ async def test_started_and_completed_events(bus: AsyncBus, tmp_path: Path):
     assert "phases" in completed.payload
     assert len(completed.payload["phases"]) == 5
     assert "voice_alignment" in completed.payload
+    assert completed.payload["alert"] is (completed.salience != hypnos._baseline_salience)
 
 
 @pytest.mark.asyncio

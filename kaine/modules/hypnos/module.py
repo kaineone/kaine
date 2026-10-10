@@ -890,6 +890,7 @@ class Hypnos(BaseModule):
         summary["voice_measures"] = voice_measures
         all_succeeded = all(r.success for r in phase_results)
         salience = self._baseline_salience if all_succeeded else self._alert_salience
+        summary["alert"] = not all_succeeded
         # Sleep-time ignition audit (change sleep-ignition-audit): runs
         # unconditionally on EVERY sleep, before the completed publish, so the
         # content-free payload is emitted on hypnos.out AND merged into the
