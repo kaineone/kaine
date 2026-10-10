@@ -9,6 +9,7 @@ real state files are touched (except the flags-only audit, which writes a
 throwaway tmp_path file)."""
 
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -156,3 +157,67 @@ def test_desired_state_file_contains_flags_only(tmp_path):
         "locus_locked",
         "locked_by",
     }
+
+
+@pytest.mark.asyncio
+async def test_enter_sleep_pauses_feed_for_whole_sleep_without_mnemos(tmp_path, monkeypatch):
+    from kaine.modules.topos.feed import PlaylistClock
+    written = []
+    h = _bare_hypnos(tmp_path / "desired.json", clock=PlaylistClock(1, clock=_FakeClock()))
+    h._sleep_lock = asyncio.Lock()
+    h._entity_clock = None
+    h._last_sleep_ended_at = None
+    h._playlist_clock.start()
+    _stub_perception_state(monkeypatch, "virtual", written)
+
+    async def fake(trigger=None):
+        assert list(written) == ["off"]
+        assert h._playlist_clock.paused
+        return {}
+
+    monkeypatch.setattr(h, "_run_pipeline", fake)
+    await h.enter_sleep()
+    assert written == ["off", "virtual"]
+    assert not h._playlist_clock.paused
+
+
+@pytest.mark.asyncio
+async def test_enter_sleep_restores_feed_when_pipeline_raises(tmp_path, monkeypatch):
+    from kaine.modules.topos.feed import PlaylistClock
+    written = []
+    h = _bare_hypnos(tmp_path / "desired.json", clock=PlaylistClock(1, clock=_FakeClock()))
+    h._sleep_lock = asyncio.Lock()
+    h._entity_clock = None
+    h._last_sleep_ended_at = None
+    h._playlist_clock.start()
+    _stub_perception_state(monkeypatch, "virtual", written)
+
+    async def fake(trigger=None):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(h, "_run_pipeline", fake)
+    with pytest.raises(RuntimeError):
+        await h.enter_sleep()
+    assert written == ["off", "virtual"]
+    assert not h._playlist_clock.paused
+
+
+@pytest.mark.asyncio
+async def test_enter_sleep_restores_feed_when_cancelled(tmp_path, monkeypatch):
+    from kaine.modules.topos.feed import PlaylistClock
+    written = []
+    h = _bare_hypnos(tmp_path / "desired.json", clock=PlaylistClock(1, clock=_FakeClock()))
+    h._sleep_lock = asyncio.Lock()
+    h._entity_clock = None
+    h._last_sleep_ended_at = None
+    h._playlist_clock.start()
+    _stub_perception_state(monkeypatch, "virtual", written)
+
+    async def fake(trigger=None):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(h, "_run_pipeline", fake)
+    with pytest.raises(asyncio.CancelledError):
+        await h.enter_sleep()
+    assert written == ["off", "virtual"]
+    assert not h._playlist_clock.paused
