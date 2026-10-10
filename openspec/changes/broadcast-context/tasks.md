@@ -11,7 +11,7 @@
 
 ## 3. Soma
 
-- [ ] 3.1 Readout takes the context; Lingua's share is kept in Soma's null context.
+- [x] 3.1 Readout takes the context; Lingua's share is kept in Soma's null context.
 
 ## 4. Docs
 
