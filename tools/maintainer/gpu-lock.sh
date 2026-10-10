@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 # gpu-lock.sh CMD... — run CMD holding the host-wide exclusive GPU lock.
 # Every GPU user on the host goes through it: training (K1-Jev SFT, voice

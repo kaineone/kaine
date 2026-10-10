@@ -25,13 +25,13 @@ The base install contains only the dependencies needed to start the bus and run 
 | `qdrant-client` | Qdrant client | Apache-2.0 | CPU | `[memory]` |
 | sqlite-vec | Edge vector store | per upstream | CPU | `[memory-edge]` |
 | `sentence-transformers` | Optional torch embedder | Apache-2.0 | CPU | `[memory]` |
-| NumPy MiniLM embedder | Default text embedder; weights Apache-2.0 | LicenseRef-CAL-0.2 | CPU | built-in |
+| NumPy MiniLM embedder | Default text embedder; weights Apache-2.0 | LicenseRef-CAL-0.4 | CPU | built-in |
 | `inferactively-pymdp` + `jax[cpu]` | JAX active-inference backend | MIT / Apache-2.0 | CPU | `[reasoning]` |
-| NumPy Nous engine | Native active-inference backend | LicenseRef-CAL-0.2 | CPU | built-in |
+| NumPy Nous engine | Native active-inference backend | LicenseRef-CAL-0.4 | CPU | built-in |
 | DreamerV3 RSSM (JAX/NumPy) | World model | MIT | CPU | `[worldmodel]` |
-| NumPy Phantasia engine | Native world-model backend | LicenseRef-CAL-0.2 | CPU | built-in |
+| NumPy Phantasia engine | Native world-model backend | LicenseRef-CAL-0.4 | CPU | built-in |
 | `ncps` (torch CfC) | Torch CfC backend | Apache-2.0 | CPU | `[core]` |
-| NumPy CfC | Default CfC backend | LicenseRef-CAL-0.2 | CPU | built-in |
+| NumPy CfC | Default CfC backend | LicenseRef-CAL-0.4 | CPU | built-in |
 | `torch` | Tensor backend | BSD-3-Clause | GPU-optional | `[core]` |
 | `snntorch` | Spiking LIF neurons | MIT | CPU | `[oscillator]` |
 | `scipy` | PLV / Hilbert transform | BSD-3-Clause | CPU | `[oscillator]` |
@@ -56,7 +56,7 @@ The base install contains only the dependencies needed to start the bus and run 
 | DINOv2-small | Fallback video encoder | Apache-2.0 | GPU (`cuda:1`) | `[vision]` |
 | FastAPI + uvicorn + Jinja2 | Nexus web UI | MIT / BSD-3-Clause | CPU | `[nexus]` |
 | uPlot | Live charts in Nexus | MIT | CPU | `[nexus]` |
-| Cognitive Architecture License (CAL) | Project license | LicenseRef-CAL-0.2 | — | — |
+| Cognitive Architecture License (CAL) | Project license | LicenseRef-CAL-0.4 | — | — |
 
 Install the research / perception bundle with `bash scripts/install.sh --research` or `pip install -e .[perception]`.
 
@@ -253,6 +253,6 @@ Device selection is not just a fallback chain. `resolve_device()` in `kaine/hard
 
 ## Licensing
 
-KAINE is released under the Cognitive Architecture License (CAL) v0.2, a custom entity-welfare copyleft license. It combines an AGPL copyleft backbone with ethical-use covenants, cognitive-integrity provisions, copyfarleft commercial restrictions, and Guardianship governance. The text is in `LICENSE.md` and tracked in `kaineone/cognitive-architecture-license`.
+KAINE is released under the Cognitive Architecture License (CAL) v0.4, a custom entity-welfare copyleft license. It combines an AGPL copyleft backbone with ethical-use covenants, cognitive-integrity provisions, copyfarleft commercial restrictions, and Guardianship governance. The text is in `LICENSE.md` and tracked in `kaineone/cognitive-architecture-license`.
 
 Dependencies are screened for license compatibility; notes are in [Appendix C](../appendix-c-licences.md). The main rejected candidate is parselmouth (Praat Python bindings, GPL-3.0), which is incompatible with the CAL and was replaced by librosa. Redis 7.2's BSD-3-Clause license is compatible with local embedded use. The Kokoro TTS archive is a current exception: it bundles espeak-ng data under GPL-3.0-or-later, which is incompatible with the CAL and must be treated accordingly in any distributed build.
