@@ -73,6 +73,6 @@ silicon models need torch and skip without it.
 ## License
 
 The plugin is part of KAINE and licensed under the Cognitive Architecture License
-(CAL) v0.2, like the rest of the repository. `cl-sdk` is Cortical Labs' software
+(CAL) v0.4, like the rest of the repository. `cl-sdk` is Cortical Labs' software
 under its own CC BY-NC 4.0 license; it is not included here. This project is not
 affiliated with or endorsed by Cortical Labs.

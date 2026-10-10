@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: LicenseRef-CAL-0.2 -->
+<!-- SPDX-License-Identifier: LicenseRef-CAL-0.4 -->
 # Maintainer tools
 
 These are the scripts the maintainers use to gate, review and merge pull requests. They are not part of the runtime, and nothing in `kaine/` imports them. They assume a Linux host with `git`, `gh` (signed in), `systemd --user`, the project's virtualenv at `<main checkout>/.venv`, and, for the worker scripts, a local [Ollama](https://ollama.com) endpoint.

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 """unit tests of the Soma wetware backend on the simulator."""
 from __future__ import annotations
 

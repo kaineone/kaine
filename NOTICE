@@ -2,14 +2,24 @@ KAINE — Kaine Autonomous Intelligent Networked Entity
 
 Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-This work is licensed under the Cognitive Architecture License (CAL) v0.2
-(draft, pending legal review). See LICENSE.md for the full license text.
-The SPDX identifier for this license is LicenseRef-CAL-0.2.
+This work is licensed under the Cognitive Architecture License (CAL)
+version 0.4, a draft that has not yet been reviewed by counsel. See LICENSE.md
+for the full license text. The SPDX identifier for this license is
+LicenseRef-CAL-0.4.
 
-CAL is a custom entity-welfare copyleft license. Free use is granted to
-individuals, non-profit organizations, research institutions, and worker-owned
-cooperatives. For-profit commercial use requires a Reciprocity License from the
-Project Cooperative. All copies and derivative works must retain this notice.
+ADOPTION NOTICE
+
+  Licensor:        Kaine.One
+  Steward:         Kaine.One, as interim Steward (CAL Article 7.0)
+  Governing law:   the law of the State of Oregon, United States
+                   (CAL Article 10.3)
+  Notices and Reciprocity License requests:  kaine.one@tuta.com
+
+CAL is an entity-welfare copyleft license. Free use is granted to individuals,
+non-profit organizations, research and educational institutions, and
+worker-owned cooperatives. For-profit commercial use requires a Reciprocity
+License from the Steward. All copies and derivative works must retain this
+notice.
 
 INTRINSIC VALUES (CAL Article 6.1)
 

@@ -228,7 +228,7 @@ The core tests use a `fakeredis`-backed bus fixture and set `KAINE_MUNDUS_OPERAT
 A minimal continuous-capable adapter for a robot base reached over a local TCP socket. It steers with `drive` and `yaw_rate`, and reports proprioception back. Copy it to `kaine/modules/mundus/adapters/robot.py` and fill in the four `TODO`s.
 
 ```python
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 """Example embodiment adapter: a robot base over a local socket."""
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 # review-pr.sh PR OUT_DIR [CONTEXT_FILE...] — the worker's first-pass review.
 # Builds a brief from review-template.md, the PR's description and its diff (plus

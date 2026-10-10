@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 # safe-run.sh CMD... — run a heavy command (test suites, builds) without being
 # able to freeze the desktop: a transient systemd user scope caps its memory at

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Pre-build EFE latency benchmark for Nous (pymdp 1.0, JAX).
