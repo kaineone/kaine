@@ -9,9 +9,11 @@ import pytest
 from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
+from kaine.cycle.access_rate import max_report_salience
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.thymos import CategoricalEmotion, Thymos
 from kaine.modules.thymos.coupling import CouplingConfig
+from kaine.modules.thymos.drives import DriveCrossing
 from kaine.modules.thymos.state import DimensionalState
 
 
@@ -418,5 +420,25 @@ async def test_empatheia_agent_model_updates_familiarity_cache(bus: AsyncBus):
 
         assert "alice" in thymos._familiarity_cache
         assert thymos._familiarity_cache["alice"] == pytest.approx(0.65)
+    finally:
+        await thymos.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_drive_crossing_is_a_categorical_alert(bus):
+    fake_now = [0.0]
+    thymos = Thymos(bus, publish_interval_s=999.0, clock=lambda: fake_now[0])
+    await thymos.initialize()
+    try:
+        thymos._drives.tick = lambda dt, **kwargs: [DriveCrossing(name="boredom", value=0.9)]
+        fake_now[0] = 1.0
+        await thymos._tick()
+        entries = await bus.read("thymos.out", last_id="0", count=50)
+        drive_events = [entry for entry in entries if entry[1].type == "thymos.drive"]
+        assert len(drive_events) == 1
+        payload = drive_events[0][1].payload
+        assert payload["alert"] is True
+        assert drive_events[0][1].salience == pytest.approx(thymos._alert_salience)
+        assert max_report_salience(entries) == pytest.approx(thymos._alert_salience)
     finally:
         await thymos.shutdown()
