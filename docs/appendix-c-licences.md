@@ -1,10 +1,25 @@
 # Licences
 
-The licence appendix lists the licenses of KAINE's required dependencies, optional install extras, container services, models, and vendored third-party code. Use it when auditing what ships with a deployment, choosing `pip` extras, or checking compatibility with KAINE's own Cognitive Architecture License (CAL) v0.4. For the rationale behind each technology choice, see [Technology choices](02-architecture/tech-choices.md).
+This appendix records KAINE's own licence and the licences of its required dependencies, optional install extras, container services, models and vendored third-party code. Use it when auditing what ships with a deployment, choosing `pip` extras, or checking compatibility with KAINE's licence. For the reasons behind each technology choice, see [Technology choices](02-architecture/tech-choices.md).
+
+## KAINE's licence
+
+KAINE is licensed under the Cognitive Architecture License (CAL) version 0.4, SPDX identifier `LicenseRef-CAL-0.4`. The full text is in [`LICENSE.md`](../LICENSE.md). CAL 0.4 is a draft that has not yet been reviewed by counsel, and the licence itself advises having a qualified attorney review it before relying on it.
+
+CAL is a general licence that any project building this kind of software can adopt. The adoption notice in [`NOTICE`](../NOTICE) fills in its parameters for KAINE:
+
+| Role | KAINE's adoption |
+|---|---|
+| Licensor | Kaine.One |
+| Steward | Kaine.One, as interim Steward (CAL Article 7.0) |
+| Governing law | The law of the State of Oregon, United States (CAL Article 10.3) |
+| Notices and Reciprocity License requests | kaine.one@tuta.com |
+
+Individuals, non-profit organizations, research and educational institutions and worker-owned cooperatives may use KAINE free of charge. For-profit commercial use needs a Reciprocity License from the Steward. Modifications must be shared back under CAL, and every copy must keep the `NOTICE` file, including its summary of the Intrinsic Values (CAL Article 6.1). Because CAL restricts some uses, it falls outside the Open Source Definition and is not an OSI-approved licence. [Security and privacy](13-security-and-privacy.md#cognitive-architecture-license) summarizes the provisions that bear on running an entity.
 
 ## Compatibility principle
 
-CAL is a copyleft license with entity-welfare covenants. Its copyleft clause requires modifications to KAINE to be shared back under CAL. A dependency license is compatible if it does not impose obligations that conflict with those covenants or with CAL's copyleft structure.
+CAL is a copyleft licence with entity-welfare covenants. Its copyleft clause requires modifications to KAINE to be shared back under CAL. A dependency license is compatible if it does not impose obligations that conflict with those covenants or with CAL's copyleft structure.
 
 Permissive licenses such as MIT, BSD, Apache-2.0, ISC and PSF impose no incompatible copyleft or use restrictions, so they are compatible.
 
@@ -44,7 +59,7 @@ These packages are only installed when you select an extra, for example `pip ins
 | `core` | `ncps` | Apache-2.0 | Yes |
 | `memory` | `qdrant-client` | Apache-2.0 | Yes |
 | `memory` | `sentence-transformers` | Apache-2.0 | Yes |
-| `memory-edge` | `sqlite-vec` | see upstream | — |
+| `memory-edge` | `sqlite-vec` | see upstream | check upstream |
 | `nexus` | `fastapi` | MIT | Yes |
 | `nexus` | `uvicorn` | BSD-3-Clause | Yes |
 | `nexus` | `jinja2` | BSD-3-Clause | Yes |
@@ -61,7 +76,7 @@ These packages are only installed when you select an extra, for example `pip ins
 | `internvideo` | `timm` | Apache-2.0 | Yes |
 | `internvideo` | `easydict` | LGPL-3.0 | Yes: used unmodified as a separately installed, replaceable package |
 | `internvideo` | `einops` | MIT | Yes |
-| `internvideo-flash` | `flash-attn` | see upstream | — |
+| `internvideo-flash` | `flash-attn` | see upstream | check upstream |
 | `oscillator` | `snntorch` | MIT | Yes |
 | `oscillator` | `scipy` | BSD-3-Clause | Yes |
 | `speech-edge` | `sherpa-onnx` | Apache-2.0 | Yes |
@@ -75,7 +90,10 @@ The optional substrate plugin in `plugins/kaine-cl1` (a separate distribution, n
 | `pytest` | MIT | Yes |
 | `pytest-asyncio` | Apache-2.0 | Yes |
 | `fakeredis` | BSD-3-Clause | Yes |
-| `import-linter` | see upstream | — |
+| `pytest-xdist` | MIT | Yes |
+| `import-linter` | see upstream | check upstream |
+
+The `browser-test` extra adds `playwright` (Apache-2.0).
 
 ## Runtime services
 
@@ -104,8 +122,8 @@ The trainer container ([`Dockerfile`](../Dockerfile)) installs its own copy of `
 
 | Model / weights | License | Notes |
 |---|---|---|
-| Published KAINE organ — GGUF (`kaineone/Qwen3.5-4B-abliterated-GGUF`) and safetensors (`kaineone/Qwen3.5-4B-abliterated`) | Apache-2.0 | KAINE's abliteration of Qwen3.5-4B; GGUF served via the local model server, safetensors is the Stage-2 trainer base |
-| InternVideo-Next base (`revliter/internvideo_next_base_p14_res224_f16`, OpenGVLab) | MIT | Frozen temporally-native visual encoder (Topos, shipped default). Modeling code vendored in [`external/internvideo_next/`](../external/internvideo_next/); weights fetched at setup. Off Meta. |
+| Published KAINE organ: GGUF (`kaineone/Qwen3.5-4B-abliterated-GGUF`) and safetensors (`kaineone/Qwen3.5-4B-abliterated`) | Apache-2.0 | KAINE's abliteration of Qwen3.5-4B. The GGUF is served by the local model server, and the safetensors copy is the base for voice-alignment training |
+| InternVideo-Next base (`revliter/internvideo_next_base_p14_res224_f16`, OpenGVLab) | MIT | Frozen temporally-native visual encoder (Topos, shipped default). Modeling code vendored in [`external/internvideo_next/`](../external/internvideo_next/); weights fetched at setup. |
 | Dasheng base (`mispeech/dasheng-base`, Xiaomi) | Apache-2.0 | Frozen self-supervised acoustic encoder (Audition, selectable). Modeling code vendored in [`external/dasheng/`](../external/dasheng/); weights fetched at setup. |
 | WavJEPA base (`labhamlet/wavjepa-base`) | MIT (per the HF model tag; no LICENSE file in the repo) | Frozen self-supervised acoustic encoder (Audition, selectable; student path only). Modeling code vendored in [`external/wavjepa/`](../external/wavjepa/) with three safety changes; weights fetched at setup. |
 | `facebook/dinov2-small` | Apache-2.0 | Frozen ViT-S/14 visual encoder (Topos, selectable non-default fallback) |

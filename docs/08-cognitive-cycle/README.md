@@ -1,6 +1,6 @@
 # The cognitive cycle
 
-The cognitive cycle is KAINE's repeating async loop. It paces the system, reads events from active modules, selects what enters the global workspace, broadcasts conscious ticks, and issues intents. This page is for operators tuning timing, freezing, or rate control, and for contributors working on the cycle engine.
+The cognitive cycle is KAINE's continuous async loop. It paces the system, reads the events the active modules publish, has the global workspace score them on every processing tick, publishes a broadcast on each broadcast tick, and issues intents. This page is for operators tuning timing, freezing, or rate control, and for contributors working on the cycle engine.
 
 For the selection algorithm, see [The global workspace](./global-workspace.md). For sleep and maintenance, see [Sleep and maintenance](../10-sleep/README.md). For wider system architecture, see [Architecture](../02-architecture/README.md). For cycle and host settings, see [Core, cycle and host configuration](../appendix-a-configuration/core.md).
 
@@ -18,55 +18,57 @@ When a phase raises, the entrypoint releases what the half-built boot holds. It 
 
 ## Rates and timing
 
-The cycle has two independently configurable rates.
+The cycle has two configurable rates.
 
 | Parameter | Default | Config key |
 |---|---|---|
-| `processing_rate_hz` | 10.0 | `[cycle].processing_rate_hz` |
-| `experiential_rate_hz` | 3.333 | `[cycle].experiential_rate_hz` |
+| Processing rate | 10.0 Hz | `[cycle].processing_rate_hz` |
+| Resting access rate | 3.333 Hz | `[cycle].experiential_rate_hz` |
 
-`processing_rate_hz` is how often the tick loop fires: 10 Hz by default, an alpha-band sampling rate (100 ms per tick). Conscious access is slower: `experiential_rate_hz` (3.333 Hz at rest, the P3b band) sets how often a tick becomes a conscious broadcast, so the senses outrun awareness and several samples inform one update. The reference development host runs the tick loop with about 17 Hz of headroom.
+The processing rate is how often the tick loop fires: 10 Hz by default (a tick every 100 ms), within the alpha range associated with perceptual sampling. Every active module stream is read and every candidate is scored on every processing tick. The access rate is how often a tick is a broadcast tick, on which the scored coalition is published to `workspace.broadcast`. The code calls a broadcast tick "experiential" (`is_experiential`, `experiential_rate_hz`). At rest the access rate is one broadcast every third processing tick, about 3.3 Hz, so several samples of each sense inform one broadcast. That resting rate is a modeling choice: attention samples the environment rhythmically at a few cycles per second, and the attentional blink (access to one item impairs access to a second for roughly 200 to 500 ms) bounds the rate of access only loosely, because it constrains the interval between accessed items and not between broadcast ticks. The reference development host runs the tick loop with about 17 Hz of headroom.
 
-`experiential_rate_hz` is how often a tick's snapshot is broadcast to `workspace.broadcast` and becomes conscious. The cycle tracks this with a fractional accumulator (`_experience_acc`): each tick adds `experiential_rate / processing_rate` to the accumulator; when it reaches `1.0`, a broadcast fires and `1.0` is subtracted, keeping the fractional carry. This keeps the long-run ratio exact when the two rates do not divide evenly. At most one broadcast happens per tick.
+The cycle decides broadcast ticks with a fractional accumulator (`_experience_acc`): each tick adds `access rate / processing rate`; when the sum reaches 1, the tick is a broadcast tick and 1 is subtracted, keeping the fractional carry. The long-run ratio stays exact when the two rates do not divide evenly, and at most one broadcast happens per tick.
 
-`CognitiveCycle.__init__` falls back to `experiential_rate_hz == processing_rate_hz` only when no value is supplied. The composition root at `kaine/cycle/__main__.py` and `config/kaine.toml` both default `experiential_rate_hz` to 3.333 Hz, the resting P3b conscious-access band, so at the default 10 Hz processing rate roughly one tick in three is broadcast. This lets faster senses outrun awareness. Setting the two rates equal restores one-tick-one-broadcast behavior. Setting `experiential_rate_hz` lower decouples background processing ticks further from conscious ticks.
+`CognitiveCycle.__init__` falls back to an access rate equal to the processing rate only when no value is supplied. The composition root at `kaine/cycle/__main__.py` and `config/kaine.toml` both default `experiential_rate_hz` to 3.333 Hz. Setting the two rates equal gives one broadcast per tick, and a lower `experiential_rate_hz` makes broadcasts sparser.
 
-The config and `cycle.set_rates` accept any positive value. Only [Soma](../09-modules/soma.md)'s `reduce_rate` advisory clamps the processing rate to [0.5, 20.0] Hz.
+The config and `cycle.set_rates` accept any positive value. Only [Soma](../09-modules/soma.md)'s `reduce_rate` advisory clamps the processing rate, to between 0.5 and 20.0 Hz.
 
-### Adaptive conscious access
+### Adaptive access rate
 
-`experiential_rate_hz` is the resting rate. With `[cycle.access_rate].enabled` — the shipped default — the cycle recomputes the broadcast rate for each tick from an **access drive** in [0, 1].
+`kaine/cycle/access_rate.py`
 
-- **Tonic** drive: [Thymos](../09-modules/thymos.md) arousal above its resting baseline, scaled to [0, 1]. Arousal rises with perceptual prediction error, so failed predictions raise it.
-- **Phasic** drive: the most salient module report on the tick above `salience_floor` (0.5), scaled to [0, 1] and held as a peak that decays with time constant `phasic_decay_s` (1 subjective second). Events from `cycle` and `syneidesis` are not module reports and do not count.
+`experiential_rate_hz` is the resting rate. With `[cycle.access_rate].enabled`, the shipped default, the cycle recomputes the access rate for each tick from an access drive between 0 and 1.
 
-The drive is the larger of the two. The tick's broadcast rate is `resting + (processing − resting) × drive`: 3.333 Hz when calm, one broadcast per processing tick at full drive. The operator's rate control and fork timing profiles set the resting rate. The adaptive rate never goes below the resting rate or above the processing rate.
+- **Tonic** drive: [Thymos](../09-modules/thymos.md) arousal above its baseline, scaled to the range 0 to 1. This follows the exploratory, high-tonic mode of the adaptive-gain account of the locus coeruleus.
+- **Phasic** drive: the highest intensity among the tick's categorical alerts (events whose payload carries `alert: true`: a predictive processor's report that meets its alert criterion, or an event another module publishes at its alert level, such as a Thymos drive crossing, a Soma fatigue or regulation event, or a failed sleep), above `salience_floor` (0.5) and scaled to the range 0 to 1, held as a peak that decays with time constant `phasic_decay_s` (1 entity second). Graded reports without an alert do not count, so with no alert and arousal at baseline the rate stays at its resting value. Events from `cycle` and `syneidesis` never count. Raising the rate after an alert is a design choice modeled on the phasic locus coeruleus response; the affect-gain ablation is planned to test the opposite direction too.
 
-Every `cycle.tick` event carries the tick's effective `experiential_rate_hz` and `access_drive`. `runtime.json` carries `experiential_rate_effective_hz` and `access_drive` next to the resting rate. Only conscious access adapts: the processing rate stays at its configured value. `enabled = false` gives the fixed resting rate.
+The drive is the larger of the two, and the tick's access rate is `resting + (processing − resting) × drive`: the resting rate when calm, one broadcast per processing tick at full drive. The drive is computed before the tick's broadcast decision, so an alert can make its own tick a broadcast tick. When the resting rate is below the processing rate, the adaptive rate stays between them; when it is not, the rate equals the resting rate. The operator's rate control and fork timing profiles set the resting rate.
+
+Every `cycle.tick` event carries the tick's effective `experiential_rate_hz` and `access_drive`, and `runtime.json` carries `experiential_rate_effective_hz` and `access_drive` next to the resting rate. Only the access rate adapts; the processing rate stays at its configured value. `enabled = false` gives the fixed resting rate.
 
 ### Time dilation
 
-`processing_rate_hz` and `experiential_rate_hz` are **subjective** Hz rates: they describe the felt tick period, not necessarily the real one. The `[cycle].time_scale` key (default `1.0`) controls how the entity's subjective clock runs relative to wall-clock time:
+`processing_rate_hz` and `experiential_rate_hz` are rates in entity time, the time on the entity's clock, which runs at a configurable multiple of wall-clock time. The `[cycle].time_scale` key (default `1.0`) sets that multiple:
 
 | `time_scale` | Meaning |
 |---|---|
-| `0` | Frozen. The subjective clock stops. This reuses the pause/freeze path; the cycle does not add a second freeze mechanism. Setting `time_scale = 0` with `auto_time_scale = true` is a configuration error and refuses boot. |
+| `0` | The entity clock stops. This setting does not pause the cycle; freezing is done through the freeze file (`state/cycle/control.json`). Setting `time_scale = 0` with `auto_time_scale = true` is a configuration error and refuses boot. |
 | `1.0` | Real-time, the shipped default. Behavior is byte-identical to no clock injection. |
-| `< 1.0` | Slower subjective time. |
-| `> 1.0` | Faster subjective target. The cycle attempts the faster real tick rate and records shortfall honestly as slip. |
+| `< 1.0` | Entity time runs slower than wall-clock time. |
+| `> 1.0` | Entity time runs faster. The cycle attempts the faster real tick rate and records any shortfall as slip. |
 
-`EntityClock` (`kaine/entity_clock.py`) is the single shared subjective clock. Every module that times a cognitive process derives its "now" and durations from one injected `EntityClock` instance, so one `time_scale` knob dilates the whole mind coherently. `EntityClock.wall()` is the real monotonic clock, used only for slip and health measurement. `EntityClock.now()` is subjective time (`origin + wall_elapsed * scale`). `EntityClock.period(hz)` converts a subjective-Hz rate into the real seconds-per-tick budget the cycle paces against: `1 / (hz * scale)`. That is what `CognitiveCycle.tick()` uses to compute `target_ms` each tick.
+`EntityClock` (`kaine/entity_clock.py`) is the single shared entity clock (the code also calls it the subjective clock). Every module that times a cognitive process derives its "now" and durations from one injected `EntityClock` instance, so one `time_scale` setting changes the rate of the whole system together. `EntityClock.wall()` is the real monotonic clock, used for slip and health measurement. `EntityClock.now()` is entity time (`origin + wall_elapsed * scale`). `EntityClock.period(hz)` converts a rate in entity time into the real seconds-per-tick budget the cycle paces against: `1 / (hz * scale)`. That is what `CognitiveCycle.tick()` uses to compute `target_ms` each tick.
 
-Infrastructure timers that must track real wall-clock time regardless of subjective rate, such as the Spot watchdog, preservation monitor, and network timeouts, do not use this clock.
+Infrastructure timers that must track wall-clock time whatever the time scale, such as the Spot watchdog, preservation monitor, and network timeouts, do not use this clock.
 
-`CognitiveCycle.pacing_stats` is the honest pacing report exposed via the `pacing_stats` property and surfaced in Nexus. It uses a rolling 32-tick window of real per-tick wall time versus target budget, reporting:
+`CognitiveCycle.pacing_stats` is the pacing report exposed through the `pacing_stats` property and shown in Nexus. It uses a rolling 32-tick window of real per-tick wall time against the target budget. Among its fields:
 
 - `target_rate_hz` = `processing_rate_hz * time_scale`
-- `achieved_rate_hz` derived from the mean real tick duration
+- `achieved_rate_hz`, derived from the mean effective tick period, `max(wall, target)`
 - `mean_slip_ms` and `max_slip_ms`
 - `overrunning`, true when the achieved rate falls more than 1% below target
 
-This makes a `time_scale > 1` dilation visible rather than silently throttled.
+It also carries `mean_tick_ms`, `mean_target_ms`, `overrun_ticks`, `window_ticks`, `time_scale`, `time_scale_changes` and `auto_time_scale`, so a `time_scale > 1` that the host cannot hold shows up as overrun.
 
 ### Automatic time dilation
 
@@ -86,7 +88,7 @@ flowchart TD
     D --> E[Sort events by source, type, entry_id]
     E --> F[Refresh affect observer and access rate]
     F --> G[Syneidesis.select]
-    G --> H{Is experiential tick?}
+    G --> H{Broadcast tick?}
     H -- no --> O[Publish cycle.tick latency]
     H -- yes --> I[Publish workspace.broadcast]
     I --> J[Volition.select snapshot]
@@ -99,7 +101,7 @@ flowchart TD
 
 ### Drain control events
 
-`consume_control_events()` reads up to 32 entries from `cycle.control` using a persistent cursor. Each `cycle.set_rates` event applies updated `processing_rate_hz` and/or `experiential_rate_hz`. Both must be positive. On success the cycle publishes `cycle.rates` to `cycle.out`. Invalid payloads are logged and skipped without disrupting the loop.
+The run loop drains these two streams before each tick. `consume_control_events()` reads up to 32 entries from `cycle.control` using a persistent cursor. Each `cycle.set_rates` event applies updated `processing_rate_hz` and/or `experiential_rate_hz`. Both must be positive. On success the cycle publishes `cycle.rates` to `cycle.out`. Invalid payloads are logged and skipped without disrupting the loop.
 
 ### Drain soma regulation
 
@@ -115,25 +117,25 @@ Unknown action values are silently ignored. All advisories are advisory only: th
 
 ### Read module streams
 
-The main read path is one round-trip `read_entries_block` for all active module streams returned by `registry.active_streams()`. A per-stream `asyncio.gather` is used only as a fallback. Each stream is read with `block_ms=0` (non-blocking) and `count=100` (configurable). The per-stream cursor advances to the last entry ID scanned, decodable or not, so a batch of undecodable entries moves the cursor past itself instead of stalling the stream. Read failures increment a per-stream error counter but do not stop the loop.
+The main read path is one round-trip `read_entries_block` for all active module streams returned by `registry.active_streams()`. A per-stream `asyncio.gather` is used only as a fallback. Each stream is read with `block_ms=0` (non-blocking) and `count=100` (the `read_count` constructor argument; there is no config key). The per-stream cursor advances to the last entry ID scanned, decodable or not, so a batch of undecodable entries moves the cursor past itself instead of stalling the stream. Read failures increment a per-stream error counter but do not stop the loop.
 
 On a production boot the entrypoint constructs the cycle with `seed_cursors_to_tail=true`. Every stream cursor is seeded to the stream tail before the first read, so an in-run process restart against a live Redis replays nothing that predates the boot, including stale soma rate advisories. Library or test construction reads from the beginning.
 
 ### Selection
 
-`syneidesis.select(events, context)` receives the event list plus a context dict containing `tick_index`, `is_experiential`, and (when the oscillatory layer is enabled) `phases` — a dict mapping module names to their current oscillator phase. Before selection, the events are sorted by `(source, type, entry_id)`, the affect observer refreshes, and the access rate updates. The function returns a `WorkspaceSnapshot`.
+`syneidesis.select(events, context)` receives the event list plus a context dict containing `tick_index`, `is_experiential`, and (when the oscillatory layer is enabled) `phases`, a dict mapping module names to their current oscillator phase. Before selection, the events are sorted by `(source, type, entry_id)`, the affect observer refreshes, and the access rate updates. The function returns a `WorkspaceSnapshot`. Selection runs on every processing tick; on a tick that is not a broadcast tick the result is discarded. See [The global workspace](./global-workspace.md) for the scoring and the access rule.
 
 ### Broadcast
 
-If the tick is experiential and selection succeeded, the cycle calls `bus.publish_workspace(payload)` on `workspace.broadcast`. The payload mirrors the `WorkspaceSnapshot`: tick index, inhibited flag, selected events (with `entry_id`, `source`, `type`, `salience`, `payload`, `timestamp`, `causal_parent`), per-event salience scores, and metadata including PLV coherence when the oscillatory layer is on.
+On a broadcast tick, if selection succeeded, the cycle calls `bus.publish_workspace(payload)` on `workspace.broadcast`. It publishes accessed, inhibited and empty snapshots alike. The payload mirrors the `WorkspaceSnapshot`: tick index, the `inhibited` flag, `is_experiential`, `time_scale`, the score of every candidate of the tick, the selected events (with `entry_id`, `source`, `type`, `salience`, `payload`, `timestamp` and `causal_parent`), and metadata holding `access_threshold` and, when the oscillatory layer is on, `coherence`.
 
 Only `source="syneidesis"` may call `publish_workspace`. Any other source raises `ReservedStreamError`.
 
 ### Volition and proposal outcomes
 
-After a successful broadcast the cycle calls `Volition.select(snapshot)`. Volition applies the inhibition gate first. Inhibited snapshots return no intents.
+After a successful broadcast, inhibited or not, the cycle calls `Volition.select(snapshot)`. Volition checks the inhibition flag first and returns no intents for an inhibited broadcast. It is never called on a tick that is not a broadcast tick.
 
-Each returned intent is published to `volition.out` with event type `intent.speak`, `intent.think`, `intent.act`, or `intent.rest`. The cycle then publishes any `proposal_outcome` values returned by the policy to `volition_feedback.out` as `volition.proposal_outcome` events.
+Each returned intent is published to `volition.out` with event type `intent.speak`, `intent.think`, `intent.act`, or `intent.rest`. The cycle then publishes any `proposal_outcome` values, including those for inhibited broadcasts, returned by the policy to `volition_feedback.out` as `volition.proposal_outcome` events.
 
 Proposal outcomes are generated only when the action-selection policy includes the `NousProposalSource` wrapper, which requires [Nous](../09-modules/nous.md) to be enabled. With no profile selected, the loader applies the `thesis_test` profile, and that profile has `nous = false`, so no proposal outcomes are produced by default.
 
@@ -149,10 +151,10 @@ Every tick publishes a `cycle.tick` event to `cycle.out`:
 | `wall_duration_ms` | float | actual tick wall time |
 | `target_duration_ms` | float | `1000 / (processing_rate_hz * time_scale)` |
 | `slip_ms` | float | `max(0, wall - target)` |
-| `is_experiential` | bool | did this tick broadcast? |
+| `is_experiential` | bool | whether the tick was a broadcast tick (a broadcast was attempted) |
 | `error` | bool | did Syneidesis raise? |
 | `processing_rate_hz` | float | current processing rate |
-| `experiential_rate_hz` | float | current effective experiential rate |
+| `experiential_rate_hz` | float | current effective access rate |
 | `access_drive` | float | current access drive in [0, 1] |
 | `time_scale` | float | current time scale |
 
@@ -181,15 +183,15 @@ The freeze is a stack of `{source, reason, frozen_at}` entries. The `stack` is a
 
 A freeze-watch task in the cycle entrypoint polls this file and calls `cycle.pause()` and `cycle.resume()` to match the commanded state. `pause()` clears an `asyncio.Event`; `run_forever` blocks on `await self._paused.wait()`, so no ticks fire while the event is clear. On freeze, the watch snapshots the desired perception flags and suspends them for non-gestation freezes; a gestation-only freeze keeps perception on. On resume it writes the snapshot back, so a freeze/resume cycle never leaves the entity deaf or blind.
 
-Freeze suspends the entity's subjective clock while operators repair infrastructure. It is not a shutdown. The file contains only operational fields: freeze entries with ISO timestamps and optional reason strings. It never contains sensory content.
+A freeze stops the entity clock while operators repair infrastructure. It is not a shutdown. The file contains only operational fields: freeze entries with ISO timestamps and optional reason strings. It never contains sensory content.
 
 The Nexus `POST /diagnostics/cycle/freeze` endpoint writes this file: freezing pushes an `operator` entry and resuming removes `operator` entries only (`stand_down(source="operator")`). `POST /diagnostics/cycle/override` lifts named `welfare`, `gestation` or `programme_end` entries (`override()`). The `unfreeze` function, used only by the cycle's own clean boot, replaces the file with a `CycleControl()` whose fields are `frozen:false`, `frozen_at:null`, `reason:null`, `source:"operator"`, and `stack:[]`.
 
 ```mermaid
 stateDiagram-v2
     [*] --> Running : boot (operator present)
-    Running --> Frozen : freeze() — paused.clear()
-    Frozen --> Running : unfreeze() — paused.set()
+    Running --> Frozen : entry pushed, pause() and paused.clear()
+    Frozen --> Running : stack empties, resume() and paused.set()
     Running --> Shutdown : shutdown()
     Frozen --> Shutdown : shutdown()
     Shutdown --> [*]
@@ -268,11 +270,11 @@ Dynamic rate changes via the `cycle.control` stream override the `[cycle]` value
 
 | File | Role |
 |---|---|
-| `kaine/cycle/engine.py` | `CognitiveCycle` — tick loop, rate control, Soma consumer |
-| `kaine/cycle/control_state.py` | Freeze state serialization — `CycleControl`, `freeze()`, `unfreeze()` |
-| `kaine/cycle/__main__.py` | Entrypoint — assembles modules, starts freeze-watch task |
-| `kaine/cycle/boot_context.py` | Shared slotted dataclass for boot-phase state — `BootContext` |
+| `kaine/cycle/engine.py` | `CognitiveCycle`: tick loop, rate control, Soma consumer |
+| `kaine/cycle/control_state.py` | Freeze state serialization: `CycleControl`, `freeze()`, `unfreeze()` |
+| `kaine/cycle/__main__.py` | Entrypoint: assembles modules, starts freeze-watch task |
+| `kaine/cycle/boot_context.py` | Shared slotted dataclass for boot-phase state, `BootContext` |
 | `kaine/cycle/types.py` | `TickResult`, `WorkspaceSnapshot` dataclasses |
 | `kaine/cycle/protocols.py` | `CycleHook`, `ModuleRegistryProtocol`, `SyneidesisProtocol` |
-| `kaine/entity_clock.py` | Shared subjective clock |
+| `kaine/entity_clock.py` | Shared entity clock |
 | `state/cycle/control.json` | Runtime freeze state (operator-written) |

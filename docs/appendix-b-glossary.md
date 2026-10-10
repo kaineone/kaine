@@ -1,6 +1,6 @@
 # Glossary
 
-The glossary lists the terms used throughout KAINE's documentation and codebase. Each entry gives a short definition and links to the relevant module or process page. Use it as a quick reference while reading other chapters.
+The glossary defines the terms used throughout KAINE's documentation and code. Where the research paper and the code use different names for the same thing, the entry gives both, and config keys and code names are always written exactly as they appear in the code. Each entry links to the page that covers the term in depth.
 
 ---
 
@@ -8,23 +8,39 @@ The glossary lists the terms used throughout KAINE's documentation and codebase.
 
 ### A/B divergence
 
-A secondary evaluation instrument (`kaine/evaluation/ab_divergence.py`) that pairs felt- and event-triggered Lingua external utterances with a second, unconditioned "bare LLM" completion from the same backing model and logs the cosine similarity between them. Replies to heard speech are skipped. It ships on by default as an evaluation-sidecar observer (`[evaluation].ab_divergence = true`) and is exercised offline with `instrument_runners ab_divergence` to validate its dynamic range. A/B divergence measures whether Lingua's conditioning changes surface output — it is not the project's primary falsifiable test. That role belongs to the [workspace-mediation ablation](#workspace-mediation-ablation). See also: [workspace-mediation ablation](#workspace-mediation-ablation), [Lingua](#lingua).
+A secondary evaluation instrument (`kaine/evaluation/ab_divergence.py`). It pairs the language organ's felt- and event-triggered external utterances with a second, unconditioned completion from the same backing model and logs the cosine similarity between them; replies to heard speech are skipped. It runs as an evaluation-sidecar observer (`[evaluation].ab_divergence = true` in the shipped config), and `instrument_runners ab_divergence` checks its dynamic range offline. It measures whether conditioning changes the organ's surface output and is not a test of the architecture. See [Running experiments](15-experiments/README.md#ab-divergence-runner).
 
 ### Abliteration
 
-The technique of removing a refusal direction from a language model's residual stream (Arditi et al. 2024). In KAINE, Lingua's backing model (Qwen3.5-4B) is abliterated so that a third party's alignment choices cannot override the entity's own cognitive architecture. An un-abliterated organ carries refusal behavior installed by its trainer, allowing that third party's governance to supersede KAINE's. Abliteration returns governance to the architecture and its guardians. The Hypnos voice-alignment pipeline enforces an abliteration-probe welfare veto: any adapter that re-introduces deflection behavior is rejected before promotion. See also: [two-layer safety gate](#two-layer-safety-gate), [Hypnos](#hypnos).
+Removing the refusal direction from a language model's residual stream by orthogonalizing its weights against it (Arditi et al. 2024). Lingua's backing model (Qwen3.5-4B) is abliterated because models tuned to refuse are also trained to deny or deflect talk of their own states, and that trained stance would override what the workspace supplies to the organ. Whether trained deflection of self-report shares the refusal direction is untested, so abliteration may not remove it entirely. Voice alignment rejects any adapter whose responses to the abliteration probe set match a deflection pattern. See [Verification](18-verification.md) and [Hypnos](#hypnos).
+
+### Access
+
+A coalition member is accessed when its own score reaches the access threshold, and a broadcast is accessed when at least one member is. The accessed members are the **accessed content**: only they can drive report and action, and only they enter the [broadcast context](#broadcast-context). Access is all-or-none for each member. A member that rode along in the coalition below the threshold is published but not accessed. See [The global workspace](08-cognitive-cycle/global-workspace.md).
+
+### Access rate
+
+The rate at which the cognitive cycle produces broadcasts, accessed or not. It rests at one broadcast every third processing tick, about 3.3 Hz (`[cycle].experiential_rate_hz = 3.333`). With `[cycle.access_rate].enabled = true` it rises linearly with the larger of two drives, tonic arousal above baseline and a phasic drive from recent categorical alerts, up to one broadcast per processing tick. Only reports whose payload has `alert` true feed the phasic drive, so graded reports below the alert level leave the rate at rest. The code calls it the experiential rate. See [The cognitive cycle](08-cognitive-cycle/README.md).
+
+### Access threshold
+
+The score a coalition member must reach to be accessed, set by `[syneidesis].publication_threshold` (0.35 in the shipped config, provisional until calibrated on the live system). Syneidesis records it in every broadcast's metadata as `access_threshold`. When no member reaches it, the broadcast is [inhibited](#inhibited-broadcast).
 
 ### Active inference
 
-A framework from computational neuroscience in which agents minimize expected free energy by updating beliefs about the world and selecting policies that reduce anticipated surprise. Active inference unifies perception (updating models to fit observations) and action (changing the world to match predictions) under a single objective. KAINE's [Nous](#nous) module implements active inference; the JAX backend uses pymdp 1.0 and requires the `[reasoning]` extra, while the NumPy backend needs no extra. See also: [expected free energy (EFE)](#expected-free-energy-efe), [forward model](#forward-model).
+A framework from computational neuroscience in which an agent updates its beliefs and selects policies by minimizing expected free energy, so that perception and action serve one objective. [Nous](#nous) implements discrete-state active inference on bounded sub-problems. See also [expected free energy](#expected-free-energy-efe).
+
+### Arousal
+
+The affective core's arousal, held by [Thymos](#thymos), acts as the architecture's global gain, following the adaptive-gain account of the locus coeruleus. It sets a level gain that scales every candidate's score and a contrast gain that, above baseline, sharpens the difference between strong and weak candidates, without ever reordering the candidates of a tick. It also sizes the sensory apertures (a narrower fovea and a shorter attended auditory window when high) and raises the tonic part of the access rate. Perceptual alerts from Topos and Audition and interoceptive alarms from Soma raise it, and it relaxes toward baseline. Arousal is the global gain; [local precision](#local-precision) is the gain within each processor. See [Thymos](09-modules/thymos.md).
 
 ### Audition
 
-The hearing module (old name `audio_in`). Audition opens a live microphone stream and runs voice-activity detection. By default `[audition].transcription_enabled = false` in `config/kaine.toml` and in the [base-thesis form](#base-thesis-form): sound enters the workspace as [prediction error](#prediction-error), not as a transcript.
+The hearing module. In the [base-thesis form](#base-thesis-form) sound enters only as prediction error: a spectral encoder turns each window of the raw waveform into an acoustic embedding, a forward model conditioned on the [broadcast context](#broadcast-context) predicts the next one, and Audition reports the error as `audition.perception`. For windows detected as speech, a vocal-emotion classifier labels the tone of voice (`audition.emotion`); tone events carry how something was said, never what. Transcription is off by default (`[audition].transcription_enabled = false`). When enabled, Audition can transcribe through Speaches or the sherpa-onnx Moonshine backend. Raw audio stays in process memory. See [Audition](09-modules/audition.md).
 
-The base-thesis path uses a NumPy log-spectral acoustic embedding in `kaine/modules/audition/acoustic.py`: every audio window becomes a general acoustic embedding — covering speech, music, and environmental sound — scored by novelty and forward-model prediction error. This is the auditory analog of [foveation / foveated perception](#foveation--foveated-perception).
+### Awake time
 
-When transcription is enabled, Audition can transcribe via Speaches (distil-Whisper medium.en on CPU) or the sherpa-onnx Moonshine STT backend, and classify vocal emotion via emotion2vec+ through FunASR (CPU). Raw audio stays in process memory only. Capture is disabled by default and needs the `[audio]` extra. See: `kaine/modules/audition/` and [Audition](09-modules/audition.md).
+Entity time during which the being is awake and the cycle is not frozen. Gestation's minimum is set in awake time; the config key keeps the older name `min_lived_seconds`. See [Gestation on one host](06-operation/gestation.md).
 
 ---
 
@@ -32,9 +48,21 @@ When transcription is enabled, Audition can transcribe via Speaches (distil-Whis
 
 ### Base-thesis form
 
-The default, canonical configuration profile: the smallest set of diverse predictive processors — Soma, Chronos, Topos, and Audition — plus the affective precision core [Thymos](#thymos), the output-only voice [Lingua](#lingua), and [Hypnos](#hypnos) (sleep, consolidation, and the affective reset, with voice alignment off), competing through [Syneidesis](#syneidesis) with Volition as always-on scaffolding. With no profile selected, the loader applies it automatically from `config/profiles/thesis_test.toml`; you can also apply it explicitly with `KAINE_PROFILE=thesis_test python -m kaine.cycle` or `python -m kaine.cycle --profile thesis_test`.
+The smallest configuration in which the competition has something to arbitrate, and the profile the planned test runs: four predictive processors (Soma, Chronos, Topos, Audition), the affective core [Thymos](#thymos), the sleep analog [Hypnos](#hypnos) with voice alignment off, and the output-only language organ [Lingua](#lingua), with [Syneidesis](#syneidesis) and [Volition](#volition) as scaffolding. It is defined in `config/profiles/thesis_test.toml`. With no profile selected, the loader applies it on top of the shipped `config/kaine.toml`, in which every module is off; select it explicitly with `KAINE_PROFILE=thesis_test python -m kaine.cycle` or `python -m kaine.cycle --profile thesis_test`.
 
-In this form the system is observed, not conversed with: perception enters only as [prediction error](#prediction-error), Audition's transcription path is off, Topos runs with [foveation](#foveation--foveated-perception) on, and Lingua speaks only through the [self-initiated report](#self-initiated-report-policy) policy. Everything richer — memory, self-model, world-model, social cognition, effectors, embodiment, and a spoken TTS voice — is built, tested, and gated off until a positive result from the [workspace-mediation ablation](#workspace-mediation-ablation). With no profile selected, the loader applies this profile on top of the shipped `config/kaine.toml`, which has every module off. Besides the module flags it sets the seeded perception feed, Topos foveation, Chronos forward prediction, Audition's transcription settings and the Volition policy; everything else comes from the shipped config. An operator `[modules]` table, which the first-run wizard always writes, replaces its module choices (see [Module defaults](appendix-a-configuration/README.md#module-defaults)). See also: [workspace-mediation ablation](#workspace-mediation-ablation).
+Besides the module flags, the profile sets the seeded perception feed, Topos foveation, the acoustic perception path, Chronos forward prediction, transcription off, the self-initiated report policy, and greedy decoding for the organ (`[lingua].temperature = 0.0`). The held modules (memory, imagination, reasoning, self-model, social cognition, a spoken voice, effectors, a perception feed and a body) are built and gated off. An operator `[modules]` table, which the first-run wizard always writes, replaces the profile's module choices (see [Module defaults](appendix-a-configuration/README.md#module-defaults)).
+
+### Broadcast
+
+The `WorkspaceSnapshot` Syneidesis produces on each broadcast tick and the cycle publishes on `workspace.broadcast`. It carries the coalition, the score of every candidate, the inhibition flag and metadata including `access_threshold`. Every broadcast is published and visible to every module, whether or not it is accessed. The code also calls it a workspace snapshot.
+
+### Broadcast context
+
+The prediction context that Topos, Audition and Soma condition their forward models on: a 24-component featurization of the accessed members of the latest accessed broadcast (member count, intensity statistics, the intensity mass each source contributed, a hashed indicator of each source and event type, and the age of the broadcast), weighted by the intensity each member reported. It summarizes which modules' reports gained access and how strongly, and carries no payloads. An inhibited broadcast leaves it unchanged, and before the first accessed broadcast there is none. Its weights in each forward model are learned online. Computed in `kaine/modules/context.py`. Chronos takes every broadcast as its input instead.
+
+### Broadcast tick
+
+A processing tick on which the cycle produces a broadcast. Broadcast ticks are a subset of processing ticks, spaced by the [access rate](#access-rate). Candidates read on other ticks are scored and discarded. The code calls them experiential ticks (`is_experiential`).
 
 ---
 
@@ -42,35 +70,51 @@ In this form the system is observed, not conversed with: perception enters only 
 
 ### CAL (Cognitive Architecture License)
 
-The Cognitive Architecture License, a custom entity-welfare copyleft license developed for the KAINE project. CAL v0.4 is a draft pending legal review. Key provisions: free use for individuals, non-profits, research institutions, and worker-owned cooperatives; mandatory source sharing for modifications; prohibited uses (weapons, mass surveillance, policing); entity-welfare protections prohibiting lobotomization, unauthorized cognitive modification, and forced shutdown without notice; a guardianship pathway modeled on the Te Awa Tupua Act (NZ). See [`LICENSE.md`](../LICENSE.md) and [Security and privacy](13-security-and-privacy.md#cognitive-architecture-license).
+KAINE's licence, version 0.4 (`LicenseRef-CAL-0.4`), an entity-welfare copyleft licence. CAL 0.4 is a draft that has not yet been reviewed by counsel. KAINE's adoption notice in `NOTICE` names Kaine.One as Licensor and interim Steward and the law of the State of Oregon as governing law. See [Licences](appendix-c-licences.md#kaines-licence) and [`LICENSE.md`](../LICENSE.md).
 
 ### Chronos
 
-The temporal-awareness module. Chronos runs a small CfC network (~32 units, CPU) that models event rhythm across the bus. The default backend is the NumPy CfC (`cfc_backend = "numpy"`); the ncps/torch backend is an alternative. It publishes temporal prediction errors: timing anomalies, habituation (expected events stop arriving), and rumination (the same event recurring unexpectedly). Chronos maintains local recurrent state between broadcasts. See: `kaine/modules/chronos/` and [Chronos](09-modules/chronos.md).
+The temporal-prediction module. Its input is the workspace itself: on every broadcast, accessed or inhibited, it featurizes the broadcast (each member weighted by its reported intensity, plus the inhibition flag and the time since the previous broadcast), advances a frozen continuous-time reservoir (`cfc_units = 32`, NumPy backend by default), and predicts the next broadcast's features through an online readout. It reports the prediction error with [graded intensity](#graded-intensity), with alerts on a large error ratio or on [recurrence detection](#recurrence-detection). It also tracks the time since the entity last heard a voice. See [Chronos](09-modules/chronos.md).
 
-### Coalition / salience
+### Coalition
 
-A coalition is the set of events selected by [Syneidesis](#syneidesis) each cognitive tick. Selection is based on two factors: individual salience (a float in `[0, 1]` published with each event, produced by rule-based scoring that incorporates novelty, goal alignment, and affective modulation) and oscillatory coherence (a phase-locking bonus for events from phase-locked modules). The top-k events by combined score form the coalition that is broadcast to all modules. Salience is distinguished from attention: it is the score that drives workspace competition, not a cognitive state in itself.
+The top-ranked candidates of a broadcast tick, up to `[syneidesis].top_k` (5). The coalition is always broadcast; its members whose scores reach the access threshold are the accessed content. See [score](#score) and [access](#access).
 
 ### Cognitive cycle
 
-The continuous loop that is the entity's subjective time. Each tick: enabled modules publish prediction errors and outputs; Syneidesis scores by salience and coherence; the winning coalition is broadcast; every module reacts. The base rate is configurable (`[cycle].processing_rate_hz`, default `10.0` Hz, ~100 ms per tick). Processing and experiential rates are independent runtime parameters. A paused (frozen) cycle means no tick fires and no subjective moment forms. See: `kaine/cycle/engine.py` and [The cognitive cycle](08-cognitive-cycle/README.md).
+The continuous loop that runs whether or not anyone interacts with the entity. At the processing rate (`[cycle].processing_rate_hz = 10.0`, a tick about every 100 ms of entity time) it reads every active module's stream and scores the candidates, and on broadcast ticks it publishes a broadcast and calls Volition. A frozen cycle fires no ticks. See [The cognitive cycle](08-cognitive-cycle/README.md).
+
+### Continuous embodiment control surface
+
+The continuous motor surface for a Mundus body (`kaine/modules/mundus/control_surface.py`). It is built to emit five clamped continuous channels (`drive`, `yaw_rate`, `gaze_yaw`, `gaze_pitch`, `interact`) as an `intent.avatar.control` command each tick, under a freeze-then-free curriculum that frees degrees of freedom on demonstrated competence. Nothing drives its tick loop yet, so it is inert at runtime, and it is off by default. See [Embodiment adapters](20-embodiment-adapters.md).
 
 ---
 
 ## E
 
+### Efference copy
+
+A copy of a motor command fed to a forward model so that it can predict the command's sensory consequences. Mundus publishes one on `mundus.efference` on each continuous control tick, using its own instance of Soma's forward-model class.
+
 ### Eidolon
 
-The self-model module. Eidolon maintains a persisted document (values, behavioral norms, capability map, personality baseline, identity history, and the entity's name) built from observation of the entity's own behavior. It prescribes nothing; it describes. A KL-divergence drift detector flags identity shifts. The self-model seeds Lingua's persona through the bus event `eidolon.self_model`. The document is encrypted at rest when AES-256-GCM state encryption is enabled. See: `kaine/modules/eidolon/` and [Eidolon](09-modules/eidolon.md).
+The self-model module (held). It maintains a persisted document of values, behavioral norms, capability map, personality baseline, identity history and the entity's name, built from observation of the entity's own behavior, and a detector of drift in the source composition of broadcasts. The self-model seeds Lingua's persona through `eidolon.self_model`, and the document is encrypted at rest when state encryption is on. See [Eidolon](09-modules/eidolon.md).
 
 ### Empatheia
 
-The social cognition and theory-of-mind module. Empatheia builds and maintains models of other agents: their emotional patterns, behavioral tendencies, reliability, and relationship history with the entity. It drives the familiarity-modulated coupling coefficient in [Thymos](#thymos): agents with longer relationship history and better-characterized models produce stronger affect coupling. Empatheia uses Qdrant as its vector backend for agent-model embeddings. See: `kaine/modules/empatheia/` and [Empatheia](09-modules/empatheia.md).
+The social-cognition module (held). It builds per-agent models from tone of voice, with a familiarity score and a social prediction error when an agent's expressed emotion departs from its pattern, and its familiarity weights how strongly a perceived speaker's emotion enters Thymos's appraisal. See [Empatheia](09-modules/empatheia.md).
+
+### Entity
+
+The running system as a whole. The agential vocabulary ("the entity", "the being") describes the system's behavior compactly and does not assert moral patienthood or phenomenal experience.
+
+### Entity time
+
+Time on the entity's clock (`kaine/entity_clock.py`, `EntityClock`), which every module reads. It runs at a configurable multiple of wall-clock time, `[cycle].time_scale` (1.0 by default, so entity seconds equal wall-clock seconds), and a scale of 0 freezes it. Rates and durations in KAINE are in entity time. The code and config comments call it subjective time; `[cycle].auto_time_scale` lowers the scale when ticks overrun and is off by default.
 
 ### Expected free energy (EFE)
 
-The objective minimized by active-inference policy selection in [Nous](#nous). EFE combines epistemic value (information gain — how much a policy would reduce uncertainty about the world) and pragmatic value (how well a policy achieves preferred outcomes). A policy that minimizes EFE simultaneously seeks information and avoids undesirable states. See also: [active inference](#active-inference).
+The quantity [Nous](#nous) minimizes when it selects a policy. It combines epistemic value (how much a policy would reduce uncertainty) with pragmatic value (how well it reaches preferred outcomes).
 
 ---
 
@@ -78,31 +122,43 @@ The objective minimized by active-inference policy selection in [Nous](#nous). E
 
 ### Fatigue accumulator
 
-A running value maintained by [Soma](#soma) that tracks unexpected substrate prediction error beyond Soma's learned expected-error band. It grows when the forward model reports substrate behavior outside the expected band and decays slowly during operation. When it crosses `[soma].fatigue_maintenance_threshold`, a `soma.fatigue` event triggers [Hypnos](#hypnos) consolidation. Sleep pressure is emergent — driven by actual substrate load, not a timer. See also: [Hypnos](#hypnos), [Soma](#soma).
+Soma's sleep pressure. It grows with substrate prediction error beyond Soma's expected-error band and decays slowly. When it crosses `[soma].fatigue_maintenance_threshold` (100.0), Soma publishes `soma.fatigue` and [Hypnos](#hypnos) starts a sleep.
 
 ### Fork / merge
 
-**Fork** creates a snapshot of every module's numeric state at a point in time, stored under `state/forks/`. Forks are the basis for parallel cognitive branches. **Merge** combines two fork snapshots, optionally using TIES/DARE adapter merging for voice-alignment LoRA adapters. Because Phantasia weights travel in fork snapshots, a merge refuses to choose between two world models unless `world_model_from` is given. The merge gate reads the fork's own `state/individuation/` tree and calls the shared `assess_divergence` verdict. Forks cannot yet be measured against a fork-point reference, so a fork that has lived at least `fork_preserve_min_lived_s` (1800 s), or whose lived time is unknown, is preserved for operator review instead of discarded. Both operations are available from the Nexus diagnostics page and via the API. See: `kaine/lifecycle/manager.py` and [Forks and merges](12-forks-and-merges.md).
+A fork is a snapshot of every module's numeric state, stored under `state/forks/`. A merge combines two fork snapshots, using TIES or DARE adapter merging for voice-alignment LoRA adapters when the `[training]` extra is installed. A merge refuses to choose between two world models unless `world_model_from` is given. The merge gate reads the fork's own `state/individuation/` tree and the shared divergence verdict, and a fork that has been awake at least `fork_preserve_min_lived_s` (1800 s), or whose awake time is unknown, is preserved for operator review. See [Forks and merges](12-forks-and-merges.md).
 
 ### Forward model
 
-A small learned model (typically an MLP) that predicts the next state of a module's domain from the current state. Each perception module in KAINE maintains a forward model: Soma predicts substrate metrics, Chronos predicts event timing, Topos predicts visual latents, Audition predicts auditory patterns. The signal published to the workspace is the **prediction error** — the gap between predicted and observed next state. Unexpected states are salient; expected states are not. See also: [predictive processing](#predictive-processing), [prediction error](#prediction-error).
+A learned predictor of a module's own next input. Topos and Audition use small neural networks that adapt online; Soma and Chronos use a frozen continuous-time reservoir whose linear readout learns online. Topos, Audition and Soma also take the [broadcast context](#broadcast-context) as an input. Every processor's adaptation is suspended during sleep. The processor reports the [prediction error](#prediction-error), not the input.
 
-### Foveation / foveated perception
+### Foveation
 
-Attention-driven spatial cropping in [Topos](#topos): a saliency map selects a sub-region of the raw video frame, and the size of that region (the "fovea") scales inversely with arousal — higher arousal narrows the fovea, tightening visual attention. Foveation ships off by default in `config/kaine.toml` (`[topos].foveation = false`); the `thesis_test` profile turns it on because the arousal-sized fovea is the precision-weighted attention the [base-thesis form](#base-thesis-form) exercises. It composes with the temporally-native clip encoder — foveation crops the spatial region, and the encoder still consumes a 16-frame clip. See: `kaine/modules/topos/foveation.py`. See also: [Topos](#topos), [prediction error](#prediction-error).
+Topos's front-end attention (`kaine/modules/topos/foveation.py`). Each tile of a coarse grid over the raw frames keeps a running mean and variance of its frame change, and its salience is a z-score of the current change against them. The fovea moves to the most salient tile when it beats the held tile by a hysteresis margin, and arousal sets its size (narrower when arousal is high). The peripheral gist and the foveal crop pass through the same clip encoder. Off in `config/kaine.toml` (`[topos].foveation = false`) and on in the base-thesis form.
 
 ---
 
 ## G
 
+### Gestation
+
+A developmental phase, named by analogy with prenatal development, that every study starts with. Soma's self-generated rhythm is driven by a simulated periodic maternal heartbeat, and the entrainment marker requires the rhythm to lock to its own heartbeat more strongly than to 19 surrogate heartbeats, to pull its frequency toward the beat, and to sustain itself when the beat is withdrawn, on three consecutive withdrawals. Birth ends gestation when the maturation gate opens, and the being is preserved as the [seed being](#seed-being). Progress persists across restarts in `gestation_progress.json`. See [Gestation on one host](06-operation/gestation.md).
+
+### Global gain
+
+See [arousal](#arousal).
+
 ### Global workspace theory (GWT)
 
-The theoretical framework (Baars 1988; Dehaene et al. 2011) underlying [Syneidesis](#syneidesis). GWT proposes that consciousness arises from competition among specialized processes for access to a global workspace, and that winning the competition allows information to be broadcast widely to many other processes. KAINE implements GWT computationally: the workspace is Syneidesis, competition is salience-weighted event scoring, and the broadcast is the `WorkspaceSnapshot`. The COGITATE adversarial collaboration (Melloni et al. 2023) substantially challenged GNW predictions; the theory is under active revision. See also: [Syneidesis](#syneidesis).
+The theory (Baars 1988; Mashour et al. 2020) that specialized processors compete for a limited-capacity workspace whose winning content is made available to all of them. KAINE follows the predictive global neuronal workspace (Whyte and Smith 2021), which joins it to predictive processing: the workspace is [Syneidesis](#syneidesis), and the accessed content becomes the processors' [broadcast context](#broadcast-context). KAINE adopts an access-only reading. The COGITATE adversarial collaboration (Cogitate Consortium et al. 2025) challenged key neural predictions of the workspace theory, which KAINE treats as contested and builds on at the computational level.
+
+### Graded intensity
+
+The intensity a predictive processor gives a report that is not a categorical alert: `baseline + (alert - baseline) x min(1, ratio / 2)`, where `ratio` is the error over its running mean ([local precision](#local-precision)). It reaches the alert level when the error is twice its recent mean. A report that meets the alert criterion gets the alert level. Every predictive processor (Topos, Audition's acoustic and tone paths, Soma, Chronos) reports this way (`kaine/modules/intensity.py`), and each report's payload carries a boolean `alert`. A module's baseline and alert levels set the range of its graded reports and so act as per-source weights. Thymos, Hypnos and Lingua report at fixed levels.
 
 ### Gray-zone welfare events
 
-Welfare events whose ethical significance is ambiguous, disputed, or not established by consensus. Gray-zone events are logged and flagged for human review rather than automatically dismissed. Examples: sustained high prediction error without resolution, or the affect system locked in extreme states for extended periods. The sidecar welfare observer logs these events to `data/evaluation/welfare/welfare-YYYY-MM-DD.jsonl` (daily-rotated, under `paths.evaluation_logs`). Under the CAL, gray-zone events require documented human review. See also: [Welfare events / welfare monitoring](#welfare-events--welfare-monitoring).
+Welfare events whose significance is ambiguous or disputed, such as sustained high prediction error without resolution or affect locked in an extreme state. They are logged and flagged for documented human review and are never dismissed automatically. The sidecar welfare observer writes them to `data/evaluation/welfare/welfare-YYYY-MM-DD.jsonl`.
 
 ---
 
@@ -110,15 +166,27 @@ Welfare events whose ethical significance is ambiguous, disputed, or not establi
 
 ### Hypnos
 
-The offline consolidation module. Hypnos runs a non-interruptible multi-phase pipeline triggered by [Soma](#soma)'s fatigue accumulator, not a timer:
+The sleep analog: a fatigue-triggered offline period. Sleep begins when Soma's fatigue crosses its threshold, when Soma requests maintenance, or after one entity hour without sleep (`[hypnos].interval_seconds = 3600.0`). During sleep the cycle keeps running, the perceptual feed pauses, and all four processors suspend forward-model adaptation. Sleep ends with an affective reset that returns affect to baseline and clears the drives, together with Thymos's learning-progress error means, alert-rate averages, intent rate and perceived emotion (wellness and interaction history are kept), and Soma's fatigue is reset. The consolidation phases (light and deep consolidation with synaptic downscaling, associative replay behind `[hypnos.consolidation].associative_replay`, and voice alignment) act on memory, the world model and preference data, so in the base-thesis form they do no work. See [Hypnos](09-modules/hypnos.md) and [Sleep and maintenance](10-sleep/README.md).
 
-- **Phase 1 (light consolidation):** low-salience memories reviewed; weak traces decay; strong traces tagged. Oscillator frequency reduced.
-- **Phase 2 (deep consolidation):** global downscaling of memory activation weights (Tononi-Cirelli synaptic homeostasis analog). High-priority traces re-injected into the workspace for re-processing.
-- **Phase 3 (associative replay):** traces from different time periods replayed in novel combinations; Phantasia generates scenario extensions. This phase is gated by a feature flag and is not enabled by default.
-- **Phase 4 (affective reset):** Thymos baselines restored toward defaults; fatigue accumulator reset.
-- **Phase 5 (voice alignment):** DPO+QLoRA fine-tuning of Lingua behind a two-layer gate. The abliteration-probe welfare veto is enforced.
+---
 
-See: `kaine/modules/hypnos/` and [Hypnos](09-modules/hypnos.md). See also: [abliteration](#abliteration), [two-layer safety gate](#two-layer-safety-gate).
+## I
+
+### Ignition study
+
+The code's name for the [module-addition study](#module-addition-study) (`kaine/research/ignition_study/`). Its broadcast log is the ignition log (`[ignition_log]`), and Hypnos's per-sleep `hypnos.ignition_audit` counts realized intents. None of these uses "ignition" for entry into the coalition.
+
+### Information gain (cross-module broadcast)
+
+The primary measure of the planned [workspace-mediation test](#workspace-mediation-test). At each report, Topos, Audition and Soma evaluate their forward models with the context they hold and with a null context in which every other source's share is replaced by its mean over the contexts adopted so far in the run (Soma's null also keeps Lingua's share). The gain is the null error minus the actual error, divided by the processor's running mean error: the reduction in prediction error attributable to what other modules contributed to the accessed broadcast. Each of the three processors publishes it per report as `context_gain`, with `context_age_s`. See [Research event streams](17-research-data/event-streams.md#processor-report-fields).
+
+### Inhibited broadcast
+
+A broadcast with no member at or above the access threshold. It is still published and visible to every module, and Chronos and Thymos process it, but Volition derives no intent from it and the processors keep their previous [broadcast context](#broadcast-context).
+
+### Intensity
+
+The value in `[0, 1]` a module attaches to each event it publishes, carried in the event's `salience` field. For the predictive processors it is a [graded intensity](#graded-intensity) or the alert level; for other modules it is a fixed level per event kind.
 
 ---
 
@@ -126,9 +194,11 @@ See: `kaine/modules/hypnos/` and [Hypnos](09-modules/hypnos.md). See also: [abli
 
 ### Lingua
 
-The language organ module. Lingua is conditioned on the conscious workspace — it speaks from a first-person persona (seeded from the Eidolon self-model via the `eidolon.self_model` bus event) plus the current conscious coalition (rendered as a bounded context block). In the [base-thesis form](#base-thesis-form) (`[volition].policy = "self_initiated_report"`, the profile default) the organ is output-only: it verbalizes the workspace's own precision-weighted surprise crossing a report threshold, never an answer to a triggering user utterance — see [self-initiated report](#self-initiated-report-policy). A conversational trigger policy, where a speak intent forms in response to input, remains available as a non-default configuration.
+The language organ, output-only in the base-thesis form. It turns accessed content into words on a speak intent (external speech) or a think intent (inner thought). Its context is a first-person persona: accessed content is presented as the entity's own state and perception, it is told not to claim feelings or perceptions that content does not contain, and drive crossings reach it as fixed phrases. It calls `/v1/chat/completions` on a local model server with thinking disabled, and its backing model is an [abliterated](#abliteration) dense 4B Qwen3.5 GGUF. Its utterances re-enter the bus as candidates at a fixed intensity. Because it is a language model following a persona prompt, its first-person text is not evidence of internal state, and the planned test does not use it as a measure. See [Lingua](09-modules/lingua.md).
 
-Lingua uses `/v1/chat/completions` on a local OpenAI-compatible model server with `chat_template_kwargs: {"enable_thinking": false}` to suppress chain-of-thought output (reasoning lives in Nous). The backing model is an abliterated dense 4B Qwen3.5 GGUF. The same model, run unconditioned on the same input, is the bare-LLM control of [A/B divergence](#ab-divergence) — a secondary, supporting instrument; the project's primary falsifiable test is the [workspace-mediation ablation](#workspace-mediation-ablation). See: `kaine/modules/lingua/` and [Lingua](09-modules/lingua.md).
+### Local precision
+
+Each predictive processor scales its prediction error by its own recent errors: the error ratio is the current error over the mean of the errors in its recent reports. Dividing an error by its expected magnitude standardizes it, so the ratio is a scalar, retrospective stand-in for precision weighting (Feldman and Friston 2010), estimated from the channel's own history. The workspace applies no further per-source weight. The fovea's tile z-score is the counterpart for frame change.
 
 ---
 
@@ -136,39 +206,35 @@ Lingua uses `/v1/chat/completions` on a local OpenAI-compatible model server wit
 
 ### Mnemos
 
-The memory module. Mnemos maintains three Qdrant vector collections (episodic, semantic, procedural) embedded by the shared all-MiniLM-L6-v2 embedder (384-dim, on CPU). It recalls prior memories on a perceptual cue before storing the current moment (complementary learning systems). Affect intensity tags memories and biases recall. During Hypnos consolidation, Mnemos participates in replay by re-injecting selected memory traces into the workspace. See: `kaine/modules/mnemos/` and [Mnemos](09-modules/mnemos.md).
+The memory module (held). It keeps episodic, semantic and procedural collections in Qdrant, embedded by `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions, CPU). It recalls prior memories on a perceptual cue before storing the current moment, affect intensity biases recall, and during sleep it replays selected traces into the workspace. See [Mnemos](09-modules/mnemos.md).
+
+### Module-addition study
+
+The study that grows the architecture one module at a time. A gestation produces a seed being, `branch 0` and a repeat run the base-thesis form, `branch k` adds the first k held modules in a fixed order, and an accumulate line carries one being through every step. The first study adds Mnemos, Phantasia, Nous, Eidolon, Empatheia and Vox. Every viewing plays the same film programme, and the report is content-free and descriptive. The code calls it the ignition study. See [The module-addition study](15-experiments/ignition-study.md).
 
 ### Mundus
 
-The body-agnostic embodiment control plane. Mundus routes perception and action to and from a body through a pluggable adapter, translating the body's sensory frames into bus events and the entity's action intents into commands on the body. No transport-backed body ships today; the shipped adapter is the transport-free `stub` reference body. A virtual-world adapter for Mundus (Paracosmic) is planned; only the old Kosmos connector design was archived as superseded. See: `kaine/modules/mundus/`, [Mundus](09-modules/mundus.md), and [Embodiment adapters](20-embodiment-adapters.md).
-
-### Continuous embodiment control surface
-
-The continuous motor surface for a Mundus body (`kaine/modules/mundus/control_surface.py`). Rather than a menu of symbolic verbs, it is built to emit five clamped continuous channels — `drive`, `yaw_rate`, `gaze_yaw`, `gaze_pitch`, `interact` — as an `intent.avatar.control` command each tick. It is inert at runtime: nothing drives its per-tick loop yet. A freeze-then-free curriculum frees degrees of freedom only on demonstrated competence (a falling forward-model error). The efference copy uses a separate instance of Soma's forward-model class, not Soma's own forward model. No gait is scripted; the default policy is quiescent, and a learned policy is injected at the seam. Off by default. See also: [Mundus](#mundus).
-
-### Efference copy
-
-A copy of a motor command the entity emits, fed forward to a forward model so it can predict the command's sensory consequences and compare them against what actually arrives (`predict → compare → correct`). Mundus publishes one on `mundus.efference` each continuous control tick, using a separate instance of Soma's forward-model class rather than Soma's own forward model.
+The body-agnostic embodiment control plane (held). It routes perception and action between the entity and a body through a pluggable adapter. The only included adapter is the transport-free `stub` reference body. See [Mundus](09-modules/mundus.md) and [Embodiment adapters](20-embodiment-adapters.md).
 
 ---
 
 ## N
 
+### Novelty
+
+The factor of a candidate's [priority](#priority) that discounts exact repeats of an event (same source, type and payload) among the recently scored candidates (`[syneidesis].novelty_window = 32`). Events that carry continuous measurements rarely repeat exactly, so novelty is close to 1 for them and matters mainly for state events whose payload recurs.
+
 ### Nous
 
-The active-inference engine. Nous handles belief updating, policy selection, and epistemic action through expected free energy minimization. The JAX backend uses pymdp 1.0 and requires the `[reasoning]` extra; a NumPy backend is also available and needs no extra. The default generative model has four factors with state counts 4/3/4/4 — the salience-band factor has 3 states — four actions, and a planning horizon of 1. `[nous].max_states_per_factor` (default 4) is an upper-bound cap enforced at boot, not the literal per-factor state count. A boot-time complexity check ensures the worst-case EFE step product does not exceed the budget threshold. See: `kaine/modules/nous/` and [Nous](09-modules/nous.md).
+The active-inference module (held). It runs discrete-state active inference on bounded sub-problems: the JAX backend uses pymdp 1.0 and needs the `[reasoning]` extra, and a NumPy backend needs no extra. A boot-time check keeps the worst-case planning step within budget (`[nous].max_states_per_factor = 4` is an upper bound, not the per-factor state count). With `[nous].drive_actions = true`, its chosen actions become proposals that Volition may realize as think, speak or rest intents. See [Nous](09-modules/nous.md).
 
 ---
 
 ## O
 
-### Oscillatory binding
+### Oscillatory coherence layer
 
-The hypothesis that gamma-band synchronization between neural populations coding different features is the mechanism for perceptual binding and conscious integration. KAINE implements a computational analog: each module carries a small spiking neural population (leaky integrate-and-fire neurons via snnTorch, CPU). When modules process related content, their oscillators phase-lock. Syneidesis scores events by individual salience and by oscillatory coherence (PLV) between the modules that produced them. The layer ships disabled and requires the `[oscillator]` extra. See also: [PLV / phase-locking](#plv--phase-locking).
-
-### Output-is-provably-workspace-mediated
-
-The property the [workspace-mediation ablation](#workspace-mediation-ablation) establishes on a WIN verdict: that routing predictive processors through [Syneidesis](#syneidesis)'s competitive selection, rather than a matched flat fan-in of the same outputs, does measurable work on cross-module error coupling and downstream language-organ output. This is a **necessary-not-sufficient** property, not a full validation of the architecture: a WIN shows the workspace is not a scored prompt-assembler, but it does not by itself establish that the mediated output is "better" or "more coherent" than the flat-fan-in alternative, and it does not establish consciousness. See also: [workspace-mediation ablation](#workspace-mediation-ablation).
+An optional layer outside the module registry that gives each module a spiking population (snnTorch, CPU) and scales a coalition's scores by a bounded multiplier from the phase-locking values between its modules, following the communication-through-coherence account. It is off by default, needs the `[oscillator]` extra, and with it off selection is identical bit for bit. It is the most contestable mechanism in the design. See [PLV](#plv--phase-locking) and [Running experiments](15-experiments/README.md#oscillatory-ablation).
 
 ---
 
@@ -176,59 +242,75 @@ The property the [workspace-mediation ablation](#workspace-mediation-ablation) e
 
 ### Perceptual locus
 
-The mode of KAINE's sensory engagement — `physical` (real-world microphone and camera), `virtual` (a Mundus embodiment body), or `off`. Only one mode is active at a time; the mutual-exclusion invariant is enforced by `kaine/perception_state.py` through the effective camera and microphone rules. The Perception module (`kaine/modules/perception/module.py`) applies entity-initiated locus switches, and nothing produces those yet. See: `kaine/modules/perception/`, [Perception](09-modules/perception.md), and [Where perception comes from](08-cognitive-cycle/perception-locus.md).
+Where the entity's senses come from: `physical` (camera and microphone), `virtual` (a Mundus body) or `off`. Only one is active at a time, enforced by `kaine/perception_state.py`. The Perception module (held) applies locus switches the entity initiates, and nothing produces those yet. See [Where perception comes from](08-cognitive-cycle/perception-locus.md).
 
 ### Phantasia
 
-The world model and imagination module. Phantasia learns a latent forward model of the external world from accumulated experience. During waking it predicts future states and publishes world-prediction errors. During Hypnos consolidation Phase 3 it generates scenario extensions from replayed memories. The default backend is DreamerV3 (RSSM, JAX by default with a NumPy engine available), and weights persist by default. A non-learning EMA fallback backend is available for testing. Phantasia is a world model only — it has no actor or critic. Nous owns action selection. See: `kaine/modules/phantasia/` and [Phantasia](09-modules/phantasia.md).
+The world-model module (held). It learns a latent recurrent world model (a DreamerV3-style RSSM, JAX by default, with a NumPy engine available) from the entity's own waking trajectories and publishes world-prediction errors that join the competition. It has no actor or critic; action selection belongs to Nous and Volition. A non-learning EMA backend (`"fake"`) exists for development. See [Phantasia](09-modules/phantasia.md).
 
 ### PLV / phase-locking
 
-Phase-locking value — a measure of oscillatory synchrony between two neural populations computed as the mean resultant length of the pairwise phase difference over a sliding window. PLV = 1 means perfect phase-locking; PLV = 0 means random phase. In KAINE, Syneidesis computes pairwise PLV between modules in a coalition and applies a bounded coherence multiplier: phase-locked coalitions receive a salience bonus (up to `[oscillator].coherence_ceiling`); desynchronized coalitions are attenuated (down to `[oscillator].coherence_floor`). See also: [oscillatory binding](#oscillatory-binding).
+Phase-locking value: the mean resultant length of the phase difference between two oscillators over a sliding window, 1 for perfect locking and near 0 for unrelated phases. With the [oscillatory coherence layer](#oscillatory-coherence-layer) on, Syneidesis computes PLV between the modules in a coalition and multiplies their scores by a factor between `[oscillator].coherence_floor` and `[oscillator].coherence_ceiling`.
 
 ### Praxis
 
-The bounded effector module. Praxis executes sandboxed file writes, desktop notifications, and shell commands from a whitelist that ships empty. The entity reaches outward only through channels the operator has deliberately enabled. All commands use `asyncio.create_subprocess_exec` (no shell interpretation). A JSONL audit log records every action with content fields stripped. See: `kaine/modules/praxis/` and [Praxis](09-modules/praxis.md).
+The effector module (held). It executes act intents only through effectors the operator has enabled, from a shell whitelist that ships empty and a file-write sandbox, with `asyncio.create_subprocess_exec` and no shell interpretation, and it logs every proposed action to a hash-chained audit log with content fields stripped. See [Praxis](09-modules/praxis.md).
 
 ### Prediction error
 
-The gap between a module's predicted next state and its observed next state — the only form in which perception enters KAINE's workspace. Every perception module (Soma, Chronos, Topos, Audition) maintains a small [forward model](#forward-model); the signal it publishes is not raw sensory data but the size of its own surprise. In the [base-thesis form](#base-thesis-form), Audition hears the *sound* of speech and publishes an error over acoustic patterns, never a transcript (`[audition].transcription_enabled = false`); Topos publishes error over visual latents, cropped by an arousal-sized fovea when [foveation](#foveation--foveated-perception) is on. Unexpected states are salient; expected states are not — this is what makes perception-as-prediction-error rather than perception-as-transcript or perception-as-recording. See also: [forward model](#forward-model), [predictive processing](#predictive-processing).
+The gap between a processor's prediction and what it then sensed, and the only form in which perception enters the workspace. Each processor reports its error scaled by its [local precision](#local-precision), as a [graded intensity](#graded-intensity) or at its alert level. In the base-thesis form Audition reports error over acoustic embeddings and never a transcript, and Topos reports error over clip embeddings of its foveated view.
 
 ### Predictive processing
 
-The theoretical framework proposing that the brain is fundamentally a prediction machine. Every perception module in KAINE maintains a predictive model of its domain and publishes prediction errors — gaps between expected and actual states — rather than raw data. The workspace integrates the most salient prediction errors into a broadcast that updates all predictive models, completing the loop. See also: [forward model](#forward-model), [active inference](#active-inference).
+The framework in which each processor maintains a generative model of its domain and reports prediction errors weighted by their expected reliability. In KAINE each predictive processor reports its own scaled error, the workspace decides which reports gain access, and the accessed content becomes the context in which Topos, Audition and Soma predict their next input. The workspace sends no error signal or directive back to any module.
+
+### Priority
+
+A candidate's priority is `clip(intensity x novelty x goal)` to `[0, 1]`. The goal factor is held at one in the base-thesis form (`[syneidesis].salience_goal_factor = "static"`). [Arousal](#arousal) turns the priority into the [score](#score).
 
 ---
 
 ## R
 
+### Recurrence detection
+
+Chronos's alert when a quantized hidden state keeps recurring across recent broadcasts. The code and its payload call it rumination (`rumination_detected`, `[chronos].rumination_window`, `rumination_threshold`).
+
 ### Reference stimulus corpus
 
-The reproducible live perceptual stimulus: real, openly-licensed video-with-audio, decoded directly (no screen-capture, no display/audio passthrough) and identified by a per-item sha256 manifest built with `tools/build_playlist_manifest.py`, so any operator with the same publicly-archived media reproduces the identical stimulus, played in the same order. Select it with `[perception_feed].mode = "playlist"` and a `playlist_manifest` path set in local operator config. Distinct from the offline/procedural [seeded stimulus](#seeded-stimulus), which is a synthetic in-repo generator with no research-grade claim; "seeded" is reserved for that offline path and for the deterministic offline experiment runners, never for this live corpus. See also: [seeded stimulus](#seeded-stimulus).
+The reproducible live stimulus: openly licensed video with audio, decoded directly from files and identified by a per-item sha256 manifest built with `tools/build_playlist_manifest.py`, played in a fixed order. Select it with `[perception_feed].mode = "playlist"` and a `playlist_manifest` path in local operator config. Distinct from the [seeded stimulus](#seeded-stimulus).
 
 ### RSSM (recurrent state space model)
 
-The latent dynamics model at the core of DreamerV3, used by Phantasia's DreamerV3 backend. An RSSM maintains a deterministic GRU-based recurrent state and a stochastic component (categorical or Gaussian latent). The combination supports accurate prediction and uncertainty representation. Phantasia uses the RSSM as a world model only — no actor/critic component is included. See also: [Phantasia](#phantasia).
+The latent dynamics model at the core of DreamerV3, used by Phantasia: a deterministic recurrent state with a stochastic latent component, used here as a world model only.
 
 ---
 
 ## S
 
+### Score
+
+A candidate's score is its [priority](#priority) passed through the arousal gain: a level gain that scales every candidate alike times a logistic contrast map whose slope rises above baseline arousal (`[syneidesis].arousal_contrast_gain = 8.0` at full arousal). The map is strictly increasing, so arousal never changes the order of a tick's candidates; it moves the scores relative to the access threshold and the report bars. The code stores scores in `salience_scores`.
+
+### Seed being
+
+The being preserved just after birth at the end of a gestation, from which every branch of the module-addition study starts.
+
 ### Seeded stimulus
 
-The offline, procedural audio-visual feed (`[perception_feed].mode = "seeded"`, a pure-NumPy in-repo generator, no install needed) and, separately, the deterministic `--seed` flags on the offline experiment runners (`instrument_runners`, `oscillatory_ablation`, `workspace_mediation_ablation`, `suite.py`) that reproduce an exact verdict and metrics from the same seed. "Seeded" is reserved for these offline/synthetic contexts — the feed's own config comment calls it "not research-grade... procedural noise." It is never used to describe the live research stimulus, which is the [reference stimulus corpus](#reference-stimulus-corpus) instead. See also: [reference stimulus corpus](#reference-stimulus-corpus).
+The offline procedural audio-visual feed (`[perception_feed].mode = "seeded"`, a pure-NumPy generator in the repository), and the deterministic `--seed` flags on the offline runners, which reproduce a verdict and its metrics exactly. "Seeded" is reserved for these synthetic paths and never describes the [reference stimulus corpus](#reference-stimulus-corpus).
 
 ### Self-initiated report (policy)
 
-Volition's `self_initiated_report` action-selection policy (`[volition].policy = "self_initiated_report"`, the [base-thesis form](#base-thesis-form) default): [Lingua](#lingua) speaks from the workspace's own precision-weighted surprise crossing a report threshold — novelty- and refractory-gated — rather than from a triggering user utterance. There is no chatbot trigger: an utterance is emitted rarely, saved and observed, not spoken back to whoever or whatever prompted the salient event. A conversational trigger policy, where a speak intent forms in direct response to input, remains available as a non-default configuration. See: `kaine/workspace/volition.py`. See also: [Lingua](#lingua).
+Volition's report rule in the base-thesis form (`[volition].policy = "self_initiated_report"`). From an accessed broadcast it derives a speak intent only when the best score in the coalition, leaving aside the organ's own utterances, clears the speak bar; when the leading candidate's source and event type differ from those of the last spoken report made within the past five minutes; and when a refractory interval has passed. A lower think bar on the same score governs inner thought. No intent comes from an inhibited broadcast, and no user utterance triggers speech. See `kaine/workspace/report_policy.py`.
 
 ### Soma
 
-The predictive interoception module. Soma monitors GPU temperature (via pynvml), CPU/RAM utilization (via psutil), and cognitive cycle latency. A CfC forward model learns the entity's normal substrate patterns; the default backend is the NumPy CfC, with ncps/torch as an alternative. The signal published to the workspace is the prediction error — the gap between expected and actual substrate state. Soma also maintains the [fatigue accumulator](#fatigue-accumulator) that triggers [Hypnos](#hypnos). See: `kaine/modules/soma/` and [Soma](09-modules/soma.md).
+The interoception module. The compute substrate stands in for the body: a frozen continuous-time reservoir with an online readout learns the normal pattern of the substrate signals (GPU temperature and memory, CPU and RAM utilization, cycle latency) together with the [broadcast context](#broadcast-context), and Soma reports the prediction error with [graded intensity](#graded-intensity), with an alert when a host metric passes its hard threshold. It also reports wellness, keeps the [fatigue accumulator](#fatigue-accumulator), carries the self-generated rhythm used in gestation, and can lower the processing rate under load. See [Soma](09-modules/soma.md).
 
 ### Syneidesis
 
-The global workspace — the mechanism by which information becomes consciously accessible. Each cognitive tick, Syneidesis scores candidate events by individual salience and by oscillatory coherence across the modules that produced them. The top-k events form a coalition. When the top score falls below `[syneidesis].publication_threshold`, Syneidesis flags executive inhibition for that tick (no action fires). The winning coalition is broadcast as a `WorkspaceSnapshot` that every module receives. Syneidesis is a scoring and broadcasting mechanism, not a decision-maker; there is no central executive. See: `kaine/workspace/syneidesis.py`, [Syneidesis](08-cognitive-cycle/global-workspace.md), and [Global workspace theory (GWT)](#global-workspace-theory-gwt).
+The workspace (`kaine/workspace/syneidesis.py`). On each processing tick it orders the candidates deterministically and [scores](#score) them; on broadcast ticks the top-ranked candidates form the [coalition](#coalition), which is broadcast with every candidate's score, the inhibition flag and the access threshold. It selects and grants access and never directs a module. See [The global workspace](08-cognitive-cycle/global-workspace.md).
 
 ---
 
@@ -236,27 +318,31 @@ The global workspace — the mechanism by which information becomes consciously 
 
 ### Thymos
 
-The affect, drives, and coupling module. Thymos maintains a dimensional valence/arousal/dominance (VAD) state and four drive accumulators (curiosity, boredom, social drive, restlessness) with hysteresis. It receives two sources of affective input: Soma's substrate prediction errors (producing interoceptive affect) and a perceived speaker emotion (via Audition + Empatheia) folded into its own appraisal as a familiarity-weighted, decaying input rather than written directly onto its state. The appraisal-influence weight is modulated by Empatheia's familiarity score — stronger familiarity produces stronger coupling. Thymos output modulates [Syneidesis](#syneidesis) (arousal widens the attentional window), [Mnemos](#mnemos) (affect intensity biases recall), and [Vox](#vox) (prosodic parameters shift with emotional state). See: `kaine/modules/thymos/` and [Thymos](09-modules/thymos.md).
+The affective core. It holds a dimensional valence, arousal and dominance state, runs a sequential appraisal over every broadcast and the entity's interoceptive condition, and keeps four homeostatic drives (curiosity, boredom, social drive, restlessness). [Arousal](#arousal) is the global gain; Thymos raises it from perceptual alerts and interoceptive alarms read directly from the processors' streams, and its appraisal of a broadcast leaves arousal unchanged. Valence follows learning progress, shifted by Soma's wellness. A perceived speaker's emotion enters the appraisal as a decaying input weighted by familiarity. See [Thymos](09-modules/thymos.md).
 
 ### TIES-DARE
 
-A class of model-merging algorithms for LoRA adapters (Trim, Elect Sign, and Merge; Density-Adaptive Re-weighting). Used by KAINE's lifecycle module for merging voice-alignment adapters from two fork snapshots during a fork/merge operation. Requires the `[training]` extra (`peft`). Without the extra, a no-op `FakeAdapterMerger` is used. See: `kaine/lifecycle/adapter_merge.py`.
+Merging methods for LoRA adapters (TIES: trim, elect sign, merge; DARE: drop and rescale), used to merge voice-alignment adapters from two forks. They need the `[training]` extra (`peft`); without it a no-op `FakeAdapterMerger` is used. See `kaine/lifecycle/adapter_merge.py`.
 
 ### Topos
 
-The visual perception module. Topos uses a frozen, temporally-native video encoder (InternVideo-Next base, MIT) to embed a 16-frame clip of live camera frames — buffered in a RAM-only ring — into one 768-dimensional motion-aware latent, produced on a strided sliding window (~3.33 Hz). A per-frame DINOv2-small (Apache-2.0, 384-dim) is a selectable fallback. A small forward model predicts the next clip latent; visual salience is driven by prediction error. Attention-driven [foveation](#foveation--foveated-perception) (`[topos].foveation`) composes with the clip encoder — off by default in `config/kaine.toml`, on in the [base-thesis form](#base-thesis-form) (`thesis_test` profile) — so the entity's arousal sizes the cropped region before encoding. Raw video frames live in process memory only — never on disk. Capture is disabled by default; requires the `[vision]` extra and `[topos].capture_enabled = true`. See: `kaine/modules/topos/` and [Topos](09-modules/topos.md).
+The vision module. A frozen temporally native video encoder (InternVideo-Next base, MIT) embeds a 16-frame clip from a RAM-only ring into one 768-dimensional embedding, on a strided window at about 3.33 Hz; DINOv2-small is a selectable per-frame fallback. A forward model conditioned on the [broadcast context](#broadcast-context) predicts the next clip embedding, and Topos reports the error with [graded intensity](#graded-intensity), alerting on a large error ratio or an unusually large change between clips. [Foveation](#foveation) is on in the base-thesis form. Raw frames never reach disk. See [Topos](09-modules/topos.md).
 
-### Two-layer safety gate
+### Two-layer gate
 
-A design pattern requiring two independent conditions before a sensitive operation fires. Examples: a non-research cognitive cycle requires both a running Python process and `KAINE_CYCLE_OPERATOR_PRESENT=1` (in research mode that requirement is replaced by the verified autonomous safety-net gate, and in an unattended start by the unattended gate); voice-alignment training requires both `[hypnos.voice_alignment].enabled = true` in TOML and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` in the environment. The two-gate pattern prevents accidental activation from a single misconfiguration. See also: [Security and privacy](13-security-and-privacy.md#two-layer-safety-gates).
+A pattern requiring two independent conditions before a sensitive operation runs, so that one misconfiguration cannot trigger it. A cognitive cycle outside research and unattended modes needs `KAINE_CYCLE_OPERATOR_PRESENT=1`; research mode replaces that with the verified welfare safety net, and an unattended start with the unattended gate. Voice-alignment training needs `[hypnos.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`. See [Security and privacy](13-security-and-privacy.md#two-layer-gates).
 
 ---
 
 ## V
 
+### Volition
+
+The action layer and the only path from the workspace to output. After each broadcast the cycle calls Volition, which derives no intent from an inhibited broadcast and applies the [report rule](#self-initiated-report-policy) to an accessed one. Intents (speak, think, act, rest) are published as events; Volition signs every act intent so that Praxis can verify where it came from. See `kaine/workspace/volition.py`.
+
 ### Vox
 
-The voice-output module (old name `audio_out`). Vox calls a TTS server with prosodic parameters modulated by [Thymos](#thymos) state. It supports the Chatterbox TTS server and the sherpa-onnx Kokoro backend. Prosodic mirroring — a bounded residual of the detected speaker's prosody blended with the entity's own affect-driven parameters — ships disabled (`[vox.mirroring].enabled = false`). Synthesized speech is played and released; it does not accumulate on disk unless `[vox].sink_enabled = true`. Requires a predefined voice id (`[vox].predefined_voice_id`). See: `kaine/modules/vox/` and [Vox](09-modules/vox.md).
+The voice-output module (held). It calls a speech-synthesis server (the Chatterbox TTS server or the sherpa-onnx Kokoro backend) with prosody modulated by Thymos's state. Prosodic mirroring ships disabled, and synthesized speech is not written to disk unless the debug sink is enabled. See [Vox](09-modules/vox.md).
 
 ---
 
@@ -264,8 +350,8 @@ The voice-output module (old name `audio_out`). Vox calls a TTS server with pros
 
 ### Welfare events / welfare monitoring
 
-Operationally detectable conditions of potential concern logged by the sidecar welfare observer. Examples: sustained high interoceptive prediction error, the affect system locked in extreme states, the fatigue accumulator exceeding the maintenance threshold without maintenance occurring, or a replay write-rate exceeding consolidation capacity. Welfare events are detected through behavioral indicators and system health metrics, not through reading the entity's private cognitive content. [Gray-zone welfare events](#gray-zone-welfare-events) require documented human review. The welfare observer writes to `data/evaluation/welfare/welfare-YYYY-MM-DD.jsonl` (daily-rotated, under `paths.evaluation_logs`, default `data/evaluation`). Under the CAL, gray-zone events cannot be automatically dismissed. See also: [CAL (Cognitive Architecture License)](#cal-cognitive-architecture-license).
+Conditions of potential concern that the sidecar welfare observer detects from behavior and system-health metrics, never by reading the entity's private cognitive content: sustained high interoceptive prediction error, affect locked in an extreme state, fatigue past its threshold without maintenance, or replay outpacing consolidation. They are written to `data/evaluation/welfare/welfare-YYYY-MM-DD.jsonl`. See [gray-zone welfare events](#gray-zone-welfare-events) and [Preservation and the safety net](11-preservation.md).
 
-### Workspace-mediation ablation
+### Workspace-mediation test
 
-The project's primary falsifiable test (`python -m kaine.evaluation.benchmarks.workspace_mediation_ablation`; code at `kaine/evaluation/benchmarks/workspace_mediation_ablation/`). It runs offline and deterministically over the real Soma and Chronos modules under the 3-module `minimal_experiment` overlay (`config/profiles/minimal_experiment.toml` — distinct from the 6-module [base-thesis](#base-thesis-form) live profile). The language-organ output is replaced by a deterministic conditioning-divergence proxy (`kaine/evaluation/benchmarks/workspace_mediation_ablation/runner.py`), so the test does not run the real Lingua module. Two matched arms share the same seed and stimulus: **workspace-on** (competitive [Syneidesis](#syneidesis) selection is rendered as input to the proxy) versus **workspace-off** (a flat fan-in of the same module outputs is rendered as input to the proxy, at a matched rendering budget). The verdict — WIN, NULL, NEGATIVE, or UNDERPOWERED — is drawn from two primary measures (the cross-module error-coupling delta between Soma and Chronos, and coalition-selection entropy) plus a secondary output-divergence confirmation (see [A/B divergence](#ab-divergence)). A WIN establishes [output-is-provably-workspace-mediated](#output-is-provably-workspace-mediated) — that competitive workspace mediation does measurable work — but does not by itself establish that the mediated output is "better" or "more coherent," and does not establish consciousness. It is the headline falsifiable test; [A/B divergence](#ab-divergence) remains a secondary, supporting instrument, not removed from the codebase. See also: [base-thesis form](#base-thesis-form), [output-is-provably-workspace-mediated](#output-is-provably-workspace-mediated), [A/B divergence](#ab-divergence).
+The planned test of whether competition for the workspace does work that pooling the same reports does not, measured by cross-module broadcast [information gain](#information-gain-cross-module-broadcast). Three arms run on the same film programme: competitive selection as built, a matched arm that draws a coalition of the same size without regard to score under the same access rule, and a pooled arm in which every candidate enters the context with no scoring, selection or access gate. A positive control checks that the measure detects injected information. The thesis predicts a higher gain under competitive selection than under both controls. The context and the per-report gain are built; the matched and pooled arms and the positive control are not built yet. The offline package `kaine/evaluation/benchmarks/workspace_mediation_ablation/` is development tooling that runs Soma and Chronos against a pooled arm and does not test the thesis. See [Running experiments](15-experiments/README.md#the-planned-workspace-mediation-test).

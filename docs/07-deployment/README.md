@@ -1,225 +1,212 @@
 # Choosing a deployment
 
-Use this page to match a host to a KAINE tier and to decide how the processes can be spread across machines. A tier bounds which backend each module uses and which devices it targets; a topology decides where the live cognitive loop, the stateful stores, and detached batch jobs may run. Read [Hardware](../03-hardware/README.md) to size the host, then [Getting started](../04-getting-started/README.md) to install the supporting services. For container recipes and dedicated headless-host setup, see [Containers](./containers.md) and [A dedicated headless host](./headless-host.md).
+Use this page to match a host to a KAINE tier and to decide how the processes can be spread across machines. A tier bounds which backend each module uses and which devices it targets. A topology decides where the live cognitive loop, the stateful stores and detached batch jobs may run. Read [Hardware](../03-hardware/README.md) to size the host, then [Getting started](../04-getting-started/README.md) to install the supporting services. For container recipes and dedicated headless-host setup, see [Containers](./containers.md) and [A dedicated headless host](./headless-host.md).
 
 ## Picking a tier
 
-KAINE is the architecture. The same mind can inhabit hardware from a small SBC to a multi-GPU server by trading capability for reach, without changing identity. The main portability cliff is the PyTorch / transformers / JAX runtime. KAINE's base dependencies are `redis`, `pydantic`, `psutil`, `numpy`, `httpx` and `cryptography`; `torch`, `transformers`, `ncps`, `qdrant-client`, `sentence-transformers` and `pynvml` live in optional extras that are imported only when a selected backend needs them.
+KAINE is a cognitive architecture for synthetic minds, built from modules that can be replaced, and the same configuration of modules can run on hardware from a small single-board computer to a multi-GPU server by choosing lighter or heavier backends. The main portability cliff is the PyTorch, transformers and JAX runtime. KAINE's base dependencies are `redis`, `pydantic`, `psutil`, `numpy`, `httpx` and `cryptography`. `torch`, `transformers`, `ncps`, `qdrant-client`, `sentence-transformers` and `pynvml` live in optional extras that are imported only when a selected backend needs them.
 
-Tier 0 avoids the PyTorch cliff entirely. Soma and Chronos default to the NumPy CfC network (`cfc_backend = "numpy"` in `config/kaine.toml`); the shared memory embedder defaults to NumPy MiniLM; [Nous](../09-modules/nous.md) can use the NumPy active-inference backend (`[nous].backend = "numpy"`); and [Phantasia](../09-modules/phantasia.md) can use the NumPy engine (`[phantasia].engine = "numpy"`). Only the modules you enable pull their optional extras.
+Several backends avoid PyTorch entirely. Soma and Chronos default to the NumPy CfC network (`cfc_backend = "numpy"` in `config/kaine.toml`), and the shared memory embedder defaults to NumPy MiniLM (`[embedding].backend = "numpy"`). [Nous](../09-modules/nous.md) can use the NumPy active-inference backend (`[nous].backend = "numpy"`), and [Phantasia](../09-modules/phantasia.md) can use the NumPy engine (`[phantasia].engine = "numpy"`). Only the modules you enable pull their optional extras.
 
-Run `scripts/probe-host` for a recommendation. It sizes the memory budget as system RAM on unified-memory hosts, or the smaller of system RAM and total VRAM across GPUs on discrete hosts, then scales each nominal threshold by 0.9 to account for firmware and kernel reservations:
+Run `scripts/probe-host` for a recommendation. It computes a memory budget, which is system RAM on unified-memory hosts and the smaller of system RAM and total VRAM on discrete hosts (system RAM when the memory state is unknown). Each nominal threshold is scaled by 0.9 to allow for firmware and kernel reservations, so the nominal 16 GB threshold is a 14.4 GiB floor, 6 GB is 5.4 GiB and 4 GB is 3.6 GiB.
 
-- a nominal 16 GB threshold becomes a 14.4 GiB floor
-- a nominal 6 GB threshold becomes a 5.4 GiB floor
-- a nominal 4 GB threshold becomes a 3.6 GiB floor
+The rules are checked in this order:
 
-The mapping is:
+| Host | Recommended tier |
+|---|---|
+| 32-bit Arm CPU, torch does not import, or RAM below the 4 GB floor | Tier 0 |
+| Two or more GPUs and a budget at or above the 16 GB floor | Tier 3 |
+| An accelerator and a budget at or above the 16 GB floor | Tier 2 |
+| An accelerator and a budget from the 6 GB floor up to the 16 GB floor | Tier 2, module residency required |
+| An accelerator with an unknown budget, or a budget below the 6 GB floor | Tier 1 |
+| No accelerator | Tier 1 |
 
-| Accelerators | Memory budget | Recommended tier |
-|---|---|---|
-| No torch, 32-bit Arm, or reported RAM below the 4 GB floor | — | Tier 0 |
-| No accelerator, or budget between the 4 GB and 6 GB floors | — | Tier 1 |
-| Any accelerator with unknown budget | — | Tier 1 |
-| Any accelerator, budget between the 6 GB and 16 GB floors | Tier 2 with module residency required |
-| One accelerator, budget at or above the 16 GB floor | Tier 2 |
-| Two or more accelerators, budget at or above the 16 GB floor | Tier 3 |
-
-Module residency is not implemented yet, so a host in the 6–16 GB range is advised to keep the base-thesis module set, run a language model that fits, and leave heavy extras off. An 8 GB Orin Nano Super is reported as Tier 2 with residency required.
+Module residency is not implemented yet. On a host that needs it, the probe advises keeping the base-thesis module set, serving a language organ that fits (for example the 4B GGUF) and leaving the vision and voice extras off. An 8 GB Orin Nano Super is reported as Tier 2 with residency required.
 
 ## What a tier is
 
-A tier is a TOML overlay (`config/profiles/tierN.toml`) layered after the shipped defaults and the module-selection profile, and before your local `config/kaine.operator.toml`. The cycle and the pre-boot check load configuration in this order:
+A tier is a TOML overlay (`config/profiles/tierN.toml`) layered after the shipped defaults and the module profile, and before your local `config/kaine.operator.toml`. The cycle and the pre-boot check load configuration in this order:
 
-1. shipped `config/kaine.toml`
-2. module profile (`thesis_test` by default, or `--profile` / `KAINE_PROFILE`)
-3. deployment tier (`KAINE_TIER`, or `[deployment].tier` in `config/kaine.operator.toml`)
-4. operator config
+1. shipped `config/kaine.toml`;
+2. module profile (`--profile` or `KAINE_PROFILE`, and `thesis_test` when neither is set);
+3. deployment tier (`KAINE_TIER`, or `[deployment].tier` in `config/kaine.operator.toml`);
+4. operator config `config/kaine.operator.toml`.
 
-A tier file must contain a `[tier]` table with `name`, `unsupported_modules` and `oscillator_supported`. Naming a file that lacks a `[tier]` table as the tier is refused with a configuration error and the cycle exits with `configuration error: ...` instead of a traceback. A tier file that contains a `[modules]` section or an `[oscillator].enabled` key is also refused with `ProfileError`.
+A tier file must contain a `[tier]` table with `name`, `unsupported_modules` and `oscillator_supported`. A file named as the tier without that table is refused with `ProfileError`, and the cycle exits with `kaine.cycle: configuration error: ...` instead of a traceback. A tier file that contains a `[modules]` table or an `[oscillator].enabled` key is refused in the same way.
 
-Tiers are inert and voice-free: they never enable a module or embed a private voice. They only bound which backend each already-selected module uses and which devices it targets. Which faculties are active is a separate choice; the default active set is the base-thesis form ([Soma](../09-modules/soma.md), [Chronos](../09-modules/chronos.md), [Topos](../09-modules/topos.md), [Audition](../09-modules/audition.md), [Thymos](../09-modules/thymos.md), [Lingua](../09-modules/lingua.md)), selected by the `thesis_test` profile at `config/profiles/thesis_test.toml`.
+A tier never enables a module and never carries a private voice. It only bounds which backend each module uses and which devices it targets. Which modules are active is a separate choice. The default active set is the base-thesis form, selected by `config/profiles/thesis_test.toml`: [Soma](../09-modules/soma.md), [Chronos](../09-modules/chronos.md), [Topos](../09-modules/topos.md), [Audition](../09-modules/audition.md), [Thymos](../09-modules/thymos.md), [Hypnos](../09-modules/hypnos.md) and [Lingua](../09-modules/lingua.md).
 
 ## Applying a tier
 
-Selecting a tier is an operator action. The probe script recommends, but never applies:
+Selecting a tier is an operator action. The probe recommends one and never applies it:
 
 ```bash
 .venv/bin/python scripts/probe-host          # recommends a tier; never applies one
+.venv/bin/python scripts/probe-host --json   # the same recommendation as JSON
 KAINE_TIER=tier1 python -m kaine.cycle       # applies the tier for this run
 ```
 
-To record it permanently, use the first-run wizard:
+To record it permanently, run the first-run wizard:
 
 ```bash
 .venv/bin/python -m kaine.setup
 ```
 
-If you confirm the recommendation, it writes `[deployment].tier` in `config/kaine.operator.toml`. `KAINE_PROFILE` or `--profile` selects the module profile; it does not apply a tier.
+If you confirm the recommendation, the wizard writes `[deployment].tier` in `config/kaine.operator.toml`. `KAINE_PROFILE` and `--profile` select the module profile and do not apply a tier.
 
 ## Pre-boot tier-fit check
 
-The pre-boot check prints a `Tier fit` row:
-
-- **FAILS** if an enabled module is in the tier's `unsupported_modules` list, or if an enabled oscillator is marked unsupported, with a message telling you to disable them or choose a larger tier.
-- **PASSES** when the enabled modules and oscillator fit the tier.
-- **SKIPS** when the merged configuration has no `[tier]` table.
-- **FAILS** on a malformed `[tier]` table or malformed `[oscillator]` shape, naming the problem.
+The pre-boot check (`python -m kaine.preboot`) prints a `Tier fit` row. It fails when an enabled module is in the tier's `unsupported_modules` list, or when `[oscillator].enabled` is true and the tier sets `oscillator_supported = false`; the message tells you to disable them in the operator config or record a larger tier. It also fails on a malformed `[tier]` table or `[oscillator]` section. It passes when the enabled modules fit, and it is skipped when the merged configuration has no `[tier]` table.
 
 ## Capability matrix
 
-| Faculty | Tier 0 (edge / sensor) | Tier 1 (CPU agent) | Tier 2 (workstation) | Tier 3 (datacenter) |
+| Faculty | Tier 0 (edge or sensor) | Tier 1 (CPU agent) | Tier 2 (workstation) | Tier 3 (datacenter) |
 |---|---|---|---|---|
-| Host target | ~512 MB SBC / retired phone; the original Pi Zero (ARMv6) cannot install the stack | 4–8 GB SBC / 8 GB phone | 1–2 GPU workstation | multi-GPU server |
-| Language ([Lingua](../09-modules/lingua.md)) | sub-1B GGUF via llama.cpp, slow | 1–2B GGUF via llama.cpp, chat pace | OpenAI-compatible HTTP server (llama.cpp server / Unsloth Studio as shipped) | larger LLM, long context |
-| Vision ([Topos](../09-modules/topos.md)) | unsupported | torch on CPU, seconds per frame | streaming DINOv2/InternVideo via torch | higher-rate streaming |
-| Speech-in ([Audition](../09-modules/audition.md)) | unsupported | Moonshine via sherpa-onnx | faster-whisper, > realtime | > realtime |
-| Vocal emotion ([Empatheia](../09-modules/empatheia.md) input) | unsupported | disabled (`[audition].emotion_model_id = ""`) | emotion2vec+ via torch/funasr | emotion2vec+ |
-| Speech-out ([Vox](../09-modules/vox.md)) | unsupported | Kokoro via sherpa-onnx, plain prosody | Chatterbox, expressive | Chatterbox |
-| Memory embeddings | NumPy MiniLM; `sentence_transformers` optional | NumPy MiniLM; `sentence_transformers` optional | NumPy MiniLM; `sentence_transformers` optional | NumPy MiniLM; `sentence_transformers` optional |
-| Vector store ([Mnemos](../09-modules/mnemos.md)) | sqlite-vec | sqlite-vec | Qdrant | Qdrant |
-| Torch runtime required | no | yes for Topos; optional for the sentence-transformers embedder | yes | yes |
-| Unsupported by tier | Topos, Audition, Vox, Empatheia, Phantasia; oscillator | vocal emotion only | — | — |
+| Host target | about 512 MB single-board computer or retired phone; the original Pi Zero (ARMv6) cannot install the stack | 4 to 8 GB single-board computer or 8 GB phone | workstation with one or two GPUs | multi-GPU server |
+| Language ([Lingua](../09-modules/lingua.md)) | `llama_cpp` backend, sub-1B GGUF, slow | `llama_cpp` backend, 1B to 2B GGUF | `openai` backend: an OpenAI-compatible HTTP server | `openai` backend, larger model and longer context |
+| Vision ([Topos](../09-modules/topos.md)) | unsupported | torch encoder on CPU (`[topos].device = "cpu"`) | InternVideo-Next (default) or DINOv2 through torch | as Tier 2 |
+| Speech in ([Audition](../09-modules/audition.md)) | unsupported | Moonshine through sherpa-onnx | faster-distil-Whisper through Speaches | as Tier 2 |
+| Vocal emotion ([Audition](../09-modules/audition.md)) | unsupported | off (`[audition].emotion_model_id = ""`) | emotion2vec+ through torch | as Tier 2 |
+| Speech out ([Vox](../09-modules/vox.md)) | unsupported | Kokoro through sherpa-onnx | Chatterbox | Chatterbox |
+| Memory embeddings | NumPy MiniLM (default) | NumPy MiniLM (default) | NumPy MiniLM (default) | NumPy MiniLM (default) |
+| Vector store ([Mnemos](../09-modules/mnemos.md)) | `sqlite_vec` | `sqlite_vec` | `qdrant` | `qdrant` |
+| `unsupported_modules` | Topos, Audition, Vox, Empatheia, Phantasia | none | none | none |
+| `oscillator_supported` | `false` | `true` | `true` | `true` |
 
-Read these constraints carefully so the tiers are not oversold:
+Read these constraints before choosing a tier:
 
-- **No vocal emotion below Tier 2, and no speech at Tier 0.** emotion2vec+ has no clean edge port, so Tier 1 disables it explicitly with `[audition].emotion_model_id = ""`; it is not silently faked. Tier 0 lists Audition and Vox as unsupported and the pre-boot check fails if they are enabled.
-- **Vision is periodic, not streaming, at Tier 1.** The ONNX/dinov2.cpp vision backend is not built, so Topos on Tier 1 runs its torch encoder on the CPU.
-- **A ≥2B language model does not fit a ~512 MB Tier-0 host.** Tier 0 is a symbolic-reasoning + episodic-memory + perception node, not a conversational host.
-- **Torch is required wherever vision runs today.** Topos needs it. Mnemos, Empatheia and Hypnos use the shared NumPy MiniLM embedder by default and only need torch when `[embedding].backend = "sentence_transformers"`.
-- **Termux support for NumPy engines and sherpa-onnx is built but not yet verified on a device.** Topos still needs torch there.
+- Tier 1 has no vocal emotion. emotion2vec+ has no edge port, so `tier1.toml` sets `[audition].emotion_model_id = ""` and the emotion path is off. Tier 0 lists Audition and Vox as unsupported, and the pre-boot check fails if they are enabled.
+- Vision at Tier 1 runs the torch encoder on the CPU, at seconds per frame. An ONNX or dinov2.cpp vision backend is not built.
+- A language model of 2B parameters or more does not fit a Tier 0 host of about 512 MB, so Tier 0 is not a conversational host.
+- Torch is required wherever vision runs. Mnemos, Empatheia and Hypnos use the shared NumPy MiniLM embedder by default and need torch only when `[embedding].backend = "sentence_transformers"`.
+- Termux support for the NumPy engines and sherpa-onnx is built but has not been verified on a device. Topos still needs torch there.
 
 ## Per-tier notes
 
-The runtime venv imports a backend's third-party dependency only when that backend is selected, so you install the extras for the tier and no others.
+The runtime imports a backend's third-party dependency only when that backend is selected, so you install the extras for the tier and no others.
 
-### Tier 0 — edge / sensor node
+### Tier 0: edge or sensor node
 
-Use llama.cpp for [Lingua](../09-modules/lingua.md) and sqlite-vec for [Mnemos](../09-modules/mnemos.md). The tier lists Topos, Audition, Vox, Empatheia and Phantasia as unsupported, and the oscillator as unsupported. Soma's self-rhythm oscillator, used in gestation, runs on snnTorch, which is why the tier marks it unsupported. [Nous](../09-modules/nous.md) runs on the NumPy active-inference backend. Soma and Chronos default to NumPy CfC; their torch+ncps backend remains available. The NumPy MiniLM embedder is the default. Speech is not enabled at Tier 0. The ONNX/dinov2.cpp vision backend and ONNX/static embeddings are not built.
+`tier0.toml` sets Lingua to `llama_cpp`, Mnemos to `sqlite_vec` and Nous to `numpy`. It lists Topos, Audition, Vox, Empatheia and Phantasia as unsupported and sets `oscillator_supported = false`, which refuses the oscillatory binding layer of the workspace (`[oscillator]`, the snnTorch extra). Soma and Chronos run the NumPy CfC by default, and their torch and ncps backend remains available. The NumPy MiniLM embedder is the default. ONNX vision and ONNX or static embeddings are not built.
 
-### Tier 1 — embodied CPU agent
+### Tier 1: CPU agent
 
-Like Tier 0, but keeps Topos on CPU and enables Audition and Vox through sherpa-onnx. Vocal emotion remains disabled. Phantasia runs on the NumPy engine. The ONNX vision and ONNX/static embeddings backends are not built.
+`tier1.toml` sets Lingua to `llama_cpp`, Mnemos to `sqlite_vec`, Topos to `device = "cpu"`, Audition and Vox to `backend = "sherpa_onnx"`, Nous to `numpy` and Phantasia to `engine = "numpy"`, and blanks `[audition].emotion_model_id` with `emotion_device = "cpu"`. No module is listed as unsupported.
 
-### Tier 2 — workstation
+### Tier 2: workstation
 
-The default as shipped. OpenAI-compatible HTTP server for [Lingua](../09-modules/lingua.md) (llama.cpp server / Unsloth Studio as shipped), Qdrant for Mnemos, shared NumPy MiniLM embedder (`sentence_transformers` optional), faster-whisper + emotion2vec+, and Chatterbox. This is what `pip install -e .` plus the first-run wizard provisions.
+`tier2.toml` sets Lingua to `openai` (an OpenAI-compatible HTTP server) and Mnemos to `qdrant`, which are also the shipped defaults. The rest of the stack is the shipped configuration: the NumPy MiniLM embedder (`sentence_transformers` optional), faster-distil-Whisper through Speaches, emotion2vec+ and Chatterbox. A plain install plus the first-run wizard provisions this tier.
 
-### Tier 3 — datacenter
+### Tier 3: datacenter
 
-The Tier-2 stack scaled up: larger model ids, longer context, and per-module GPU placement in `config/kaine.operator.toml`. Multi-instance fleets and cross-host module splits are part of the `distributed-substrate` work, not the tier ladder.
+`tier3.toml` sets the same backends as Tier 2. Larger models, longer context and per-module GPU placement go in `config/kaine.operator.toml`. Multi-instance fleets and cross-host module splits belong to the distributed-substrate work described below and are outside the tier ladder.
 
 ## Staging status
 
-Shipped today: the backend-selection framework; Tier-2-preserving defaults; the llama.cpp/GGUF Lingua backend; the sqlite-vec Mnemos backend; the four tier profiles; the host probe; the NumPy CfC for Soma and Chronos (default); the NumPy Nous backend; the NumPy Phantasia engine; and the sherpa-onnx speech backends for Audition (Moonshine STT) and Vox (Kokoro TTS). The memory modules default to the shared NumPy MiniLM embedder, with `sentence_transformers` still available. Phantasia's shipped default is DreamerV3 with JAX (`engine = "jax"`, `persist_weights = true`, `training_enabled = true` in `config/kaine.toml`); the NumPy engine is available for lower tiers.
+Built: the backend-selection framework, the four tier profiles, the host probe, the `llama_cpp` Lingua backend, the `sqlite_vec` Mnemos backend, the NumPy CfC for Soma and Chronos (the default), the NumPy Nous backend, the NumPy Phantasia engine and the sherpa-onnx speech backends for Audition (Moonshine) and Vox (Kokoro). The memory modules default to the shared NumPy MiniLM embedder, and `sentence_transformers` remains available. Phantasia's shipped default is DreamerV3 on JAX (`engine = "jax"`, `persist_weights = true` and `training_enabled = true` in `config/kaine.toml`).
 
-Not yet built: ONNX/dinov2.cpp vision and ONNX/static embeddings. There is no configuration key for either; Topos on a small host runs its torch encoder on the CPU.
+Not built: ONNX or dinov2.cpp vision and ONNX or static embeddings. Neither has a configuration key, and Topos on a small host runs its torch encoder on the CPU.
 
 ## Spreading KAINE across hosts
 
-A tier answers "what fits on one host." A topology answers "which parts may leave it." The rule is: the live mind stays on trusted hardware; only detached batch work goes off-box, and only behind a trusted-side verification gate.
+A tier says what fits on one host, and a topology says which parts may leave it. The live mind stays on trusted hardware. Only detached batch work goes off the host, and only behind a verification gate on the trusted side.
 
 ### Three workloads
 
-Conflating KAINE's workloads produces bad distributed-compute plans. Treat them separately:
+KAINE's workloads have different requirements and are planned separately:
 
-1. **The live cognitive loop** — the tick loop runs at up to 10 Hz with about a 100 ms tick budget. Conscious access rests at 3.333 Hz and scales toward 10 Hz as arousal and salience rise. Soma flags when `cycle_latency_avg_ms` exceeds 600. The loop is latency-critical, stateful and partly bound to physical sensors.
-2. **The stateful stores** — [Mnemos](../09-modules/mnemos.md) episodic/semantic/procedural memory and the [Eidolon](../09-modules/eidolon.md) self-model are read or written every cycle. The continuity of this state is the welfare claim.
-3. **Detached batch jobs** — [Hypnos](../09-modules/hypnos.md) voice-alignment QLoRA/DPO training, self-abliteration, deep memory consolidation, offline evaluation, and bounded forked-being runs. These run while the entity is asleep or offline and each produces a discrete, verifiable artifact.
+1. The live cognitive loop. The cycle processes at 10 Hz, a tick about every 100 ms. Broadcast ticks fall at the access rate, which rests at about 3.3 Hz (`[cycle].experiential_rate_hz = 3.333`) and rises toward the 10 Hz processing rate with tonic arousal and briefly after categorical alerts. Soma flags a host whose `cycle_latency_avg_ms` exceeds 600. The loop is latency-critical, stateful and partly bound to physical sensors.
+2. The stateful stores. When [Mnemos](../09-modules/mnemos.md) and the [Eidolon](../09-modules/eidolon.md) self-model are enabled, they are read or written every cycle, and the being's continuity depends on that state.
+3. Detached batch jobs: [Hypnos](../09-modules/hypnos.md) voice-alignment training, self-abliteration, deep memory consolidation, offline evaluation and bounded runs of forked beings. These run while the entity sleeps or is offline, and each produces a discrete artifact that can be verified.
 
-### Workload target matrix
+### Workload targets
 
 | Target | Live loop | Stateful stores | Batch jobs |
 |---|---|---|---|
-| Single host (default) | Yes | Yes | Yes |
-| Trusted LAN / datacenter split | Yes, with LAN RTT | Yes, one coordinator | Yes |
-| Rented trusted GPU | No | No | Yes, preferred for offload |
-| Volunteer / BOINC (untrusted) | No | No | Only with trusted re-verify |
+| Single host (default) | yes | yes | yes |
+| Trusted LAN or datacenter split | yes, with LAN round-trip time | yes, one coordinator | yes |
+| Rented trusted GPU | no | no | yes, preferred for offload |
+| Volunteer computing such as BOINC (untrusted) | no | no | only with re-verification on the trusted side |
 
 ### Why the live loop stays on trusted hardware
 
-Three independent walls keep the live loop and stateful stores off untrusted or volunteer compute:
+Latency rules out wide-area links. A WAN round trip costs tens to hundreds of milliseconds per hop, volunteer nodes come and go, and volunteer batch frameworks have no messaging between nodes because they are built for independent tasks.
 
-- **Latency.** WAN RTT is tens to hundreds of milliseconds per hop, and volunteer nodes are intermittent. Soma already flags average cycle latency above 600 ms. Volunteer batch frameworks have no inter-node messaging primitive; they are built for independent tasks.
-- **Shared mutable state under CAP.** Mnemos and Eidolon are read/written every cycle. Across intermittent, partitioned volunteer nodes you must sacrifice consistency (identity drift) or availability (the mind stalls).
-- **Physical I/O and zero-persistence.** Perception transduces local hardware bound to a place, and the zero-raw-persistence invariant forbids shipping the raw sensory stream off-box. Perception cannot be offloaded even in principle.
+Shared mutable state rules out partitioned nodes. Mnemos and Eidolon are read and written every cycle, and across intermittent, partitioned volunteer nodes you must give up either consistency (the self-model drifts) or availability (the loop stalls).
+
+Perception is bound to local hardware. Raw sense data is never persisted or shipped off the host, so perception cannot be offloaded.
 
 ### Trusted cross-host split
 
-The bus is the right substrate for a trusted LAN split. `[redis].host` and `[redis].port` are config, and the bus audit in `kaine/bus/client.py` refuses a non-loopback Redis that lacks `requirepass` or is bound to a wildcard (`0.0.0.0`/`*`). If `KAINE_REDIS_URL` points elsewhere, the wildcard-bind check is skipped and only `requirepass` is enforced.
+The event bus is the substrate for a split across a trusted LAN. `[redis].host` and `[redis].port` are configuration (`127.0.0.1` and `6479` as shipped). The bus audit in `kaine/bus/client.py` refuses to start when Redis has no `requirepass`, on any host including loopback, and refuses a Redis bound to a wildcard address (`0.0.0.0` or `*`) when `[redis].host` is not a loopback address. The bind check reads `[redis].host`, so when `KAINE_REDIS_URL` redirects the bus while `[redis].host` stays on loopback, only the password check applies.
 
-Per host:
+The intended layout:
 
-- Each host runs one process with a subset of modules; all processes share one authenticated Redis bus.
-- The **stateful coordinator** host runs the workspace, Mnemos, Eidolon and Thymos. GPU-heavy organs such as Lingua and Topos may run on a **second trusted GPU host**.
+- Each host runs one process with a subset of modules, and all processes share one authenticated Redis bus.
+- A stateful coordinator host runs the workspace, Mnemos, Eidolon and Thymos. GPU-heavy modules such as Lingua and Topos may run on a second trusted GPU host.
 - The single-host default is the case where the subset is every module.
-- Cross-host coordination goes through the bus or an explicitly typed contract, never an in-process Python object reference.
+- Coordination between hosts goes through the bus or an explicitly typed contract, never an in-process Python object reference.
 
-The main blocker to a cross-host split was a handful of boot-time direct Python references plus the single shared asyncio loop.
-
-- Lingua reads Eidolon's self-model from the bus (`eidolon.self_model` on `eidolon.out`) instead of holding a live `eidolon.model` handle, so Lingua can run on a separate trusted GPU host.
-- **Still single-host** — Hypnos still receives live object handles at boot. That coupling is the next decoupling target; nothing moves it yet.
+Lingua already reads Eidolon's self-model from the bus (`eidolon.self_model` on `eidolon.out`) instead of holding a live object, so Lingua can run on a separate trusted GPU host. Hypnos still receives the Mnemos, Nous and Thymos instances at boot, so it must run in the same process as those modules.
 
 ### Batch offload behind a verification gate
 
-A batch job is a self-contained descriptor in `kaine/distributed/job.py` with a kind (`voice_align`, `abliterate`, `consolidate`, `eval`, `forked_being`), inputs and an expected verifiable artifact. The runner selector in `kaine/distributed/runner.py` walks hosts in trusted-first order: owned host → rented trusted GPU → volunteer.
+A batch job is a self-contained descriptor in `kaine/distributed/job.py` with a kind (`voice_align`, `abliterate`, `consolidate`, `eval` or `forked_being`), its inputs and the artifact it is expected to return. The runner selector in `kaine/distributed/runner.py` tries runners in trusted-first order: an owned host, then a rented trusted GPU, then a volunteer.
 
-Every returned artifact passes the verification gate in `kaine/distributed/gate.py` on the trusted side before promotion. The gate re-runs the capability-loss veto and an independent eval on trusted hardware. A failing artifact is never promoted; the rejection is logged and surfaced on the operator health surface. Volunteer redundancy or quorum does not substitute for this gate for non-deterministic work.
+Every returned artifact passes the gate in `kaine/distributed/gate.py` on the trusted side before promotion. The gate re-runs the Hypnos capability-loss veto and an independent evaluation on trusted hardware. A failing artifact is never promoted, and the rejection is logged and shown on the operator health surface. Volunteer redundancy or quorum does not replace this gate for work that is not deterministic.
 
 ### Forked temporary beings
 
-A temporary being — fork a copy, let it run a directive, possibly time-dilated, then remerge — is a batch job, not the live loop. It is bounded, runs to completion off-host and returns a verifiable artifact: its post-run snapshot. It reuses the existing fork/dilation/merge machinery in `kaine/distributed/fork_being.py`. The snapshot passes the same trusted-side gate (welfare / individuation / admissibility) before the parent assimilates it through `ForkManager.merge()`. Instantiating a full individual on an anonymous volunteer is withheld until a volunteer-host welfare-and-security model exists.
+A temporary being is a fork that runs a directive, possibly with its entity time running at a different multiple of wall-clock time, and is then merged back. It is a batch job with a bound, and the artifact it returns is its post-run snapshot. `kaine/distributed/fork_being.py` reuses the existing fork and merge machinery. The snapshot passes the same trusted-side gate (the welfare, individuation and admissibility path in `kaine/lifecycle/fork_merge_gate.py`) before the parent assimilates it through `ForkManager.merge()`. Running a full individual on an anonymous volunteer host is withheld until a welfare and security model for volunteer hosts exists.
 
 ### Fork-merge welfare gate
 
-A merge is, for the fork, an ending. `kaine/lifecycle/fork_merge_gate.py::gated_merge` uses the shared divergence verdict from `kaine/lifecycle/divergence.py`. The verdict gains an arm when the ledger shows individuated, consolidation divergence is over threshold, Eidolon drift is present, or voice adapters are present; no arm suppresses another. Forks cannot yet be measured against a fork-point reference, so a fork is preserved if it has lived at least 1800 s (`fork_preserve_min_lived_s`) or its lived time is unknown, rather than discarded. The parent may still assimilate knowledge one-directionally from a preserved fork. Ending an individuated fork requires the operator-authorized, transparent, welfare-gated decommission path. See [Forks and merges](../12-forks-and-merges.md).
+`gated_merge` in `kaine/lifecycle/fork_merge_gate.py` uses the shared divergence verdict from `kaine/lifecycle/divergence.py`. The verdict counts a fork as individuated when its ledger says so, when its consolidation divergence is over threshold, when Eidolon has recorded drift or when voice adapters are present, and no one of these signals suppresses another. Forks cannot yet be measured against a fork-point reference, so a fork is preserved when it has lived at least 1800 s (`fork_preserve_min_lived_s`) or when its lived time is unknown. The parent may still assimilate knowledge from a preserved fork in one direction. Ending an individuated fork requires the operator-authorized, welfare-gated decommission path. See [Forks and merges](../12-forks-and-merges.md).
 
-### Volunteer compute: BOINC
+### Volunteer computing: BOINC
 
-Where a batch job genuinely goes to volunteer compute, the substrate is BOINC, defined for bounded, independent, returnable work units — the opposite of the live loop. `kaine/distributed/boinc.py` ships the work-unit contract, output-boundary guard and validator, not a running server or live volunteer client.
+When a batch job goes to volunteer computing, the substrate is BOINC, which is designed for bounded, independent work units that are returned when done. `kaine/distributed/boinc.py` ships the work-unit contract, the output-boundary guard and the validator. It does not ship a running server or a live volunteer client.
 
-- **Unit** — the KAINE container image run via the official `docker_wrapper` (Docker/Podman); GPU is declared in `job.toml`.
-- **Plan classes** — a CPU class and a `cuda`/`opencl` GPU class, matched by the scheduler.
-- **Server** — a self-hosted `boinc-server-docker` project. This is operator-provisioned infrastructure.
-- **Validation differs by determinism.** Deterministic kinds (seeded eval/research with run-identity and admissibility) use `boinc.py::quorum_validate`, a replicate-and-compare quorum. Non-deterministic kinds (QLoRA, abliterate, consolidate, forked-being) rely on trusted-side re-verification.
-- **Output boundary** — `kaine/distributed/boinc.py::enforce_output_boundary` refuses raw sense data, private voice adapters and operator configuration in the work-unit output.
+- A work unit is the KAINE container image run through BOINC's `docker_wrapper` (Docker or Podman), with the GPU declared in `job.toml`.
+- There is a CPU plan class and a `cuda` or `opencl` GPU plan class, which the scheduler matches to hosts.
+- The server is a self-hosted `boinc-server-docker` project that the operator provisions.
+- Deterministic kinds (seeded evaluation and research runs with run identity and admissibility) are validated by `quorum_validate`, which replicates a unit and compares the results. Kinds that are not deterministic (training, abliteration, consolidation and forked beings) rely on re-verification on the trusted side.
+- `enforce_output_boundary` refuses raw sense data, private voice adapters and operator configuration in a work unit's output.
 
-Entity-bearing forks are withheld from anonymous volunteers until the volunteer-host welfare model exists. Phasing: B0 containerize, B1 the BOINC harness, B2 non-entity research/training units, B3 entity-bearing forked beings once the welfare model exists.
+Forks that carry an entity are withheld from anonymous volunteers until the welfare model for volunteer hosts exists. The planned phases are B0 (containerize), B1 (the BOINC harness), B2 (research and training units with no entity) and B3 (forked beings, once that welfare model exists).
 
-### Choose a substrate for each workload
+### Choosing a substrate for each workload
 
-There is no single substrate; match the workload:
+- Do not run the live loop across untrusted public nodes. Systems that shard a model across volunteers, such as Petals, have no global scheduler, deliver a few tokens per second across the WAN, use a PyTorch backend that cannot load KAINE's GGUF organs, and let first-block servers recover client inputs.
+- If the organ outgrows one GPU, it can be split over a trusted LAN with llama.cpp RPC or exo. Distributed inference is slower than inference on one device, so use it only when the model does not fit. The 4B organ fits one 12 GB GPU as shipped, so this remains a future option.
+- For training spread across distant trusted GPUs, DiLoCo or OpenDiLoCo on Hivemind distributes the work better than naive BOINC replication. It does not add trust, and the re-verification gate still applies. Voice-alignment training after each sleep fits one host today.
+- Independent, returnable, deterministic work units (evaluation batteries, reproducible research runs, bounded forked-being runs) fit BOINC's replicate-and-compare quorum.
 
-- **Untrusted public nodes for the live loop.** Do not run the live loop across untrusted public nodes. Live-sharding systems such as Petals are disqualified: no global scheduler, a few tokens per second across the WAN, a PyTorch backend that cannot load KAINE's GGUF organs, and first-block servers that can recover client inputs.
-- **Live loop across your own trusted devices — possible when needed.** If the organ outgrows one GPU, split it over a trusted LAN with llama.cpp RPC or exo. Distributed inference is not faster; use it only when the model does not fit. The 4B organ fits one 12 GB GPU as shipped, so this is a future scaling option.
-- **Decentralized training across trusted GPUs — DiLoCo/Hivemind if it scales.** For distributing training across geographically spread trusted GPUs, DiLoCo / OpenDiLoCo on Hivemind/DeDLOC beats naive BOINC replication. It improves distribution, not trust; the trusted re-verify gate still applies. KAINE's per-sleep QLoRA fits one box today.
-- **Bounded embarrassingly-parallel jobs — BOINC.** Independent, returnable, deterministic work units (evaluation batteries, reproducible research runs, bounded forked-being runs) fit BOINC's replicate-and-compare quorum cleanly.
-
-The sound decentralization story is federation of peer instances or encrypted quorum-backup, not sharding one mind across volunteers.
+Decentralization, where it is wanted, means federated peer instances or an encrypted backup held by a quorum of hosts, and never one mind sharded across volunteers.
 
 ## Default security posture
 
-Defaults that shape the deployment choice:
+These defaults shape the deployment choice:
 
-- **State encryption is on.** The shipped config sets `[security.state_encryption].enabled = true`. Boot tries the OS keyring when `KAINE_STATE_KEY` is empty; if no key is found, it refuses to start. See [Security and privacy](../13-security-and-privacy.md).
-- **The bus is authenticated on any non-loopback split.** The bus audit in `kaine/bus/client.py` refuses an unauthenticated Redis or one bound to a wildcard. Set `requirepass` before you point `[redis].host` at a LAN address.
-- **The cycle never auto-restarts.** `kaine-cycle` runs with no restart policy, and the quadlet unit has no `[Install]` section. Spot recovers modules in-process; a dead cycle is an operator decision.
+- State encryption is on. The shipped config sets `[security.state_encryption].enabled = true`. When `KAINE_STATE_KEY` is unset, boot tries the kernel keyring (`kaine:state_key` in the user keyring), and with no key it refuses to start. See [Security and privacy](../13-security-and-privacy.md).
+- The bus requires a password on every host, and a non-loopback `[redis].host` must not point at a Redis bound to a wildcard address. Set `requirepass` before you point `[redis].host` at a LAN address.
+- The cycle never restarts automatically. The Compose `kaine-cycle` service has no restart policy, and the quadlet `kaine-cycle.container` has `Restart=no` and no `[Install]` section. Spot recovers modules inside the process, and restarting a dead cycle is an operator decision.
 
 ## Durable output and unattended-run defaults
 
-- **Profiles ship in the image.** The `Dockerfile` copies `config/profiles`, so `KAINE_PROFILE` (and the `thesis_test` auto-selection) resolves without a bind mount.
-- **Research output is durable.** The `kaine-eval-data` volume is mounted at `/app/data/evaluation` for the nexus and cycle containers; the study container has none. `kaine-trajectory` is mounted at `/app/data/workspace_trajectory`. `KAINE_DATA_ROOT=/app` on the nexus, cycle and study containers.
-- **Quadlet volume mounts differ.** The quadlet `kaine-nexus` unit does not mount `kaine-eval-data`. Compose mounts are described in [Containers](./containers.md).
-- **Redis is capped and strict.** The effective default for `KAINE_REDIS_MAXMEMORY` is `4gb` from the `${KAINE_REDIS_MAXMEMORY:-4gb}` fallback in the compose and quadlet files; `compose/.env.example` only comments it out. Redis runs with `noeviction` so the bus fails loud rather than silently dropping events. A full study needs `12gb` or more on hosts with the RAM.
-- **Log rotation.** The `x-logging` anchor in `compose/kaine.yml` uses `json-file` with `max-size: "50m"` and `max-file: "3"` for every service.
-- **Manifest provenance.** Compose passes `GIT_SHA` through `build.args`; the Dockerfile bakes it as `ENV KAINE_GIT_SHA`, and the run manifest's `git_sha` falls back to it when the git subprocess lookup fails.
-- **Qdrant healthcheck.** `bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333'`: qdrant v1.19.1 ships neither wget nor curl, and a successful `/dev/tcp` connect is a readiness signal.
+- Profiles ship in the image. The `Dockerfile` copies `config/profiles`, so `KAINE_PROFILE` and the automatic `thesis_test` selection resolve without a bind mount.
+- Research output is durable. In Compose, the `kaine-eval-data` volume is mounted at `/app/data/evaluation` on `kaine-nexus` and `kaine-cycle`, and `kaine-trajectory` at `/app/data/workspace_trajectory` on `kaine-cycle`. `kaine-study` mounts neither and keeps every step under `/app/studies`. `KAINE_DATA_ROOT=/app` is set on the Nexus, cycle and study containers.
+- Quadlet mounts differ. The quadlet `kaine-nexus` unit mounts only `kaine-state` and has no `kaine-eval-data` mount. Compose mounts are described in [Containers](./containers.md).
+- Redis is capped and strict. `KAINE_REDIS_MAXMEMORY` defaults to `4gb` through the `${KAINE_REDIS_MAXMEMORY:-4gb}` fallback in the Compose file and the equivalent fallback in the quadlet unit; `compose/.env.example` only shows it commented out. Redis runs with `--maxmemory-policy noeviction`, so a full bus fails loudly instead of silently dropping events. A full study needs `12gb` or more on hosts with the RAM.
+- Logs rotate. The `x-logging` anchor in `compose/kaine.yml` uses `json-file` with `max-size: "50m"` and `max-file: "3"`. It is applied to `kaine-redis`, `kaine-qdrant`, `kaine-cycle`, `kaine-study`, `kaine-trainer` and `kaine-provision`; `kaine-model-server`, `kaine-speaches`, `kaine-chatterbox` and `kaine-nexus` use the engine's default logging.
+- Manifests record their source revision. Compose passes `GIT_SHA` (from `KAINE_GIT_SHA`) as a build argument, the Dockerfile sets it as `ENV KAINE_GIT_SHA`, and the run manifest's `git_sha` falls back to it when the git lookup fails.
+- The Qdrant healthcheck is `bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333'`, because `qdrant/qdrant:v1.19.1` ships neither wget nor curl and a successful TCP connect shows the server is serving.
 
-`.git` is excluded by `../../.dockerignore`, so no repo data leaks into the image.
+`.dockerignore` excludes `.git/`, so no repository history enters the image.
 
 ## Where to go next
 
-- For container images, profiles and compose overrides, read [Containers](./containers.md).
+- For container images, profiles and Compose overlays, read [Containers](./containers.md).
 - For a dedicated headless host with quadlet and Tailscale, read [A dedicated headless host](./headless-host.md).
 - For day-to-day operation, start at [Day-to-day operation](../06-operation/README.md).
 - For first boot and the setup wizard, read [First boot](../04-getting-started/first-boot.md).

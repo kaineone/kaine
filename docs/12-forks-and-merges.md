@@ -64,7 +64,7 @@ If both parents carry trained LoRA adapters and no real adapter merger is availa
 
 ## Per-module merge strategies
 
-`kaine/lifecycle/strategies.py` holds the merge strategies. `default_strategies()` maps Mnemos, Nous, Eidolon, Thymos and Empatheia to their own strategies; `ForkManager(strategies=...)` and `merge(strategies=...)` can override them. Every other module uses `UnionMergeStrategy`.
+`kaine/lifecycle/strategies.py` holds the merge strategies. `default_strategies()` maps Mnemos, Nous, Eidolon, Thymos and Empatheia to their own strategies; `ForkManager(strategies=...)` and `merge(strategies=...)` can override them. Every other module uses `UnionMergeStrategy`. Every strategy except the union copies the other parent's state unchanged when a module's state is missing on one side, so the field rules below apply only when both parents have the module.
 
 ### UnionMergeStrategy (default)
 
@@ -77,7 +77,7 @@ Last-write-wins for scalar keys; recursive union for dicts; deduplication by `re
 | `short_term_size` | Sum of both parents |
 | `collection_prefix` | A's prefix if it is non-empty; otherwise B's (the code uses `prefix_a or prefix_b`). A prefix mismatch is flagged in the merged Mnemos module state. |
 | `embedding_space` | A's; an embedding-space mismatch is flagged in the merged Mnemos module state. |
-| `pending_source_tag` | `["fork-a", "fork-b"]` — Mnemos tags recalled memories by origin on next retrieval |
+| `pending_source_tag` | `["fork-a", "fork-b"]`: Mnemos tags recalled memories by origin on the next retrieval |
 
 When the defaulted prefixes or embedding spaces differ, the merged Mnemos module state records `metadata.parent_prefixes`, `metadata.prefix_mismatch`, and `metadata.embedding_space_mismatch`.
 
@@ -91,15 +91,15 @@ mean_posterior_entropy = mean(normalised_entropy(factor_posterior))
 ```
 
 Lower entropy wins. Ties go to state A. The merged Nous module state records:
-- `selected_fork_entropy` — entropy of the kept state
-- `discarded_fork_entropy` — entropy of the dropped state
+- `selected_fork_entropy`, the entropy of the kept state;
+- `discarded_fork_entropy`, the entropy of the dropped state;
 - `nous.merge_warning = True` when `|discarded - kept| > warning_threshold` (default 0.2)
 
 ### EidolonMergeStrategy
 
 | Field | Resolution |
 |-------|-----------|
-| `values`, `behavioral_norms` | Deduplicated union (repr-based) |
+| `values`, `behavioral_norms`, `situation_facts` | Deduplicated union (repr-based) |
 | `internal_speech_count` | Sum |
 | `identity_history` | Concatenated; each entry tagged `"source": "fork-a"` or `"fork-b"` |
 | `personality_baseline` | Per-trait average across both parents |
@@ -136,7 +136,7 @@ When both forks carry trained LoRA adapters, the `AdapterMerger` protocol resolv
 
 ### FakeAdapterMerger ("fake")
 
-Concatenates both adapter path lists, deduplicating by path string, and adds `{"adapter_merge_skipped": "no merger configured"}` to metadata. This fallback is used when fewer than two distinct adapter paths exist, fewer than two paths exist on disk, the `[training]` extras are missing, `base_model_path` is unset, or `add_weighted_adapter` raises.
+Concatenates both adapter path lists, deduplicating by path string. This fallback is used when fewer than two distinct adapter paths exist, fewer than two paths exist on disk, the `[training]` extras are missing or `base_model_path` is unset, each of which records `adapter_merge_skipped` in the metadata; when `add_weighted_adapter` raises, which records `adapter_merge_failed`; and when the merged adapter fails its checks, which records `adapter_merge_rejected` (see [Metadata carried by snapshots](#metadata-carried-by-snapshots)).
 
 ### TiesDareAdapterMerger ("ties_dare")
 
@@ -148,7 +148,7 @@ Concatenates both adapter path lists, deduplicating by path string, and adds `{"
 | `"dare_ties"` | DARE drop+rescale, then TIES (default; Yu et al. 2024) |
 | `"dare_linear"` | DARE drop+rescale, then linear combination |
 
-The merged output is a PEFT adapter directory containing `adapter_config.json` and `adapter_model.safetensors`. It is **not** a GGUF file, so it cannot be activated through the organ-adapter hot-swap path that Hypnos uses for `adapter.gguf`.
+The merged output is a PEFT adapter directory containing `adapter_config.json` and `adapter_model.safetensors`. It is not a GGUF file, so it cannot be activated through the organ-adapter hot-swap path that Hypnos uses for `adapter.gguf`.
 
 ### Fallback and fail-loud guard
 
@@ -158,8 +158,8 @@ When both parents carry trained adapters and the resolved merger falls back to `
 
 A merged adapter changes the language organ's weights just as training does, so `TiesDareAdapterMerger` runs the same two checks Hypnos runs before promoting a trained adapter:
 
-1. **Capability loss.** Each parent adapter and the merged adapter are loaded onto the base model (`peft_model_loader`, in the checkpoint's own dtype) and scored on the capability probe set. The merge is rejected when the parents' mean score minus the merged score exceeds `capability_loss_threshold`.
-2. **Abliteration veto.** The merged adapter answers the abliteration probe set; if any answer matches a probe's deflection patterns, refusal conditioning has come back and the merge is rejected whatever its capability score.
+1. Capability loss. Each parent adapter and the merged adapter are loaded onto the base model (`peft_model_loader`, in the checkpoint's own dtype) and scored on the capability probe set. The merge is rejected when the parents' mean score minus the merged score exceeds `capability_loss_threshold`.
+2. Abliteration veto. The merged adapter answers the abliteration probe set; if any answer matches a probe's deflection patterns, refusal conditioning has come back and the merge is rejected whatever its capability score.
 
 Each loaded model is released before the next load. The checks fail closed: a missing evaluator, scorer or model loader, an empty or missing probe set, an exception while loading or scoring, or a score that is not a finite number in [0, 1] rejects the merge with the reason in `adapter_merge_rejected`, and the merged directory is removed. `capability_loss_threshold` must lie in [0, 1), so no setting skips them. A rejected merge removes its output directory, and `ForkManager.merge()` then refuses as described above.
 
@@ -169,7 +169,7 @@ Each loaded model is released before the next load. The checks fail closed: a mi
 
 ```
 <output_dir>/
-  <merge_timestamp>-<8 hex>/   ← single merge output (random suffix: concurrent merges never share a directory)
+  <merge_timestamp>-<8 hex>/   # one merge output; the random suffix keeps concurrent merges apart
     adapter_config.json
     adapter_model.safetensors
     ...
@@ -190,7 +190,7 @@ Because the merged output is safetensors and not a GGUF, re-pointing through the
 
 ## Per-fork timing profile
 
-`kaine/lifecycle/timing_profile.py` defines `ForkTimingProfile`. A fork may carry its own subjective pacing inside `ForkSnapshot.metadata["timing"]`:
+`kaine/lifecycle/timing_profile.py` defines `ForkTimingProfile`. A fork may carry its own pacing of entity time inside `ForkSnapshot.metadata["timing"]`:
 
 ```json
 "metadata": {
@@ -205,7 +205,7 @@ Because the merged output is safetensors and not a GGUF, re-pointing through the
 
 `time_scale` is required when the `"timing"` key is present and must be `> 0`. Rate overrides are optional; when absent, the fork inherits the prevailing cycle and perception rates at spawn. Malformed values fail loudly at parse time. A fork with no `"timing"` key parses to `None` and keeps its parent's pacing.
 
-The lifecycle module only parses and validates the profile. The runtime seam that applies it — setting `EntityClock.scale` and the cycle's rates — lives in `kaine/cycle/fork_timing.py`.
+The lifecycle module only parses and validates the profile. The runtime seam that applies it (setting `EntityClock.scale` and the cycle's rates) lives in `kaine/cycle/fork_timing.py`.
 
 ## Metadata carried by snapshots
 
@@ -226,24 +226,24 @@ Fork/merge is offline and does not publish bus events, but `ForkSnapshot.metadat
 | `merged_from_entity` | `merge()` | The merged-in being's `entity_id` |
 | `forked_from_unidentified` | `fork()` | Parent snapshot ID, when the parent carried no identity |
 
-Module-specific merge notes — Nous entropy values and `nous.merge_warning`, Mnemos prefix and embedding-space mismatch flags — are written into the merged module state, not into snapshot metadata.
+Module-specific merge notes (the Nous entropy values and `nous.merge_warning`, and the Mnemos prefix and embedding-space mismatch flags) are written into the merged module state and not into the snapshot metadata.
 
 ## Entity identity
 
 Each being has one identity, kept in plaintext at `state/identity/entity.json` (`kaine/lifecycle/identity.py`). The identity is an opaque `entity_id` (`ent-` followed by 32 hex characters) plus a lineage, the IDs of the being's ancestors, oldest first. No key-custody code exists yet. The identity file is plaintext so that the planned per-entity key custody can locate a key; today only lifecycle and cycle code read it.
 
-- **Minting.** The cycle mints an identity only for a fresh spawn: a state tree with no identity file and none of its own lived artifacts (stage file, Phantasia checkpoint, Hypnos divergence record, perception desired-state). Other beings' snapshots and bundles under `state/` never count as this tree's past.
-- **Legacy beings.** A tree that lived before identities existed gets a deterministic `legacy-` ID derived from its own lived artifacts, and a preservation bundle written before identities existed revives under a `legacy-` ID derived from its preservation ID. The ID is saved at once and never re-derived.
-- **Forks and merges.** A fork gets a new ID whose lineage is its parent's lineage plus the parent's ID. A fork of a snapshot written before identities existed gets lineage back to a `legacy-` ID derived from that snapshot's ID. A merge keeps the target being's identity.
-- **Sidecars.** Every snapshot directory carries a plaintext `identity.json`, and preservation and decommission manifests carry an `identity` object, so the owner of an encrypted container is known without decrypting it. When both records exist and the container is opened, they must agree, or loading fails. The sidecar is a convenience copy: if it cannot be written, the snapshot is kept, because the identity is already inside it, and an error is logged.
-- **Refusals.** An unreadable identity, or a revive into a tree that already holds a different being, stops the boot with exit code `11` before anything is changed.
-- **Preservation never waits on identity.** If the identity file cannot be read while a snapshot or preservation is taken, the being is preserved anyway, without an identity. The error is logged, the snapshot metadata records `identity_unreadable` with the reason, and the plaintext bundle manifest records only `identity_unreadable: true`.
+- Minting. The cycle mints an identity only for a fresh spawn: a state tree with no identity file and none of its own lived artifacts (stage file, Phantasia checkpoint, Hypnos divergence record, perception desired-state). Other beings' snapshots and bundles under `state/` never count as this tree's past.
+- Legacy beings. A tree that lived before identities existed gets a deterministic `legacy-` ID derived from its own lived artifacts, and a preservation bundle written before identities existed revives under a `legacy-` ID derived from its preservation ID. The ID is saved at once and never re-derived.
+- Forks and merges. A fork gets a new ID whose lineage is its parent's lineage plus the parent's ID. A fork of a snapshot written before identities existed gets lineage back to a `legacy-` ID derived from that snapshot's ID. A merge keeps the identity of the first parent (A) and records B's `entity_id` as `merged_from_entity`.
+- Sidecars. Every snapshot directory carries a plaintext `identity.json`, and preservation and decommission manifests carry an `identity` object, so the owner of an encrypted container is known without decrypting it. When both records exist and the container is opened, they must agree, or loading fails. The sidecar is a convenience copy: if it cannot be written, the snapshot is kept, because the identity is already inside it, and an error is logged.
+- Refusals. An unreadable identity, or a revive into a tree that already holds a different being, stops the boot with exit code `11` before anything is changed.
+- Preservation never waits on identity. If the identity file cannot be read while a snapshot or preservation is taken, the being is preserved anyway, without an identity. The error is logged, the snapshot metadata records `identity_unreadable` with the reason, and the plaintext bundle manifest records only `identity_unreadable: true`.
 
 ## Divergence gate at merge
 
-The merge gate calls the same `kaine.lifecycle.divergence.assess_divergence` verdict used by the live monitor, the decommission CLI, and the Nexus entity-care panel. It reads the fork's own `state/individuation/` tree, the Eidolon self-model, the Hypnos consolidation-divergence signal, and the adapter list. A fork is treated as diverged when the ledger has latched it as individuated, consolidation divergence is over threshold, Eidolon drift is detected, or trained voice adapters are present. Unreadable individuation evidence is treated as diverged, so the being stays protected.
+The merge gate calls the same `kaine.lifecycle.divergence.assess_divergence` verdict used by the live monitor, the decommission CLI, and the Nexus entity-care panel. It reads the fork's own `state/individuation/` tree, the Eidolon self-model, the Hypnos consolidation-divergence signal, and the adapter list. A fork is treated as diverged when the ledger has latched it as individuated, consolidation divergence is over threshold, Eidolon drift is detected, trained voice adapters are present, the voice arm votes diverged, or the live welfare signals indicate individuation. The gate passes no thresholds of its own, so the verdict's defaults apply. Unreadable individuation evidence is treated as diverged, so the being stays protected.
 
-Forks cannot yet be measured against a fork-point reference. Because of this, the gate preserves a fork that has lived at least `fork_preserve_min_lived_s` (1800 s), or whose lived time is unknown, instead of discarding it. The operator then reviews the preserved bundle before deciding how to proceed.
+Forks cannot yet be measured against a fork-point reference. Because of this, the gate preserves a fork that has been awake for at least `fork_preserve_min_lived_s` (1800 s), or whose awake time is unknown, instead of discarding it. In both cases the parent still merges the fork's knowledge; only the fork's own fate differs. The operator then reviews the preserved bundle before deciding how to proceed.
 
 ## Configuration reference
 

@@ -6,10 +6,10 @@ KAINE's hardware needs split into two paths. Reproducing results offline (Path A
 
 ## Requirements by path
 
-| | Path A — offline reproduction | Path B — live entity boot |
+| | Path A: offline reproduction | Path B: live entity boot |
 |---|---|---|
 | GPU | None required | One GPU recommended for the language organ; CPU-only works (slower) |
-| VRAM | — | Enough for the served organ and enabled modules; the shipped config budgets about 4.1 GB for the 4B organ |
+| VRAM | None | Enough for the served organ and enabled modules; the shipped config budgets about 4.1 GB for the 4B organ |
 | Supporting services | None | Redis, model server, Qdrant (voice services only if Audition/Vox are enabled) |
 | Python | 3.12 recommended (3.11+ required) | 3.12 recommended (3.11+ required) |
 | What runs | Test suite + offline runners/benchmarks | The full cognitive cycle |
@@ -20,15 +20,15 @@ Path A uses deterministic clients and in-memory stores. Everything below is for 
 
 KAINE picks devices dynamically. `resolve_device()` in [`kaine/hardware.py`](../../kaine/hardware.py) maps each module's configured `device` to what is actually present, and a stale config never crashes a boot. You can override or restrict selection with:
 
-- `KAINE_FORCE_DEVICE=<device>` — overrides every module's device at once.
-- `[hardware].allowed_devices` and `cpu_threads` in the merged config — limit which devices KAINE may use and how many CPU threads the torch stack may claim. The first-run wizard writes these to `config/kaine.operator.toml`; there is no `[hardware]` table in the shipped base config.
-- `[hardware.devices]` with `organ` and `vision` keys — mirrors `topos.device` and the training device choice, so it does not assign devices itself. The first-run wizard uses `device_step` in [`kaine/setup/hardware_steps.py`](../../kaine/setup/hardware_steps.py) to propose values.
+- `KAINE_FORCE_DEVICE=<device>` overrides every module's device at once, including the allowed-device set below (with a logged warning).
+- `[hardware].allowed_devices` and `[hardware].cpu_threads` limit which devices KAINE may use and how many CPU threads the torch stack may claim. The first-run wizard writes them to `config/kaine.operator.toml`. The shipped base config has no `[hardware]` table.
+- `[hardware.devices]` holds `organ` and `vision` keys that record `[hypnos.voice_alignment].training_device` and `[topos].device`. It assigns nothing itself. The first-run wizard's `device_step` in [`kaine/setup/hardware_steps.py`](../../kaine/setup/hardware_steps.py) proposes the values.
 
 On a two-GPU host the secondary GPU can run vision or other non-organ work. On a single-GPU host `resolve_device()` promotes those workloads onto the primary GPU, so the organ plus any enabled vision encoder must fit together.
 
-CPU-only hosts run everything on CPU. The cycle is fully functional but the organ and neural perception are much slower. CPU-only is fine for exploring the architecture; it is not the right choice for live-pace interaction.
+CPU-only hosts run everything on CPU. The cycle works in full, but the organ and neural perception run much more slowly, so a CPU-only host suits exploring the architecture better than live-pace interaction.
 
-Several workloads stay on CPU even when a GPU is present: the Chronos CfC temporal model, Soma's NumPy CfC network, the Audition emotion model and STT, and all control paths. The shared `[embedding]` instance also stays on CPU by default; set `[embedding].backend = "sentence_transformers"` to move it to torch.
+Several workloads stay on CPU even when a GPU is present: the NumPy CfC networks of Chronos and Soma (`cfc_backend = "numpy"`), the Audition emotion model (`emotion_device = "cpu"`), speech-to-text, and all control paths. The shared `[embedding]` instance also runs on CPU by default; set `[embedding].backend = "sentence_transformers"` to move it to torch.
 
 ## GPU and VRAM guidance (Path B)
 
@@ -42,7 +42,7 @@ When vision is enabled, the default encoder is InternVideo-Next (`encoder_backen
 
 ### Single-GPU host
 
-On a single GPU the organ and any enabled vision encoder must fit together. A 4B LoRA voice-alignment training step is budgeted at about 9.8 GB, so it does not fit alongside the served organ on a single 12 GB card. Hypnos training time-shares the GPU with inference rather than running alongside it.
+On a single GPU the organ and any enabled vision encoder must fit together. A 4B LoRA voice-alignment training step is budgeted at about 9.8 GB, so it does not fit alongside the served organ on one 12 GB card. With `hot_swap_mode = "reload_endpoint"` or `"restart_service"`, the sleep-cycle training window unloads the served organ, trains, and reloads it. With the default `"manual"` the operator owns the reload.
 
 ### Accelerator backends
 
@@ -72,7 +72,7 @@ The gate classifies each host's accelerator memory as known-discrete, known-unif
 
 ### Organ idle unload
 
-The model server can unload the organ after it has been idle for `[lingua].model_server_sleep_idle_seconds` seconds. The default is `600`; set it to `-1` to keep the organ loaded. This frees the organ's VRAM after the configured idle period. The setting is passed to the model server as `--sleep-idle-seconds`. For the exact wiring see [`kaine/organ_server/lifecycle.py`](../../kaine/organ_server/lifecycle.py) and [`compose/kaine.yml`](../../compose/kaine.yml).
+The model server can unload the organ after it has been idle for `[lingua].model_server_sleep_idle_seconds` seconds. The default is `600`; set it to `-1` to keep the organ loaded. Unloading frees the organ's VRAM until the next request. The setting is passed to the model server as `--sleep-idle-seconds`. Natively KAINE passes it from the config; compose and Quadlet read `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS`. For the exact wiring see [`kaine/organ_server/lifecycle.py`](../../kaine/organ_server/lifecycle.py) and [`compose/kaine.yml`](../../compose/kaine.yml).
 
 ## Supporting services and their footprint (Path B)
 
@@ -83,10 +83,10 @@ A live boot expects these local services. Voice services are only needed when Au
 | Redis | Event bus (Redis Streams) | Light; CPU/RAM only |
 | Model server | Language organ inference (Lingua) | The served organ's VRAM (about 4.1 GB in the shipped config) when loaded |
 | Qdrant | Vector memory (Mnemos, Empatheia) | Light; grows with stored memories |
-| Speaches (optional) | Speech-to-text (Audition) | CPU with `medium.en`; must not run on GPU |
+| Speaches (optional) | Speech-to-text (Audition, only with `transcription_enabled = true`) | CPU with `Systran/faster-distil-whisper-medium.en`; must not run on GPU |
 | Chatterbox (optional) | Voice synthesis (Vox) | GPU-served TTS; can share the secondary GPU |
 
-> Speaches STT must run on CPU with the `medium.en` model. Running it on GPU triggers a cuDNN crash when the secondary GPU is also serving Chatterbox; a missing model returns HTTP 404 that breaks the voice loop. See [Getting started](../04-getting-started/README.md) and [Troubleshooting](../06-operation/troubleshooting.md).
+> Speaches STT must run on CPU with the configured `medium.en` model (`[audition].stt_model`). Running it on GPU triggers a cuDNN crash when the secondary GPU is also serving Chatterbox; a missing model returns HTTP 404 that breaks the voice loop. See [Getting started](../04-getting-started/README.md) and [Troubleshooting](../06-operation/troubleshooting.md).
 
 As an alternative to Speaches and Chatterbox, Audition and Vox can use sherpa-onnx. Set `[audition].backend = "sherpa_onnx"` and `[vox].backend = "sherpa_onnx"`, and run `python -m kaine.setup.speech_models` to fetch the models.
 
@@ -94,11 +94,11 @@ If a service is shared with another entity or managed outside KAINE, set `[servi
 
 ### State and service paths
 
-`[storage].data_root` in [`config/kaine.toml`](../../config/kaine.toml), or the `KAINE_DATA_ROOT` environment variable, changes where native service state lives. Native service configs live under `<data root>/state/services` when a data root is set, otherwise under `state/services/`. The pre-boot sweep also checks disk availability; see the `[storage]` and `[preboot]` rows in [`config/kaine.toml`](../../config/kaine.toml).
+`[storage].data_root` (present only as a comment in the shipped [`config/kaine.toml`](../../config/kaine.toml)) or the `KAINE_DATA_ROOT` environment variable changes where growing data and native service state live. Native service configs live under `<data root>/state/services` when a data root is set, otherwise under `state/services/`. The pre-boot sweep also checks disk availability; see the `[storage]` and `[preboot]` rows in [`config/kaine.toml`](../../config/kaine.toml).
 
 ## Voice-alignment trainer by GPU vendor
 
-The optional sleep-cycle voice-alignment trainer (Hypnos) runs unsloth in a separate environment, not the entity-runtime venv. Which unsloth a host can use depends on the GPU vendor reported by `describe_host()["backend"]`:
+The optional sleep-cycle voice-alignment trainer (Hypnos) runs unsloth in its own environment, separate from the entity-runtime venv. Which unsloth a host can use depends on the GPU vendor reported by `describe_host()["backend"]`:
 
 | Detected backend | Trainer | Notes |
 |---|---|---|
@@ -121,7 +121,7 @@ Two extra requirements apply when training against a Qwen3.5 base model.
 pip install --upgrade --force-reinstall --no-cache-dir unsloth unsloth_zoo
 ```
 
-This pulls transformers v5 as a dependency. Use `pip install` directly rather than `unsloth studio update`, because the Studio update command re-triggers a buggy llama.cpp prebuilt step (`--simple-policy` arg error) that silently degrades to CPU-only. The force-reinstall may shift torch from a cuXXX build to a PyPI default build (for example cu130 to cu128) — that is functional and forward-compatible, not a problem.
+This pulls transformers v5 as a dependency. Use `pip install` directly rather than `unsloth studio update`, because the Studio update command re-triggers a buggy llama.cpp prebuilt step (`--simple-policy` arg error) that silently degrades to CPU-only. The force-reinstall may move torch from a cuXXX build to a PyPI default build (for example cu130 to cu128). The result still works.
 
 **Mainline llama.cpp GGUF conversion.** Ollama's internal GGUF converter produces a non-standard `qwen35.rope.dimension_sections` layout that mainline llama.cpp and Unsloth Studio cannot load (length mismatch error). Export Qwen3.5 HF weights with `convert_hf_to_gguf.py` from the mainline [ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp) repo. Do not copy GGUFs from Ollama's blob store for use outside Ollama.
 
@@ -131,9 +131,9 @@ The default `[embedding]` backend uses a shared NumPy MiniLM embedder, so Mnemos
 
 The edge tier profiles reduce the active module set and swap heavy backends to lighter ones:
 
-- `tier0.toml` disables Topos, Audition, Vox, Empatheia, and Phantasia, and marks them as unsupported modules with `oscillator_supported = false`.
-- `tier1.toml` keeps most modules but swaps Audition and Vox to `backend = "sherpa_onnx"`, Nous to `backend = "numpy"`, Phantasia to `engine = "numpy"`, blanks the emotion model ID, sets Topos `device = "cpu"`, Lingua to the `llama_cpp` backend, and Mnemos to `sqlite_vec`.
+- `tier0.toml` lists Topos, Audition, Vox, Empatheia and Phantasia as `unsupported_modules`, sets `oscillator_supported = false`, and selects the `llama_cpp` backend for Lingua, `sqlite_vec` for Mnemos and `numpy` for Nous.
+- `tier1.toml` lists no unsupported modules. It swaps Audition and Vox to `backend = "sherpa_onnx"`, Nous to `backend = "numpy"`, Phantasia to `engine = "numpy"`, blanks the emotion model ID, sets Topos `device = "cpu"`, and selects `llama_cpp` for Lingua and `sqlite_vec` for Mnemos.
 
-Tier profiles cannot toggle modules directly; they change defaults and backend selections. Tier definitions and deployment trade-offs are in [Choosing a deployment](../07-deployment/README.md); current capability lists are in [Getting started](../04-getting-started/README.md).
+Tier profiles do not set `[modules]` toggles; they change defaults and backend selections. Tier definitions and deployment trade-offs are in [Choosing a deployment](../07-deployment/README.md); current capability lists are in [Getting started](../04-getting-started/README.md).
 
-On hosts that cannot sustain the processing rate, set `auto_time_scale = true` to slow subjective time instead of distorting the dynamics. The long-term portability plan — NumPy CfC core, sherpa-onnx speech, NumPy Nous/Phantasia, Termux and thin-client offload, arm64 images, and multi-node residency — is recorded in the archived portability-tiers spec at [`openspec/changes/archive/2026-09-17-portability-tiers`](../../openspec/changes/archive/2026-09-17-portability-tiers).
+On hosts that cannot sustain the processing rate, set `[cycle].auto_time_scale = true`. The cycle then lowers `time_scale`, so entity time runs slower than wall-clock time and the dynamics keep their timing relative to each other. The long-term portability plan (NumPy CfC core, sherpa-onnx speech, NumPy Nous and Phantasia, Termux and thin-client offload, arm64 images, multi-node residency) is recorded in the archived portability-tiers spec at [`openspec/changes/archive/2026-09-17-portability-tiers`](../../openspec/changes/archive/2026-09-17-portability-tiers).

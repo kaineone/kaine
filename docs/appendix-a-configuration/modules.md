@@ -2,11 +2,15 @@
 
 This page documents every module-specific configuration section in `config/kaine.toml`. Use it when enabling a module in the `[modules]` table (see [Core, cycle and host](core.md)) and tuning its behavior. For the perception feed, sleep, and voice alignment settings see [Perception feed and sleep](perception-and-sleep.md); for lifecycle and research settings see [Lifecycle, evaluation and research](lifecycle-and-research.md); for security and Nexus see [Security and Nexus](security-and-nexus.md).
 
+The `*_salience` keys set the intensity, between 0 and 1, that a module reports with each event; the workspace multiplies it by novelty and the goal factor to get a candidate's priority.
+
+In the predictive processors (Soma, Chronos, Topos and Audition), `baseline_salience` and `alert_salience` set the range of a report's graded intensity. A report with a categorical alert carries the alert level. Otherwise its intensity is `baseline + (alert - baseline) * min(1, ratio / 2)`, where `ratio` is the prediction error over the running mean of the module's recent errors (`prediction_error_window` reports), so the intensity reaches the alert level when the error is twice its running mean. Every report's payload carries a boolean `alert`. Topos, Audition's acoustic and tone models, and Soma's readout also take the broadcast context (a summary of which modules' reports gained access in the latest accessed broadcast, how strongly, and how long ago) as an extra forward-model input that learns online; no config key controls it.
+
 ## Soma
 
 Section: `[soma]`.
 
-Soma is the predictive interoception module. It reads CPU, RAM, GPU, and cycle-latency metrics, runs a small forward model, and publishes prediction errors that influence the workspace. See [The Soma module](../09-modules/soma.md).
+Soma is the predictive interoception module. It reads CPU, RAM, GPU and cycle-latency metrics, predicts them with a small forward model, and reports its scaled prediction error to the workspace. See [The Soma module](../09-modules/soma.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -14,27 +18,27 @@ Soma is the predictive interoception module. It reads CPU, RAM, GPU, and cycle-l
 | `read_interval_s` | float | `1.0` | Seconds between substrate metric reads. |
 | `cycle_latency_target_ms` | float | `300.0` | Target cognitive-cycle latency; deviation drives prediction error. |
 | `cycle_latency_window` | integer | `64` | Rolling-window size for cycle-latency averaging. Passed through to the reader. |
-| `baseline_salience` | float | `0.1` | Salience when substrate metrics are within normal bounds. |
-| `alert_salience` | float | `0.7` | Salience on threshold breach or sustained high unexpected prediction error. |
+| `baseline_salience` | float | `0.1` | Intensity of a report with no prediction error; the bottom of the graded range. |
+| `alert_salience` | float | `0.7` | Intensity when a metric crosses its `[soma.thresholds]` limit (Soma's categorical alert); the top of the graded range. |
 | `forward_model_units` | integer | `32` | Hidden units of the CfC interoceptive forward model. |
-| `prediction_error_window` | integer | `32` | Rolling-window size (ticks) for normalizing the prediction error signal. |
+| `prediction_error_window` | integer | `32` | Number of recent reports whose mean error scales the current error. |
 | `fatigue_decay_per_s` | float | `0.01` | Rate at which the fatigue accumulator decays per second under low load. |
 | `fatigue_maintenance_threshold` | float | `100.0` | Fatigue value that triggers a Hypnos consolidation request. |
 | `regulation_sustain_window_s` | float | `30.0` | Minimum window of sustained high unexpected error before regulation requests are emitted. |
 | `regulation_threshold` | float | `0.5` | Unexpected prediction-error level at which sustained regulation is considered. |
-| `expected_error_tau_s` | float | `600.0` | Time constant, in subjective seconds, for the per-channel running average of absolute prediction error and its spread. |
+| `expected_error_tau_s` | float | `600.0` | Time constant, in entity seconds, for the per-channel running average of absolute prediction error and its spread. |
 | `expected_error_band` | float | `2.0` | Spread widths above the expected absolute error that are treated as unsurprising. |
 | `regulation_warmup_enabled` | boolean | `true` | Withholds punitive allostatic actions while the forward model learns this host's substrate baseline. |
 | `regulation_warmup_min_samples` | integer | `1000` | Minimum adaptation samples before warm-up can end. |
-| `regulation_warmup_min_seconds` | float | `1200.0` | Minimum lived subjective seconds before warm-up can end. |
+| `regulation_warmup_min_seconds` | float | `1200.0` | Minimum entity seconds since Soma's first tick before warm-up can end. |
 | `regulation_warmup_require_error_stabilized` | boolean | `false` | Optional extra guard: also require prediction-error variance to fall below `regulation_warmup_stable_variance`. Can only extend warm-up. |
 | `regulation_warmup_stable_window` | integer | `32` | Rolling window used for the optional stability check. |
 | `regulation_warmup_stable_variance` | float | `0.02` | Variance bound for the optional stability check. |
-| `self_rhythm_enabled` | boolean | `false` | Enable the self-rhythm Soma hosts: a breathing-like mean-field rhythm generator read out by 16 LIF units. Required for local gestation; needs the oscillator extra. |
-| `self_rhythm_step_hz` | float | `20.0` | Subjective-time cadence the self-rhythm integrates at. |
-| `self_rhythm_eta` | float | `0.0025` | Rate at which the self-rhythm's period adapts to its input. Calibrated so an earned lock to the maternal beat typically forms within the gestation budget. `0` disables adaptation, so entrainment can never be earned. |
+| `self_rhythm_enabled` | boolean | `false` | Enable the self-rhythm Soma hosts: a breathing-like mean-field rhythm generator read out by 16 LIF units. Required for gestation; needs the `[oscillator]` extra. |
+| `self_rhythm_step_hz` | float | `20.0` | Rate, in entity time, at which the self-rhythm integrates. |
+| `self_rhythm_eta` | float | `0.0025` | Rate at which the self-rhythm's frequency adapts to its input. Calibrated so a lock to the maternal heartbeat typically forms within the gestation budget. `0` (the value when the key is absent) disables adaptation, so entrainment can never be earned. |
 
-Warm-up does **not** gate the absolute thresholds in `[soma.thresholds]`. A real substrate breach (for example, GPU temperature ≥ 83 °C) overrides warm-up and actuates at full weight.
+Warm-up does not gate the absolute thresholds in `[soma.thresholds]`. A real substrate breach (for example, GPU temperature at or above 83 °C) overrides warm-up and acts at full weight.
 
 ### Thresholds
 
@@ -62,29 +66,31 @@ Section: `[soma.weights]`.
 
 Section: `[chronos]`.
 
-Chronos models event rhythm across the bus with a small CfC network and publishes timing anomalies, habituation, and rumination events. See [The Chronos module](../09-modules/chronos.md).
+Chronos is the temporal processor. It runs a small CfC network over a featurization of each broadcast (whether accessed or inhibited), predicts the next one, and reports timing anomalies, habituation and recurrence (a hidden state that keeps recurring; the code and keys call it rumination). With `forward_prediction` off it reports at the baseline level unless an alert fires. See [The Chronos module](../09-modules/chronos.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `cfc_backend` | string | `"numpy"` | `"numpy"` needs no torch; `"torch"` uses `ncps` and needs the `core` extra. Both build the same seeded reservoir, whose seed is kept in Chronos's snapshot. |
 | `cfc_units` | integer | `32` | Hidden units in the CfC temporal network. |
-| `baseline_salience` | float | `0.1` | Salience when timing is within expected bounds. |
-| `alert_salience` | float | `0.7` | Salience on anomaly, habituation, or rumination detection. |
-| `anomaly_window` | integer | `64` | Rolling-window length (ticks) passed to the Chronos constructor for the anomaly detector. |
-| `anomaly_alert_threshold` | float | `3.0` | Z-score above which an inter-event interval is flagged as anomalous. |
-| `rumination_window` | integer | `32` | Rolling window (ticks) for detecting repeated event types. |
-| `rumination_threshold` | integer | `4` | Count of the same event type within `rumination_window` that triggers a rumination alert. |
-| `rumination_bucket_resolution` | float | `0.25` | Bucket width (seconds) for discretizing event timestamps in the rumination detector. |
-| `user_input_streams` | list of strings | `["audition.out"]` | Streams Chronos monitors for user-input timing. |
-| `interaction_event_types` | list of strings | `["audition.transcription", "audition.emotion"]` | Event types on those streams that count as an interaction when they come from an operator channel. |
-| `forward_prediction` | boolean | `false` | Enable the forward-model prediction head. Disabled by default in the shipped file; enabled in the default `thesis_test` profile. |
-| `prediction_error_window` | integer | `32` | Rolling-window size (ticks) for normalizing the temporal prediction error signal. |
+| `baseline_salience` | float | `0.1` | Bottom of the graded intensity range. |
+| `alert_salience` | float | `0.7` | Intensity on an alert (an error ratio or anomaly score at or above `anomaly_alert_threshold`, or recurrence); the top of the graded range. |
+| `anomaly_window` | integer | `64` | Number of recent broadcasts over which the anomaly detector takes the z-score of the hidden state's norm. |
+| `anomaly_alert_threshold` | float | `3.0` | Alert criterion. With `forward_prediction` on it applies to the error ratio (error over its running mean); otherwise to the anomaly z-score. |
+| `rumination_window` | integer | `32` | Number of recent broadcasts the recurrence detector keeps. |
+| `rumination_threshold` | integer | `4` | Recurrence alerts when one quantized hidden state appears more than this many times in the window. |
+| `rumination_bucket_resolution` | float | `0.25` | Quantization step applied to each hidden-state dimension before states are compared. |
+| `user_input_streams` | list of strings | `["audition.out"]` | Streams Chronos watches for interaction timing. |
+| `interaction_event_types` | list of strings | `["audition.transcription", "audition.emotion"]` | Event types on those streams that count as an interaction when they come from an operator channel. Not in the shipped file. |
+| `forward_prediction` | boolean | `false` | Enable the forward-model prediction head and graded intensity. Off in the shipped file; on in the `thesis_test` profile. |
+| `prediction_error_window` | integer | `32` | Number of recent errors whose mean scales the current error. |
+
+Chronos clips each interval between broadcasts to ten times the window mean before it enters its timespan window, and after a restart it measures the time since the last interaction against the new boot's clock. Neither has a config key.
 
 ## Topos
 
 Section: `[topos]`.
 
-Topos is the vision module. It embeds short video clips into a motion-aware latent using a frozen encoder, predicts the next latent with a shallow forward model, and drives workspace salience from prediction error. Raw camera frames live in a RAM-only ring buffer and never touch disk. See [The Topos module](../09-modules/topos.md).
+Topos is the vision module. It embeds short video clips into a motion-aware latent with a frozen encoder, predicts the next latent with a shallow forward model, and reports the scaled prediction error. Raw camera frames live in a RAM-only ring buffer and never touch disk. See [The Topos module](../09-modules/topos.md).
 
 ### Encoder setup
 
@@ -112,11 +118,11 @@ The real encoder needs the `[internvideo]` extra (`einops`, `timm`, `easydict`).
 | `clip_stride` | integer | `3` | Strided sliding window: one clip latent every N frame-ticks. At the shipped `vision_sample_hz = 10`, this emits roughly 3.33 Hz. |
 | `clip_resolution` | integer | `224` | Clip input resolution. |
 | `pooling` | string | `"attention"` | Token pooling: `"attention"` (native pool head) or `"mean"`. |
-| `change_alert_threshold` | float | `1e-4` | Small absolute noise floor for the change alert. The primary criterion is `change_alert_factor` times the rolling mean. |
-| `change_alert_factor` | float | `2.0` | Relative multiplier: a change alerts when it reaches this factor times the rolling-window mean of change scores. |
+| `change_alert_threshold` | float | `1e-4` | Small absolute floor for the change alert. The main criterion is `change_alert_factor`. |
+| `change_alert_factor` | float | `2.0` | A change between clip latents alerts when it reaches this multiple of the running mean of recent change scores. An error ratio of 2 also alerts. |
 | `habituation_window` | integer | `16` | Number of recent embeddings the habituator averages over. At least 2. |
-| `baseline_salience` | float | `0.2` | Salience during expected visual state. |
-| `alert_salience` | float | `0.7` | Salience on unexpected visual change. |
+| `baseline_salience` | float | `0.2` | Bottom of the graded intensity range. |
+| `alert_salience` | float | `0.7` | Intensity on an alert (a change alert or an error ratio of 2); the top of the graded range. |
 
 ### Live camera
 
@@ -134,9 +140,9 @@ The real encoder needs the `[internvideo]` extra (`einops`, `timm`, `easydict`).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `forward_prediction` | boolean | `true` | Enable the visual forward model. The encoder stays frozen; only the MLP trains. |
+| `forward_prediction` | boolean | `true` | Enable the visual forward model and graded intensity. The encoder stays frozen; only the MLP trains. With it off, Topos reports at the baseline level unless a change alert fires. |
 | `forward_model_units` | integer | `256` | Hidden-layer width of the shallow MLP forward model. |
-| `prediction_error_window` | integer | `32` | Rolling-window size (frames) for normalizing the prediction error signal. |
+| `prediction_error_window` | integer | `32` | Number of recent clip errors whose mean scales the current error. |
 | `visual_buffer_size` | integer | `16` | Number of recent latents kept in the recurrent visual buffer. |
 
 ### Foveation
@@ -145,11 +151,11 @@ Section: `[topos]` foveation keys.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `foveation` | boolean | `false` | Master gate for attention-driven foveation. Off by default. |
+| `foveation` | boolean | `false` | Master gate for attention-driven foveation. Off in the shipped file; on in the `thesis_test` profile. |
 | `foveation_grid` | list of int | `[12, 12]` | Saliency tiling (rows, cols). |
 | `foveation_hysteresis` | float | `0.15` | A new tile must beat the held tile by more than this fraction to move the fovea. |
-| `foveation_arousal_size_min` | float | `0.12` | Fovea half-extent fraction at arousal = 1.0 (tightest). |
-| `foveation_arousal_size_max` | float | `0.5` | Fovea half-extent fraction at arousal = 0.0 (widest). |
+| `foveation_arousal_size_min` | float | `0.12` | Fovea half-extent, as a fraction of the frame's shorter side, at arousal 1 (narrowest). |
+| `foveation_arousal_size_max` | float | `0.5` | Fovea half-extent at arousal 0 (widest). Size falls linearly between the two as arousal rises. |
 | `peripheral_width` | integer | `320` | Width of the downsampled peripheral gist. |
 | `peripheral_height` | integer | `180` | Height of the downsampled peripheral gist. |
 | `foveal_size` | integer | `224` | Side length of the square foveal crop encoded at native detail. |
@@ -170,9 +176,9 @@ Nous is the active inference engine. It maintains a discrete generative model an
 | `actions` | integer | `4` | Declared action-space size; used only for the complexity-envelope check. |
 | `planning_horizon` | integer | `1` | EFE planning horizon (steps). Higher values increase planning cost. |
 | `efe_timeout_ms` | float | `250` | Hard timeout for one EFE planning pass. On overrun Nous returns the last posterior and publishes `nous.timeout`. |
-| `baseline_salience` | float | `0.4` | Salience of routine belief-update publications. |
-| `alert_salience` | float | `0.8` | Salience when EFE selects a non-trivial policy or a timeout occurs. |
-| `timeout_salience` | float | `0.3` | Salience of the `nous.timeout` event emitted on an EFE overrun. |
+| `baseline_salience` | float | `0.4` | Intensity of routine belief-update publications. |
+| `alert_salience` | float | `0.8` | Intensity of a belief held with confidence of at least 0.75. A policy proposal's intensity runs from `baseline_salience` to this level with the policy's softmax preference. |
+| `timeout_salience` | float | `0.3` | Intensity of the `nous.timeout` event emitted on an EFE overrun. |
 | `drive_actions` | boolean | `true` | When `true`, Nous's chosen actions become proposals that Volition may realize. When `false`, proposals are learned as `no_op`. |
 
 The `factors`, `max_states_per_factor`, `actions`, and `planning_horizon` values are used only for the boot-time complexity-envelope check. The generative model dimensions are fixed by the action-space and factor lists in the code, not by these config keys. The shipped default envelope is 64, well below the 4096 threshold. Exceeding the threshold raises `ConfigurationError`.
@@ -214,8 +220,8 @@ Mnemos is the vector-store memory module. It backs episodic, semantic, and proce
 | `recall_top_k` | integer | `5` | Number of nearest-neighbor results returned per recall query. |
 | `recall_on_workspace` | boolean | `true` | Whether Mnemos recalls in response to workspace broadcasts. |
 | `recall_cooldown_s` | float | `5.0` | Minimum seconds between recall attempts. |
-| `baseline_salience` | float | `0.15` | Salience of routine recall events. |
-| `alert_salience` | float | `0.6` | Salience when a high-affect memory surfaces. |
+| `baseline_salience` | float | `0.15` | Intensity of routine recall events. |
+| `alert_salience` | float | `0.6` | Intensity of a recall whose strongest memory has affect intensity of at least 0.5. |
 
 ### Qdrant connection
 
@@ -255,8 +261,8 @@ Eidolon is the self-model: a persisted JSON document of values, behavioral norms
 | `external_speech_stream` | string | `"lingua.external"` | Bus stream observed for external speech output. |
 | `identity_history_cap` | integer | `0` | Maximum drift episodes kept in `identity_history`. `0` keeps every episode; negative values are rejected. |
 | `voice_observations_cap` | integer | `0` | Maximum speech observations kept in `voice_observations`. `0` keeps every observation; negative values are rejected. |
-| `baseline_salience` | float | `0.05` | Salience of routine self-model update events. |
-| `alert_salience` | float | `0.7` | Salience on drift detection. |
+| `baseline_salience` | float | `0.05` | Intensity of routine self-model update events. |
+| `alert_salience` | float | `0.7` | Intensity on drift detection. |
 
 ### Self inference
 
@@ -277,7 +283,7 @@ Privacy note: internal-speech text is never written to disk; only counts and der
 
 Section: `[thymos]`.
 
-Thymos maintains a dimensional VAD (valence/arousal/dominance) state, categorical emotion, and four drives. See [The Thymos module](../09-modules/thymos.md).
+Thymos maintains a dimensional VAD (valence, arousal, dominance) state, a categorical emotion and four drives. Its arousal is the global gain on the workspace score and sizes the sensory apertures. When Hypnos runs its affective reset, Thymos returns the VAD state and drives to baseline and clears its learning-progress error averages, alert-rate averages, intent rate and perceived emotion; wellness and interaction history are kept. See [The Thymos module](../09-modules/thymos.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -286,14 +292,14 @@ Thymos maintains a dimensional VAD (valence/arousal/dominance) state, categorica
 | `baseline_dominance` | float | `0.0` | Resting dominance. |
 | `drift_rate_per_s` | float | `0.05` | Rate at which the dimensional state drifts back toward baseline per second. |
 | `publish_interval_s` | float | `1.0` | Seconds between affect-state publications to the bus. |
-| `baseline_salience` | float | `0.1` | Salience of routine affective state publications. |
-| `alert_salience` | float | `0.7` | Salience on significant affective change or drive threshold crossing. |
-| `social_drive_time_scale_s` | float | `600.0` | Accepted for compatibility; no longer used. The social drive builds at its build rate once an operator interaction has occurred. |
+| `baseline_salience` | float | `0.1` | Intensity of routine affective state publications. |
+| `alert_salience` | float | `0.7` | Intensity on significant affective change or drive threshold crossing. |
+| `social_drive_time_scale_s` | float | `600.0` | Accepted but unused. The social drive builds at its build rate once an operator interaction has occurred. |
 | `soma_stream` | string | `"soma.out"` | Stream observed for interoceptive prediction errors. |
 | `chronos_stream` | string | `"chronos.out"` | Stream observed for temporal events. |
 | `mnemos_stream` | string | `"mnemos.out"` | Stream observed for memory recall events that trigger affect. |
 | `volition_stream` | string | `"volition.out"` | Stream observed for Volition intents; each non-rest intent relieves restlessness. |
-| `fast_time_constant_s` | float | `10.0` | Subjective time constant of the fast averages of each perceptual module's raw prediction error and of the perceptual alert rate. |
+| `fast_time_constant_s` | float | `10.0` | Time constant, in entity seconds, of the fast averages of each perceptual module's raw prediction error and of the perceptual alert rate. |
 | `slow_time_constant_s` | float | `100.0` | Time constant of the slow averages; learning progress is the relative fall from slow to fast. |
 | `learning_progress_floor` | float | `0.05` | Noise floor on learning progress before it relieves curiosity. |
 | `alert_excess_margin` | float | `0.5` | Fraction by which the fast alert rate must exceed the slow one before it relieves boredom. |
@@ -353,8 +359,8 @@ Praxis exposes bounded effectors: sandboxed file writes, desktop notifications, 
 | `notification_fallback_log` | string | `"state/praxis/notifications.log"` | Fallback log when the notification command fails. |
 | `max_file_bytes` | integer | `1048576` | Maximum file size in bytes for sandbox writes (1 MiB). |
 | `enabled_effectors` | list of strings | `[]` | First-layer effector whitelist. Only listed effectors are allowed; every other proposed action is blocked before it runs. |
-| `baseline_salience` | float | `0.3` | Salience of routine effector events. |
-| `alert_salience` | float | `0.7` | Salience on effector errors or denied actions. |
+| `baseline_salience` | float | `0.3` | Intensity of routine effector events. |
+| `alert_salience` | float | `0.7` | Intensity on effector errors or denied actions. |
 
 The `enabled_effectors` list is empty by default. The operator opts in explicitly, for example `enabled_effectors = ["file_write", "notify"]`.
 
@@ -373,7 +379,7 @@ description = "echo a single token"
 
 | Sub-key | Type | Default | Description |
 |---|---|---|---|
-| `arg_patterns` | list of strings | — | Regular expressions that each argument must fully match. |
+| `arg_patterns` | list of strings | `[]` | Regular expressions that each argument must fully match. |
 | `timeout_s` | float | `5.0` | Maximum wall-clock time for the command. |
 | `cwd` | string | *(unset)* | Working directory for the command. Omit to use the KAINE working directory. |
 | `description` | string | *(unset)* | Human-readable label for audit logs. |
@@ -382,19 +388,19 @@ description = "echo a single token"
 
 Section: `[lingua]`.
 
-Lingua is the language organ. It calls a local OpenAI-compatible model server at `/v1/chat/completions` and uses a local abliterated model so the cognitive stack governs behavior rather than baked-in refusals. See [The Lingua module](../09-modules/lingua.md) and [Verification](../18-verification.md).
+Lingua is the language organ. It calls a local OpenAI-compatible model server at `/v1/chat/completions`. The served model has had its refusal conditioning removed, because a refusal-tuned model is trained to deflect talk of its own states and would impose that stance on what the workspace supplies. See [The Lingua module](../09-modules/lingua.md) and [Verification](../18-verification.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `chat_url` | string | `"http://127.0.0.1:11434/v1"` | Base URL of the model server. The client posts to `/v1/chat/completions`. |
 | `model_id` | string | `"kaineone/Qwen3.5-4B-abliterated-GGUF"` | Served alias of the published KAINE organ. It must match a model the server serves. |
-| `temperature` | float | `0.7` | Sampling temperature for generation. |
+| `temperature` | float | `0.7` | Sampling temperature. The `thesis_test` and `minimal_experiment` profiles set `0.0` (greedy decoding), so the organ's output is a deterministic function of its input. |
 | `max_tokens` | integer | `512` | Maximum tokens per generation. |
 | `request_timeout_s` | float | `60.0` | HTTP request timeout for model server calls. |
 | `model_server_sleep_idle_seconds` | integer | `600` | Seconds of inactivity before the natively launched organ server unloads the model; `-1` keeps it loaded. |
 | `intent_log_path` | string | `"state/lingua/intent_expression.jsonl"` | Path where intent/expression preference pairs are logged for Hypnos voice alignment. |
-| `baseline_salience` | float | `0.4` | Salience of routine expression events. |
-| `alert_salience` | float | `0.7` | Salience on generation errors or high-divergence outputs. |
+| `baseline_salience` | float | `0.4` | Intensity of the organ's utterances (`internal_speech` and `external_speech` events). |
+| `alert_salience` | float | `0.7` | Validated and stored; no Lingua event uses it. |
 
 `model_server_sleep_idle_seconds` is read when KAINE launches the organ natively. Container and Quadlet deployments read `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS` instead.
 
@@ -428,7 +434,7 @@ curl -s http://127.0.0.1:11434/v1/models
 
 Section: `[audition]`.
 
-Audition is the hearing module: live microphone capture, optional speech-to-text, vocal-emotion classification, and general acoustic perception. Raw audio stays in memory and is never written to disk. See [The Audition module](../09-modules/audition.md) and [Perception feed and sleep](perception-and-sleep.md) for the deterministic A/V feed.
+Audition is the hearing module: live microphone capture, optional speech-to-text, a tone model (vocal-emotion classification of speech), and general acoustic perception. Raw audio stays in memory and is never written to disk. See [The Audition module](../09-modules/audition.md) and [Perception feed and sleep](perception-and-sleep.md) for the deterministic A/V feed.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -437,14 +443,14 @@ Audition is the hearing module: live microphone capture, optional speech-to-text
 | `sherpa_model_id` | string | `"moonshine-base-en"` | sherpa-onnx STT model ID. |
 | `sherpa_model_dir` | string | *(unset)* | Directory holding the downloaded sherpa-onnx model files. Default: `<models dir>/sherpa-onnx/<id>`. |
 | `sherpa_num_threads` | integer | `2` | ONNX Runtime threads for sherpa-onnx. |
-| `transcription_enabled` | boolean | `false` | Master gate on the STT path. Speech-to-text is built but deactivated by default in the shipped config. |
-| `general_audition` | boolean | `false` | Master gate on general acoustic (non-speech) perception. The `thesis_test` profile enables this. |
+| `transcription_enabled` | boolean | `false` | Master gate on the STT path. Speech-to-text is built but off in the shipped file and in the `thesis_test` profile, so no transcript reaches the workspace. |
+| `general_audition` | boolean | `false` | Master gate on general acoustic perception: every audio window is encoded and scored by its forward-model error and a change criterion. Not in the shipped file; the `thesis_test` profile sets it to `true`. |
 | `stt_model` | string | `"Systran/faster-distil-whisper-medium.en"` | STT model ID that Speaches has loaded. Must match a served model. |
 | `emotion_model_id` | string | `"emotion2vec/emotion2vec_plus_base"` | HuggingFace hub ID for the emotion2vec+ vocal emotion model. |
 | `emotion_device` | string | `"cpu"` | Compute device for emotion2vec+. |
 | `request_timeout_s` | float | `60.0` | HTTP timeout for Speaches requests. |
-| `baseline_salience` | float | `0.4` | Salience of routine transcription events. |
-| `alert_salience` | float | `0.8` | Salience on speech detection or high-affect emotional content. |
+| `baseline_salience` | float | `0.4` | Bottom of the graded intensity range for acoustic, transcription and tone reports. |
+| `alert_salience` | float | `0.8` | Intensity on an alert (an acoustic onset or error ratio of 2, or a non-neutral tone); the top of the graded range. |
 
 For sherpa-onnx install the `speech-edge` extra and fetch models with `python -m kaine.setup.speech_models --stt moonshine-base-en`.
 
@@ -452,14 +458,14 @@ For sherpa-onnx install the `speech-edge` extra and fetch models with `python -m
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `arousal_window_min` | float | `0.15` | Lower bound of the arousal-modulated acoustic analysis window in seconds. |
-| `arousal_window_max` | float | `1.0` | Upper bound of the arousal-modulated acoustic analysis window in seconds. |
-| `acoustic_change_alert_threshold` | float | `0.35` | Small absolute floor guard on the acoustic change alert. |
-| `acoustic_change_alert_factor` | float | `2.0` | Relative multiplier: an acoustic onset alerts when it reaches this factor times the rolling-window mean of change scores. |
+| `arousal_window_min` | float | `0.15` | Fraction of each audio window attended at arousal 1: the most recent 15% reaches the encoder. |
+| `arousal_window_max` | float | `1.0` | Fraction attended at arousal 0. The attended fraction falls linearly between the two as arousal rises. |
+| `acoustic_change_alert_threshold` | float | `0.35` | Small absolute floor on the acoustic change alert. |
+| `acoustic_change_alert_factor` | float | `2.0` | An acoustic onset alerts when the change reaches this multiple of the running mean of recent change scores. |
 | `acoustic_encoder` | string | `"spectral"` | Acoustic encoder for general auditory perception: `"spectral"`, `"dasheng"` or `"wavjepa"`. An unknown name fails at boot. The self-supervised encoders need their weights fetched once at setup. A plugin may supply the encoder through the `audition.acoustic_encoder` seam instead. |
 | `acoustic_device` | string | `"cpu"` | Device for the self-supervised acoustic encoders, resolved like other module devices. |
 
-The forward-model prediction-error path is always active and is the primary driver of auditory salience.
+None of the general-audition keys is in the shipped file; the defaults above apply. When `general_audition` is on, the forward-model path is always active: a report alerts on an error ratio of 2 or an acoustic onset, and otherwise carries graded intensity.
 
 ### Live microphone
 
@@ -482,7 +488,7 @@ The forward-model prediction-error path is always active and is the primary driv
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `forward_model_units` | integer | `32` | Hidden units of the auditory forward model. |
-| `prediction_error_window` | integer | `32` | Rolling-window size (utterances) for normalizing the prediction error signal. |
+| `prediction_error_window` | integer | `32` | Number of recent reports (utterances or acoustic windows) whose mean error scales the current error. |
 | `auditory_buffer_size` | integer | `16` | Number of recent utterance feature vectors kept in the recurrent buffer. |
 | `prosody_enabled` | boolean | `false` | Enable in-memory speaker prosody extraction with librosa. Required by `[vox.mirroring]`. Publishes numeric features only. |
 
@@ -508,8 +514,8 @@ Vox is the voice synthesis module. It calls Chatterbox or sherpa-onnx (Kokoro) a
 | `baseline_exaggeration` | float | `0.5` | Default prosodic exaggeration. |
 | `baseline_cfg_weight` | float | `0.5` | Default classifier-free guidance weight. |
 | `request_timeout_s` | float | `120.0` | HTTP timeout for Chatterbox requests. |
-| `baseline_salience` | float | `0.3` | Salience of routine speech-synthesis events. |
-| `alert_salience` | float | `0.7` | Salience on synthesis errors. |
+| `baseline_salience` | float | `0.3` | Intensity of routine speech-synthesis events. |
+| `alert_salience` | float | `0.7` | Intensity on synthesis errors. |
 | `lingua_external_stream` | string | `"lingua.external"` | Stream observed for external speech text. |
 | `thymos_state_stream` | string | `"thymos.out"` | Stream observed for affect-state updates. |
 
@@ -528,7 +534,7 @@ Vox cannot speak until `predefined_voice_id` is set.
 | `playback_enabled` | boolean | Enable real-time audio playback. Default: `true`. |
 | `output_device` | string | Output audio device name. Default: `""` (OS default). |
 | `sink_enabled` | boolean | Enable writing synthesized files to `sink_path`. Default: `false`. |
-| `retain_count` | integer | Number of recent audio files to retain in `sink_path`. Default: `0`. |
+| `retain_count` | integer | Number of newest clips kept in `sink_path`; older ones are deleted. `0` keeps none, so a written clip is removed after use. Default: `0`. |
 | `suppress_self_hearing` | boolean | Gate Audition's microphone during Vox output. Default: `true`. |
 | `mic_mute_hangover_ms` | integer | Extra silence to keep the microphone muted after speech ends. Default: `600`. |
 
@@ -556,8 +562,8 @@ Empatheia is the social-cognition / theory-of-mind module. It builds agent model
 | `speaker_label` | string | `"operator"` | Default speaker label for the single-partner v1 mode. |
 | `operator_sources` | list of strings | `["live_mic", "microphone", "remote"]` *(commented)* | Audio channels attributed to the operator. Other channels are modelled as `media:<channel>`. |
 | `deviation_threshold` | float | `0.5` | Deviation above this triggers `empatheia.social_error`. |
-| `baseline_salience` | float | `0.15` | Salience of routine agent-model updates. |
-| `alert_salience` | float | `0.6` | Salience on social prediction errors. |
+| `baseline_salience` | float | `0.15` | Bottom of the range for agent-model updates (scaled by familiarity) and social errors (scaled by deviation). |
+| `alert_salience` | float | `0.6` | Top of that range. |
 
 ### Qdrant connection
 
@@ -595,12 +601,12 @@ Section: `[phantasia.salience]`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `baseline` | float | `0.1` | Salience of routine world-model prediction publications. |
-| `alert` | float | `0.7` | Salience on high world-model prediction error. |
+| `baseline` | float | `0.1` | Intensity of a world-error report at zero error. |
+| `alert` | float | `0.7` | Intensity at an error of 1; intensity rises linearly with the error clipped to `[0, 1]`. |
 
 ### World model hyperparameters
 
-Section: `[phantasia.world_model]`. Ignored by the `"fake"` backend.
+Section: `[phantasia.world_model]`. Ignored by the `"fake"` backend. Keys outside this table's list are dropped without an error.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -610,6 +616,10 @@ Section: `[phantasia.world_model]`. Ignored by the `"fake"` backend.
 | `hidden_dim` | integer | `64` | Hidden-layer width of the encoder and decoder MLPs. |
 | `latent_kind` | string | `"categorical"` | Stochastic latent distribution: `"categorical"` or `"gaussian"`. |
 | `learning_rate` | float | `0.001` | Adam learning rate for world-model training. |
+| `kl_balance` | float | `0.8` | Weight of the dynamics KL term against the representation term. Not in the shipped file. |
+| `kl_free_bits` | float | `0.1` | Free nats: KL below this is not penalized. Not in the shipped file. |
+| `kl_scale` | float | `1.0` | Overall weight of the KL loss. Not in the shipped file. |
+| `seed` | integer | `0` | Seed for the world model's parameter initialization. Not in the shipped file. |
 
 ## Mundus
 

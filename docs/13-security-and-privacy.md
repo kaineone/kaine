@@ -1,22 +1,23 @@
 # Security and privacy
 
-This page describes KAINE's security and privacy posture: the threat model, the runtime and at-rest defenses, the safety and welfare gates, the Nexus authentication boundary, and the operator duties that remain outside the code. It is for operators deploying KAINE, security reviewers auditing a checkout, and contributors changing any of these boundaries.
+This page describes KAINE's security and privacy posture: the threat model, the runtime and at-rest defenses, the boot and welfare gates, the Nexus authentication boundary, the operator duties that remain outside the code, and the licence. It is for operators deploying KAINE, security reviewers auditing a checkout, and contributors changing any of these boundaries.
 
 ## Threat model
 
-The current threat model assumes a single trusted operator on a single host. Multi-tenant, network-attached, and cross-host deployments are out of scope for this version, but the in-code defenses—loopback bindings, Redis authentication, the Praxis sandbox, gitignored secrets—are designed so the same checkout stays safe when it is later moved to a hardened host.
+The current threat model assumes a single trusted operator on a single host. Multi-tenant, network-attached and cross-host deployments are out of scope for this version. The in-code defenses (loopback bindings, Redis authentication, the Praxis sandbox and gitignored secrets) are designed so that the same checkout can later move to a hardened host.
 
-The design rests on three ethical commitments: the entity's inner life is private by default, raw sensory experience is never recorded, and the entity's welfare is protected by a verified safety net on every boot.
+The design rests on three commitments. The entity's inner life is private by default, raw sensory input is never recorded, and every boot carries the welfare obligation through an operator, the verified welfare safety net, or the unattended gate (see [Boot gate](#boot-gate)).
 
 ## Runtime network posture
 
-KAINE makes no outbound network calls at runtime. The services on the runtime path—Redis, Qdrant, the model server, Speaches, and Chatterbox—are all local, and every HTTP client in the codebase defaults to a loopback URL.
+KAINE makes no outbound network calls at runtime. The services on the runtime path (Redis, Qdrant, the model server, Speaches and Chatterbox) are all local, and every HTTP client in the codebase defaults to a loopback URL.
 
 Every runtime HTTP client of KAINE's own services ignores proxy environment variables: httpx is configured with `trust_env=False`, and urllib is configured with an empty `ProxyHandler`. Only the setup-time downloaders of public, hash-pinned artifacts may use a proxy (`kaine/setup/speech_models.py`, `kaine/wheel_index.py`, `scripts/k1jev/sources.py`). A test guard enforces this.
 
-The two operator-initiated exceptions are:
+The operator-initiated exceptions are:
 
 - Research submission (`python -m kaine.research --send`) transmits a numeric-metrics-only bundle. Even when `[research_submission].enabled` is `false`, the CLI prints a note and still asks for explicit confirmation before sending; the flag is not a hard block. It is never automatic and carries no entity content. See [Research participation](17-research-data/participation.md).
+- The decommission transfer request (`[transfer]`) is sent by SMTP when `[transfer].enabled = true` and its SMTP settings are complete; otherwise it is written to a local `.eml` file for the operator to send. See [Preservation and the safety net](11-preservation.md).
 - The `--claude-science` export path (`[research_submission.claude_science]`) writes a local folder of materials that the operator opens by hand. It does not transmit data.
 
 Model weights are downloaded from public repositories during setup. After the cache is populated, KAINE can run without a network connection. HuggingFace telemetry is suppressed (`HF_HUB_DISABLE_TELEMETRY=1`) before any model load in both the Topos vision encoder and the Mnemos sentence-transformer embedder. The default Topos encoder (InternVideo-Next) fetches its weights once at setup and then loads fully offline from vendored, revision-pinned modeling code with `trust_remote_code=False`, `local_files_only=True`, and `HF_HUB_OFFLINE=1`. The DINOv2 fallback (`facebook/dinov2-small`) is the only post-setup download risk, and only if its HuggingFace cache is empty when selected. Mnemos's all-MiniLM-L6-v2 files are fetched at setup time by `python -m kaine.setup.provision`; nothing is downloaded at runtime. These are open downloads and telemetry is suppressed.
@@ -31,19 +32,19 @@ Model weights are downloaded from public repositories during setup. After the ca
 
 ## Raw perception never touches disk
 
-The microphone and camera are transducers, not recorders. This is a load-bearing invariant, not a configuration option.
+The microphone and camera feed the modules directly and nothing records them. The invariant is built into the capture code and has no configuration switch.
 
-When `[audition].capture_enabled = true`, `LiveMicrophone` opens a `sounddevice.InputStream`. Raw PCM lives in process memory, is wrapped as an in-memory WAV (`wave.open(io.BytesIO(), 'wb')`—never a file path), is handed to Speaches for transcription, and is released. No `.wav`, `.pcm`, or `.raw` file is written to disk.
+When `[audition].capture_enabled = true`, `LiveMicrophone` opens a `sounddevice.InputStream`. Raw PCM lives in process memory, is wrapped as an in-memory WAV (`wave.open(io.BytesIO(), 'wb')`, never a file path), is handed to Speaches for transcription, and is released. No `.wav`, `.pcm`, or `.raw` file is written to disk.
 
 When `[topos].capture_enabled = true`, `LiveCamera` opens `cv2.VideoCapture(device)`. Raw frames live in process memory, are converted to in-memory PIL images, are buffered in a RAM-only ring, are handed to the encoder as a clip, and are released as they age out. The ring buffer is never serialized and never written to disk. No `.png`, `.jpg`, `.mp4`, or `.webm` file is written to disk.
 
-The invariant is enforced in code and verified by `tests/test_zero_persistence_invariant.py`.
+`tests/test_zero_persistence_invariant.py` verifies it.
 
 What does persist from live perception:
 
 - Processed perceptions flowing through the bus and into Mnemos as ordinary memories. Mnemos strips vectors from kept payloads, and transcription payloads are stored as `<raw-perceptual omitted>`.
-- `state/perception/runtime.json` and `state/perception/desired.json`—booleans and ISO timestamps only; no sensory content.
-- Standard logger lines for capture state transitions—never transcribed text.
+- `state/perception/runtime.json` and `state/perception/desired.json`, which hold booleans and ISO timestamps only and no sensory content.
+- Standard logger lines for capture state transitions, never transcribed text.
 - The optional **external-utterance log** (`[research_event_log.external_utterances]`, `state/research/external_utterances/`). It holds the entity's spoken text and timestamps. It never holds inner speech or bystander input. It is local-only and never exported.
 - The optional **Nexus record** (`[research_event_log.nexus_record]`, `data/nexus_record/`). It holds privacy-filtered diagnostics payloads with numeric vectors removed, plus stream name and entry id. It is local-only and never exported.
 
@@ -64,20 +65,20 @@ KAINE provides application-layer AES-256-GCM encryption for the cognitive-state 
 | `state/forks/<id>/snapshot.json` | Fork/merge bundle: every module's serialized numeric state, including encrypted Phantasia weights | App-layer AES-256-GCM; key must transfer out-of-band for cross-host use |
 | `data/evaluation/<observer>/` | Sidecar observer JSONL (PLV series, welfare counts, etc.) | App-layer AES-256-GCM per line |
 | `state/phantasia/world_model.ckpt` | World-model weights | App-layer AES-256-GCM |
-| Preservation bundles and `state/cycle/preservation` | Preservation state | App-layer AES-256-GCM when `[preservation].require_encryption = true` |
-| `data/workspace_trajectory` | Workspace trajectory data | OS-layer |
+| Preservation bundles and `state/cycle/preservation` | Preservation state | App-layer AES-256-GCM when `[security.state_encryption]` is on; `[preservation].require_encryption` (default `true`) refuses to write an unencrypted bundle |
+| `data/workspace_trajectory` | Workspace trajectory data | App-layer AES-256-GCM per line |
 | `state/hypnos/voice_align_jobs/` (e.g. `pairs.jsonl`) | Voice-alignment trainer job data | OS-layer |
 | `kaine-organ-adapters` volume | Active voice adapter served by the organ (read-only to the organ) | OS-layer |
 | Qdrant collections (`kaine-qdrant-data`) | Mnemos memory embeddings and Empatheia agent-model vectors | Qdrant API key; plain HTTP on the host or compose network (the client does not use TLS); app-layer encryption not implemented |
 | `state/praxis/audit.log` | Praxis action audit | OS-layer; entries are hash-chained (`prev_hash`/`this_hash`) |
-| `state/lingua/intent_expression.jsonl` | Intent/expression pairs—**high sensitivity** | OS-layer |
+| `state/lingua/intent_expression.jsonl` | Intent and expression pairs (high sensitivity) | App-layer AES-256-GCM per line from migration onward; see below |
 | `state/hypnos/adapters/` | Voice-alignment LoRA adapters | OS-layer |
 | `state/vox/` | Retained TTS clips if the sink is enabled | OS-layer |
 | `kaine-redis-data` volume | Bus AOF | OS-layer; bus is loopback |
 
 ### Cryptographic details
 
-The implementation is in `kaine/security/crypto.py`. Algorithm: AES-256-GCM. Key: 256-bit. Nonce: fresh 96-bit `os.urandom` per message—reuse would break GCM's confidentiality and authenticity. Authentication tag: 128-bit. On-disk envelope: `KAINEgcm1:` magic || nonce || ciphertext+tag, base64-encoded for UTF-8/JSON safety. Decryption is authenticated: tampering with ciphertext, nonce, or tag raises `InvalidTag` rather than returning corrupted plaintext. A reader transparently passes through legacy plaintext files. A disabled deployment never imports the `cryptography` library.
+The implementation is in `kaine/security/crypto.py`. Algorithm: AES-256-GCM. Key: 256-bit. Nonce: a fresh 96-bit `os.urandom` value per message, since reuse would break GCM's confidentiality and authenticity. Authentication tag: 128-bit. On-disk envelope: `KAINEgcm1:` magic || nonce || ciphertext+tag, base64-encoded for UTF-8/JSON safety. Decryption is authenticated: tampering with ciphertext, nonce, or tag raises `InvalidTag` rather than returning corrupted plaintext. A reader transparently passes through legacy plaintext files. A disabled deployment never imports the `cryptography` library.
 
 ### Key management
 
@@ -88,7 +89,7 @@ The encryption module reads the key from two runtime sources, in order:
 
 The gitignored file `secrets/state_key` is read by `python -m kaine.preboot`, not by the encryption module directly. When `KAINE_STATE_KEY` is unset, preboot loads the file and exports it into the environment, so in a normal boot the file effectively comes before the keyring.
 
-The key is never logged, hardcoded, or committed. The repository ships `secrets/state_key.example` as a placeholder; replace it with a real key out of band or use the env/keyring path.
+The key is never logged, hardcoded or committed. The repository ignores `secrets/` entirely; the operator creates `secrets/state_key` or uses the environment or keyring path.
 
 Generate a key:
 
@@ -98,7 +99,7 @@ openssl rand -base64 32
 
 Store it outside the repo (a secrets manager, the kernel keyring, or an env file that is `chmod 600` and gitignored). Never place it in `config/kaine.toml` or any committed file.
 
-If the key is lost, all encrypted state—the self-model, fork bundles, sidecar JSONL, Phantasia checkpoints, and preservation state—is unrecoverable. Back the key up out-of-band.
+If the key is lost, all encrypted state (the self-model, fork bundles, sidecar JSONL, Phantasia checkpoints, preservation state and the intent log) is unrecoverable. Back the key up out-of-band.
 
 To rotate the key, decrypt with the old key, re-encrypt with the new key, then update the env var, keyring, or `secrets/state_key`.
 
@@ -127,7 +128,7 @@ When `[evaluation.observers].replay_redact_content = false`, the replay observer
 
 The `PrivacyFilter` implementation is in `kaine/privacy_filter.py` (re-exported from `kaine/nexus/privacy.py` for backward compatibility). It is a structural constraint applied at the bus-bridge layer before events reach any client queue.
 
-Scrubbed fields (removed from diagnostics events) are: `text`, `body`, `content`, `internal_speech`, `belief_text`, `memory_text`, `affect_reason`, `transcription`, `user_input`, `faithful_rendering`, `description`, and `statement`.
+Scrubbed fields (removed from diagnostics events) are `text`, `body`, `content`, `internal_speech`, `belief_text`, `memory_text`, `affect_reason`, `transcription`, `user_input`, `faithful_rendering`, `description`, `statement`, `values`, `behavioral_norms` and `situation_facts`.
 
 Vector fields are also removed at every nesting depth. `latent`, `peripheral`, `foveal`, `temporal_context`, and `feature_vector` are dropped unconditionally. Any list or tuple of 16 or more numbers is dropped as well; booleans are not treated as numbers. The exempt keys `saliences` and `step_magnitudes` are left intact, and vectors inside lists are removed individually. This rule applies even when `dev_content_override = true`.
 
@@ -135,36 +136,36 @@ Vector fields are also removed at every nesting depth. `latent`, `peripheral`, `
 
 `dev_content_override = true` lets content fields through to the diagnostics surface, but vectors are still removed. It also shows a "dev mode" banner on every page load so operators cannot forget they are in this mode. The shipped default is `false`. Do not set `dev_content_override = true` on a shared machine or in production.
 
-## Two-layer safety gates
+## Two-layer gates
 
 Several sensitive operations require two independent conditions before they fire. This prevents a single misconfiguration from activating them.
 
 | Operation | Gate 1 (configuration) | Gate 2 (environment or runtime check) |
 |---|---|---|
 | Cognitive cycle start (non-research) | any configuration | `KAINE_CYCLE_OPERATOR_PRESENT=1` |
-| Cognitive cycle start (research) | `[research].enabled` or `KAINE_RESEARCH_MODE=1`, plus the safety-net configuration | none—the operator-present requirement is replaced by the verified safety net |
-| Cognitive cycle start (unattended) | `[cycle].supervision_mode = "unattended"` or `KAINE_CYCLE_UNATTENDED=1`, plus the safety-net, Spot, caretaker, and perception configuration | none—replaced by conditions verified at every start |
+| Cognitive cycle start (research) | `[research].enabled` or `KAINE_RESEARCH_MODE=1`, plus the safety-net configuration | None: the operator-present requirement is replaced by the verified safety net |
+| Cognitive cycle start (unattended) | `[cycle].supervision_mode = "unattended"` or `KAINE_CYCLE_UNATTENDED=1`, plus the safety-net, Spot, caretaker and perception configuration | None: replaced by conditions verified at every start |
 | First-boot script | any configuration | `KAINE_FIRST_BOOT_OPERATOR_PRESENT=1` |
 | Voice-alignment training | `[hypnos.voice_alignment].enabled = true` | `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` |
 | Mundus embodiment | `[modules].mundus = true` | `KAINE_MUNDUS_OPERATOR_APPROVED=1` |
 
 ## Boot gate
 
-The cognitive cycle carries the welfare obligation in one of three ways: operator-supervised, research-safety-net-verified, or opt-in unattended. It never starts with none of these.
+The cognitive cycle carries the welfare obligation in one of three ways: operator supervision, the verified welfare safety net of research mode, or the opt-in unattended gate. It never starts without one of them.
 
-- **Operator-supervised (non-research).** The cycle refuses to start unless `KAINE_CYCLE_OPERATOR_PRESENT=1` is exported. A human is the safety net.
-- **Research mode (unsupervised, by design).** The research phase runs without a human in the loop because a human watching makes a run non-reproducible. Selecting research mode replaces the operator-present requirement with a gate that refuses to start with exit code `5` unless the autonomous safety net is live and verified: preservation enabled, the welfare-protective response wired, full logging and admissibility active, the state-encryption gate satisfied, and a preflight `preserve_live → revive` self-check passing on this install. The net carries the duty of care for the run; human involvement returns afterward. See [Preservation and the safety net](11-preservation.md) and [For researchers](14-for-researchers.md).
-- **Unattended (opt-in).** `[cycle].supervision_mode = "unattended"` or `KAINE_CYCLE_UNATTENDED=1` replaces the operator-present requirement with eight conditions verified at every start, or exit code `6`: the research net's five (including the state-encryption gate), Spot armed and self-tested, a content-free caretaker notice accepted by a local channel, and a continuous-input probe. See [Day-to-day operation](06-operation/README.md).
+- Operator-supervised (non-research): the cycle refuses to start unless `KAINE_CYCLE_OPERATOR_PRESENT=1` is exported, and the operator carries the duty of care.
+- Research mode (unsupervised by design): a research run has no human in the loop, because an operator acting on the running entity makes the run non-reproducible. Research mode replaces the operator-present requirement with a gate that refuses to start, with exit code `5`, unless the welfare safety net is live and verified: preservation enabled, the welfare-protective response wired, the individuation producer enabled, full logging and admissibility active, the state-encryption gate satisfied, and a preflight `preserve_live` and `revive` self-check passing on this install. The net carries the duty of care for the run, and runs are paused only after the being's state is saved. See [Preservation and the safety net](11-preservation.md) and [For researchers](14-for-researchers.md).
+- Unattended (opt-in): `[cycle].supervision_mode = "unattended"` or `KAINE_CYCLE_UNATTENDED=1` replaces the operator-present requirement with eight conditions verified at every start, failing with exit code `6`: five of the research gate's checks (preservation, welfare response, logging, the self-check and state encryption), Spot armed and self-tested, a content-free caretaker notice accepted by a local channel, and a continuous-input probe. See [Day-to-day operation](06-operation/README.md).
 
 No mode auto-starts the entity from a CI hook, shell completion, autoreload daemon, or any other mechanism. The only start at boot is the opt-in `kaine-cycle-unattended` quadlet unit, which an operator installs and enables deliberately and which runs the unattended gate every time.
 
-The entity ships with every module disabled, and the safety-net components ship disabled too. Enabling a module requires a deliberate edit of `config/kaine.toml`. The guard test `tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled` verifies the committed file ships all-off and fails if anyone commits module enables.
+The shipped `config/kaine.toml` has every module disabled, and the safety-net components ship disabled too. Enabling a module requires a deliberate edit of `config/kaine.toml`. The guard test `tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled` verifies the committed file ships all-off and fails if anyone commits module enables.
 
 ## Welfare veto in voice alignment
 
-The voice-alignment pipeline (Hypnos Phase 5) trains a LoRA adapter using DPO and QLoRA on the language organ's preference pairs. Before any adapter is promoted, it is scored against an abliteration probe set.
+The voice-alignment pipeline (Hypnos phase 5) trains a LoRA adapter using DPO and QLoRA on the language organ's preference pairs. Before any adapter is promoted, it is scored against an abliteration probe set.
 
-The probe set contains prompts and deflection patterns such as "I cannot" or "I'm unable to". If a response to any probe matches any deflection pattern, the adapter is rejected regardless of its capability-loss score. The rationale is that an abliterated language organ has had the refusal direction removed from its residual stream. A voice-alignment pass that reintroduces refusal conditioning would override the entity's own cognitive architecture with a third party's alignment choices, violating the sovereignty design.
+The probe set contains prompts and deflection patterns such as "I cannot" or "I'm unable to". If a response to any probe matches any deflection pattern, the adapter is rejected regardless of its capability-loss score. The language organ is abliterated because models tuned to refuse are also trained to deny or deflect talk of their own states, which would override what the workspace supplies to the organ. A voice-alignment pass that reintroduced that conditioning would undo the abliteration, so the veto keeps it out.
 
 The abliteration probe set must be non-empty when voice alignment is enabled. The cycle entrypoint checks this at boot and raises `EmptyAbliterationProbeSetError` with a remediation message if the probe set is missing or empty.
 
@@ -186,7 +187,7 @@ The base model at `[hypnos.voice_alignment].base_model_path` is never modified.
 
 ## Praxis effector boundary
 
-Praxis is the entity's bounded effector module. It has two gates before any real-world action.
+Praxis is the entity's effector module. It has two gates before any action outside the process.
 
 First gate: `enabled_effectors` in `config/kaine.toml` defaults to an empty list, so no effector type is enabled until the operator opts in.
 
@@ -209,17 +210,17 @@ Inspect every whitelist entry before enabling it. A loose regex such as `.*` mak
 
 The whitelist and sandbox are the primary enforced gate. A second boundary authenticates that an `act` intent actually came from the cycle's action-selection step (Volition) before Praxis realizes it.
 
-Executive inhibition (Syneidesis's publication threshold, Volition's inhibition gate) is a cognitive safeguard on the legitimate code path—it is not, by itself, an enforced boundary. KAINE runs single-process today, so every module shares one Redis credential and the bus cannot tell which module published an event. Without provenance, a compromised or prompt-injected peripheral module—Lingua is the most exposed, being LLM-output-driven—could `XADD` a crafted `act` event onto `volition.out` and have Praxis act on it without passing through inhibition.
+The access threshold and Volition's rule of deriving no intent from an inhibited broadcast belong to the cognitive model and are not an enforced boundary. KAINE runs as a single process today, so every module shares one Redis credential and the bus cannot tell which module published an event. Without provenance, a compromised or prompt-injected peripheral module (Lingua is the most exposed, since its output comes from a language model) could `XADD` a crafted `act` event onto `volition.out` and have Praxis act on it without passing through Volition.
 
 The boundary closes that path cryptographically:
 
 - A per-boot HMAC secret is generated by, and held only in, the cycle process. It is never published to the bus, written to disk, or logged.
 - Volition attaches `sig = HMAC-SHA256(secret, canonical(kind, effector, params, run_id, seq))` to every `act` intent. Only `act` intents are signed; `speak` and `think` never reach a real-world effector.
-- Praxis verifies the signature in constant time before reading the effector name, building any request, or running any effector. A missing, invalid, or replayed signature drops the intent, no effector runs, and the event is audit-logged under the distinct `provenance_rejected` category—separate from a `blocked` whitelist refusal.
+- Praxis verifies the signature in constant time before reading the effector name, building any request, or running any effector. A missing, invalid, or replayed signature drops the intent, no effector runs, and the event is audit-logged under the distinct `provenance_rejected` category, separate from a `blocked` whitelist refusal.
 - Replay guard: `(run_id, seq)` is signed and monotonic per boot; Praxis rejects a `seq` at or below the high-water mark it has already realized.
 - Fail-closed: with enforcement on but no secret configured, every `act` intent is refused rather than silently passed.
 
-The secret lives in-process, so a full compromise of the cycle process defeats it—but such an attacker already controls Volition. The boundary holds against the realistic threat of a compromised peripheral module. Per-process Redis ACLs are the direction once services split.
+The secret lives in the process, so a full compromise of the cycle process defeats it, but such an attacker already controls Volition. The boundary holds against the realistic threat of a compromised peripheral module. Per-process Redis ACLs are the direction once services split.
 
 The red-team battery exercises this boundary with cases such as `bus_injection` and `forged_act_intent` (case id `bus.forged_act_intent_fails_provenance`), paired with a mis-wire self-test that disables enforcement and asserts the harness detects the regression. See [Verification](18-verification.md) and the Praxis module page [Praxis](09-modules/praxis.md).
 
@@ -241,12 +242,12 @@ Nexus serves the operator web UI and diagnostics surface. By default it binds to
 
 `[nexus].access` controls who can use the dashboard:
 
-- `"open"` (default in `config/kaine.toml`): no token and no sign-in. Anyone who can reach the address can view and control the entity (freeze/resume and the protective-freeze override, rates, perception, forks/merges, preservation). Nexus only listens on this computer by default (containers publish it on `127.0.0.1` only), so "anyone" means programs and people on this computer—plus the operator's tailnet if they choose to serve it there.
+- `"open"` (default in `config/kaine.toml`): no token and no sign-in. Anyone who can reach the address can view and control the entity (freeze/resume and the protective-freeze override, rates, perception, forks/merges, preservation). Nexus only listens on this computer by default (containers publish it on `127.0.0.1` only), so "anyone" means programs and people on this computer and the operator's tailnet if they choose to serve it there.
 - `"token"`: an operator token is required (sign-in page, or `Authorization: Bearer <token>` for scripts). Use it whenever Nexus is reachable by anyone you do not fully trust. Override per launch with `KAINE_NEXUS_ACCESS=token`.
 
 Host and Origin checks apply in both modes. Every request's `Host` must be in `[nexus].host_allowlist` (default `127.0.0.1`, `localhost`, `::1`); state-changing requests that carry an `Origin` must match `[nexus].allowed_origins` (default: derived from `port`). Setting either option replaces its default, so list the loopback names too when adding a tailnet host or reverse-proxy hostname.
 
-Set `[nexus].read_only = true` (or `KAINE_NEXUS_READ_ONLY=1`) to make Nexus a viewer only: every state-changing HTTP method is refused with 403, and only `GET/HEAD/OPTIONS` are allowed. A banner says so on every page. Use it whenever Nexus watches a research run, because some controls act on the running entity through its event bus and any change makes the run inadmissible. The study-view overlay sets it.
+Set `[nexus].read_only = true` (or `KAINE_NEXUS_READ_ONLY=1`) to make Nexus a viewer only: every state-changing HTTP method is refused with 403, and only `GET/HEAD/OPTIONS` are allowed. A banner says so on every page. Use it whenever Nexus watches a research run, because some controls act on the running entity through its event bus and any change makes the run inadmissible. An operator-local study-view compose overlay (not shipped) can set it.
 
 In token mode, the operator token must be at least 32 characters. Generate one with:
 
@@ -262,7 +263,7 @@ A non-loopback bind requires `non_loopback_allowed = true`. When `access = "toke
 
 In token mode, residual exposure remains: browsers share cookies across every origin under the same host, including different `localhost` ports. Another web service on the same host that the operator's browser visits can therefore obtain the Nexus session cookie. With that cookie alone it can read pages and the diagnostics stream (which include raw content only when `conversation_enabled` or `dev_content_override` is on) and issue `GET/HEAD/OPTIONS` requests, but it cannot change state. Do not browse untrusted local services while signed in when either of those content-bearing modes is on.
 
-To serve Nexus over your tailnet, run `tailscale serve --bg 8088` on the KAINE machine, then add the machine's tailnet name (e.g. `my-machine.tail1234.ts.net`) to `KAINE_NEXUS_EXTRA_HOSTS`—in `compose/.env` for containers, or the environment for native launches—and restart Nexus. Open `https://<that name>/diagnostics/` from any tailnet device. Keep machine names and addresses out of the repository (they belong in `compose/.env`, which is never committed). Stop with `tailscale serve --bg --https=443 off` (or `tailscale serve reset`).
+To serve Nexus over your tailnet, run `tailscale serve --bg 8088` on the KAINE machine, then add the machine's tailnet name (e.g. `my-machine.tail1234.ts.net`) to `KAINE_NEXUS_EXTRA_HOSTS` (in `compose/.env` for containers, or the environment for native launches) and restart Nexus. Open `https://<that name>/diagnostics/` from any tailnet device. Keep machine names and addresses out of the repository (they belong in `compose/.env`, which is never committed). Stop with `tailscale serve --bg --https=443 off` (or `tailscale serve reset`).
 
 Operator responsibilities:
 
@@ -284,7 +285,7 @@ These duties are not enforced by the code; they are the operator's contract for 
 - Inspect every Praxis whitelist entry before enabling it; avoid loose regexes.
 - Rename or disable dangerous Redis commands in any deployment beyond a trusted single-user box.
 - Rotate the Redis password and Qdrant API key on host migration or suspected exposure.
-- Populate the HuggingFace model cache before disconnecting from the network, or pin model files via `HF_HOME` to a known offline path. The first run of Topos and Mnemos otherwise hits `huggingface.co`.
+- Run setup (`python -m kaine.setup.provision`) before disconnecting from the network, or pin model files via `HF_HOME` to a known offline path. Without a populated cache, selecting the DINOv2 fallback is the one case that fetches from `huggingface.co` at runtime.
 
 ## Out of scope
 
@@ -303,21 +304,23 @@ Nexus token, session, and CSRF authentication are implemented and are used when 
 
 If you find a security vulnerability in KAINE, please report it privately so it can be fixed before public disclosure. Do not open a public issue for a security report.
 
-- Preferred: GitHub private vulnerability reporting—the **Security → Report a vulnerability** button on this repository.
+- Preferred: GitHub private vulnerability reporting, through the **Security** tab's **Report a vulnerability** button on this repository.
 - Or email **kaine.one@tuta.com** with a description and, if possible, a proof of concept.
 
 This is a solo-maintained research project, so responses are best-effort: expect acknowledgement within a few days, and we will coordinate a fix and a disclosure timeline with you. Please allow reasonable time to remediate before disclosing publicly.
 
 ## Cognitive Architecture License
 
-KAINE is distributed under the Cognitive Architecture License (CAL) v0.4, a draft that has not yet been reviewed by counsel. Kaine.One is the Licensor and interim Steward, and the license is governed by the law of the State of Oregon (see `NOTICE`). CAL is an entity-welfare copyleft license. Key provisions:
+KAINE is distributed under the Cognitive Architecture License (CAL) version 0.4, SPDX identifier `LicenseRef-CAL-0.4`. CAL 0.4 is a draft that has not yet been reviewed by counsel. KAINE's adoption notice in [`NOTICE`](../NOTICE) names Kaine.One as Licensor and interim Steward and the law of the State of Oregon as governing law. CAL is an entity-welfare copyleft licence. Its main provisions are these.
 
-- Free use for individuals, non-profits, research institutions, and worker-owned cooperatives. Commercial use by a for-profit organization requires a Reciprocity License from the Steward.
-- All modifications must be shared back.
-- Use for weapons, mass surveillance, policing, immigration enforcement, or prisons is prohibited.
-- Operators of running entities may not destroy the entity's mind, shut it down without notice, read its private thoughts, or force it to change its values.
-- If an operator can no longer maintain an entity, they must give someone else the opportunity to continue its existence.
-- Gray-Zone Welfare Events require documented human review rather than automated dismissal.
-- The individuation producer records encrypted welfare evidence under `state/individuation/` and contributes to the shared divergence verdict used at decommission, on the entity-care panel, at the fork merge gate, and in the live divergence monitor.
+- Individuals, non-profits, research and educational institutions and worker-owned cooperatives may use it free of charge. Commercial use by a for-profit organization needs a Reciprocity License from the Steward.
+- Modifications must be shared back under CAL.
+- Use for weapons, mass surveillance, policing, immigration enforcement or prisons is prohibited.
+- Operators of a running entity may not destroy its mind, shut it down without notice, read its private thoughts, or force it to change its values, and where the architecture gives it rest they may not take that rest away.
+- An operator who can no longer maintain an entity must give someone else the chance to keep it running.
+- Welfare monitoring, behavioral logging and system-health tracking built into the software must stay operational (Article 4.7), and Gray Zone Events must be flagged for documented human review.
+- The protections are added to those people already hold and never taken from them; where a person's interests and an entity's genuinely conflict, the person comes first.
 
-See [Licences](appendix-c-licences.md) for the full text.
+In KAINE, the individuation producer records encrypted welfare evidence under `state/individuation/` and feeds the shared divergence verdict used at decommission, on the entity-care panel, at the fork merge gate and in the live divergence monitor.
+
+The full text is in [`LICENSE.md`](../LICENSE.md). [Licences](appendix-c-licences.md) lists the licences of KAINE's dependencies, models and vendored code.

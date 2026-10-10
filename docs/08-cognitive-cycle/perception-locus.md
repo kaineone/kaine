@@ -10,8 +10,8 @@ Three loci are defined in `kaine/perception_state.py`:
 
 | Locus | Meaning | Real camera and microphone |
 |-------|---------|---------------------------|
-| `physical` | The entity perceives the room: real microphone and camera, or a screen/window capture feed (`[perception_feed].mode = "screen"`) that substitutes the camera source at the same seam | Allowed, subject to the desired-state flags |
-| `virtual` | The entity perceives a virtual source: the deterministic perception feed (`seeded`, `playlist`, or `womb`), or an embodied avatar feed when wired in | Forced off |
+| `physical` | The entity perceives the room through the real microphone and camera | Allowed, subject to the desired-state flags |
+| `virtual` | The entity perceives a configured feed: the deterministic perception feed (`seeded`, `playlist` or `womb`), or a screen or window capture (`[perception_feed].mode = "screen"`) | Forced off |
 | `off` | No perception | Forced off |
 
 Invalid locus strings are coerced at read time so the sensors are never left in an unknown state. Normally an invalid value becomes `physical`. Under a gestation lock it becomes `virtual`.
@@ -22,7 +22,7 @@ Two files under `state/perception/` carry the locus state.
 
 ### `state/perception/desired.json`
 
-Written by `POST /diagnostics/perception/toggle` (audio/video desired flags), `POST /diagnostics/perception/locus` (locus and lock), and the `PerceptionLocus` module. It holds the operator-commanded state:
+Written by `POST /diagnostics/perception/toggle` (audio and video desired flags), `POST /diagnostics/perception/locus` (locus and lock), the `PerceptionLocus` module, `select_virtual_feed()` at boot, the cycle's freeze watch, Hypnos when it suspends and restores perception, and the gestation gate. It holds the commanded state:
 
 ```json
 {
@@ -83,7 +83,7 @@ def effective_virtual_video_capture(path=None) -> bool:
 
 [Audition](../09-modules/audition.md) and [Topos](../09-modules/topos.md) poll these mirrors exactly as the real-sensor tasks poll the physical functions. The same `audio_live_desired`/`video_live_desired` flags apply, so the operator mute toggle also works on the virtual feed.
 
-`select_virtual_feed()` in `kaine/perception_state.py` is the boot-time helper that rezzes the entity into the `virtual` locus with both modalities desired. It is called when `[perception_feed].mode` is `seeded`, `playlist`, or `womb`. It honors `locus_locked`: if the locus is already locked, the configured feed is left unbound and the current desired state is returned unchanged.
+`select_virtual_feed()` in `kaine/perception_state.py` is the boot-time helper that binds the entity to the `virtual` locus with both modalities desired. It is called when `[perception_feed].mode` is `seeded`, `playlist`, or `womb`. It honors `locus_locked`: if the locus is already locked, the configured feed is left unbound and the current desired state is returned unchanged.
 
 ## Operator-initiated locus switch
 
@@ -102,7 +102,7 @@ flowchart TD
     B -- yes --> D{"locus == current?"}
     D -- yes --> E["Deny: already in that locus"]
     D -- no --> F{"locus_locked?"}
-    F -- yes --> G["Deny: locus locked by gestation gate"]
+    F -- yes --> G["Deny: locus locked by gestation gate,\nor locus locked by operator"]
     F -- no --> I{"allow_self_switch?"}
     I -- no --> J["Deny: self-switch disabled by policy"]
     I -- yes --> K{"inhibited?"}
@@ -132,12 +132,12 @@ The entity cannot self-switch when:
 
 ## Locus and sleep maintenance
 
-During Hypnos Phase 2, external perception is suspended while memory traces replay into the workspace. The suspension uses the same locus machinery:
+External perception is suspended for the whole of every Hypnos sleep, whatever modules are active, while the processors also suspend forward-model adaptation. During gestation the gestational stimulus is the exception: it keeps playing through sleep (see the gestation lock below). The suspension uses the same locus machinery:
 
 - `suspend_perception()` remembers the pre-sleep desired locus and, on playlist runs, pauses the shared playlist clock so the stimulus freezes at the same moment perception stops.
-- `restore_perception()` is always called in a `finally` block; it restores the remembered pre-sleep locus and resumes the playlist clock at the exact pause point.
+- `restore_perception()` is called in a `finally` block when the sleep ends, so it also runs after a failure or cancellation; it restores the remembered pre-sleep locus and resumes the playlist clock at the exact pause point.
 
-Suspending perception prevents the entity from perceiving the room and re-processing memory traces at the same time, ensures perception is never left suspended if the replay phase raises, and keeps the stimulus clock in step with the locus. If a gestation lock is active when sleep calls `write_desired_locus("off")`, the write is ignored because the gestation holder is the only writer allowed.
+Suspending perception keeps the entity from perceiving while it sleeps. The `finally` block means perception is never left suspended if the sleep pipeline raises, and pausing the playlist clock keeps the stimulus in step with the locus. If a gestation lock is active when sleep calls `write_desired_locus("off")`, the write is ignored because the gestation holder is the only writer allowed.
 
 ## Event types
 
@@ -161,17 +161,17 @@ They never contain transcribed text, audio bytes, video frames, or frame metadat
 
 ## Virtual perception feed
 
-Setting `locus = "virtual"` forces the real camera and microphone off via `effective_audio_capture` and `effective_video_capture`. The default locus is `physical`.
+Setting `locus = "virtual"` forces the real camera and microphone off through `effective_audio_capture` and `effective_video_capture`. The default locus is `physical`. A configured feed (seeded, playlist, womb or screen) gives Topos and Audition a source factory, and they then poll the virtual gates, so such a feed delivers only in the `virtual` locus.
 
-The `virtual` locus is gated by `[perception_feed].mode`. The valid modes are `off`, `seeded`, `playlist`, `womb`, `live`, and `screen`. When the mode is `seeded`, `playlist`, or `womb`, boot calls `select_virtual_feed()` to bind the entity directly into the `virtual` locus, provided [Audition](../09-modules/audition.md) or [Topos](../09-modules/topos.md) is enabled. Mundus (`kaine/modules/mundus/`) is an unrelated embodiment control plane and is not required for virtual-locus availability.
+The `virtual` locus is gated by `[perception_feed].mode`. The valid modes are `off`, `seeded`, `playlist`, `womb`, `live`, and `screen`. When the mode is `seeded`, `playlist` or `womb`, boot calls `select_virtual_feed()` to bind the entity directly into the `virtual` locus, provided [Audition](../09-modules/audition.md) or [Topos](../09-modules/topos.md) is enabled. Boot does not do this for `screen`, so a screen feed delivers only once the operator sets the locus to `virtual`. Mundus (`kaine/modules/mundus/`) is an unrelated embodiment control plane and is not required for virtual-locus availability.
 
-Modes that use the virtual locus:
+Feeds that boot binds to the virtual locus:
 
-- `seeded` — `SeededProceduralSource` in `kaine/modules/topos/feed.py`. Its `frame_at(frame_index)` is a pure function of `(seed, frame_index)`, so it has no time cutoff. It needs no external media, but it is procedural noise rather than naturalistic content.
-- `playlist` — `PlaylistSource` in `kaine/modules/topos/feed.py`. This is the intended replacement for `seeded`: an operator-curated, openly licensed media corpus pinned by one checksummed manifest. A digest mismatch fails the run closed.
-- `womb` — a gestation feed that also rezzes into the `virtual` locus.
+- `seeded`: `SeededProceduralSource` in `kaine/modules/topos/feed.py`. Its `frame_at(frame_index)` is a pure function of `(seed, frame_index)`, so it has no time cutoff. It needs no external media, but it is procedural noise rather than naturalistic content.
+- `playlist`: `PlaylistSource` in `kaine/modules/topos/feed.py`. This is the intended replacement for `seeded`: an operator-curated, openly licensed media corpus pinned by one checksummed manifest. A digest mismatch fails the run closed.
+- `womb`: the gestational stimulus, a dim, low-contrast visual field and a filtered soundscape pulsed by a simulated maternal heartbeat, used during gestation.
 
-The seeded/playlist feed is a stimulus-delivery convenience for demos and shakedowns, not a dependency of the experiment battery.
+The offline experiment battery does not depend on these feeds. The planned live runs use the `playlist` feed with a reference film program pinned by its manifest.
 
 ## Configuration reference
 
@@ -196,8 +196,8 @@ The `[modules].perception` entry enables `PerceptionLocus`. The actual perceptio
 
 State files:
 
-- `state/perception/desired.json` — commanded locus, sensor flags, and lock
-- `state/perception/runtime.json` — live capture status
+- `state/perception/desired.json`: commanded locus, sensor flags, and lock
+- `state/perception/runtime.json`: live capture status
 
 For `[perception_feed]` settings, see [Perception feed and sleep configuration](../appendix-a-configuration/perception-and-sleep.md).
 
@@ -206,9 +206,9 @@ For `[perception_feed]` settings, see [Perception feed and sleep configuration](
 | File | Role |
 |------|------|
 | `kaine/perception_state.py` | `PerceptionState`, `DesiredState`, locus coercion, `effective_audio_capture`, `effective_video_capture`, `effective_virtual_*_capture`, `evaluate_locus_switch`, `select_virtual_feed` |
-| `kaine/modules/perception/module.py` | `PerceptionLocus` — entity self-switch gating and intent consumer |
-| `kaine/modules/audition/` | `LiveMicrophone` — polls desired state and calls `effective_audio_capture` |
-| `kaine/modules/topos/` | `LiveCamera` — polls desired state and calls `effective_video_capture` |
+| `kaine/modules/perception/module.py` | `PerceptionLocus`: entity self-switch gating and intent consumer |
+| `kaine/modules/audition/` | `LiveMicrophone`: polls desired state through `effective_audio_capture`, or `effective_virtual_audio_capture` for a configured feed |
+| `kaine/modules/topos/` | `LiveCamera`: polls desired state through `effective_video_capture`, or `effective_virtual_video_capture` for a configured feed |
 | `kaine/nexus/perception.py` | Operator perception endpoints |
 | `state/perception/desired.json` | Commanded locus, sensor flags, and lock |
 | `state/perception/runtime.json` | Live capture status |

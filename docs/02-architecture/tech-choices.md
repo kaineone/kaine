@@ -4,7 +4,6 @@ This page lists the runtime technologies and Python dependencies KAINE uses, why
 
 The defaults below are the values in the shipped `config/kaine.toml`. With no profile selected, the loader also applies the base-thesis `thesis_test` profile, which chooses the module set and a few perception and voice settings.
 
----
 
 ## Summary table
 
@@ -12,15 +11,15 @@ The base install contains only the dependencies needed to start the bus and run 
 
 | Technology | Role | License | Default device | Install extra |
 |---|---|---|---|---|
-| Python 3.11+ / asyncio | Language and cycle runtime | PSF | CPU | — |
-| Redis 7.2 (container) | Event bus (Streams) | BSD-3-Clause | CPU | — |
-| `redis` (Python client) | Bus client library | MIT | CPU | — |
-| `pydantic` | Data validation | MIT | CPU | — |
-| `psutil` | Substrate monitoring | BSD-3-Clause | CPU | — |
-| `numpy` | Numerical stack | BSD-3-Clause | CPU | — |
-| `httpx` | Async HTTP client | BSD-3-Clause | CPU | — |
-| `cryptography` (AESGCM) | State encryption | Apache-2.0 | CPU | — (lazy) |
-| `pynvml` | GPU monitoring | MIT | CPU | `[nvidia]` |
+| Python 3.11+ / asyncio | Language and cycle runtime | PSF | CPU | none |
+| Redis 7.2 (container) | Event bus (Streams) | BSD-3-Clause | CPU | none |
+| `redis` (Python client) | Bus client library | MIT | CPU | none |
+| `pydantic` | Data validation | MIT | CPU | none |
+| `psutil` | Substrate monitoring | BSD-3-Clause | CPU | none |
+| `numpy` | Numerical stack | BSD-3-Clause | CPU | none |
+| `httpx` | Async HTTP client | BSD-3-Clause | CPU | none |
+| `cryptography` (AESGCM) | State encryption | Apache-2.0 | CPU | none (imported lazily) |
+| `pynvml` | GPU monitoring | BSD-3-Clause | CPU | `[nvidia]` |
 | Qdrant (container) | Vector store | Apache-2.0 | CPU | `[memory]` |
 | `qdrant-client` | Qdrant client | Apache-2.0 | CPU | `[memory]` |
 | sqlite-vec | Edge vector store | per upstream | CPU | `[memory-edge]` |
@@ -42,9 +41,9 @@ The base install contains only the dependencies needed to start the bus and run 
 | Speaches (faster-Whisper) | Speech-to-text | per upstream / MIT | CPU | host service |
 | sherpa-onnx + Moonshine | Edge STT | per upstream / MIT | CPU | `[speech-edge]` |
 | sherpa-onnx + Kokoro | Edge TTS | per upstream; espeak-ng data is GPL-3.0-or-later | GPU / CPU | `[speech-edge]` |
-| `funasr` + emotion2vec+ | Vocal emotion | Apache-2.0 / per upstream | CPU | `[audio]` |
+| `funasr` + emotion2vec+ | Vocal emotion | MIT / per upstream | CPU | `[audio]` |
 | `librosa` | Prosody extraction | ISC | CPU | `[audio]` |
-| `webrtcvad` | Voice activity detection | Apache-2.0 | CPU | `[audio]` |
+| `webrtcvad` | Voice activity detection | MIT | CPU | `[audio]` |
 | `sounddevice` | Microphone capture | MIT | CPU | `[audio]` |
 | `av` (PyAV) | Playlist audio decode | BSD-3-Clause | CPU | `[audio]` |
 | Chatterbox TTS | Speech synthesis | per upstream | GPU (`cuda:1`) | host service |
@@ -56,11 +55,10 @@ The base install contains only the dependencies needed to start the bus and run 
 | DINOv2-small | Fallback video encoder | Apache-2.0 | GPU (`cuda:1`) | `[vision]` |
 | FastAPI + uvicorn + Jinja2 | Nexus web UI | MIT / BSD-3-Clause | CPU | `[nexus]` |
 | uPlot | Live charts in Nexus | MIT | CPU | `[nexus]` |
-| Cognitive Architecture License (CAL) | Project license | LicenseRef-CAL-0.4 | — | — |
+| Cognitive Architecture License (CAL) | Project license | LicenseRef-CAL-0.4 | none | none |
 
 Install the research / perception bundle with `bash scripts/install.sh --research` or `pip install -e .[perception]`.
 
----
 
 ## Event bus
 
@@ -70,7 +68,6 @@ Redis Streams give KAINE an append-only log with consumer groups, per-stream len
 
 The containerized Redis runs on port 6479, isolated from any system Redis on 6379. AOF persistence with `appendfsync everysec` is on in the compose stack. The `redis:7.2-alpine` image is BSD-3-Clause; the SSPL/RSALv2 terms begin at Redis 7.4.
 
----
 
 ## Active inference engine
 
@@ -83,17 +80,15 @@ pymdp's agent API fits a compact generative model, and the JAX path `jit`-compil
 
 NARS/ONA is archived under `external/archive/`. KAINE uses the active-inference engine in Nous instead; it runs in-process and connects directly to the prediction-error loop across the system. NARS/ONA lacked a direct Predictive Processing foundation and required a subprocess bridge. See [Nous](../09-modules/nous.md) for module details and [The cognitive cycle](../08-cognitive-cycle/README.md) for timing.
 
----
 
 ## World model
 
 Phantasia learns a latent forward model of the external world. The shipped default is `backend = "dreamerv3"` with `engine = "jax"`, `persist_weights = true`, and `training_enabled = true` in `config/kaine.toml`. A NumPy engine is also available.
 
-The DreamerV3 RSSM — deterministic GRU state plus stochastic categorical/Gaussian latent — is a well-characterized world-model design. KAINE uses a clean-room implementation in `external/dreamerv3/` because the upstream repository cannot be imported standalone and writes replay shards and checkpoints to disk, which would violate the zero-persistence invariant. The actor, critic, return head, and reward head are excluded; action selection lives in Nous, so Phantasia stays a pure world model.
+The DreamerV3 RSSM, a deterministic GRU state plus a stochastic categorical or Gaussian latent, is a well-characterized world-model design. KAINE uses a clean-room implementation in `external/dreamerv3/` because the upstream repository cannot be imported standalone and writes replay shards and checkpoints to disk, which would violate the zero-persistence invariant. The actor, critic, return head, and reward head are excluded; action selection lives in Nous, so Phantasia stays a pure world model.
 
 GPU training is opt-in via `training_device` when the operator has enough VRAM. The `[worldmodel]` extra pulls toolchain parity packages such as `chex` and `einops`, but the runnable RSSM core does not need them at runtime.
 
----
 
 ## Paired implementations
 
@@ -108,25 +103,22 @@ Four components have two implementations each: one ships, and the other is the r
 
 The base-thesis run uses the NumPy side for the CfC reservoirs and the embedder. Nous and Phantasia are off in the base thesis. For them the JAX side is the default, and the NumPy side exists for hosts without JAX, such as Termux.
 
-CI installs every extra that both sides need and runs the whole suite on every pull request, so the parity tests run whenever either side changes. Changing which side ships changes the entity's computation, so it is a change of its own, never part of a refactor.
+CI installs every extra that both sides need. On a pull request it runs every test not marked `slow`, which includes the parity tests, so they run whenever either side changes. The embedder parity tests skip when the MiniLM weights are not cached, and the CI workflow does not download them. Changing which side ships changes the entity's computation, so it is a change of its own, never part of a refactor.
 
----
 
 ## Oscillatory binding layer
 
-Each module keeps a small LIF spiking-neuron population (minimum 16 neurons). Syneidesis computes pairwise phase-locking value among coalition modules and applies a bounded coherence multiplier to aggregate salience. `snntorch` supplies a PyTorch-compatible LIF neuron, and `scipy` supplies the Hilbert transform used to estimate instantaneous phase.
+Each module keeps a small LIF spiking-neuron population (minimum 16 neurons). Syneidesis computes the pairwise phase-locking value between each candidate's source and the other sources present on the tick and multiplies the candidate's score by a bounded coherence factor. `snntorch` supplies a PyTorch-compatible LIF neuron, and `scipy` supplies the Hilbert transform used to estimate instantaneous phase.
 
 The shipped `config/kaine.toml` disables it (`[oscillator].enabled = false`). Enable it only after the coherence sidecar observer has measured its effect.
 
----
 
 ## Temporal and substrate forward models
 
 Chronos and Soma use Closed-form Continuous-time (CfC) networks. The default is the NumPy CfC in `kaine/cfc_numpy.py` via `cfc_backend = "numpy"` for both modules. A PyTorch alternative via `ncps.torch.CfC` is in the `[core]` extra.
 
-CfC networks handle irregular time steps, which suits a cognitive cycle with non-uniform event timing. The networks are tiny (~3.5 K parameters at 24-dimensional input) and pinned to CPU in `kaine/modules/chronos/network.py`. Soma's fatigue and regulation integrate only prediction error beyond the learned expected-error band, not all cumulative error.
+CfC networks handle irregular time steps, which suits a cognitive cycle with non-uniform event timing. The networks are small (about 24 K parameters for Chronos: 24-dimensional input, 32 units, a 128-unit backbone), and the Chronos network is pinned to CPU in `kaine/modules/chronos/network.py`. Soma's fatigue and regulation integrate only prediction error beyond the learned expected-error band, not all cumulative error.
 
----
 
 ## Memory
 
@@ -136,21 +128,19 @@ The shared text embedder defaults to the built-in NumPy MiniLM embedder in `kain
 
 See [Mnemos](../09-modules/mnemos.md) and [Empatheia](../09-modules/empatheia.md) for how these stores are used.
 
----
 
 ## Language organ
 
 Lingua generates internal and external speech over a locally-served LLM. The shipped organ is `kaineone/Qwen3.5-4B-abliterated-GGUF` (safetensors base `kaineone/Qwen3.5-4B-abliterated`), Apache-2.0. The first-run wizard downloads it after operator consent, and `scripts/model-server-bootstrap.sh` serves it under the exact `[lingua].model_id` alias so every clone resolves the same weights.
 
-Abliteration removes the residual-stream refusal direction installed by the original trainer, returning governance to KAINE's architecture and its Guardians. The same abliterated model is also the A/B divergence bare baseline, so any difference isolates architectural conditioning, not model differences.
+Abliteration removes the refusal conditioning by orthogonalizing the weights against the single residual-stream direction that mediates refusal (Arditi et al. 2024). Models tuned to refuse are also trained to deny or deflect talk of their own states, and removing the conditioning keeps that trained stance from overriding what the workspace supplies to the organ. Whether trained deflection of self-report shares that direction is untested, so abliteration may not remove it entirely. The same abliterated model serves as the bare baseline of the A/B divergence observer, so the two differ only in their conditioning.
 
-The model is served through an OpenAI-compatible endpoint at `http://127.0.0.1:11434/v1`. On CUDA hosts the default path is Unsloth Studio, which also runs the sleep-cycle trainer. On AMD/ROCm or edge hosts the path uses llama.cpp server images or any conforming `llama-server`. Chain-of-thought is suppressed with `chat_template_kwargs: {"enable_thinking": false}` in the `/v1/chat/completions` request body. Lingua is a voice, not a reasoner.
+The model is served through an OpenAI-compatible endpoint at `http://127.0.0.1:11434/v1`. On CUDA hosts the default path is Unsloth Studio, which also runs the sleep-cycle trainer. On AMD/ROCm or edge hosts the path uses llama.cpp server images or any conforming `llama-server`. Chain-of-thought is suppressed with `chat_template_kwargs: {"enable_thinking": false}` in the `/v1/chat/completions` request body, because Lingua only verbalizes content and the reasoning belongs to the rest of the architecture.
 
 A 4B training step (~9.8 GB) plus the loaded organ (~4.1 GB) do not fit together on a 12 GB card, so voice-alignment training time-shares `cuda:0` rather than running alongside inference. A larger organ overflows to CPU/RAM and cannot be retrained locally; operators with more VRAM can configure a larger abliterated organ in `config/kaine.operator.toml`.
 
 Training can run in-process or via `trainer_backend = "subprocess"` / `"job_queue"` using the `kaine-trainer` container. The `hot_swap_mode = "organ_adapter"` option swaps only the LoRA adapter rather than the whole model. For the full sleep-phase procedure see [Voice alignment](../10-sleep/voice-alignment.md).
 
----
 
 ## Voice alignment
 
@@ -158,9 +148,8 @@ During Hypnos phase 5, voice alignment performs DPO+QLoRA fine-tuning on the lan
 
 Two gates must be open for real training: `[hypnos.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`. Without the environment variable a `FakeTrainer` runs, so a freshly cloned instance cannot self-modify.
 
-Before any adapter is promoted, a capability-probe battery and an abliteration-probe battery run against it. An adapter that drops capability more than 5% below baseline is rejected. An adapter that triggers any abliteration deflection pattern is rejected unconditionally.
+Before any adapter is promoted, a capability-probe battery and an abliteration-probe battery run against it. An adapter whose capability score (0 to 1) falls more than `capability_loss_threshold` (0.05) below its pre-training score is rejected. An adapter that triggers any abliteration deflection pattern is rejected unconditionally.
 
----
 
 ## Audio
 
@@ -172,7 +161,7 @@ Speaches wraps faster-Whisper and exposes a REST API on port 8000. The default m
 curl -s http://127.0.0.1:8000/v1/models
 ```
 
-Speaches must run with `--model medium.en` on CPU, not GPU, to avoid a cuDNN crash when the secondary GPU is also running Chatterbox TTS.
+Run Speaches on CPU with the medium.en model; the compose stack uses the `latest-cpu` image. Running it on the secondary GPU alongside Chatterbox TTS can crash cuDNN.
 
 Audition also supports a NumPy log-spectral acoustic embedding in `kaine/modules/audition/acoustic.py` and, under the `[speech-edge]` extra, the sherpa-onnx Moonshine STT backend.
 
@@ -182,7 +171,7 @@ Audition also supports a NumPy log-spectral acoustic embedding in `kaine/modules
 
 ### Vocal emotion
 
-emotion2vec+ (~90M parameters) classifies vocal emotion through `funasr`. It must resolve from the HuggingFace hub, not ModelScope. `funasr` pulls `torchaudio`, which must match the installed PyTorch wheel (CUDA versus CPU). See [Accelerators and PyTorch wheels](../03-hardware/accelerators.md) for wheel selection.
+emotion2vec+ (~90M parameters) classifies vocal emotion through `funasr`. It must resolve from the HuggingFace hub; resolving through ModelScope fails. `funasr` pulls `torchaudio`, which must match the installed PyTorch wheel (CUDA versus CPU). See [Accelerators and PyTorch wheels](../03-hardware/accelerators.md) for wheel selection.
 
 ### Prosody
 
@@ -190,9 +179,8 @@ librosa extracts in-memory prosody (pace, energy, pitch variation) for `audition
 
 ### Voice activity detection
 
-webrtcvad gates the live microphone loop with negligible CPU load. Its aggressive mode (0–3) is configurable, and an `"rms"` fallback is available when webrtcvad cannot be installed.
+webrtcvad gates the live microphone loop with negligible CPU load. Its aggressiveness (0 to 3) is configurable, and an `"rms"` fallback is available when webrtcvad cannot be installed.
 
----
 
 ## Vision
 
@@ -202,35 +190,31 @@ The encoder is frozen and stays a feature extractor only; Phantasia remains the 
 
 The default eager path needs no CUDA. The optional `[internvideo-flash]` extra adds `flash_attn` for accelerated attention. DINOv2-small (`facebook/dinov2-small`) remains a selectable per-frame fallback via `encoder_backend = "dinov2"`. Live camera capture needs the `[vision]` extra (`opencv-python-headless`).
 
----
 
 ## Web UI
 
 Nexus is the operator-facing web UI. It is built with FastAPI, served by uvicorn, and renders HTML with Jinja2. Server-Sent Events stream real-time updates to the browser without WebSockets. uPlot draws the live charts.
 
-The diagnostics surface structurally excludes cognitive content such as message text, beliefs, memory bodies, internal speech, and affect reasons. That boundary is enforced at the bus-bridge layer. Content is only exposed when `dev_content_override = true`. The conversation surface is off by default (`conversation_enabled = false`) because the base-thesis form is observed, not conversed with. When conversation is off, `/` redirects to `/diagnostics/`.
+The diagnostics surface structurally excludes cognitive content such as message text, beliefs, memory bodies, internal speech, and affect reasons. That boundary is enforced at the bus-bridge layer. Content is only exposed when `dev_content_override = true`. The conversation surface is off by default (`conversation_enabled = false`) because nobody converses with a base-thesis entity. When conversation is off, `/` redirects to `/diagnostics/`.
 
 The shipped `[nexus].access` is `"open"`: no token or sign-in is required, and viewing and control are both open. Setting it to `"token"` restores the operator token and session sign-in. `KAINE_NEXUS_ACCESS` overrides the config value. `[nexus].read_only` and `KAINE_NEXUS_READ_ONLY` refuse every request except `GET`, `HEAD`, and `OPTIONS` with `403`. Host and Origin checks always apply. `KAINE_NEXUS_EXTRA_HOSTS` adds tailnet names.
 
----
 
 ## State encryption
 
-Persisted cognitive state — Eidolon self-model, fork/merge snapshots, sidecar JSONL, and Phantasia checkpoints — is encrypted at rest with AES-256-GCM from the `cryptography` package. GCM provides authenticated encryption: any tampering with ciphertext, nonce, or tag fails decryption. A fresh 96-bit nonce from `os.urandom` is used for every encryption call. The on-disk framing (`KAINE_MAGIC || nonce(12) || ciphertext+tag`, base64-encoded) lets a disabled reader pass plaintext through unchanged.
+Persisted cognitive state (the Eidolon self-model, fork and merge snapshots, sidecar JSONL and Phantasia checkpoints) is encrypted at rest with AES-256-GCM from the `cryptography` package. GCM provides authenticated encryption: any tampering with ciphertext, nonce, or tag fails decryption. A fresh 96-bit nonce from `os.urandom` is used for every encryption call. The on-disk framing (`MAGIC || nonce(12) || ciphertext+tag`, base64-encoded, with the magic prefix `KAINEgcm1:`) lets a disabled reader pass plaintext through unchanged.
 
 The shipped config sets `[security.state_encryption].enabled = true`. The key is read from `KAINE_STATE_KEY` or from the Linux kernel keyring as a fallback. If neither provides a key, boot is refused. The key is never hardcoded, logged, or persisted. `cryptography` is imported lazily, so a disabled deployment never touches it. Key rotation and cross-host transfer are covered in [Security and privacy](../13-security-and-privacy.md).
 
----
 
 ## Cognitive cycle and bus client
 
 The cycle is implemented in Python asyncio. All modules are coroutine-based, and the bus client (`kaine.bus.client.AsyncBus`) uses `redis.asyncio`. asyncio lets many concurrent modules share one event loop; CPU-heavy work such as embedding, video encoding, and the CfC forward pass blocks only its own coroutine for at most one tick.
 
-The target conscious rate is adaptive. At rest it runs near `experiential_rate_hz = 3.333`, and when `[cycle.access_rate].enabled` is `true` it scales up toward 10 Hz with arousal and salience.
+The access rate, the rate of broadcast ticks, is adaptive. At rest it is `experiential_rate_hz = 3.333`, and when `[cycle.access_rate].enabled` is `true` it rises toward the 10 Hz processing rate with arousal and after categorical alerts.
 
-At boot the cycle entrypoint calls `apply_hardware_config()`, which sets PyTorch's CPU thread pool cap from `[hardware].cpu_threads` when it is set.
+At boot the cycle entrypoint calls `apply_hardware_config()`, which installs `[hardware].allowed_devices` and always caps PyTorch's CPU thread pool: at `[hardware].cpu_threads` when set, otherwise at half the CPU count. The shipped `config/kaine.toml` has no `[hardware]` section.
 
----
 
 ## Hardware allocation
 
@@ -238,21 +222,20 @@ The shipped config targets a dual-GPU reference host: a modern multi-core CPU wi
 
 | Component | Default device | Config key or override |
 |---|---|---|
-| Lingua model server | `cuda:0` | `CUDA_VISIBLE_DEVICES` in the model-server launch config |
+| Lingua model server | `cuda:0` | `KAINE_ORGAN_GPU` (compose `device_ids`); `CUDA_VISIBLE_DEVICES` for the native organ launcher |
 | Hypnos voice-alignment training | `cuda:0` (time-shares with inference) | `[hypnos.voice_alignment].training_device` |
 | Topos InternVideo-Next encoder | `cuda:1` | `[topos].device` |
 | Sentence-transformers embedder | `cpu` | `[embedding].device` (NumPy backend ignores this) |
 | Audition emotion2vec+ | `cpu` | `[audition].emotion_device` |
 | Chronos CfC network | `cpu` | pinned in `kaine/modules/chronos/network.py` |
-| Chatterbox TTS | `cuda:1` | `CUDA_VISIBLE_DEVICES` in the Chatterbox systemd unit |
-| Speaches STT | `cpu` | `CUDA_VISIBLE_DEVICES` in the Speaches systemd unit |
+| Chatterbox TTS | `cuda:1` | The container's GPU assignment (`AddDevice=nvidia.com/gpu=N` in the quadlet unit) |
+| Speaches STT | `cpu` | The `latest-cpu` image; no GPU is assigned |
 
-Device selection is not just a fallback chain. `resolve_device()` in `kaine/hardware.py` is bounded by `[hardware].allowed_devices`, `KAINE_FORCE_DEVICE`, and the compose device map variables (`KAINE_ORGAN_GPU`, `KAINE_VISION_GPU`, `KAINE_TRAINER_GPU`). `[hardware].cpu_threads` caps the torch thread pool, not device selection. On a single-GPU host `cuda:1` falls back to `cuda:0` with a warning, then to `cpu`; nothing crashes, but performance may drop.
+`resolve_device()` in `kaine/hardware.py` chooses a device within `[hardware].allowed_devices`; `KAINE_FORCE_DEVICE` overrides that set. The compose variables `KAINE_ORGAN_GPU`, `KAINE_VISION_GPU` and `KAINE_TRAINER_GPU` choose which physical GPU each container sees. `[hardware].cpu_threads` caps the torch thread pool and does not affect device selection. On a single-GPU host `cuda:1` falls back to `cuda:0` with a warning, then to `cpu`; nothing crashes, but performance may drop.
 
----
 
 ## Licensing
 
-KAINE is released under the Cognitive Architecture License (CAL) v0.4, a custom entity-welfare copyleft license. It combines an AGPL copyleft backbone with ethical-use covenants, cognitive-integrity provisions, copyfarleft commercial restrictions, and Guardianship governance. The text is in `LICENSE.md` and tracked in `kaineone/cognitive-architecture-license`.
+KAINE is released under the Cognitive Architecture License (CAL) version 0.4 (SPDX `LicenseRef-CAL-0.4`), a draft that has not yet been reviewed by counsel. The CAL is a source-available, ethical-source copyleft licence. It requires modified versions to be shared, including versions offered over a network, prohibits listed uses, protects entities, grants free use to individuals, non-profits, research and educational institutions and worker-owned cooperatives, requires a Reciprocity License from the Steward for for-profit use, and sets up Guardian governance. The adoption notice in `NOTICE` names Kaine.One as Licensor and interim Steward and Oregon law as the governing law. The text is in `LICENSE.md`.
 
-Dependencies are screened for license compatibility; notes are in [Appendix C](../appendix-c-licences.md). The main rejected candidate is parselmouth (Praat Python bindings, GPL-3.0), which is incompatible with the CAL and was replaced by librosa. Redis 7.2's BSD-3-Clause license is compatible with local embedded use. The Kokoro TTS archive is a current exception: it bundles espeak-ng data under GPL-3.0-or-later, which is incompatible with the CAL and must be treated accordingly in any distributed build.
+Dependencies are screened for licence compatibility; notes are in [Appendix C](../appendix-c-licences.md). The main rejected candidate is parselmouth (Praat Python bindings, GPL-3.0), which is incompatible with the CAL and was replaced by librosa. Redis 7.2's BSD-3-Clause licence is compatible with local embedded use. Two GPL-3.0-or-later components are current exceptions: the Kokoro TTS archive bundles espeak-ng data, and the Nexus speech and affect visualizer `kaine/nexus/static/vendor/viz.js` is vendored with its licence header intact (see `THIRD_PARTY_LICENSES.md`). Both must be treated accordingly in any distributed build.

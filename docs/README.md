@@ -1,6 +1,6 @@
 # About this book
 
-This is the documentation for KAINE, written as one book. Read it in order to learn the system from the claim it tests to how to extend it, or jump to the chapter you need. The reference appendices at the end list every configuration key, define the terms, and record licences and the roadmap.
+This is the documentation for KAINE, a cognitive architecture for synthetic minds: a modular framework whose modules can be replaced, and whose first instantiation is a predictive global workspace. The documentation is written as one book. Read it in order to learn the system from the ideas behind it to how to extend it, or jump to the chapter you need. The reference appendices at the end list every configuration key, define the terms, and record licences and the roadmap.
 
 The chapters are plain Markdown and read fine on GitHub. To read them as a book with a sidebar, search and next/previous pages, install [mdBook](https://rust-lang.github.io/mdBook/) and run `mdbook serve docs` from the repository root; the built book is written to `book/` and is not committed.
 
@@ -65,7 +65,7 @@ The chapters are plain Markdown and read fine on GitHub. To read them as a book 
 
 - [For researchers](14-for-researchers.md)
 - [Running experiments](15-experiments/README.md)
-  - [The module-ignition study](15-experiments/ignition-study.md)
+  - [The module-addition study](15-experiments/ignition-study.md)
 - [Run identity and admissibility](16-run-identity.md)
 - [The evaluation sidecar](17-research-data/README.md)
   - [Research event streams](17-research-data/event-streams.md)

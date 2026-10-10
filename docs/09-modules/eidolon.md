@@ -1,162 +1,156 @@
 # Eidolon
 
-Eidolon is KAINE's self-model organ. This page describes how it maintains identity, detects drift in which sources dominate the global workspace, and (when enabled) derives a self-model from internal observations. Read it if you are enabling the module, tuning its drift alerts, or integrating it with Lingua's persona.
+Eidolon is KAINE's self-model module. It keeps a persisted model of the entity (a name, values, behavioural norms, a personality baseline, a capability map, and an identity history) and watches for drift in which modules supply the broadcast coalitions. The design is inspired by Metzinger's self-model theory (Metzinger 2003) and draws on the self-referential processing of cortical midline structures (Northoff and Bermpohl 2004); the drift detector uses a symmetric Kullback-Leibler divergence (Kullback and Leibler 1951). Read this page if you are enabling the module, tuning its drift alerts, or connecting it to the language organ's persona.
 
 ## Status
 
-Implemented and tested, but shipped disabled. The base-thesis gate (see [Architecture](../02-architecture/README.md)) keeps it off until a positive result justifies enabling it.
+Eidolon is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].eidolon = false`) and in the base-thesis `thesis_test` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it fourth in its default order of six: Mnemos, Phantasia, Nous, Eidolon, Empatheia, Vox. In the paper's terms it adds a new kind of candidate to the competition, the self-model's drift alerts and self-model updates.
 
-In `config/kaine.toml`, `[modules].eidolon` defaults to `false`. The self-inference sub-engine is additionally disabled by default: `[eidolon.self_inference].enabled = false`.
+The self-inference engine is a second, separate switch: `[eidolon.self_inference].enabled = false` in the shipped configuration. The study overlay does not turn it on, so unless the operator file enables it, a study branch with Eidolon runs the drift detector and the launch name only.
 
-No external services are required. The self-model is persisted to `state/eidolon/self_model.json`, and is encrypted with AES-256-GCM when `[security.state_encryption].enabled = true`.
+Eidolon needs no external service. The self-model is saved to `state/eidolon/self_model.json`, encrypted with AES-256-GCM when `[security.state_encryption].enabled = true`.
 
-## Responsibility
+## What it does
 
-Eidolon holds KAINE's self-model — a structured, persistent description of the entity. In the PP+GWT framing, it maintains identity continuity across cognitive cycles. It does two things:
+1. Drift detection. On every broadcast, accessed or inhibited, Eidolon counts the `source` of each coalition member. It compares the source distribution of the last `drift_window` broadcasts with a reference distribution built from every broadcast that has left that window, using the symmetric (Jeffreys) Kullback-Leibler divergence. When the score reaches `drift_threshold` it publishes `eidolon.drift`. The two distributions never overlap, so a shift is not diluted by its own counts. The score stays at 0.0 until the reference holds at least `drift_window` broadcasts, which takes about twice the window after boot, because the detector's counts are not saved across restarts.
+2. Self-inference, when enabled. Eidolon accumulates observations from the language organ (event-type labels only), from Thymos (valence, arousal and dominance numbers, and drive crossings) and from Nous (policy labels and expected free energy). At the end of each sleep it rewrites four self-model fields: `behavioral_norms`, `personality_baseline`, `values` and `capability_map`.
 
-1. **KL-drift detection** — every `workspace.broadcast`, it compares the recent event-source distribution (the last `drift_window` broadcasts) with a reference distribution built from the broadcasts that have left that window, using symmetric (Jeffreys) KL divergence, and publishes `eidolon.drift` when the composition of conscious content shifts significantly. The two distributions are disjoint, so a shift is not diluted by its own counts, and the score is 0.0 until the reference holds at least `drift_window` broadcasts (about twice the window after boot; the detector's counts are not saved across restarts).
-2. **Self-inference** (opt-in) — when enabled, it accumulates observations from Lingua (speech type labels only), Thymos (VAD numerics), and Nous (EFE policy labels), and at each Hypnos maintenance-cycle end it writes four self-model fields: `behavioral_norms`, `personality_baseline`, `values`, and `capability_map`.
-
-Raw speech text is never read or stored. The `_record_voice` and `observe_lingua` methods inspect only event type, length, and word count.
+Eidolon never reads or stores the text of the entity's speech. Its speech loops keep the event type, the text length and the word count of each utterance.
 
 ## Inputs
 
 | Source | Stream | Event type | What is used |
 |---|---|---|---|
-| Syneidesis | `workspace.broadcast` | — | `selected_events` source names for KL drift |
-| Lingua | `lingua.internal` (configurable) | any | Event type label, text length, word count |
-| Lingua | `lingua.external` (configurable) | any | Event type label, text length, word count |
-| Thymos | `thymos.out` | `thymos.state` | `valence`, `arousal`, `dominance` |
+| Syneidesis | `workspace.broadcast` | snapshot | The `source` of every coalition member, for drift |
+| Lingua | `lingua.internal` (configurable) | any | Event type, text length, word count |
+| Lingua | `lingua.external` (configurable) | any | Event type, text length, word count |
+| Thymos | `thymos.out` | `thymos.state` | `state.valence`, `state.arousal`, `state.dominance` |
 | Thymos | `thymos.out` | `thymos.drive` | `drive` name |
-| Nous | `nous.out` | `nous.policy` | `policy` action label, `expected_free_energy` |
-| Hypnos | `hypnos.out` | `hypnos.sleep.completed` | Triggers `maintenance_cycle_end()` and self-model update |
+| Nous | `nous.out` | `nous.policy` | `policy` label and `expected_free_energy` |
+| Hypnos | `hypnos.out` | `hypnos.sleep.completed` | Triggers the self-model update |
 
-The Lingua internal and external speech loops always start in `initialize()`. The Thymos, Nous, and Hypnos consumers are spawned only when `self_inference.enabled = true`.
-
-External speech is recorded for zero-persistence accounting, but self-inference uses only the internal channel.
+The two speech loops always run. The Thymos, Nous and Hypnos consumers start only when self-inference is enabled. External speech is counted, but self-inference uses only the internal channel.
 
 ## Outputs
 
-| Stream | Event type | Key payload fields | Salience |
+| Stream | Event type | Payload fields | Intensity |
 |---|---|---|---|
-| `eidolon.out` | `eidolon.drift` | `score`, `recent_count`, `historical_count` (all events ever observed), `reference_count` (events in the reference), `top_drifted_sources` | `alert_salience` (0.7) |
-| `eidolon.out` | `eidolon.self_model` | `name`, `values`, `behavioral_norms`, `personality_baseline`, `capability_map` | `baseline_salience` (0.05) |
+| `eidolon.out` | `eidolon.drift` | `score`, `recent_count`, `historical_count` (every source counted since boot), `reference_count` (sources in the reference), `top_drifted_sources` | `alert_salience` (0.7) |
+| `eidolon.out` | `eidolon.self_model` | `name`, `values`, `behavioral_norms`, `situation_facts`, `personality_baseline`, `capability_map` | `baseline_salience` (0.05) |
 
-`eidolon.drift` carries no event contents — only source names and numeric scores. `eidolon.self_model` is published unconditionally at `initialize()` and again after each successful `maintenance_cycle_end()`. Lingua consumes `eidolon.self_model` over the bus to seed its persona.
+`eidolon.drift` carries source names and numbers only. Eidolon publishes `eidolon.self_model` once at `initialize()`, again after each self-inference update, and whenever a situation fact is added. Lingua reads it from the bus to seed its persona, so a language organ in a separate process sees the same persona.
 
 ## Configuration
 
-All keys are under `[eidolon]` and `[eidolon.self_inference]`. For the full reference, see [Appendix A: module configuration](../appendix-a-configuration/modules.md).
+All keys are under `[eidolon]` and `[eidolon.self_inference]`. The full reference is in [Appendix A: module configuration](../appendix-a-configuration/modules.md).
 
-| Key | Default | Description |
-|---|---|---|
-| `persistence_path` | `"state/eidolon/self_model.json"` | JSON path for the self-model |
-| `drift_window` | `100` | Recent broadcasts kept for KL drift |
-| `drift_threshold` | `0.6` | Symmetric-KL score that triggers `eidolon.drift` |
-| `save_interval_s` | `30.0` | Periodic self-model save interval |
-| `internal_speech_stream` | `"lingua.internal"` | Stream observed for internal speech |
-| `external_speech_stream` | `"lingua.external"` | Stream observed for external speech |
-| `voice_observations_cap` | `0` | Max speech observations kept; `0` keeps all, a positive value keeps the most recent N |
-| `identity_history_cap` | `0` | Max drift episodes kept; `0` keeps all, a positive value keeps the most recent N |
-| `baseline_salience` | `0.05` | Default event salience |
-| `alert_salience` | `0.7` | Salience on drift alert |
-| `[eidolon.self_inference].enabled` | `false` | Opt-in switch for self-inference |
-| `[eidolon.self_inference].vad_window_cycles` | `10` | Maintenance cycles in rolling VAD window |
-| `[eidolon.self_inference].speech_pattern_min_count` | `5` | Observations needed before a norm is written |
-| `[eidolon.self_inference].seed_path` | — | Optional JSONL seed file for first-boot initialization |
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `persistence_path` | string | `"state/eidolon/self_model.json"` | Where the self-model is saved |
+| `drift_window` | int | `100` | Number of recent broadcasts in the drift window |
+| `drift_threshold` | float | `0.6` | Symmetric divergence at which `eidolon.drift` is published |
+| `save_interval_s` | float | `30.0` | Seconds between periodic saves (wall-clock) |
+| `internal_speech_stream` | string | `"lingua.internal"` | Stream read for internal speech |
+| `external_speech_stream` | string | `"lingua.external"` | Stream read for external speech |
+| `voice_observations_cap` | int | `0` | Speech observations kept; `0` keeps all, a positive value keeps the newest N |
+| `identity_history_cap` | int | `0` | Drift episodes kept; `0` keeps all, a positive value keeps the newest N |
+| `baseline_salience` | float | `0.05` | Intensity of `eidolon.self_model` |
+| `alert_salience` | float | `0.7` | Intensity of `eidolon.drift` |
+| `[eidolon.self_inference].enabled` | bool | `false` | Turns self-inference on |
+| `[eidolon.self_inference].vad_window_cycles` | int | `10` | Sleeps in the rolling valence, arousal and dominance window |
+| `[eidolon.self_inference].speech_pattern_min_count` | int | `5` | Observations of an internal-speech type needed before it becomes a norm, and threshold crossings of a drive needed before it becomes a value |
+| `[eidolon.self_inference].seed_path` | string | unset | Optional JSONL file applied once at first boot |
+
+The factory rejects any other key in either table.
 
 ## How it works
 
-### Identity naming
+### Launch name
 
-On first boot, if `SelfModel.name` is empty, `generate_launch_name()` picks `"Kaine <Surname>"` from the Second Life surname list in `kaine/modules/eidolon/surnames.txt`. The name is written to disk immediately. It is only the starting point; the entity may rename itself later.
+On first boot, if the self-model has no name, `generate_launch_name()` picks `"Kaine <Surname>"` from the Second Life surname list in `kaine/modules/eidolon/surnames.txt` and saves it at once. The name is a starting point that the entity may later replace.
 
-### KL-drift detection
+### Drift detection
 
-`kaine/modules/eidolon/drift.py` implements `SourceDistributionDrift`. It keeps a `deque[Counter[str]]` of recent workspace batches and a cumulative `Counter[str]`. Each `on_workspace` call passes event source names to `observe()`.
+`SourceDistributionDrift` in `kaine/modules/eidolon/drift.py` keeps the recent window as a deque of per-broadcast source counts. When a broadcast pushes the oldest batch out of the window, that batch is added to the reference counts, which keep growing for the life of the process. Both distributions are smoothed additively (epsilon 1e-3) before the divergence is computed, and the five sources that contribute most are reported as `top_drifted_sources`.
 
-The symmetric KL divergence between the recent and cumulative distributions is computed with additive smoothing (`ε = 1e-3`). When the score reaches `drift_threshold`, `eidolon.drift` is published and the alert is added to the current drift episode in `SelfModel.identity_history`.
-
-An episode is one contiguous run of alerting broadcasts. It stores `onset`, `end`, `peak_score`, `count`, `sources` (frequency of each top-drifted source), and `top_sources`. Older readers also get `timestamp` (= onset) and `score` (= peak). The first broadcast below the threshold closes the episode, so a sustained shift adds one history entry rather than one per alert. Self-models saved with older per-alert entries still load.
+Each alert is recorded in `SelfModel.identity_history` as part of a drift episode. An episode is one contiguous run of alerting broadcasts and stores `onset`, `end`, `peak_score`, `count`, `sources` (how often each source was among the top drifted sources) and `top_sources`; it also carries `timestamp` (the onset) and `score` (the peak) for readers of older entries. The first broadcast below the threshold closes the episode, so a sustained shift adds one entry. Self-models saved with older per-alert entries still load.
 
 ```mermaid
 flowchart TD
-    WS[workspace.broadcast] --> OBS[observe source names]
-    OBS --> KL[compute symmetric-KL\nrecent vs cumulative]
-    KL -- score < threshold --> SKIP[no publication]
-    KL -- score >= threshold --> DRIFT[publish eidolon.drift\nalert_salience]
-    DRIFT --> HIST[extend the open drift episode\nor start one in identity_history]
-    KL -- score < threshold --> CLOSE[close the open episode]
+    WS[workspace.broadcast] --> OBS[count coalition sources]
+    OBS --> KL[symmetric divergence\nrecent window vs reference]
+    KL -- score below threshold --> CLOSE[no publication\nclose any open episode]
+    KL -- score at or above threshold --> DRIFT[publish eidolon.drift]
+    DRIFT --> HIST[extend the open episode\nor start one in identity_history]
 ```
 
 ### Self-inference engine
 
-When enabled, `SelfInferenceEngine` populates four `SelfModel` fields from observations accumulated between maintenance cycles.
+When enabled, `SelfInferenceEngine` fills four fields from what it observed between sleeps.
 
-`behavioral_norms` counts speech type labels from `lingua.internal` events. Only types in `_INTERNAL_SPEECH_TYPES` (`"internal.thought"`, `"speak.internal"`, `"think"`, `"internal_speech"`) are counted. A label must appear at least `speech_pattern_min_count` times before it becomes a `"speech_pattern:<type>"` norm.
+`behavioral_norms` counts the event types of internal speech. Only the types in `_INTERNAL_SPEECH_TYPES` count (`"internal_speech"`, which is what Lingua publishes, and the labels `"internal.thought"`, `"speak.internal"` and `"think"`). A type that reaches `speech_pattern_min_count` becomes the norm `"speech_pattern:<type>"`.
 
-`personality_baseline` is built from rolling VAD statistics. At each maintenance-cycle end the latest `thymos.state` sample is pushed to a bounded `deque` of length `vad_window_cycles`. Population mean and variance over `valence`, `arousal`, and `dominance` are written as six floats.
+`personality_baseline` holds six numbers: the population mean and variance of valence, arousal and dominance over a deque of `vad_window_cycles` samples. At the end of each sleep the latest `thymos.state` sample seen since the previous sleep is pushed onto the deque.
 
-`values` lists drives that have crossed threshold at least `speech_pattern_min_count` times, but only after at least one behavioral norm exists. They are stored as `"drive:<drive_name>"`.
+`values` lists the drives that crossed their threshold at least `speech_pattern_min_count` times, stored as `"drive:<name>"`. Values are derived only when at least one norm exists.
 
-`capability_map` is built by `CapabilityMapBuilder`:
-- `effectors`: the sorted Praxis effector whitelist from `[praxis].enabled_effectors`. `kaine/boot/factories/eidolon.py` wires it into `SelfInferenceEngine` at boot.
-- `policy_outcomes`: per-action count and mean EFE from `nous.policy` events.
-
-No raw text or audio is used.
+`capability_map` comes from `CapabilityMapBuilder`. Its `effectors` entry is the sorted Praxis effector whitelist (`[praxis].enabled_effectors`), which `_wire_eidolon_capabilities` in `kaine/boot/wiring.py` hands to the engine at boot when both modules are registered. Its `policy_outcomes` entry holds the count and mean expected free energy of each Nous policy label.
 
 ### Operator seed
 
-If `seed_path` is set, the engine loads a JSONL file once at first boot via `apply_seed()`. Each line may contain any of `values`, `behavioral_norms`, `personality_baseline`, or `capability_map`. Seed values become the initial state; later observation-driven updates overwrite them. The seed flag is set immediately so the file is not reapplied on restart.
+If `seed_path` is set, the engine reads the JSONL file once at first boot through `apply_seed()`. Each line may set any of `values`, `behavioral_norms`, `personality_baseline` and `capability_map`. Seed values are the starting state, and later observation-driven updates overwrite them. The seed is marked as applied before the file is read, so it is not reapplied after a restart.
+
+### Situation facts
+
+`ensure_situation_fact(text)` records a fact about the being's situation that it is told, saves the self-model and publishes it at once. The individuation producer uses it (`kaine/cycle/__main__.py`), falling back to Lingua when Eidolon is not registered. Situation facts are separate from values and norms and never touch drift or the identity history.
 
 ### Persistence and encryption
 
-`save_atomic(path, model)` writes the JSON through `get_state_encryptor().encrypt_text()` (AES-256-GCM when state encryption is enabled, passthrough otherwise) to a sibling `*.tmp` file, then `os.replace`s it into place. `load(path)` passes bytes through `maybe_decrypt()` before parsing. A crash mid-save cannot corrupt the destination file.
-
-Saves run periodically every `save_interval_s` and unconditionally on `shutdown()`.
+`save_atomic(path, model)` encrypts the JSON through `get_state_encryptor().encrypt_text()` (AES-256-GCM when state encryption is on, unchanged otherwise), writes it to a sibling temporary file and moves it into place with `os.replace`, so a crash mid-save cannot corrupt the saved file. `load(path)` passes the bytes through `maybe_decrypt()` before parsing. Saves run every `save_interval_s` and on `shutdown()`.
 
 ## Key files
 
 | Path | Purpose |
 |---|---|
-| `kaine/modules/eidolon/module.py` | `Eidolon(BaseModule)` — tick driver, speech loops, consumer tasks |
-| `kaine/modules/eidolon/self_inference.py` | `SelfInferenceEngine` — observation-driven field derivation |
-| `kaine/modules/eidolon/document.py` | `SelfModel` dataclass, `generate_launch_name()`, `load()`, `save_atomic()` |
-| `kaine/modules/eidolon/drift.py` | `SourceDistributionDrift`, `DriftDetector` protocol, `DriftResult` |
-| `kaine/modules/eidolon/capability_map.py` | `CapabilityMapBuilder` — whitelist + policy-outcome accumulator |
-| `kaine/modules/eidolon/surnames.txt` | Second Life surname list |
-| `kaine/boot/factories/eidolon.py` | `make_eidolon()` — self-inference sub-table wiring |
+| `kaine/modules/eidolon/module.py` | `Eidolon(BaseModule)`: drift, speech loops, consumer tasks, publication |
+| `kaine/modules/eidolon/self_inference.py` | `SelfInferenceEngine` |
+| `kaine/modules/eidolon/document.py` | `SelfModel`, `generate_launch_name()`, `load()`, `save_atomic()` |
+| `kaine/modules/eidolon/drift.py` | `SourceDistributionDrift`, the `DriftDetector` protocol, `DriftResult` |
+| `kaine/modules/eidolon/capability_map.py` | `CapabilityMapBuilder` |
+| `kaine/modules/eidolon/surnames.txt` | Surname list for the launch name |
+| `kaine/boot/factories/eidolon.py` | `make_eidolon()` and the self-inference sub-table |
 
-## Enabling and use
+## Enabling
 
-1. Edit `config/kaine.toml`: set `[modules].eidolon = true`.
-2. Make `state/eidolon/` writable.
+1. In the operator file `config/kaine.operator.toml`, set `[modules].eidolon = true`. The operator file merges last. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
+2. Make sure `state/eidolon/` is writable.
 3. To turn on self-inference, also set `[eidolon.self_inference].enabled = true`.
-4. To seed fields at first boot, set `seed_path` to a JSONL file with one object per line.
+4. To seed fields at first boot, set `seed_path` to a JSONL file with one object per line, for example:
 
-Example seed line:
 ```json
 {"values": ["honesty", "curiosity"], "personality_baseline": {"valence_mean": 0.2}}
 ```
 
-State encryption is optional. To use it, set `[security.state_encryption].enabled = true` and supply `KAINE_STATE_KEY` as 32 raw bytes or base64/hex.
+State encryption is optional. To use it, set `[security.state_encryption].enabled = true` and supply `KAINE_STATE_KEY` as 32 raw bytes or in base64 or hex.
 
-## Zero-persistence note
+## What Eidolon keeps
 
-Eidolon's zero-persistence commitment covers internal speech. `_record_voice()` keeps only `{timestamp, channel, length, word_count}` from utterance payloads and discards the text. `observe_lingua()` reads only the event type label. Raw speech content never appears in `self_model.json` or any Eidolon publication.
+From each utterance `_record_voice()` keeps `{timestamp, channel, length, word_count}` and discards the text, and `observe_lingua()` reads only the event type. No text of the being's own speech reaches `self_model.json` or any Eidolon event; the only text Eidolon keeps is the situation facts it is told (above). The `eidolon.drift` payload holds `score`, `recent_count`, `historical_count`, `reference_count` and `top_drifted_sources`.
 
-The `eidolon.drift` payload contains only `score`, `recent_count`, `historical_count`, and `top_drifted_sources` — no event content.
+## Evaluation
+
+The offline suite's self-model accuracy battery (`kaine/evaluation/benchmarks/instrument_runners/self_model_runner.py`) exercises Eidolon offline.
 
 ## Tests
 
 | File | Coverage |
 |---|---|
-| `tests/test_eidolon_module.py` | Full module tick, drift, speech-loop counting |
-| `tests/test_eidolon_self_inference.py` | All four derivation paths, disabled no-op, seed application |
-| `tests/test_eidolon_drift.py` | KL computation, window capping, top sources |
-| `tests/test_eidolon_document.py` | JSON round-trip, `save_atomic`, `generate_launch_name` |
-| `tests/test_eidolon_capability_map.py` | Whitelist + policy accumulation |
-| `tests/test_eidolon_seed.py` | Seed load, first-boot-only application |
+| `tests/test_eidolon_module.py` | Module tick, drift, speech-loop counting |
+| `tests/test_eidolon_self_inference.py` | The four derivations, the disabled no-op, seed application |
+| `tests/test_eidolon_drift.py` | Divergence, window handling, top sources |
+| `tests/test_eidolon_document.py` | JSON round trip, `save_atomic`, `generate_launch_name` |
+| `tests/test_eidolon_capability_map.py` | Whitelist and policy accumulation |
+| `tests/test_eidolon_seed.py` | Seed loading and first-boot-only application |
 | `tests/test_eidolon_scorer_calibration.py` | Scorer calibration |
 | `tests/systems/test_eidolon_subsystem.py` | End-to-end subsystem test |
 
@@ -164,9 +158,4 @@ The `eidolon.drift` payload contains only `score`, `recent_count`, `historical_c
 
 - Primary spec: [`openspec/specs/eidolon/spec.md`](../../openspec/specs/eidolon/spec.md)
 - Self-inference spec: [`openspec/specs/eidolon-self-inference/spec.md`](../../openspec/specs/eidolon-self-inference/spec.md)
-- Related modules:
-  - [Lingua](lingua.md) — reads `eidolon.self_model` to seed its persona
-  - [Nous](nous.md) — `nous.policy` feeds the capability map
-  - [Thymos](thymos.md) — VAD events set the personality baseline
-  - [Hypnos](hypnos.md) — `hypnos.sleep.completed` triggers maintenance
-  - [Praxis](praxis.md) — enabled effector whitelist feeds the capability map
+- Related modules: [Lingua](lingua.md) reads `eidolon.self_model` for its persona; [Nous](nous.md) supplies `nous.policy` for the capability map; [Thymos](thymos.md) supplies the samples behind the personality baseline; [Hypnos](hypnos.md) triggers the update with `hypnos.sleep.completed`; [Praxis](praxis.md) supplies the effector whitelist.
