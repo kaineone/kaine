@@ -14,7 +14,11 @@ import pytest_asyncio
 
 from kaine.lifecycle import stage
 from kaine.lifecycle.manager import ForkManager
-from kaine.lifecycle.preservation import extract_bundle_gestation, read_bundle_stage
+from kaine.lifecycle.preservation import (
+    extract_bundle_gestation,
+    read_bundle_stage,
+    set_aside_gestation_files,
+)
 from kaine.modules.eidolon import Eidolon, SelfModel
 from kaine.modules.registry import ModuleRegistry
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
@@ -205,3 +209,20 @@ async def test_gestation_files_travel_encrypted(tmp_path, eidolon, monkeypatch):
         == progress
     )
     assert not (bundle / "gestation").exists()
+
+def test_set_aside_gestation_files_keeps_them(tmp_path):
+    dest = tmp_path / "lifecycle"
+    dest.mkdir()
+    (dest / "gestation_progress.json").write_text("{}")
+    (dest / "gestation_viability.json").write_text("{}")
+
+    originals = {"gestation_progress.json", "gestation_viability.json"}
+    moved = set_aside_gestation_files(dest)
+    assert len(moved) == 2
+    for original in originals:
+        assert not (dest / original).exists()
+    for p in moved:
+        assert p.exists()
+        assert any(p.name.startswith(f"{original}.replaced-") for original in originals)
+
+    assert set_aside_gestation_files(tmp_path / "missing") == []

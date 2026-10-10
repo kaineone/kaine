@@ -127,6 +127,7 @@ async def _capture_module_state(module: Any) -> dict[str, Any]:
 # Gestation files that travel with the being. The viability verdict is not one:
 # it already rides inside the progress file.
 BUNDLED_GESTATION_FILES = ("gestation_progress.json", "gestation_readout.json")
+GESTATION_STATE_FILES = BUNDLED_GESTATION_FILES + ("gestation_viability.json",)
 
 
 async def preserve_live(
@@ -753,6 +754,22 @@ def _extract_stage_from_bundle(bundle: Path) -> bytes | None:
     if loose_stage.is_file():
         return encryptor.maybe_decrypt(loose_stage.read_bytes())
     return None
+
+
+def set_aside_gestation_files(dest_dir: Path) -> list[Path]:
+    """Move any gestation state files in ``dest_dir`` aside (renamed, never deleted) so a revived being never inherits another being's progress, readout baselines or verdict; return the new paths."""
+    import uuid
+
+    moved: list[Path] = []
+    if not dest_dir.exists():
+        return moved
+    for name in GESTATION_STATE_FILES:
+        src = dest_dir / name
+        if src.is_file():
+            dst = dest_dir / f"{name}.replaced-{uuid.uuid4().hex[:8]}"
+            os.replace(src, dst)
+            moved.append(dst)
+    return moved
 
 
 def extract_bundle_gestation(bundle: Path, dest_dir: Path) -> list[str]:
