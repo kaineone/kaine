@@ -5,12 +5,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from collections import deque
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.entity_clock import EntityClock
 from kaine.modules.context import CONTEXT_DIM, BroadcastContext
 from kaine.modules.intensity import graded_intensity
 
@@ -124,6 +124,7 @@ class Audition(BaseModule):
         # forward-model prediction-error criterion (normalised >= 2.0). Makes the
         # alert embedding-scale-agnostic and self-calibrating.
         acoustic_change_alert_factor: float = 2.0,
+        entity_clock: Optional[EntityClock] = None,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -212,8 +213,8 @@ class Audition(BaseModule):
         # Hypnos sleep suspension state.
         self._in_hypnos: bool = False
         self._hypnos_cursor: str = "$"
-        # Audition has no entity clock; context age is wall time, equal to entity time at default scale.
-        self._context = BroadcastContext(time.monotonic)
+        self._clock = entity_clock or EntityClock()
+        self._context = BroadcastContext(self._clock.now)
 
         # Carried-forward acoustic forward-model snapshots for encoders that are
         # not currently running. They are keyed by encoder model_id and never

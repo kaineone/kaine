@@ -70,7 +70,7 @@ SIMPLE_FACTORIES: dict[str, ModuleFactory] = {
 # clock dilates their integrals/cadences coherently with the cycle's tick
 # pacing. Every other module is purely event-driven (paces off the subjective
 # cycle already) or times only infrastructure, so it gets no clock.
-_CLOCKED_FACTORIES: frozenset[str] = frozenset({"soma", "topos", "mnemos", "thymos", "perception", "chronos", "vox"})
+_CLOCKED_FACTORIES: frozenset[str] = frozenset({"audition", "chronos", "mnemos", "perception", "soma", "thymos", "topos", "vox"})
 
 
 def plugin_injections(plugins: Any, name: str) -> Optional[dict[str, Any]]:
@@ -343,7 +343,7 @@ def construct_module(
 
     factory = SIMPLE_FACTORIES[name]
     if name in _CLOCKED_FACTORIES:
-        if name in {"chronos", "soma", "nous"}:
+        if name in {"audition", "chronos", "soma", "nous"}:
             return factory(
                 bus, section, entity_clock=entity_clock, injections=injections
             )
@@ -351,8 +351,6 @@ def construct_module(
     if name == "praxis":
         return factory(bus, section, intent_secret=intent_secret)
     if name in {"chronos", "soma", "nous"}:
-        return factory(bus, section, injections=injections)
-    if name == "audition":
         return factory(bus, section, injections=injections)
     return factory(bus, section)
 

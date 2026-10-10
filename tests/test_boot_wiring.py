@@ -40,6 +40,7 @@ from kaine.boot import (
 )
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
+from kaine.entity_clock import EntityClock
 from kaine.security.crypto import (
     CryptoConfig,
     CryptoConfigError,
@@ -1045,3 +1046,9 @@ def test_build_registry_encryption_enabled_installs_encryptor(monkeypatch, tmp_p
         assert get_state_encryptor().enabled is True
     finally:
         set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
+
+
+def test_make_audition_uses_the_entity_clock():
+    clk = EntityClock()
+    audition = make_audition(_bus(), {}, entity_clock=clk)
+    assert audition._clock is clk

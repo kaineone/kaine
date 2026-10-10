@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import time
 from abc import ABC
 from datetime import datetime, timezone
@@ -267,6 +268,15 @@ class BaseModule(ABC):
                 log.warning("dropped malformed broadcast item: %s", item, exc_info=True)
                 continue
             selected.append((str(item.get("entry_id", "")), event))
+        published_at = payload.get("published_at")
+        if (
+            isinstance(published_at, bool)
+            or not isinstance(published_at, (int, float))
+            or not math.isfinite(published_at)
+        ):
+            published_at = None
+        else:
+            published_at = float(published_at)
         return WorkspaceSnapshot(
             tick_index=int(payload.get("tick_index", 0)),
             selected_events=selected,
@@ -276,4 +286,5 @@ class BaseModule(ABC):
                 str(k): float(v) for k, v in (payload.get("salience_scores") or {}).items()
             },
             metadata=dict(payload.get("metadata") or {}),
+            published_at=published_at,
         )
