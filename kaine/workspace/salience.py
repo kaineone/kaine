@@ -9,7 +9,6 @@ from typing import Any, Sequence
 
 from kaine.bus.schema import Event
 from kaine.workspace.novelty import NoveltyTracker
-from kaine.workspace.precision import SourcePrecision
 from kaine.workspace.strategies import GoalScorer, ThymosModulator
 
 log = logging.getLogger(__name__)
@@ -48,13 +47,15 @@ def arousal_contrast(p: float, gain: float) -> float:
 
 
 class RuleBasedSalience:
-    """Product-form salience with precision weighting and arousal contrast.
+    """Product-form salience with arousal contrast.
 
-    priority = intensity * novelty * goal * precision weight;
+    priority = intensity * novelty * goal;
     score = thymos level factor times the arousal contrast of the priority.
 
-    With no precision tracker and contrast gain 0 this reduces to the original
-    four-factor product.
+    Precision is local to each processor, which scores its own prediction error
+    against its recent errors, so the workspace applies no per-source weight.
+
+    With contrast gain 0 this reduces to the original four-factor product.
 
     A degraded-mode warning is emitted at construction ONLY for factors named in
     ``downgraded_factors`` — the factors the operator deliberately set to the
@@ -71,13 +72,12 @@ class RuleBasedSalience:
         goal_scorer: GoalScorer,
         thymos_modulator: ThymosModulator,
         *,
-        precision: SourcePrecision | None = None,
         downgraded_factors: Sequence[str] = (),
     ) -> None:
         self._novelty = novelty
         self._goal = goal_scorer
         self._thymos = thymos_modulator
-        self._precision = precision
+
         # Announce a deliberate downgrade (a factor that ships REAL by default but
         # was set to the static negative control) so it is visible in operator
         # logs rather than silent. Shipped defaults (thymos=real, goal=staged
@@ -98,14 +98,7 @@ class RuleBasedSalience:
         goal = _clamp(await self._goal.relevance(event))
         thymos = _clamp(await self._thymos.modulate(event))
 
-        weight = 1.0
-        if self._precision is not None:
-            weight = self._precision.weight(event.source)
-
-        priority = _clamp(intensity * novelty * goal * weight)
-
-        if self._precision is not None:
-            self._precision.observe(event.source, intensity)
+        priority = _clamp(intensity * novelty * goal)
 
         getter = getattr(self._thymos, "contrast_gain", None)
         gain = float(getter()) if callable(getter) else 0.0

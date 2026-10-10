@@ -5,13 +5,10 @@ from datetime import datetime, timezone
 
 import pytest
 
-from kaine.boot.errors import ConfigurationError
-from kaine.boot.wiring import make_source_precision
 from kaine.bus.schema import Event
 from kaine.modules.thymos.modulator import StateModulator
 from kaine.modules.thymos.state import DimensionalState
 from kaine.workspace.novelty import NoveltyTracker
-from kaine.workspace.precision import SourcePrecision
 from kaine.workspace.salience import RuleBasedSalience, arousal_contrast
 from kaine.workspace.strategies import StaticGoalScorer, StaticThymosModulator
 
@@ -24,61 +21,6 @@ def _ev(intensity: float = 0.8, source: str = "soma", payload=None) -> Event:
         salience=intensity,
         timestamp=datetime.now(timezone.utc),
     )
-
-
-def test_precision_weights_after_warmup():
-    sp = SourcePrecision()
-    for i in range(200):
-        a_int = 0.2 if i % 2 == 0 else 0.7
-        b_int = 0.8 if i % 25 == 24 else 0.4
-        sp.observe("a", a_int)
-        sp.observe("b", b_int)
-        sp.observe("c", 0.1)
-
-    assert sp._count["a"] == 200
-    # Precision orders the sources by how steady their surprise is: the
-    # alternating source is least reliable, the constant one most.
-    assert sp.weight("a") < sp.weight("b") < sp.weight("c")
-    assert sp.weight("a") < 1.0 < sp.weight("c")
-    for src in ("a", "b", "c"):
-        assert 0.5 <= sp.weight(src) <= 1.5
-
-
-def test_precision_weight_neutral_until_warmed_and_for_unknown():
-    sp = SourcePrecision()
-    for _ in range(19):
-        sp.observe("a", 0.5)
-        sp.observe("b", 0.5)
-    assert sp.weight("a") == 1.0
-    assert sp.weight("b") == 1.0
-    assert sp.weight("c") == 1.0
-    assert sp.weight("unknown") == 1.0
-
-
-@pytest.mark.parametrize(
-    "override",
-    [
-        {"sample_weight": 0.0},
-        {"sample_weight": 1.1},
-        {"warmup_samples": 0},
-        {"bounds": (0.0, 1.5)},
-        {"bounds": (0.5, 0.9)},
-        {"bounds": (1.5, 2.0)},
-        {"variance_floor": 0.0},
-        {"min_sources": 0},
-    ],
-)
-def test_source_precision_rejects_invalid_arguments(override):
-    defaults = {
-        "sample_weight": 0.02,
-        "warmup_samples": 20,
-        "bounds": (0.5, 1.5),
-        "variance_floor": 1e-4,
-        "min_sources": 3,
-    }
-    defaults.update(override)
-    with pytest.raises(ValueError):
-        SourcePrecision(**defaults)
 
 
 def test_arousal_contrast_identity_and_values():
@@ -97,7 +39,7 @@ def test_arousal_contrast_identity_and_values():
 
 
 @pytest.mark.asyncio
-async def test_rule_based_salience_without_precision_is_original_product():
+async def test_rule_based_salience_is_original_product_at_zero_gain():
     s = RuleBasedSalience(
         novelty=NoveltyTracker(window=32),
         goal_scorer=StaticGoalScorer(1.0),
@@ -153,16 +95,28 @@ async def test_arousal_contrast_preserves_order_and_sharpens():
     assert high / low > 4.0
 
 
-def test_make_source_precision_switch_and_bounds():
-    assert make_source_precision({"syneidesis": {"precision_weighting": False}}) is None
-    sp = make_source_precision({})
-    assert isinstance(sp, SourcePrecision)
+@pytest.mark.asyncio
+async def test_steady_source_does_not_suppress_alerts():
+    strategy = RuleBasedSalience(
+        novelty=NoveltyTracker(window=32),
+        goal_scorer=StaticGoalScorer(1.0),
+        thymos_modulator=StaticThymosModulator(1.0),
+    )
+    fresh = RuleBasedSalience(
+        novelty=NoveltyTracker(window=32),
+        goal_scorer=StaticGoalScorer(1.0),
+        thymos_modulator=StaticThymosModulator(1.0),
+    )
+    expected = await fresh.score(
+        _ev(0.8, source="audition", payload={"p": "fresh"}), context={}
+    )
 
-    with pytest.raises(ConfigurationError):
-        make_source_precision(
-            {"syneidesis": {"precision_weighting": True, "precision_bounds": [0.5]}}
+    for i in range(600):
+        await strategy.score(
+            _ev(0.1, source="thymos", payload={"i": i}), context={}
         )
-    with pytest.raises(ConfigurationError):
-        make_source_precision(
-            {"syneidesis": {"precision_weighting": True, "precision_bounds": (0.0, 1.5)}}
-        )
+        if i % 10 == 9:
+            score = await strategy.score(
+                _ev(0.8, source="audition", payload={"a": i}), context={}
+            )
+            assert score == pytest.approx(expected, abs=1e-9)

@@ -24,7 +24,7 @@ chronos = true
 topos = true
 audition = true
 lingua = true
-# Affect/arousal — the precision core: arousal sets the gain on the competition and
+# Affect/arousal — the global gain: arousal sets the gain and contrast of the competition and
 # is itself moved by perceptual surprise. Part of the minimal base-thesis machinery
 # (without it the workspace shows no interest or arousal in stimuli), NOT one of the
 # richer faculties deferred with the rest.
@@ -76,6 +76,11 @@ transcription_enabled = false
 # Acoustic perception path ON: every window is encoded and scored by change +
 # forward-model prediction error → audition.perception competes in the workspace.
 general_audition = true
+
+[lingua]
+# Greedy decoding (temperature 0) for the planned runs, so what the language organ
+# voices is a deterministic function of its input (paper §6).
+temperature = 0.0
 
 [volition]
 # Self-initiated voice: speech comes from the entity's OWN precision-weighted
