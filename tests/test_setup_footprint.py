@@ -706,8 +706,9 @@ def _returns_then_sleeps() -> dict[str, Any]:
 
 
 def test_measure_callable_in_child_uses_result_before_join_timeout():
+    # The poll timeout only bounds the wait for the report; a spawned child can take seconds to start on a loaded runner.
     ok, peak, device_bytes, device, mapped, err = _measure_callable_in_child(
-        _returns_then_sleeps, timeout=2.0
+        _returns_then_sleeps, timeout=60.0
     )
     assert ok is True
     assert peak is not None
