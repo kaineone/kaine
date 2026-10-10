@@ -187,6 +187,9 @@ def test_preview_lists_contents_and_excluded_note(tmp_path: Path):
 
 def test_preview_never_sends(tmp_path: Path, monkeypatch):
     """--preview CLI flag must build and print but never call send_or_write."""
+    # Isolate from the repo's operator config (chdir so the relative
+    # OPERATOR_CONFIG_PATH resolves under tmp and finds nothing).
+    monkeypatch.chdir(tmp_path)
     from kaine.transfer import email_request as email_mod
 
     send_called = []
@@ -304,8 +307,11 @@ def test_research_loader_applies_operator_override(tmp_path: Path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_cli_send_eof_fails_safe(tmp_path: Path):
+def test_cli_send_eof_fails_safe(tmp_path: Path, monkeypatch):
     """EOF at the confirm prompt must abort without sending."""
+    # Isolate from the repo's operator config (chdir so the relative
+    # OPERATOR_CONFIG_PATH resolves under tmp and finds nothing).
+    monkeypatch.chdir(tmp_path)
     from kaine.research.__main__ import main
     from kaine.transfer import email_request as email_mod
 
@@ -342,8 +348,11 @@ def test_cli_send_eof_fails_safe(tmp_path: Path):
     assert not send_called, "send_or_write must NOT be called when input is EOF"
 
 
-def test_cli_send_decline_fails_safe(tmp_path: Path):
+def test_cli_send_decline_fails_safe(tmp_path: Path, monkeypatch):
     """Answering 'n' at the recipient-confirm prompt must not send."""
+    # Isolate from the repo's operator config (chdir so the relative
+    # OPERATOR_CONFIG_PATH resolves under tmp and finds nothing).
+    monkeypatch.chdir(tmp_path)
     import unittest.mock as mock
 
     from kaine.research.__main__ import main
@@ -380,8 +389,11 @@ def test_cli_send_decline_fails_safe(tmp_path: Path):
     assert not send_called
 
 
-def test_cli_send_confirm_calls_send_or_write(tmp_path: Path):
+def test_cli_send_confirm_calls_send_or_write(tmp_path: Path, monkeypatch):
     """Answering 'y' at both prompts should call send_or_write."""
+    # Isolate from the repo's operator config (chdir so the relative
+    # OPERATOR_CONFIG_PATH resolves under tmp and finds nothing).
+    monkeypatch.chdir(tmp_path)
     import unittest.mock as mock
 
     from kaine.research.__main__ import main
@@ -817,11 +829,14 @@ def test_auto_discovered_inadmissible_run_exportable_via_override(tmp_path: Path
     )
 
 
-def test_cli_preview_blocks_on_inadmissible_eval_root(tmp_path: Path):
+def test_cli_preview_blocks_on_inadmissible_eval_root(tmp_path: Path, monkeypatch):
     """The REAL entry point: `python -m kaine.research --preview` against an
     eval_root holding an inadmissible run must fail (non-zero) and NOT print a
     clean preview — proving the gate fires at the operator CLI, not just in the
     library."""
+    # Isolate from the repo's operator config (chdir so the relative
+    # OPERATOR_CONFIG_PATH resolves under tmp and finds nothing).
+    monkeypatch.chdir(tmp_path)
     from io import StringIO
 
     from kaine.research.__main__ import main
@@ -1045,9 +1060,12 @@ def test_cli_installs_encryptor_before_scan(tmp_path: Path, monkeypatch):
         set_state_encryptor(StateEncryptor(CryptoConfig()))
 
 
-def test_cli_expected_stream_flag_triggers_missing_stream_block(tmp_path: Path):
+def test_cli_expected_stream_flag_triggers_missing_stream_block(tmp_path: Path, monkeypatch):
     """P2 wiring: --expected-stream reaches scan_run so the missing-stream half
     of the completeness gate can fire at the real entry point."""
+    # Isolate from the repo's operator config (chdir so the relative
+    # OPERATOR_CONFIG_PATH resolves under tmp and finds nothing).
+    monkeypatch.chdir(tmp_path)
     from io import StringIO
 
     from kaine.research.__main__ import main
