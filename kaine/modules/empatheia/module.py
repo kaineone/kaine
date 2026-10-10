@@ -263,7 +263,7 @@ class Empatheia(BaseModule):
     async def _publish_agent_model(
         self, model: AgentModel, *, source_label: str | None = None
     ) -> None:
-        """Publish empatheia.agent_model with numeric metadata only.
+        """Publish empatheia.agent_model: numeric metadata and labels, no content.
 
         If source_label is provided it is included so listeners can map the
         model back to the originating audio channel.
