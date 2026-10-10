@@ -345,6 +345,7 @@ def _cosine(a, b):
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-12))
 
 
+@pytest.mark.no_data_root
 @pytest.mark.skipif(
     not (models_dir() / "dasheng_base" / "model.safetensors").exists(),
     reason="dasheng weights not provisioned",
@@ -372,6 +373,7 @@ def test_dasheng_real_weights_tone_vs_noise():
     assert e_tone == e_tone2
 
 
+@pytest.mark.no_data_root
 @pytest.mark.skipif(
     not (models_dir() / "wavjepa_base" / "model.safetensors").exists(),
     reason="wavjepa weights not provisioned",
