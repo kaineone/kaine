@@ -143,6 +143,7 @@ async def test_emotion_event_publishes_agent_model(bus: AsyncBus):
         assert "interaction_count" in payload
         assert "reliability" in payload
         assert "agent_id" in payload
+        assert payload["source_label"] == "live_mic"
     finally:
         await emp.shutdown()
 

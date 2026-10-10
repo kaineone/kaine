@@ -415,3 +415,35 @@ async def test_empatheia_agent_model_updates_familiarity_cache(bus: AsyncBus):
         assert thymos._familiarity_cache["alice"] == pytest.approx(0.65)
     finally:
         await thymos.shutdown()
+
+@pytest.mark.asyncio
+async def test_familiarity_cached_under_source_label(bus: AsyncBus):
+    """empatheia.agent_model events cache familiarity under source_label too."""
+    cfg = CouplingConfig(enabled=True)
+    thymos = Thymos(bus, coupling=cfg, publish_interval_s=999.0)
+    await thymos.initialize()
+    try:
+        await bus.publish(
+            Event(
+                source="empatheia",
+                type="empatheia.agent_model",
+                payload={
+                    "agent_id": "media:live_mic",
+                    "source_label": "live_mic",
+                    "familiarity": 0.65,
+                },
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+        for _ in range(60):
+            await asyncio.sleep(0.02)
+            if "live_mic" in thymos._familiarity_cache:
+                break
+
+        assert "live_mic" in thymos._familiarity_cache
+        assert thymos._familiarity_cache["live_mic"] == pytest.approx(0.65)
+        assert "media:live_mic" in thymos._familiarity_cache
+        assert thymos._familiarity_cache["media:live_mic"] == pytest.approx(0.65)
+    finally:
+        await thymos.shutdown()

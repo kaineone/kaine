@@ -833,6 +833,15 @@ def test_shipped_config_research_submission_disabled():
     )
 
 
+def test_make_lingua_accepts_outcome_reply_window(tmp_path):
+    # Lingua factory should accept cycle-specific config keys it does not consume.
+    lingua = make_lingua(
+        _bus(),
+        {"intent_log_path": str(tmp_path / "i.jsonl"), "outcome_reply_window_s": 45},
+    )
+    assert lingua is not None
+
+
 def test_make_lingua_api_key_from_env(monkeypatch, tmp_path):
     # The model-server key may come from the env (kept out of config files).
     monkeypatch.setenv("KAINE_MODEL_SERVER_API_KEY", "sk-env")
