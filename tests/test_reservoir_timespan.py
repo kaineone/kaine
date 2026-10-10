@@ -259,3 +259,37 @@ async def test_chronos_timespan_from_featurizer_dt(bus: AsyncBus):
 
     assert net.calls[0] == pytest.approx(1.0)
     assert net.calls[-1] > 1.5
+
+
+@pytest.mark.asyncio
+async def test_chronos_long_pause_does_not_distort_later_steps(bus: AsyncBus):
+    class TimespanNetwork:
+        accepts_timespan: bool = True
+
+        def __init__(self) -> None:
+            self.calls: list[float] = []
+
+        def tick(self, feature_vec: list[float], timespan: float = 1.0) -> list[float]:
+            self.calls.append(timespan)
+            return [0.0] * 4
+
+    times = [0.0]
+    featurizer = SnapshotFeaturizer(clock=lambda: times[0])
+    net = TimespanNetwork()
+    chronos = Chronos(
+        bus,
+        featurizer=featurizer,
+        network=net,
+    )
+
+    for i in range(11):
+        times[0] = i * 0.2
+        await chronos.on_workspace(_empty_snapshot())
+
+    times[0] = 602.0
+    await chronos.on_workspace(_empty_snapshot())
+    times[0] = 602.2
+    await chronos.on_workspace(_empty_snapshot())
+
+    assert net.calls[-2] == pytest.approx(10.0)
+    assert 0.5 <= net.calls[-1] <= 1.5

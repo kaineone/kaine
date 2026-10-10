@@ -366,7 +366,7 @@ class Soma(BaseModule):
 
         # --- Self-rhythm interoception (fills zero-padded feature slots) ---
         # slots 4..6 keep the width at 8 for the wetware interoceptive model;
-        # sin/cos avoid a jump where the phase wraps. slot 7 stays 0.0.
+        # sin/cos avoid a jump where the phase wraps; slot 7 carries GPU memory use.
         if self._self_rhythm is not None:
             rhythm_state = self.self_rhythm_state()
             if rhythm_state is not None:
@@ -374,7 +374,6 @@ class Soma(BaseModule):
                 feature_vec[4] = 0.5 + 0.5 * math.sin(phase)
                 feature_vec[5] = 0.5 + 0.5 * math.cos(phase)
                 feature_vec[6] = min(1.0, 2.0 * amplitude)
-                # slot 7 intentionally stays 0.0
 
         if self._in_hypnos:
             self._forward_model.suspended = True
