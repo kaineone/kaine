@@ -122,7 +122,7 @@ class CognitiveCycle:
         # logical period can never diverge.
         self._target_tick_period = 1.0 / self._processing_rate
         self._experiential_rate = float(experiential_rate_hz or processing_rate_hz)
-        # Adaptive conscious access (adaptive-access-rate). The configured
+        # Adaptive access (adaptive-access-rate). The configured
         # experiential rate is the RESTING rate; when a controller is wired the
         # rate used for promotion is recomputed every tick from arousal and the
         # salience of module reports, between the resting rate and the

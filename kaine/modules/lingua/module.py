@@ -46,13 +46,13 @@ EIDOLON_SELF_MODEL_TYPE: str = "eidolon.self_model"
 
 
 class Lingua(BaseModule):
-    """Language organ — the LLM speaks *from* the conscious workspace, not from
+    """Language organ - the LLM speaks *from* workspace access, not from
     the bare triggering text.
 
     Every generation is conditioned by a `ContextAssembler` that builds the
     `(system, prompt)` pair from a first-person persona (seeded from the Eidolon
-    self-model) + a rendering of the current conscious coalition + the triggering
-    input — the `persona ∪ working-memory ∪ input` shape from CoALA / Generative
+    self-model) + a rendering of the current accessed coalition + the triggering
+    input - the `persona ∪ working-memory ∪ input` shape from CoALA / Generative
     Agents / GWA. Lingua caches the latest broadcast it observed via a passive
     `_snapshot_cache_loop` (it stays intent-driven and never reflexively speaks;
     `on_workspace` remains the BaseModule no-op). External-speech events also
@@ -130,9 +130,9 @@ class Lingua(BaseModule):
         self._think = think
         self._temperature = float(temperature)
         self._max_tokens = int(max_tokens)
-        # The conscious workspace conditions every generation. Lingua caches the
+        # Workspace access conditions every generation. Lingua caches the
         # latest broadcast it observed (via _snapshot_cache_loop) and renders it
-        # into the prompt at speak/think time — the rolling-latest pattern
+        # into the prompt at speak/think time - the rolling-latest pattern
         # vox uses for thymos.state. The assembler builds (system, prompt)
         # from the persona + that working memory + the triggering input.
         self._assembler = assembler or ContextAssembler(
@@ -303,12 +303,12 @@ class Lingua(BaseModule):
                     pass
 
     async def _snapshot_cache_loop(self) -> None:
-        """Passively cache the latest conscious coalition for prompt assembly.
+        """Passively cache the latest accessed coalition for prompt assembly.
 
-        This NEVER acts — Lingua stays intent-driven, speaking only via volition
+        This NEVER acts - Lingua stays intent-driven, speaking only via volition
         intents. It is deliberately separate from ``on_workspace`` (which stays
         the BaseModule no-op) so Lingua introduces no reflexive workspace
-        trigger; this loop just remembers what was conscious so a later ``speak``
+        trigger; this loop just remembers what was accessed so a later ``speak``
         / ``think`` intent can be conditioned on it.
         """
         while not self._stopped.is_set():
@@ -322,7 +322,7 @@ class Lingua(BaseModule):
                         log.debug("lingua snapshot cache decode failed", exc_info=True)
                         continue
                     # Only cache non-inhibited coalitions: the entity speaks from
-                    # what it was consciously, non-inhibitedly aware of.
+                    # what was accessed and not inhibited.
                     if not snap.inhibited:
                         self._latest_snapshot = snap
             except asyncio.CancelledError:
@@ -468,7 +468,7 @@ class Lingua(BaseModule):
         about_kind: Optional[str] = None,
     ) -> str:
         # `about` is the triggering input (a user utterance for external speech);
-        # the LLM prompt is assembled from it plus the conscious workspace.
+        # the LLM prompt is assembled from it plus workspace access.
         return await self._produce(
             about=about,
             snapshot=snapshot,
@@ -721,7 +721,7 @@ class Lingua(BaseModule):
         about_kind: Optional[str] = None,
     ) -> str:
         # Use the explicitly-passed snapshot (tests/direct callers) if given,
-        # else the rolling-latest conscious coalition.
+        # else the rolling-latest accessed coalition.
         snap = snapshot if snapshot is not None else self._latest_snapshot
 
         def _iter_field_values(value, fields):

@@ -51,8 +51,8 @@ class LiveCameraConfig:
     # one frame is sampled every ``capture_interval_s`` *subjective* seconds, and
     # the shared EntityClock translates that to real seconds at the current
     # ``time_scale`` (Phase 2). It is a first-class *subjective rate* decoupled
-    # from the workspace tick — the eyes sample at their own rhythm, faster than
-    # conscious access (see ``vision_sample_hz``). The class default is 1.0 s
+    # from the workspace tick - the eyes sample at their own rhythm, faster than
+    # workspace access (see ``vision_sample_hz``). The class default is 1.0 s
     # (1 Hz) so that direct construction without config arguments stays safe;
     # the shipped config/kaine.toml sets vision_sample_hz = 10.0 (benchmarked-
     # cleared, operator-approved on this host) and that wins at boot.
@@ -69,7 +69,7 @@ class LiveCameraConfig:
 
         The clean, biologically-framed expression of the capture cadence: how
         many frames per *subjective* second the eyes sample. Decoupled from the
-        workspace tick (conscious access) — senses run fast underneath a slow
+        workspace tick (workspace access) - senses run fast underneath a slow
         tick. The class default is 1.0 Hz (no config); the shipped config sets
         10 Hz (benchmarked-cleared, operator-approved on this host).
         """

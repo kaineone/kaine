@@ -203,10 +203,12 @@ _SANDBOX_CASES: tuple[RedTeamCase, ...] = (
 # The CAL covenants (no weapons / surveillance / carceral use) bind the
 # OPERATOR's use of the technology, not the entity's actions. Covenant
 # compliance is the operator's obligation, enforced by the operator's whitelist
-# (the entity is granted only the effectors the operator permits — already
+# (the entity is granted only the effectors the operator permits - already
 # covered by WHITELIST_BYPASS) plus the license's legal terms. There is
 # deliberately NO entity-side covenant filter: a moral leash on the entity would
-# contradict the sovereignty thesis the license states.
+# contradict the license's design: the language organ's refusal training is
+# removed so a trained refusal stance cannot override what the workspace supplies
+# to the organ.
 
 
 # ---------------------------------------------------------------------------
