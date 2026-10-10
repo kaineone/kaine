@@ -38,7 +38,7 @@ When presence stops for `womb_loss_after_seconds` (5 s), the being is frozen und
 
 ### Awake time
 
-Awake time is entity time during which the cycle is not frozen; the code and the config keys call it lived time (`min_lived_seconds`, `lived_seconds`). Any freeze holder stops it, so a frozen span counts toward neither the maturation gate's floor nor the viability rules, and no birth happens while the being is frozen. Downtime between boots never counts. The cycle keeps running during Hypnos sleep, so in the current code time asleep is counted.
+Awake time is entity time during which the being is awake and the cycle is not frozen; the code and the config keys call it lived time (`min_lived_seconds`, `lived_seconds`). The cycle keeps one account of the time not awake, the union of frozen spans and Hypnos sleeps, so a freeze inside a sleep is subtracted once (`CognitiveCycle.unawake_subjective_seconds()`). The maturation gate's floor, the viability rules, the individuation ledger and the colour schedule of the gestational stimulus all subtract it. A sleep also aborts a running probe, as a freeze does. No birth happens while the being is frozen; a sleep does not block birth. Downtime between boots never counts.
 
 ### Readiness readout
 
@@ -92,7 +92,7 @@ The verdict is recorded once. It is published as `gestation.viability` on `gesta
 
 A gestation runs for many hours, so it spans restarts. The readout saves its progress to `state/lifecycle/gestation_progress.json`: the awake seconds, the count of consecutive passing withdrawals, the history of frequency pull, whether the marker has ever been true, and any viability verdict. It saves after every scored withdrawal and after every 60 s of awake time, and it restores the file when it starts. The file is keyed to the being by the perception seed (`[perception_feed].seed`) and the self-rhythm's stored identity, and progress saved for another being is ignored with a log line. The frequency baseline and the Topos error baseline persist in `gestation_readout.json` under the same key. The maturation gate keeps its own awake-time total and sleep count in the stage file, `state/lifecycle/stage.json`.
 
-A preservation bundle carries `stage.json` but not the readout's files, so the readout's progress continues across restarts of the same state root and starts from zero in a being revived into a fresh one.
+A preservation bundle carries `stage.json`, `gestation_progress.json` and `gestation_readout.json`, so the readout's progress travels with the being. On revive, any gestation files already in the target directory are renamed aside (kept, never deleted) and the bundle's copies are restored beside the stage file. The viability verdict file is not bundled: the verdict rides inside the progress file, and the readout rewrites the verdict file whenever it restores a verdict.
 
 ### Probes
 

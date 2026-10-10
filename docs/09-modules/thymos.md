@@ -120,8 +120,8 @@ The Topos, Audition and Empatheia stream names are fixed. The Soma, Chronos, Mne
 | Stream | Event type | When | Intensity |
 |---|---|---|---|
 | `thymos.out` | `thymos.state` | Every `publish_interval_s` of entity time, on its own timer and after a broadcast once the interval has passed; carries the VAD state, the drives and the current emotion label, plus `reset: true` after a sleep reset | `baseline_salience`; `alert_salience` after a reset |
-| `thymos.out` | `thymos.emotion` | On a change of categorical emotion; carries the five scores, the state, `norm_compatibility_available` and `goal_significance_method` | `alert_salience`, or `baseline_salience` for `neutral` |
-| `thymos.out` | `thymos.drive` | On a threshold crossing; carries the drive name and value | `alert_salience` |
+| `thymos.out` | `thymos.emotion` | On a change of categorical emotion; carries the five scores, the state, `norm_compatibility_available`, `goal_significance_method` and `alert` (true for a non-neutral emotion) | `alert_salience`, or `baseline_salience` for `neutral` |
+| `thymos.out` | `thymos.drive` | On a threshold crossing; carries the drive name and value, and `alert: true`, so a crossing raises the access rate | `alert_salience` |
 | `thymos.out` | `thymos.goal` | On a goal lifecycle event (`added`, `completed`, `abandoned`) | `baseline_salience` |
 
 Thymos reports at these fixed levels; its events are not graded by surprise.
@@ -180,7 +180,7 @@ A `coupling_max_rate_per_s` key is accepted and ignored, so older local configs 
 Coupling is off in the default config and in the base-thesis form. When `[thymos.coupling].enabled = true`, Thymos records each `audition.emotion` event as a transient signal and never writes it to the dimensional state:
 
 1. It maps the perceived category to a pleasantness and an intensity through the `EMOTION_VAD` table.
-2. It looks up the speaker's familiarity, keyed on `source_label`, in the cache filled from `empatheia.agent_model` events (0.0 when unknown).
+2. It looks up the speaker's familiarity, keyed on the event's `source_label` (the audio channel), in the cache filled from `empatheia.agent_model` events, which carry the `source_label` of the audio event that updated the agent model (0.0 when unknown).
 3. It computes `weight = clip(coupling_base + coupling_familiarity_gain × familiarity, 0, coupling_ceiling)`.
 4. It stores `{pleasantness, intensity, weight, ts}`.
 

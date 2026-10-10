@@ -151,7 +151,7 @@ The context vector is a 24-component featurization of the adopted members plus t
 | 22 | Broadcast indicator, always 1 |
 | 23 | Intensity mass of Audition |
 
-The context records which modules' reports gained access, which event types, how strongly and how recently. It carries no payloads. Topos and Soma measure the age on the entity clock; Audition has no entity clock and uses the monotonic wall clock, which equals entity time at the default time scale.
+The context records which modules' reports gained access, which event types, how strongly and how recently. It carries no payloads. Its age is the entity time since the broadcast was published: the cycle stamps each broadcast with `published_at` on the entity clock, and Topos, Audition and Soma read the age on the same shared clock when they form a prediction. A broadcast without the stamp is aged from its receipt, and the age is never negative.
 
 The context enters each processor's forward model as an extra input alongside the module's own recent inputs: the Topos forward model, both Audition forward models (the acoustic path and the tone path), and Soma's readout. The weights that read the context are learned online with the rest of the model, so each processor learns how much the shared context helps it predict its own input. Before the first adoption the context input is all zeros. Adaptation pauses during sleep, as it does for the rest of each forward model. Chronos does not hold a context; the broadcast is its input.
 

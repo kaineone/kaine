@@ -88,7 +88,7 @@ Geometry is taken from `[topos]`.
 
 The readout probes briefly change the maternal drive that a gestating entity perceives. They are bounded, announced on `gestation.out` as `gestation.probe` events, and never run while the entity is frozen (including during a welfare response), within a readout period after boot or thaw, or within 60 seconds of another probe. Their timing is jittered from the run seed so the entity cannot learn the schedule, while a research run with the same seed reproduces it exactly. All durations are entity seconds.
 
-The readout saves its progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) to `gestation_progress.json` beside its readout file, by default in `state/lifecycle/`. The file is keyed to the being's seed and self-rhythm; on boot the readout restores it when the key matches, so a gestation continues where it left off after a restart.
+The readout saves its progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) to `gestation_progress.json` beside its readout file, by default in `state/lifecycle/`. The file is keyed to the being's seed and self-rhythm; on boot the readout restores it when the key matches, so a gestation continues where it left off after a restart. Preservation bundles carry this file and `gestation_readout.json`, so the progress also survives a revive.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

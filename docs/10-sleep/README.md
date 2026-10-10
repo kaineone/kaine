@@ -4,9 +4,9 @@ Hypnos is KAINE's analog of sleep: a fatigue-triggered offline period during whi
 
 ## What sleep does
 
-A sleep runs between a `hypnos.sleep.started` and a `hypnos.sleep.completed` event, and the cognitive cycle keeps running through it. On `hypnos.sleep.started`, Topos, Audition, Soma and Chronos stop updating their forward models; they keep predicting and reporting, and resume learning on `hypnos.sleep.completed`. Soma's fatigue decays three times faster during the window. At the end Thymos's affective reset returns valence, arousal and dominance to baseline and clears the drives, and Soma resets its fatigue and regulation state when `hypnos.sleep.completed` arrives. Because every sleep ends with that reset, arousal cannot drift across a whole run.
+A sleep runs between a `hypnos.sleep.started` and a `hypnos.sleep.completed` event, and the cognitive cycle keeps running through it. When a sleep starts, Hypnos switches the perception locus to `off` and pauses the shared stimulus playlist; when it ends, including after a failure or cancellation, it restores the pre-sleep locus and resumes the playlist from the pause point. On `hypnos.sleep.started`, Topos, Audition, Soma and Chronos stop updating their forward models; they keep predicting and reporting, and resume learning on `hypnos.sleep.completed`. Soma's fatigue decays three times faster during the window. At the end Thymos's affective reset returns valence, arousal and dominance to baseline and clears the drives, and Soma resets its fatigue and regulation state when `hypnos.sleep.completed` arrives. Because every sleep ends with that reset, arousal cannot drift across a whole run.
 
-The consolidation phases act on memory, the world model and preference data. The base-thesis form has none of these, so in that form a sleep suspends adaptation, resets affect and drives, and resets fatigue, and the consolidation phases do no work. They begin to work when Mnemos and Phantasia join. In particular, phase 2 is the only place the perception locus is switched off and the stimulus playlist paused, and it runs only when Mnemos is present, so in the base-thesis form the perceptual feed keeps running during a sleep.
+The consolidation phases act on memory, the world model and preference data. The base-thesis form has none of these, so in that form a sleep suspends adaptation, resets affect and drives, and resets fatigue, and the consolidation phases do no work. They begin to work when Mnemos and Phantasia join. The feed pause does not depend on them: it covers every sleep. Sleep time does not count as awake time (see [Gestation on one host](../06-operation/gestation.md)).
 
 ## Fatigue
 
@@ -49,7 +49,8 @@ sequenceDiagram
 
     Hypnos->>Bus: hypnos.sleep.started
     Note over Hypnos: Phase 1: set_frequency(0.5); mnemos.consolidate_now()
-    Note over Hypnos: Phase 2: downscale; locus off, playlist paused; replay; restore
+    Note over Hypnos: Locus off and playlist paused for the whole sleep
+    Note over Hypnos: Phase 2: downscale; replay
     Note over Hypnos: Phase 3: cross-period traces, Phantasia, hypnos.association
     Note over Hypnos: Phase 4: thymos.affective_reset()
     Note over Hypnos: Phase 5: consolidation divergence; voice-alignment gates
@@ -66,7 +67,7 @@ Phase 1 calls `set_frequency(0.5)` on every active module, a no-op unless the os
 
 ### Phase 2: deep consolidation
 
-Phase 2 needs Mnemos and otherwise returns at once with `skipped`. It scales every memory activation vector by `downscale_factor` (0.9), following the synaptic homeostasis hypothesis (Tononi and Cirelli 2014). It then switches the perception locus to `off`, pauses the shared stimulus playlist, runs `mnemos.replay_now()`, and restores the pre-sleep locus and resumes the playlist in a `finally` block, falling back to `physical` when no locus was remembered. Metadata: `vectors_downscaled`, `downscale_factor`, `perception_suspended`, `perception_restored`, `replay_events` and `replay_window_s`.
+Phase 2 needs Mnemos and otherwise returns at once with `skipped`. It scales every memory activation vector by `downscale_factor` (0.9), following the synaptic homeostasis hypothesis (Tononi and Cirelli 2014). It then runs `mnemos.replay_now()` while perception is already suspended for the sleep. Metadata: `vectors_downscaled`, `downscale_factor`, `replay_events` and `replay_window_s`.
 
 ### Phase 3: associative replay
 

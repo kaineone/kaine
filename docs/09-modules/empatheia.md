@@ -35,7 +35,7 @@ A background task, `_audition_consumer_loop`, reads these events. An emotion eve
 
 | Stream | Event type | Payload fields | Intensity |
 |---|---|---|---|
-| `empatheia.out` | `empatheia.agent_model` | `agent_id`, `agent_label`, `familiarity`, `reliability`, `interaction_count` | `baseline_salience + familiarity × (alert_salience − baseline_salience)` |
+| `empatheia.out` | `empatheia.agent_model` | `agent_id`, `agent_label`, `familiarity`, `reliability`, `interaction_count`, and `source_label` of the triggering audio event | `baseline_salience + familiarity × (alert_salience − baseline_salience)` |
 | `empatheia.out` | `empatheia.social_error` | `agent_id`, `agent_label`, `salience`, `deviation_magnitude` | `baseline_salience + deviation × (alert_salience − baseline_salience)`, capped at 1 |
 
 Both payloads hold identifiers and numbers only.
@@ -153,7 +153,7 @@ weight = min(coupling_ceiling, coupling_base + familiarity × coupling_familiari
 
 with `coupling_base = 0.05`, `coupling_familiarity_gain = 0.10` and `coupling_ceiling = 0.15` by default. The perceived emotion enters the appraisal and is never written to the entity's valence, arousal or dominance directly. See [Thymos](thymos.md).
 
-One gap remains in the current code. Thymos caches familiarity under Empatheia's `agent_id` (`operator` or `media:<channel>`) but looks it up under the emotion event's `source_label` (for example `live_mic`). The two keys never match, so the weight stays at `coupling_base` whatever the familiarity.
+Each `empatheia.agent_model` carries the `source_label` of the audio event that updated the model. Thymos caches the familiarity under that label as well as under `agent_id` (`operator` or `media:<channel>`), and looks it up by the perceived emotion's `source_label`, so a familiar channel raises the weight.
 
 ## Key files
 

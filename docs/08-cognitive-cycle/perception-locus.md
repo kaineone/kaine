@@ -132,12 +132,12 @@ The entity cannot self-switch when:
 
 ## Locus and sleep maintenance
 
-During Hypnos phase 2, external perception is suspended while memory traces replay into the workspace. Phase 2 runs only when Mnemos is present; without it (as in the base-thesis form) the phase is skipped and this suspension does not happen, and sleep then suspends the processors' forward-model adaptation without changing the locus. The suspension uses the same locus machinery:
+External perception is suspended for the whole of every Hypnos sleep, whatever modules are active, while the processors also suspend forward-model adaptation. The suspension uses the same locus machinery:
 
 - `suspend_perception()` remembers the pre-sleep desired locus and, on playlist runs, pauses the shared playlist clock so the stimulus freezes at the same moment perception stops.
-- `restore_perception()` is always called in a `finally` block; it restores the remembered pre-sleep locus and resumes the playlist clock at the exact pause point.
+- `restore_perception()` is called in a `finally` block when the sleep ends, so it also runs after a failure or cancellation; it restores the remembered pre-sleep locus and resumes the playlist clock at the exact pause point.
 
-Suspending perception keeps the entity from perceiving the room while it re-processes memory traces. The `finally` block means perception is never left suspended if the replay phase raises, and pausing the playlist clock keeps the stimulus in step with the locus. If a gestation lock is active when sleep calls `write_desired_locus("off")`, the write is ignored because the gestation holder is the only writer allowed.
+Suspending perception keeps the entity from perceiving while it sleeps. The `finally` block means perception is never left suspended if the sleep pipeline raises, and pausing the playlist clock keeps the stimulus in step with the locus. If a gestation lock is active when sleep calls `write_desired_locus("off")`, the write is ignored because the gestation holder is the only writer allowed.
 
 ## Event types
 

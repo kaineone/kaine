@@ -103,7 +103,7 @@ The full `[lingua]` reference is in the [modules configuration page](../appendix
 | `gguf_path` | string | unset | Directory of the local GGUF for the in-process backend |
 | `gguf_filename` | string | unset | File name of the local GGUF for the in-process backend |
 
-The utterance-outcome observer reads `[lingua].outcome_reply_window_s` (30 s by default), but the Lingua factory's key check does not accept that key, so setting it in `[lingua]` currently stops boot. Leave it unset to use the default.
+The utterance-outcome observer reads `[lingua].outcome_reply_window_s` (30 s by default); the Lingua factory accepts the key and leaves it to the observer.
 
 ## How it works
 

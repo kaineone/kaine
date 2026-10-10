@@ -10,7 +10,7 @@ Three parts of the pipeline stay off unless an operator turns them on. Associati
 
 ## What a sleep is
 
-A sleep runs between a `hypnos.sleep.started` and a `hypnos.sleep.completed` event. The cognitive cycle keeps running throughout. A sleep lock stops a second sleep from starting, and nothing else waits on it.
+A sleep runs between a `hypnos.sleep.started` and a `hypnos.sleep.completed` event. The cognitive cycle keeps running throughout. A sleep lock stops a second sleep from starting, and nothing else waits on it. When the sleep starts, `enter_sleep` switches the perception locus to `off` and pauses the shared stimulus playlist; when it ends, including after a failure or cancellation, it restores the remembered pre-sleep locus (falling back to `physical`) and resumes the playlist. Sleep time does not count as awake time.
 
 The predictive processors read `hypnos.out` and suspend forward-model adaptation for the whole window: Topos, Audition (both its acoustic and its tone forward models), Soma and Chronos. Each keeps predicting and reporting, but none updates its weights until `hypnos.sleep.completed` arrives. Soma's fatigue decays three times faster while the window is open.
 
@@ -21,7 +21,7 @@ At the end of every sleep, phase 4 calls Thymos's `affective_reset()`, which ret
 With Mnemos, Phantasia and voice alignment off, the consolidation phases do no work:
 
 - Phase 1 calls the oscillator hook, a no-op unless the oscillatory layer is active, and skips consolidation.
-- Phase 2 returns at once, so the perception locus is not switched off and the stimulus playlist does not pause.
+- Phase 2 returns at once. The perceptual feed is paused for the whole sleep in any case (see [Sleep](../10-sleep/README.md)).
 - Phase 3 is skipped by its flag.
 - Phase 4 resets Thymos.
 - Phase 5 computes the consolidation-divergence metric and skips training.
@@ -49,7 +49,7 @@ flowchart TD
     ST --> P1
     P1["Phase 1: light consolidation\n• set_frequency(0.5) on active modules\n• mnemos.consolidate_now()"]
     P1 --> P2
-    P2["Phase 2: deep consolidation (needs Mnemos)\n• mnemos.downscale_activations(0.9)\n• perception locus off, playlist paused\n• mnemos.replay_now()\n• locus and playlist restored"]
+    P2["Phase 2: deep consolidation (needs Mnemos)\n• mnemos.downscale_activations(0.9)\n• mnemos.replay_now()"]
     P2 --> P3
     P3["Phase 3: associative replay (flag)\n• cross-period traces\n• cue Phantasia\n• publish hypnos.association"]
     P3 --> P4
@@ -60,7 +60,7 @@ flowchart TD
     R --> E([hypnos.sleep.completed])
 ```
 
-Each phase catches its own errors, and the later phases still run after one fails. Phase 2 restores the remembered pre-sleep perception locus and resumes the playlist in a `finally` block, falling back to `physical` when no locus was remembered. Phase 3 re-injects Phantasia's scenarios as `hypnos.association` events, which compete in the workspace like any other event. The phase functions are in `kaine/modules/hypnos/phases.py`; phase 5 is driven from `kaine/modules/hypnos/module.py`.
+Each phase catches its own errors, and the later phases still run after one fails. Phase 3 re-injects Phantasia's scenarios as `hypnos.association` events, which compete in the workspace like any other event. The phase functions are in `kaine/modules/hypnos/phases.py`; phase 5 is driven from `kaine/modules/hypnos/module.py`.
 
 ## Outputs
 
