@@ -44,3 +44,8 @@ def test_voice_is_self_initiated_no_chatbot():
     cfg = _cfg()
     assert cfg["volition"]["policy"] == "self_initiated_report"
     assert cfg["volition"]["drive_initiative"] is False
+
+
+def test_language_organ_decodes_greedily():
+    cfg = _cfg()
+    assert cfg["lingua"]["temperature"] == 0.0

@@ -110,15 +110,6 @@ salience_thymos_factor = "state_modulator"
 # validation on logged runs; flip to "drive_relevance" once validated.
 salience_goal_factor = "static"
 
-# Precision weighting (precision-weighted-selection). Each source's precision is the
-# inverse variance of the intensities it publishes; a candidate's priority is weighted
-# by sqrt(precision / geometric-mean precision), clipped to precision_bounds, so a
-# source whose surprise signal fires habitually counts for less (Feldman and Friston
-# 2010). Neutral (weight 1) until three sources have precision_warmup_samples events.
-precision_weighting = true
-precision_sample_weight = 0.02
-precision_warmup_samples = 20
-precision_bounds = [0.5, 1.5]
 # Arousal contrast (adaptive gain). Above baseline arousal the score is the level
 # factor times a logistic of the priority whose slope rises to this gain at full
 # arousal, amplifying high priorities and suppressing low ones. 0 disables it.

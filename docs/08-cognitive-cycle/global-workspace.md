@@ -35,18 +35,20 @@ The snapshot is either experiential (it contains selected events) or non-experie
 `RuleBasedSalience` scores each event in two steps. A priority is the product of four factors in `[0, 1]`, and the score is the Thymos level factor times an arousal contrast of that priority:
 
 ```
-priority = clamp(intensity × novelty × goal_relevance × precision_weight)
+priority = clamp(intensity × novelty × goal_relevance)
 score    = clamp(thymos_level × C_g(priority))
 ```
 
-`precision_weight` is the source's precision relative to the other sources (below). `C_g` is the logistic `sigmoid(g·(p − 0.5))` rescaled to map 0 to 0 and 1 to 1, the identity when `g = 0`. With no precision tracker and `g = 0` the score is the original product `intensity × novelty × goal_relevance × thymos_level`.
+`C_g` is the logistic `sigmoid(g·(p − 0.5))` rescaled to map 0 to 0 and 1 to 1, the identity when `g = 0`. With `g = 0` the score is the original product `intensity × novelty × goal_relevance × thymos_level`.
+
+Precision is local to each processor: each scores its prediction error against its own recent errors before it reports, so the workspace applies no per-source weight, and arousal is the only global gain.
 
 | Factor | Source | Notes |
 |--------|--------|-------|
 | `intensity` | `event.salience` | The publishing module's self-assessed importance, validated at publish time. |
 | `novelty` | `NoveltyTracker` | Repeated events decay toward 0; novel events score 1. Window size is set by `[syneidesis].novelty_window` (default 32). |
 | `goal_relevance` | `GoalScorer` | Alignment with the current drive state. The default is the static fallback because the live `DriveRelevanceGoalScorer` is not yet validated and changes what reaches the workspace. |
-| `precision_weight` | `SourcePrecision` | The source's precision, `1 / (variance + 1e-4)` of the intensities it publishes (exponential average, weight `precision_sample_weight` per event), relative to the geometric mean over warmed sources, square-rooted and clipped to `precision_bounds` (`[0.5, 1.5]`). 1.0 until three sources have `precision_warmup_samples` events, and 1.0 when `precision_weighting = false`. A source whose surprise fires habitually counts for less; precision weighting in predictive coding (Feldman and Friston 2010). This is the term that can change which source wins. |
+
 | `thymos_level` | `ThymosModulator.modulate` | `0.2 + 0.8 × arousal`: a level factor common to every candidate, so it moves scores against the confidence threshold and report bars without reordering them. |
 | `g` (contrast) | `ThymosModulator.contrast_gain` | 0 at or below baseline arousal, rising linearly to `arousal_contrast_gain` (8) at arousal 1. Adaptive gain (Aston-Jones and Cohen 2005; Eldar, Cohen and Niv 2013): above baseline, priorities over one half are amplified and those under it suppressed, the arousal-biased competition of Mather and Sutherland (2011). Monotone, so it changes contrast and ignition, not ranking. |
 

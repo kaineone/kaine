@@ -6,11 +6,8 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from typing import Any, Mapping, Optional
 
-if TYPE_CHECKING:
-    pass
-    from kaine.workspace.precision import SourcePrecision
 from kaine.boot.common import _effective_hot_swap_mode
 from kaine.boot.errors import ConfigurationError, _require_keys
 from kaine.defaults import lingua_section_api_key
@@ -79,10 +76,6 @@ _SYNEIDESIS_ALLOWED_KEYS: set[str] = {
     "novelty_window",
     "salience_thymos_factor",
     "salience_goal_factor",
-    "precision_weighting",
-    "precision_sample_weight",
-    "precision_warmup_samples",
-    "precision_bounds",
     "arousal_contrast_gain",
 }
 
@@ -185,48 +178,6 @@ def make_salience_factors(
         )
 
     return thymos_modulator, goal_scorer, downgraded_factors
-
-
-def make_source_precision(kaine_config: dict[str, Any]) -> SourcePrecision | None:
-    """Build the optional source-precision tracker from the [syneidesis] section.
-
-    Returns ``None`` when precision weighting is disabled, otherwise a
-    :class:`kaine.workspace.precision.SourcePrecision` configured from the
-    section. Invalid values raise :class:`ConfigurationError`.
-    """
-    from kaine.workspace.precision import SourcePrecision
-
-    section = dict(kaine_config.get("syneidesis") or {})
-    if not section.get("precision_weighting", True):
-        return None
-
-    sample_weight = float(section.get("precision_sample_weight", 0.02))
-    warmup_samples = int(section.get("precision_warmup_samples", 20))
-    raw_bounds = section.get("precision_bounds", (0.5, 1.5))
-
-    try:
-        bounds = tuple(float(b) for b in raw_bounds)
-    except Exception as exc:
-        raise ConfigurationError(
-            f"[syneidesis].precision_bounds must be a pair of floats, "
-            f"got {raw_bounds!r}"
-        ) from exc
-
-    if len(bounds) != 2:
-        raise ConfigurationError(
-            f"[syneidesis].precision_bounds must contain exactly two floats, "
-            f"got {raw_bounds!r}"
-        )
-
-    try:
-        return SourcePrecision(
-            sample_weight=sample_weight,
-            warmup_samples=warmup_samples,
-            bounds=bounds,
-        )
-    except ValueError as exc:
-        raise ConfigurationError(f"Invalid precision configuration: {exc}") from exc
-
 
 def _wire_oscillators(registry: ModuleRegistry, kaine_config: dict[str, Any]) -> None:
     """Attach a live `ModuleOscillator` to every registered module when the
