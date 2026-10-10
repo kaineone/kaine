@@ -10,8 +10,10 @@ from collections import deque
 from typing import Any, Callable, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
+from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
+from kaine.modules.context import CONTEXT_DIM, BroadcastContext
 from kaine.modules.soma.detector import (
     AnomalyDetector,
     ThresholdAnomalyDetector,
@@ -129,6 +131,8 @@ class Soma(BaseModule):
         )
         self._read_interval_s = float(read_interval_s)
         self._clock = entity_clock or EntityClock()
+        # Accessed broadcast prediction context for Soma (paper Appendix A.1).
+        self._context = BroadcastContext(self._clock.now)
         self._feature_layout: int = 2
         self._last_read_time: float | None = None
         self._weights = dict(weights) if weights is not None else dict(DEFAULT_WEIGHTS)
@@ -145,6 +149,7 @@ class Soma(BaseModule):
                 units=int(forward_model_units),
                 backend=cfc_backend,
                 seed=reservoir_seed,
+                context_dim=CONTEXT_DIM,
             )
         else:
             self._forward_model = forward_model
@@ -346,6 +351,10 @@ class Soma(BaseModule):
         """Read-only access to the maternal drive provider."""
         return self._maternal_drive
 
+    async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
+        # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).
+        self._context.observe(snapshot)
+
     async def tick_once(self) -> dict[str, Any]:
         """Read metrics, evaluate, update forward model / fatigue / regulation, publish."""
         metrics = await self._reader.read_metrics()
@@ -392,12 +401,39 @@ class Soma(BaseModule):
             ts = min(10.0, max(0.0, (now_read - self._last_read_time) / self._read_interval_s))
         self._last_read_time = now_read
 
-        if getattr(self._forward_model, "accepts_timespan", False):
-            prediction_error = self._forward_model.step(feature_vec, timespan=ts)
+        if getattr(self._forward_model, "context_dim", 0) > 0:
+            ctx = self._context.vector()
+            null = (
+                self._context.null_vector(("soma", "lingua"))
+                if ctx is not None else None
+            )
+            if getattr(self._forward_model, "accepts_timespan", False):
+                prediction_error = self._forward_model.step(
+                    feature_vec, timespan=ts, context=ctx, null_context=null
+                )
+            else:
+                prediction_error = self._forward_model.step(
+                    feature_vec, context=ctx, null_context=null
+                )
         else:
-            prediction_error = self._forward_model.step(feature_vec)
+            if getattr(self._forward_model, "accepts_timespan", False):
+                prediction_error = self._forward_model.step(feature_vec, timespan=ts)
+            else:
+                prediction_error = self._forward_model.step(feature_vec)
         self._last_prediction_error = prediction_error
         self._prediction_error_window.append(prediction_error)
+
+        context_gain: Optional[float] = None
+        if (
+            getattr(self._forward_model, "last_scored_had_context", False)
+            and self._forward_model.last_null_error is not None
+            and self._prediction_error_window
+        ):
+            mean_err = sum(self._prediction_error_window) / len(self._prediction_error_window)
+            if mean_err > 0.0:
+                context_gain = (
+                    self._forward_model.last_null_error - prediction_error
+                ) / mean_err
 
         # --- Subjective clock / warm-up bookkeeping ---
         # Subjective time: the fatigue dt integral and the regulation
@@ -509,6 +545,9 @@ class Soma(BaseModule):
             "alerts": list(alert.keys),
             "alert": bool(alert.is_alert),
             "prediction_error": prediction_error,
+            # cross-module broadcast information gain, paper Appendix A.8
+            "context_gain": context_gain,
+            "context_age_s": self._context.age_s(),
             "unexpected_error": unexpected_error,
             "fatigue_value": self._fatigue.value,
             "fatigue_threshold": self._fatigue.threshold,
@@ -777,6 +816,7 @@ class Soma(BaseModule):
                     lr=getattr(fm, "lr", 1e-3),
                     backend=getattr(fm, "backend", "numpy"),
                     seed=seed,
+                    context_dim=getattr(fm, "context_dim", 0),
                 )
             elif hasattr(fm, "reservoir_seed"):
                 log.warning(
