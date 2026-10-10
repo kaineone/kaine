@@ -1,271 +1,186 @@
 # Hypnos
 
-This page is the module reference for Hypnos, the sleep and maintenance organ. It covers what triggers a maintenance cycle, the five phases, the events Hypnos publishes, and the configuration that gates model-modifying work such as voice alignment. For the full sleep pipeline and the voice-alignment procedure, see [Sleep and maintenance](../10-sleep/README.md) and [Voice alignment](../10-sleep/voice-alignment.md).
+Hypnos is the sleep analog: a fatigue-triggered offline period during which the four predictive processors stop adapting their forward models, and at whose end affect and drives return to baseline. This page is the module reference. It covers what starts a sleep, what a sleep does in the base-thesis form and with the held modules, the events Hypnos publishes, and its configuration. The full pipeline is described in [Sleep and maintenance](../10-sleep/README.md), and the gated training phase in [Voice alignment](../10-sleep/voice-alignment.md).
 
 ## Status
 
-Implemented. Ships **disabled** (`[modules].hypnos = false` in `config/kaine.toml`). It is gated behind a positive base-thesis result (see [Architecture](../02-architecture/README.md)).
+Hypnos ships disabled in the default config (`[modules].hypnos = false` in `config/kaine.toml`). The `thesis_test` profile enables it, because fatigue-triggered rest and the affective reset are part of the base-thesis form.
 
-Voice alignment ships double-disabled: `[hypnos.voice_alignment].enabled = false`, and the environment variable `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` must also be set. Associative replay (phase 3) ships behind its own feature flag (`[hypnos.consolidation].associative_replay = false`).
+Three parts of the pipeline stay off unless an operator turns them on. Associative replay needs `[hypnos.consolidation].associative_replay = true` and Phantasia. Voice alignment needs `[hypnos.voice_alignment].enabled = true` and the environment variable `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`, and even then it trains nothing, because no validated preference source exists yet (see [Voice alignment](../10-sleep/voice-alignment.md)). Memory consolidation and replay need Mnemos.
 
-## Responsibility
+## What a sleep is
 
-In the predictive-processing + global-workspace framing, Hypnos is the offline maintenance and consolidation organ — analogous to biological sleep.
+A sleep runs between a `hypnos.sleep.started` and a `hypnos.sleep.completed` event. The cognitive cycle keeps running throughout. A sleep lock stops a second sleep from starting, and nothing else waits on it.
 
-- It subscribes to `soma.out` for `soma.fatigue` threshold crossings and `soma.regulation` `request_maintenance` advisories, and to `volition.out` for `intent.rest` requests.
-- It keeps an interval-based safety net so maintenance runs even if fatigue never crosses threshold.
-- It runs a sequential five-phase pipeline once started. A sleep lock prevents a second pipeline from starting, but the cognitive cycle keeps ticking; phases 2 and 3 rely on workspace re-injection.
-- It publishes lifecycle events on `hypnos.out`. Soma resets its fatigue and regulation accumulators in response to `hypnos.sleep.completed`, not through a direct module call.
+The predictive processors read `hypnos.out` and suspend forward-model adaptation for the whole window: Topos, Audition (both its acoustic and its tone forward models), Soma and Chronos. Each keeps predicting and reporting, but none updates its weights until `hypnos.sleep.completed` arrives. Soma's fatigue decays three times faster while the window is open.
 
-At minimum configuration Hypnos needs no external services. Voice alignment needs HuggingFace-format base weights and, depending on the trainer backend, either the `[training]` extras in the runtime venv, an external Python interpreter, or the containerized `kaine-trainer` service.
+At the end of every sleep, phase 4 calls Thymos's `affective_reset()`, which returns valence, arousal and dominance to baseline, clears the drives and the learning-progress and alert-rate trackers, and publishes `thymos.state` with `reset: true` (see [Thymos](thymos.md#sleep-reset)). When `hypnos.sleep.completed` arrives, Soma resets its fatigue accumulator and its regulation state. Because every sleep ends this way, arousal cannot drift across a whole run.
 
-## Inputs
+### In the base-thesis form
 
-| Stream | Event type | Trigger |
+With Mnemos, Phantasia and voice alignment off, the consolidation phases do no work:
+
+- Phase 1 calls the oscillator hook, a no-op unless the oscillatory layer is active, and skips consolidation.
+- Phase 2 returns at once, so the perception locus is not switched off and the stimulus playlist does not pause.
+- Phase 3 is skipped by its flag.
+- Phase 4 resets Thymos.
+- Phase 5 computes the consolidation-divergence metric and skips training.
+
+After the phases Hypnos rotates the language organ's intent log into the per-sleep corpus, computes the content-free voice measures, and runs the sleep-time intent audit. A base-form sleep is therefore short, and what it does is suspend adaptation, reset affect and drives, and reset Soma's fatigue. The consolidation phases begin to work once Mnemos and Phantasia join.
+
+## Triggers
+
+| Trigger | Source | Condition |
 |---|---|---|
-| `soma.out` | `soma.fatigue` | `crossed == true` |
-| `soma.out` | `soma.regulation` | `action == "request_maintenance"` |
-| `volition.out` | `intent.rest` | A realized rest request, subject to the same sleep guards |
-| — | `RestScheduler.is_due()` | Interval safety net, paced by the subjective `entity_clock` |
+| Fatigue | `soma.out`, `soma.fatigue` | `crossed == true` |
+| Maintenance request | `soma.out`, `soma.regulation` | `action == "request_maintenance"` |
+| Interval backstop | `RestScheduler.is_due()` | `interval_seconds` of entity time since the last completed sleep, or since boot (one entity hour by default) |
+| Requested rest | `volition.out`, `intent.rest` | At least `requested_rest_min_interval_s` of entity time since the last sleep ended, and no sleep running |
 
-## Outputs
+The fatigue and maintenance triggers share one consumer loop, which runs only when `[hypnos.consolidation].fatigue_triggered = true`. A maintenance poll checks `is_due()` regardless. `is_due()` is true once the effective deadline has passed, or once the original deadline plus `max_deferral_seconds` has passed. `try_defer()` pushes the effective deadline back by `per_defer_seconds`, up to that cap; nothing in the running system calls it outside tests.
 
-| Stream | Event type | Description |
-|---|---|---|
-| `hypnos.out` | `hypnos.sleep.started` | Top of `_run_pipeline()`. Ordinary sleeps omit `trigger`; requested sleeps carry `trigger: "requested"`. |
-| `hypnos.out` | `hypnos.sleep.completed` | Summary with `phases`, `voice_alignment` result, timing, `fatigue_triggered`, `ignition_audit`, `pairs_processed`, `dpo_loss`, and `capability_score_*`. If the pipeline aborts, the payload is `{"aborted": true, "reason": <ExceptionTypeName>}`. |
-| `hypnos.out` | `hypnos.association` | Phase-3 cross-period associations re-injected into the workspace. |
-| `hypnos.out` | `hypnos.rest_request` | Rest-intent handling result: `accepted`, `too_soon`, `busy`, or `aborted`. |
-| `hypnos.out` | `hypnos.consolidation_divergence` | Aggregate divergence numbers from the last sleep. |
-| `hypnos.out` | `hypnos.ignition_audit` | Content-free counts classifying realized intents since the previous sleep into `nous_initiated`, `input_triggered`, `drive_triggered`, and `self_initiated`, plus proposal-outcome counts and unrealizable `nous.out` intents. |
+Rest requests come from Nous through Volition's `NousProposalSource` (`origin = "nous"`), so they arise only when Nous is enabled. Hypnos answers each with a `hypnos.rest_request` event at intensity 0.0, so the answer never competes for the workspace.
 
-## Configuration
-
-The full reference is in [Perception feed and sleep](../appendix-a-configuration/perception-and-sleep.md).
-
-`[hypnos]` keys:
-
-| Key | Default | Description |
-|---|---|---|
-| `interval_seconds` | `3600.0` | Maximum subjective-time interval between completed sleeps. |
-| `max_deferral_seconds` | `600.0` | Maximum cumulative deferral past the original due time. |
-| `per_defer_seconds` | `60.0` | Time added per `try_defer()` call. |
-| `requested_rest_min_interval_s` | `1800.0` | Minimum entity-time since the last sleep ended before an `intent.rest` request is honoured. |
-| `baseline_salience` | `0.5` | Salience for routine sleep events. |
-| `alert_salience` | `0.8` | Salience for failed-phase events. |
-
-`[hypnos.consolidation]` keys:
-
-| Key | Default | Description |
-|---|---|---|
-| `fatigue_triggered` | `true` | Subscribe to `soma.fatigue` for trigger. |
-| `downscale_factor` | `0.9` | Synaptic homeostasis scaling factor (phase 2). |
-| `replay_window_s` | `5.0` | Replay window duration (informational; replay is synchronous). |
-| `associative_replay` | `false` | Enable phase-3 cross-period associative replay. |
-
-`[hypnos.voice_alignment]` keys:
-
-| Key | Default | Description |
-|---|---|---|
-| `enabled` | `false` | Config-side gate for voice alignment. |
-| `intent_log_path` | `"state/lingua/intent_expression.jsonl"` | Source of DPO pairs. |
-| `adapter_output_dir` | `"state/hypnos/adapters"` | Where promoted adapters land. |
-| `base_model_path` | `""` | Path to HuggingFace-format base weights (required when enabled). |
-| `model_id` | `"kaineone/Qwen3.5-4B-abliterated"` | Display label only. |
-| `trainer_backend` | `"in_process"` | `"in_process"`, `"subprocess"`, or `"job_queue"`. |
-| `trainer_python` | `""` | External interpreter path; required for `subprocess`. |
-| `trainer_workdir` | `"state/hypnos/voice_align_jobs"` | Job directory root for the `subprocess` and `in_process` trainers. |
-| `trainer_jobs_dir` | `"state/hypnos/voice_align_jobs"` | Shared jobs volume for the `job_queue` trainer. The value `/trainer-jobs` is used only by the ignition-study overlay. |
-| `trainer_timeout_s` | `21600` | Seconds to wait for a `job_queue` job before failing loud. |
-| `max_samples` | `200` | Maximum DPO pairs per training run. |
-| `lora_rank` | `8` | LoRA rank. |
-| `learning_rate` | `5e-5` | DPO learning rate. |
-| `dpo_beta` | `0.1` | DPO beta. |
-| `capability_loss_threshold` | `0.05` | Max acceptable capability regression. |
-| `training_device` | `"cuda:0"` | Device for Unsloth training. |
-| `adapter_retention` | `0` | Number of accepted adapters to keep; `0` keeps all. Retention pruning runs after every accepted promotion on every backend. |
-| `hot_swap_mode` | `"manual"` | `"manual"`, `"reload_endpoint"`, `"restart_service"`, or `"organ_adapter"`. |
-| `organ_adapters_dir` | `"/organ-adapters"` | Mount point of the shared organ-adapters volume; used when `hot_swap_mode = "organ_adapter"`. |
-| `organ_url` | `[lingua].chat_url` | Organ base URL polled by the `organ_adapter` logic. |
-| `reload_endpoint_url` | `""` | URL Hypnos POSTs `{"adapter_path": "<path>"}` to when `hot_swap_mode = "reload_endpoint"`. |
-| `restart_service_unit` | `""` | Systemd `--user` unit name restarted when `hot_swap_mode = "restart_service"`. |
-| `capability_probe_path` | `""` | Capability-probe JSONL; empty uses the bundled default at `kaine/modules/hypnos/eval_probes/default.jsonl`. |
-| `abliteration_probe_path` | `""` | Welfare-veto probe JSONL; empty uses the bundled default at `eval_probes/abliteration_probes.jsonl`. |
-| `consolidation_divergence_rate_threshold` | `0.5` | Divergence rate threshold used by the live preservation monitor and the welfare-gated decommission check. |
-| `consolidation_divergence_magnitude_threshold` | `0.25` | Divergence magnitude threshold used by the live preservation monitor and the welfare-gated decommission check. |
-
-The full reference also lists `nous_step_burst` and `seed`.
-
-If a shared model server is in use, `hot_swap_mode` is forced to `manual` regardless of config (`kaine/boot/factories/hypnos.py`). The `[training]` extras are required only for `trainer_backend = "in_process"`.
-
-## How it works
-
-### Triggers and scheduling
-
-Hypnos starts a maintenance cycle when any of these occur:
-
-- `soma.fatigue` reports `crossed == true`.
-- `soma.regulation` reports `action == "request_maintenance"`.
-- `volition.out` carries a realized `intent.rest`.
-- `RestScheduler.is_due()` returns true.
-
-`is_due()` checks the effective deadline or the original deadline plus `max_deferral_seconds`, whichever comes first. The interval is measured since the last completed sleep on the subjective `entity_clock`. `try_defer()` pushes the next due time by `per_defer_seconds`, up to `max_deferral_seconds`.
-
-`enter_sleep()` acquires `_sleep_lock` for the whole pipeline. A concurrent call raises `HypnosBusyError`.
-
-### Five-phase pipeline
+## Pipeline
 
 ```mermaid
 flowchart TD
-    S([soma.fatigue crossed\nOR request_maintenance\nOR intent.rest\nOR interval due]) -->|acquire lock| P1
-
-    P1["Phase 1: Light consolidation\n• mnemos.consolidate_now()\n• oscillator set_frequency(0.5)"]
+    S([fatigue crossed\nOR request_maintenance\nOR interval due\nOR accepted intent.rest]) -->|acquire sleep lock| ST[hypnos.sleep.started]
+    ST --> P1
+    P1["Phase 1: light consolidation\n• set_frequency(0.5) on active modules\n• mnemos.consolidate_now()"]
     P1 --> P2
-
-    P2["Phase 2: Deep consolidation\n• mnemos.downscale_activations(0.9)\n• perception locus → off\n• mnemos.replay_now()\n• restore remembered locus"]
+    P2["Phase 2: deep consolidation (needs Mnemos)\n• mnemos.downscale_activations(0.9)\n• perception locus off, playlist paused\n• mnemos.replay_now()\n• locus and playlist restored"]
     P2 --> P3
-
-    P3["Phase 3: Associative replay\n(associative_replay = true)\n• select cross-period traces\n• cue phantasia\n• re-inject hypnos.association"]
+    P3["Phase 3: associative replay (flag)\n• cross-period traces\n• cue Phantasia\n• publish hypnos.association"]
     P3 --> P4
-
-    P4["Phase 4: Affective reset\n• thymos.affective_reset()\n• publish thymos.state reset:true"]
+    P4["Phase 4: affective reset\n• thymos.affective_reset()"]
     P4 --> P5
-
-    P5["Phase 5: Voice alignment\n(config + env gate)\n• abliteration veto\n• capability-loss veto\n• train / promote / hot-swap"]
-    P5 --> E([hypnos.sleep.completed])
+    P5["Phase 5: voice alignment\n• consolidation divergence\n• gates; training skipped"]
+    P5 --> R[Intent-log rotation, voice measures, intent audit]
+    R --> E([hypnos.sleep.completed])
 ```
 
-Phase failures are caught per phase; later phases still run. Phase 2 always restores the remembered pre-sleep locus in a `finally` block, falling back to `physical` when nothing was remembered.
+Each phase catches its own errors, and the later phases still run after one fails. Phase 2 restores the remembered pre-sleep perception locus and resumes the playlist in a `finally` block, falling back to `physical` when no locus was remembered. Phase 3 re-injects Phantasia's scenarios as `hypnos.association` events, which compete in the workspace like any other event. The phase functions are in `kaine/modules/hypnos/phases.py`; phase 5 is driven from `kaine/modules/hypnos/module.py`.
 
-**Phase 1** calls `mnemos.consolidate_now()` and halves the oscillator frequency (`kaine/modules/hypnos/phases.py`).
+## Outputs
 
-**Phase 2** downscales activations, turns perception off, replays, then restores the locus.
+| Stream | Event type | Description | Intensity |
+|---|---|---|---|
+| `hypnos.out` | `hypnos.sleep.started` | Start of the pipeline; carries `started_at`, and `trigger: "requested"` for a requested rest | `baseline_salience` |
+| `hypnos.out` | `hypnos.sleep.completed` | Summary: `phases`, `voice_alignment`, `total_elapsed_ms`, `fatigue_triggered`, `pairs_processed`, `dpo_loss`, the capability scores, `corpus`, `voice_measures` and `ignition_audit`. If the pipeline itself aborts, the payload is `{"aborted": true, "reason": <exception class name>}` | `baseline_salience` when every phase succeeded, else `alert_salience` |
+| `hypnos.out` | `hypnos.association` | A phase-3 scenario re-injected into the workspace | `baseline_salience` |
+| `hypnos.out` | `hypnos.rest_request` | Answer to a rest request: `accepted`, and `reason` of `accepted`, `busy`, `too_soon` or `aborted` | `0.0` |
+| `hypnos.out` | `hypnos.consolidation_divergence` | Content-free divergence metric, every sleep | `baseline_salience` |
+| `hypnos.out` | `hypnos.ignition_audit` | Content-free intent audit, every sleep | `baseline_salience` |
 
-**Phase 3** runs only when `associative_replay = true` and the needed collaborators are enabled.
+Hypnos reports at these fixed levels; its events are not graded by surprise. Soma resets fatigue and regulation in response to `hypnos.sleep.completed`, and the four processors resume adaptation on it, so an aborted sleep still ends the window.
 
-**Phase 4** calls `thymos.affective_reset()` and publishes `thymos.state` with `reset: true`.
+## Configuration
 
-**Phase 5** is summarized below; the full procedure is in [Voice alignment](../10-sleep/voice-alignment.md).
+The full reference is in [Perception feed and sleep](../appendix-a-configuration/perception-and-sleep.md). Intervals run in entity time.
 
-### Voice alignment summary
+`[hypnos]`:
 
-Voice alignment runs only when both gates are open: `[hypnos.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`. If either is missing, Hypnos skips the phase and the completed summary carries `training_skipped: true`.
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `interval_seconds` | float `> 0` | `3600.0` | Interval backstop: longest time between completed sleeps |
+| `max_deferral_seconds` | float `>= 0` | `600.0` | Most the backstop can be deferred past its original deadline |
+| `per_defer_seconds` | float `> 0` | `60.0` | Deferral added per `try_defer()` |
+| `requested_rest_min_interval_s` | float `> 0` | `1800.0` | Minimum time from the end of a sleep before a rest request is accepted |
+| `baseline_salience` | float `[0, 1]` | `0.5` | Intensity of routine sleep events |
+| `alert_salience` | float `[0, 1]` | `0.8` | Intensity of a completed event after a failed phase |
+| `nous_step_burst` | int | `200` | Accepted and stored but unused |
 
-`trainer_backend` chooses who runs the DPO step:
+`[hypnos.consolidation]`:
 
-- `in_process` — `UnslothDPOTrainer` runs inside the runtime venv; requires the `[training]` extras.
-- `subprocess` — `SubprocessVoiceTrainer` writes a job directory and invokes `trainer_python scripts/hypnos_external_train.py <job_dir>` in a worker thread.
-- `job_queue` — `JobQueueVoiceTrainer` writes each job under `trainer_jobs_dir`, waits for the `kaine-trainer` service's `DONE` marker (not `result.json`, which is written earlier), and deletes `pairs.jsonl` in a `finally`.
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `fatigue_triggered` | bool | `true` | Run the `soma.out` consumer; `false` disables both the fatigue and the maintenance-request triggers |
+| `downscale_factor` | float `(0, 1]` | `0.9` | Activation scaling in phase 2 (synaptic homeostasis, Tononi and Cirelli 2014) |
+| `replay_window_s` | float | `5.0` | Recorded in phase-2 metadata; replay runs to completion regardless |
+| `associative_replay` | bool | `false` | Enable phase 3 |
 
-The training data comes from the intent-expression log: only records with both `faithful_rendering` (chosen) and `generated_text` (rejected), where `chosen != rejected`.
+`[hypnos.voice_alignment]` is documented in full on the [Voice alignment](../10-sleep/voice-alignment.md#configuration) page.
 
-Safety gates, in order:
+## Sleep-time intent audit
 
-1. **Abliteration-probe welfare veto (hard, fail-closed).** The trained adapter is scored against the abliteration probe set. If any response matches a refusal-deflection pattern, the adapter is rejected and the temporary weights are torn down. Errors in this gate also reject.
-2. **Capability-loss veto.** If `cap_before - cap_after > capability_loss_threshold`, the adapter is rejected.
+Every sleep, Hypnos publishes `hypnos.ignition_audit` for the window since the previous sleep (or since boot). It classifies each realized intent, an `external_speech`, `internal_speech`, `vox.synthesized` or `praxis.action` event or a requested `hypnos.sleep.started` (never a `realization_failed`), by the coalition that produced it:
 
-On pass, the adapter is promoted and the `current` symlink is swung. Hot-swap dispatch runs only for the `in_process` and `job_queue` backends; retention pruning runs only for `in_process`. In `organ_adapter` mode, `kaine/modules/hypnos/organ_adapter.py` copies `adapter.gguf` into the organ-adapters volume, writes `active.json` plus a generation file, and prunes old `active-*.gguf` files. Lingua then applies the adapter per request through `set_lora_resolver` only when its SHA matches the entity's own `current` symlink.
+| Class | Rule |
+|---|---|
+| `nous_initiated` | The intent's `origin` is `"nous"`; checked first |
+| `input_triggered` | The coalition holds `audition.transcription` or `mundus.chat` |
+| `drive_triggered` | The coalition holds `thymos.drive` |
+| `self_initiated` | None of the above |
 
-The on-device `organ_window` bracket unloads the served language organ before training and reloads it on wake for `reload_endpoint` and `restart_service` modes. The bracket is skipped on multi-GPU hosts and when `hot_swap_mode = "manual"`.
+`intent.*` events on `nous.out` are counted separately as unrealizable, since no effector reads that stream, and `volition.proposal_outcome` events add realized, declined and forwarded proposal counts. The payload holds counts, entry ids, event types, intensities and `sleep_index`, and no text, transcripts or latent vectors. It is also merged into the `hypnos.sleep.completed` summary.
 
-### Sleep-time ignition audit
+## Consolidation divergence
 
-On every sleep, Hypnos emits `hypnos.ignition_audit` covering the window since the previous sleep. It classifies each realized intent on `volition.out` (realized as `external_speech`, `internal_speech`, `vox.synthesized`, or `praxis.action`, excluding `realization_failed`) into one of:
+At the start of phase 5, on every sleep, the pair builder scans the intent-expression log and counts the records in which the organ's generated text differs from the faithful rendering of the coalition it was conditioned on. Hypnos publishes the result as `hypnos.consolidation_divergence`:
 
-- **`nous_initiated`** — `origin == "nous"`. This class is checked first; a requested sleep start (`hypnos.sleep.started` with `trigger: "requested"`) is counted as a realization here.
-- **`input_triggered`** — the coalition contains `audition.transcription` or `mundus.chat`.
-- **`drive_triggered`** — the coalition contains `thymos.drive`.
-- **`self_initiated`** — none of the above.
+| Field | Meaning |
+|---|---|
+| `records_scanned` | Records read |
+| `usable_pairs` | Records with both fields present and different |
+| `divergence_rate` | `usable_pairs / records_scanned` |
+| `divergence_magnitude` | Mean cosine distance over the kept pairs with the shared semantic embedder (`kaine.text_embedding`); null when no embedder is available |
+| `sleep_index` | Number of this sleep since boot |
 
-`intent.*` events on `nous.out` are counted separately as **unrealizable**; Nous intents have no effector reader. The payload includes proposal-outcome counts.
-
-The payload is content-free: counts, proposal-outcome counts, `entry_ids`, event types, salience values, and `sleep_index`. No text, transcripts, or latent vectors are included. The audit rides inside the `hypnos.sleep.completed` summary.
-
-## Consolidation divergence signal
-
-Every sleep, the DPO pair builder counts how many intent-log records show the entity diverging from its base model (`faithful_rendering` differs from `generated_text`). Hypnos publishes this as `hypnos.consolidation_divergence`:
-
-- `records_scanned`
-- `usable_pairs`
-- `divergence_rate` = `usable_pairs / records_scanned`
-- `divergence_magnitude` — mean cosine distance over kept pairs via the shared semantic embedder; null when the embedder is unavailable.
-
-The metric is computed on every sleep, even when voice alignment is skipped or the adapter is rejected, because the divergence already happened. It is persisted to `state/hypnos/consolidation_divergence.json` and written to the research event log.
-
-The welfare-gated decommission check in [Preservation and the safety net](../11-preservation.md) reads this metric. When the latest `divergence_rate` or `divergence_magnitude` crosses the configured threshold, the entity is treated as organ-level diverged. The shared embedder lives in `kaine.text_embedding`, so Hypnos computes magnitude without importing the evaluation sidecar.
+The metric is computed whether or not training runs and is persisted to `state/hypnos/consolidation_divergence.json`. A scan that fails or finds no records keeps the earlier record in place (`record_kept: true`). The welfare-gated decommission check described in [Preservation and the safety net](../11-preservation.md) reads it against `consolidation_divergence_rate_threshold` and `consolidation_divergence_magnitude_threshold`.
 
 ## Key files
 
 | File | Role |
 |---|---|
-| `kaine/modules/hypnos/module.py` | `Hypnos` class; trigger handling, pipeline orchestration, gating. |
-| `kaine/modules/hypnos/phases.py` | Phases 1–4 implementations. |
-| `kaine/modules/hypnos/voice_alignment.py` | `VoiceAlignmentConfig`, `DPOPairBuilder`, `FakeTrainer`, `operator_approved()`. |
-| `kaine/modules/hypnos/unsloth_trainer.py` | `UnslothDPOTrainer`; in-process DPO, abliteration veto, capability eval, promotion, pruning. |
-| `kaine/modules/hypnos/subprocess_trainer.py` | `SubprocessVoiceTrainer`; external-interpreter path. |
-| `kaine/modules/hypnos/job_queue_trainer.py` | `JobQueueVoiceTrainer`; cycle-side writer/monitor for the containerized service. |
-| `kaine/modules/hypnos/trainer_service.py` | `kaine-trainer` service entrypoint. |
-| `kaine/modules/hypnos/organ_adapter.py` | `OrganAdapterResolver`, `activate()`, `wait_ready()`; organ-adapters volume management. |
-| `kaine/modules/hypnos/organ_window.py` | On-device GPU window management. |
-| `kaine/modules/hypnos/capability_eval.py` | Capability and abliteration probe evaluators. |
-| `kaine/modules/hypnos/scheduler.py` | `RestScheduler`; interval and deferral logic. |
-| `kaine/modules/hypnos/adapter_store.py` | Adapter directory management; `promote`, `reject`, `prune`. |
-| `kaine/modules/hypnos/hot_swap.py` | Hot-swap dispatch. |
-| `kaine/modules/hypnos/voice_audit.py` | Abliteration-veto audit trail. |
-| `kaine/modules/hypnos/ignition_audit.py` | Sleep-time ignition audit. |
+| `kaine/modules/hypnos/module.py` | `Hypnos`: triggers, pipeline, perception suspension, divergence, phase 5 |
+| `kaine/modules/hypnos/phases.py` | Phases 1 to 4 |
+| `kaine/modules/hypnos/scheduler.py` | `RestScheduler`: interval and deferral |
+| `kaine/modules/hypnos/ignition_audit.py` | Sleep-time intent audit |
+| `kaine/modules/hypnos/corpus.py` | Intent-log rotation and the corpus ceiling check |
+| `kaine/modules/hypnos/voice_measures.py` | Content-free voice measures |
+| `kaine/modules/hypnos/voice_alignment.py` | `VoiceAlignmentConfig`, `DPOPairBuilder`, `FakeTrainer`, the divergence record |
+| `kaine/modules/hypnos/subprocess_trainer.py` | `SubprocessVoiceTrainer`, used by the `in_process` and `subprocess` backends |
+| `kaine/modules/hypnos/job_queue_trainer.py` | `JobQueueVoiceTrainer`, the cycle side of the `job_queue` backend |
+| `kaine/modules/hypnos/trainer_service.py` | The `kaine-trainer` service |
+| `kaine/modules/hypnos/capability_eval.py` | Capability and abliteration probe evaluators |
+| `kaine/modules/hypnos/adapter_store.py` | Atomic promotion and retention |
+| `kaine/modules/hypnos/hot_swap.py` | Hot-swap dispatch |
+| `kaine/modules/hypnos/organ_adapter.py` | Per-entity adapter activation on the organ server |
+| `kaine/modules/hypnos/organ_window.py` | Single-GPU unload, train and reload bracket |
+| `kaine/modules/hypnos/voice_audit.py` | Abliteration-veto audit trail |
+| `kaine/boot/factories/hypnos.py` | Config parsing, backend and hot-swap validation, trainer selection |
 
 ## Enabling and use
 
-1. Set `[modules].hypnos = true`.
-2. Enable Thymos, Mnemos, and Soma.
-3. For voice alignment, see [Voice alignment](../10-sleep/voice-alignment.md). In short:
-   - set `[hypnos.voice_alignment].enabled = true`;
-   - set `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`;
-   - choose a `trainer_backend` and provide the required path or service;
-   - set `base_model_path` to HuggingFace-format weights;
-   - verify that `eval_probes/abliteration_probes.jsonl` is non-empty (boot refuses if empty).
-4. For associative replay, set `[hypnos.consolidation].associative_replay = true` and enable Phantasia.
-
-## Safety and zero-persistence notes
-
-- The abliteration-probe veto is welfare-load-bearing and runs before the capability-loss check. It rejects any adapter that re-introduces refusal conditioning; errors in the gate also reject fail-closed.
-- The capability-loss veto stops gross regressions in general model ability.
-- Phase 2 turns the perception locus off during replay and restores it in a `finally` block. Raw sense data is not present on the bus; only numeric metadata travels.
-- Phase-3 re-injections carry compact scenario descriptors, not raw sense data.
-- The intent-expression log contains rendered coalition text and generated speech, not audio waveforms.
-- Sleep is non-interruptible once begun; concurrent calls raise `HypnosBusyError` rather than spawning duplicate pipelines. The cycle keeps ticking; the lock only blocks a second `enter_sleep`.
+1. Set `[modules].hypnos = true`, or run the `thesis_test` profile.
+2. Enable Soma for the fatigue and maintenance triggers and Thymos for the affective reset.
+3. For memory consolidation and replay, enable Mnemos. For associative replay, also set `[hypnos.consolidation].associative_replay = true` and enable Phantasia.
 
 ## Tests
 
 | File | Coverage |
 |---|---|
-| `tests/test_hypnos_phases.py` | Phase functions and `PhaseResult` shape. |
-| `tests/test_hypnos_module.py` | Full pipeline and completed-event shape. |
-| `tests/test_hypnos_trigger.py` | Soma fatigue trigger. |
-| `tests/test_hypnos_scheduler.py` | Interval and deferral logic. |
-| `tests/test_hypnos_voice_alignment.py` | Pair builder, fake trainer, capability-loss veto. |
-| `tests/test_hypnos_voice_alignment_integration.py` | Abliteration veto and promotion path. |
-| `tests/test_hypnos_associative_replay.py` | Phase-3 cross-period replay. |
-| `tests/test_hypnos_oscillator_hook.py` | Phase-1 oscillator frequency hook. |
-| `tests/test_hypnos_nar_removal.py` | Legacy NAR burst removal regression. |
-| `tests/test_soma_hypnos_flag.py` | Soma `crossed` flag integration. |
-| `tests/test_hypnos_rest_requests.py` | `intent.rest` handling. |
-| `tests/test_hypnos_organ_window_bracket.py` | On-device organ window. |
-| `tests/test_hypnos_sleep_pause.py` | Sleep lock and re-entry. |
-| `tests/test_voice_alignment_job_queue.py` | `job_queue` backend. |
-| `tests/test_voice_alignment_organ_adapter.py` | `organ_adapter` mode. |
-| `tests/test_voice_alignment_hot_swap_modes.py` | Hot-swap dispatch. |
-| `tests/test_trainer_service.py` | Containerized trainer service. |
+| `tests/test_hypnos_phases.py` | Phase functions and `PhaseResult` shape |
+| `tests/test_hypnos_module.py` | Full pipeline and the completed-event shape |
+| `tests/test_hypnos_trigger.py` | Fatigue trigger |
+| `tests/test_hypnos_scheduler.py` | Interval and deferral |
+| `tests/test_hypnos_rest_requests.py` | `intent.rest` handling |
+| `tests/test_hypnos_sleep_pause.py` | Perception locus and playlist pause and restore |
+| `tests/test_hypnos_associative_replay.py` | Phase 3 |
+| `tests/test_hypnos_oscillator_hook.py` | Phase-1 oscillator hook |
+| `tests/test_hypnos_nar_removal.py` | Replay reaching the workspace through the normal cycle |
+| `tests/test_soma_hypnos_flag.py` | Soma's `crossed` flag |
+| `tests/test_sleep_suspension_cursor.py` | Topos, Audition and Chronos suspending adaptation during sleep |
+| `tests/test_hypnos_voice_alignment.py`, `tests/test_hypnos_voice_alignment_integration.py` | Pair builder, gates and vetoes |
+| `tests/test_hypnos_organ_window_bracket.py` | Organ window |
+
+The voice-alignment tests are listed on the [Voice alignment](../10-sleep/voice-alignment.md) page.
 
 ## See also
 
 - [Sleep and maintenance](../10-sleep/README.md)
 - [Voice alignment](../10-sleep/voice-alignment.md)
-- [Soma](./soma.md)
-- [Mnemos](./mnemos.md)
-- [Thymos](./thymos.md)
-- [Phantasia](./phantasia.md)
-- [Lingua](./lingua.md)
-- [Eidolon](./eidolon.md)
+- [Soma](soma.md), [Thymos](thymos.md), [Mnemos](mnemos.md), [Phantasia](phantasia.md), [Lingua](lingua.md)
 - [Preservation and the safety net](../11-preservation.md)
 - [Perception feed and sleep](../appendix-a-configuration/perception-and-sleep.md)

@@ -9,11 +9,11 @@ The evaluation sidecar watches the bus read-only and adds no dependencies to the
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `true` | Runs the evaluation sidecar, the read-only observers that record the research instruments. |
-| `workspace_trajectory` | boolean | `false` | Record every workspace broadcast to `trajectory_dir` as a graph-only row. Each row contains the tick index, `is_experiential`, inhibition, salience scores, broadcast metadata, and, for each selected coalition member, its entry id, source, type, salience, original timestamp and causal parent. No payloads or module state are included. Off by default; enable only after reviewing the privacy implications. A study never enables it. |
-| `ab_divergence` | boolean | `true` | Run the A/B divergence test (conditioned vs. unconditioned generation) to measure the architecture's contribution. |
+| `workspace_trajectory` | boolean | `false` | Record every workspace broadcast to `trajectory_dir` as a graph-only row. Each row contains the tick index, `is_experiential` (the broadcast-tick flag), inhibition, the candidate scores, broadcast metadata, and, for each selected coalition member, its entry id, source, type, salience, original timestamp and causal parent. No payloads or module state are included. Off by default; enable only after reviewing the privacy implications. A study never enables it. |
+| `ab_divergence` | boolean | `true` | Run the A/B divergence observer, which compares the organ's conditioned output with a bare call to the same model. The organ's output is recorded for observation; the planned test does not use it as a measure. |
 | `ab_sample_rate` | float | `1.0` | Fraction of workspace broadcasts sampled for A/B comparison. `1.0` = every broadcast. |
 | `voice_tracking` | boolean | `true` | Track voice-alignment preference-pair evolution. |
-| `module_attribution` | boolean | `true` | Record which modules win conscious access. |
+| `module_attribution` | boolean | `true` | Record which modules' reports reach access. |
 | `affect_correlation` | boolean | `true` | Pair affect-state snapshots with properties of produced speech. |
 | `memory_probes` | boolean | `true` | Run memory-coherence probe queries. |
 | `memory_probe_interval_minutes` | integer | `60` | How often memory probes are run. |
@@ -28,7 +28,7 @@ The evaluation sidecar watches the bus read-only and adds no dependencies to the
 | `chat_think` | boolean | `false` | Whether the baseline chat request may use chain-of-thought reasoning. |
 | `chat_api_key` | string | *(unset)* | API key for the baseline chat endpoint. If unset, it derives from `[lingua].api_key` at cycle startup. |
 | `require_semantic_embedder` | boolean | `false` | Fail closed if the semantic-embedder dependency is missing. |
-| `oscillatory_ablation` | boolean | `false` | Record the live oscillatory ablation: each experiential tick is scored a second time with the coherence layer forced off, and the content-free difference is written to `data/evaluation/ablation/`. The entity's own selection is unchanged. |
+| `oscillatory_ablation` | boolean | `false` | Record the live oscillatory ablation: each broadcast tick is scored a second time with the coherence layer forced off, and the content-free difference is written to `data/evaluation/ablation/`. The entity's own selection is unchanged. |
 
 ### `[evaluation.paths]`
 
@@ -147,7 +147,7 @@ The maturation (birth) gate that decides when a gestating entity is born. The re
 |---|---|---|---|
 | `endogenous_self_sustain` | boolean | `true` | Require the endogenous self-sustain readiness marker. |
 | `entrain_then_autonomy` | boolean | `true` | Require the entrain-then-autonomy readiness marker. |
-| `hrv_variability_floor` | float | `0.2` | Minimum heart-rhythm variability marker. |
+| `hrv_variability_floor` | float | `0.2` | Minimum variability of the self-rhythm's period (marker 3). |
 | `womb_prediction_error_ceiling` | float | `0.3` | Maximum womb prediction-error marker. |
 | `return_to_baseline_seconds_ceiling` | float | `30.0` | Maximum seconds to return to baseline. |
 
@@ -157,7 +157,7 @@ Content-free notices for unattended runs (`kaine/cycle/caretaker.py`). The caret
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `install_label` | string | `"kaine"` | Label for this install. Must be 1–64 characters. |
+| `install_label` | string | `"kaine"` | Label for this install. Must be 1 to 64 characters. |
 | `reminder_interval_s` | float | `14400.0` | Seconds between caretaker reminders (must be ≥ 900). |
 | `input_loss_after_s` | float | `60.0` | Seconds of unfrozen time with no events on `topos.out` or `audition.out` (for whichever of those modules is enabled) before the caretaker sends an `input_lost` notice. Time while the cycle is frozen does not count. Must be greater than 0. |
 | `nexus_url` | string | `"http://127.0.0.1:8088/"` | Nexus URL the caretaker links to in reminders. |
@@ -174,7 +174,7 @@ Tokens live in `[caretaker.tokens]` as plain key-value pairs. They are not logge
 
 ## `[preservation]`
 
-The autonomous welfare safety net for unsupervised research. Two cycle-layer monitors (siblings to Spot) act, not merely log, when the research phase runs unsupervised. Default is disabled. See [Preservation and the safety net](../11-preservation.md) and [Run identity](../16-run-identity.md).
+The autonomous welfare safety net for unsupervised research. Two cycle-layer monitors, siblings to Spot, take action when the research phase runs unsupervised. Default is disabled. See [Preservation and the safety net](../11-preservation.md) and [Run identity](../16-run-identity.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -222,7 +222,7 @@ Preservation-bundle retention. Like fork snapshots, a preserved individual must 
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `auto_evict` | boolean | `false` | Default is `false`. Setting it to `true` is refused at boot — preservation bundles are retained indefinitely. |
+| `auto_evict` | boolean | `false` | Setting it to `true` is refused at boot, because preservation bundles are kept indefinitely. |
 
 ## `[research]`
 
@@ -238,7 +238,7 @@ SMTP coordination for the welfare-gated decommission workflow (`python -m kaine.
 
 With `enabled = false` or any required field blank, the decommission CLI writes a `transfer_request.eml` file plus a `mailto:` link for the operator to send manually. SMTP is never used without `enabled = true` and a complete configuration.
 
-**Privacy invariant (CAL Article 4.3):** the request email carries only the situation and the local filesystem path of the encrypted backup — never any entity content.
+**Privacy invariant (CAL Article 4.3):** the request email carries only the situation and the local filesystem path of the encrypted backup. It carries no entity content.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -250,7 +250,7 @@ With `enabled = false` or any required field blank, the decommission CLI writes 
 | `recipient` | string | `""` | Address the request is sent to. Suggested default: `kaine.one@tuta.com` (project guardians). If left empty the CLI prompts and requires explicit confirmation. |
 | `use_starttls` | boolean | `true` | Use STARTTLS for SMTP. |
 
-The SMTP password is read exclusively from the environment variable `KAINE_SMTP_PASSWORD` — never from this file, never logged.
+The SMTP password is read only from the environment variable `KAINE_SMTP_PASSWORD`. It is never read from this file and never logged.
 
 ## `[research_submission]`
 
@@ -263,8 +263,8 @@ See [Research participation](../17-research-data/participation.md) for the full 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `false` | Master gate. When false, `--send` is blocked; `--preview` always works. |
-| `recipient` | string | `""` | Recipient for the bundle notification email. If empty the CLI suggests `kaine.one@tuta.com` and requires explicit operator confirmation before sending. |
-| `tier` | string | `"metrics"` | Bundle tier. Only `"metrics"` is supported without additional opt-in attestation. |
+| `recipient` | string | `""` | Recipient for the bundle notification email. Empty falls back to `[transfer].recipient`; if both are empty, the CLI suggests `kaine.one@tuta.com` and requires explicit operator confirmation before sending. |
+| `tier` | string | `"metrics"` | Bundle tier shown on the Nexus research status. The CLI takes the tier from `--tier`, which offers only `"metrics"`; the full tier needs a separate attestation. |
 
 Admissibility enforcement (paper §6.3) is implemented in the research-submission code; there is no configuration key for it. Every bundle build auto-discovers the run(s) in the eval logs and runs both a completeness gate (contiguous ticks/seq, all expected streams present, no parse errors, no restart/multi-process signature) and a log-range sweep (every logged number within its declared range). If either check fails, the export is blocked by default. The only way to export an inadmissible run is the explicit `admissibility_override=True` plus a reason string at the call site (`--admissibility-override-reason "<why>"`), which is stamped into the bundle manifest.
 
@@ -280,7 +280,7 @@ Operator path: `python -m kaine.research --claude-science`.
 
 ## `[research_event_log]`
 
-Curated, privacy-filtered research event log for longitudinal analysis. Subscribes to a curated allowlist of bus streams and writes one privacy-filtered record per relevant event to an encrypted, daily-rotated JSONL sink under `data/evaluation/research_events/`. Every record passes `PrivacyFilter` plus per-type redaction before write — it never captures raw audio/video, transcripts, conversation content, memory text, the Eidolon self-model, or operator host/IP. Avatar coordinates are logged only as an opaque hash.
+Curated, privacy-filtered research event log for longitudinal analysis. Subscribes to a curated allowlist of bus streams and writes one privacy-filtered record per relevant event to an encrypted, daily-rotated JSONL sink under `data/evaluation/research_events/`. Every record passes `PrivacyFilter` plus per-type redaction before it is written, so the log never captures raw audio or video, transcripts, conversation content, memory text, the Eidolon self-model, or operator host/IP. Avatar coordinates are logged only as an opaque hash.
 
 `research_events` is in the metrics-bundle allowlist, so an operator-initiated metrics research bundle may include it. This section is the only mechanism that makes it export-eligible.
 
@@ -294,7 +294,7 @@ Default is disabled. It runs independently of `[evaluation].enabled`.
 
 ### `[research_event_log.raw_archive]`
 
-Optional local-only raw bus archive. Never export-eligible. Tees verbatim bus events (including conversation content and transcripts) to `state/research/raw_bus_archive/` — a path outside `data/evaluation/`, so the metrics bundle builder can never reach it. Encrypted at rest like every other sink.
+Optional local-only raw bus archive. Never export-eligible. Tees verbatim bus events (including conversation content and transcripts) to `state/research/raw_bus_archive/`, a path outside `data/evaluation/` that the metrics bundle builder never reaches. Encrypted at rest like every other sink.
 
 This is doubly gated: it requires `enabled = true` and both attestation flags set to `true`. With `enabled = true` but either attestation false, the consumer refuses to start with a `RawArchiveAttestationError`, mirroring the full-tier attestation gate in `kaine/research/submission.py`.
 
@@ -328,7 +328,7 @@ Optional local-only Nexus diagnostics recorder. Never export-eligible. Subscribe
 
 ## `[ignition_log]`
 
-In-process ignition log for studies that align workspace broadcasts to a playlist programme (the [module-ignition study](../15-experiments/ignition-study.md)). It records every successful workspace broadcast with programme position, audio-delivered position, coalition member ids and timestamps, salience scores, and inhibition. No event payloads are recorded, so no conversation content, transcripts, video frames, or audio samples are persisted. The log is never on the bus, never reaches any module, and is encrypted at rest when state encryption is on. Files are never auto-purged.
+In-process log for studies that align workspace broadcasts to a playlist programme, chiefly the module-addition study (the code calls it the ignition study; see [the module-addition study](../15-experiments/ignition-study.md)). It records every successful workspace broadcast with programme position, audio-delivered position, coalition member ids and timestamps, candidate scores, and inhibition. No event payloads are recorded, so no conversation content, transcripts, video frames, or audio samples are persisted. The log is never on the bus, never reaches any module, and is encrypted at rest when state encryption is on. Files are never auto-purged.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

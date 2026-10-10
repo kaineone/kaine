@@ -5,7 +5,7 @@ KAINE ships the Cognitive Architecture License at version 0.2 (`LICENSE.md`, `NO
 ## What Changes
 
 - `LICENSE.md` becomes the CAL 0.4 text from kaineone/cognitive-architecture-license.
-- Every `LicenseRef-CAL-0.4` identifier becomes `LicenseRef-CAL-0.4` (source headers, the header-application script, `pyproject.toml`, container and quadlet files, docs).
+- Every `LicenseRef-CAL-0.2` identifier becomes `LicenseRef-CAL-0.4` (source headers, the header-application script, `pyproject.toml`, container and quadlet files, docs).
 - `NOTICE` records version 0.4, that the text has not yet been reviewed by counsel, and an adoption notice: Licensor Kaine.One, interim Steward Kaine.One, governing law of the State of Oregon, United States, notices and Reciprocity License requests to kaine.one@tuta.com. It names the Steward, not the "Project Cooperative" of 0.2, as the grantor of Reciprocity Licenses.
 - Docs that name the version (`THIRD_PARTY_LICENSES.md`, the glossary, the licence appendix, technology choices) say 0.4.
 

@@ -47,15 +47,15 @@ The device map: which device serves each role. The cycle's device keys, the comp
 
 ### Tier and deployment
 
-`[tier]` names a host tier and records which modules it disables and whether the oscillator layer is supported. `[deployment].tier` selects the tier.
+`[tier]` is written by the tier overlays (`config/profiles/tier0.toml` to `tier3.toml`). It names the tier and records what the host cannot run; the pre-boot "Tier fit" row fails when the enabled configuration exceeds it. `[deployment].tier` selects the tier. The shipped `config/kaine.toml` has neither table.
 
 `[tier]`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `name` | string | absent | Tier name. |
-| `unsupported_modules` | list of strings | `[]` | Modules this tier disables. |
-| `oscillator_supported` | boolean | `false` | Whether the oscillator layer is supported on this tier. |
+| `unsupported_modules` | list of strings | `[]` | Modules this tier cannot run. Enabling one fails the "Tier fit" row; the tier itself never changes a `[modules]` toggle. |
+| `oscillator_supported` | boolean | `true` | Whether the oscillator layer fits this tier. When `false`, `[oscillator].enabled = true` fails the "Tier fit" row. Only `tier0` sets it to `false`. |
 
 `[deployment]`
 
@@ -98,8 +98,8 @@ Per-stream overrides. The key is the full stream name (`<module>.out` or `worksp
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `"workspace.broadcast"` | integer | `100000` | Cap for the broadcast stream (about 6.6 KB per entry). |
-| `"topos.out"` | integer | `12000` | About 20 minutes at 10 Hz. Each entry carries a latent vector (about 40 KB), so this is the largest stream in memory. |
-| `"audition.out"` | integer | `12000` | About 20 minutes at 10 Hz. |
+| `"topos.out"` | integer | `12000` | About 20 minutes at ten entries per second. Each entry carries a latent vector (about 40 KB), so this is the largest stream in memory. |
+| `"audition.out"` | integer | `12000` | About 20 minutes at ten entries per second. |
 
 The memory these caps imply must fit in Redis `maxmemory`, set per host with `KAINE_REDIS_MAXMEMORY` (default `4gb`; see [Containers](../07-deployment/containers.md)). The pre-boot `python -m kaine.preboot` reports it as the "Bus budget" row: for every stream the enabled modules produce, it multiplies the cap by a per-entry size, doubles the result for AOF-rewrite headroom, and compares it with `maxmemory`. The per-entry size is sampled from the running bus when possible, otherwise taken from the measured table in `kaine/bus/config.py`, otherwise estimated at 2 KB. The row FAILS only when the measured streams alone exceed `maxmemory`; when the overage depends on the 2 KB estimate it WARNS and names the estimated streams. It also WARNS above 70% of `maxmemory`. A full study with every module enabled needs `KAINE_REDIS_MAXMEMORY=12gb` or more on hosts with the RAM.
 
@@ -138,7 +138,7 @@ The same run also reports the "Bus budget" row described under [`[bus.per_stream
 
 Cooperative pre-boot GPU headroom check. When enabled, the cycle verifies that each GPU has at least `min_free_vram_gb` free before any module initializes, so the entity is not OOM-killed mid-init. The model backend is a single-resident OpenAI-compatible server with no idle-model unload, so reclamation is report-only: the gate measures headroom and reports the server's resident model(s) and other GPU consumers, and never terminates a process. KAINE services (model server / Chatterbox / Speaches) are detected and preserved. If headroom is short the gate asks the operator to free memory and refuses to boot unless `KAINE_GPU_PREFLIGHT_APPROVED=1` is set. Unknown memory always passes with an annotation and never refuses boot.
 
-Ships disabled — first boot is operator-supervised.
+It ships disabled, since first boot is operator-supervised.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -152,14 +152,14 @@ Ships disabled — first boot is operator-supervised.
 
 ### Cycle
 
-Cognitive cycle timing, read at startup.
+Cognitive cycle timing, read at startup. Rates and durations elsewhere in the configuration are in entity time: time on the entity's clock, which runs at `time_scale` times wall-clock time. The code calls this clock the subjective clock.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `processing_rate_hz` | float | `10.0` | Processing loop rate (100 ms/tick; alpha-band sampling / workspace tick). Independent of the experiential rate. |
-| `experiential_rate_hz` | float | `3.333` | Rate at which a tick is promoted to a CONSCIOUS broadcast. This is the resting P3b conscious-access band, so the senses outrun awareness and several samples inform one conscious update. |
-| `time_scale` | float | `1.0` | Global time dilation of the subjective clock. `1.0` = real-time. `0` freezes the entity. Values `> 1` run the mind faster than wall-clock as an aspirational target; slip is recorded honestly when the hardware cannot hold the rate. |
-| `auto_time_scale` | bool | `false` | Enable automatic adjustment of `time_scale` to keep tick utilization near target. Disabled in deterministic mode. |
+| `processing_rate_hz` | float | `10.0` | Processing rate: every active module's stream is read and scored once per tick (100 ms at 10 Hz). |
+| `experiential_rate_hz` | float | `3.333` | Resting access rate: the rate of broadcast ticks with no alert and resting arousal, one every third processing tick (about 3.3 Hz). `[cycle.access_rate]` raises it toward `processing_rate_hz`. |
+| `time_scale` | float | `1.0` | Multiple of wall-clock time at which entity time runs. `1.0` is real time and `0` freezes the entity. Above `1` the cycle attempts the faster rate and records the slip when the hardware cannot hold it. |
+| `auto_time_scale` | bool | `false` | Lower `time_scale` automatically when ticks overrun their period and raise it again when they fit, never above the configured `time_scale`. Disabled in deterministic mode. |
 | `auto_time_scale_floor` | float | `0.1` | Minimum value `time_scale` is allowed to reach. |
 | `auto_time_scale_target` | float | `0.85` | Target tick utilization (busy time / tick period). |
 | `auto_time_scale_high` | float | `0.95` | Utilization above which the controller lowers `time_scale` after one dwell. |
@@ -170,32 +170,31 @@ Cognitive cycle timing, read at startup.
 
 `time_scale = 0` with `auto_time_scale = true`, or an invalid threshold combination, refuses boot.
 
-### Adaptive conscious access
+### Access rate
 
-`[cycle.access_rate]` adapts the conscious-access rate between the resting `experiential_rate_hz` and `processing_rate_hz`. See [The cognitive cycle](../08-cognitive-cycle/README.md) for how the rate is used.
+`[cycle.access_rate]` moves the access rate, the rate of broadcast ticks, between the resting `experiential_rate_hz` and `processing_rate_hz`. See [The cognitive cycle](../08-cognitive-cycle/README.md) for how the rate is used.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `enabled` | bool | `true` | Adapt the conscious-access rate. `false` gives the fixed resting rate. |
-| `salience_floor` | float | `0.5` | Module reports at or below this salience do not raise access. Routine reports sit at or below it; alerts rise above it. |
-| `phasic_decay_s` | float | `1.0` | Subjective seconds for a salient report's effect to decay by 1/e. |
-| `baseline_arousal` | float | `[thymos].baseline_arousal` | Arousal at which the tonic drive is zero. Set only to override the Thymos baseline. |
+| `enabled` | bool | `true` | Adapt the access rate. `false` holds it at the resting rate. |
+| `salience_floor` | float | `0.5` | Only reports whose payload carries `alert = true` count toward the phasic input, and only by how far their intensity exceeds this floor. Graded reports without an alert never raise the rate, so with no alert it rests at about 3.3 Hz. |
+| `phasic_decay_s` | float | `1.0` | Entity seconds for an alert's effect to decay by 1/e. |
+| `baseline_arousal` | float | `[thymos].baseline_arousal` | Arousal at which the tonic drive is zero. Not in the shipped file; set it only to override the Thymos baseline. |
 
-Each tick the controller computes `drive = max(tonic, phasic)`, where `tonic` is Thymos arousal above baseline scaled to `[0, 1]` and `phasic` is the most salient module report above `salience_floor` scaled to `[0, 1]`, held as a peak that decays over `phasic_decay_s`. The access rate is then `experiential_rate_hz + (processing_rate_hz - experiential_rate_hz) * drive`.
+Each tick the controller computes `drive = max(tonic, phasic)`. `tonic` is Thymos arousal above `baseline_arousal`, scaled to `[0, 1]`. `phasic` is the highest intensity among the tick's alert reports above `salience_floor`, scaled to `[0, 1]` and held as a peak that decays over `phasic_decay_s`. The access rate is `experiential_rate_hz + (processing_rate_hz - experiential_rate_hz) * drive`.
 
 ### Syneidesis
 
-Global Workspace scoring parameters.
+Workspace scoring and access. A candidate's priority is the product of its reported intensity, a novelty factor and a goal factor, clipped to `[0, 1]`; its score applies the arousal level gain and contrast to that priority. There is no per-source precision weight: each processor scales its own error before it reports. The `minimal_experiment` profile sets `top_k = 2`; `thesis_test` keeps the shipped values.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `top_k` | integer | `5` | Maximum coalition size: the top-*k* scoring events are broadcast each tick. |
-| `publication_threshold` | float | `0.35` | Minimum salience for an event to enter the coalition. Below this the tick publishes executive inhibition. |
-| `novelty_window` | integer | `32` | Sliding-window length (ticks) for the novelty detector. |
-| `salience_thymos_factor` | string | `"state_modulator"` | Source of the Thymos salience factor. `"state_modulator"` wires the real arousal-weighted StateModulator. `"static"` bypasses affect weighting and fires a degraded-mode warning. |
-| `salience_goal_factor` | string | `"static"` | Source of the goal salience factor. `"static"` leaves the goal factor at a constant; this is the shipped default and logs at INFO. `"drive_relevance"` is built and selectable but ships off by default: it changes what reaches the workspace and would shift the research baseline. |
-
-| `arousal_contrast_gain` | float | `8.0` | Logistic contrast slope at arousal 1.0; the slope is 0 at or below baseline arousal. `0` disables the contrast. |
+| `top_k` | integer | `5` | Coalition size: on each broadcast tick the `top_k` highest-scoring candidates form the coalition. |
+| `publication_threshold` | float | `0.35` | Access threshold. A coalition member is accessed when its own score reaches it. A broadcast whose best score is below it is inhibited: it is still published, but it drives no report or action and leaves the processors' prediction context unchanged. |
+| `novelty_window` | integer | `32` | Number of recently scored candidates over which novelty discounts exact repeats (same source, type and payload). |
+| `salience_thymos_factor` | string | `"state_modulator"` | `"state_modulator"` applies Thymos arousal as the level gain and contrast on the score. `"static"` holds the level at a constant with no contrast and logs a warning; it is a negative control. |
+| `salience_goal_factor` | string | `"static"` | `"static"` holds the goal factor at one (the shipped value, logged at INFO). `"drive_relevance"` scores each candidate's relevance to the Thymos drives; it is built but off, because it changes what reaches access. |
+| `arousal_contrast_gain` | float | `8.0` | Maximum contrast gain, reached at arousal 1. The gain is 0 at or below baseline arousal, and `0` disables the contrast. Read only with `salience_thymos_factor = "state_modulator"`. |
 
 ### Volition
 
@@ -203,22 +202,22 @@ Executive action selection (`kaine/workspace/volition.py`). When the section is 
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `policy` | string | `""` (unset) | `"self_initiated_report"` selects `SelfInitiatedReportPolicy`: the entity speaks or thinks only from its own precision-weighted surprise, never from a user utterance. Any other value or omission uses the drive-biased or plain default policy. |
-| `drive_initiative` | boolean | `true` | Consulted whenever `policy` is not `"self_initiated_report"`. `true` injects drive threshold-crossings as intents; `false` falls back to the plain default policy. |
-| `report_threshold` | float | `0.6` | Coalition surprise at or above this speaks aloud (`intent.speak`). The code only enforces `0 <= think_threshold <= report_threshold <= 1`; setting it at or above `publication_threshold` is a recommendation, not a requirement. |
-| `think_threshold` | float | `0.45` | Coalition surprise at or above this (but below `report_threshold`) forms an internal `intent.think`. |
-| `speak_refractory_s` | float | `8.0` | Minimum seconds between spoken reports under the self-initiated policy. `NousProposalSource` also reads this when Nous is enabled. |
-| `think_refractory_s` | float | `3.0` | Minimum seconds between internal think intents under the self-initiated policy. `NousProposalSource` also reads this when Nous is enabled. |
-| `interrupt_threshold` | float | unset | Opt-in mid-utterance interruption. Must satisfy `report_threshold < interrupt_threshold <= 1.0`. |
-| `sig_expiry_s` | float | unset | Expiry for the coarse novelty signature. Unset means it never expires. |
+| `policy` | string | `""` (unset) | `"self_initiated_report"` selects `SelfInitiatedReportPolicy`: the entity speaks or thinks only when the top score of an accessed broadcast clears a report bar, and a user utterance never triggers it. Any other value, or none, uses the drive-biased or plain default policy. |
+| `drive_initiative` | boolean | `true` | Read when `policy` is not `"self_initiated_report"`. `true` turns drive threshold crossings into intents; `false` uses the plain default policy. |
+| `report_threshold` | float | `0.6` | Report bar for speech. When the top score among the broadcast's members (the entity's own speech excluded) reaches it, Volition forms an `intent.speak`. The code enforces `0 <= think_threshold <= report_threshold <= 1`; keeping the bars above `[syneidesis].publication_threshold` is a recommendation. |
+| `think_threshold` | float | `0.45` | Report bar for inner speech: a top score at or above it, but below `report_threshold`, forms an `intent.think`. |
+| `speak_refractory_s` | float | `8.0` | Minimum entity seconds between spoken reports under the self-initiated policy. `NousProposalSource` also reads it when Nous is enabled. |
+| `think_refractory_s` | float | `3.0` | Minimum entity seconds between think intents under the self-initiated policy. `NousProposalSource` also reads it when Nous is enabled. |
+| `interrupt_threshold` | float | unset | Opt-in interruption of an utterance in progress. Must satisfy `report_threshold < interrupt_threshold <= 1.0`. |
+| `sig_expiry_s` | float | unset | Entity seconds after which the novelty signature (the top member's source and type) stops blocking a repeat report. Unset means it never expires. |
 
-With the base profile selected, `policy` is `"self_initiated_report"`, `drive_initiative` is `false`, and `sig_expiry_s` is `300.0`.
+None of these keys is in the shipped file, so the defaults above apply. The `thesis_test` profile sets `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`; `minimal_experiment` sets `drive_initiative = false`.
 
 Regardless of policy, inhibition gates first: if `snapshot.inhibited` is true, `Volition.select()` returns no intents.
 
 ### Oscillator
 
-Oscillatory-binding layer. Each module maintains a spiking LIF population; Syneidesis uses pairwise phase-locking value among a coalition's source modules to apply a bounded coherence multiplier to aggregate salience.
+Oscillatory-binding layer. Each module maintains a spiking LIF population, and Syneidesis multiplies each candidate's score by a bounded coherence factor computed from the pairwise phase-locking value among the tick's source modules.
 
 Ships disabled; when `enabled = false` the multiplier is exactly `1.0`.
 
@@ -242,7 +241,7 @@ Per-run identity, seeding, and manifest for research reproducibility.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `seed` | integer or `""` | `""` | Fixed integer makes a run reproducible. Blank generates a fresh seed each boot. The manifest always records the seed used, so even an unseeded run can be reproduced after the fact. |
-| `write_manifest` | boolean | `true` | Write the run manifest to `data/evaluation/runs/<run_id>/manifest.json` at boot. The manifest holds only run id, seed, git sha, model ids, a config digest, started-at, and the KAINE version — no entity interior, no operator-identifying data. |
+| `write_manifest` | boolean | `true` | Write the run manifest to `data/evaluation/runs/<run_id>/manifest.json` at boot. The manifest holds only the run id, seed, git sha, model ids, a config digest, start time and KAINE version. It holds nothing from the entity's interior and nothing that identifies the operator. |
 | `deterministic` | boolean | `false` | Opt-in deterministic cycle mode. Event timestamps come from a logical clock and each tick's events are ordered by a canonical key, so two runs with the same seed and the same input produce an identical cognitive trajectory. Wall-clock latency measurements remain physical. Off in production; used by the controlled oscillatory-ablation runner (see [Running experiments](../15-experiments/README.md)). |
 
 Determinism holds for the seeded procedural feed. Under `[perception_feed].mode = "playlist"` the stimulus is paced by the real wall clock, so playlist runs are reproducible by per-item sha256, not bit-for-bit.
@@ -259,7 +258,7 @@ Determinism holds for the seeded procedural feed. Under `[perception_feed].mode 
 
 ### Remote bridge
 
-Remote perception bridge — a WebSocket server that runs in the cycle process and gives the operator direct access to Topos, Audition, and Vox. It lets the operator stream a remote camera into vision, a remote microphone into hearing, and receive generated speech plus the conversation transcript over a Tailscale tailnet. Ships disabled.
+The remote perception bridge is a WebSocket server that runs in the cycle process and gives the operator direct access to Topos, Audition, and Vox. It lets the operator stream a remote camera into vision, a remote microphone into hearing, and receive generated speech plus the conversation transcript over a Tailscale tailnet. Ships disabled.
 
 Remote payloads are decoded in memory and never written to disk. Remote audio uses the same VAD/utterance pipeline as the physical mic and is attributed `source_label = "remote"` so it never impersonates the physical microphone. While a remote camera or mic is connected, `claim_senses = true` marks the matching physical sense as not-desired and restores the previous state on disconnect.
 
@@ -274,7 +273,7 @@ Remote payloads are decoded in memory and never written to disk. Remote audio us
 | `audio_vad_backend` | string | `"webrtcvad"` | Utterance segmentation for remote audio. `"webrtcvad"` needs the `[audio]` extra; `"rms"` is the dependency-free fallback. |
 | `claim_senses` | boolean | `true` | While a remote camera/mic is connected, mark the matching physical sense as not-desired. |
 | `speech_queue_size` | integer | `8` | Per-client outbound speech queue. Oldest clips drop when a slow client falls behind. |
-| `allowed_origins` | list of strings | `["null", "http://127.0.0.1:17893", "https://appassets.androidplatform.net"] | Browser WebSocket Origin allowlist. `"null"` admits native clients that send no Origin header. |
+| `allowed_origins` | list of strings | `["null", "http://127.0.0.1:17893", "https://appassets.androidplatform.net"]` | Browser WebSocket Origin allowlist. `"null"` admits native clients that send no Origin header. |
 | `max_message_bytes` | integer | `2097152` | Hard cap on a single inbound WebSocket message in bytes. |
 | `ssl_certfile` | string | `""` | Optional TLS certificate PEM file. Set both this and `ssl_keyfile` to serve over `wss` instead of `ws`. |
 | `ssl_keyfile` | string | `""` | Optional TLS key PEM file. |
@@ -289,8 +288,8 @@ Security: clients must present `token` as `Authorization: Bearer <token>`; query
 |---|---|---|---|
 | `echo` | boolean | `false` | Permanent test infrastructure. Never enable in production. |
 | `soma` | boolean | `false` | Predictive interoception. |
-| `chronos` | boolean | `false` | Temporal awareness and event-rhythm prediction. |
-| `topos` | boolean | `false` | Vision encoder and live camera. |
+| `chronos` | boolean | `false` | Temporal processor: predicts the broadcast sequence. |
+| `topos` | boolean | `false` | Vision. |
 | `nous` | boolean | `false` | Active inference engine. |
 | `mnemos` | boolean | `false` | Vector-store memory. |
 | `eidolon` | boolean | `false` | Self-model. |
@@ -299,7 +298,7 @@ Security: clients must present `token` as `Authorization: Bearer <token>`; query
 | `lingua` | boolean | `false` | Language organ. |
 | `vox` | boolean | `false` | Voice synthesis. |
 | `audition` | boolean | `false` | Hearing. |
-| `hypnos` | boolean | `false` | Offline consolidation. |
+| `hypnos` | boolean | `false` | Sleep: fatigue-triggered offline periods and consolidation. |
 | `empatheia` | boolean | `false` | Social cognition. |
 | `phantasia` | boolean | `false` | World model. |
 | `perception` | boolean | `false` | Perception locus arbiter (physical-XOR-virtual sense gating). |
@@ -307,7 +306,7 @@ Security: clients must present `token` as `Authorization: Bearer <token>`; query
 
 The guard test that enforces the all-off invariant is `tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled`.
 
-With no profile selected, the loader applies the base-thesis `thesis_test` profile, which turns `soma`, `chronos`, `topos`, `audition`, `lingua`, and `thymos` on and leaves the rest off. The operator file merges last, and the first-run wizard writes its own `[modules]` table there, so a wizard-configured install runs the wizard's module set instead (see [Module defaults](README.md#module-defaults)).
+With no profile selected, the loader applies the base-thesis `thesis_test` profile, which turns `soma`, `chronos`, `topos`, `audition`, `lingua`, `thymos` and `hypnos` on and leaves the rest off. The operator file merges last, and the first-run wizard writes its own `[modules]` table there, so a wizard-configured install runs the wizard's module set instead (see [Module defaults](README.md#module-defaults)).
 
 ## Plugins
 
@@ -323,7 +322,7 @@ Per-plugin settings live under `[plugins.<name>]`. Their keys are plugin-specifi
 
 `[spot]` configures the module supervisor (watchdog). Spot runs in the cycle process, polls every module for crash or hang, and on a fault freezes the cycle, snapshots last-good state, and restarts the faulted module. After `max_restart_attempts` consecutive failures it saves a final snapshot, shuts every module down, writes `state/cycle/escalation.json`, and exits non-zero. Spot never reboots the host.
 
-Ships disabled — first boot is operator-supervised. For remote operation guidance see [Remote operation and the Spot supervisor](../06-operation/remote-and-spot.md).
+It ships disabled, since first boot is operator-supervised. For remote operation guidance see [Remote operation and the Spot supervisor](../06-operation/remote-and-spot.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|

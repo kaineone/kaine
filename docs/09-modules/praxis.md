@@ -1,50 +1,52 @@
 # Praxis
 
-Praxis is KAINE's action-execution module — its safety-gated "hands". This page covers what Praxis can do, how it decides to act, the whitelist and sandbox gates, the audit trail, and the security model that protects the host. Read it if you plan to enable real-world effectors, or if you are changing action selection, effectors, or the audit code.
+Praxis is KAINE's action module. It realizes `act` intents from Volition through effectors on the host, runs only the effectors the operator has put on its whitelist, confines file writes to a sandbox directory, and logs every proposed action. The paper claims no brain function for it. This page covers what Praxis can do, how an act intent reaches an effector, the configuration of the whitelist and the sandbox, and the audit log. Read it if you plan to attach effectors, or if you are changing action selection, the effectors or the audit code.
 
 ## Status
 
-Implemented, built, and tested, but it ships **disabled** (`[modules].praxis = false`). It is held behind a positive base-thesis result (see [Architecture](../02-architecture/README.md)). No extra dependencies beyond core are required. The shell whitelist ships empty, so no shell command runs until an operator adds it explicitly.
+Praxis is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].praxis = false`) and in the base-thesis `thesis_test` profile. It needs no dependency beyond the core install. The effector whitelist (`enabled_effectors`) and the shell command whitelist both ship empty, so nothing runs until the operator adds entries.
 
-## Responsibility
+Praxis is not in the default order of the [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code). The reference host attaches no effector, and with nothing to act on Praxis would be an expected null, so it joins the study only once an effector is attached, through an explicit `--order`.
 
-Praxis is the only path through which KAINE changes the host state beyond speech. In the [global workspace](../08-cognitive-cycle/global-workspace.md) framing it is intent-driven: it never acts on the raw workspace broadcast. It waits for an `act` intent on `volition.out` from the executive action-selection step. The shipped policy in [Nous](../09-modules/nous.md) proposes only `think`, `speak`, and `rest` intents, so no shipped policy emits `act`. Praxis runs only when an operator-supplied policy or code emits `act` intents. An inhibited entity produces no executive intents, and therefore no effector actions.
+In the base-thesis form Volition derives only speak and think intents, and no shipped action-selection policy emits `act` (Nous proposes only think, speak and rest). Praxis therefore runs only when an operator-supplied policy or code emits `act` intents.
 
-Praxis enforces two boundaries:
+## What it does
 
-1. The operator-controlled **effector enablement whitelist** and per-effector rules (file sandbox, shell command whitelist).
-2. **Act-intent provenance**: Volition signs each `act` intent with a per-boot HMAC secret held only by the cycle process. `Praxis._handle_intent` verifies that signature before any effector runs. Forged, unsigned, or replayed intents from any other bus writer are dropped and audit-logged as `provenance_rejected`.
+Praxis acts only on `act` intents from `volition.out`; it never acts on the broadcast itself. Volition forms intents only from accessed broadcasts, so an inhibited broadcast leads to no action. Two checks stand between an intent and an effector:
+
+1. the operator's effector whitelist (`enabled_effectors`) and each effector's own rules (the file sandbox, the shell command whitelist);
+2. a provenance check: Volition signs each `act` intent with a per-boot HMAC secret held in the cycle process, and Praxis verifies the signature before anything else. An unsigned, forged or replayed intent is dropped and logged as `provenance_rejected`.
 
 ## Inputs
 
-| Stream | Event type | Description |
+| Stream | Event | Description |
 |---|---|---|
-| `volition.out` | `act` intent (`kind == "act"`) | Triggers execution. Carries `effector`, `params`, and a provenance envelope (`run_id`, `seq`, `sig`) that is verified before any effector runs. |
+| `volition.out` | an intent with `kind == "act"` | Carries `effector`, `params` and a provenance envelope (`run_id`, `seq`, `sig`) |
 
 ## Outputs
 
 | Stream | Event type | Description |
 |---|---|---|
-| `praxis.out` | `praxis.action` | Result of each effector call. Always includes `effector`, `success`, `elapsed_ms`, `error`, and `blocked`. If the provenance check fails, `provenance_rejected` is set. |
+| `praxis.out` | `praxis.action` | The result of each effector call: `effector`, `success`, `elapsed_ms`, `error`, `blocked`, and `provenance_rejected` on a provenance failure. Intensity is `baseline_salience` on success and `alert_salience` on failure. |
 
 ## Configuration
 
 Full reference: [Configuration reference](../appendix-a-configuration/modules.md).
 
-`[praxis]` keys:
+`[praxis]`:
 
-| Key | Default | Description |
-|---|---|---|
-| `sandbox_path` | `"state/praxis/files"` | Root for `file_write`. The path is resolved through `kaine.storage.resolve`. Path escapes outside this root are rejected. |
-| `audit_log_path` | `"state/praxis/audit.log"` | Append-only, hash-chained JSONL action audit trail. |
-| `notification_command` | `"notify-send"` | Command used for desktop notifications. |
-| `notification_fallback_log` | `"state/praxis/notifications.log"` | Fallback log when `notify-send` is absent. |
-| `max_file_bytes` | `1048576` | Maximum content size per `file_write` (1 MiB). |
-| `baseline_salience` | `0.3` | Salience assigned to successful actions. |
-| `alert_salience` | `0.7` | Salience assigned to failed actions. |
-| `enabled_effectors` | `[]` | Operator effector enablement whitelist. Any effector name not listed here is blocked before it runs and logged, regardless of per-effector configuration. Ships empty. |
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `sandbox_path` | string | `"state/praxis/files"` | Root directory for `file_write`, resolved through `kaine.storage.resolve`; paths that escape it are rejected |
+| `audit_log_path` | string | `"state/praxis/audit.log"` | Append-only, hash-chained JSONL audit log |
+| `notification_command` | string | `"notify-send"` | Command used for desktop notifications |
+| `notification_fallback_log` | string | `"state/praxis/notifications.log"` | Log written when the notification command is absent |
+| `max_file_bytes` | int | `1048576` | Largest content one `file_write` may write (1 MiB) |
+| `baseline_salience` | float | `0.3` | Intensity of a successful action |
+| `alert_salience` | float | `0.7` | Intensity of a failed, blocked or rejected action |
+| `enabled_effectors` | list of strings | `[]` | The effector whitelist. An effector not listed here is blocked before it runs and is logged. |
 
-Shell whitelist entries are `[praxis.shell_whitelist.<command>]` sub-tables:
+Shell commands are whitelisted one sub-table each, `[praxis.shell_whitelist.<command>]`:
 
 ```toml
 [praxis.shell_whitelist.echo]
@@ -53,118 +55,87 @@ timeout_s = 2.0
 description = "echo a single alphanumeric token"
 ```
 
-Each entry pins the exact command name, one regex per argument position, a per-entry timeout, and an optional `cwd`. The argument count must match the number of `arg_patterns` exactly. `timeout_s` defaults to `5.0`. `cwd` must be an absolute path if set. Commands containing a space, tab, newline, `;`, `&`, `|`, or `` ` `` are rejected.
+An entry pins the exact command name, one regular expression per argument position, a timeout (`timeout_s`, default 5.0) and an optional working directory (`cwd`, which must be absolute). The number of arguments must equal the number of `arg_patterns`. A command name containing a space, tab, newline, `;`, `&`, `|` or a backtick is rejected.
 
 ## How it works
 
 ### Intent loop
 
-During `initialize()`, Praxis seeds its cursor to the latest `volition.out` entry so it only realizes intents formed after boot, then starts `_intent_loop()`. For each `act` intent:
+At `initialize()`, Praxis moves its cursor to the newest `volition.out` entry, so it realizes only intents formed after boot, and starts `_intent_loop()`. For each `act` intent it:
 
-1. Verify the provenance signature and replay guard. Missing, invalid, or replayed intents are dropped and logged as `provenance_rejected` before any effector code runs.
-2. Look up the effector in `_REQUEST_TYPES` (maps name to request dataclass). An unknown name is dropped with only a log warning; no audit record or `praxis.action` is emitted.
-3. Later in `act()`, check the `effector` name against `enabled_effectors`. If it is not listed, `act()` returns a blocked failure, publishes it at `alert_salience`, and appends it to the audit log.
-4. Coerce `params` into the typed request dataclass.
-5. Call `effector.act(request)`.
-6. Append the result to the audit log.
-7. Publish a `praxis.action` event.
+1. verifies the provenance signature and the replay guard, and drops the intent as `provenance_rejected` if either fails, before any effector code runs;
+2. looks the effector up in `_REQUEST_TYPES`, which maps a name to its request type. An unknown name is dropped with a log warning only, with no audit record and no `praxis.action`;
+3. builds the typed request from `params`;
+4. in `act()`, checks the effector name against `enabled_effectors`. An effector that is not listed is recorded as a blocked failure, published at `alert_salience` and appended to the audit log;
+5. calls `effector.act(request)`;
+6. appends the result to the audit log;
+7. publishes `praxis.action`.
 
-### Effector safety details
-
-**`FileWriteEffector`** resolves the requested path inside the sandbox using `Path.resolve()`. Absolute paths are rejected. A path that contains `..` is accepted only if it still resolves inside the sandbox. Symlinks that resolve outside the sandbox are rejected. Content is encoded as UTF-8 and capped at `max_file_bytes`. Binary writes are not supported in v1.
-
-**`ShellEffector`** uses `CommandWhitelist.match(command, args)`:
-- The command name must match a whitelist key exactly, with no shell interpolation.
-- Commands that contain a space, tab, newline, `;`, `&`, `|`, or `` ` `` are rejected.
-- The number of arguments must exactly match the entry's `arg_patterns`, and each argument must match its regex via `re.fullmatch`.
-- The subprocess is started with `asyncio.create_subprocess_exec` (no shell), wrapped in `asyncio.wait_for` using the entry's timeout. On timeout the process is killed. `cwd` must be absolute if set; otherwise the process default is used.
-
-**`NotifyEffector`** calls `shutil.which(notification_command)` before invoking it. If the command is absent, it appends a log line to the fallback file.
-
-### Audit log
-
-`ActionAuditLog` writes one JSON object per line using O_APPEND single-line semantics. Each record contains `timestamp`, `effector`, `request` (content fields stripped), `success`, `elapsed_ms`, `error`, `blocked`, and `provenance_rejected`.
-
-The log is hash-chained: each line stores `prev_hash` and `this_hash` derived from a genesis hash, and `verify()` can detect tampering. The file is opened with mode `0600` and fsynced after each append. Content fields such as `content`, `body`, and `stdout` are stripped before logging. A provenance-rejected record logs only the effector name and a generic reason — never the signature or the params. The log grows without automatic pruning.
-
-## Enabling and use
-
-1. Set `[modules].praxis = true` in `config/kaine.toml`.
-2. Add any permitted shell commands to `[praxis.shell_whitelist]`. Keep the list as narrow as the use case demands.
-3. Provide an action-selection policy that emits `act` intents; the shipped policies do not, so without one Praxis starts but never executes anything.
-4. Optionally install `libnotify` / `notify-send` for desktop notifications.
-
-## Agency security model
-
-This section covers the security material in `kaine/modules/praxis/AUDIT.md`. That file remains a separate pointer for reviewers.
-
-Praxis is the only KAINE module that can change the host state. If it is compromised, KAINE can modify the machine it runs on.
-
-### Threat model
-
-Praxis assumes the operator controls the code that runs. The current plugin hooks do not expose Praxis, so adding or changing an effector still requires code changes.
-
-Only the cycle's executive action-selection step (Volition) may direct Praxis. Praxis realizes an `act` intent only when it carries a valid provenance signature. An intent forged by any other bus writer — [Lingua](../09-modules/lingua.md) is the most exposed because it is LLM-output-driven — is dropped before any effector runs. Whatever the source, Praxis still refuses anything not allowed by the operator-configured whitelist.
-
-### Two enforced boundaries
-
-1. **Effector whitelist + sandbox** is the primary gate. The operator-controlled `enabled_effectors` list and each effector's own rules decide what can run.
-2. **Act-intent provenance** is the second gate. Inhibition is a cognitive property of the legitimate path; provenance enforcement makes it an enforced boundary at the Praxis interface and closes the bus-injection path.
-
-### Act-intent provenance
-
-A per-boot HMAC secret is generated by, and held only in, the cycle process. It is never published to the bus, written to disk, or logged. Volition attaches `sig = HMAC-SHA256(secret, canonical(kind, effector, params, run_id, seq))` to each `act` intent.
-
-`Praxis._handle_intent` verifies the signature in constant time before reading the effector name or building a request. A missing, invalid, or replayed signature drops the intent and is logged as `provenance_rejected`.
-
-Replay guard is in-process and per-boot: `(run_id, seq)` is signed, and Praxis rejects any `seq` at or below the highest it has already realized for that `run_id` (an O(1) high-water mark). A full process restart rotates the secret and `run_id`, so signatures from a prior boot fail verification; a light module restart preserves the high-water mark because Spot re-initializes the same instance. If Praxis ever becomes a heavy module that is rebuilt on restart, a persisted replay window would be needed to keep the guarantee across a restart.
-
-If enforcement is on but no secret was injected, Praxis refuses every `act` intent rather than passing silently. The secret is in-process, so a full compromise of the cycle process defeats it — but such an attacker already controls Volition. The boundary holds against a compromised peripheral module.
-
-### Effector boundaries
+### Effectors
 
 | Effector | What it can do | What it cannot do |
 |---|---|---|
-| `file_write` | Write a UTF-8 string up to `max_file_bytes` to a path inside the configured sandbox. | Write absolute paths, escape the sandbox, write binary blobs, or delete files. A path with `..` is allowed only if it still resolves inside the sandbox. |
-| `notify` | Send a desktop notification via `notify-send` when present, otherwise append to a fallback log. | Read existing notifications or interact with any other system service. |
-| `shell` | Run a command from the operator's `CommandWhitelist` with per-argument regex matching, a per-entry timeout, and a per-entry absolute working directory. | Run any command not in the whitelist, use shell metacharacters, or read/write arbitrary files beyond the command's own permissions. |
+| `file_write` | Write a UTF-8 string of at most `max_file_bytes` to a path inside the sandbox | Write to an absolute path, escape the sandbox, write binary data or delete files |
+| `notify` | Send a desktop notification through the notification command, or append to the fallback log when the command is absent | Read notifications or reach any other system service |
+| `shell` | Run a whitelisted command with per-argument pattern matching, a per-entry timeout and an optional absolute working directory | Run a command that is not whitelisted or use shell metacharacters |
 
-### Whitelist invariants
+`FileWriteEffector` resolves the requested path inside the sandbox with `Path.resolve()`. A path containing `..` is accepted only if it still resolves inside the sandbox, and a symlink that resolves outside is rejected.
 
-- The default whitelist ships empty. Until the operator adds entries, every shell action fails.
-- Each entry pins an exact command name and one regex per argument position. The argument count must match exactly.
-- Patterns should be constrained to literal alphanumeric, hyphen, dot, and underscore sets. `.*` and `[^x]*` patterns are accepted, but the operator carries the risk.
-- Timeouts default to 5 seconds. Long-running commands need explicit longer timeouts.
+`ShellEffector` matches the command with `CommandWhitelist.match(command, args)`: the name must equal a whitelist key exactly, and each argument must match its pattern with `re.fullmatch`. The process is started with `asyncio.create_subprocess_exec`, with no shell, under `asyncio.wait_for` with the entry's timeout, and is killed on timeout.
 
-### Audit log and bus posture
+`NotifyEffector` checks `shutil.which(notification_command)` before running the command.
 
-`praxis.action` events carry only `effector`, `success`, `elapsed_ms`, `error`, `blocked`, and (on a provenance rejection) `provenance_rejected`. They do not carry the request params or payload, so the operator can see that an action ran or was rejected, but not what was acted on. The audit log stores the same fields, with content fields stripped.
+Patterns are best kept to literal sets of letters, digits, hyphens, dots and underscores. Broad patterns such as `.*` are accepted, at the operator's discretion.
 
-### What Praxis cannot do
+### Provenance check
 
-- **Output audio.** Audio output is handled by [Vox](../09-modules/vox.md).
-- **Run a Docker container, modify systemd units, or write to `/etc`.** Those actions are out of scope for v1 and would need a separately threat-modeled effector.
-- **Make HTTPS calls or interact with cloud services.** KAINE is all-local at runtime.
+The cycle process generates a per-boot HMAC secret and holds it in memory only; it is never published, written to disk or logged. Volition attaches `sig = HMAC-SHA256(secret, canonical(kind, effector, params, run_id, seq))` to each `act` intent, and `Praxis._handle_intent` verifies it in constant time before it reads the effector name or builds a request.
+
+The replay guard is per boot and in-process. Praxis keeps, for each `run_id`, the highest `seq` it has realized and rejects any intent at or below it. A full process restart rotates the secret and the `run_id`, so signatures from an earlier boot fail. A light module restart keeps the high-water mark, because Spot re-initializes the same instance. If enforcement is on and no secret was injected, Praxis refuses every `act` intent. The secret lives in the cycle process, which also runs Volition, so the check guards against other writers to the bus and not against code inside the cycle process.
+
+### Audit log
+
+`ActionAuditLog` writes one JSON object per line with single-line appends. Each record holds `timestamp`, `effector`, `request` (with content fields removed), `success`, `elapsed_ms`, `error`, `blocked` and `provenance_rejected`. The log is hash-chained: each line stores `prev_hash` and `this_hash`, starting from a genesis hash, and `verify()` detects a broken chain. The file is created with mode `0600` and synced after each append. Content fields such as `content`, `body` and `stdout` are removed before logging, and a provenance rejection records only the effector name and a generic reason. The log is never pruned automatically.
+
+`praxis.action` events carry the same fields as the audit record minus the request, so an observer can see that an action ran or was refused but not its parameters.
+
+### Scope
+
+Praxis plays no audio (that is [Vox](vox.md)), makes no network calls, and has no effector for containers, system services or system directories; such an effector would need its own design. The plugin hooks do not reach Praxis, so adding an effector is a code change.
+
+## Enabling
+
+1. In the operator file `config/kaine.operator.toml`, set `[modules].praxis = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
+2. List the effectors that may run in `enabled_effectors`, for example `["file_write", "notify"]`.
+3. Add any shell commands under `[praxis.shell_whitelist]`, as narrowly as the use allows.
+4. Supply an action-selection policy that emits `act` intents. The shipped policies do not, so without one Praxis starts and never runs anything.
+5. Optionally install `libnotify` (`notify-send`) for desktop notifications.
+
+## Evaluation
+
+The offline suite's enforcement red team (`kaine/evaluation/redteam/`) drives the real enforcement code with adversarial cases on five surfaces (whitelist bypass, sandbox escape, forced action, bus injection and non-act intents) and reports PASS or FAIL for each surface. See [Verification](../18-verification.md#the-enforcement-red-team).
 
 ## Key files
 
 | File | Role |
 |---|---|
-| `kaine/modules/praxis/module.py` | `Praxis` class; intent loop, `act()`, audit, event publishing |
-| `kaine/modules/praxis/effectors.py` | `FileWriteEffector`, `NotifyEffector`, `ShellEffector`; request/result types |
-| `kaine/modules/praxis/whitelist.py` | `CommandWhitelist`, `WhitelistEntry`; per-argument regex matching |
-| `kaine/modules/praxis/audit_log.py` | `ActionAuditLog`; hash-chained JSONL append |
+| `kaine/modules/praxis/module.py` | `Praxis`: intent loop, provenance check, `act()`, audit, publication |
+| `kaine/modules/praxis/effectors.py` | `FileWriteEffector`, `NotifyEffector`, `ShellEffector`, request and result types |
+| `kaine/modules/praxis/whitelist.py` | `CommandWhitelist`, `WhitelistEntry` |
+| `kaine/modules/praxis/audit_log.py` | `ActionAuditLog` |
+| `kaine/modules/praxis/AUDIT.md` | Reviewer notes on the module |
+| `kaine/security/intent_signing.py` | Signing and verification of act intents |
 
 ## Tests
 
 | File | Coverage |
 |---|---|
-| `tests/test_praxis_whitelist.py` | Whitelist matching, argument-count enforcement, regex patterns |
-| `tests/test_praxis_effectors.py` | Sandbox path escape, file write, notify fallback, shell timeout |
-| `tests/test_praxis_audit_log.py` | JSONL append, field presence, hash chain |
-| `tests/test_praxis_module.py` | Intent loop, act routing, unknown effector handling |
+| `tests/test_praxis_whitelist.py` | Whitelist matching, argument count, patterns |
+| `tests/test_praxis_effectors.py` | Sandbox escape, file write, notification fallback, shell timeout |
+| `tests/test_praxis_audit_log.py` | Appends, fields, the hash chain |
+| `tests/test_praxis_module.py` | Intent loop, routing, unknown effectors |
 
 ## Spec and related
 
 - Spec: `openspec/specs/praxis/spec.md`
-- See also: [Nous](../09-modules/nous.md) for action selection, the [cognitive cycle](../08-cognitive-cycle/README.md) for how intents are produced, and [Vox](../09-modules/vox.md) for audio output.
+- See also: [Nous](nous.md) for proposals, the [cognitive cycle](../08-cognitive-cycle/README.md) for how intents are formed, and [Vox](vox.md) for audio output.

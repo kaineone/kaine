@@ -19,7 +19,7 @@ out = []; seen = set(); in_active = False
 for line in L:
     if line.startswith('## '):
         in_active = line.strip() == '## Active changes'
-    m = re.match(r'^\| ([a-z0-9-]+) \| (\d+/\d+ \(\d+%\)) \| (.*)$', line) if in_active else None
+    m = re.match(r'^\| ([a-z0-9.-]+) \| (\d+/\d+ \(\d+%\)) \| (.*)$', line) if in_active else None
     if m:
         name = m.group(1)
         if name not in active:

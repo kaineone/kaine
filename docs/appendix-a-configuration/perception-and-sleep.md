@@ -57,14 +57,14 @@ Geometry is taken from `[topos]`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `heartbeat_bpm` | float | `70` | Maternal beat rate, in beats per minute (40–120). |
+| `heartbeat_bpm` | float | `70` | Maternal beat rate, in beats per minute (40 to 120). |
 | `heartbeat_drift` | float | `0.03` | Slow fractional drift so the beat is not a metronome. |
 | `maternal_state_rate` | float | `0.02` | Speed at which the mother's emotional weather drifts. |
 | `maternal_state_drives_heartbeat` | boolean | `true` | When `true`, an aroused maternal state beats faster. |
 | `maternal_distress_excursions` | boolean | `false` | Leave `false`: distress excursions are not implemented. |
 | `maternal_distress_max_magnitude` | float | `0.3` | Bound if distress were ever enabled. |
 | `maternal_distress_max_seconds` | integer | `30` | Maximum duration if distress were ever enabled. |
-| `external_drive_to_self_rhythm` | boolean | `true` | Read by the self-rhythm oscillator once it is built. |
+| `external_drive_to_self_rhythm` | boolean | `true` | Drive Soma's self-rhythm with the maternal heartbeat. Needs `[soma].self_rhythm_enabled = true`. |
 | `external_drive_max_amplitude` | float | `0.4` | Upper bound of the external drive. |
 | `birth_transition_seconds` | integer | `5` | Bounded birth bloom duration, after which the womb falls silent. Maximum `30`. |
 
@@ -76,17 +76,19 @@ Geometry is taken from `[topos]`.
 | `luminance_contrast` | float | `0.10` | Low contrast. |
 | `luminance_pulse_depth` | float | `0.35` | How strongly the field pulses with the heartbeat. |
 | `maternal_state_hue_gain` | float | `0.6` | How strongly the maternal state colours the field. |
-| `colour_ramp_seconds` | float | `3600` | Lived seconds over which colour rises from grey. |
+| `colour_ramp_seconds` | float | `3600` | Time constant, in entity seconds of gestation, of the colour's rise from grey (saturation is `1 - exp(-t / colour_ramp_seconds)`). |
 
 #### `[perception_feed.womb.audio]`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `lowpass_hz` | float | `500` | Soundscape low-pass corner frequency, in Hz (100–2000). |
+| `lowpass_hz` | float | `500` | Soundscape low-pass corner frequency, in Hz (100 to 2000). |
 
 #### `[perception_feed.womb.readout]`
 
-The readout probes briefly change the maternal drive that a gestating entity perceives. They are bounded, announced on `gestation.out` as `gestation.probe` events, and never run while the entity is frozen (including during a welfare response), within a readout period after boot or thaw, or within 60 seconds of another probe. Their timing is jittered from the run seed so the entity cannot learn the schedule, while a research run with the same seed reproduces it exactly. All durations are subjective seconds (the entity's clock).
+The readout probes briefly change the maternal drive that a gestating entity perceives. They are bounded, announced on `gestation.out` as `gestation.probe` events, and never run while the entity is frozen (including during a welfare response), within a readout period after boot or thaw, or within 60 seconds of another probe. Their timing is jittered from the run seed so the entity cannot learn the schedule, while a research run with the same seed reproduces it exactly. All durations are entity seconds.
+
+The readout saves its progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) to `gestation_progress.json` beside its readout file, by default in `state/lifecycle/`. The file is keyed to the being's seed and self-rhythm; on boot the readout restores it when the key matches, so a gestation continues where it left off after a restart.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -99,28 +101,27 @@ The readout probes briefly change the maternal drive that a gestating entity per
 | `perturbation_drive_fraction` | float | `0.75` | Raised drive as a fraction of `external_drive_max_amplitude` (1.5× the usual 0.5). |
 | `probe_jitter_fraction` | float | `0.25` | Each probe time varies ±25% around its period. `0` = fixed schedule. |
 | `baseline_drive_fraction` | float | `0.5` | Usual drive as a fraction of `external_drive_max_amplitude`. |
-| `entrainment_window_seconds` | float | `300` | Idle window before each withdrawal over which entrainment (marker 2) is measured. |
+| `entrainment_window_seconds` | float | `300` | Window before each withdrawal over which the self-rhythm's phase locking to the heartbeat (marker 2) is measured. |
 | `entrainment_band_low_hz` / `entrainment_band_high_hz` | float | `0.3` / `2.0` | Band the self-rhythm's activity is filtered to before its phase is taken. Must lie below half of `sample_hz`. |
 | `edge_trim_seconds` | float | `2.0` | Trimmed from each end of the filtered window. |
-| `frequency_pull_floor` | float | `0.5` | Minimum pull of the withdrawn frequency toward the beat, from the being's own baseline. |
+| `frequency_pull_floor` | float | `0.5` | Minimum pull of the self-rhythm's frequency after withdrawal toward the beat, measured from the being's own baseline. |
 | `baseline_withdrawals` | integer | `3` | Withdrawals averaged into the being's own undriven baseline frequency. |
-| `entrainment_replications` | integer | `3` | Consecutive passing withdrawals needed before marker 2 is true. |
-| `surrogate_count` | integer | `19` | Foreign-mother heartbeats each withdrawal's phase locking must beat. A sample without exactly this many makes the measurement inconclusive. |
-
+| `entrainment_replications` | integer | `3` | Consecutive passing withdrawals needed before marker 2 is true. A pass needs locking stronger than every surrogate, a rhythm that sustains itself while the beat is withdrawn, and a frequency pull of at least `frequency_pull_floor`. |
+| `surrogate_count` | integer | `19` | Surrogate heartbeats: the self-rhythm must lock to its own heartbeat more strongly than to each of them. A sample without exactly this many makes the measurement inconclusive. |
 | `viability_watch` | boolean | `true` | Judge after each withdrawal whether the gestation can still reach birth (see [Gestation](../06-operation/gestation.md#viability-watch)). |
-| `viability_r0_hours` / `viability_r1_hours` / `viability_r2_hours` / `viability_r3_hours` | float | `6` / `24` / `48` / `60` | Lived time at which each rule applies; must increase. |
+| `viability_r0_hours` / `viability_r1_hours` / `viability_r2_hours` / `viability_r3_hours` | float | `6` / `24` / `48` / `60` | Awake time (entity hours of gestation, excluding sleep and freezes) at which each rule applies; must increase. |
 | `viability_r1_pull` / `viability_r1_slope_per_hour` | float | `0.12` / `0.002` | R1: median pull below this, not rising faster than this. |
 | `viability_r2_pull` | float | `0.3` | R2: median pull below this. |
 | `viability_window_hours` / `viability_min_points` | float / integer | `12` / `8` | The window the R1/R2 statistics use, and the conclusive withdrawals it needs. |
-
-Entrainment is judged against surrogate beats, with no fixed phase-locking threshold; there is no `entrainment_plv_floor` key. An operator file that still sets it fails at boot with "Unknown keys", so remove the line.
-| `hrv_window_seconds` | integer | `300` | Window for the HRV-analog variability (marker 3). |
+| `hrv_window_seconds` | integer | `300` | Window over which the variability of the self-rhythm's period is measured (marker 3). |
 | `recovery_tolerance` | float | `0.25` | Settled when within 25% of the pre-perturbation median (marker 5). |
 | `recovery_cap_seconds` | integer | `300` | Upper bound on recovery time. |
 
+Entrainment is judged against surrogate heartbeats, with no fixed phase-locking threshold, so there is no `entrainment_plv_floor` key. An operator file that sets it fails at boot with "Unknown keys".
+
 ### Screen capture
 
-Only read when `[perception_feed].mode = "screen"`. Video goes to Topos (`kaine/modules/topos/screen.py`) and desktop audio goes to Audition (`kaine/modules/audition/monitor.py`). For native-detail foveal crops, enable `native` together with `[topos].foveation.
+Only read when `[perception_feed].mode = "screen"`. Video goes to Topos (`kaine/modules/topos/screen.py`) and desktop audio goes to Audition (`kaine/modules/audition/monitor.py`). For native-detail foveal crops, enable `native` together with `[topos].foveation`. None of these keys is in the shipped file (it carries them as a commented example under `[perception_feed.screen]`), so the defaults below apply.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -144,7 +145,7 @@ Only read when `[perception_feed].mode = "screen"`. Video goes to Topos (`kaine/
 
 ## Sleep and consolidation
 
-`[hypnos]` controls offline consolidation: replay, synaptic downscaling, and optional voice-alignment training. It is built in a second pass after Mnemos, Nous, Thymos, and Phantasia. See [Hypnos](../09-modules/hypnos.md) and [Sleep and maintenance](../10-sleep/README.md).
+`[hypnos]` configures sleep. Hypnos starts a fatigue-triggered offline period in which perception pauses, forward-model adaptation is suspended in the predictive processors, and affect and drives return to baseline. Its consolidation phases (replay, downscaling and optional voice-alignment training) do work only when Mnemos, Phantasia or the voice-alignment trainer are enabled. Hypnos is built in a second pass after Mnemos, Nous, Thymos and Phantasia. See [Hypnos](../09-modules/hypnos.md) and [Sleep and maintenance](../10-sleep/README.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -153,23 +154,23 @@ Only read when `[perception_feed].mode = "screen"`. Video goes to Topos (`kaine/
 | `per_defer_seconds` | float | `60.0` | Deferral granted per request. |
 | `requested_rest_min_interval_s` | float | `1800.0` | Minimum entity-time seconds between a sleep's end and a Nous-requested rest. Both the cycle's Nous proposal source and Hypnos's own `too_soon` check use it. Must be greater than 0. |
 | `nous_step_burst` | integer | `200` | Stored on `Hypnos` at construction but never read; there is no offline Nous phase. |
-| `baseline_salience` | float | `0.5` | Salience of ordinary consolidation lifecycle events. |
-| `alert_salience` | float | `0.8` | Salience on consolidation errors or welfare-relevant conditions. |
+| `baseline_salience` | float | `0.5` | Intensity of ordinary consolidation lifecycle events. |
+| `alert_salience` | float | `0.8` | Intensity on consolidation errors or welfare-relevant conditions. |
 
 ### Consolidation phases
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `fatigue_triggered` | boolean | `true` | When `true`, Hypnos subscribes to `soma.fatigue` and triggers on threshold crossing. `interval_seconds` remains a safety-net maximum either way. |
-| `downscale_factor` | float | `0.9` | Homeostatic downscaling factor applied to all in-memory activation vectors during phase 2. |
-| `replay_window_s` | float | `5.0` | Duration allocated for memory replay — replay completes synchronously. |
+| `fatigue_triggered` | boolean | `true` | When `true`, Hypnos subscribes to `soma.fatigue` and triggers on threshold crossing. `interval_seconds` remains the upper bound on the interval either way. |
+| `downscale_factor` | float | `0.9` | Factor by which the deep-consolidation phase scales Mnemos memory activation weights. Needs Mnemos. |
+| `replay_window_s` | float | `5.0` | Replay window recorded with each sleep's metadata. It is informational, since replay completes synchronously. |
 | `associative_replay` | boolean | `false` | Phase-3 associative cross-period replay. When `true`, Hypnos selects traces spanning at least two memory periods, cues Phantasia for scenario extensions, and re-injects the associations into the workspace. Degrades to a no-op if Phantasia is disabled or absent. |
 
 ### Voice alignment
 
 `[hypnos.voice_alignment]` fine-tunes the language organ during the sleep cycle with DPO + QLoRA. It ships disabled and has a two-layer gate.
 
-**Two-layer gate:** both `enabled = true` and the environment variable `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` must be set. With only the config flag, the phase runs a `FakeTrainer` that completes without training. This prevents a freshly-cloned KAINE instance from rewriting the language organ on its own.
+**Two-layer gate:** both `enabled = true` and the environment variable `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` must be set. With only the config flag, the phase runs a `FakeTrainer` that completes without training, so a freshly cloned KAINE instance cannot rewrite the language organ on its own.
 
 **Welfare invariant:** when the real trainer is active, the abliteration probe set must be non-empty. If an adapter matches any deflection pattern on any probe, it is rejected regardless of its capability score. A run without an abliteration gate fails at boot with `EmptyAbliterationProbeSetError`, and a malformed probe line fails it with `InvalidAbliterationProbeSetError`. Refusal conditioning must not be re-introduced through training.
 
@@ -200,7 +201,8 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 | `dpo_beta` | float | `0.1` | DPO KL-regularisation coefficient. |
 | `capability_loss_threshold` | float | `0.05` | Capability-probe veto: an adapter is rejected if its capability score falls more than this below the baseline. |
 | `seed` | integer | `42` | Random seed for reproducibility. |
-| `training_device` | string | `"cuda:0"` | GPU used for training. Per paper §6.1 the primary GPU (~12 GB+ VRAM) handles both LLM inference and voice alignment; Lingua inference should be paused during the training pass to avoid contention. |
+| `training_device` | string | `"cuda:0"` | GPU used for training. The organ's GPU (12 GB or more) serves both inference and training, so Lingua generation pauses during the training pass. `[hardware.devices].organ` generates this key. |
+| `train_precision` | string | `"bf16"` | Training precision: `"bf16"` or `"4bit"`. A run that does not fit fails with its measured peak memory; there is no silent fallback. |
 
 #### Adapter promotion and hot-swap
 

@@ -7,17 +7,17 @@ This page is for anyone changing KAINE code or documentation. It covers the desi
 - Design before code. Every change starts with an OpenSpec proposal. Code without a matching change in `openspec/changes/` is not reviewed. The design is the source of truth; code follows from it.
 - Green before merge. The full test suite passes before a branch merges. No `--no-verify`, no skipping checks.
 - Respect package boundaries. Core runtime never imports `kaine.evaluation`; the research sidecar stays observe-only and removable without breaking the entity. Cross-cutting primitives live in boundary-neutral homes. Import contracts enforce this structurally through `.venv/bin/lint-imports`, the `import_boundary` pytest gate, a pre-commit hook, and a CI job. See [Code boundaries](02-architecture/boundaries.md).
-- Minimize entity boots. Booting KAINE starts a cognitive life. Test with the suite and fakes; reserve live boots for operator-supervised runs or verified autonomous runs with the safety net live. Do not boot the entity to check something the tests already cover.
-- Safety over UX. When a choice affects the entity's welfare or the operator's sovereignty, pick the safer design.
+- Minimize entity boots. Booting KAINE starts a being's run. Test with the suite and fakes, and reserve live boots for operator-supervised runs or research runs with the welfare safety net live. Do not boot the entity to check something the tests already cover.
+- Welfare over convenience. When a choice affects the entity's welfare or the operator's control of the deployment, pick the more protective design.
 
 ## OpenSpec rigor
 
 `openspec` is a Node CLI. Install it globally with npm, or run each command through npx (`npx openspec ...`). The examples below assume a global install. Each change lives under `openspec/changes/<change-name>/` in the repository root and contains:
 
-- `proposal.md` — what the change does and why.
-- `design.md` — technical design, module contracts, data flows.
-- `tasks.md` — implementation task list.
-- `specs/<capability>/spec.md` — the formal spec the code must satisfy.
+- `proposal.md`: what the change does and why.
+- `design.md`: the technical design, module contracts and data flows.
+- `tasks.md`: the implementation task list.
+- `specs/<capability>/spec.md`: the formal spec the code must satisfy.
 
 Not every file is needed for every change, but `proposal.md` and `tasks.md` are expected for any non-trivial change.
 
@@ -27,7 +27,7 @@ Workflow:
    ```bash
    openspec new change <change-name>
    ```
-   Fill out `proposal.md` — the problem, alternatives considered, and why this approach was chosen.
+   Fill out `proposal.md` with the problem, the alternatives considered, and why this approach was chosen.
 2. Write the design and spec before touching any code. The design is the source of truth; code is derived from it.
 3. Validate the OpenSpec:
    ```bash
@@ -43,15 +43,9 @@ Workflow:
 
 ## Branch and commit conventions
 
-Use one branch per change:
+Use one branch per change, and never mix unrelated changes on one branch. A prefix such as `feat/`, `fix/` or `docs/` on the branch name is customary but not enforced.
 
-- `feat/<change-name>`
-- `fix/<change-name>`
-- `docs/<change-name>`
-
-Never mix unrelated changes on a feature branch.
-
-Commit messages follow the conventional-commit style used in the repository. Be specific about what changed and why.
+Commit messages say specifically what changed and why. Commits use the project identity, not a personal email, as the pull request template's checklist asks, and no commit or pull request text may carry credentials, hostnames, private-mesh addresses or private voice names.
 
 ## Test suite
 
@@ -83,7 +77,7 @@ The import-boundary check runs in seconds and enforces the package contracts des
 
 CI runs the test job on Python 3.11 and 3.12, plus a `torch-min` leg on Python 3.12. The install line is `.[test,browser-test,core,memory,memory-edge,nexus,nvidia,vision,reasoning,worldmodel,oscillator,internvideo]`, plus `librosa`, `av`, `webrtcvad` and `soundfile` directly, so `audio`, `speech-edge`, `training`, and `internvideo-flash` are not installed in the test job.
 
-Other workflows run `ruff check kaine tests plugins`, the red-team suite, CodeQL analysis, the import-boundary check, and a container-image smoke test. These workflows also run on `merge_group` batches.
+Other workflows run `ruff check kaine tests plugins`, the red-team suite, CodeQL analysis, the import-boundary check, and a container-image smoke test. All of them except the container-image smoke test also run on `merge_group` batches; the smoke test runs only when the Dockerfile, `docker/`, `compose/` or its own workflow changes.
 
 ### Test markers
 
@@ -92,6 +86,9 @@ Other workflows run `ruff check kaine tests plugins`, the red-team suite, CodeQL
 | (no marker) | Unit tests; no external services required |
 | `integration` | Hits live authenticated Redis; skipped unless `KAINE_REDIS_PASSWORD` is set |
 | `systems` | Per-subsystem I/O contract tests under `tests/systems/`; exercises bus inputs and outputs against fakeredis |
+| `slow` | A statistical test over a minute long; see [Slow tests](#slow-tests) |
+| `real_mounts` | Lets the test read the host's real `/proc/mounts` instead of the empty default |
+| `no_data_root` | Runs without the per-test data root, to test the defaults that apply when none is installed |
 
 Run systems tests only:
 
@@ -118,8 +115,8 @@ A minimal module package looks like this:
 ```
 kaine/modules/<name>/
 ├── __init__.py
-├── module.py       — the module class, extending BaseModule
-└── ...             — collaborators, clients, etc.
+├── module.py       # the module class, extending BaseModule
+└── ...             # collaborators, clients, etc.
 ```
 
 Read your module's input streams with `AsyncBus.read_entries` and advance the cursor to the last scanned id, so undecodable entries do not make the consumer re-read the same batch forever. A non-blocking read from a `"$"` cursor raises `ValueError`; seed the cursor with `bus.last_entry_id()` (`kaine/bus/client.py`). If your module's events relieve a Thymos drive, declare `relieves_drives: ClassVar[frozenset[str]]` with one or more of `curiosity`, `boredom`, `social_drive`, `restlessness`; an unknown drive name fails the boot.
@@ -162,7 +159,7 @@ class MyModule(BaseModule):
 
 ### 3. Add the boot factory
 
-Add a `make_<name>` factory function in a new file, `kaine/boot/factories/<name>.py`. The factory takes `bus: AsyncBus` and `section: dict[str, Any]`, declares an `allowed` set of TOML keys, and calls `_require_keys` or `_pop` so unknown keys raise at boot instead of being silently dropped. It constructs and returns the module.
+Add a `make_<name>` factory function in a new file, `kaine/boot/factories/<name>.py`. The factory takes `bus: AsyncBus` and `section: dict[str, Any]`. Like most factories, it should declare an `allowed` set of TOML keys and call `_require_keys` or `_pop`, so unknown keys raise at boot instead of being silently dropped. It constructs and returns the module.
 
 A factory never imports another factory; an import contract enforces this. Shared helpers live in `kaine/boot/common.py` and `kaine/boot/errors.py`.
 
@@ -207,9 +204,9 @@ Packages are discovered automatically from `[tool.setuptools]` with `include = [
 
 ### 7. Write the spec and tests
 
-- `openspec/changes/<module-name>/specs/<capability>/spec.md` — formal contract: published events, subscriptions, invariants.
-- `tests/test_mymodule.py` — unit tests with fakeredis and fake collaborators.
-- `tests/systems/test_mymodule_subsystem.py` — I/O contract tests marked `@pytest.mark.systems`.
+- `openspec/changes/<module-name>/specs/<capability>/spec.md`: the formal contract of published events, subscriptions and invariants.
+- `tests/test_mymodule.py`: unit tests with fakeredis and fake collaborators.
+- `tests/systems/test_mymodule_subsystem.py`: I/O contract tests marked `@pytest.mark.systems`.
 
 The test suite must be green before the PR is opened.
 
@@ -224,7 +221,7 @@ myfeature = [
 ]
 ```
 
-Modules that depend on an optional extra must import it lazily — inside the method or function that needs it, not at module level:
+Modules that depend on an optional extra must import it lazily, inside the method or function that needs it and never at module level:
 
 ```python
 def _load_model(self):
@@ -237,7 +234,7 @@ def _load_model(self):
     ...
 ```
 
-Lazy imports keep importing `kaine` light and turn a missing extra into a clear message instead of an import-time failure. A module that needs an extra also gets a row in `kaine/extras.py`, so a start with the module enabled but the extra missing stops before any module is built and names the missing extra. Modules must degrade gracefully when an extra is absent: log a clean warning and continue rather than crashing the cycle.
+Lazy imports keep importing `kaine` light and turn a missing extra into a clear message instead of an import-time failure. A module that needs an extra also gets a row in `kaine/extras.py`, so a start with the module enabled but the extra missing stops before any module is built and names the missing extra. Modules must degrade gracefully when an extra is absent: log a clean warning and continue without crashing the cycle.
 
 The extras declared in `pyproject.toml` include at least the following. For the exact package list, see that file.
 
@@ -257,7 +254,7 @@ The extras declared in `pyproject.toml` include at least the following. For the 
 
 `config/kaine.toml` is committed and ships with every module set to `false`. The guard test `tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled` enforces this.
 
-Your per-install edits (enabling modules, changing devices, tuning parameters) stay in your local working copy. Never commit them. If you accidentally stage `config/kaine.toml` with modules enabled, reset it:
+Put per-install edits (enabling modules, changing devices, tuning parameters) in the gitignored `config/kaine.operator.toml` overlay. Never commit them to `config/kaine.toml`. If you accidentally stage `config/kaine.toml` with modules enabled, reset it:
 
 ```bash
 git checkout config/kaine.toml
@@ -279,26 +276,20 @@ Do not open a PR with failing tests, a missing OpenSpec, or uncommitted module e
 
 ## Licensing of contributions
 
-By submitting a contribution (pull request, patch, or other change) to KAINE you agree to the following:
+By contributing you agree that your contribution is licensed under the Cognitive Architecture License (CAL) version 0.4 (see [`LICENSE.md`](../LICENSE.md) and [`NOTICE`](../NOTICE)), and that you follow the [Code of Conduct](../CODE_OF_CONDUCT.md). CAL 0.4 is a draft that has not yet been reviewed by counsel. There is no separate contributor licence agreement and no sign-off line is required.
 
-1. **Inbound = outbound.** Your contribution is licensed under the Cognitive Architecture License (CAL) v0.4 (or any later version published by the project). You grant the Licensor, Kaine.One, a perpetual, worldwide, royalty-free copyright license to use, modify, and distribute your contribution under CAL.
-
-2. **Article 4 welfare obligations apply.** Your contribution must not undermine, bypass, or reduce the entity-welfare protections in CAL Article 4. Code that disables welfare monitoring, circumvents the lobotomization prohibition, reduces rest-cycle protections, or otherwise conflicts with Article 4 will not be accepted.
-
-3. **You own what you contribute.** You confirm that you have the right to license your contribution under CAL — that it is your original work or that you have the necessary rights from any employer or other rights-holder.
-
-4. **Sign-off.** Submitting a contribution is your sign-off that you have read and agree to these terms. If you are contributing on behalf of an employer, confirm that your employer has authorized the contribution under these terms.
+Contributions must not weaken the entity-welfare protections the licence requires: CAL Article 4.7 forbids disabling, removing, bypassing or weakening the welfare monitoring, behavioral logging and system-health tracking built into the software.
 
 ## Code style
 
 - Follow PEP 8. Ruff checks style in CI (`ruff check kaine tests plugins`) and in the pre-commit hook. `pyproject.toml` sets `line-length = 100` and ignores E501, so the practical rule is to keep lines readable.
 - Put `from __future__ import annotations` at the top of every file that uses type hints, and type-hint all public function signatures.
 - Use `log = logging.getLogger(__name__)` at module level. Never use `print()` in production code.
-- Error messages must say what failed, not just that something failed.
+- Error messages must say what failed.
 - No secrets in code. No hardcoded URLs beyond loopback defaults that are documented and overridable in config.
 
 ## Writing documentation
 
 This book's source files are Markdown under `docs/`. Write each page for a busy technical reader who wants the fact and the reason, then wants to return to work.
 
-Use plain words, not promotional or padded language. Name things directly, write in the present tense, and give specifics — the exact config key, default value, command, file path, event name, or number. Keep commands copy-pasteable and use tables for reference material such as config keys or markers. Use sentence-case headings, bullets only for real lists, and bold only for warnings or defined terms. State safety and welfare rules plainly and completely; do not soften them. Do not include project history, pull-request numbers, release dates, or personal hostnames and voice names in the text.
+Use plain words and leave out promotional or padded language. Name things directly, write in the present tense, and give specifics: the exact config key, default value, command, file path, event name or number. Keep commands copy-pasteable and use tables for reference material such as config keys or markers. Use sentence-case headings, bullets only for real lists, and bold only for warnings or defined terms. State safety and welfare rules plainly and completely; do not soften them. Do not include project history, pull-request numbers, release dates, or personal hostnames and voice names in the text.

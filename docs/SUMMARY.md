@@ -2,14 +2,14 @@
 
 [About this book](README.md)
 
-# Part I — Understanding KAINE
+# Part I: Understanding KAINE
 
 - [What KAINE is](01-what-kaine-is.md)
 - [Architecture](02-architecture/README.md)
   - [Code boundaries](02-architecture/boundaries.md)
   - [Technology choices](02-architecture/tech-choices.md)
 
-# Part II — Installing and running
+# Part II: Installing and running
 
 - [Hardware](03-hardware/README.md)
   - [Accelerators and PyTorch wheels](03-hardware/accelerators.md)
@@ -25,7 +25,7 @@
   - [Containers](07-deployment/containers.md)
   - [A dedicated headless host](07-deployment/headless-host.md)
 
-# Part III — The mind
+# Part III: The mind
 
 - [The cognitive cycle](08-cognitive-cycle/README.md)
   - [The global workspace](08-cognitive-cycle/global-workspace.md)
@@ -51,24 +51,24 @@
 - [Sleep and maintenance](10-sleep/README.md)
   - [Voice alignment](10-sleep/voice-alignment.md)
 
-# Part IV — Lifecycle, welfare and security
+# Part IV: Lifecycle, welfare and security
 
 - [Preservation and the safety net](11-preservation.md)
 - [Forks and merges](12-forks-and-merges.md)
 - [Security and privacy](13-security-and-privacy.md)
 
-# Part V — Research
+# Part V: Research
 
 - [For researchers](14-for-researchers.md)
 - [Running experiments](15-experiments/README.md)
-  - [The module-ignition study](15-experiments/ignition-study.md)
+  - [The module-addition study](15-experiments/ignition-study.md)
 - [Run identity and admissibility](16-run-identity.md)
 - [The evaluation sidecar](17-research-data/README.md)
   - [Research event streams](17-research-data/event-streams.md)
   - [Research participation](17-research-data/participation.md)
 - [Verification](18-verification.md)
 
-# Part VI — Extending KAINE
+# Part VI: Extending KAINE
 
 - [Plugins and CL1](19-plugins-and-cl1.md)
 - [Embodiment adapters](20-embodiment-adapters.md)

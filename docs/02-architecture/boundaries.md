@@ -6,7 +6,7 @@ This page explains the package-level boundaries that keep KAINE's cognitive runt
 
 `kaine/evaluation/` is the observe-only research subsystem. It holds the sidecar observers, A/B divergence tracking, the red-team harness, and benchmarks. It reads the bus and module state; it never injects signals back into the cognitive loop. The individuation producer lives in the cycle under `kaine/cycle/` and writes encrypted welfare evidence to `state/individuation/`.
 
-Core code never imports `kaine.evaluation/`. The entity must be able to boot and run a full cognitive life with the entire `kaine/evaluation/` directory deleted. If core code reached into evaluation, disabling research would break the entity, and the "instrumentation is observe-only" guarantee would be false.
+Core code never imports `kaine.evaluation`. The entity must be able to boot and run with the entire `kaine/evaluation/` directory deleted. If core code reached into evaluation, disabling research would break the entity, and the instrumentation would no longer be observe-only. There is one exception: when `[preservation.welfare_response]` is enabled (it ships off), the cycle entrypoint runs the welfare observer from `kaine.evaluation`, because that observer produces the gray-zone events the welfare response acts on, and the boot refuses without it.
 
 ### The two composition roots
 
@@ -17,11 +17,11 @@ Only two entrypoints are allowed to wire the sidecar in:
 | `kaine/cycle/__main__.py` | Boots the cognitive cycle and constructs the sidecar registry if evaluation is enabled. |
 | `kaine/nexus/__main__.py` | Boots the operator UI process and surfaces sidecar output. |
 
-These are entrypoints, not library code. Nothing else imports them. The dependency points one way — entrypoint → both halves — and never core → evaluation.
+These are entrypoints, and nothing else imports them. The dependency runs from each entrypoint to both halves, and never from core to evaluation.
 
 ### Cross-cutting primitives
 
-When core code needs logic that lives in evaluation, do not import it. Move the primitive to a boundary-neutral home instead. That keeps both sides able to share the helper without either side owning the other.
+When core code needs logic that lives in evaluation, do not import it. Move the primitive to a boundary-neutral home instead, so both sides can share the helper without either side owning the other.
 
 ## Boundary-neutral shared homes
 
@@ -31,7 +31,7 @@ Boundary-neutral homes sit between core and evaluation. They may import neither 
 |------|----------|
 | `kaine/persistence/` | `AsyncJsonlSink` and persistence primitives. |
 | `kaine/experiment/` | Experiment helpers, e.g. `welfare_counts`. |
-| `kaine/privacy_filter.py` | `PrivacyFilter` — content redaction. |
+| `kaine/privacy_filter.py` | `PrivacyFilter`, content redaction. |
 | `kaine/text_embedding.py` | The text embedder. |
 | `kaine/lifecycle/welfare_signal.py` | The sustained-distress detector. |
 
@@ -45,11 +45,11 @@ The import contracts document and enforce the project's real layering. Violation
 
 The domain organs in `kaine/modules/` are leaf components driven by the cycle. They must not import the cycle runtime: the engine/loop, registry, preflight, boot, `__main__`, the Spot supervisor, or the preservation/research monitors. See [The modules](../09-modules/README.md) for what each module does.
 
-The one allowed dependency is the pure data/contract module `kaine.cycle.types` (`WorkspaceSnapshot`). That import is permitted directly and transitively — for example, through neutral collaborators like `kaine.faithful` and `kaine.workspace.volition`. It is the single declared exception to "modules stay independent of the cycle."
+The one allowed dependency is the pure data module `kaine.cycle.types` (`WorkspaceSnapshot`). That import is permitted directly and transitively, for example through `kaine.faithful` and `kaine.workspace.volition`, and it is the single declared exception to the rule that modules stay independent of the cycle.
 
 ### Workspace and cognitive modules
 
-`kaine/workspace/` holds Syneidesis selection and the `RuleBasedSalience` factors. It must not import `kaine/modules/`. Salience factors that need module-produced signals — such as Thymos affect state or goal drive levels — receive them by dependency injection at cycle assembly. The cycle constructs the real `StateModulator` and refreshes an `AffectStateProvider` each tick from `thymos.state`.
+`kaine/workspace/` holds Syneidesis selection and the `RuleBasedSalience` factors. It must not import `kaine/modules/`. Salience factors that need module-produced signals, such as Thymos arousal or the drive levels, receive them by dependency injection at boot: `kaine/boot/wiring.py` constructs the live `StateModulator`, and the cycle refreshes an `AffectStateProvider` each tick from `thymos.state`.
 
 There are no `ignore_imports` exceptions for this rule. Any `from kaine.modules... import ...` inside `kaine/workspace/` is a boundary violation.
 
@@ -59,7 +59,7 @@ There are no `ignore_imports` exceptions for this rule. Any `from kaine.modules.
 
 ### The core runtime and edge features
 
-Boot, the cycle and the workspace (`kaine.boot`, `kaine.cycle`, `kaine.workspace`) must not import the install and edge features: `kaine.setup`, `kaine.distributed`, `kaine.transfer`, `kaine.remote`, `kaine.install_target`, `kaine.wheel_index` and the research export `kaine.research.claude_science_export`. The contract forbids indirect imports too, so a chain through a third module breaks CI as well. The one declared exception is the cycle entrypoint's remote bridge (`kaine.cycle.__main__` importing `kaine.remote.bridge`). Code the runtime shares with setup lives in neutral homes such as `kaine.model_paths`, `kaine.organ_probe`, `kaine.speech_manifest` and the `kaine.organ_server` package.
+Boot, the cycle and the workspace (`kaine.boot`, `kaine.cycle`, `kaine.workspace`) must not import the install and edge features: `kaine.setup`, `kaine.distributed`, `kaine.transfer`, `kaine.remote`, `kaine.install_target`, `kaine.wheel_index` and the research export `kaine.research.claude_science_export`. The contract forbids indirect imports too, so a chain through a third module breaks CI as well. The one declared exception is the cycle entrypoint's remote bridge (`kaine.cycle.__main__` importing `kaine.remote.bridge`). Code the runtime shares with setup lives in shared modules outside the edge set, such as `kaine.model_paths`, `kaine.organ_probe`, `kaine.speech_manifest` and the `kaine.organ_server` package.
 
 ### Neutral homes stay neutral
 
@@ -69,15 +69,15 @@ The boundary-neutral homes must not import the core runtime or `kaine/evaluation
 
 The import contracts also protect three plugin boundaries, defined in [`pyproject.toml`](../../pyproject.toml):
 
-- `kaine/modules/` must not import `kaine/plugins/`.
-- `kaine/plugins/` must not import boot (`kaine/boot/`), cycle (`kaine/cycle/`), or modules (`kaine/modules/`).
+- `kaine/modules/` must not import `kaine.plugins` (`kaine/plugins.py`).
+- `kaine.plugins` must not import boot (`kaine/boot/`), cycle (`kaine/cycle/`), or modules (`kaine/modules/`).
 - Core KAINE must not import `kaine_cl1`.
 
 These rules keep plugins optional and stop core code from depending on a plugin interface.
 
 ## Running the check
 
-The contracts live in [`pyproject.toml`](../../pyproject.toml) under `[tool.importlinter]`, with `root_packages = ["kaine"]`. You can run them in three ways, all in seconds and independent of the full test suite:
+The contracts live in [`pyproject.toml`](../../pyproject.toml) under `[tool.importlinter]`, with `root_packages = ["kaine"]`. You can run them in three ways, all in seconds and independently of the full test suite:
 
 ```bash
 # Direct: run all contracts.
@@ -95,4 +95,4 @@ A dedicated GitHub Actions job, [`../../.github/workflows/import-boundary.yml`](
 
 The grep test in [`tests/systems/test_sidecar_subsystem.py::test_boundary_no_core_module_imports_evaluation`](../../tests/systems/test_sidecar_subsystem.py) is an extra safeguard: it catches real `kaine.evaluation` imports, but it does not catch aliased or indirect imports. The import contract catches those.
 
-When you add a new top-level `kaine/` package, add it to the `source_modules` list of the sidecar contract. `tests/test_import_contract_coverage.py` verifies that every top-level `kaine/` package is classified, so the list stays complete automatically.
+When you add a new top-level `kaine/` package, add it to the sidecar contract's `source_modules` list or, if it is a boundary-neutral home, to the neutral contract. `tests/test_import_contract_coverage.py` fails until every top-level `kaine/` package is classified.

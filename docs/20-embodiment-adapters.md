@@ -4,7 +4,7 @@ An embodiment adapter connects a body to a KAINE entity. The body may be a physi
 
 ## What an adapter is
 
-Mundus is a body-agnostic control plane. It routes perception and action between the entity and a body, and owns the contract: gating, perceptual locus, intent routing, the speech mirror, salience policy, and the zero-raw-sense-data guarantee. The core knows no wire protocol, transport, or platform vocabulary.
+Mundus is a body-agnostic control plane. It routes perception and action between the entity and a body, and owns the contract: gating, perceptual locus, intent routing, the speech mirror, the intensity policy, and the zero-raw-sense-data guarantee. The core knows no wire protocol, transport, or platform vocabulary.
 
 A body is a small adapter that:
 
@@ -22,25 +22,29 @@ The shipped reference body is the transport-free stub in [`kaine/modules/mundus/
 
 ## The `EmbodimentAdapter` protocol
 
-[`kaine/modules/mundus/adapter.py`](../kaine/modules/mundus/adapter.py) defines the protocol the core drives every body through. It is `runtime_checkable`, so your adapter needs no base class. It only needs these members:
+[`kaine/modules/mundus/adapter.py`](../kaine/modules/mundus/adapter.py) defines the protocol the core drives every body through. It is `runtime_checkable`, so your adapter needs no base class. It needs these members, and may also implement an optional `probe()`:
 
 ```python
 class EmbodimentAdapter(Protocol):
     def capabilities(self) -> EmbodimentCapabilities: ...
-    async def probe(self) -> bool: ...          # optional: reachability check without staying open
     async def open(self) -> None: ...          # bind/connect/spawn the transport
     async def close(self) -> None: ...          # tear it down; idempotent
     def feed(self) -> AsyncIterator[FeedFrame]: ...          # perception: body → core
     async def apply_action(self, family: str, params: dict) -> bool: ...   # symbolic sink
     async def apply_setpoints(self, channels: dict[str, float]) -> bool: ...  # continuous sink
+
+# Optional, outside the protocol: Mundus looks it up with getattr.
+async def probe(self) -> bool: ...  # reachability check without staying open
 ```
+
+Because `probe()` is not part of the protocol, an `isinstance(adapter, EmbodimentAdapter)` check does not test for it.
 
 | Method | Direction | What it does |
 |---|---|---|
-| `capabilities()` | — | Return the immutable capability descriptor. The core calls it on construction and on every feed/action, so keep it cheap and constant. |
-| `probe()` (optional) | — | Test reachability without leaving the body open. Mundus calls it from `probe_available()` if it exists. |
-| `open()` | — | Bind the socket, connect, or spawn the transport. Mundus calls it when the body is activated, which can happen during `probe_available()` or later when a dormant Mundus is activated. It is not guaranteed to run exactly once. |
-| `close()` | — | Tear the transport down. Must be idempotent and must tolerate a `close()` after a probe-time `open()` that never started `feed()` or `apply_*`. |
+| `capabilities()` | none | Return the immutable capability descriptor. The core calls it on construction and on every feed/action, so keep it cheap and constant. |
+| `probe()` (optional) | none | Test reachability without leaving the body open. Mundus calls it from `probe_available()` if it exists. |
+| `open()` | none | Bind the socket, connect, or spawn the transport. Mundus calls it when the body is activated, which can happen during `probe_available()` or later when a dormant Mundus is activated. It is not guaranteed to run exactly once. |
+| `close()` | none | Tear the transport down. Must be idempotent and must tolerate a `close()` after a probe-time `open()` that never started `feed()` or `apply_*`. |
 | `feed()` | body → core | Yield `FeedFrame(kind, payload)` values until the body disconnects. The core pumps this in its own task and maps each frame to a bus event. Never publish to the bus yourself. |
 | `apply_action(family, params)` | core → body | The symbolic sink: perform a whole-action verb (`move`, `say`, `gesture`, …). Return `True` if the command was sent. |
 | `apply_setpoints(channels)` | core → body | The continuous sink: drive graded per-tick channels. Return `True` if sent; a symbolic-only body returns `False`. |
@@ -74,12 +78,12 @@ class EmbodimentCapabilities:
 |---|---|---|
 | `name` | Adapter identity (non-empty). It matches the `[mundus].adapter` value that selects it. | `"robot"` |
 | `transitional` | `True` marks a body expected to be retired, such as a reference or conformance body. `False` marks a real body. | `False` |
-| `feed_events` | feed `kind` → `(bus event type, baseline salience in [0,1])`. The core maps each `FeedFrame.kind` to this event and salience. A `kind` not in this map is dropped with a debug log. | `{"proprio": ("mundus.proprio", 0.3), "frame": ("mundus.visual.raw", 0.1)}` |
+| `feed_events` | feed `kind` → `(bus event type, baseline intensity in [0,1])`. The core maps each `FeedFrame.kind` to this event type and publishes it at that intensity (the event's `salience` field). A `kind` not in this map is dropped with a debug log. | `{"proprio": ("mundus.proprio", 0.3), "frame": ("mundus.visual.raw", 0.1)}` |
 | `action_families` | symbolic family → default exposure (bool). World-mutating or consent-sensitive verbs should default to `False`; the operator opts in. The core merges operator overrides on top. | `{"move": True, "say": True, "teleport": False}` |
 | `continuous_channels` | Names of the graded continuous channels this body supports (empty for symbolic-only). The canonical vocabulary lives in `kaine/modules/mundus/channels.py`. `__post_init__` rejects repeats and empty names; unknown names are accepted and fall back to a default range of `(-1, 1)`. | `("drive", "yaw_rate")` |
 | `raw_buffer_keys` | Payload keys naming raw sense buffers the core must strip before publishing. | `("frame_bytes", "pcm")` |
 
-The current consumers of `mundus.*` feed events are the research observer (`mundus.proprio`, `mundus.scene`, `mundus.notice`) and Hypnos (`mundus.chat`). Reusing those names lets those modules consume your feed directly. Other event names are accepted, but nothing built-in listens to them.
+The current consumers of `mundus.*` feed events are the research observer (`mundus.proprio`, `mundus.scene`, `mundus.notice`), and Hypnos's realization audit and the external-input redaction list, which treat `mundus.chat` as external input. Reusing those names lets those modules consume your feed directly. Other event names are accepted, but nothing built-in listens to them.
 
 ## Perception
 
@@ -96,7 +100,7 @@ For each frame, the core's `_handle_feed`:
 
 1. looks up `frame.kind` in `feed_events` → `(event_type, baseline_salience)` (unknown kinds are dropped);
 2. copies the payload and strips every key named in `raw_buffer_keys` before anything reaches the bus;
-3. applies the core-owned salience policy (for example, a `proprio` frame with `dying`/`falling` is bumped to 0.8);
+3. applies the core-owned intensity policy (for example, a `proprio` frame with `dying`/`falling` is bumped to 0.8);
 4. publishes `event_type` with the stripped payload.
 
 ### The zero-raw-sense-data guarantee
@@ -114,7 +118,7 @@ There are two action paths. The core chooses between them by intent type.
 
 ### Symbolic whole-action verbs
 
-`intent.avatar.<family>` intents from Volition (and the speech mirror's `say`) route to `apply_action(family, params)` only when both conditions hold:
+`intent.avatar.<family>` events on the intent stream (no built-in module publishes them yet) and the speech mirror's `say` route to `apply_action(family, params)` only when both conditions hold:
 
 - the perceptual locus is `virtual` (`locus_reader()`); and
 - the family is exposed (descriptor default, overridable by operator config).

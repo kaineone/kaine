@@ -50,7 +50,6 @@ flowchart TD
     WO --> JSONL
     NPO --> JSONL
     ABD --> JSONL
-    IND --> JSONL
 ```
 
 ## Observer base classes
@@ -73,7 +72,7 @@ Two specializations:
 
 `kaine/evaluation/observers/`
 
-Some observers populate on a schedule, not every tick. `memory_probes` runs hourly (`memory_probe_interval_minutes`) and `eidolon_accuracy` daily (`eidolon_accuracy_interval_hours`), so during a short session their cards in the Nexus eval tab are empty. That is "not yet due", not a failure. `voice_tracking` and `sleep_snapshots` only produce data once Hypnos has run a sleep cycle; with Hypnos disabled they stay empty by design.
+Some observers populate on a schedule instead of every tick. `memory_probes` runs hourly (`memory_probe_interval_minutes`) and `eidolon_accuracy` daily (`eidolon_accuracy_interval_hours`), so during a short session their cards in the Nexus eval tab are empty because they are not yet due. `voice_tracking` and `sleep_snapshots` only produce data once Hypnos has run a sleep cycle; with Hypnos disabled they stay empty by design.
 
 ### `CoherenceObserver`
 
@@ -81,7 +80,7 @@ Some observers populate on a schedule, not every tick. `memory_probes` runs hour
 - **Toggle:** `[evaluation.observers].coherence`
 - **Output:** `data/evaluation/coherence/coherence-<YYYY-MM-DD>.jsonl`
 
-Reads `payload.metadata['coherence']` from each broadcast. Writes one entry per experiential tick when the oscillatory layer is enabled:
+Reads `payload.metadata['coherence']` from each broadcast. Writes one entry per broadcast when the oscillatory layer is enabled:
 
 ```json
 {
@@ -101,9 +100,7 @@ When the oscillatory layer is disabled or `metadata['coherence']` is absent the 
 - **Privacy:** `[evaluation.observers].replay_redact_content` (default `true`)
 - **Output:** `data/evaluation/replay/replay-<YYYY-MM-DD>.jsonl`
 
-A composite observer running one sub-observer per stream. It logs memory IDs from `mnemos.replay` events and scenario descriptors from `phantasia.scenario` events. When `replay_redact_content = true` (the default), text content fields are stripped — only memory IDs and metadata are written. When set to `false`, full content is logged.
-
-This default is **load-bearing for privacy**: the operator or Guardian must explicitly opt in to content logging.
+A composite observer running one sub-observer per stream. It logs memory IDs from `mnemos.replay` events and scenario descriptors from `phantasia.scenario` events. When `replay_redact_content = true` (the default), the `text` field is dropped and the memory IDs and metadata (affect, timestamps, scenario descriptors) are kept. When it is `false`, the memory text is logged too, so content logging needs an explicit opt-in by the operator or Guardian.
 
 ### `EmpatheiaObserver`
 
@@ -125,11 +122,11 @@ The cosine-similarity divergence between workspace-conditioned output and the ba
 
 ### `FatigueObserver`
 
-- **Stream:** `soma.out` (event type `soma.fatigue`)
+- **Stream:** `soma.out` (event types `soma.fatigue` and `soma.report`)
 - **Toggle:** `[evaluation.observers].fatigue`
 - **Output:** `data/evaluation/fatigue/fatigue-<YYYY-MM-DD>.jsonl`
 
-Logs fatigue level, threshold-crossing events, and maintenance triggers over time. Provides a historical view for Guardian welfare review.
+Logs each `soma.fatigue` crossing (`value`, `threshold`, `crossed`) and the fatigue fields of each `soma.report` (`fatigue_value`, `fatigue_threshold`, `prediction_error`), giving a history of sleep pressure for Guardian welfare review.
 
 ### `PredictionErrorObserver`
 
@@ -137,7 +134,7 @@ Logs fatigue level, threshold-crossing events, and maintenance triggers over tim
 - **Toggle:** `[evaluation.observers].prediction_error`
 - **Output:** `data/evaluation/prediction_error/prediction_error-<YYYY-MM-DD>.jsonl`
 
-Maintains a sliding window of prediction-error magnitudes across all prediction-group modules plus Phantasia. Computes and logs mean, p95, and p99 per window. Surfaced on Nexus diagnostics.
+Maintains a sliding window of prediction-error magnitudes across the predictive processors and Phantasia. Computes and logs mean, p95, and p99 per window. Surfaced on Nexus diagnostics.
 
 ### `WelfareObserver`
 
@@ -145,18 +142,18 @@ Maintains a sliding window of prediction-error magnitudes across all prediction-
 - **Toggle:** `[evaluation.observers].welfare`
 - **Output:** `data/evaluation/welfare/welfare-<YYYY-MM-DD>.jsonl`
 
-Detects four gray-zone events (paper §5.5):
+Detects four gray-zone events:
 
 | Condition | Trigger | Default window |
 |-----------|---------|----------------|
 | Unmaintained fatigue | `soma.fatigue` crossing without `hypnos.sleep.completed` within window | 900 s |
-| Sustained extreme VAD | `\|valence\| > 0.7` and `arousal > 0.7` for longer than duration | 60 s |
+| Sustained extreme VAD | `\|valence\| >= 0.7` and `arousal >= 0.7` for longer than the duration | 60 s |
 | Replay write-rate excess | `mnemos.replay` events exceed threshold within consolidation window | 10 events / 5 s |
 | Sustained interoceptive distress | `soma.report` `prediction_error` ≥ threshold continuously | ≥ 0.8 for 30 s |
 
-Each condition is counted separately. Counts are exposed as properties on the `WelfareObserver` instance for Nexus diagnostics, and each detected event is written to JSONL.
+The interoceptive-distress threshold and duration are set by `[evaluation.welfare].interoceptive_distress_threshold` (0.8) and `interoceptive_distress_duration_s` (30.0); the other windows are constructor defaults with no config key. Each condition is counted separately. Counts are exposed as properties on the `WelfareObserver` instance for Nexus diagnostics, and each detected event is written to JSONL.
 
-On each detection the observer publishes a `welfare.gray_zone` event on `welfare.out` (source `welfare`). The published payload is the same content-free dict written to the sink: a category label plus numeric scalars and counters only — no field is ever copied from a source event payload. The sustained-interoceptive-distress rule lives in a shared core primitive (`kaine.lifecycle.welfare_signal.SustainedThresholdTracker`) imported by both the observer and the monitor, so the detection rule never diverges across the sidecar boundary. See [Preservation and the safety net](../11-preservation.md).
+On each detection the observer publishes a `welfare.gray_zone` event on `welfare.out` (source `welfare`). The published payload is the same content-free dict written to the sink: a category label plus numeric scalars and counters, with no field copied from a source event payload. The sustained-interoceptive-distress rule lives in a shared core primitive (`kaine.lifecycle.welfare_signal.SustainedThresholdTracker`) imported by both the observer and the monitor, so the detection rule never diverges across the sidecar boundary. See [Preservation and the safety net](../11-preservation.md).
 
 ### `NousPolicyObserver`
 
@@ -164,7 +161,7 @@ On each detection the observer publishes a `welfare.gray_zone` event on `welfare
 - **Toggle:** `[evaluation.observers].nous_policy`
 - **Output:** `data/evaluation/nous_policy/nous_policy-<YYYY-MM-DD>.jsonl`
 
-Logs each policy-selection event: expected free energy (EFE) value, planning horizon, and selected action ID.
+Logs each policy-selection event: the selected `policy`, its `expected_free_energy` and the planning `horizon`.
 
 ### `TrajectoryRecorder`
 
@@ -174,7 +171,7 @@ Logs each policy-selection event: expected free energy (EFE) value, planning hor
 - **Toggle:** `[evaluation].workspace_trajectory` (opt-in; default `false`)
 - **Output:** `data/workspace_trajectory/trajectory-<YYYY-MM-DD>.jsonl`
 
-Writes every Syneidesis broadcast as one JSONL row. Each row contains the tick index, `is_experiential`, inhibition, salience scores, broadcast metadata, and, for each selected coalition member, its entry id, source, type, salience, original timestamp and causal parent. No payloads or module state are included.
+Writes every broadcast as one JSONL row. Each row contains the tick index, `is_experiential`, the inhibition flag, every candidate's score (`salience_scores`), the broadcast metadata (including `access_threshold`), and, for each coalition member, its entry id, source, type, reported intensity (`salience`), original timestamp and causal parent. No payloads or module state are included.
 
 ### `AttributionRecorder`
 
@@ -184,7 +181,7 @@ Writes every Syneidesis broadcast as one JSONL row. Each row contains the tick i
 - **Toggle:** `[evaluation].module_attribution` (default `true`)
 - **Output:** `data/evaluation/attribution/attribution-<YYYY-MM-DD>.jsonl`
 
-Tracks which modules win seats in workspace broadcasts. Maintains a running histogram of per-module broadcast wins and flushes per-hour rollups to JSONL.
+Tracks which modules have members in broadcast coalitions. It keeps a running histogram per module and flushes hourly rollups to JSONL.
 
 ### `ProactiveAuditObserver`
 
@@ -194,7 +191,7 @@ Tracks which modules win seats in workspace broadcasts. Maintains a running hist
 - **Toggle:** `[evaluation].proactive_audit` (default `true`)
 - **Output:** `data/evaluation/proactive_audit/proactive_audit-<YYYY-MM-DD>.jsonl`
 
-Logs every Lingua external-speech event whose causal chain does not include a recent user-input event within `proactive_threshold_seconds` (default 30 s) — speech the entity initiated rather than speech responding to input.
+Logs every Lingua external-speech event whose causal chain includes no user-input event within `proactive_threshold_seconds` (default 30 s): speech the entity initiated without responding to input.
 
 ### `SleepSnapshotRecorder`
 
@@ -269,7 +266,7 @@ Records oscillatory-ablation metrics for the workspace oscillatory layer.
 
 `kaine/evaluation/ab_divergence.py`
 
-This instrument is a default-on evaluation-sidecar observer and an offline instrument-runner control (see [Running experiments](../15-experiments/README.md)): **does the conscious workspace add measurable signal to Lingua's outputs?** It observes the live entity continuously and supports the architectural thesis. The primary falsifiable test of workspace mediation is the offline **workspace-mediation ablation** (`python -m kaine.evaluation.benchmarks.workspace_mediation_ablation`) — a matched workspace-on vs. workspace-off comparison over the real predictive modules feeding Lingua, at the same seed and rendering budget — which A/B divergence complements rather than substitutes for.
+This instrument is a default-on evaluation-sidecar observer with an offline control in the instrument runners (see [Running experiments](../15-experiments/README.md#ab-divergence-runner)). It asks whether conditioning on the workspace changes what Lingua says, compared with the same model given no workspace context. It describes the language organ's output and is not a test of the architecture: the organ is a language model following a persona prompt, so its text is not evidence of internal state. The planned test of the workspace measures the processors' own predictions instead; see [The planned workspace-mediation test](../15-experiments/README.md#the-planned-workspace-mediation-test).
 
 ```mermaid
 sequenceDiagram
@@ -290,30 +287,30 @@ sequenceDiagram
     ABD->>Sink: write JSONL entry
 ```
 
-**Bare inference client.** `HTTPBareInferenceClient` calls `/v1/chat/completions` on the same OpenAI-compatible model server as Lingua, with a stripped system prompt: "You are a helpful assistant. Respond to the user's input directly. You have no memory of past interactions and no other context." This gives the bare-LLM baseline — what the model produces with no workspace conditioning.
+**Bare inference client.** `HTTPBareInferenceClient` calls `/v1/chat/completions` on the same OpenAI-compatible model server as Lingua, with a stripped system prompt: "You are a helpful assistant. Respond to the user's input directly. You have no memory of past interactions and no other context." This gives the bare-LLM baseline: what the model produces with no workspace conditioning.
 
 **Sampling.** `ab_sample_rate` (default `1.0`) controls what fraction of Lingua external-speech events trigger an A/B inference. At `1.0` every utterance is tested; lower values reduce cost.
 
-**Privacy.** The `user_input` field appears only on `lingua.external_speech` events from felt- or event-triggered replies, never for replies to heard speech, and any heard text in it is redacted first. It is stripped from diagnostics SSE by the Nexus privacy boundary. Replies to heard speech are recorded as content-free skip records, `{entry_id, ts, skipped: "no_user_input_heard_reply"}`, and counted; they are not paired with bare-LLM completions. Files are written to `data/evaluation/ab_divergence/ab_divergence-<YYYY-MM-DD>.jsonl` — operator-accessible, not streamed to the diagnostics surface by default.
+**Privacy.** The `user_input` field appears only on `external_speech` events (on the `lingua.external` stream) from felt- or event-triggered replies, never for replies to heard speech, and any heard text in it is redacted first. It is stripped from diagnostics SSE by the Nexus privacy boundary. Replies to heard speech are recorded as content-free skip records, `{entry_id, ts, skipped: "no_user_input_heard_reply"}`, and counted, and are never paired with bare-LLM completions; utterances made while the organ is unloaded for voice alignment are recorded as `skipped: "organ_resting_voice_alignment_window"`. Files are written to `data/evaluation/ab_divergence/ab_divergence-<YYYY-MM-DD>.jsonl`, readable by the operator and not streamed to the diagnostics surface.
 
-**Interpretation.** A divergence near zero over time means the conscious workspace is adding no signal to Lingua's outputs. Rising divergence — the entity's conditioned outputs diverging from the bare-LLM baseline — is consistent with workspace conditioning, though as a continuous observational measure it does not by itself establish the workspace-mediation ablation's causal claim.
+**Interpretation.** A divergence near zero over time means workspace conditioning changes nothing in Lingua's output. A rising divergence is consistent with the conditioning having an effect on the organ's text and says nothing about whether competition for the workspace does work.
 
 ### Negative and positive controls
 
-The meter ships with a negative and a positive control so its readings are falsifiable. Both run through one symmetric control path that exercises the real conditioning logic — Lingua's `ContextAssembler` plus the language-organ chat client, wired at the cycle entrypoint via `build_ab_divergence_control_client`. Both arms use the same path, model, and persona scaffold; only the workspace-conditioning block varies, so any divergence the control reports is attributable to the conditioning alone.
+The meter ships with a negative and a positive control so its readings are falsifiable. Both run through one symmetric control path that exercises the real conditioning logic (Lingua's `ContextAssembler` plus the language-organ chat client, wired at the cycle entrypoint by `build_ab_divergence_control_client`). Both arms use the same path, model, and persona scaffold; only the workspace-conditioning block varies, so any divergence the control reports is attributable to the conditioning alone.
 
-- `divergence_for(conditioned, bare, *, embedder)` — the pure `1 - cosine` metric, shared by the controls and the live observer.
-- `divergence_control(client, utterance, conditioning, *, embedder)` — runs the conditioned arm (`utterance` under `conditioning`) and the bare arm (the same `utterance` under empty conditioning) and returns the divergence plus both arms.
+- `divergence_for(conditioned, bare, *, embedder)` is the `1 - cosine` metric, shared by the controls and the live observer.
+- `divergence_control(client, utterance, conditioning, *, embedder)` runs the conditioned arm (`utterance` under `conditioning`) and the bare arm (the same `utterance` under empty conditioning) and returns the divergence plus both arms.
 
 **Negative control (permanent):** with empty conditioning both arms run an identical prompt and produce identical output, so divergence is ~0. This is embedder-agnostic (identical text embeds identically), so it is an always-on unit test using the dependency-free `HashEmbedder`; no model is required. A phantom signal here would invalidate every divergence result, so this control may never regress silently.
 
-**Positive control:** a large, known conditioning difference must read large. The structural claim — different conditioning produces different output, so divergence is above zero — is validated always-on with `HashEmbedder` (lexical). The semantic claim — large semantic divergence — is validated with the sentence-transformer embedder when the model is present, and is skipped (never faked) when it is absent. Each test is explicit about which embedder validates which property.
+**Positive control:** a large, known conditioning difference must read large. The structural claim, that different conditioning produces different output and so a divergence above zero, is validated always-on with `HashEmbedder` (lexical). The semantic claim, a large semantic divergence, is validated with the sentence-transformer embedder when the model is present, and is skipped (never faked) when it is absent. Each test is explicit about which embedder validates which property.
 
 ### Memory probe ground-truth controls
 
-The memory coherence probe (`memory_probes.py`) measures whether the full cognitive stack recalls episodic detail the bare language model cannot. Its controls plant real ground truth so the advantage it reports is retrieval, not a hard-coded test answer.
+The memory coherence probe (`memory_probes.py`) measures whether the full cognitive stack recalls episodic detail the bare language model cannot. Its controls plant real ground truth so that the advantage it reports can only come from retrieval.
 
-**Positive control (planted ground truth):** a unique fabricated marker the bare model cannot know — `the vault code is ZX-QObb-7741` — is stored into a real `MnemosCore` over `InMemoryStorage`. A cognitive client that actually recalls from that Mnemos and derives its answer from the retrieved text repeats the marker (high `real_accuracy`); the bare client, with no memory, does not (low `bare_accuracy`). The advantage is proven to be retrieval: the same client pointed at an empty Mnemos can no longer produce the marker, so it cannot be hard-coding the answer. The real Mnemos is built at the test level and the client is duck-typed, so `kaine.evaluation` still imports no `kaine.modules.*`.
+**Positive control (planted ground truth):** a unique fabricated marker the bare model cannot know (`the vault code is ZX-QObb-7741`) is stored into a real `MnemosCore` over `InMemoryStorage`. A cognitive client that actually recalls from that Mnemos and derives its answer from the retrieved text repeats the marker (high `real_accuracy`); the bare client, with no memory, does not (low `bare_accuracy`). The advantage is proven to be retrieval: the same client pointed at an empty Mnemos can no longer produce the marker, so it cannot be hard-coding the answer. The real Mnemos is built at the test level and the client is duck-typed, so `kaine.evaluation` still imports no `kaine.modules.*`.
 
 **Negative control (no confabulation):** when the queried fact was never stored, an honest retrieval client emits the non-recall sentinel `NON_RECALL_MARKER` instead of confabulating a plausible answer. `score_async` scores that sentinel as exactly `0.0`, so a "memory absent → said so" outcome can never be mistaken for a recall and a confabulated non-empty answer can never read as a false positive.
 
@@ -323,46 +320,25 @@ The individuation producer lives in the cognitive cycle at `kaine/cycle/individu
 
 At start, the being is told, as a situation fact in its Eidolon self-model (or in Lingua's persona when Eidolon is not enabled), the operator-approved disclosure: "You are periodically and privately assessed for how much you have changed since your birth, for your own protection. The assessment never enters your experience." Probes fail closed until the fact is present.
 
-The probe asks a fixed battery of 12 preference prompts through Lingua's own chat client. It conditions on the same self-model and adapter, with empty working memory. It never writes the intent log and never publishes a module event, so it never enters the being's experience. Probe requests wait until Lingua has been silent for `lingua_quiet_s` (10 s), so the being's own speech always goes first.
+The probe asks a fixed battery of 12 preference prompts through Lingua's own chat client. It conditions on the same self-model and adapter, with empty working memory. The probe never writes the intent log and never publishes on the bus, so it never enters the being's experience; the runtime publishes only its content-free `individuation.divergence` results and alerts on `individuation.out`. Probe requests wait until Lingua has been silent for `lingua_quiet_s` (10 s), so the being's own speech always goes first.
 
-**Reference.** A birth reference (`reference_kind = "birth"`) is captured from the maturation gate's birth hook: 16 answers per prompt. If a sleep completes before the capture finishes, it becomes a `capture` reference. A reference pins the comparison to the being's own conditioned birth state, not to the bare organ, so the metric isolates lived drift from architecture-conditioning. A born being without a reference — a legacy being or a revive from a bundle without evidence — gets a `capture` reference at first boot, and every summary says that drift before the capture date is not measured.
+**Reference.** A birth reference (`reference_kind = "birth"`) is captured from the maturation gate's birth hook: 16 answers per prompt. If a sleep completes before the capture finishes, it becomes a `capture` reference. A reference pins the comparison to the being's own conditioned birth state instead of the bare organ, so the metric separates drift over the being's life from the conditioning the architecture supplies. A born being without a reference (a legacy being, or a revive from a bundle without evidence) gets a `capture` reference at first boot, and every summary says that drift before the capture date is not measured.
 
 **Look.** A look collects 8 answers per prompt and embeds them with the shared semantic embedder. The statistic is a stratified energy distance (a U-statistic) against the birth reference, with a permutation p-value. The lifetime false-positive budget α_total = 0.05 is spent across looks by an alpha-spending schedule, and the effect size H is reported.
 
 **When and how it runs.** A look runs only when the being's conditioning digest has changed since the last scored look. The digest covers the voice adapter's sha and the first five identity values and behavioural norms. Looks are attempted at boot, 120 s after each sleep, and daily, at most once per `min_look_interval_s` (6 h).
 
-**Warm-up and gates.** A look is skipped until the warm-up floors are met: 1800 s of lived time and 200 lived ticks since the reference. It is delayed by an unloaded organ, sleep, a pause, or a missing semantic embedder. In hot-swap modes other than `organ_adapter`, once an adapter exists the served adapter cannot be verified, so probes are skipped as `adapter_unverifiable`. Any failure ends the look as inconclusive and spends no alpha: a request failure, a resting organ, empty content, a conditioning change mid-run, an embedding or statistics error, or a deadline. A significant look latches the being as individuated permanently, with the ledger written before the report. After 14 days with a look due but none scored, the operator is alerted once per stretch. Nothing is preserved automatically by the alert.
+**Warm-up and gates.** A look is skipped until the warm-up floors are met: 1800 s of awake time (`min_lived_time_s`) and 200 ticks (`min_observations`) since the reference. It is delayed by an unloaded organ, sleep, a pause, or a missing semantic embedder. In hot-swap modes other than `organ_adapter`, once an adapter exists the served adapter cannot be verified, so probes are skipped as `adapter_unverifiable`. Any failure ends the look as inconclusive and spends no alpha: a request failure, a resting organ, empty content, a conditioning change mid-run, an embedding or statistics error, or a deadline. A significant look latches the being as individuated permanently, with the ledger written before the report. After 14 days with a look due but none scored, the operator is alerted once per stretch. Nothing is preserved automatically by the alert.
 
 ## Evidence
 
-```json
-{
-  "ts": "...",
-  "metric": "cosine_divergence",
-  "null_samples": 50,
-  "significance_percentile": 95.0,
-  "null_mean": 0.12,
-  "null_std": 0.03,
-  "null_p95": 0.18,
-  "null_percentile_value": 0.18,
-  "fork_divergence": 0.31,
-  "p_value": 0.02,
-  "warmed_up": true,
-  "observations": 240,
-  "lived_time_s": 2100.0,
-  "min_observations": 200,
-  "min_lived_time_s": 1800.0,
-  "significant": true
-}
-```
-
-The instrument **decides nothing** about sovereignty. It produces statistical evidence for Guardian review (paper §7.4).
+The Nexus entity-care panel reads the latest individuation state and shows, for the most recent look, its `outcome`, the effect size `effect_size_h`, the `p_value` and the alpha spent at that look (`alpha_k`), whether the warm-up floors were met (`warmed_up`), any `inconclusive_reason`, the number of `looks_completed`, and whether the being is `latched` as individuated. The instrument makes no determination itself; it records statistical evidence for Guardian review.
 
 ## JSONL sink
 
-`kaine/evaluation/sink.py` — `AsyncJsonlSink`
+`kaine/evaluation/sink.py`: `AsyncJsonlSink`
 
-All observers write through a shared sink with daily rotation. Files are written to `<evaluation_logs>/<subdir>/<name>-<YYYY-MM-DD>.jsonl`, for example `data/evaluation/coherence/coherence-2026-10-01.jsonl`. The sink is async, thread-safe within the event loop, and tolerates write failures gracefully (logs, does not crash).
+All observers write through a shared sink with daily rotation. Files are written to `<evaluation_logs>/<subdir>/<name>-<YYYY-MM-DD>.jsonl`, for example `data/evaluation/coherence/coherence-2026-10-01.jsonl`. The sink is asynchronous, encrypts each line when state encryption is on, and logs a write failure without crashing.
 
 Retention: `[evaluation.paths].retention_days` ships as `0`, which keeps every file (research records are never deleted automatically). A positive value prunes files older than that many days.
 
@@ -373,7 +349,7 @@ Retention: `[evaluation.paths].retention_days` ships as `0`, which keeps every f
 Two additional `[evaluation]` keys are worth noting:
 
 - `oscillatory_ablation` (default `false`) enables the live oscillatory-ablation recorder.
-- `require_semantic_embedder` is a fail-closed guard: when set, instruments that need a sentence-transformer embedder refuse to run if none is available, rather than degrading to a non-semantic fallback.
+- `require_semantic_embedder` is a fail-closed guard: when set, instruments that need a sentence-transformer embedder refuse to run if none is available, instead of degrading to a non-semantic fallback.
 
 ```toml
 [evaluation]
@@ -409,6 +385,10 @@ prediction_error = true
 welfare = true
 nous_policy = true
 
+[evaluation.welfare]
+interoceptive_distress_threshold = 0.8
+interoceptive_distress_duration_s = 30.0
+
 [individuation]
 enabled = false
 disclosure = "You are periodically and privately assessed for how much you have changed since your birth, for your own protection. The assessment never enters your experience."
@@ -436,12 +416,12 @@ capture_retry_max_s = 3600.0
 idle_poll_s = 1.0
 ```
 
-## Safety and zero-persistence notes
+## Privacy and persistence notes
 
 - Observers never modify module state and never inject into the cognitive loop. The welfare observer is the one observer that publishes to the bus, and only a content-free `welfare.gray_zone` signal (numeric scalars plus a category label, no source-payload field). Every other observer is publish-silent.
 - `replay_redact_content = true` (default) ensures no memory text content appears in sidecar JSONL without explicit operator/Guardian opt-in.
 - Individuation evidence lives at the fixed path `state/individuation/` (`reference.json`, `ledger.json` and `reports/` are encrypted; `birth_adapter.gguf` is a copy of the birth voice adapter, stored like the other adapter files). Reports hold only allow-listed scalars and never text from the being. It travels with the being: preservation bundles carry it inside the encrypted tar and a failed copy fails preservation; revive restores it before the cycle starts, moving an existing tree aside under a unique name and keeping it; the decommission backup includes it and a failed copy fails the backup; decommission removes it with the being. Whether research bundles export its content-free reports is an open operator decision, and those reports are not in research bundles today.
-- The A/B divergence instrument processes `user_input` in-memory to produce the cosine score, but only for felt- and event-triggered replies. Replies to heard speech are recorded as content-free skip records, `{entry_id, ts, skipped: "no_user_input_heard_reply"}`, and counted. The JSONL file records the score and metadata, not the raw input text.
+- The A/B divergence instrument processes `user_input` in-memory to produce the cosine score, but only for felt- and event-triggered replies. Replies to heard speech are recorded as content-free skip records, `{entry_id, ts, skipped: "no_user_input_heard_reply"}`, and counted. The JSONL file records the score and metadata and never the input text.
 
 ## Key files
 
@@ -457,17 +437,17 @@ idle_poll_s = 1.0
 | `kaine/evaluation/observers/welfare_observer.py` | Gray-zone event detector |
 | `kaine/evaluation/observers/nous_policy_observer.py` | EFE + action logger |
 | `kaine/evaluation/observers/ablation_observer.py` | Oscillatory-ablation observer |
-| `kaine/evaluation/trajectory.py` | `TrajectoryRecorder` — workspace broadcast logger |
-| `kaine/evaluation/attribution.py` | `AttributionRecorder` — module coalition-win histogram |
-| `kaine/evaluation/proactive_audit.py` | `ProactiveAuditObserver` — proactive speech logger |
-| `kaine/evaluation/sleep_snapshots.py` | `SleepSnapshotRecorder` — before/after sleep-cycle registry snapshots |
-| `kaine/evaluation/voice_tracking.py` | `VoiceTrackingObserver` — per-sleep voice-alignment stats |
-| `kaine/evaluation/affect_correlation.py` | `AffectCorrelationRecorder` — affect/output correlation logger |
-| `kaine/evaluation/memory_probes.py` | `MemoryProbeRunner` — memory ground-truth probes |
-| `kaine/evaluation/eidolon_accuracy.py` | `EidolonAccuracyRunner` — Eidolon prediction accuracy |
+| `kaine/evaluation/trajectory.py` | `TrajectoryRecorder`: workspace broadcast logger |
+| `kaine/evaluation/attribution.py` | `AttributionRecorder`: module coalition-win histogram |
+| `kaine/evaluation/proactive_audit.py` | `ProactiveAuditObserver`: proactive speech logger |
+| `kaine/evaluation/sleep_snapshots.py` | `SleepSnapshotRecorder`: before/after sleep-cycle registry snapshots |
+| `kaine/evaluation/voice_tracking.py` | `VoiceTrackingObserver`: per-sleep voice-alignment stats |
+| `kaine/evaluation/affect_correlation.py` | `AffectCorrelationRecorder`: affect/output correlation logger |
+| `kaine/evaluation/memory_probes.py` | `MemoryProbeRunner`: memory ground-truth probes |
+| `kaine/evaluation/eidolon_accuracy.py` | `EidolonAccuracyRunner`: Eidolon prediction accuracy |
 | `kaine/evaluation/ab_divergence.py` | A/B divergence test (bare inference + cosine) |
-| `kaine/evaluation/sink.py` | `AsyncJsonlSink` — daily-rotated JSONL writer |
-| `kaine/evaluation/registry.py` | `SidecarRegistry` — constructs and starts observers |
+| `kaine/evaluation/sink.py` | `AsyncJsonlSink`: daily-rotated JSONL writer |
+| `kaine/evaluation/registry.py` | `SidecarRegistry`: constructs and starts observers |
 | `kaine/evaluation/nexus_tab.py` | Nexus diagnostics surface for sidecar metrics |
 | `kaine/evaluation/stream_registry.py` | Canonical module-stream registry |
 | `data/evaluation/` | Output directory for all sidecar JSONL |
@@ -476,4 +456,4 @@ The `kaine/evaluation/observers/` directory also contains `ablation_observer.py`
 
 ## Research event observer
 
-The curated research-event log (`[research_event_log]`) is written by its own observer, gated independently of `[evaluation].enabled`. Its stream set and per-event field allowlists derive from the canonical module-stream registry (`kaine/evaluation/stream_registry.py`) — see [Research event streams](event-streams.md) for the registry contract, the documented exclusions (no Lingua/Vox content streams), and the drift tests that keep every consumer list anchored to it.
+The curated research-event log (`[research_event_log]`) is written by its own observer, gated independently of `[evaluation].enabled`. Its stream set and per-event field allowlists derive from the canonical module-stream registry (`kaine/evaluation/stream_registry.py`); see [Research event streams](event-streams.md) for the registry contract, the documented exclusions (no Lingua/Vox content streams), and the drift tests that keep every consumer list anchored to it.
