@@ -212,6 +212,10 @@ class CognitiveCycle:
         # finished pauses and the start of the current one, if any.
         self._paused_total = 0.0
         self._paused_at: float | None = None
+        # Time not awake: the union of frozen and Hypnos-sleep spans (awake time excludes both).
+        self._sleep_source: Optional[Callable[[], bool]] = None
+        self._unawake_total = 0.0
+        self._unawake_since: float | None = None
         self._stopped = False
         self.hooks = CycleHooks()
 
@@ -437,6 +441,7 @@ class CognitiveCycle:
         await self.hooks.fire("pause")
         self._paused.clear()
         self._paused_at = self._entity_clock.now()
+        self._refresh_unawake()
 
     async def resume(self) -> None:
         if self._paused.is_set():
@@ -448,6 +453,7 @@ class CognitiveCycle:
             self._paused_at = None
         self._paused.set()
         await self.hooks.fire("resume")
+        self._refresh_unawake()
 
     def paused_subjective_seconds(self) -> float:
         """Return subjective seconds spent paused, including a pause in progress.
@@ -460,12 +466,47 @@ class CognitiveCycle:
             total += max(0.0, self._entity_clock.now() - self._paused_at)
         return total
 
+    def set_sleep_source(self, source: Optional[Callable[[], bool]]) -> None:
+        """Set the callable that reports whether Hypnos is asleep (None: never asleep)."""
+        self._sleep_source = source
+
+    @property
+    def is_asleep(self) -> bool:
+        if self._sleep_source is None:
+            return False
+        try:
+            return bool(self._sleep_source())
+        except Exception:  # pragma: no cover - defensive
+            log.debug("sleep_source raised; treating as awake", exc_info=True)
+            return False
+
+    def _refresh_unawake(self) -> None:
+        now = self._entity_clock.now()
+        excluded = self.is_paused or self.is_asleep
+        if excluded and self._unawake_since is None:
+            self._unawake_since = now
+        elif not excluded and self._unawake_since is not None:
+            self._unawake_total += max(0.0, now - self._unawake_since)
+            self._unawake_since = None
+
+    def unawake_subjective_seconds(self) -> float:
+        """Subjective seconds not awake (frozen or asleep, counted once), including a span in progress.
+
+        Awake-time readers subtract this.
+        """
+        self._refresh_unawake()
+        total = self._unawake_total
+        if self._unawake_since is not None:
+            total += max(0.0, self._entity_clock.now() - self._unawake_since)
+        return total
+
     async def shutdown(self) -> None:
         self._stopped = True
         self._paused.set()
         await self.hooks.fire("shutdown")
 
     async def tick(self) -> TickResult:
+        self._refresh_unawake()
         # REAL target budget for this tick. The processing rate is subjective-Hz;
         # the real seconds the tick may take before it overruns is the
         # EntityClock period = 1 / (rate * time_scale). At time_scale == 1.0 this

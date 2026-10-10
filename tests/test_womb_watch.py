@@ -638,6 +638,9 @@ async def test_cognitive_cycle_paused_subjective_seconds():
     cycle._paused.set()
     cycle._paused_total = 0.0
     cycle._paused_at = None
+    cycle._sleep_source = None
+    cycle._unawake_total = 0.0
+    cycle._unawake_since = None
     cycle._entity_clock = clock
     cycle.hooks = NoopHooks()
 
@@ -670,6 +673,74 @@ async def test_cognitive_cycle_paused_subjective_seconds():
     clock._now = 55.0
     await cycle.resume()
     assert cycle.paused_subjective_seconds() == 30.0
+
+
+@pytest.mark.asyncio
+async def test_unawake_seconds_union_of_freeze_and_sleep():
+    clock = MutableClock(0.0)
+    cycle = object.__new__(CognitiveCycle)
+    cycle._paused = asyncio.Event()
+    cycle._paused.set()
+    cycle._paused_total = 0.0
+    cycle._paused_at = None
+    cycle._sleep_source = None
+    cycle._unawake_total = 0.0
+    cycle._unawake_since = None
+    cycle._entity_clock = clock
+    cycle.hooks = NoopHooks()
+    asleep = [False]
+    cycle.set_sleep_source(lambda: asleep[0])
+
+    assert cycle.unawake_subjective_seconds() == 0.0
+
+    clock._now = 10.0
+    asleep[0] = True
+    assert cycle.unawake_subjective_seconds() == 0.0
+    assert cycle._unawake_since == 10.0
+
+    clock._now = 20.0
+    await cycle.pause()
+    assert cycle.is_paused
+
+    clock._now = 30.0
+    await cycle.resume()
+    assert not cycle.is_paused
+
+    clock._now = 40.0
+    asleep[0] = False
+    assert cycle.unawake_subjective_seconds() == 30.0
+
+    clock._now = 50.0
+    await cycle.pause()
+
+    clock._now = 55.0
+    assert cycle.unawake_subjective_seconds() == 35.0
+
+    clock._now = 60.0
+    await cycle.resume()
+    assert cycle.unawake_subjective_seconds() == 40.0
+
+    assert cycle.paused_subjective_seconds() == 20.0
+
+
+def test_is_asleep_is_false_when_the_source_raises():
+    clock = MutableClock(0.0)
+    cycle = object.__new__(CognitiveCycle)
+    cycle._paused = asyncio.Event()
+    cycle._paused.set()
+    cycle._paused_total = 0.0
+    cycle._paused_at = None
+    cycle._sleep_source = None
+    cycle._unawake_total = 0.0
+    cycle._unawake_since = None
+    cycle._entity_clock = clock
+    cycle.hooks = NoopHooks()
+
+    def bad() -> bool:
+        raise RuntimeError("boom")
+
+    cycle.set_sleep_source(bad)
+    assert cycle.is_asleep is False
 
 
 class FakeEntityClock:
