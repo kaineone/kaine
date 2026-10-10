@@ -102,6 +102,7 @@ def _install_shared_womb_clock(
                 "the womb delivers nothing. Choose another perception mode."
             )
 
+    unawake: dict[str, Any] = {}
     if entity_clock is None:
         def lived_provider() -> float:
             return offset
@@ -113,14 +114,36 @@ def _install_shared_womb_clock(
             reading = entity_clock.now()
             if not math.isfinite(reading):
                 return offset
-            return offset + max(0.0, reading - baseline)
+            elapsed = reading - baseline
+            not_awake = 0.0
+            fn = unawake.get("fn")
+            if fn is not None:
+                try:
+                    val = fn()
+                    if math.isfinite(val):
+                        not_awake = float(val)
+                except Exception:
+                    not_awake = 0.0
+            return offset + max(0.0, elapsed - not_awake)
 
     perception_feed["_shared_womb_clock"] = clock
     perception_feed["_womb_lived_seconds"] = lived_provider
+    perception_feed["_womb_unawake"] = unawake
     if kaine_config is not None:
         target = kaine_config.setdefault("perception_feed", {})
         target["_shared_womb_clock"] = clock
         target["_womb_lived_seconds"] = lived_provider
+        target["_womb_unawake"] = unawake
+
+
+def bind_womb_unawake_source(kaine_config: dict[str, Any] | None, fn: Callable[[], float]) -> None:
+    """Hand the cycle's time-not-awake account to the womb's colour schedule.
+
+    The cycle is built after the feed.
+    """
+    holder = (kaine_config or {}).get("perception_feed", {}).get("_womb_unawake")
+    if isinstance(holder, dict):
+        holder["fn"] = fn
 
 
 _TRANSITION_DEFAULT_SECONDS = 20.0

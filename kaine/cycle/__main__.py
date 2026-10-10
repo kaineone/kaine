@@ -45,6 +45,7 @@ from kaine.boot import (
     make_salience_factors,
     plugin_injections,
 )
+from kaine.boot.perception_feed import bind_womb_unawake_source
 from kaine.bus.client import CYCLE_CLIENT_NAME, AsyncBus
 from kaine.bus.config import load_bus_config, load_secrets_doc
 from kaine.bus.schema import Event
@@ -287,7 +288,7 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
         per_request_adapter=per_request_adapter,
         state_root=resolve(DEFAULT_ROOT),
         clock_now=entity_clock.now if entity_clock is not None else None,
-        paused_seconds=cycle.paused_subjective_seconds,
+        paused_seconds=cycle.unawake_subjective_seconds,
         tick_index=lambda: cycle.tick_index,
         is_paused=lambda: cycle.is_paused,
         organ_unloaded=organ_unloaded,
@@ -1956,6 +1957,13 @@ async def _phase_volition(ctx: BootContext) -> int | None:
         )
 
 
+def _hypnos_is_sleeping(registry: Any) -> bool:
+    """Whether Hypnos is asleep now (False without Hypnos)."""
+    if "hypnos" not in registry:
+        return False
+    return bool(registry.get("hypnos").is_sleeping)
+
+
 async def _phase_cycle(ctx: BootContext) -> int | None:
     """Build the cognitive cycle and its metrics collector."""
     ctx.cycle = CognitiveCycle(
@@ -2008,6 +2016,9 @@ async def _phase_cycle(ctx: BootContext) -> int | None:
             else None
         ),
     )
+    # Hypnos sleep stops awake time; read through the registry so a rebuilt Hypnos is still read.
+    ctx.cycle.set_sleep_source(lambda: _hypnos_is_sleeping(ctx.registry))
+    bind_womb_unawake_source(ctx.kaine_config, ctx.cycle.unawake_subjective_seconds)
 
 
 async def _phase_supervision(ctx: BootContext) -> int | None:
@@ -2341,11 +2352,11 @@ async def _phase_launch(ctx: BootContext) -> int | None:
 
 async def _phase_birth(ctx: BootContext) -> int | None:
     """Wire the maturation gate's pause sources and birth hooks, and start the gate and individuation tasks."""
-    # Frozen time is not lived time: the runner subtracts the subjective time
-    # the cycle spends paused (maturation-gate-liveness 2.5).
+    # Time not awake is not lived time: the runner subtracts the subjective time
+    # the cycle spends frozen or asleep (paper A.7).
     # A frozen entity is never born, whoever froze it.
     ctx.gate_runner.set_pause_sources(
-        paused_seconds=ctx.cycle.paused_subjective_seconds,
+        paused_seconds=ctx.cycle.unawake_subjective_seconds,
         is_paused=lambda: ctx.cycle.is_paused,
     )
     # Birth transition (local-womb-feed 3.6): at birth the local womb blooms
@@ -2459,6 +2470,7 @@ async def _phase_gestation(ctx: BootContext) -> int | None:
     # maturation gate reads to detect womb loss. gestation.out is not a module
     # stream, so presence never enters the workspace.
     ctx.womb_presence_task = _start_womb_presence(ctx.kaine_config, ctx.bus, ctx.stop_event)
+    # Sleep stops the readout's awake time and aborts a running probe, like a freeze.
     # The readiness readout (local-womb-feed phase 3): measures, never imposes.
     ctx.gestation_task = None
     if ctx.staging_enabled and ctx.stage_state.is_gestating:
@@ -2467,7 +2479,7 @@ async def _phase_gestation(ctx: BootContext) -> int | None:
             ctx.bus,
             ctx.registry,
             ctx.stop_event,
-            is_paused=lambda: ctx.cycle.is_paused,
+            is_paused=lambda: ctx.cycle.is_paused or ctx.cycle.is_asleep,
         )
 
 
