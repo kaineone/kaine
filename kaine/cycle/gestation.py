@@ -631,6 +631,9 @@ class GestationOwner:
         self._ever_replicated: bool = False
         self._viability_verdict: dict | None = None
         self._viability_path: Path = self._state_path.parent / "gestation_viability.json"
+        self._progress_path: Path = self._state_path.parent / "gestation_progress.json"
+        self._last_progress_save_awake: float = 0.0
+        self._load_progress()
 
     def _jitter_unit(self, kind: str) -> float:
         """Return a fresh unit draw for ``kind`` and advance its counter."""
@@ -683,6 +686,7 @@ class GestationOwner:
         except Exception:
             log.warning("gestation: could not load baseline", exc_info=True)
 
+
     def _persist_baseline(self) -> None:
         if self._state_path is None:
             return
@@ -708,6 +712,72 @@ class GestationOwner:
         except Exception:
             log.warning("gestation: could not persist baseline", exc_info=True)
 
+    def _load_progress(self) -> None:
+        try:
+            if not self._progress_path.exists():
+                return
+            data = json.loads(self._progress_path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                return
+            key = data.get("key")
+            if key != self._baseline_key:
+                log.info(
+                    "gestation: ignoring progress from another being (%r != %r)",
+                    key,
+                    self._baseline_key,
+                )
+                return
+            awake = data.get("awake_seconds")
+            if isinstance(awake, (int, float)) and awake >= 0:
+                self._active_lived_seconds = float(awake)
+                self._last_progress_save_awake = self._active_lived_seconds
+            passes = data.get("consecutive_passes")
+            if isinstance(passes, int) and passes >= 0:
+                self._entrainment_consecutive_passes = passes
+            history = data.get("viability_history")
+            if isinstance(history, list):
+                cleaned: list[dict] = []
+                for entry in history:
+                    if not isinstance(entry, dict):
+                        continue
+                    lived_hours = entry.get("lived_hours")
+                    pull = entry.get("pull")
+                    # A withdrawal without a defined pull is recorded with pull None.
+                    if isinstance(lived_hours, (int, float)) and (
+                        pull is None or isinstance(pull, (int, float))
+                    ):
+                        cleaned.append(
+                            {
+                                "lived_hours": float(lived_hours),
+                                "pull": None if pull is None else float(pull),
+                            }
+                        )
+                self._viability_history = cleaned
+            ever = data.get("ever_replicated")
+            if isinstance(ever, bool):
+                self._ever_replicated = ever
+            verdict = data.get("viability_verdict")
+            if verdict is None or isinstance(verdict, dict):
+                self._viability_verdict = verdict
+        except Exception:
+            log.warning("gestation: could not load progress", exc_info=True)
+
+    def _persist_progress(self) -> None:
+        try:
+            from kaine.state_io import write_json_atomic
+            data: dict[str, Any] = {
+                "key": self._baseline_key,
+                "awake_seconds": self._active_lived_seconds,
+                "consecutive_passes": self._entrainment_consecutive_passes,
+                "viability_history": self._viability_history,
+                "ever_replicated": self._ever_replicated,
+                "viability_verdict": self._viability_verdict,
+            }
+            write_json_atomic(self._progress_path, data)
+            self._last_progress_save_awake = self._active_lived_seconds
+        except Exception:
+            log.warning("gestation: could not persist progress", exc_info=True)
+
     def _paused(self) -> bool:
         try:
             return bool(self._is_paused())
@@ -730,12 +800,15 @@ class GestationOwner:
                 log.warning("gestation: failed to initialise soma cursor", exc_info=True)
                 self._soma_cursor = "0"
 
+
     def _advance_lived(self, now: float, paused: bool) -> None:
         """Lived time for the viability rules excludes paused intervals (sleep,
         freezes), because the rules were validated on un-paused lived time.
         """
         if not paused and now > self._last_step_at:
             self._active_lived_seconds += now - self._last_step_at
+            if self._active_lived_seconds - self._last_progress_save_awake >= 60.0:
+                self._persist_progress()
         self._last_step_at = now
 
     async def step(self) -> None:
@@ -1124,9 +1197,11 @@ class GestationOwner:
         if self._entrainment_consecutive_passes >= int(cfg.entrainment_replications):
             self._ever_replicated = True
 
+
         self._viability_history.append(
             {"lived_hours": lived, "pull": self._frequency_pull}
         )
+        self._persist_progress()
 
         if cfg.viability_watch and self._viability_verdict is None:
             verdict = assess_viability(
@@ -1137,6 +1212,7 @@ class GestationOwner:
             )
             if verdict is not None:
                 self._viability_verdict = verdict
+                self._persist_progress()
                 try:
                     from kaine.state_io import write_json_atomic
                     write_json_atomic(self._viability_path, verdict)
