@@ -26,6 +26,8 @@ def make_lingua(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "request_timeout_s",
         # read by kaine.organ_server.lifecycle when it launches the organ, not by Lingua
         "model_server_sleep_idle_seconds",
+        # read by kaine.cycle.utterance_outcome, not by Lingua
+        "outcome_reply_window_s",
         "api_key",
         "intent_log_path",
         "context_max_events",
@@ -46,6 +48,7 @@ def make_lingua(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     }
     kw = _pop(section, allowed)
     kw.pop("model_server_sleep_idle_seconds", None)
+    kw.pop("outcome_reply_window_s", None)
     # Bearer token for a keyed model server (e.g. Unsloth Studio). Resolve from
     # [lingua].api_key, else the model-server key environment variable (so the secret
     # can stay out of the config file). None → keyless server (llama-server).
