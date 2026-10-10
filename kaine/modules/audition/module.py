@@ -708,6 +708,7 @@ class Audition(BaseModule):
                 "latency_ms": 0.0,
                 "error": f"{type(exc).__name__}: {exc}",
                 "backend": self._backend,
+                "alert": True,
             },
             salience=self._alert_salience,
         )
@@ -755,6 +756,7 @@ class Audition(BaseModule):
             "audition.emotion",
             {
                 "category": "neutral",
+                "alert": True,
                 "confidence": 0.0,
                 "scores": {c: (1.0 if c == "neutral" else 0.0) for c in CATEGORIES},
                 "model": self._emotion_classifier.model_id,

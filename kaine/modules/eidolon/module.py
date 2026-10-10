@@ -234,6 +234,7 @@ class Eidolon(BaseModule):
                     "historical_count": result.historical_count,
                     "reference_count": result.reference_count,
                     "top_drifted_sources": list(result.top_drifted_sources),
+                    "alert": True,
                 },
                 salience=self._alert_salience,
             )

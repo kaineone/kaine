@@ -301,6 +301,7 @@ class Praxis(BaseModule):
                 "error": reason,
                 "blocked": False,
                 "provenance_rejected": True,
+                "alert": True,
             },
             salience=self._alert_salience,
         )
@@ -366,6 +367,7 @@ class Praxis(BaseModule):
                 "elapsed_ms": result.elapsed_ms,
                 "error": result.error,
                 "blocked": blocked,
+                "alert": not result.success,
             },
             salience=salience,
         )

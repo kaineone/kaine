@@ -97,6 +97,11 @@ async def test_workspace_publishes_emotion_when_changes(bus: AsyncBus):
             e.payload.get("emotion") == CategoricalEmotion.SURPRISE.value
             for e in emotion_events
         )
+        assert all(
+            e.payload["alert"] is True
+            for e in emotion_events
+            if e.payload.get("emotion") != CategoricalEmotion.NEUTRAL.value
+        )
     finally:
         await thymos.shutdown()
 

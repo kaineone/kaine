@@ -310,3 +310,29 @@ def test_graded_report_leaves_rate_at_rest():
     )
     assert drive == pytest.approx(0.0)
     assert effective == pytest.approx(3.333)
+
+
+def test_max_report_salience_counts_module_alert_level_events():
+    events = [
+        (
+            "0-0",
+            Event(
+                source="thymos",
+                type="thymos.drive",
+                payload={"drive": "boredom", "value": 0.9, "alert": True},
+                salience=0.7,
+                timestamp=datetime.now(timezone.utc),
+            ),
+        ),
+        (
+            "0-0",
+            Event(
+                source="thymos",
+                type="thymos.drive",
+                payload={"drive": "curiosity", "value": 0.5},
+                salience=0.9,
+                timestamp=datetime.now(timezone.utc),
+            ),
+        ),
+    ]
+    assert max_report_salience(events) == pytest.approx(0.7)
