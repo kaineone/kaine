@@ -569,6 +569,9 @@ async def test_perception_event_is_content_free(bus: AsyncBus):
             "attended_seconds",
             "alert",
             "energy_dbfs",
+            # Content-free numbers: the broadcast information gain and context age.
+            "context_gain",
+            "context_age_s",
         }
         # The energy channel is a single number, never samples.
         assert isinstance(perc.payload["energy_dbfs"], float)

@@ -6,8 +6,8 @@
 
 ## 2. Topos and Audition
 
-- [ ] 2.1 Forward models take the context; checkpoints without context weights restore with zeros.
-- [ ] 2.2 Modules adopt the context from the broadcast stream and publish the per-report information gain.
+- [x] 2.1 Forward models take the context; checkpoints without context weights restore with zeros.
+- [x] 2.2 Modules adopt the context from the broadcast stream and publish the per-report information gain.
 
 ## 3. Soma
 
