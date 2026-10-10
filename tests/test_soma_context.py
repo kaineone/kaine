@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
+import math
 from datetime import datetime, timezone
 
 import pytest
@@ -104,6 +105,9 @@ async def test_soma_reports_context_gain(bus: AsyncBus) -> None:
 
     assert payload is not None
     assert "context_gain" in payload
+    # By the third report the scored prediction was formed with a context.
+    assert isinstance(payload["context_gain"], float)
+    assert math.isfinite(payload["context_gain"])
     assert "context_age_s" in payload
     assert isinstance(payload["context_age_s"], float)
     assert payload["context_age_s"] >= 0.0
