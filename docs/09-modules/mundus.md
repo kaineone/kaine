@@ -6,7 +6,7 @@ Mundus is KAINE's body-agnostic embodiment layer. It routes perception from a bo
 
 Mundus is built and tested, and held: it is off in the shipped `config/kaine.toml` and in the base-thesis `thesis_test` profile. It acts on a body only when all three of these hold:
 
-1. `[modules].mundus = true`, so the module is constructed;
+1. `[modules].mundus = true` in the operator file `config/kaine.operator.toml`, so the module is constructed (the same flag in the shipped `config/kaine.toml` is overridden by the `thesis_test` profile);
 2. `[mundus].enabled = true` (the shipped value), the configuration gate;
 3. `KAINE_MUNDUS_OPERATOR_APPROVED=1` in the environment, the operator gate.
 

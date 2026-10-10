@@ -175,7 +175,6 @@ The metric is computed whether or not training runs and is persisted to `state/h
 | `tests/test_hypnos_voice_alignment.py`, `tests/test_hypnos_voice_alignment_integration.py` | Pair builder, gates and vetoes |
 | `tests/test_hypnos_organ_window_bracket.py` | Organ window |
 
-The voice-alignment tests are listed on the [Voice alignment](../10-sleep/voice-alignment.md) page.
 
 ## See also
 

@@ -115,7 +115,7 @@ When an organ adapter is active, the client asks its LoRA resolver for the per-e
 
 While Hypnos has unloaded the organ to train an adapter, the client returns an empty "organ resting" response instead of calling the server, and generation resumes when the organ is reloaded.
 
-An interrupt-marked `speak` intent cancels an in-flight generation and realizes the new one. This happens only when `[volition].interrupt_threshold` is set (it is unset by default) and a coalition whose score crosses it arrives during a `speak`; a `think` intent never preempts a `speak`. The preemption is logged content-free as `{"event": "preempted", "mode", "tick"}`.
+An interrupt-marked `speak` intent cancels an in-flight generation and realizes the new one. This happens only when `[volition].interrupt_threshold` is set (it is unset by default) and a coalition whose score crosses it arrives during a `speak`; a `think` intent never preempts a `speak`. The preemption is logged content-free, as a record with `event` set to `"preempted"` and the `mode` and `tick` of the cancelled generation.
 
 ### Intent-expression log
 

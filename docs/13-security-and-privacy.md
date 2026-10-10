@@ -65,7 +65,7 @@ KAINE provides application-layer AES-256-GCM encryption for the cognitive-state 
 | `state/forks/<id>/snapshot.json` | Fork/merge bundle: every module's serialized numeric state, including encrypted Phantasia weights | App-layer AES-256-GCM; key must transfer out-of-band for cross-host use |
 | `data/evaluation/<observer>/` | Sidecar observer JSONL (PLV series, welfare counts, etc.) | App-layer AES-256-GCM per line |
 | `state/phantasia/world_model.ckpt` | World-model weights | App-layer AES-256-GCM |
-| Preservation bundles and `state/cycle/preservation` | Preservation state | App-layer AES-256-GCM when `[preservation].require_encryption = true` |
+| Preservation bundles and `state/cycle/preservation` | Preservation state | App-layer AES-256-GCM when `[security.state_encryption]` is on; `[preservation].require_encryption` (default `true`) refuses to write an unencrypted bundle |
 | `data/workspace_trajectory` | Workspace trajectory data | App-layer AES-256-GCM per line |
 | `state/hypnos/voice_align_jobs/` (e.g. `pairs.jsonl`) | Voice-alignment trainer job data | OS-layer |
 | `kaine-organ-adapters` volume | Active voice adapter served by the organ (read-only to the organ) | OS-layer |

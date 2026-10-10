@@ -58,7 +58,7 @@ All keys are under `[eidolon]` and `[eidolon.self_inference]`. The full referenc
 | `alert_salience` | float | `0.7` | Intensity of `eidolon.drift` |
 | `[eidolon.self_inference].enabled` | bool | `false` | Turns self-inference on |
 | `[eidolon.self_inference].vad_window_cycles` | int | `10` | Sleeps in the rolling valence, arousal and dominance window |
-| `[eidolon.self_inference].speech_pattern_min_count` | int | `5` | Observations needed before a speech type becomes a norm, or a drive becomes a value |
+| `[eidolon.self_inference].speech_pattern_min_count` | int | `5` | Observations of an internal-speech type needed before it becomes a norm, and threshold crossings of a drive needed before it becomes a value |
 | `[eidolon.self_inference].seed_path` | string | unset | Optional JSONL file applied once at first boot |
 
 The factory rejects any other key in either table.
@@ -135,7 +135,7 @@ State encryption is optional. To use it, set `[security.state_encryption].enable
 
 ## What Eidolon keeps
 
-From each utterance `_record_voice()` keeps `{timestamp, channel, length, word_count}` and discards the text, and `observe_lingua()` reads only the event type. No speech text reaches `self_model.json` or any Eidolon event. The `eidolon.drift` payload holds `score`, `recent_count`, `historical_count`, `reference_count` and `top_drifted_sources`.
+From each utterance `_record_voice()` keeps `{timestamp, channel, length, word_count}` and discards the text, and `observe_lingua()` reads only the event type. No text of the being's own speech reaches `self_model.json` or any Eidolon event; the only text Eidolon keeps is the situation facts it is told (above). The `eidolon.drift` payload holds `score`, `recent_count`, `historical_count`, `reference_count` and `top_drifted_sources`.
 
 ## Evaluation
 
