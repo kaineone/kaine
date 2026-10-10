@@ -251,7 +251,9 @@ async def test_roundtrip_chronos(bus: AsyncBus, tmp_path: Path) -> None:
     got = _json_roundtrip(m2.serialize())
     want = dict(state)
     for key in ("last_interaction_at", "time_since_last_interaction_s"):
-        assert got.pop(key) == pytest.approx(want.pop(key), abs=1.0)
+        g = got.pop(key)
+        w = want.pop(key)
+        assert g == pytest.approx(w, abs=1.0)
     assert got == want
 
 
