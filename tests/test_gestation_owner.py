@@ -766,7 +766,6 @@ def test_progress_persists_across_restart(owner_factory, tmp_path):
 
 
 def test_progress_of_another_being_is_ignored(owner_factory, tmp_path):
-    import json
 
     path = tmp_path / "gestation_readout.json"
     first = owner_factory(state_path=path)
