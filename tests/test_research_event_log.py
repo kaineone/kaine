@@ -1119,6 +1119,62 @@ def test_workspace_selected_yields_coalition_metadata():
     assert "secret" not in str(record)
 
 
+def test_audition_perception_numeric_fields_logged_item_dropped():
+    record = _taxonomy_record(
+        "audition.perception",
+        {
+            "prediction_error": 0.4,
+            "normalised_error": 1.2,
+            "alert": False,
+            "context_gain": 0.12,
+            "context_age_s": 0.3,
+            "item": "film.mp4",
+            "source_label": "playlist",
+        },
+    )
+    assert record["context_gain"] == 0.12
+    assert record["alert"] is False
+    assert record["context_age_s"] == 0.3
+    assert "item" not in record
+
+
+def test_processor_reports_carry_alert_and_context_gain():
+    for event_type in ("topos.report", "soma.report"):
+        record = _taxonomy_record(
+            event_type,
+            {
+                "prediction_error": 0.5,
+                "alert": True,
+                "context_gain": -0.05,
+                "context_age_s": 1.0,
+            },
+        )
+        assert record["alert"] is True
+        assert record["context_gain"] == -0.05
+
+    assert _taxonomy_record("chronos.report", {"alert": True})["alert"] is True
+
+
+def test_workspace_record_carries_access_threshold_and_publication_time():
+    from kaine.evaluation.observers.research_event_observer import (
+        _workspace_metadata_record,
+    )
+
+    record = _workspace_metadata_record(
+        {
+            "tick_index": 1,
+            "inhibited": False,
+            "metadata": {"access_threshold": 0.35, "coherence": {"x": 1}},
+            "published_at": 12.5,
+            "selected": [],
+        }
+    )
+    assert record["access_threshold"] == 0.35
+    assert record["published_at"] == 12.5
+    assert "coherence" not in record
+    assert "metadata" not in record
+
+
 def test_workspace_selected_events_key_no_longer_used():
     from kaine.evaluation.observers.research_event_observer import (
         _workspace_metadata_record,
