@@ -13,5 +13,10 @@ def test_bind_womb_unawake_source_sets_fn():
 
 
 def test_bind_womb_unawake_source_silently_ignores_missing_holder():
-    bind_womb_unawake_source({}, lambda: 1.0)
+    cfg = {}
+    cfg2 = {"perception_feed": {}}
+    bind_womb_unawake_source(cfg, lambda: 1.0)
+    bind_womb_unawake_source(cfg2, lambda: 1.0)
     bind_womb_unawake_source(None, lambda: 1.0)
+    assert cfg == {}
+    assert cfg2 == {"perception_feed": {}}
