@@ -14,6 +14,7 @@ from kaine.boot.common import _check_injections
 from kaine.boot.errors import ConfigurationError, _require_keys
 from kaine.boot.perception_feed import _build_perception_feed_audio_factory
 from kaine.bus.client import AsyncBus
+from kaine.entity_clock import EntityClock
 from kaine.hardware import resolve_device
 from kaine.modules.base import BaseModule
 
@@ -45,6 +46,7 @@ def make_audition(
     section: dict[str, Any],
     *,
     injections: Optional[Mapping[str, Any]] = None,
+    entity_clock: Optional[EntityClock] = None,
 ) -> BaseModule:
     from kaine.modules.audition.acoustic import ACOUSTIC_ENCODERS, build_acoustic_encoder
     from kaine.modules.audition.live import LiveMicConfig
@@ -110,6 +112,8 @@ def make_audition(
         "alert_salience",
     }
     kwargs: dict[str, Any] = {k: section[k] for k in base_keys if k in section}
+    if entity_clock is not None:
+        kwargs["entity_clock"] = entity_clock
     kwargs["capture_enabled"] = bool(section.get("capture_enabled", False))
 
     # Unified deterministic perception-feed selection (unified-perception-feed).

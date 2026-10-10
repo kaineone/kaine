@@ -1160,6 +1160,7 @@ class CognitiveCycle:
             "inhibited": snapshot.inhibited,
             "is_experiential": is_experiential,
             "time_scale": self._entity_clock.scale,
+            "published_at": self._entity_clock.now(),
             "salience_scores": dict(snapshot.salience_scores),
             "metadata": dict(snapshot.metadata),
             "selected": [

@@ -176,6 +176,69 @@ def test_age_grows_with_the_clock():
     assert ctx.age_s() == pytest.approx(3.0)
 
 
+def test_age_counts_from_publication():
+    clock = [12.5]
+
+    def tick():
+        return clock[0]
+
+    ctx = BroadcastContext(clock=tick)
+    snapshot = WorkspaceSnapshot(
+        tick_index=0,
+        selected_events=[("1-0", _ev("topos", "topos.report", 0.5))],
+        inhibited=False,
+        salience_scores={"1-0": 0.5},
+        metadata={"access_threshold": 0.0},
+        is_experiential=True,
+        published_at=10.0,
+    )
+    assert ctx.observe(snapshot) is True
+    assert ctx.age_s() == pytest.approx(2.5)
+    assert ctx.vector()[20] == pytest.approx(math.log1p(2.5))
+
+
+def test_age_falls_back_to_receipt_without_publication_time():
+    clock = [5.0]
+
+    def tick():
+        return clock[0]
+
+    ctx = BroadcastContext(clock=tick)
+    snapshot = WorkspaceSnapshot(
+        tick_index=0,
+        selected_events=[("1-0", _ev("topos", "topos.report", 0.5))],
+        inhibited=False,
+        salience_scores={"1-0": 0.5},
+        metadata={"access_threshold": 0.0},
+        is_experiential=True,
+    )
+    assert ctx.observe(snapshot) is True
+    assert ctx.age_s() == pytest.approx(0.0)
+
+    clock[0] = 7.0
+    assert ctx.age_s() == pytest.approx(2.0)
+
+
+def test_age_is_never_negative():
+    clock = [1.0]
+
+    def tick():
+        return clock[0]
+
+    ctx = BroadcastContext(clock=tick)
+    snapshot = WorkspaceSnapshot(
+        tick_index=0,
+        selected_events=[("1-0", _ev("topos", "topos.report", 0.5))],
+        inhibited=False,
+        salience_scores={"1-0": 0.5},
+        metadata={"access_threshold": 0.0},
+        is_experiential=True,
+        published_at=4.0,
+    )
+    assert ctx.observe(snapshot) is True
+    assert ctx.age_s() == 0.0
+
+
 def test_no_context_before_first_adoption():
     ctx = BroadcastContext(clock=lambda: 0.0)
     assert ctx.has_context is False
