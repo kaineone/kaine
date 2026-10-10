@@ -76,10 +76,10 @@ class Thymos(BaseModule):
         valence_time_constant_s: float = 30.0,
         valence_progress_gain: float = 2.0,
         clock: Optional[Callable[[], float]] = None,
-        # Shared subjective clock (injected at boot). Affect drift, the publish
-        # interval, and the time-alone → social-drive mapping
-        # (social_drive_time_scale_s) are all cognitive time constants, so they
-        # run in subjective time. When given, it supplies `now()` as this
+        # Shared subjective clock (injected at boot). Affect drift and the
+        # publish interval are cognitive time constants, so they run in subjective
+        # time. social_drive_time_scale_s is accepted for compatibility but unused.
+        # When given, it supplies `now()` as this
         # module's clock; an explicit `clock` callable still wins (tests inject a
         # fake monotonic). Absent both, a real-time EntityClock →
         # behavior-identical.
@@ -626,7 +626,10 @@ class Thymos(BaseModule):
                         progressed = True
                         self._cursors[stream] = last_scanned
                         for _, event in entries:
-                            await self._handle_peer_event(stream, event)
+                            try:
+                                await self._handle_peer_event(stream, event)
+                            except Exception:
+                                log.exception("Error handling peer event from %s", stream)
                 if not progressed:
                     await asyncio.sleep(0.05)
         except asyncio.CancelledError:
@@ -784,6 +787,19 @@ class Thymos(BaseModule):
         )
         self._drives.reset_all()
         self._last_emotion = CategoricalEmotion.NEUTRAL
+
+        # Reset learning-progress trackers so post-sleep affect starts afresh.
+        self._err_fast_sum.clear()
+        self._err_fast_count.clear()
+        self._err_slow_sum.clear()
+        self._err_slow_count.clear()
+        self._err_last_at.clear()
+        self._alert_fast = 0.0
+        self._alert_slow = 0.0
+        self._intent_rate = 0.0
+        self._intents_since_broadcast = 0
+        self._perceived_emotion = None
+
         await self.publish(
             "thymos.state",
             {
