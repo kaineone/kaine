@@ -1,4 +1,5 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """Tests for playlist-sleep-pause: Hypnos sleep freezes the shared playlist
 clock and restores the pre-sleep perception locus on wake.
 
