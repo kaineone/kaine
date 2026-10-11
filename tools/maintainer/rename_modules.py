@@ -96,6 +96,7 @@ class Plan:
     moves: list[tuple[str, str, str]]
     results: dict[str, FileResult]
     collisions: list[tuple[str, str, str]]
+    accepted: list[tuple[str, str, str]] = dataclasses.field(default_factory=list)
     table_modules: dict[str, dict] = dataclasses.field(default_factory=dict)
     table_developmental: dict[str, dict] = dataclasses.field(default_factory=dict)
     path_queued: list[Queued] = dataclasses.field(default_factory=list)
@@ -286,6 +287,14 @@ def validate_table(table) -> None:
     accepted = getattr(table, "ACCEPTED_COLLISIONS", None)
     if not isinstance(accepted, list):
         raise TableError("ACCEPTED_COLLISIONS must be a list")
+    for item in accepted:
+        if (
+            not isinstance(item, tuple)
+            or len(item) != 2
+            or not isinstance(item[0], str)
+            or not isinstance(item[1], str)
+        ):
+            raise TableError("ACCEPTED_COLLISIONS items must be (str, str)")
 
     for env_attr in ("ENV_VARS", "COMPOSE_VARS"):
         obj = getattr(table, env_attr, None)
@@ -979,6 +988,21 @@ def _repo_top_prefixes(table) -> tuple[str, ...]:
     return tuple(f"{d}/" for d in dirs)
 
 
+def _in_pip_extra(text: str, start: int, end: int) -> bool:
+    """Return True when ``text[start:end]`` lies inside a ``kaine[...]`` pip extra."""
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", start)
+    if line_end == -1:
+        line_end = len(text)
+    line = text[line_start:line_end]
+    rel_start = start - line_start
+    rel_end = end - line_start
+    for m in re.finditer(r"kaine\[[^\]\n]*\]", line):
+        if m.start() <= rel_start and m.end() >= rel_end:
+            return True
+    return False
+
+
 def _assign_scope(
     rel_path: str,
     ctx: str | None,
@@ -1038,8 +1062,9 @@ def _assign_scope(
     if os.path.basename(rel_path) == "pyproject.toml":
         if toml_table == "project.optional-dependencies" and ctx == "toml_key":
             return "operator"
-        if re.search(r"kaine\[[^\]]+\]", T):
-            return "operator"
+
+    if _in_pip_extra(text, start, end):
+        return "operator"
 
     if _is_prose_like(ctx) and shape == "bare":
         if T == W or T.endswith(".md") or T.startswith("docs/"):
@@ -1292,10 +1317,15 @@ def _resolve_non_guarded(
     ctx: str | None,
     T: str,
     rel_path: str,
+    text: str,
+    start: int,
+    end: int,
     table,
 ) -> tuple[bool, str]:
     """Return (rename, rule) for a non-guarded name."""
     if ctx in {"shell", "other"}:
+        if _in_pip_extra(text, start, end):
+            return (True, "unlisted")
         env_vars = _env_var_set(table)
         if re.fullmatch(r"^[A-Z][A-Z0-9_]*$", T) and (
             T.startswith("KAINE_") or T in env_vars
@@ -1381,6 +1411,52 @@ def _mask_excluded_regions(rel_path: str, text: str, table) -> list[tuple[int, i
     return blocked
 
 
+def _parse_toml_table_name(header: str) -> str | None:
+    """Return the full dotted table name from a TOML header line."""
+    header = header.strip()
+    if not (header.startswith("[") and header.endswith("]")):
+        return None
+    inner = header[1:-1].strip()
+    inner = inner.lstrip("[").rstrip("]").strip()
+    if not inner:
+        return ""
+    segments: list[str] = []
+    i = 0
+    n = len(inner)
+    while i < n:
+        while i < n and inner[i].isspace():
+            i += 1
+        if i >= n:
+            break
+        ch = inner[i]
+        if ch in "'\"":
+            i += 1
+            start = i
+            while i < n:
+                if inner[i] == "\\" and i + 1 < n and inner[i + 1] == ch:
+                    i += 2
+                    continue
+                if inner[i] == ch:
+                    break
+                i += 1
+            seg = inner[start:i]
+            if i < n and inner[i] == ch:
+                i += 1
+            segments.append(seg)
+        else:
+            start = i
+            while i < n and inner[i] != ".":
+                i += 1
+            seg = inner[start:i].strip()
+            if seg:
+                segments.append(seg)
+        while i < n and inner[i].isspace():
+            i += 1
+        if i < n and inner[i] == ".":
+            i += 1
+    return ".".join(segments)
+
+
 def _excluded_toml_values(text: str, table) -> list[tuple[int, int]]:
     blocked: list[tuple[int, int]] = []
     excluded = set(getattr(table, "EXCLUDED_TOML_KEYS", ()))
@@ -1397,8 +1473,9 @@ def _excluded_toml_values(text: str, table) -> list[tuple[int, int]]:
         line_end = line_start + len(raw_line)
         stripped = raw_line.lstrip()
         if stripped.startswith("[") and stripped.endswith("]"):
-            current_table = stripped[1:-1].strip().lstrip("[").split(".")[0].strip()
-            current_table = current_table.strip('"').strip("'")
+            parsed = _parse_toml_table_name(stripped)
+            if parsed is not None:
+                current_table = parsed
             continue
         eq_pos = _find_unquoted_equal(raw_line)
         if eq_pos == -1:
@@ -1521,9 +1598,7 @@ def _current_toml_table_at(
             break
         if ctx == "toml_header":
             header = text[start:end].strip()
-            if header.startswith("[") and header.endswith("]"):
-                inner = header[1:-1].lstrip("[").strip()
-                current = inner.split(".")[0].strip().strip('"').strip("'")
+            current = _parse_toml_table_name(header)
     return current
 
 
@@ -1722,7 +1797,7 @@ def _apply_word_matches(
                 )
                 continue
 
-        rename, rule_text = _resolve_non_guarded(ctx, T, rel_path, table)
+        rename, rule_text = _resolve_non_guarded(ctx, T, rel_path, text, start, end, table)
         if rename:
             scope = _assign_scope(
                 rel_path, ctx, text, start, end, W, T, shape, toml_table, tokens, table
@@ -2262,6 +2337,20 @@ def plan(
     moves.sort(key=lambda x: (x[0], x[1]))
     all_collisions.sort(key=lambda x: (x[0], x[1], x[2]))
 
+    accepted_pairs: set[tuple[str, str]] = set()
+    for item in getattr(table, "ACCEPTED_COLLISIONS", ()):
+        accepted_pairs.add(item)
+
+    move_map = {old: new for old, new, _scope in moves}
+    collisions: list[tuple[str, str, str]] = []
+    accepted: list[tuple[str, str, str]] = []
+    for rel, name, kind in all_collisions:
+        new_rel = move_map.get(rel, rel)
+        if (rel, name) in accepted_pairs or (new_rel, name) in accepted_pairs:
+            accepted.append((rel, name, kind))
+        else:
+            collisions.append((rel, name, kind))
+
     scopes_tuple = tuple(s for s in getattr(table, "SCOPES", ()) if s in scopes)
 
     only_tuple: tuple[str, ...] | None = None
@@ -2273,7 +2362,8 @@ def plan(
         only=only_tuple,
         moves=moves,
         results=results,
-        collisions=all_collisions,
+        collisions=collisions,
+        accepted=accepted,
         table_modules=getattr(table, "MODULES", {}),
         table_developmental=getattr(table, "DEVELOPMENTAL", {}),
         path_queued=path_queued,
@@ -2344,6 +2434,9 @@ def render_report(plan: Plan, mode: str) -> str:
         )
 
     collision_lines = [f"{rel} {name} {kind}" for rel, name, kind in plan.collisions]
+    collision_lines.extend(
+        f"{rel} {name} {kind} accepted" for rel, name, kind in plan.accepted
+    )
 
     queue_items: list[Queued] = []
     for result in plan.results.values():
@@ -2365,7 +2458,7 @@ def render_report(plan: Plan, mode: str) -> str:
         (f"## moves ({len(plan.moves)})", move_lines),
         (f"## changes ({len(scope_rule_counts)} files, {total_replacements} replacements)", change_lines),
         ("## per name", name_lines),
-        (f"## collisions ({len(plan.collisions)})", collision_lines),
+        (f"## collisions ({len(plan.collisions) + len(plan.accepted)})", collision_lines),
         (f"## review queue ({len(queue_items)})", queue_lines),
         (f"## skipped ({len(skipped_items)})", skipped_lines),
     ]
@@ -2412,7 +2505,7 @@ def apply_plan(root: Path, plan: Plan) -> None:
 
     if plan.collisions:
         raise PlanError(
-            f"plan has {len(plan.collisions)} collision(s); add to ACCEPTED_COLLISIONS"
+            f"plan has {len(plan.collisions)} unaccepted collision(s); add to ACCEPTED_COLLISIONS"
         )
 
     for old, new, _scope in plan.moves:

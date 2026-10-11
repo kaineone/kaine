@@ -269,6 +269,36 @@ def test_is_excluded(codemod, table):
     assert not codemod.is_excluded("kaine/config.py", table)
 
 
+def test_accepted_collision_lets_apply_proceed(codemod, table, tmp_path: pathlib.Path, capsys):
+    case_dir = _fixture_dir("collision")
+    repo = tmp_path / "repo"
+    _copy_fixture(case_dir / "before", repo)
+    _git_init(repo)
+
+    table_copy = tmp_path / "legacy_names_accepted.py"
+    table_copy.write_text(
+        pathlib.Path(table.__file__).read_text()
+        + '\n_old = [k for k, e in MODULES.items() if e["new_class"] == "Affect"][0]\n'
+        + 'ACCEPTED_COLLISIONS.append(("kaine/modules/" + _old + "/helper.py", "Affect"))\n'
+    )
+
+    exit_code = codemod.main(
+        ["--apply", "--scope", "identifiers", "--table", str(table_copy), "--root", str(repo)]
+    )
+    out = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert " accepted" in out
+
+    result = subprocess.run(
+        ["git", "ls-files"], cwd=repo, capture_output=True, text=True, check=True
+    )
+    assert "kaine/modules/affect/helper.py" in result.stdout.splitlines()
+
+    helper_text = (repo / "kaine/modules/affect/helper.py").read_text()
+    assert "class Affect" in helper_text
+
+
 def test_survey_report(codemod, table, tmp_path: pathlib.Path, capsys):
     case_dir = _fixture_dir("rename_all")
     repo = tmp_path / "repo"

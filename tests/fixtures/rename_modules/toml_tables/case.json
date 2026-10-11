@@ -1,0 +1,6 @@
+{
+  "args": ["--apply", "--scope", "operator"],
+  "expect_exit": 0,
+  "moves": [],
+  "report_contains": ["## moves (0)", "replacements=2"]
+}
