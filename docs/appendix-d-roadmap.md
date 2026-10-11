@@ -53,6 +53,8 @@ This page shows the engineering work in flight, the operator and on-device steps
 | gestation-progress-in-bundles | 3/3 (100%) | Gestation progress travels in preservation bundles. |
 | footprint-test-spawn-timeout | 1/1 (100%) | Give the footprint test's spawned child time to report. |
 | config-dead-keys | 9/9 (100%) | Remove configuration keys and an environment variable that drive nothing, and point the host probe at KAINE_TIER. |
+| mediation-harness-information-gain | 12/12 (100%) | Rebuild the offline development harness of the workspace-mediation test around the information-gain measure, with a pooled arm, and retire the coupling and utterance measures. |
+| flaky-group-kill-test | 3/3 (100%) | The group-kill tests wait for the job to finish before reading its status. |
 | hypnos-replay-buffer-order | 4/4 (100%) | Sleep's replay draws on the traces that sleep's consolidation moved, so it no longer finds an empty buffer. |
 
 ## Open operator and device steps
@@ -74,7 +76,7 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 48 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 50 active changes, 268 archived changes and 104 capability specs.
 
 The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 
