@@ -321,6 +321,7 @@ def construct_module(
     section = dict(kaine_config.get(name) or {})
     if name in ("topos", "audition", "soma"):
         section["perception_feed"] = dict(kaine_config.get("perception_feed") or {})
+        section["positive_control"] = dict(kaine_config.get("positive_control") or {})
 
     if name in ("mnemos", "empatheia"):
         section["_embedder"] = shared_embedder(registry, kaine_config)

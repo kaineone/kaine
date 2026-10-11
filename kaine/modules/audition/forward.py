@@ -337,6 +337,72 @@ class AuditoryForwardModel:
 
         return baseline_salience + ratio * (alert_salience - baseline_salience)
 
+    def widened_copy(self, extra: int = 1) -> "AuditoryForwardModel":
+        """A copy whose context input is ``extra`` components wider.
+
+        The new inputs start with zero weights, so the copy predicts exactly
+        as this model does whatever they hold.  It copies the weights, the
+        buffer, the learning rate and the suspended flag, gets its own
+        optimiser, and leaves the global torch RNG untouched.
+        """
+        if extra < 1:
+            raise ValueError("extra must be >= 1")
+        with self._torch.random.fork_rng(devices=[]):
+            twin = AuditoryForwardModel(
+                self._feature_dim,
+                self._units,
+                auditory_buffer_size=self._auditory_buffer_size,
+                lr=self._lr,
+                seed=None,
+                context_dim=self._context_dim + extra,
+            )
+        old_in = 2 * self._feature_dim + self._context_dim
+        with self._torch.no_grad():
+            twin._net[0].weight.zero_()
+            twin._net[0].weight[:, :old_in].copy_(self._net[0].weight)
+            twin._net[0].bias.copy_(self._net[0].bias)
+            twin._net[2].weight.copy_(self._net[2].weight)
+            twin._net[2].bias.copy_(self._net[2].bias)
+        twin._buffer = deque(
+            (list(v) for v in self._buffer), maxlen=self._auditory_buffer_size
+        )
+        twin.suspended = self.suspended
+        return twin
+
+    def hindsight_step(
+        self,
+        feature: list[float],
+        context: Optional[list[float]] = None,
+        null_context: Optional[list[float]] = None,
+    ) -> tuple[Optional[float], Optional[float]]:
+        """Score, in hindsight, the prediction of *feature* that the previous
+        call's state forms with *context*.
+
+        The buffer still ends with the previous input and the weights are
+        unchanged since then, so the prediction formed now is the one that
+        would have been formed at the previous call.  Returns the L2 error
+        and, when *null_context* is given, the L2 error of the prediction
+        formed with it; both None on the first call.  Then adapts toward
+        *feature* from the same input with *context* (unless suspended) and
+        appends *feature* to the buffer.
+        """
+        if not self._buffer:
+            self._buffer.append(list(feature))
+            return None, None
+        prev = list(self._buffer[-1])
+        pred = self.predict(prev, context)
+        error = math.sqrt(sum((a - b) ** 2 for a, b in zip(feature, pred)))
+        null_error = None
+        if null_context is not None:
+            null_pred = self.predict(prev, null_context)
+            null_error = math.sqrt(
+                sum((a - b) ** 2 for a, b in zip(feature, null_pred))
+            )
+        if not self.suspended:
+            self._adapt_toward(feature, context)
+        self._buffer.append(list(feature))
+        return error, null_error
+
     # ------------------------------------------------------------------
     # Serialisation — weights only; buffer as statistical summary.
     # ------------------------------------------------------------------

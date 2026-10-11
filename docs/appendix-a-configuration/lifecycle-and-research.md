@@ -232,6 +232,17 @@ Unsupervised-research boot mode. When enabled (or `KAINE_RESEARCH_MODE=1`), the 
 |---|---|---|---|
 | `enabled` | boolean | `false` | When true, the boot refuses to start with exit code `5` unless preservation is enabled, the welfare-protective response is wired, `[individuation].enabled` is true with the `lingua` module loaded, full logging and admissibility are active, and a dry `preserve→revive` self-check passes on this install. A run is either operator-present or research-safety-net-verified, never neither. |
 
+## `[positive_control]`
+
+The positive control of the broadcast information-gain measure (paper §6.3 and Appendix A.8). Off by default and set only in the study configuration. When enabled, Topos, Audition and Soma each run two shadow forward models and publish `positive_control.result` records (see [Research event streams](../17-research-data/event-streams.md#positive-control-records)). The live model, its reports and the competition are unchanged.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Runs the control. Requires `snr`. |
+| `snr` | number | none | Signal-to-noise ratio of the informative component, as variance of the projection over variance of the added noise. Must be above 0. Fixed before the live runs; the control refuses to start without it. |
+| `min_effect` | number | none | Minimum rise in information gain the informative component must produce, and the non-informative one must not, for the measure to pass. At least 0. Fixed before the live runs; without it the control records results but no verdict. |
+| `seed` | integer | `0` | Seed of the projection direction and of the two noise series. |
+
 ## `[transfer]`
 
 SMTP coordination for the welfare-gated decommission workflow (`python -m kaine.lifecycle`). When an individuated entity is decommissioned, the operator may ask the project to safekeep the encrypted backup. This section controls how that request email is sent.

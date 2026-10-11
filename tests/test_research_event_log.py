@@ -1163,6 +1163,30 @@ def test_processor_reports_carry_alert_and_context_gain():
     assert _taxonomy_record("chronos.report", {"alert": True})["alert"] is True
 
 
+def test_positive_control_result_is_logged():
+    from kaine.modules.positive_control import RESULT_FIELDS
+
+    payload = {
+        "processor": "topos",
+        "n_reports": 5,
+        "ig_with": 0.1,
+        "ig_without": 0.05,
+        "ig_noise": 0.04,
+        "effect": 0.05,
+        "noise_effect": 0.01,
+        "min_effect": 0.01,
+        "snr": 10.0,
+        "detected": True,
+        "noise_detected": False,
+        "passed": True,
+        "extra": "x",
+    }
+    record = _taxonomy_record("positive_control.result", payload)
+    for field in RESULT_FIELDS:
+        assert record[field] == payload[field]
+    assert "extra" not in record
+
+
 def test_workspace_record_carries_access_threshold_and_publication_time():
     from kaine.evaluation.observers.research_event_observer import (
         _workspace_metadata_record,

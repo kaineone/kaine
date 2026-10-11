@@ -72,6 +72,8 @@ SCHEMA: dict[str, dict[str, tuple[float, float]]] = {
     # interval; unexpected_error is the learned-band residual, also non-negative.
     "soma.report": {"prediction_error": NONNEG, "wellness": UNIT, "fatigue_value": NONNEG, "unexpected_error": NONNEG},
     "topos.report": {"prediction_error": NONNEG},
+    # Positive control result: numeric summary fields only.
+    "positive_control.result": {"n_reports": NONNEG, "min_effect": NONNEG, "snr": (0.0, INF)},
     "phantasia.world_error": {"error": NONNEG},
     # nous confidence is 1 - normalised_entropy, clamped to [0, 1]
     # (nous.module). expected_free_energy is a signed scalar with no hard

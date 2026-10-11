@@ -6,10 +6,10 @@
 - [x] 1.4 Tests: the null replaces only other sources' contributions by their running means; the gain is exactly zero when the context carries nothing; the paired evaluations reproduce the gain; a skipped reading reports no gain
 - [x] 1.5 Docs: the module pages and the research-data chapter list the new fields
 
-## 2. Positive control (waiting on operator decisions)
+## 2. Positive control (decided 2026-10-10; built in change `ablation-positive-control`)
 
-- [ ] 2.1 Decide what the synthetic component carries for each processor and how it reaches the context before the next input arrives
-- [ ] 2.2 Decide whether the with and without comparison is within one run or across paired runs
-- [ ] 2.3 Decide how the control's minimum effect is set
-- [ ] 2.4 Build the control as a study-mode facility, off by default, with the minimum effect as configuration and a pass or fail record per processor
-- [ ] 2.5 Tests: the control passes on an informative component and fails on a non-informative one
+- [x] 2.1 Decide what the synthetic component carries for each processor and how it reaches the context before the next input arrives
+- [x] 2.2 Decide whether the with and without comparison is within one run or across paired runs
+- [x] 2.3 Decide how the control's minimum effect is set
+- [x] 2.4 Build the control as a study-mode facility, off by default, with the minimum effect as configuration and a pass or fail record per processor
+- [x] 2.5 Tests: the control passes on an informative component and fails on a non-informative one

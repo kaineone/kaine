@@ -570,6 +570,110 @@ class SubstrateForwardModel:
 
         return baseline_salience + ratio * (alert_salience - baseline_salience)
 
+    def widened_copy(self, extra: int = 1) -> "SubstrateForwardModel":
+        """A copy whose context input is ``extra`` components wider.
+
+        The new inputs start with zero weights, so the copy predicts exactly
+        as this model does whatever they hold.  It copies the readout
+        weights, the recurrent state, the last hidden state, the learning
+        rate and the suspended flag; the frozen reservoir is rebuilt from
+        the same ``reservoir_seed``, so it is identical.
+        """
+        if extra < 1:
+            raise ValueError("extra must be >= 1")
+
+        if self._backend == "torch":
+            with self._torch.random.fork_rng(devices=[]):
+                twin = SubstrateForwardModel(
+                    self._feature_dim,
+                    self._units,
+                    lr=self._lr,
+                    seed=self.reservoir_seed,
+                    backend=self._backend,
+                    context_dim=self._context_dim + extra,
+                )
+        else:
+            twin = SubstrateForwardModel(
+                self._feature_dim,
+                self._units,
+                lr=self._lr,
+                seed=self.reservoir_seed,
+                backend=self._backend,
+                context_dim=self._context_dim + extra,
+            )
+
+        if self._backend == "numpy":
+            from kaine.cfc_numpy import NumpyReadout
+
+            W = np.asarray(self._readout.state_dict()["weight"], dtype=np.float32)
+            b = np.asarray(self._readout.state_dict()["bias"], dtype=np.float32)
+            twin._readout = NumpyReadout.from_arrays(
+                np.hstack([W, np.zeros((self._feature_dim, extra), dtype=np.float32)]),
+                b,
+            )
+            twin._hx = list(self._hx) if self._hx is not None else None
+        else:
+            with self._torch.no_grad():
+                twin._readout.weight.zero_()
+                twin._readout.weight[:, : self._units + self._context_dim].copy_(
+                    self._readout.weight
+                )
+                twin._readout.bias.copy_(self._readout.bias)
+            twin._hx = self._hx.clone() if self._hx is not None else None
+
+        twin._last_hidden = (
+            list(self._last_hidden) if self._last_hidden is not None else None
+        )
+        twin.suspended = self.suspended
+        return twin
+
+    def hindsight_step(
+        self,
+        feature: list[float],
+        context: Optional[list[float]] = None,
+        null_context: Optional[list[float]] = None,
+        *,
+        timespan: float = 1.0,
+    ) -> tuple[Optional[float], Optional[float]]:
+        """Score, in hindsight, the prediction of *feature* that the previous
+        call's state forms with *context*.
+
+        The last hidden state and the readout are unchanged since the
+        previous call, so the prediction formed now is the one that would
+        have been formed then.  Returns the L2 error and, when
+        *null_context* is given, the L2 error of the prediction formed
+        with it; both None on the first call.  Then adapts toward
+        *feature* from the same input with *context* (unless suspended)
+        and advances the recurrent state.
+        """
+        if len(feature) != self._feature_dim:
+            raise ValueError(
+                f"expected feature vector of length {self._feature_dim}, "
+                f"got {len(feature)}"
+            )
+        if not all(math.isfinite(v) for v in feature):
+            self._last_hidden = None
+            return None, None
+
+        if self._last_hidden is None:
+            error = None
+            null_error = None
+        else:
+            pred = self._readout_predict(self._last_hidden, context)
+            error = math.sqrt(sum((a - b) ** 2 for a, b in zip(feature, pred)))
+            if null_context is not None:
+                null_pred = self._readout_predict(self._last_hidden, null_context)
+                null_error = math.sqrt(
+                    sum((a - b) ** 2 for a, b in zip(feature, null_pred))
+                )
+            else:
+                null_error = None
+            if not self.suspended:
+                self._adapt_toward(self._last_hidden, feature, context)
+
+        self._last_hidden = self._tick(feature, commit=True, timespan=timespan)
+        return error, null_error
+
     # ------------------------------------------------------------------
     # Serialisation — readout weights only. The frozen CfC reservoir is
     # rebuilt from ``reservoir_seed`` (kept in Soma's snapshot), and the

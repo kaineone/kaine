@@ -52,7 +52,8 @@ This page shows the engineering work in flight, the operator and on-device steps
 | awake-time-excludes-sleep | 4/4 (100%) | Awake time excludes sleep as well as freezes. |
 | gestation-progress-in-bundles | 3/3 (100%) | Gestation progress travels in preservation bundles. |
 | footprint-test-spawn-timeout | 1/1 (100%) | Give the footprint test's spawned child time to report. |
-| ablation-null-context-positive-control | 5/10 (50%) | The null context differs from the held context only where other modules contributed, and reports carry the paired evaluations behind the gain. The positive control waits on operator decisions. |
+| ablation-null-context-positive-control | 10/10 (100%) | The null context differs from the held context only where other modules contributed, and reports carry the paired evaluations behind the gain. The positive control is built in ablation-positive-control. |
+| ablation-positive-control | 9/10 (90%) | The positive control of the information-gain measure: shadow forward models with an informative and a non-informative component, a per-processor verdict in the research log, and an offline all-processors check. Off by default. |
 
 ## Open operator and device steps
 
@@ -73,7 +74,7 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 47 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 48 active changes, 268 archived changes and 104 capability specs.
 
 The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 

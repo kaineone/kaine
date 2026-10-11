@@ -21,7 +21,7 @@ All four call the registry helpers, so a stream added in one consumer and not in
 
 The registry treats each canonical module as one `<module>.out` stream. The lists differ as follows.
 
-- `curated_module_streams()` and `raw_archive_module_streams()` both add `volition_feedback.out`.
+- `curated_module_streams()` and `raw_archive_module_streams()` both add `volition_feedback.out` and `positive_control.out`.
 - The curated list leaves out `vox.out` (raw audio) and `lingua.out` (the language organ's text) so that the research log stays content-free. The raw archive keeps every produced stream.
 - `diagnostics_streams()` leaves out the low-signal operational streams `volition.out`, `mundus.out`, `perception.out`, `welfare.out`, `preservation.out` and `individuation.out`, and appends `workspace.broadcast`. It includes `cycle.out`, which carries the cycle's `cycle.tick`, `cycle.rates` and `cycle.time_scale` events.
 
@@ -46,6 +46,14 @@ Every event carries its intensity in the event's `salience` field (the code's na
 The null context keeps the reporting processor's own share of the context and replaces every other source's share with its mean over the contexts the processor has adopted so far in the run. Soma's null context also keeps Lingua's share, because the language organ's load on the host would otherwise let its share predict Soma's input. The context and its null are built from one reading of the clock, so they carry the same age and flags. Chronos publishes no `context_gain`, since the broadcast is its input. The context itself is computed in `kaine/modules/context.py`: a 24-component featurization of the accessed members of the latest accessed broadcast, weighted by the intensity each member reported, plus the context's age. An inhibited broadcast leaves the context unchanged.
 
 These fields are on the bus and in the raw archive. The curated research log keeps only the keys in its allowlist (below). It records `alert` on every processor report, `context_gain`, `null_prediction_error`, `mean_prediction_error` and `context_age_s` on `topos.report`, `soma.report` and `audition.perception` (logged with its numeric fields only, never the playlist item title), `alert` on `thymos.drive`, `thymos.emotion` and `hypnos.sleep.completed`, and, on each broadcast record, `published_at` and, when the broadcast had candidates, `access_threshold`.
+
+## Positive control records
+
+When `[positive_control].enabled` is true (study configuration only), Topos, Audition and Soma each run two shadow copies of their forward model beside the live one. Each shadow's context carries one extra component: for the first, a seeded projection of the processor's own next input plus noise at the configured signal-to-noise ratio; for the second, a seeded series with the same mean and variance that is independent of the input. The shadows score in hindsight, forming at each report the prediction the previous report's state would have formed, so the extra component can carry the next input without the live model ever seeing it. The live model, its reports, its intensities and the competition are unchanged.
+
+After each awake report on which the live gain and both shadow gains are defined, the processor publishes a `positive_control.result` event on `positive_control.out`, a stream the cycle never reads as candidates. Its fields are cumulative over the run's counted reports: `processor`, `n_reports`, `ig_with` (the informative shadow's mean gain, with the component nulled to its running mean), `ig_without` (the live model's mean `context_gain` on the same reports), `ig_noise` (the non-informative shadow's mean gain), `effect` (`ig_with` minus `ig_without`), `noise_effect` (`ig_noise` minus `ig_without`), `min_effect`, `snr`, `detected` (`effect` is at least `min_effect`), `noise_detected` (`noise_effect` is at least `min_effect`) and `passed` (detected and not noise-detected). Without a `min_effect` the three verdict fields are null. The curated research log keeps every one of these fields.
+
+The paper runs the live test only after the measure passes for every processor. No boot gate enforces that yet. `python -m kaine.experiment.positive_control <run_id>` reads a finished run's records, takes the last result of each processor, and exits 0 only when all three passed.
 
 ## Broadcast metadata
 

@@ -195,6 +195,23 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "context_age_s",
         }
     ),
+    # Positive control of the information-gain measure: numbers and flags only.
+    "positive_control.result": frozenset(
+        {
+            "processor",
+            "n_reports",
+            "ig_with",
+            "ig_without",
+            "ig_noise",
+            "effect",
+            "noise_effect",
+            "min_effect",
+            "snr",
+            "detected",
+            "noise_detected",
+            "passed",
+        }
+    ),
     # NOTE: `audition.transcription` is intentionally ABSENT — never logged.
     # --- Memory / sleep ---
     "mnemos.recall": frozenset(

@@ -82,7 +82,7 @@ context_gain = (null-context error − error) / running mean error
 
 where the running mean is over the last `prediction_error_window` errors. A positive value means other modules' share of the accessed content helped Topos predict its own input. `context_gain` is `null` when the scored prediction was made without a context or the running mean error is zero. Each report also carries `null_prediction_error` and `mean_prediction_error`, the null-context error and the running mean the gain is computed from; both are `null` when `context_gain` is. The null prediction never enters learning or the competition. The running means behind it are not persisted, so they restart with each boot.
 
-`context_gain` is the measure behind the planned workspace-mediation test (see [Running experiments](../15-experiments/README.md)). Its matched-selection and pooled arms and its positive control are not built yet.
+`context_gain` is the measure behind the planned workspace-mediation test (see [Running experiments](../15-experiments/README.md)). Its positive control runs, when `[positive_control]` enables it, as two shadow forward models beside the live one (see [Research event streams](../17-research-data/event-streams.md#positive-control-records)). Its matched-selection and pooled arms are not built yet.
 
 ## Intensity and the alert flag
 
