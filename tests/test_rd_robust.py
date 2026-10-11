@@ -38,6 +38,8 @@ def dataset(n, jump, shape, noise, shift=0.0):
         m = 0.3 + 0.8 * x
     elif shape == "curved":
         m = np.sin(2.5 * x) + 0.6 * x**2
+    else:
+        raise ValueError(f"unknown shape {shape!r}")
     y = m + jump * (x >= 0) + e
     return x, y
 
