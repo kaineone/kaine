@@ -75,14 +75,8 @@ class _OutOfProcessStorage:
         *,
         query_vector: list[float],
         limit: int,
-        min_log_base: float | None = None,
     ) -> list:
-        return await self._inner.search(
-            collection,
-            query_vector=query_vector,
-            limit=limit,
-            min_log_base=min_log_base,
-        )
+        return await self._inner.search(collection, query_vector=query_vector, limit=limit)
 
     async def delete(self, collection: str, point_id: str) -> None:
         return await self._inner.delete(collection, point_id)
