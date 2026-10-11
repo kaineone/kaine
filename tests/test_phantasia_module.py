@@ -131,8 +131,8 @@ async def test_replay_cue_during_window_emits_scenario(bus: AsyncBus):
         for i in range(6):
             await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
 
-        # Open the Hypnos window, then deliver a mnemos.replay cue.
-        await ph._handle_peer_event("hypnos.out", _event("hypnos", "hypnos.sleep.started"))
+        # Hypnos opens the scenario window, then a mnemos.replay cue arrives.
+        ph.open_scenario_window()
         assert ph.window_active is True
         await ph._handle_peer_event(
             "mnemos.out",
@@ -192,16 +192,91 @@ async def test_scenario_reinjected_onto_phantasia_out(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_window_close_stops_scenarios(bus: AsyncBus):
+    """A cue handled after the window closes is ignored."""
     ph = Phantasia(bus, backend="fake")
     await ph.initialize()
     try:
-        await ph._handle_peer_event("hypnos.out", _event("hypnos", "hypnos.sleep.started"))
+        ph.open_scenario_window()
         assert ph.window_active is True
-        await ph._handle_peer_event("hypnos.out", _event("hypnos", "hypnos.sleep.completed"))
+        ph.close_scenario_window()
         assert ph.window_active is False
         await ph._handle_peer_event(
             "mnemos.out", _event("mnemos", "mnemos.replay", {"memory_id": "m"})
         )
+        events = await _drain(bus)
+        assert [e for e in events if e.type == "phantasia.scenario"] == []
+    finally:
+        await ph.shutdown()
+
+
+async def test_sleep_started_does_not_open_the_window(bus: AsyncBus):
+    """hypnos.sleep.started only pauses the waking path; the window stays closed."""
+    ph = Phantasia(bus, backend="fake")
+    await ph.initialize()
+    try:
+        await ph._handle_peer_event("hypnos.out", _event("hypnos", "hypnos.sleep.started"))
+        assert ph.window_active is False
+        await ph._handle_peer_event(
+            "mnemos.out", _event("mnemos", "mnemos.replay", {"memory_id": "m"})
+        )
+        events = await _drain(bus)
+        assert [e for e in events if e.type == "phantasia.scenario"] == []
+
+        await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)]))
+        events = await _drain(bus)
+        assert [e for e in events if e.type == "phantasia.world_error"] == []
+    finally:
+        await ph.shutdown()
+
+
+async def test_sleep_completed_closes_the_window(bus: AsyncBus):
+    """hypnos.sleep.completed clears the sleep flag and closes the window as a backstop."""
+    ph = Phantasia(bus, backend="fake")
+    await ph.initialize()
+    try:
+        ph.open_scenario_window()
+        await ph._handle_peer_event("hypnos.out", _event("hypnos", "hypnos.sleep.started"))
+        await ph._handle_peer_event("hypnos.out", _event("hypnos", "hypnos.sleep.completed"))
+        assert ph.window_active is False
+
+        await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)]))
+        events = await _drain(bus)
+        assert [e for e in events if e.type == "phantasia.world_error"] != []
+    finally:
+        await ph.shutdown()
+
+
+async def test_cue_published_in_window_is_answered_after_close(bus: AsyncBus):
+    """A cue whose timestamp lies inside the latest closed window is still answered."""
+    ph = Phantasia(bus, backend="fake", rollout_horizon=5)
+    await ph.initialize()
+    try:
+        for i in range(4):
+            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
+
+        ph.open_scenario_window()
+        cue = _event("mnemos", "mnemos.replay", {"memory_id": "m-late"})
+        ph.close_scenario_window()
+        await ph._handle_peer_event("mnemos.out", cue)
+
+        events = await _drain(bus)
+        scenarios = [e for e in events if e.type == "phantasia.scenario"]
+        assert len(scenarios) == 1
+        assert scenarios[0].payload["seed_memory_id"] == "m-late"
+    finally:
+        await ph.shutdown()
+
+
+async def test_cue_published_before_the_window_is_ignored(bus: AsyncBus):
+    """A cue whose timestamp is earlier than the latest window is ignored."""
+    ph = Phantasia(bus, backend="fake")
+    await ph.initialize()
+    try:
+        cue = _event("mnemos", "mnemos.replay", {"memory_id": "m-early"})
+        ph.open_scenario_window()
+        ph.close_scenario_window()
+        await ph._handle_peer_event("mnemos.out", cue)
+
         events = await _drain(bus)
         assert [e for e in events if e.type == "phantasia.scenario"] == []
     finally:
@@ -242,7 +317,7 @@ async def test_no_raw_sense_data_on_bus(bus: AsyncBus):
         ])
         for i in range(5):
             await ph.on_workspace(snap)
-        await ph._handle_peer_event("hypnos.out", _event("hypnos", "hypnos.sleep.started"))
+        ph.open_scenario_window()
         await ph._handle_peer_event(
             "mnemos.out",
             _event("mnemos", "mnemos.replay",

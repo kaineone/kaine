@@ -60,7 +60,7 @@ flowchart TD
     R --> E([hypnos.sleep.completed])
 ```
 
-Each phase catches its own errors, and the later phases still run after one fails. The affective reset runs in a `finally` after phases 1 to 4, shielded from a second cancel, so even a sleep that raises or is cancelled ends with it, and an aborted `hypnos.sleep.completed` is published on any exception, including a cancel. Phase 3 re-injects Phantasia's scenarios as `hypnos.association` events, which compete in the workspace like any other event. The order follows the paper (§3.5): replay, then synaptic downscaling, then associative replay, then the voice, and sleep ends with the affective reset. Phase 2 opens Mnemos's replay window itself, immediately before it replays, and closes it afterwards, so replay never depends on Mnemos having seen `hypnos.sleep.started` on the bus. The phase functions are in `kaine/modules/hypnos/phases.py`; phase 4 is driven from `kaine/modules/hypnos/module.py`.
+Each phase catches its own errors, and the later phases still run after one fails. The affective reset runs in a `finally` after phases 1 to 4, shielded from a second cancel, so even a sleep that raises or is cancelled ends with it, and an aborted `hypnos.sleep.completed` is published on any exception, including a cancel. Phase 3 re-injects Phantasia's scenarios as `hypnos.association` events, which compete in the workspace like any other event. The order follows the paper (§3.5): replay, then synaptic downscaling, then associative replay, then the voice, and sleep ends with the affective reset. Phase 2 opens Mnemos's replay window itself, immediately before it replays, and closes it afterwards, so replay never depends on Mnemos having seen `hypnos.sleep.started` on the bus. When Phantasia is present, Hypnos also opens its scenario window before phase 2, whose replay cues Phantasia through `mnemos.replay`, and closes it in a `finally` after phase 3, which cues Phantasia directly. On shutdown, Hypnos stops its loops, cancels a sleep still in flight and waits for it, so the sleep ends with the affective reset and an aborted `hypnos.sleep.completed`, then waits for the reset and publish tasks it holds; each wait is bounded at 5 s. The phase functions are in `kaine/modules/hypnos/phases.py`; phase 4 is driven from `kaine/modules/hypnos/module.py`.
 
 ## Outputs
 
@@ -176,6 +176,8 @@ The metric is computed whether or not training runs and is persisted to `state/h
 | `tests/test_sleep_suspension_cursor.py` | Topos, Audition and Chronos suspending adaptation during sleep |
 | `tests/test_hypnos_voice_alignment.py`, `tests/test_hypnos_voice_alignment_integration.py` | Pair builder, gates and vetoes |
 | `tests/test_hypnos_organ_window_bracket.py` | Organ window |
+| `tests/test_hypnos_phantasia_window.py` | Phantasia's scenario window around phases 2 and 3, through a real sleep on the bus |
+| `tests/test_hypnos_shutdown.py` | Shutdown during a sleep and during a held reset; the bounded wait |
 
 
 ## See also

@@ -15,14 +15,16 @@ Two modes:
     carries no imagined content. The observation is appended to a bounded
     in-memory ring buffer (the training corpus), which is NEVER serialized.
 
-  * **Offline (Hypnos window only).** While a Hypnos maintenance window is open
-    (tracked from ``hypnos.out``): (1) on a ``mnemos.replay`` cue, seed the
-    world model from the prior trajectory and roll out imagined trajectories,
-    publishing ``phantasia.scenario`` events — which, being published on
-    ``phantasia.out``, are re-injected into the workspace broadcast so Nous,
-    Thymos, and Eidolon process them via ``on_workspace`` (associative
-    consolidation); (2) training over the accumulated buffer runs in-memory,
-    gated by ``training_enabled``.
+  * **Offline (scenario window only).** While the scenario window that Hypnos
+    opens around the sleep phases that cue Phantasia is open: (1) on a
+    ``mnemos.replay`` cue, seed the world model from the prior trajectory and
+    roll out imagined trajectories, publishing ``phantasia.scenario`` events.
+    Because those events are published on ``phantasia.out``, they are
+    re-injected into the workspace broadcast so Nous, Thymos, and Eidolon
+    process them via ``on_workspace`` (associative consolidation); (2) training
+    over the accumulated buffer runs when ``hypnos.sleep.started`` arrives,
+    gated by ``training_enabled``. The waking path pauses from
+    ``hypnos.sleep.started`` to ``hypnos.sleep.completed``.
 
 ZERO-PERSISTENCE (load-bearing): the trajectory buffer is in-memory only and is
 never serialized to disk; a training pass writes NOTHING to disk; observation
@@ -48,6 +50,7 @@ import asyncio
 import json
 import logging
 from collections import deque
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, ClassVar, Optional
 
@@ -143,8 +146,15 @@ class Phantasia(BaseModule):
         # Bounded in-memory waking-trajectory ring buffer. NEVER serialized.
         self._buffer: deque[list[float]] = deque(maxlen=int(trajectory_buffer_size))
 
-        # Offline state: Hypnos maintenance window flag.
+        # _asleep tracks the sleep from hypnos.sleep.started to
+        # hypnos.sleep.completed on the bus and pauses the waking path for the
+        # whole sleep. Hypnos itself opens and closes the scenario window.
+        self._asleep: bool = False
         self._window_active: bool = False
+        # Wall-clock bounds of the latest window, compared with the timestamps
+        # of replay cues handled after it closed.
+        self._window_opened_at: Optional[datetime] = None
+        self._window_closed_at: Optional[datetime] = None
 
         self._mnemos_stream = mnemos_stream
         self._hypnos_stream = hypnos_stream
@@ -357,11 +367,10 @@ class Phantasia(BaseModule):
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         """Each waking tick: encode, fold in, publish salience-only world error.
 
-        During an open Hypnos window the live loop is suspended (external
-        perception is off), so we skip waking inference and let the offline
-        path drive scenario generation instead.
+        The waking path is skipped while asleep (from ``hypnos.sleep.started``
+        to ``hypnos.sleep.completed``) or while the scenario window is open.
         """
-        if self._window_active:
+        if self._asleep or self._window_active:
             return
         obs = encode_snapshot(snapshot)
         # Append to the bounded in-memory ring buffer (training corpus).
@@ -422,21 +431,53 @@ class Phantasia(BaseModule):
     async def _handle_peer_event(self, stream: str, event: Event) -> None:
         if stream == self._hypnos_stream:
             if event.type == "hypnos.sleep.started":
-                self._window_active = True
+                # The waking path pauses for the whole sleep. The scenario
+                # window is opened by Hypnos, so a late sleep.started on the
+                # bus cannot open it after the sleep ended.
+                self._asleep = True
                 # Maintenance entered: run an in-memory training pass.
                 await self._maybe_train()
             elif event.type == "hypnos.sleep.completed":
-                self._window_active = False
+                self._asleep = False
+                # Backstop: Hypnos closes the window itself after phase 3.
+                self.close_scenario_window()
         elif stream == self._mnemos_stream and event.type == "mnemos.replay":
             await self._handle_replay_cue(event)
 
-    async def _handle_replay_cue(self, event: Event) -> None:
-        """On a mnemos.replay cue during an open window, generate a scenario.
+    def open_scenario_window(self) -> None:
+        """Open the scenario window. Hypnos calls this inside a sleep, before phase 2's replay."""
+        self._window_active = True
+        self._window_opened_at = datetime.now(timezone.utc)
+        self._window_closed_at = None
 
-        Offline-only: replay cues received while awake are ignored (the live
-        loop never produces scenarios — paper §3.3.5 phase 3).
-        """
+    def close_scenario_window(self) -> None:
+        """Close the scenario window. Hypnos calls this once phase 3 is done; closing a closed window does nothing."""
         if not self._window_active:
+            return
+        self._window_active = False
+        self._window_closed_at = datetime.now(timezone.utc)
+
+    def _cue_in_window(self, event: Event) -> bool:
+        """Whether a replay cue belongs to a scenario window.
+
+        The peer poll can handle a cue after Hypnos has closed the window that
+        it was published in. Such a cue still counts when its timestamp lies
+        inside the latest window.
+        """
+        if self._window_active:
+            return True
+        opened, closed = self._window_opened_at, self._window_closed_at
+        if opened is None or closed is None:
+            return False
+        return opened <= event.timestamp <= closed
+
+    async def _handle_replay_cue(self, event: Event) -> None:
+        """On a mnemos.replay cue inside the latest scenario window, generate a scenario.
+
+        Offline only: a cue published while awake is ignored, since the live
+        loop never produces scenarios (paper §3.3.5 phase 3).
+        """
+        if not self._cue_in_window(event):
             return
         await self.generate_scenario(seed_memory_id=str(event.payload.get("memory_id", "")))
 

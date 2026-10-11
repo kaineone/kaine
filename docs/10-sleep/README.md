@@ -71,7 +71,7 @@ Phase 2 needs Mnemos and otherwise returns at once with `skipped`. It opens Mnem
 
 ### Phase 3: associative replay
 
-Phase 3 runs only when `[hypnos.consolidation].associative_replay = true` and otherwise returns a successful no-op. It selects traces from at least two memory periods, drawing on the short-term buffer, the traces phase 1 consolidated and the persisted episodic store on every memory backend, cues [Phantasia](../09-modules/phantasia.md) to extend each into a scenario, and publishes each scenario as a `hypnos.association` event, which competes in the workspace like any other event. [Nous](../09-modules/nous.md) and Thymos take it up through the normal cycle.
+Phase 3 runs only when `[hypnos.consolidation].associative_replay = true` and otherwise returns a successful no-op. It selects traces from at least two memory periods, drawing on the short-term buffer, the traces phase 1 consolidated and the persisted episodic store on every memory backend, cues [Phantasia](../09-modules/phantasia.md) to extend each into a scenario inside the scenario window that Hypnos opens before phase 2 and closes after phase 3, and publishes each scenario as a `hypnos.association` event, which competes in the workspace like any other event. [Nous](../09-modules/nous.md) and Thymos take it up through the normal cycle.
 
 ### Phase 4: voice alignment
 
