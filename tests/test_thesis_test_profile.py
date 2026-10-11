@@ -46,6 +46,7 @@ def test_voice_is_self_initiated_no_chatbot():
     assert cfg["volition"]["drive_initiative"] is False
 
 
-def test_language_organ_decodes_greedily():
+def test_language_organ_samples_in_general_use():
     cfg = _cfg()
-    assert cfg["lingua"]["temperature"] == 0.0
+    # Greedy decoding is set only by study configurations.
+    assert cfg["lingua"]["temperature"] == 0.7

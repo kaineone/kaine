@@ -14,6 +14,7 @@ CLS collections, so selecting a backend never changes Mnemos's semantics.
 from __future__ import annotations
 
 import asyncio
+import heapq
 import json
 import logging
 import math
@@ -143,6 +144,17 @@ class MemoryStorage(Protocol):
     async def export(self, collections: Sequence[str]) -> dict[str, list[dict[str, Any]]]:
         """Protocol member: export."""
 
+    async def recent_points(self, collection: str, *, limit: int) -> list[dict[str, Any]]:
+        """Protocol member: recent points.
+
+        Returns at most ``limit`` points of ``collection``, the newest by
+        ``payload["timestamp"]`` (a missing or non-numeric timestamp counts as
+        0.0), newest first. Each point dict has keys ``id`` (str), ``text``
+        (str), ``payload`` (dict), ``affect`` (dict or None) and NO vector. A
+        collection that does not exist gives ``[]``. ``limit <= 0`` gives ``[]``.
+        Used by sleep's cross-period selection, which must not pull every vector.
+        """
+
     async def replace_collection(self, name: str, points: Sequence[dict[str, Any]]) -> int:
         """Protocol member: replace collection."""
 
@@ -159,6 +171,15 @@ def _cosine(a: list[float], b: list[float]) -> float:
     if na == 0 or nb == 0:
         return 0.0
     return sum(x * y for x, y in zip(a, b)) / (na * nb)
+
+
+def _payload_timestamp(payload: Any) -> float:
+    if not isinstance(payload, dict):
+        return 0.0
+    try:
+        return float(payload.get("timestamp", 0.0))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 class InMemoryStorage:
@@ -283,6 +304,21 @@ class InMemoryStorage:
                 for p in points
             ]
         return out
+
+    async def recent_points(self, collection: str, *, limit: int) -> list[dict[str, Any]]:
+        if limit <= 0:
+            return []
+        points = self._collections.get(collection, [])
+        newest = heapq.nlargest(limit, points, key=lambda p: _payload_timestamp(p["payload"]))
+        return [
+            {
+                "id": str(p["id"]),
+                "text": p["text"],
+                "payload": dict(p["payload"]),
+                "affect": dict(p["affect"]) if p["affect"] else None,
+            }
+            for p in newest
+        ]
 
     async def replace_collection(self, name: str, points: Sequence[dict[str, Any]]) -> int:
         """Replace one collection with the given points. Returns point count.
@@ -699,6 +735,37 @@ class SqliteVecStorage:
 
         return await self._run(_export)
 
+    async def recent_points(self, collection: str, *, limit: int) -> list[dict[str, Any]]:
+        if limit <= 0:
+            return []
+
+        def _recent(db: Any) -> list[dict[str, Any]]:
+            if db is None:
+                raise StorageError("sqlite-vec recent_points before initialize()")
+            out: list[dict[str, Any]] = []
+            try:
+                cur = db.execute(
+                    "SELECT point_id, text, payload, affect FROM memories "
+                    "WHERE collection = ? "
+                    "ORDER BY COALESCE(CAST(json_extract(payload, '$.timestamp') AS REAL), 0.0) DESC "
+                    "LIMIT ?",
+                    (collection, int(limit)),
+                )
+                for pid, text, payload_json, affect_json in cur.fetchall():
+                    out.append(
+                        {
+                            "id": str(pid),
+                            "text": str(text or ""),
+                            "payload": json.loads(payload_json) if payload_json else {},
+                            "affect": json.loads(affect_json) if affect_json else None,
+                        }
+                    )
+            except Exception as exc:
+                raise StorageError(f"sqlite-vec recent_points failed: {exc}") from exc
+            return out
+
+        return await self._run(_recent)
+
     async def replace_collection(self, name: str, points: Sequence[dict[str, Any]]) -> int:
 
         for p in points:
@@ -1033,6 +1100,56 @@ class QdrantStorage:
                 ) from exc
             out[name] = points
         return out
+
+    async def recent_points(self, collection: str, *, limit: int) -> list[dict[str, Any]]:
+        if limit <= 0:
+            return []
+        assert self._client is not None
+        try:
+            existing = await self._client.get_collections()
+            existing_names = {c.name for c in existing.collections}
+        except Exception as exc:
+            raise StorageError(
+                f"qdrant recent_points failed: could not list collections ({exc})"
+            ) from exc
+        if collection not in existing_names:
+            return []
+
+        heap: list[tuple[float, int, dict[str, Any]]] = []
+        seq = 0
+        offset = None
+        try:
+            while True:
+                batch, offset = await self._client.scroll(
+                    collection_name=collection,
+                    limit=256,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+                for p in batch:
+                    payload = dict(getattr(p, "payload", None) or {})
+                    text = str(payload.pop("text", ""))
+                    affect = payload.pop("affect", None)
+                    ts = _payload_timestamp(payload)
+                    point = {
+                        "id": str(getattr(p, "id", "")),
+                        "text": text,
+                        "payload": payload,
+                        "affect": dict(affect) if affect else None,
+                    }
+                    if len(heap) < limit:
+                        heapq.heappush(heap, (ts, seq, point))
+                    elif heap and ts > heap[0][0]:
+                        heapq.heappushpop(heap, (ts, seq, point))
+                    seq += 1
+                if offset is None:
+                    break
+        except Exception as exc:
+            raise StorageError(
+                f"qdrant recent_points failed scrolling collection {collection!r}: {exc}"
+            ) from exc
+        return [point for _, _, point in sorted(heap, reverse=True)]
 
     async def replace_collection(self, name: str, points: Sequence[dict[str, Any]]) -> int:
         """Replace one collection with the given validated points.

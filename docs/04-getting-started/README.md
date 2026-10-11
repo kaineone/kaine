@@ -132,7 +132,7 @@ Every runtime service is local. Model weights download from public repositories 
 | Speaches | STT for Audition when transcription is on (`Systran/faster-distil-whisper-medium.en`) | `127.0.0.1:8000` |
 | Chatterbox TTS | Voice synthesis for Vox | `127.0.0.1:8883` |
 
-If no profile is selected, the loader applies the `thesis_test` profile automatically. That profile turns Soma, Chronos, Topos, Audition, Lingua, Thymos and Hypnos on and every other module off. It also sets `[perception_feed]` to `seeded` with seed 0, `[topos].foveation = true`, `[chronos].forward_prediction = true`, `[audition].transcription_enabled = false` with `general_audition = true`, `[lingua].temperature = 0.0` (greedy decoding), and `[volition]` `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`. Every other value comes from the shipped `config/kaine.toml`.
+If no profile is selected, the loader applies the `thesis_test` profile automatically. That profile turns Soma, Chronos, Topos, Audition, Lingua, Thymos and Hypnos on and every other module off. It also sets `[perception_feed]` to `seeded` with seed 0, `[topos].foveation = true`, `[chronos].forward_prediction = true`, `[audition].transcription_enabled = false` with `general_audition = true`, and `[volition]` `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`. Every other value comes from the shipped `config/kaine.toml`.
 
 `config/kaine.operator.toml` merges last and wins, and the first-run wizard always writes a full `[modules]` table there, so after the wizard has run its module choices replace the profile's.
 

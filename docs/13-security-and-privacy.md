@@ -155,7 +155,7 @@ The cognitive cycle carries the welfare obligation in one of three ways: operato
 
 - Operator-supervised (non-research): the cycle refuses to start unless `KAINE_CYCLE_OPERATOR_PRESENT=1` is exported, and the operator carries the duty of care.
 - Research mode (unsupervised by design): a research run has no human in the loop, because an operator acting on the running entity makes the run non-reproducible. Research mode replaces the operator-present requirement with a gate that refuses to start, with exit code `5`, unless the welfare safety net is live and verified: preservation enabled, the welfare-protective response wired, the individuation producer enabled, full logging and admissibility active, the state-encryption gate satisfied, and a preflight `preserve_live` and `revive` self-check passing on this install. The net carries the duty of care for the run, and runs are paused only after the being's state is saved. See [Preservation and the safety net](11-preservation.md) and [For researchers](14-for-researchers.md).
-- Unattended (opt-in): `[cycle].supervision_mode = "unattended"` or `KAINE_CYCLE_UNATTENDED=1` replaces the operator-present requirement with eight conditions verified at every start, failing with exit code `6`: five of the research gate's checks (preservation, welfare response, logging, the self-check and state encryption), Spot armed and self-tested, a content-free caretaker notice accepted by a local channel, and a continuous-input probe. See [Day-to-day operation](06-operation/README.md).
+- Unattended (opt-in): `[cycle].supervision_mode = "unattended"` or `KAINE_CYCLE_UNATTENDED=1` replaces the operator-present requirement with nine conditions verified at every start, failing with exit code `6`: all six of the research gate's checks (preservation, welfare response, logging, the self-check, state encryption and the individuation producer), Spot armed and self-tested, a content-free caretaker notice accepted by a local channel, and a continuous-input probe. See [Day-to-day operation](06-operation/README.md).
 
 No mode auto-starts the entity from a CI hook, shell completion, autoreload daemon, or any other mechanism. The only start at boot is the opt-in `kaine-cycle-unattended` quadlet unit, which an operator installs and enables deliberately and which runs the unattended gate every time.
 
@@ -163,7 +163,7 @@ The shipped `config/kaine.toml` has every module disabled, and the safety-net co
 
 ## Welfare veto in voice alignment
 
-The voice-alignment pipeline (Hypnos phase 5) trains a LoRA adapter using DPO and QLoRA on the language organ's preference pairs. Before any adapter is promoted, it is scored against an abliteration probe set.
+The voice-alignment pipeline (Hypnos phase 4) trains a LoRA adapter using DPO and QLoRA on the language organ's preference pairs. Before any adapter is promoted, it is scored against an abliteration probe set.
 
 The probe set contains prompts and deflection patterns such as "I cannot" or "I'm unable to". If a response to any probe matches any deflection pattern, the adapter is rejected regardless of its capability-loss score. The language organ is abliterated because models tuned to refuse are also trained to deny or deflect talk of their own states, which would override what the workspace supplies to the organ. A voice-alignment pass that reintroduced that conditioning would undo the abliteration, so the veto keeps it out.
 

@@ -125,6 +125,8 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "alerts",
             "alert",
             "context_gain",
+            "null_prediction_error",
+            "mean_prediction_error",
             "context_age_s",
         }
     ),
@@ -136,6 +138,8 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "habituation_score",
             "alert",
             "context_gain",
+            "null_prediction_error",
+            "mean_prediction_error",
             "context_age_s",
         }
     ),
@@ -186,7 +190,29 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "attended_seconds",
             "alert",
             "context_gain",
+            "null_prediction_error",
+            "mean_prediction_error",
             "context_age_s",
+        }
+    ),
+    # Positive control of the information-gain measure: numbers and flags only.
+    "positive_control.result": frozenset(
+        {
+            "processor",
+            "n_reports",
+            "min_reports",
+            "ig_with",
+            "ig_without",
+            "ig_noise",
+            "effect",
+            "noise_effect",
+            "min_effect",
+            "snr",
+            "detected",
+            "noise_detected",
+            "passed",
+            "failed",
+            "final",
         }
     ),
     # NOTE: `audition.transcription` is intentionally ABSENT — never logged.
@@ -591,7 +617,7 @@ def _workspace_metadata_record(snapshot: dict[str, Any]) -> dict[str, Any]:
     metadata ONLY ({source, type, salience, causal_parent}), never the entry
     `payload`/content field.
 
-    Also copies `access_threshold` from `metadata` and `published_at`
+    Also copies `access_threshold` and `arm` from `metadata` and `published_at`
     from the snapshot when present.
     """
     record: dict[str, Any] = {
@@ -609,6 +635,8 @@ def _workspace_metadata_record(snapshot: dict[str, Any]) -> dict[str, Any]:
     metadata = snapshot.get("metadata")
     if isinstance(metadata, dict) and "access_threshold" in metadata:
         record["access_threshold"] = metadata["access_threshold"]
+    if isinstance(metadata, dict) and "arm" in metadata:
+        record["arm"] = metadata["arm"]
     if "published_at" in snapshot:
         record["published_at"] = snapshot.get("published_at")
 

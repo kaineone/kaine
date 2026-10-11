@@ -50,16 +50,16 @@ sequenceDiagram
     Hypnos->>Bus: hypnos.sleep.started
     Note over Hypnos: Phase 1: set_frequency(0.5); mnemos.consolidate_now()
     Note over Hypnos: Locus off and playlist paused for the whole sleep
-    Note over Hypnos: Phase 2: downscale; replay
+    Note over Hypnos: Phase 2: replay in Mnemos's replay window; downscale
     Note over Hypnos: Phase 3: cross-period traces, Phantasia, hypnos.association
-    Note over Hypnos: Phase 4: thymos.affective_reset()
-    Note over Hypnos: Phase 5: consolidation divergence; voice-alignment gates
-    Note over Hypnos: Intent-log rotation, voice measures, intent audit
+    Note over Hypnos: Phase 4: consolidation divergence; voice-alignment gates; intent-log rotation, voice measures
+    Note over Hypnos: Phase 5: thymos.affective_reset()
+    Note over Hypnos: Intent audit
     Hypnos->>Bus: hypnos.sleep.completed
     Bus->>Soma: reset fatigue and regulation
 ```
 
-Each phase returns a `PhaseResult` with `phase`, `success`, `elapsed_ms`, `error` and `metadata`, and catches its own errors, so the phases always run in order and a failure in one does not stop the next.
+Each phase returns a `PhaseResult` with `phase`, `success`, `elapsed_ms`, `error` and `metadata`, and catches its own errors, so the phases always run in order and a failure in one does not stop the next. Phases 1 to 4 run inside a `try` whose `finally` runs the affective reset, so a sleep that raises or is cancelled still ends with it. The reset runs as its own task behind `asyncio.shield`, so a second cancel cannot interrupt it. On any exception, including a cancel, Hypnos publishes an aborted `hypnos.sleep.completed` and re-raises, so Soma and Mnemos always see the sleep end.
 
 ### Phase 1: light consolidation
 
@@ -67,23 +67,23 @@ Phase 1 calls `set_frequency(0.5)` on every active module, a no-op unless the os
 
 ### Phase 2: deep consolidation
 
-Phase 2 needs Mnemos and otherwise returns at once with `skipped`. It scales every memory activation vector by `downscale_factor` (0.9), following the synaptic homeostasis hypothesis (Tononi and Cirelli 2014). It then runs `mnemos.replay_now()` while perception is already suspended for the sleep. Metadata: `vectors_downscaled`, `downscale_factor`, `replay_events` and `replay_window_s`.
+Phase 2 needs Mnemos and otherwise returns at once with `skipped`. It opens Mnemos's replay window with `open_replay_window()`, runs `mnemos.replay_now()` while perception is already suspended for the sleep, and closes the window again with `close_replay_window()`. The replay draws on the traces phase 1 moved into episodic memory. Because Hypnos opens the window itself, the replay does not depend on Mnemos's bus poll having seen `hypnos.sleep.started`, and nothing outside phase 2 can replay. It then scales every memory activation vector by `downscale_factor` (0.9), following the synaptic homeostasis hypothesis (Tononi and Cirelli 2014). Replay ranks traces by affect and recency and never reads vectors, so downscaling after it leaves the replayed traces unchanged. Metadata: `vectors_downscaled`, `downscale_factor`, `replay_events` and `replay_window_s`.
 
 ### Phase 3: associative replay
 
-Phase 3 runs only when `[hypnos.consolidation].associative_replay = true` and otherwise returns a successful no-op. It selects traces from at least two memory periods, cues [Phantasia](../09-modules/phantasia.md) to extend each into a scenario, and publishes each scenario as a `hypnos.association` event, which competes in the workspace like any other event. [Nous](../09-modules/nous.md) and Thymos take it up through the normal cycle.
+Phase 3 runs only when `[hypnos.consolidation].associative_replay = true` and otherwise returns a successful no-op. It selects traces from at least two memory periods, drawing on the short-term buffer, the traces phase 1 consolidated and the persisted episodic store on every memory backend, cues [Phantasia](../09-modules/phantasia.md) to extend each into a scenario, and publishes each scenario as a `hypnos.association` event, which competes in the workspace like any other event. [Nous](../09-modules/nous.md) and Thymos take it up through the normal cycle.
 
-### Phase 4: affective reset
+### Phase 4: voice alignment
 
-Phase 4 calls `thymos.affective_reset()`. It returns valence, arousal and dominance to baseline, resets every drive, sets the emotion to neutral, clears the learning-progress and alert-rate trackers, the intent rate and any perceived emotion, and publishes `thymos.state` with `reset: true`. Wellness and the record of the last heard voice are kept. See [Thymos](../09-modules/thymos.md#sleep-reset).
+Phase 4 first builds preference pairs from the intent-expression log and publishes the content-free `hypnos.consolidation_divergence` metric. It then checks the voice-alignment gates. No validated preference source exists yet, so the phase trains nothing, even with both operator gates open. Hypnos then moves the waking intent log `state/lingua/intent_expression.jsonl` into the per-sleep corpus under `state/lingua/intent_log/`. The move never overwrites a file, and a disk check warns at 80% of `corpus_ceiling_gb` and never deletes. It computes content-free voice measures from the rotated file. See [Voice alignment](voice-alignment.md).
 
-### Phase 5: voice alignment
+### Phase 5: affective reset
 
-Phase 5 first builds preference pairs from the intent-expression log and publishes the content-free `hypnos.consolidation_divergence` metric. It then checks the voice-alignment gates. No validated preference source exists yet, so the phase trains nothing, even with both operator gates open. See [Voice alignment](voice-alignment.md).
+Sleep ends with the affective reset (paper §3.5). Phase 5 calls `thymos.affective_reset()`. It returns valence, arousal and dominance to baseline, resets every drive, sets the emotion to neutral, clears the learning-progress and alert-rate trackers, the intent rate and any perceived emotion, and publishes `thymos.state` with `reset: true`. Wellness and the record of the last heard voice are kept. See [Thymos](../09-modules/thymos.md#sleep-reset).
 
 ### After the phases
 
-Hypnos moves the waking intent log `state/lingua/intent_expression.jsonl` into the per-sleep corpus under `state/lingua/intent_log/`. The move never overwrites a file, and a disk check warns at 80% of `corpus_ceiling_gb` and never deletes. It computes content-free voice measures from the rotated file, runs the sleep-time intent audit (`hypnos.ignition_audit`), and publishes `hypnos.sleep.completed`.
+Hypnos runs the sleep-time intent audit (`hypnos.ignition_audit`) and publishes `hypnos.sleep.completed`.
 
 ## Bus events
 
@@ -92,8 +92,8 @@ Hypnos moves the waking intent log `state/lingua/intent_expression.jsonl` into t
 | `hypnos.sleep.started` | `hypnos.out` | A sleep begins; `trigger: "requested"` only for a requested rest |
 | `hypnos.rest_request` | `hypnos.out` | Answer to a rest request |
 | `hypnos.association` | `hypnos.out` | Each phase-3 scenario |
-| `thymos.state` | `thymos.out` | Phase 4, with `reset: true` |
-| `hypnos.consolidation_divergence` | `hypnos.out` | Every sleep, at the start of phase 5 |
+| `thymos.state` | `thymos.out` | Phase 5, with `reset: true` |
+| `hypnos.consolidation_divergence` | `hypnos.out` | Every sleep, at the start of phase 4 |
 | `hypnos.ignition_audit` | `hypnos.out` | Every sleep, after the phases; also merged into the completed summary |
 | `hypnos.sleep.completed` | `hypnos.out` | The sleep ends; carries the phase results and the audit, or `{"aborted": true, "reason": ...}` if the pipeline itself aborted |
 | `soma.fatigue` | `soma.out` | Fatigue crossed its threshold; a trigger |
@@ -114,7 +114,7 @@ The `[hypnos]`, `[hypnos.consolidation]` and `[hypnos.voice_alignment]` tables a
 
 | File | Role |
 |---|---|
-| `kaine/modules/hypnos/module.py` | `Hypnos`: triggers, pipeline, perception suspension, phase 5 |
+| `kaine/modules/hypnos/module.py` | `Hypnos`: triggers, pipeline, perception suspension, phase 4 |
 | `kaine/modules/hypnos/phases.py` | Phases 1 to 4 |
 | `kaine/modules/hypnos/scheduler.py` | `RestScheduler` |
 | `kaine/modules/hypnos/corpus.py` | Intent-log rotation and the corpus ceiling check |

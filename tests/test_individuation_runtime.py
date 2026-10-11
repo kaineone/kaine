@@ -54,12 +54,16 @@ class FakeChatClient:
 class FakeLingua:
     def __init__(self) -> None:
         self.chat_client = FakeChatClient()
+        self.probe_temperature: float | None = None
         self._cond = {
             "model_id": "m",
             "temperature": 0.5,
             "think": False,
             "persona_digest": "abcd1234abcd1234",
         }
+
+    def set_probe_temperature(self, value: float) -> None:
+        self.probe_temperature = value
 
     def probe_self_model(self) -> dict:
         return {
@@ -164,6 +168,13 @@ def test_config_defaults():
     cfg = IndividuationConfig.from_dict(None)
     assert cfg.enabled is False
     assert cfg.disclosure == DEFAULT_DISCLOSURE
+    assert cfg.probe_temperature == 0.0
+
+
+def test_build_runtime_sets_the_probe_temperature(tmp_path):
+    lingua = FakeLingua()
+    build(tmp_path, config={"probe_temperature": 0.25}, lingua=lingua)
+    assert lingua.probe_temperature == 0.25
 
 
 def test_config_validation():

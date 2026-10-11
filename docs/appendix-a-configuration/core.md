@@ -195,6 +195,7 @@ Workspace scoring and access. A candidate's priority is the product of its repor
 | `salience_thymos_factor` | string | `"state_modulator"` | `"state_modulator"` applies Thymos arousal as the level gain and contrast on the score. `"static"` holds the level at a constant with no contrast and logs a warning; it is a negative control. |
 | `salience_goal_factor` | string | `"static"` | `"static"` holds the goal factor at one (the shipped value, logged at INFO). `"drive_relevance"` scores each candidate's relevance to the Thymos drives; it is built but off, because it changes what reaches access. |
 | `arousal_contrast_gain` | float | `8.0` | Maximum contrast gain, reached at arousal 1. The gain is 0 at or below baseline arousal, and `0` disables the contrast. Read only with `salience_thymos_factor = "state_modulator"`. |
+| `arm` | string | `"competitive"` | Arm of the planned workspace-mediation test. `"competitive"` is selection and access as built. `"matched"` draws each broadcast's coalition of the competitive size without regard to score, seeded from the run seed, with access by the same threshold. `"pooled"` broadcasts every candidate with no scoring, selection or access gate. The two controls need `[oscillator].enabled = false`. |
 
 ### Volition
 

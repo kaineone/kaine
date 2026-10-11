@@ -144,7 +144,7 @@ Training can run in-process or via `trainer_backend = "subprocess"` / `"job_queu
 
 ## Voice alignment
 
-During Hypnos phase 5, voice alignment performs DPO+QLoRA fine-tuning on the language organ using `unsloth`, `trl`, `peft`, and `datasets`. Direct Preference Optimization trains on ranked pairs drawn from the entity's own intent log (`intent_log_path`).
+During Hypnos phase 4, voice alignment performs DPO+QLoRA fine-tuning on the language organ using `unsloth`, `trl`, `peft`, and `datasets`. Direct Preference Optimization trains on ranked pairs drawn from the entity's own intent log (`intent_log_path`).
 
 Two gates must be open for real training: `[hypnos.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`. Without the environment variable a `FakeTrainer` runs, so a freshly cloned instance cannot self-modify.
 

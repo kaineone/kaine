@@ -94,6 +94,7 @@ from kaine.lifecycle.maturation_gate import (
     MaturationConfig,
     gestation_started_payload,
 )
+from kaine.modules.positive_control import finish_positive_controls
 from kaine.modules.thymos.modulator import StateModulator
 from kaine.perception_state import (
     read_desired,
@@ -956,6 +957,14 @@ def _resolve_seed(config: dict[str, Any]) -> int:
     return secrets.randbits(32)
 
 
+def _syneidesis_arm_kwargs(syn_cfg: dict[str, Any], run_ctx: Any) -> dict[str, Any]:
+    """The workspace arm from ``[syneidesis].arm`` (paper §6.3) and the run seed
+    the matched arm's draw is seeded from (``None`` before a run context exists)."""
+    arm = str(syn_cfg.get("arm", "competitive")).strip().lower()
+    seed = int(run_ctx.seed) if run_ctx is not None else None
+    return {"arm": arm, "arm_seed": seed}
+
+
 def _resolve_boot_stage(
     config: dict[str, Any],
     stage_override: lifecycle_stage.StageState | None = None,
@@ -1524,6 +1533,9 @@ async def _phase_run_identity(ctx: BootContext) -> int | None:
         timing["dwell_s"] = float(_timing_cfg.get("auto_time_scale_dwell_s", 10.0))
         timing["window_s"] = float(_timing_cfg.get("auto_time_scale_window_s", 30.0))
 
+    # The same resolution load_runtime_config used for this run's config.
+    from kaine.config import resolve_study_name
+
     ctx.run_ctx = mint_run_context(
         seed=seed,
         started_at=datetime.now(timezone.utc).isoformat(),
@@ -1537,6 +1549,7 @@ async def _phase_run_identity(ctx: BootContext) -> int | None:
         ),
         plugins=ctx.plugins.manifest_entry(),
         revived_from=ctx.revive.revived_from if ctx.revive is not None else None,
+        study=resolve_study_name(),
         timing=timing,
     )
     set_run_context(ctx.run_ctx)
@@ -1841,7 +1854,12 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
         top_k=int(syn_cfg.get("top_k", 5)),
         publication_threshold=float(syn_cfg.get("publication_threshold", 0.35)),
         coherence=ctx.coherence_scorer,
+        **_syneidesis_arm_kwargs(syn_cfg, ctx.run_ctx),
     )
+    if ctx.syneidesis.arm != "competitive":
+        log.warning(
+            "workspace runs the %s control arm of the planned ablation", ctx.syneidesis.arm
+        )
 
 
 async def _phase_volition(ctx: BootContext) -> int | None:
@@ -2693,6 +2711,9 @@ async def _shutdown(ctx: BootContext) -> None:
             await ctx.remote_bridge.stop()
         except Exception:
             log.warning("remote bridge stop failed", exc_info=True)
+    # The positive control's terminal records must reach the research log, so
+    # publish them while the evaluation sidecar still runs.
+    await finish_positive_controls(ctx.registry.all_modules())
     if ctx.sidecar is not None:
         try:
             await ctx.sidecar.stop()
@@ -2817,12 +2838,12 @@ def _evaluate_research_safety_net(config: dict[str, Any]) -> "Any":
 
 
 def _evaluate_unattended_gate(config: dict[str, Any]) -> "Any":
-    """Run the eight-condition unattended gate over the resolved config.
+    """Run the nine-condition unattended gate over the resolved config.
 
-    Reuses the research safety net for conditions 1–5.  Condition 6 comes from
-    Spot's selftest.  Condition 8 requires a continuous perception input.
-    Condition 7 runs last and needs the outcome of conditions 1–6 and 8 as
-    prerequisites.
+    Reuses the research safety net for conditions 1–5 and 9.  Condition 6
+    comes from Spot's selftest.  Condition 8 requires a continuous perception
+    input.  Condition 7 runs last and needs the outcome of conditions 1–6,
+    8 and 9 as prerequisites.
     """
     net = _evaluate_research_safety_net(config)
     from kaine.cycle.caretaker import check_caretaker_condition
@@ -3000,7 +3021,7 @@ def main(argv: list[str] | None = None) -> int:
     supervision_mode = "operator"
     gate_checks: dict[str, bool] | None = None
     if mode == "unattended":
-        # Unattended boot: the eight-condition safety net must be satisfied.
+        # Unattended boot: the nine-condition safety net must be satisfied.
         result = _evaluate_unattended_gate(config)
         for c in result.conditions:
             status = "pass" if c.ok else f"FAIL — {c.reason}"

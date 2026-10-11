@@ -37,7 +37,7 @@ KAINE_CYCLE_OPERATOR_PRESENT=1 KAINE_PROFILE=thesis_test python -m kaine.cycle
 # or: KAINE_CYCLE_OPERATOR_PRESENT=1 python -m kaine.cycle --profile thesis_test
 ```
 
-`thesis_test` turns on seven modules: Soma (interoception), Chronos (temporal prediction), Topos (foveated vision), Audition (raw sound as prediction error, speech-to-text off), Thymos (the affective core), Hypnos (fatigue-triggered sleep, voice alignment off), and Lingua (the output-only language organ with a self-initiated voice). It turns every other module off, including Praxis, Vox, Eidolon, Mnemos, Nous, Empatheia, Phantasia, Perception, Mundus, and Echo. It also sets `[perception_feed]` to `mode = "seeded"` with `seed = 0`, `[topos].foveation = true`, `[chronos].forward_prediction = true`, `[audition].transcription_enabled = false`, `[audition].general_audition = true`, `[lingua].temperature = 0.0` (greedy decoding), and `[volition].policy = "self_initiated_report"` with `drive_initiative = false` and `sig_expiry_s = 300.0`. Every other value (organ model, rates, encryption, speech-to-text model, Phantasia backend and the rest) comes from the shipped `config/kaine.toml`.
+`thesis_test` turns on seven modules: Soma (interoception), Chronos (temporal prediction), Topos (foveated vision), Audition (raw sound as prediction error, speech-to-text off), Thymos (the affective core), Hypnos (fatigue-triggered sleep, voice alignment off), and Lingua (the output-only language organ with a self-initiated voice). It turns every other module off, including Praxis, Vox, Eidolon, Mnemos, Nous, Empatheia, Phantasia, Perception, Mundus, and Echo. It also sets `[perception_feed]` to `mode = "seeded"` with `seed = 0`, `[topos].foveation = true`, `[chronos].forward_prediction = true`, `[audition].transcription_enabled = false`, `[audition].general_audition = true`, and `[volition].policy = "self_initiated_report"` with `drive_initiative = false` and `sig_expiry_s = 300.0`. Every other value (organ model, rates, encryption, speech-to-text model, Phantasia backend and the rest) comes from the shipped `config/kaine.toml`.
 
 For the full overlay, see `config/profiles/thesis_test.toml`. For how profile resolution works, see [Configuration](../appendix-a-configuration/README.md).
 
@@ -101,7 +101,7 @@ The entrypoint:
 6. Writes `state/cycle/runtime.json` for Nexus.
 7. Begins ticking at `[cycle].processing_rate_hz` (default `10.0` Hz, 100 ms per tick).
 
-In the operator-supervised path, the cycle refuses to start unless `KAINE_CYCLE_OPERATOR_PRESENT=1` is set. The preflight script `scripts/first-boot.sh` reads its own signal, `KAINE_FIRST_BOOT_OPERATOR_PRESENT`; the running cycle reads `KAINE_CYCLE_OPERATOR_PRESENT`. There are two other boot paths. An unsupervised research run starts only when its research gate verifies, among other conditions, that preservation, the welfare response, full logging and a preserve-and-revive round trip work on this install (see [For researchers](../14-for-researchers.md)). An opt-in unattended start must pass eight conditions at every boot and exits with code `6` when one fails.
+In the operator-supervised path, the cycle refuses to start unless `KAINE_CYCLE_OPERATOR_PRESENT=1` is set. The preflight script `scripts/first-boot.sh` reads its own signal, `KAINE_FIRST_BOOT_OPERATOR_PRESENT`; the running cycle reads `KAINE_CYCLE_OPERATOR_PRESENT`. There are two other boot paths. An unsupervised research run starts only when its research gate verifies, among other conditions, that preservation, the welfare response, full logging and a preserve-and-revive round trip work on this install (see [For researchers](../14-for-researchers.md)). An opt-in unattended start must pass nine conditions at every boot and exits with code `6` when one fails.
 
 If the organ returns no content, the cycle refuses boot and exits with code `9` unless `KAINE_ALLOW_MUTE_ORGAN=1` is set.
 
@@ -128,7 +128,7 @@ See [Day-to-day operation](../06-operation/README.md). Each additional module is
 
 - It calls no cloud service at runtime. All inference and cognitive processing is local, and model weights are downloaded once during setup.
 - It does not record raw audio or video to disk. Live perception streams pass through processing in memory and are released. See [Security and privacy](../13-security-and-privacy.md#raw-perception-never-touches-disk).
-- It does not start itself unless you opt in. Every launch needs the operator-present signal (`KAINE_CYCLE_OPERATOR_PRESENT=1`), a passing research gate in an unsupervised research run, or an opt-in unattended start that passes eight conditions at every boot, and the cycle refuses to boot if none holds. See [For researchers](../14-for-researchers.md).
+- It does not start itself unless you opt in. Every launch needs the operator-present signal (`KAINE_CYCLE_OPERATOR_PRESENT=1`), a passing research gate in an unsupervised research run, or an opt-in unattended start that passes nine conditions at every boot, and the cycle refuses to boot if none holds. See [For researchers](../14-for-researchers.md).
 - It does not act unless Praxis is enabled and the operator has explicitly added shell or file-write whitelist entries.
 
 ## Roadmap and hardware portability

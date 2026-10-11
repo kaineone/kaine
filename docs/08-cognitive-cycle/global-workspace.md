@@ -99,7 +99,7 @@ inhibited = best score < θ
 metadata["access_threshold"] = θ
 ```
 
-where `θ` is `[syneidesis].publication_threshold` (default 0.35), the access threshold. A coalition member is accessed when its own score reaches `θ` (a score equal to `θ` counts). A broadcast is accessed when at least one member is, which is the same as its best score reaching `θ`, so `inhibited` is false exactly when the broadcast is accessed. A member of an accessed broadcast whose score is below `θ` is broadcast but not accessed. With no candidates, Syneidesis returns an empty snapshot marked inhibited, with no metadata.
+where `θ` is `[syneidesis].publication_threshold` (default 0.35), the access threshold. A coalition member is accessed when its own score reaches `θ` (a score equal to `θ` counts). A broadcast is accessed when at least one member is, which is the same as its best score reaching `θ`, so `inhibited` is false exactly when the broadcast is accessed. A member of an accessed broadcast whose score is below `θ` is broadcast but not accessed. With no candidates, Syneidesis returns an empty snapshot marked inhibited, whose metadata holds only the arm (the pooled arm below is the exception: its empty snapshot is not inhibited).
 
 Every broadcast with candidates carries the threshold in its metadata so that each module can tell accessed members from the rest of the coalition. When the coherence layer is on, the threshold applies to the coherence-adjusted scores.
 
@@ -157,15 +157,27 @@ The context enters each processor's forward model as an extra input alongside th
 
 ### Broadcast information gain per report
 
-Topos, Audition's acoustic path and Soma also form a second prediction with a null context and publish, on every report, `context_gain` and `context_age_s`:
+Topos, Audition's acoustic path and Soma also form a second prediction with a null context and publish, on every report, `context_gain`, the two errors it is computed from (`null_prediction_error` and `mean_prediction_error`), and `context_age_s`:
 
 ```
 context_gain = (null error − error) / running mean error
 ```
 
-The null context keeps the module's own share of the context and replaces the other sources' share with its mean over the contexts the module has adopted so far in the run. Components 0 to 3 are replaced by their running means, the additive components (4 to 19 and 23) by the kept sources' current share plus the mean of the other sources' share, and components 20 to 22 are kept. The kept sources are `topos` for Topos, `audition` for Audition, and `soma` and `lingua` for Soma, because the language organ's load on the host would otherwise let its share predict Soma's input. The null prediction never trains the model. `context_gain` is `None` until a prediction formed with an adopted context has been scored.
+The null context keeps the module's own share of the context and replaces the other sources' share with its mean over the contexts the module has adopted so far in the run. Components 0 to 3 are replaced by their running means, the additive components (4 to 19 and 23) by the kept sources' current share plus the mean of the other sources' share, and components 20 to 22 are kept. The context and its null are built from one reading of the clock, so they carry the same age. The kept sources are `topos` for Topos, `audition` for Audition, and `soma` and `lingua` for Soma, because the language organ's load on the host would otherwise let its share predict Soma's input. The null prediction never trains the model. `context_gain` is `None` until a prediction formed with an adopted context has been scored.
 
-This per-report gain is the measurement the planned workspace-mediation test is built on. The test's matched-selection and pooled arms, and the positive control that checks the measure detects injected information, are not built yet. See [For researchers](../14-for-researchers.md#the-planned-test).
+This per-report gain is the measurement the planned workspace-mediation test is built on. The positive control that checks the measure detects injected information is built as a study-mode facility (`[positive_control]`, off by default). See [For researchers](../14-for-researchers.md#the-planned-test).
+
+### The arms of the planned test
+
+`[syneidesis].arm` selects the arm the live cycle runs (paper §6.3, A.8), and every broadcast records it in `metadata["arm"]`, which the research log copies.
+
+- `competitive`, the default, is selection and access as described above.
+- `matched` scores every candidate as usual, then on each broadcast tick draws `min(top_k, n)` of the `n` candidates uniformly without regard to score, from a generator seeded from the run seed (`[experiment].seed`). The drawn members are ordered by score. A drawn member is accessed when its score reaches `θ`, and the broadcast is inhibited when none does. Ticks that are not broadcast ticks draw nothing, so the same seed and the same broadcast ticks give the same coalitions. A matched selection whose context does not say whether the tick is a broadcast tick is refused. The generator's state is not saved: the draws reproduce within one uninterrupted run, and a restart or revive starts the stream again from the seed.
+- `pooled` scores nothing. Every candidate of the tick is a member, the broadcast is never inhibited, the score table carries each candidate's intensity (Volition applies its report bars to intensities), and the metadata has no access threshold, so every member enters the context. An empty pooled broadcast replaces the context with the featurization of the empty set.
+
+The two controls need the coherence layer off, as it is in the base-thesis form; Syneidesis refuses the combination at construction.
+
+A run selects its arm through a study configuration, which also sets greedy decoding: `KAINE_STUDY=workspace_mediation_matched` (or `_competitive`, `_pooled`) applies `config/studies/workspace_mediation_matched.toml` after the operator file. See [How configuration is loaded](../appendix-a-configuration/README.md#how-configuration-is-loaded).
 
 ## Oscillatory coherence multiplier
 
@@ -267,6 +279,7 @@ Selection keys live in `config/kaine.toml`; the `[volition]` values below are se
 | `[syneidesis].salience_thymos_factor` | string | `"state_modulator"` | Arousal level and contrast gain; `"static"` is the negative control |
 | `[syneidesis].salience_goal_factor` | string | `"static"` | Goal factor held at 1; `"drive_relevance"` enables the drive-relevance scorer |
 | `[syneidesis].arousal_contrast_gain` | float | 8.0 | Contrast gain at arousal 1; 0 disables the contrast |
+| `[syneidesis].arm` | string | `"competitive"` | Arm of the planned test: `"competitive"`, `"matched"` or `"pooled"` |
 | `[thymos].baseline_arousal` | float | 0.3 | Arousal at which the contrast gain is 0 |
 | `[volition].policy` | string | unset; `"self_initiated_report"` in `thesis_test` | Action-selection policy |
 | `[volition].drive_initiative` | bool | true; false in `thesis_test` | Use the drive-biased policy when no policy is named |

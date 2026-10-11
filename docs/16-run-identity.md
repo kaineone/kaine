@@ -21,6 +21,7 @@ A cycle run needs a stable identity before its data can be trusted. This page ex
 - `plugins`: identifiers of loaded plugins, if any.
 - `timing`: the timing parameters used by the run.
 - `revived_from`: when the run was revived from a preservation, the preservation id, or the bundle name if the id is not set.
+- `study`: the study configuration the run's config was loaded with (`KAINE_STUDY`, see [How configuration is loaded](appendix-a-configuration/README.md#how-configuration-is-loaded)), or `null` when none was selected. `config_digest` covers the merged result; `study` names the file.
 
 ## Record stamping
 

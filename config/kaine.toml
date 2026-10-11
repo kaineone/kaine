@@ -116,6 +116,14 @@ salience_goal_factor = "static"
 # arousal, amplifying high priorities and suppressing low ones. 0 disables it.
 arousal_contrast_gain = 8.0
 
+# Arm of the planned workspace-mediation test (paper §6.3, A.8). "competitive"
+# is selection and access as built. "matched" draws each broadcast's coalition
+# at random, of the size competitive selection keeps, seeded from the run seed,
+# with access by the same threshold. "pooled" broadcasts every candidate with no
+# scoring, selection or access gate. The two controls need the coherence layer
+# off. Every broadcast records its arm in the research log.
+arm = "competitive"
+
 [experiment]
 # Per-run identity, seeding, and manifest (research reproducibility).
 # At boot the cycle pins the global RNGs from `seed`, mints a unique run id, and
@@ -610,6 +618,9 @@ recency_weight = 0.3
 # When true (default), sidecar/observer payloads carry only memory IDs,
 # not trace text — keeps memory content out of operational logs.
 redact_content = true
+# Newest episodic traces sleep's cross-period selection (associative
+# replay) reads, without vectors. Matches short_term_capacity.
+cross_period_candidates = 128
 
 [eidolon]
 persistence_path = "state/eidolon/self_model.json"
@@ -1454,6 +1465,9 @@ disclosure = "You are periodically and privately assessed for how much you have 
 battery_path = ""
 # Probe requests wait until Lingua has been silent this long, so the being speaks first.
 lingua_quiet_s = 10.0
+# Decoding temperature of the probe, fixed apart from the voice's [lingua].temperature
+# so study or voice settings never change the probe's conditions. 0 is greedy.
+probe_temperature = 0.0
 # Answers per battery prompt in the reference.
 n_reference = 16
 # Answers per battery prompt at each look.
@@ -1637,6 +1651,28 @@ auto_evict = false
 # verified, never neither. SHIPS DISABLED — first boot is operator-supervised;
 # human involvement returns AFTER research to socialize any emerged individuals.
 enabled = false
+
+[positive_control]
+# Positive control of the broadcast information-gain measure (paper §6.3,
+# Appendix A.8). When enabled, Topos, Audition and Soma each run shadow
+# forward models whose context carries one extra synthetic component: a
+# seeded projection of the processor's own next input plus noise at the
+# signal-to-noise ratio `snr`, and, as the non-informative check, a seeded
+# series with the same mean and variance that is independent of the input.
+# The live model, its reports, intensities and the competition are untouched.
+# Results go to the research log as positive_control.result records; the
+# measure passes for a processor when the informative component raises its
+# information gain by at least `min_effect` and the non-informative one
+# does not, over at least `min_reports` counted reports. Check a finished
+# run with `python -m kaine.experiment.positive_control <run_id>`.
+# Off by default; set it only in the study configuration. `min_effect`,
+# `min_reports` and `snr` have no defaults and are fixed with the
+# preregistration; enabling the control without all three fails the boot.
+enabled = false
+seed = 0
+# min_effect = <fixed before the live runs>
+# snr = <fixed before the live runs>
+# min_reports = <fixed before the live runs>
 
 [nexus]
 host = "127.0.0.1"

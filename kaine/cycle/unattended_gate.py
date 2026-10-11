@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Unattended boot gate — eight-condition safety net.
+"""Unattended boot gate: nine-condition safety net.
 
 The unattended supervision mode is *not* a research run: it reuses the
-research safety net's evaluator for conditions 1–5, then adds three more
-gates (Spot, caretaker notice, continuous input) before the entity may start
-without a person present.
+research safety net's evaluator for conditions 1 to 5 and 9 (every check the net
+makes), then adds three more gates (Spot, caretaker notice, continuous input)
+before the entity may start without a person present.
 
 This module is pure over its inputs except for the research-net round-trip,
 which is executed by :func:`kaine.cycle.research_gate.evaluate_safety_net`.
@@ -93,6 +93,18 @@ CONDITION_NAMES: dict[int, str] = {
     6: "Spot armed and self-tested",
     7: "caretaker told",
     8: "continuous input",
+    9: "individuation wired",
+}
+
+
+# every check the research net returns must appear here, so the unattended gate covers the whole net
+SAFETY_NET_CONDITIONS: dict[str, int] = {
+    "preservation_enabled": 1,
+    "welfare_response_wired": 2,
+    "logging_active": 3,
+    "dry_self_check_passed": 4,
+    "encryption_satisfied": 5,
+    "individuation_enabled": 9,
 }
 
 
@@ -122,7 +134,7 @@ def not_built(number: int) -> Condition:
 
 
 def conditions_from_safety_net(net: GateResult) -> list[Condition]:
-    """Map the shared five-condition research net to unattended conditions 1–5.
+    """Map every check of the shared research net to unattended conditions 1 to 5 and 9.
 
     The mapping uses the net's ``checks`` dict; a missing key is treated as
     failed.  Failure reasons are short and config-key specific so an operator
@@ -134,16 +146,10 @@ def conditions_from_safety_net(net: GateResult) -> list[Condition]:
         3: "neither [evaluation] nor [research_event_log] is enabled",
         4: "the dry preserve→revive round-trip did not pass on this install",
         5: "[preservation].require_encryption is true but [security.state_encryption] is off",
+        9: "[individuation].enabled is false, its configuration is invalid, or the lingua module is disabled",
     }
-    keys = [
-        "preservation_enabled",
-        "welfare_response_wired",
-        "logging_active",
-        "dry_self_check_passed",
-        "encryption_satisfied",
-    ]
     out: list[Condition] = []
-    for number, key in enumerate(keys, start=1):
+    for key, number in SAFETY_NET_CONDITIONS.items():
         ok = bool(net.checks.get(key, False))
         out.append(
             Condition(
@@ -164,11 +170,11 @@ class UnattendedGateResult:
 
     @property
     def ok(self) -> bool:
-        """True only when all eight conditions are present and passed."""
+        """True only when all nine conditions are present and passed."""
         numbers = {c.number for c in self.conditions}
         return (
-            len(self.conditions) == 8
-            and numbers == set(range(1, 9))
+            len(self.conditions) == 9
+            and numbers == set(range(1, 10))
             and all(c.ok for c in self.conditions)
         )
 
@@ -180,7 +186,7 @@ class UnattendedGateResult:
     def checks(self) -> dict[str, bool]:
         """Numbered condition names (underscore-normalised) → pass/fail.
 
-        The insertion order follows condition number 1–8 so runtime.json and
+        The insertion order follows condition number 1 to 9 so runtime.json and
         Nexus render the list deterministically.
         """
         ordered = sorted(self.conditions, key=lambda c: c.number)
@@ -191,7 +197,7 @@ class UnattendedGateResult:
 
     def message(self) -> str:
         if self.ok:
-            return "Unattended gate VERIFIED: all eight conditions passed."
+            return "Unattended gate VERIFIED: all nine conditions passed."
         lines = [
             "Refusing to boot KAINE cycle: the unattended gate is not satisfied.",
             "",
@@ -211,8 +217,8 @@ def evaluate_unattended_gate(
 ) -> UnattendedGateResult:
     """Combine the shared safety net with the unattended-specific conditions.
 
-    Conditions 1–5 come from the research net.  Conditions 6–8 come from
-    ``built`` when supplied by a later slice; until then they fail with
+    Conditions 1 to 5 and 9 come from the research net.  Conditions 6–8 come
+    from ``built`` when supplied by a later slice; until then they fail with
     :data:`NOT_BUILT_REASON`.
 
     ``built`` may only contain keys ``6``, ``7`` or ``8``, and each supplied
@@ -242,7 +248,7 @@ def evaluate_unattended_gate(
         else:
             conditions.append(not_built(number))
 
-    return UnattendedGateResult(conditions=tuple(conditions))
+    return UnattendedGateResult(conditions=tuple(sorted(conditions, key=lambda c: c.number)))
 
 
 __all__ = [
@@ -252,6 +258,7 @@ __all__ = [
     "unattended_mode_requested",
     "resolve_supervision_mode",
     "CONDITION_NAMES",
+    "SAFETY_NET_CONDITIONS",
     "Condition",
     "NOT_BUILT_REASON",
     "not_built",

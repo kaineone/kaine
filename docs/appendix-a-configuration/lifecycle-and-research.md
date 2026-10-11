@@ -73,6 +73,7 @@ Cycle-layer individuation producer. Ships disabled. Requires the `lingua` module
 | `disclosure` | string | *(operator-approved text)* | Disclosure text inserted as a situation fact in the being's Eidolon self-model. Probes fail closed until the fact is present. |
 | `battery_path` | string | `""` | Path to an operator-supplied JSONL preference battery. Empty uses the bundled default. |
 | `lingua_quiet_s` | float | `10.0` | Seconds Lingua must be silent before a probe runs, so the being's own speech goes first. |
+| `probe_temperature` | float | `0.0` | Decoding temperature of the probe, at least 0. It is fixed apart from the voice's `[lingua].temperature`, so a study or a change to the voice never changes the probe's conditions. `0.0` is greedy. |
 | `n_reference` | integer | `16` | Answers captured per prompt in a birth reference. |
 | `n_current` | integer | `8` | Answers sampled per prompt in a look. |
 | `max_tokens` | integer | `160` | Maximum tokens per probe answer. |
@@ -231,6 +232,18 @@ Unsupervised-research boot mode. When enabled (or `KAINE_RESEARCH_MODE=1`), the 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `false` | When true, the boot refuses to start with exit code `5` unless preservation is enabled, the welfare-protective response is wired, `[individuation].enabled` is true with the `lingua` module loaded, full logging and admissibility are active, and a dry `preserve→revive` self-check passes on this install. A run is either operator-present or research-safety-net-verified, never neither. |
+
+## `[positive_control]`
+
+The positive control of the broadcast information-gain measure (paper §6.3 and Appendix A.8). Off by default and set only in the study configuration. When enabled, Topos, Audition and Soma each run two shadow forward models and publish `positive_control.result` records (see [Research event streams](../17-research-data/event-streams.md#positive-control-records)). The live model, its reports and the competition are unchanged.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Runs the control. Requires `snr`, `min_effect` and `min_reports`; the boot fails without them. |
+| `snr` | number | none | Signal-to-noise ratio of the informative component, as variance of the projection over variance of the added noise. Must be above 0. Fixed before the live runs and required when the control is enabled. |
+| `min_effect` | number | none | Minimum rise in information gain the informative component must produce, and the non-informative one must not, for the measure to pass. Above 0. Fixed before the live runs and required when the control is enabled. |
+| `min_reports` | integer | none | Counted reports a processor needs before it can pass. At least 1. Fixed before the live runs and required when the control is enabled. |
+| `seed` | integer | `0` | Seed of the projection direction and of the two noise series. |
 
 ## `[transfer]`
 

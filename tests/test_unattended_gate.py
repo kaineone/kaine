@@ -8,12 +8,14 @@ from typing import Any
 
 import pytest
 
-from kaine.cycle.research_gate import evaluate_research_gate
+from kaine.cycle.research_gate import GateResult, evaluate_research_gate, evaluate_safety_net
 from kaine.cycle.unattended_gate import (
     CONDITION_NAMES,
     NOT_BUILT_REASON,
+    SAFETY_NET_CONDITIONS,
     Condition,
     SupervisionConfigError,
+    conditions_from_safety_net,
     evaluate_unattended_gate,
     resolve_supervision_mode,
 )
@@ -141,7 +143,7 @@ def test_unattended_gate_with_built_6_7_8_passes():
     }
     result = evaluate_unattended_gate(_all_pass_net(), built=built)
     assert result.ok
-    assert result.message() == "Unattended gate VERIFIED: all eight conditions passed."
+    assert result.message() == "Unattended gate VERIFIED: all nine conditions passed."
 
 
 def test_unattended_gate_built_rejects_bad_key():
@@ -178,6 +180,7 @@ def test_unattended_gate_checks_keys_in_order():
         "6_Spot_armed_and_self_tested",
         "7_caretaker_told",
         "8_continuous_input",
+        "9_individuation_wired",
     ]
     assert list(result.checks.keys()) == expected
 
@@ -196,6 +199,7 @@ def test_evaluate_unattended_gate_includes_spot_condition(monkeypatch):
                 "logging_active": True,
                 "dry_self_check_passed": True,
                 "encryption_satisfied": True,
+                "individuation_enabled": True,
             }
         )
 
@@ -239,6 +243,7 @@ def test_evaluate_unattended_gate_uses_input_condition(monkeypatch):
                 "logging_active": True,
                 "dry_self_check_passed": True,
                 "encryption_satisfied": True,
+                "individuation_enabled": True,
             }
         },
     )()
@@ -291,3 +296,111 @@ def test_evaluate_unattended_gate_uses_input_condition(monkeypatch):
     c7 = next(c for c in result2.conditions if c.number == 7)
     assert "not attempted" in c7.reason
     assert False in caretaker_calls
+
+
+def test_unattended_gate_individuation_failure_is_condition_9():
+    net = evaluate_research_gate(
+        individuation_enabled=False,
+        preservation_enabled=True,
+        welfare_response_wired=True,
+        logging_active=True,
+        self_check_passed=True,
+        encryption_satisfied=True,
+    )
+    built = {
+        6: Condition(6, CONDITION_NAMES[6], True),
+        7: Condition(7, CONDITION_NAMES[7], True),
+        8: Condition(8, CONDITION_NAMES[8], True),
+    }
+    result = evaluate_unattended_gate(net, built=built)
+    assert not result.ok
+    assert [c.number for c in result.failed] == [9]
+    failed = next(c for c in result.conditions if c.number == 9)
+    assert failed.name == "individuation wired"
+    assert "[individuation].enabled" in failed.reason
+    assert "  9: individuation wired — " in result.message()
+
+
+def test_unattended_gate_conditions_ordered_by_number():
+    result = evaluate_unattended_gate(_all_pass_net())
+    assert [c.number for c in result.conditions] == list(range(1, 10))
+
+
+def test_every_safety_net_check_maps_to_an_unattended_condition(monkeypatch):
+    """A check added to the research net must become an unattended condition."""
+    monkeypatch.setattr(
+        "kaine.cycle.research_gate.run_preflight_self_check", lambda: (True, "")
+    )
+    net = evaluate_safety_net({})
+    assert set(net.checks) == set(SAFETY_NET_CONDITIONS)
+
+    numbers = set(SAFETY_NET_CONDITIONS.values())
+    assert len(numbers) == len(SAFETY_NET_CONDITIONS)
+    assert numbers.issubset(set(CONDITION_NAMES))
+    assert numbers.isdisjoint({6, 7, 8})
+    assert numbers | {6, 7, 8} == set(CONDITION_NAMES)
+
+    # A mapped number without a failure reason raises KeyError here, so a gap fails CI.
+    net = GateResult(ok=False, checks={key: False for key in SAFETY_NET_CONDITIONS})
+    conditions = conditions_from_safety_net(net)
+    assert {c.number for c in conditions} == set(SAFETY_NET_CONDITIONS.values())
+    assert all(not c.ok for c in conditions)
+    assert all(c.reason for c in conditions)
+
+
+def test_individuation_failure_withholds_the_caretaker_start_notice(monkeypatch):
+    from kaine.cycle import __main__ as main_module
+    from kaine.cycle.unattended_gate import Condition
+
+    net = type(
+        "GateResult",
+        (),
+        {
+            "checks": {
+                "preservation_enabled": True,
+                "welfare_response_wired": True,
+                "logging_active": True,
+                "dry_self_check_passed": True,
+                "encryption_satisfied": True,
+                "individuation_enabled": False,
+            }
+        },
+    )()
+
+    spot = Condition(
+        number=6, name="Spot armed and self-tested", ok=True, reason=""
+    )
+    eight_ok = Condition(number=8, name="continuous input", ok=True, reason="")
+
+    caretaker_calls: list[tuple[bool, dict[str, bool]]] = []
+
+    def fake_caretaker(
+        cfg: Any, prerequisites_ok: bool, conditions: dict[str, bool]
+    ) -> Condition:
+        caretaker_calls.append((prerequisites_ok, dict(conditions)))
+        return Condition(
+            number=7,
+            name="caretaker told",
+            ok=False,
+            reason="prerequisites not attempted",
+        )
+
+    monkeypatch.setattr(main_module, "_evaluate_research_safety_net", lambda cfg: net)
+    monkeypatch.setattr(
+        "kaine.cycle.spot_selftest.check_spot_condition", lambda cfg: spot
+    )
+    monkeypatch.setattr(
+        "kaine.cycle.input_check.check_input_condition", lambda cfg: eight_ok
+    )
+    monkeypatch.setattr(
+        "kaine.cycle.caretaker.check_caretaker_condition", fake_caretaker
+    )
+
+    result = main_module._evaluate_unattended_gate({})
+    assert not result.ok
+    assert 9 in [c.number for c in result.failed]
+    assert len(caretaker_calls) == 1
+    prerequisites_ok, passed_conditions = caretaker_calls[0]
+    assert prerequisites_ok is False
+    assert passed_conditions.get("9_individuation_wired") is False
+    assert "7_caretaker_told" not in passed_conditions

@@ -1,0 +1,12 @@
+# Study configuration: the pooled arm of the workspace-mediation test (paper
+# §6.3, A.8). Select it for a run with KAINE_STUDY=workspace_mediation_pooled.
+# It is applied after the operator config, so these settings hold for the run.
+# The run's seed comes from [experiment].seed; run r of every arm uses the same
+# seed.
+
+[lingua]
+# Greedy decoding in the planned runs (paper §6.1).
+temperature = 0.0
+
+[syneidesis]
+arm = "pooled"
