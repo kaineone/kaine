@@ -50,6 +50,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | context-age-from-publication | 4/4 (100%) | Context age is entity time since the broadcast's publication. |
 | research-log-access-fields | 4/4 (100%) | The research log carries the access and context fields the planned test reads. |
 | awake-time-excludes-sleep | 4/4 (100%) | Awake time excludes sleep as well as freezes. |
+| ablation-matched-pooled-arms | 0/6 (0%) | The matched and pooled control arms of the workspace-mediation test run in the live cycle, and study steps decode greedily. |
 | gestation-progress-in-bundles | 3/3 (100%) | Gestation progress travels in preservation bundles. |
 | footprint-test-spawn-timeout | 1/1 (100%) | Give the footprint test's spawned child time to report. |
 
@@ -72,7 +73,7 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 46 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 47 active changes, 268 archived changes and 104 capability specs.
 
 The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 
