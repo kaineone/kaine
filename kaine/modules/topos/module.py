@@ -584,8 +584,9 @@ class Topos(BaseModule):
                 )
             else:
                 prediction_error = await asyncio.to_thread(self._forward_model.step, embedding)
-            # A skipped reading carries no real error to average.
-            if not getattr(self._forward_model, "last_reading_skipped", False):
+            # Only a defined error enters the running mean: a skipped reading has
+            # none, nor has the first reading after a skip (paper A.2).
+            if getattr(self._forward_model, "last_error_defined", True):
                 self._pred_errors.append(prediction_error)
 
             # Normalise error against the rolling window mean so a steady,
@@ -646,12 +647,19 @@ class Topos(BaseModule):
         except Exception:
             log.debug("topos preview tap failed (non-fatal)", exc_info=True)
 
+        # A report without a defined error publishes none, so consumers such as
+        # Thymos do not pool a made-up 0.
+        published_error: Optional[float] = (
+            None
+            if skipped or not getattr(self._forward_model, "last_error_defined", True)
+            else prediction_error
+        )
         report: dict[str, Any] = {
             "latent": _finite_or_none(embedding),
             "change_score": change,
             "habituation_score": habituation,
             "encoder_model_id": self._encoder.model_id,
-            "prediction_error": prediction_error,
+            "prediction_error": published_error,
             # Prediction error normalised against the rolling-window mean (the same
             # quantity the alert criterion uses). Exposed so the affect layer can
             # scale arousal by perceptual surprise (perception→arousal coupling).

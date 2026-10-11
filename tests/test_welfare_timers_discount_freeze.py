@@ -1081,3 +1081,48 @@ async def test_monitor_retries_an_unreadable_incident_whose_write_failed(bus, tm
     u.value = 1.0
     await mon._poll_once(stop)  # retried
     assert [r["kind"] for r in log_.records] == ["freeze_state_unreadable"]
+
+
+@pytest.mark.asyncio
+async def test_observer_null_error_is_no_distress_sample():
+    """A soma.report with prediction_error None is not a distress sample:
+    it neither extends nor resets an active sustained-distress episode."""
+    u = _Mono(0.0)
+    sink = FakeSink()
+    obs = WelfareObserver(
+        FakeBus(),
+        sink,
+        maintenance_window_s=9999.0,
+        extreme_vad_threshold=0.9,
+        extreme_vad_duration_s=9999.0,
+        consolidation_window_s=9999.0,
+        replay_rate_threshold=9999,
+        poll_interval_s=0.5,
+        unfrozen_clock=_unfrozen_clock(u),
+        interoceptive_distress_threshold=0.5,
+        interoceptive_distress_duration_s=30.0,
+    )
+
+    u.value = 0.0
+    await obs._handle_soma(
+        "0-0", _event("soma", "soma.report", {"prediction_error": 0.9})
+    )
+    assert obs._interoceptive_distress.active_since is not None
+
+    for t_s in range(1, 11):
+        u.value = float(t_s)
+        await obs._handle_soma(
+            f"{t_s}-0",
+            _event("soma", "soma.report", {"prediction_error": None}),
+        )
+
+    assert obs._interoceptive_distress.active_since is not None
+    assert not any(
+        r.get("gray_zone_event") == "sustained_interoceptive_distress"
+        for r in sink.rows
+    )
+
+    await obs._handle_soma(
+        "11-0", _event("soma", "soma.report", {"prediction_error": 0.0})
+    )
+    assert obs._interoceptive_distress.active_since is None

@@ -868,12 +868,20 @@ async def test_acoustic_path_skips_a_non_finite_embedding(bus, monkeypatch) -> N
         assert events[3].payload["context_gain"] is None
         assert events[3].payload["null_prediction_error"] is None
         assert events[3].payload["mean_prediction_error"] is None
-        assert events[3].payload["prediction_error"] == 0.0
+        assert events[3].payload["prediction_error"] is None  # undefined after skip
+        assert events[3].payload["normalised_error"] == 0.0
         assert events[3].payload["change_score"] == 0.0
         assert events[3].payload["alert"] is False
         assert events[3].salience == pytest.approx(audition._baseline_salience)
         assert events[4].payload["context_gain"] is None
+        assert events[4].payload["prediction_error"] is None  # undefined on first finite step after skip
+        assert events[4].payload["normalised_error"] == 0.0
         assert isinstance(events[5].payload["context_gain"], float)
+        window = list(audition._acoustic_errors)
+        assert window == errors_before + [events[5].payload["prediction_error"]]
+        assert events[5].payload["normalised_error"] == pytest.approx(
+            events[5].payload["prediction_error"] / (sum(window) / len(window))
+        )
         for event in events:
             assert _non_finite_numbers(event.payload) == []
     finally:
@@ -911,7 +919,7 @@ async def test_tone_path_skips_a_non_finite_feature_vector(bus, monkeypatch):
         entries = await bus.read("audition.out", last_id="0", count=50)
         emotions = [e for _, e in entries if e.type == "audition.emotion"]
         assert len(emotions) == 4
-        assert emotions[3].payload["prediction_error"] == 0.0
+        assert emotions[3].payload["prediction_error"] is None
         assert emotions[3].payload["alert"] is False
         assert emotions[3].salience == pytest.approx(audition._baseline_salience)
         for _, e in entries:
@@ -919,8 +927,18 @@ async def test_tone_path_skips_a_non_finite_feature_vector(bus, monkeypatch):
 
         await audition.process_audio(_tone(300), sample_rate=16000)
         assert model.last_reading_skipped is False
+        assert model.last_error_defined is False  # first finite step after a skip is unscored
+        assert list(audition._prediction_errors) == errors_before
+
+        await audition.process_audio(_tone(300), sample_rate=16000)
+        assert model.last_error_defined is True  # second finite step after a skip is scored
         assert len(audition._prediction_errors) == min(
             len(errors_before) + 1, audition._prediction_errors.maxlen
         )
+
+        entries = await bus.read("audition.out", last_id="0", count=50)
+        emotions = [e for _, e in entries if e.type == "audition.emotion"]
+        assert emotions[4].payload["prediction_error"] is None
+        assert isinstance(emotions[5].payload["prediction_error"], float)
     finally:
         await audition.shutdown()

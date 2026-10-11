@@ -291,7 +291,12 @@ class WelfareObserver(StreamSubscriberObserver):
             # tick — no reduction needed. The tracker fires once per sustained
             # episode (rising-edge), resetting its own timer.
             payload = event.payload or {}
-            magnitude = float(payload.get("prediction_error", 0.0))
+            raw = payload.get("prediction_error", 0.0)
+            if raw is None:
+                # A reading Soma skipped as non-finite has no error: it is no sample,
+                # so it neither feeds nor resets the distress tracker.
+                return
+            magnitude = float(raw)
             now = self._unfrozen.now()
             wall_now = self._unfrozen.wall()
             # Feed the shared tracker (records onset / resets on drop). The fire

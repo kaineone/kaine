@@ -115,6 +115,11 @@ class LatentForwardModel:
         self.last_scored_had_context: bool = False
         # True when the last step skipped a non-finite input.
         self.last_reading_skipped: bool = False
+        # False for a skipped reading and for the first reading after one, which
+        # has no prediction to be scored against. The first reading's error of 0
+        # is defined (paper A.2), so it stays True there.
+        self.last_error_defined: bool = True
+        self._after_skip: bool = False
 
         self.suspended: bool = False
         self._hindsight_resume: bool = False
@@ -224,9 +229,13 @@ class LatentForwardModel:
             self._last_prediction = None
             self._last_null_prediction = None
             self._last_input_context = None
+            self.last_error_defined = False
+            self._after_skip = True
             self.last_reading_skipped = True
             return 0.0
         self.last_reading_skipped = False
+        self.last_error_defined = not self._after_skip
+        self._after_skip = False
 
         # 1. Compute prediction error from the previous step's prediction.
         if self._last_prediction is None:

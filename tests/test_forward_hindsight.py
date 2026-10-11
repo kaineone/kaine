@@ -228,11 +228,13 @@ def test_step_skips_a_non_finite_input(model_cls, dim, init_kw):
     live = model_cls(**init_kw)
     ctx = [0.2] * 24
     live.step([0.1] * dim, ctx, ctx)
+    assert live.last_error_defined is True  # first step error is 0 by definition
     live.step([0.2] * dim, ctx, ctx)
     assert live.last_null_error is not None
     buffer_before = [list(v) for v in live._buffer]
     weights_before = [p.detach().clone() for p in live._net.parameters()]
     assert live.step([float("nan")] * dim, ctx, ctx) == 0.0
+    assert live.last_error_defined is False  # skipped input has no defined error
     assert live.last_reading_skipped is True
     assert live.last_null_error is None
     assert live.last_scored_had_context is False
@@ -240,12 +242,14 @@ def test_step_skips_a_non_finite_input(model_cls, dim, init_kw):
     for saved, current in zip(weights_before, live._net.parameters()):
         assert torch.equal(saved, current)
     assert live.step([0.3] * dim, ctx, ctx) == 0.0
+    assert live.last_error_defined is False  # first finite step after a skip has no prediction to score
     assert live.last_reading_skipped is False
     assert live.last_null_error is None
     assert len(live._buffer) == len(buffer_before) + 1
     for saved, current in zip(weights_before, live._net.parameters()):
         assert torch.equal(saved, current)
     error = live.step([0.4] * dim, ctx, ctx)
+    assert live.last_error_defined is True  # second finite step after a skip is scored
     assert math.isfinite(error)
     assert error > 0
     assert live.last_null_error is not None

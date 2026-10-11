@@ -1053,3 +1053,35 @@ async def test_welfare_real_notify_rate_limit_holds_within_one_poll(bus, tmp_pat
     assert len(fm.calls) == 1
     assert control_state.read_control().frozen is False
     await eid.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_welfare_null_error_does_not_reset_distress(bus, tmp_path):
+    """None prediction_error samples are ignored by the welfare monitor:
+    the sustained-distress episode continues and eventually crosses."""
+    reg, eid = await _entity(bus, tmp_path)
+    fm = _StubFM()
+    cfg = WelfareResponseConfig(
+        enabled=True, action="pause", distress_threshold=0.5,
+        distress_duration_s=1.0, out_root=str(tmp_path / "backups"),
+    )
+    clock = {"t": 0.0}
+    mon = _welfare_monitor(bus, reg, fm, cfg, clock=lambda: clock["t"])
+
+    stop = asyncio.Event()
+    await _push_soma_report(bus, 0.9)
+    clock["t"] = 0.0
+    await mon._poll_once(stop)
+    assert fm.calls == []
+
+    for _ in range(3):
+        await _push_soma_report(bus, None)
+    clock["t"] = 0.5
+    await mon._poll_once(stop)
+    assert fm.calls == []
+    assert mon._distress.active_since is not None
+
+    clock["t"] = 2.0
+    await mon._poll_once(stop)
+    assert len(fm.calls) == 1
+    await eid.shutdown()
