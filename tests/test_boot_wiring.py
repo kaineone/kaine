@@ -16,6 +16,8 @@ config path. Phase 9's integration tests used `StreamProducerFake`.
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from kaine.boot import (
@@ -375,34 +377,50 @@ def test_make_thymos_from_config_builds_baseline():
             "publish_interval_s": 1.0,
             "baseline_salience": 0.1,
             "alert_salience": 0.7,
-            "social_drive_time_scale_s": 600.0,
         },
     )
     assert thymos.name == "thymos"
 
 
-def test_make_thymos_tolerates_legacy_coupling_max_rate_key():
-    """A stale [thymos.coupling].coupling_max_rate_per_s key is ignored, not an error.
+def test_make_thymos_tolerates_legacy_coupling_max_rate_key(caplog):
+    """A stale [thymos.coupling].coupling_max_rate_per_s key is ignored with a warning.
 
     The DriftSafeguard it backed was removed (thymos-emergent-affect-coupling);
     existing local configs that still carry the key must not break boot.
     """
     bus = _bus()
-    thymos = make_thymos(
-        bus,
-        {
-            "coupling": {
-                "enabled": True,
-                "coupling_base": 0.05,
-                "decay_s": 8.0,
-                "coupling_max_rate_per_s": 0.30,  # legacy, must be ignored
+    with caplog.at_level(logging.WARNING):
+        thymos = make_thymos(
+            bus,
+            {
+                "coupling": {
+                    "enabled": True,
+                    "coupling_base": 0.05,
+                    "decay_s": 8.0,
+                    "coupling_max_rate_per_s": 0.30,  # legacy, must be ignored
+                },
             },
-        },
-    )
+        )
     assert thymos.name == "thymos"
     assert thymos._coupling.enabled is True
     assert thymos._coupling.decay_s == 8.0
     assert not hasattr(thymos._coupling, "coupling_max_rate_per_s")
+    assert "[thymos.coupling].coupling_max_rate_per_s is retired" in caplog.text
+
+
+def test_make_thymos_ignores_retired_social_drive_time_scale(caplog):
+    """A stale [thymos].social_drive_time_scale_s key is ignored with a warning."""
+    with caplog.at_level(logging.WARNING):
+        thymos = make_thymos(
+            _bus(),
+            {
+                "publish_interval_s": 1.0,
+                "social_drive_time_scale_s": 600.0,
+            },
+        )
+    assert thymos.name == "thymos"
+    assert not hasattr(thymos, "_social_drive_time_scale_s")
+    assert "[thymos].social_drive_time_scale_s is retired" in caplog.text
 
 
 def test_make_thymos_rejects_truly_unknown_coupling_key():
@@ -642,7 +660,6 @@ def test_make_hypnos_without_deps(tmp_path):
             "interval_seconds": 3600.0,
             "max_deferral_seconds": 600.0,
             "per_defer_seconds": 60.0,
-            "nous_step_burst": 200,
             "voice_alignment": {
                 "intent_log_path": str(tmp_path / "intent.jsonl"),
                 "adapter_output_dir": str(tmp_path / "adapters"),
@@ -651,6 +668,32 @@ def test_make_hypnos_without_deps(tmp_path):
         },
     )
     assert hypnos.name == "hypnos"
+
+
+def test_make_hypnos_ignores_retired_nous_step_burst(tmp_path, caplog):
+    """A stale [hypnos].nous_step_burst key is ignored with a warning."""
+    with caplog.at_level(logging.WARNING):
+        hypnos = make_hypnos(
+            _bus(),
+            {
+                "interval_seconds": 3600.0,
+                "nous_step_burst": 200,
+                "voice_alignment": {
+                    "intent_log_path": str(tmp_path / "intent.jsonl"),
+                    "adapter_output_dir": str(tmp_path / "adapters"),
+                    "model_id": "kaineone/Qwen3.5-4B-abliterated-GGUF",
+                },
+            },
+        )
+    assert hypnos.name == "hypnos"
+    assert not hasattr(hypnos, "_nous_step_burst")
+    assert "[hypnos].nous_step_burst is retired" in caplog.text
+
+
+def test_make_hypnos_still_rejects_unknown_key():
+    """A typoed hypnos key is still rejected."""
+    with pytest.raises(ValueError, match="unknown config keys"):
+        make_hypnos(_bus(), {"nous_step_bursts": 200})
 
 
 def test_build_registry_respects_disabled_toggles():
@@ -695,7 +738,6 @@ def test_build_registry_constructs_hypnos_last():
                 "baseline_dominance": 0.0,
                 "drift_rate_per_s": 0.05,
                 "publish_interval_s": 1.0,
-                "social_drive_time_scale_s": 600.0,
             },
             "hypnos": {
                 "interval_seconds": 3600.0,

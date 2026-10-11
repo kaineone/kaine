@@ -68,17 +68,6 @@ class FakeThymos:
         self.resets += 1
 
 
-# Generic steppable stand-in for the belief-revision phase. Nous no longer
-# runs a NAR subprocess; the phase remains a generic "steppable" hook.
-class FakeSteppable:
-    @property
-    def running(self) -> bool:
-        return True
-
-    async def step(self, n: int) -> list[str]:
-        return ["belief_factor_0"]
-
-
 class FakeResetter:
     def __init__(self) -> None:
         self.calls = 0
@@ -109,7 +98,6 @@ def _make_hypnos(
     return Hypnos(
         bus,
         mnemos=mnemos or FakeMnemos(),
-        nous_process=FakeSteppable(),
         thymos=FakeThymos(),
         chronos_resetters=[FakeResetter(), FakeResetter()],
         trainer=trainer or FakeTrainer(),
@@ -351,7 +339,6 @@ async def test_one_phase_failure_does_not_stop_others(bus: AsyncBus, tmp_path: P
     hypnos = Hypnos(
         bus,
         mnemos=BoomMnemos(),
-        nous_process=FakeSteppable(),
         thymos=FakeThymos(),
         chronos_resetters=[FakeResetter()],
         trainer=FakeTrainer(),
