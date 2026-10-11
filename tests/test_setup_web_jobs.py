@@ -1743,9 +1743,10 @@ def test_group_kill_reaps_sigterm_ignoring_grandchild_after_cancel(tmp_path):
         else:
             raise AssertionError("grandchild survived group kill")
 
-        if job.proc is not None:
-            await asyncio.wait_for(job.proc.wait(), timeout=5.0)
-        assert runner.status(job_id)["status"] != "running"
+        # The runner sets the final status before the done event, and the
+        # process may exit earlier, so wait for the done event.
+        await asyncio.wait_for(job._done.wait(), timeout=5.0)
+        assert runner.status(job_id)["status"] == "cancelled"
         return runner, job_id
 
     asyncio.run(run())
@@ -1802,7 +1803,8 @@ def test_group_kill_reaps_sigterm_ignoring_grandchild_after_shutdown(tmp_path):
         else:
             raise AssertionError("grandchild survived group kill")
 
-        assert runner.status(job_id)["status"] != "running"
+        await asyncio.wait_for(job._done.wait(), timeout=5.0)
+        assert runner.status(job_id)["status"] == "failed"
         return runner, job_id
 
     asyncio.run(run())
