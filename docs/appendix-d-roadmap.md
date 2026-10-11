@@ -53,6 +53,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | gestation-progress-in-bundles | 3/3 (100%) | Gestation progress travels in preservation bundles. |
 | footprint-test-spawn-timeout | 1/1 (100%) | Give the footprint test's spawned child time to report. |
 | config-dead-keys | 9/9 (100%) | Remove configuration keys and an environment variable that drive nothing, and point the host probe at KAINE_TIER. |
+| hypnos-replay-buffer-order | 4/4 (100%) | Sleep's replay draws on the traces that sleep's consolidation moved, so it no longer finds an empty buffer. |
 
 ## Open operator and device steps
 
