@@ -8,7 +8,10 @@ The paper defines per-processor broadcast information gain as
 other sources by their running means. This module injects a synthetic
 informative component into each processor's shadow forward model so we can
 verify that the gain measure detects known information and does not pass for
-a non-informative component with the same marginal distribution.
+a non-informative component with the same marginal distribution. The live
+model and both shadow probes use the live model's running mean error as the
+common denominator, so a smaller shadow error cannot inflate the apparent
+effect.
 
 The control is off by default and configured only from the
 [positive_control] section of a study configuration.
@@ -17,7 +20,6 @@ The control is off by default and configured only from the
 from __future__ import annotations
 
 import math
-from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
@@ -38,11 +40,13 @@ RESULT_FIELDS: tuple[str, ...] = (
     "effect",
     "noise_effect",
     "min_effect",
+    "min_reports",
     "snr",
     "detected",
     "noise_detected",
     "passed",
     "failed",
+    "final",
 )
 
 
@@ -50,6 +54,7 @@ RESULT_FIELDS: tuple[str, ...] = (
 class PositiveControlSettings:
     enabled: bool = False
     min_effect: Optional[float] = None
+    min_reports: Optional[int] = None
     snr: Optional[float] = None
     seed: int = 0
 
@@ -57,7 +62,7 @@ class PositiveControlSettings:
     def from_config(cls, section: Optional[Mapping[str, Any]]) -> "PositiveControlSettings":
         if not section:
             return cls()
-        allowed = {"enabled", "min_effect", "snr", "seed"}
+        allowed = {"enabled", "min_effect", "min_reports", "snr", "seed"}
         unknown = set(section) - allowed
         if unknown:
             raise ValueError(f"unknown keys in [positive_control]: {sorted(unknown)}")
@@ -75,9 +80,20 @@ class PositiveControlSettings:
                     f"[positive_control].min_effect must be a number, got {min_effect!r}"
                 )
             min_effect = float(min_effect)
-            if not math.isfinite(min_effect) or min_effect < 0:
+            if not math.isfinite(min_effect) or min_effect <= 0.0:
                 raise ValueError(
-                    f"[positive_control].min_effect must be finite and non-negative, got {min_effect}"
+                    f"[positive_control].min_effect must be finite and greater than 0, got {min_effect}"
+                )
+
+        min_reports = section.get("min_reports", None)
+        if min_reports is not None:
+            if isinstance(min_reports, bool) or not isinstance(min_reports, int):
+                raise ValueError(
+                    f"[positive_control].min_reports must be an int, got {min_reports!r}"
+                )
+            if min_reports < 1:
+                raise ValueError(
+                    f"[positive_control].min_reports must be >= 1, got {min_reports}"
                 )
 
         snr = section.get("snr", None)
@@ -101,7 +117,13 @@ class PositiveControlSettings:
                 "[positive_control].snr must be set when the control is enabled"
             )
 
-        return cls(enabled=enabled, min_effect=min_effect, snr=snr, seed=int(seed))
+        return cls(
+            enabled=enabled,
+            min_effect=min_effect,
+            min_reports=min_reports,
+            snr=snr,
+            seed=int(seed),
+        )
 
 
 class ComponentSource:
@@ -163,15 +185,15 @@ class ComponentSource:
 
 
 class ShadowProbe:
-    def __init__(self, source: ComponentSource, *, window: int) -> None:
+    """Shadow forward model that tracks the raw error drop from one synthetic component."""
+
+    def __init__(self, source: ComponentSource) -> None:
         self._source = source
-        self._window = int(window)
         self._shadow: Any = None
         self._prev_context: Optional[list[float]] = None
         self._prev_null_context: Optional[list[float]] = None
         self._component_sum = 0.0
         self._component_count = 0
-        self._errors: deque[float] = deque(maxlen=self._window)
 
     def step(
         self,
@@ -235,25 +257,22 @@ class ShadowProbe:
             list(null_context) if null_context is not None else None
         )
 
-        if error is None:
+        if error is None or null_error is None:
             return None
 
-        self._errors.append(float(error))
-        mean_error = sum(self._errors) / len(self._errors)
-        if mean_error <= 0.0:
-            return None
-        if had_context and null_error is not None:
-            return (null_error - error) / mean_error
+        raw = null_error - error
+        if had_context and math.isfinite(raw):
+            return raw
         return None
 
 
 class PositiveControl:
+    """Runs the positive control for one processor and reports the verdict."""
+
     def __init__(
         self,
         processor: str,
         settings: PositiveControlSettings,
-        *,
-        window: int = 32,
     ) -> None:
         if processor not in PROCESSORS:
             raise ValueError(
@@ -275,7 +294,6 @@ class PositiveControl:
                 seed=settings.seed,
                 processor=processor,
             ),
-            window=window,
         )
         self._probe_noise = ShadowProbe(
             ComponentSource(
@@ -284,7 +302,6 @@ class PositiveControl:
                 seed=settings.seed,
                 processor=processor,
             ),
-            window=window,
         )
         self._sum_with = 0.0
         self._sum_without = 0.0
@@ -298,6 +315,7 @@ class PositiveControl:
         context: Optional[Sequence[float]],
         null_context: Optional[Sequence[float]],
         live_gain: Optional[float],
+        live_mean_error: Optional[float],
         *,
         awake: bool,
         timespan: Optional[float] = None,
@@ -309,22 +327,28 @@ class PositiveControl:
                 f"live model for {self._processor} lacks widened_copy or hindsight_step"
             )
 
-        g_with = self._probe_info.step(
+        d_with = self._probe_info.step(
             live_model, x, context, null_context, timespan=timespan
         )
-        g_noise = self._probe_noise.step(
+        d_noise = self._probe_noise.step(
             live_model, x, context, null_context, timespan=timespan
         )
 
         if (
             awake
             and live_gain is not None
-            and g_with is not None
-            and g_noise is not None
+            and live_mean_error is not None
+            and d_with is not None
+            and d_noise is not None
+            and math.isfinite(live_gain)
+            and math.isfinite(live_mean_error)
+            and live_mean_error > 0.0
+            and math.isfinite(d_with)
+            and math.isfinite(d_noise)
         ):
-            self._sum_with += g_with
+            self._sum_with += d_with / live_mean_error
             self._sum_without += live_gain
-            self._sum_noise += g_noise
+            self._sum_noise += d_noise / live_mean_error
             self._n += 1
             return self.result()
         return None
@@ -337,12 +361,18 @@ class PositiveControl:
         effect = (ig_with - ig_without) if n else None
         noise_effect = (ig_noise - ig_without) if n else None
 
-        if self._settings.min_effect is None or n == 0:
+        if (
+            self._settings.min_effect is None
+            or self._settings.min_reports is None
+            or n == 0
+        ):
             detected = noise_detected = passed = None
         else:
             detected = bool(effect >= self._settings.min_effect)
             noise_detected = bool(noise_effect >= self._settings.min_effect)
-            passed = detected and not noise_detected
+            passed = bool(
+                n >= self._settings.min_reports and detected and not noise_detected
+            )
 
         return {
             "processor": self._processor,
@@ -353,18 +383,29 @@ class PositiveControl:
             "effect": effect,
             "noise_effect": noise_effect,
             "min_effect": self._settings.min_effect,
+            "min_reports": self._settings.min_reports,
             "snr": self._settings.snr,
             "detected": detected,
             "noise_detected": noise_detected,
             "passed": passed,
             "failed": False,
+            "final": False,
         }
+
+    def final_result(self) -> dict[str, Any]:
+        """The current result marked as the run's terminal record for this processor;
+        published at a clean shutdown.
+        """
+        result = self.result()
+        result["final"] = True
+        return result
 
     def failure_result(self) -> dict[str, Any]:
         """The current result marked as failed, so a run whose control stopped cannot pass."""
         result = self.result()
         result["failed"] = True
         result["passed"] = False
+        result["final"] = True
         return result
 
 

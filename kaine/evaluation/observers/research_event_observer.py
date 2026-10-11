@@ -200,6 +200,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
         {
             "processor",
             "n_reports",
+            "min_reports",
             "ig_with",
             "ig_without",
             "ig_noise",
@@ -211,6 +212,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "noise_detected",
             "passed",
             "failed",
+            "final",
         }
     ),
     # NOTE: `audition.transcription` is intentionally ABSENT — never logged.

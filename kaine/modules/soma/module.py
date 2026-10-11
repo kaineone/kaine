@@ -141,11 +141,7 @@ class Soma(BaseModule):
         self._context = BroadcastContext(self._clock.now)
         # Positive control of the information-gain measure; study configuration only.
         self._positive_control: Optional[PositiveControl] = (
-            PositiveControl(
-                "soma",
-                positive_control,
-                window=int(prediction_error_window),
-            )
+            PositiveControl("soma", positive_control)
             if positive_control is not None and positive_control.enabled
             else None
         )
@@ -332,6 +328,7 @@ class Soma(BaseModule):
 
     async def shutdown(self) -> None:
         await super().shutdown()
+        await self._finish_positive_control()
         try:
             await self._reader.shutdown()
         except Exception:
@@ -373,6 +370,7 @@ class Soma(BaseModule):
         ctx: Optional[list[float]],
         null: Optional[list[float]],
         live_gain: Optional[float],
+        live_mean_error: Optional[float],
         timespan: Optional[float],
     ) -> None:
         """Step the positive control after the live report and publish its running result."""
@@ -380,16 +378,18 @@ class Soma(BaseModule):
         if control is None:
             return
         try:
-            result = control.after_report(
+            result = await asyncio.to_thread(
+                control.after_report,
                 self._forward_model,
                 x,
                 ctx,
                 null,
                 live_gain,
+                live_mean_error,
                 awake=not self._in_hypnos,
                 timespan=timespan,
             )
-            if result is not None:
+            if result is not None and self._positive_control is control:
                 await publish_result(self._bus, result)
         except Exception:
             # A failing control must not break perception. It stops for this run
@@ -398,8 +398,26 @@ class Soma(BaseModule):
             try:
                 await publish_result(self._bus, control.failure_result())
             except Exception:
-                log.exception("soma: could not record the positive control's failure")
+                log.error(
+                    "soma: could not publish the positive control's failure record; "
+                    "the run has no terminal record and cannot pass",
+                    exc_info=True,
+                )
             self._positive_control = None
+
+    async def _finish_positive_control(self) -> None:
+        """Publish the control's terminal record at a clean shutdown."""
+        control = self._positive_control
+        if control is None:
+            return
+        try:
+            await publish_result(self._bus, control.final_result())
+        except Exception:
+            log.error(
+                "soma: could not publish the positive control's terminal record; "
+                "the run cannot pass",
+                exc_info=True,
+            )
 
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).
@@ -495,6 +513,7 @@ class Soma(BaseModule):
                 ctx,
                 null,
                 context_gain,
+                mean_prediction_error,
                 ts if getattr(self._forward_model, "accepts_timespan", False) else None,
             )
 

@@ -345,7 +345,12 @@ class LatentForwardModel:
         formed with it; both None on the first call.  Then adapts toward
         *latent* from the same input with *context* (unless suspended) and
         appends *latent* to the buffer.
+
+        A non-finite input is skipped and leaves the state as it was, so it
+        cannot poison the shadow for the rest of the run.
         """
+        if any(not math.isfinite(v) for v in latent):
+            return None, None
         if not self._buffer:
             self._buffer.append(list(latent))
             return None, None

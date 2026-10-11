@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
+import math
 from collections import deque
 
 import numpy as np
@@ -54,6 +55,19 @@ def test_settings_min_effect_validation():
         PositiveControlSettings.from_config({"min_effect": True})
     with pytest.raises(ValueError, match="min_effect"):
         PositiveControlSettings.from_config({"min_effect": -0.1})
+    with pytest.raises(ValueError, match="min_effect"):
+        PositiveControlSettings.from_config({"min_effect": 0.0})
+
+
+def test_settings_min_reports_validation():
+    with pytest.raises(ValueError, match="min_reports"):
+        PositiveControlSettings.from_config({"min_reports": 0})
+    with pytest.raises(ValueError, match="min_reports"):
+        PositiveControlSettings.from_config({"min_reports": -1})
+    with pytest.raises(ValueError, match="min_reports"):
+        PositiveControlSettings.from_config({"min_reports": 2.5})
+    with pytest.raises(ValueError, match="min_reports"):
+        PositiveControlSettings.from_config({"min_reports": True})
 
 
 def test_settings_snr_validation():
@@ -67,12 +81,13 @@ def test_settings_valid_section():
     section = {
         "enabled": True,
         "min_effect": 0.02,
+        "min_reports": 10,
         "snr": 100.0,
         "seed": 5,
     }
     settings = PositiveControlSettings.from_config(section)
     assert settings == PositiveControlSettings(
-        enabled=True, min_effect=0.02, snr=100.0, seed=5
+        enabled=True, min_effect=0.02, min_reports=10, snr=100.0, seed=5
     )
 
 
@@ -99,11 +114,11 @@ def test_component_source():
     assert abs(out_a.std() - out_n1.std()) / out_a.std() < 0.15
 
 
-def _run_topos_detection(min_effect):
+def _run_topos_detection(min_effect, min_reports=500):
     settings = PositiveControlSettings(
-        enabled=True, snr=100.0, min_effect=min_effect, seed=0
+        enabled=True, snr=100.0, min_effect=min_effect, min_reports=min_reports, seed=0
     )
-    control = PositiveControl("topos", settings, window=32)
+    control = PositiveControl("topos", settings)
     live = LatentForwardModel(
         latent_dim=4, units=16, context_dim=24, seed=1, lr=0.05
     )
@@ -124,9 +139,10 @@ def _run_topos_detection(min_effect):
                 (live.last_null_error - err) / mean_err if mean_err > 0 else None
             )
         else:
+            mean_err = None
             live_gain = None
 
-        control.after_report(live, x, ctx, null, live_gain, awake=True)
+        control.after_report(live, x, ctx, null, live_gain, mean_err, awake=True)
 
     return control.result()
 
@@ -153,6 +169,21 @@ def test_detection_without_min_effect():
     assert result["passed"] is None
 
 
+def test_no_verdict_without_min_reports():
+    result = _run_topos_detection(min_effect=0.02, min_reports=None)
+    assert result["n_reports"] > 900
+    assert result["detected"] is None
+    assert result["noise_detected"] is None
+    assert result["passed"] is None
+
+
+def test_small_sample_does_not_pass():
+    result = _run_topos_detection(min_effect=0.02, min_reports=5000)
+    assert result["n_reports"] > 0
+    assert result["detected"] is True
+    assert result["passed"] is False
+
+
 def _assert_state_equal(a, b):
     if isinstance(a, dict):
         assert isinstance(b, dict)
@@ -169,9 +200,9 @@ def _assert_state_equal(a, b):
 
 def test_live_model_untouched():
     settings = PositiveControlSettings(
-        enabled=True, snr=100.0, min_effect=0.02, seed=0
+        enabled=True, snr=100.0, min_effect=0.02, min_reports=1, seed=0
     )
-    control = PositiveControl("topos", settings, window=32)
+    control = PositiveControl("topos", settings)
 
     live_with = LatentForwardModel(
         latent_dim=4, units=16, context_dim=24, seed=2, lr=0.05
@@ -191,7 +222,7 @@ def test_live_model_untouched():
     for _ in range(200):
         x = rng.standard_normal(4).tolist()
         err_with = live_with.step(x, ctx, null)
-        control.after_report(live_with, x, ctx, null, None, awake=True)
+        control.after_report(live_with, x, ctx, null, None, None, awake=True)
         err_without = live_without.step(x, ctx, null)
 
         errors_with.append(err_with)
@@ -206,7 +237,7 @@ def test_live_model_untouched():
 
 def test_asleep_reports_do_not_count():
     settings = PositiveControlSettings(enabled=True, snr=100.0, seed=0)
-    control = PositiveControl("topos", settings, window=32)
+    control = PositiveControl("topos", settings)
     live = LatentForwardModel(
         latent_dim=4, units=16, context_dim=24, seed=3, lr=0.05
     )
@@ -218,7 +249,7 @@ def test_asleep_reports_do_not_count():
     for _ in range(50):
         x = rng.standard_normal(4).tolist()
         live.step(x, ctx, null)
-        ret = control.after_report(live, x, ctx, null, 0.0, awake=False)
+        ret = control.after_report(live, x, ctx, null, 0.0, 1.0, awake=False)
         assert ret is None
 
     result = control.result()
@@ -238,10 +269,13 @@ async def test_publish_result(bus):
         "effect": 0.1,
         "noise_effect": 0.0,
         "min_effect": 0.02,
+        "min_reports": 1,
         "snr": 100.0,
         "detected": True,
         "noise_detected": False,
         "passed": True,
+        "failed": False,
+        "final": False,
     }
     await publish_result(bus, result)
 
@@ -274,7 +308,7 @@ def test_after_report_requires_model_methods():
         pass
 
     with pytest.raises(TypeError, match="topos"):
-        control.after_report(NoMethods(), [0.0], None, None, None, awake=True)
+        control.after_report(NoMethods(), [0.0], None, None, None, None, awake=True)
 
 
 def test_non_informative_value_ignores_the_current_input():
@@ -290,10 +324,123 @@ def test_non_informative_value_ignores_the_current_input():
     assert fresh.next([1.0, 2.0, 3.0]) == 0.0
 
 
+def test_gains_share_the_live_denominator():
+    settings = PositiveControlSettings(
+        enabled=True, snr=10.0, min_effect=0.01, min_reports=1, seed=0
+    )
+    control = PositiveControl("topos", settings)
+    control._probe_info.step = lambda *args, **kwargs: 0.2
+    control._probe_noise.step = lambda *args, **kwargs: 0.0
+
+    class Model:
+        def widened_copy(self, n):
+            return self
+
+        def hindsight_step(self, *args, **kwargs):
+            return (0.0, 0.0)
+
+    result = control.after_report(Model(), [0.0], None, None, 0.1, 2.0, awake=True)
+    assert result is not None
+    assert result["ig_with"] == pytest.approx(0.1)
+    assert result["ig_without"] == pytest.approx(0.1)
+    assert result["ig_noise"] == pytest.approx(0.0)
+
+
+def test_non_finite_gains_are_not_counted():
+    settings = PositiveControlSettings(
+        enabled=True, snr=10.0, min_effect=0.01, min_reports=1, seed=0
+    )
+    control = PositiveControl("topos", settings)
+    control._probe_info.step = lambda *args, **kwargs: 0.2
+    control._probe_noise.step = lambda *args, **kwargs: 0.0
+
+    class Model:
+        def widened_copy(self, n):
+            return self
+
+        def hindsight_step(self, *args, **kwargs):
+            return (0.0, 0.0)
+
+    model = Model()
+    assert control.after_report(
+        model, [0.0], None, None, float("nan"), 2.0, awake=True
+    ) is None
+    assert control.result()["n_reports"] == 0
+    assert control.after_report(
+        model, [0.0], None, None, 0.1, 0.0, awake=True
+    ) is None
+    assert control.result()["n_reports"] == 0
+
+
+def test_final_and_failure_results():
+    settings = PositiveControlSettings(
+        enabled=True, snr=10.0, min_effect=0.01, min_reports=1, seed=0
+    )
+    control = PositiveControl("topos", settings)
+    final = control.final_result()
+    assert final["final"] is True
+    assert final["failed"] is False
+    failure = control.failure_result()
+    assert failure["final"] is True
+    assert failure["failed"] is True
+    assert failure["passed"] is False
+
+
+def test_non_finite_input_does_not_poison_the_control():
+    settings = PositiveControlSettings(
+        enabled=True, snr=100.0, min_effect=0.02, min_reports=100, seed=0
+    )
+    control = PositiveControl("topos", settings)
+    live = LatentForwardModel(
+        latent_dim=4, units=16, context_dim=24, seed=1, lr=0.05
+    )
+
+    rng = np.random.default_rng(7)
+    ctx = [0.5] * 24
+    null = [0.5] * 24
+    live_errors = deque(maxlen=32)
+
+    for i in range(300):
+        if i == 150:
+            x = [float("nan")] * 4
+        else:
+            x = rng.standard_normal(4).tolist()
+
+        err = live.step(x, ctx, null)
+        live_errors.append(err)
+
+        if i == 150:
+            control.after_report(live, x, ctx, null, None, None, awake=True)
+        else:
+            if live.last_scored_had_context and live.last_null_error is not None:
+                mean_err = sum(live_errors) / len(live_errors)
+                live_gain = (
+                    (live.last_null_error - err) / mean_err
+                    if mean_err > 0
+                    else None
+                )
+            else:
+                mean_err = None
+                live_gain = None
+            control.after_report(
+                live, x, ctx, null, live_gain, mean_err, awake=True
+            )
+
+    result = control.result()
+    assert result["n_reports"] > 0
+    assert math.isfinite(result["ig_with"])
+    assert math.isfinite(result["ig_without"])
+    assert math.isfinite(result["ig_noise"])
+    assert math.isfinite(result["effect"])
+
+
 def test_failure_result_cannot_pass():
-    settings = PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.0)
+    settings = PositiveControlSettings(
+        enabled=True, snr=10.0, min_effect=0.01, min_reports=1, seed=0
+    )
     control = PositiveControl("topos", settings)
     assert control.result()["failed"] is False
     failed = control.failure_result()
     assert failed["failed"] is True
     assert failed["passed"] is False
+    assert failed["final"] is True

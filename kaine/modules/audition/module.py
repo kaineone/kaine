@@ -223,11 +223,7 @@ class Audition(BaseModule):
         self._context = BroadcastContext(self._clock.now)
         # Positive control of the information-gain measure; study configuration only.
         self._positive_control: Optional[PositiveControl] = (
-            PositiveControl(
-                "audition",
-                positive_control,
-                window=max(1, int(prediction_error_window)),
-            )
+            PositiveControl("audition", positive_control)
             if positive_control is not None and positive_control.enabled
             else None
         )
@@ -329,7 +325,7 @@ class Audition(BaseModule):
 
         # Positive control (study mode only): shadows of the forward model, never the live one.
         if self._positive_control is not None and getattr(self._acoustic_forward_model, "context_dim", 0) > 0:
-            await self._run_positive_control(embedding, ctx, null, context_gain)
+            await self._run_positive_control(embedding, ctx, null, context_gain, mean_prediction_error)
 
         # Self-calibrating change alert (perception-drives-salience): the change is
         # judged RELATIVE to its own rolling baseline, not against an absolute
@@ -448,21 +444,24 @@ class Audition(BaseModule):
         ctx: Optional[list[float]],
         null: Optional[list[float]],
         live_gain: Optional[float],
+        live_mean_error: Optional[float],
     ) -> None:
         """Step the positive control after the live report and publish its running result."""
         control = self._positive_control
         if control is None:
             return
         try:
-            result = control.after_report(
+            result = await asyncio.to_thread(
+                control.after_report,
                 self._acoustic_forward_model,
                 x,
                 ctx,
                 null,
                 live_gain,
+                live_mean_error,
                 awake=not self._in_hypnos,
             )
-            if result is not None:
+            if result is not None and self._positive_control is control:
                 await publish_result(self._bus, result)
         except Exception:
             # A failing control must not break perception. It stops for this run
@@ -471,8 +470,26 @@ class Audition(BaseModule):
             try:
                 await publish_result(self._bus, control.failure_result())
             except Exception:
-                log.exception("audition: could not record the positive control's failure")
+                log.error(
+                    "audition: could not publish the positive control's failure record; "
+                    "the run has no terminal record and cannot pass",
+                    exc_info=True,
+                )
             self._positive_control = None
+
+    async def _finish_positive_control(self) -> None:
+        """Publish the control's terminal record at a clean shutdown."""
+        control = self._positive_control
+        if control is None:
+            return
+        try:
+            await publish_result(self._bus, control.final_result())
+        except Exception:
+            log.error(
+                "audition: could not publish the positive control's terminal record; "
+                "the run cannot pass",
+                exc_info=True,
+            )
 
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).
@@ -518,6 +535,7 @@ class Audition(BaseModule):
             except Exception:
                 log.warning("live mic shutdown failed", exc_info=True)
         await super().shutdown()
+        await self._finish_positive_control()
         for closeable in (self._stt_client, self._emotion_classifier):
             try:
                 shutdown = getattr(closeable, "shutdown", None) or getattr(

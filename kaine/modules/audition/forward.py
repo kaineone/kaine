@@ -385,7 +385,12 @@ class AuditoryForwardModel:
         formed with it; both None on the first call.  Then adapts toward
         *feature* from the same input with *context* (unless suspended) and
         appends *feature* to the buffer.
+
+        A non-finite input is skipped and leaves the state as it was, so it
+        cannot poison the shadow for the rest of the run.
         """
+        if any(not math.isfinite(v) for v in feature):
+            return None, None
         if not self._buffer:
             self._buffer.append(list(feature))
             return None, None

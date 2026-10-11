@@ -1169,6 +1169,7 @@ def test_positive_control_result_is_logged():
     payload = {
         "processor": "topos",
         "n_reports": 5,
+        "min_reports": 100,
         "ig_with": 0.1,
         "ig_without": 0.05,
         "ig_noise": 0.04,
@@ -1180,6 +1181,7 @@ def test_positive_control_result_is_logged():
         "noise_detected": False,
         "passed": True,
         "failed": False,
+        "final": True,
         "extra": "x",
     }
     record = _taxonomy_record("positive_control.result", payload)

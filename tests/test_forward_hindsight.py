@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
+import math
 import random
 
 import pytest
@@ -130,3 +131,26 @@ def test_widened_copy_rejects_zero_extra(model_cls, init_kw):
     live = model_cls(**init_kw)
     with pytest.raises(ValueError):
         live.widened_copy(0)
+
+
+@pytest.mark.parametrize(
+    "model_cls, dim, init_kw",
+    [
+        (LatentForwardModel, 4, {"latent_dim": 4, "units": 8, "context_dim": 24, "seed": 3}),
+        (AuditoryForwardModel, 6, {"feature_dim": 6, "units": 8, "context_dim": 24, "seed": 3}),
+    ],
+)
+def test_hindsight_skips_a_non_finite_input(model_cls, dim, init_kw):
+    live = model_cls(**init_kw)
+    live.step([0.1] * dim, [0.2] * 24, [0.2] * 24)
+    live.step([0.2] * dim, [0.2] * 24, [0.2] * 24)
+    twin = live.widened_copy(1)
+    buf_len = len(twin._buffer)
+    result = twin.hindsight_step([float("nan")] * dim, [0.0] * 25, None)
+    assert result == (None, None)
+    assert len(twin._buffer) == buf_len
+    error, null_error = twin.hindsight_step([0.3] * dim, [0.0] * 25, [0.0] * 25)
+    assert error is not None
+    assert null_error is not None
+    assert math.isfinite(error)
+    assert math.isfinite(null_error)

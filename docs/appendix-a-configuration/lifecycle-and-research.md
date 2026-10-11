@@ -240,7 +240,8 @@ The positive control of the broadcast information-gain measure (paper §6.3 and 
 |---|---|---|---|
 | `enabled` | boolean | `false` | Runs the control. Requires `snr`. |
 | `snr` | number | none | Signal-to-noise ratio of the informative component, as variance of the projection over variance of the added noise. Must be above 0. Fixed before the live runs; the control refuses to start without it. |
-| `min_effect` | number | none | Minimum rise in information gain the informative component must produce, and the non-informative one must not, for the measure to pass. At least 0. Fixed before the live runs; without it the control records results but no verdict. |
+| `min_effect` | number | none | Minimum rise in information gain the informative component must produce, and the non-informative one must not, for the measure to pass. Above 0. Fixed before the live runs; without it the control records results but no verdict. |
+| `min_reports` | integer | none | Counted reports a processor needs before it can pass. At least 1. Fixed before the live runs; without it the control records results but no verdict. |
 | `seed` | integer | `0` | Seed of the projection direction and of the two noise series. |
 
 ## `[transfer]`
