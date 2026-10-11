@@ -89,7 +89,8 @@ The full reference is in [Perception feed and sleep](../appendix-a-configuration
 | `requested_rest_min_interval_s` | float `> 0` | `1800.0` | Minimum time from the end of a sleep before a rest request is accepted |
 | `baseline_salience` | float `[0, 1]` | `0.5` | Intensity of routine sleep events |
 | `alert_salience` | float `[0, 1]` | `0.8` | Intensity of a completed event after a failed phase |
-| `nous_step_burst` | int | `200` | Accepted and stored but unused |
+
+The retired key `nous_step_burst` is accepted and ignored with a warning, so older local configs still boot.
 
 `[hypnos.consolidation]`:
 

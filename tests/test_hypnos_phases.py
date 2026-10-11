@@ -13,7 +13,6 @@ from kaine.modules.hypnos.phases import (
     light_consolidation,
     recalibrate_time,
     reset_affect,
-    revise_beliefs,
 )
 
 
@@ -34,23 +33,6 @@ class FakeThymos:
     async def affective_reset(self) -> None:
         self.reset_calls += 1
 
-
-# Nous is now a pymdp/JAX active-inference engine with no subprocess, so the
-# belief-revision phase no longer steps a NAR binary. The phase is a generic
-# "steppable" hook; this fake exercises that contract without any NARS coupling.
-class FakeSteppable:
-    def __init__(self, running: bool = True, lines=None) -> None:
-        self._running = running
-        self._lines = list(lines or [])
-        self.step_calls: list[int] = []
-
-    @property
-    def running(self) -> bool:
-        return self._running
-
-    async def step(self, n: int) -> list[str]:
-        self.step_calls.append(n)
-        return list(self._lines)
 
 
 class FakeResetter:
@@ -87,27 +69,6 @@ async def test_consolidate_memory_error():
     assert r.success is False
     assert "RuntimeError" in (r.error or "")
 
-
-@pytest.mark.asyncio
-async def test_revise_beliefs_skipped_when_no_process():
-    r = await revise_beliefs(None, step_burst=100)
-    assert r.success is True
-    assert "skipped" in r.metadata
-
-
-@pytest.mark.asyncio
-async def test_revise_beliefs_skipped_when_not_running():
-    r = await revise_beliefs(FakeSteppable(running=False), step_burst=100)
-    assert r.success is True
-
-
-@pytest.mark.asyncio
-async def test_revise_beliefs_calls_step():
-    proc = FakeSteppable(running=True, lines=["belief_factor_0"])
-    r = await revise_beliefs(proc, step_burst=50)
-    assert r.success is True
-    assert proc.step_calls == [50]
-    assert r.metadata["lines_emitted"] == 1
 
 
 @pytest.mark.asyncio
