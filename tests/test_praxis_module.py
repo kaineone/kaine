@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import asyncio
@@ -142,7 +142,8 @@ async def test_action_publishes_diagnostics_only_event(bus: AsyncBus, tmp_path: 
     _, event = entries[0]
     assert event.type == "praxis.action"
     keys = set(event.payload.keys())
-    assert keys == {"effector", "success", "elapsed_ms", "error", "blocked"}
+    assert keys == {"effector", "success", "elapsed_ms", "error", "blocked", "alert"}
+    assert event.payload["alert"] is False
     # Payload contains no traces of the file content.
     for v in event.payload.values():
         if isinstance(v, str):

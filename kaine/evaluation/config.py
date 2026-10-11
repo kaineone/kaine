@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from __future__ import annotations
@@ -385,16 +385,25 @@ class WelfareConfig:
         Default 30 s.  The sustain timer resets whenever the magnitude
         drops below the threshold, so a single sustained episode produces
         a single event rather than one per tick.
+    blind_sensor_samples:
+        Consecutive undefined ``prediction_error`` samples from one
+        processor after which the observer publishes a
+        ``welfare.blind_sensor`` advisory.  0 (the default) means the run
+        must span one ``interoceptive_distress_duration_s``, which is the
+        number of samples in that duration at the processor's own rate.
     """
 
     interoceptive_distress_threshold: float = 0.8
     interoceptive_distress_duration_s: float = 30.0
+    blind_sensor_samples: int = 0
 
     def __post_init__(self) -> None:
         if self.interoceptive_distress_threshold < 0.0:
             raise ValueError("interoceptive_distress_threshold must be non-negative")
         if self.interoceptive_distress_duration_s <= 0.0:
             raise ValueError("interoceptive_distress_duration_s must be positive")
+        if type(self.blind_sensor_samples) is not int or self.blind_sensor_samples < 0:
+            raise ValueError("blind_sensor_samples must be a non-negative integer")
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any] | None) -> "WelfareConfig":
@@ -411,6 +420,10 @@ class WelfareConfig:
                     "interoceptive_distress_duration_s",
                     cls.interoceptive_distress_duration_s,
                 )
+            ),
+            blind_sensor_samples=data.get(
+                "blind_sensor_samples",
+                cls.blind_sensor_samples,
             ),
         )
 

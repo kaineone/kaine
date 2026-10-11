@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import importlib.util
@@ -357,6 +357,12 @@ async def test_audition_transcription_event_discloses_backend(bus, monkeypatch):
     assert captured[-1][0] == "audition.transcription"
     assert captured[-1][1]["backend"] == "sherpa_onnx"
     assert captured[-1][1]["model"] == stt_model
+    assert captured[-1][1]["alert"] is True
+
+    captured.clear()
+    await audition._publish_emotion_error(source_label="mic", exc=RuntimeError("ser failed"))
+    assert captured[-1][0] == "audition.emotion"
+    assert captured[-1][1]["alert"] is True
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Research bundle builder for kaine.research.
@@ -99,6 +99,7 @@ METRICS_ONLY_GLOBS: tuple[str, ...] = tuple(
 #: Substrings that must never appear in any path inside a metrics bundle.
 DENY_PATTERNS: tuple[str, ...] = (
     "intent_expression",
+    "intent_log",
     "mnemos",
     "qdrant",
     "eidolon",

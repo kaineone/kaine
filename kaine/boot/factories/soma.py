@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """The Soma factory."""
@@ -15,6 +15,7 @@ from kaine.boot.perception_feed import _shared_womb_objects, _womb_params
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
+from kaine.modules.positive_control import PositiveControlSettings
 
 
 def make_soma(
@@ -59,7 +60,9 @@ def make_soma(
         "self_rhythm_eta",
     }
     feed_section = dict(section.pop("perception_feed", {}) or {})
+    pc_section = section.pop("positive_control", None)
     kw = _pop(section, allowed)
+    kw["positive_control"] = PositiveControlSettings.from_config(pc_section)
     kw.update(_check_injections("soma", injections, {"forward_model"}))
 
     if kw.get("self_rhythm_enabled"):

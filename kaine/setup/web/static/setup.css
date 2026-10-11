@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LicenseRef-CAL-0.2 */
+/* SPDX-License-Identifier: LicenseRef-CAL-0.4 */
 /* Copyright (c) 2026 Kaine.One <kaine.one@tuta.com> */
 
 body {
@@ -116,4 +116,25 @@ body {
   color: var(--fg-dim);
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 0.75em;
+  height: 0.75em;
+  border-radius: 50%;
+  margin-right: calc(var(--gap) / 2);
+}
+
+.status-running {
+  background: var(--up);
+}
+
+.status-stopped {
+  background: var(--down);
 }

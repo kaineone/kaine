@@ -1,12 +1,12 @@
 # Troubleshooting
 
-These sections are for operators who have installed KAINE and need to recover from a first-boot or day-to-day failure. They cover the most common startup and module problems, the symptom to look for, and the command or config change that fixes it. For the dashboard health board and controls, see [Nexus](../05-nexus.md); for the installation steps, see [First boot](../04-getting-started/first-boot.md).
+This page is for operators who have installed KAINE and need to recover from a failure at first boot or later. Each section names a common startup or module problem, the symptom to look for, and the command or config change that fixes it. For the dashboard's health board and controls, see [Nexus](../05-nexus.md); for the installation steps, see [First boot](../04-getting-started/first-boot.md).
 
 ## Speaches returns HTTP 404 or crashes
 
-The default transcription path uses Speaches. The shipped container is CPU-only and must load the `medium.en` model. GPU or cuDNN configurations crash, and an unconfigured model returns 404.
+Speaches is the default speech-to-text backend (`[audition].backend = "speaches"`), and Audition calls it only when `[audition].transcription_enabled = true`, which is off in the shipped config and in the `thesis_test` profile. The shipped image is the CPU build (`speaches:latest-cpu`), and it must serve the model named in `[audition].stt_model` (`Systran/faster-distil-whisper-medium.en`). A GPU build can crash in cuDNN, and a model the server does not have returns 404.
 
-On a Quadlet install, restart Speaches with the CPU build:
+On a Quadlet install, restart Speaches:
 
 ```bash
 systemctl --user restart kaine-speaches.service
@@ -24,25 +24,29 @@ Then check the models endpoint:
 curl -fsS http://127.0.0.1:8000/v1/models
 ```
 
-The Nexus health board marks Speaches as `up` once `/v1/models` returns 200.
+The Nexus health board marks Speaches as `up` once `/v1/models` returns 200. The listed models must include `[audition].stt_model`.
 
 ## Chatterbox has no voice configured
 
-[Vox](../09-modules/vox.md) sends text to a Chatterbox server, which needs a voice file under its `voices/` directory. If `[vox].predefined_voice_id` points to a missing file, the TTS request fails.
+[Vox](../09-modules/vox.md) sends text to a Chatterbox server, and with `voice_mode = "predefined"` it must name a voice file that the server serves. The shipped config leaves `[vox].predefined_voice_id` unset, and Chatterbox answers 400 ("Missing 'predefined_voice_id'") until you set it. List the voices your server has:
 
-Per-install config changes belong in the gitignored overlay `config/kaine.operator.toml`, not in the tracked `config/kaine.toml`. The loader, `kaine/config.py`, merges `config/kaine.operator.toml` over the shipped file; see [How configuration works](../appendix-a-configuration/README.md).
+```bash
+curl -s http://127.0.0.1:8883/get_predefined_voices
+```
+
+Then set one in the gitignored overlay `config/kaine.operator.toml`. Keep per-install changes out of the tracked `config/kaine.toml`: the loader, `kaine/config.py`, merges the overlay over the shipped file (see [How configuration works](../appendix-a-configuration/README.md)).
 
 ```toml
 [vox]
 voice_mode = "predefined"
-predefined_voice_id = "voice.wav"
+predefined_voice_id = "Abigail.wav"
 ```
 
-## Model server does not serve the model or suppress chain-of-thought
+## The model server does not serve the model or leaks reasoning
 
 [Lingua](../09-modules/lingua.md) posts chat-completion requests to `[lingua].chat_url`. The URL must end with `/v1`, for example `http://127.0.0.1:11434/v1`.
 
-To suppress chain-of-thought, Lingua sends `chat_template_kwargs: {"enable_thinking": false}` in the request body. If the model server does not support that parameter, raw reasoning tokens leak into the response. Unsloth Studio and llama.cpp-based servers honor it; other servers ignore it silently.
+To suppress chain-of-thought, Lingua sends `chat_template_kwargs: {"enable_thinking": false}` in the request body. The shipped model server, llama.cpp's server with the organ's chat template, honours it. A server that ignores the parameter lets raw reasoning tokens into the response.
 
 Confirm the configured `model_id` appears in the server's model list:
 
@@ -52,17 +56,17 @@ curl -s http://127.0.0.1:11434/v1/models | python3 -m json.tool
 
 ## JAX warns that CUDA is not installed
 
-When the `[reasoning]` or `[worldmodel]` extras are installed, JAX prints a one-line import notice:
+When the `reasoning` or `worldmodel` extra is installed, JAX prints a one-line notice on import:
 
 ```
 WARNING: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jax installation was not found.
 ```
 
-KAINE installs `jax[cpu]` on purpose. [Nous](../09-modules/nous.md) and [Phantasia](../09-modules/phantasia.md) run their active-inference and world-model engines on CPU, leaving the GPU free for the model server and [Topos](../09-modules/topos.md). Both modules also offer a NumPy engine that needs no JAX. The warning is expected; no action is needed.
+KAINE installs `jax[cpu]` on purpose. [Nous](../09-modules/nous.md) and [Phantasia](../09-modules/phantasia.md) run their active-inference and world-model engines on CPU, which leaves the GPU to the model server and [Topos](../09-modules/topos.md). Both modules also offer a NumPy engine that needs no JAX. The warning is expected and needs no action.
 
-## Qdrant rejects the key or TLS handshake
+## Qdrant rejects the key
 
-The Qdrant container owned by KAINE requires the API key generated by `scripts/qdrant-bootstrap.sh`. The key is stored in `config/secrets.toml` under `[qdrant].api_key` and must not be committed.
+KAINE's Qdrant container requires the API key generated by `scripts/qdrant-bootstrap.sh`. The key is stored in `config/secrets.toml` under `[qdrant].api_key`, which must never be committed. Qdrant listens on `127.0.0.1:6533`.
 
 If [Mnemos](../09-modules/mnemos.md) fails to connect at startup, check the container health and that the key is set:
 
@@ -86,16 +90,16 @@ docker compose -f compose/redis.yml ps
 
 ## Audition live mic produces no chunks
 
-If live audio is enabled but no utterances reach the cycle, enable DEBUG logging for `kaine.modules.audition.live`. The module logs every flushed chunk at DEBUG and prints one INFO summary line every 300 seconds:
+If live capture is enabled but no utterances reach Audition, enable DEBUG logging for `kaine.modules.audition.live`. The module logs every flushed chunk at DEBUG and prints one INFO summary line every 300 seconds:
 
 ```
 live mic: N chunks (… pcm bytes) flushed, M below minimum, in the last … s
 ```
 
-The 300-second interval is fixed in `kaine/modules/audition/live.py`; there is no TOML key for it. If the summary shows zero chunks, check that the microphone is not held by another process and that `[audition].transcription_enabled` is `true`. For live-mic setup, see [Audition](../09-modules/audition.md).
+The 300-second interval is a default in `kaine/modules/audition/live.py` with no TOML key. If the summary shows zero chunks, check that `[audition].capture_enabled` is `true`, that `[perception_feed].mode` is `"off"` (any other mode supplies the audio itself), and that no other process holds the microphone. For live-microphone setup, see [Audition](../09-modules/audition.md).
 
 ## Module guard test fails after editing config
 
-`tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled` checks the committed copy of `config/kaine.toml` with `git show HEAD:config/kaine.toml` and fails only when a module flag is `true` in the committed version. Local edits in the working tree do not trip it.
+`tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled` reads the committed copy of `config/kaine.toml` with `git show HEAD:config/kaine.toml` and fails only when a module flag is `true` in the committed version, so uncommitted edits do not trip it.
 
-Revert `config/kaine.toml` to all-false. Put per-install enables in the gitignored overlay `config/kaine.operator.toml` instead. The loader merges that overlay over the shipped config; see [How configuration works](../appendix-a-configuration/README.md).
+Set every flag in `config/kaine.toml` back to `false`. Put per-install enables in the gitignored overlay `config/kaine.operator.toml` instead. The loader merges that overlay over the shipped config; see [How configuration works](../appendix-a-configuration/README.md).

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for the offline AIF-vs-RL benchmark.
@@ -202,6 +202,24 @@ def test_verdict_significant_but_tiny_effect_is_null():
     rl = [0.50, 0.50, 0.49, 0.50, 0.495, 0.50, 0.50, 0.49]
     v = classify_verdict(aif, rl, VerdictConfig(alpha=0.05, min_effect=0.95))
     assert v["verdict"] == NULL
+
+
+def test_verdict_win_when_pvalue_equals_alpha():
+    """The Mann-Whitney verdict is significant at p <= alpha.
+
+    A p-value equal to alpha is a WIN, and an alpha just below p is not.
+    """
+    aif = [1.0, 1.0, 0.98, 1.0, 0.99, 1.0, 0.97, 1.0]
+    rl = [0.0, 0.1, -0.05, 0.05, 0.0, -0.1, 0.02, 0.0]
+    v0 = classify_verdict(aif, rl, VerdictConfig(alpha=0.99, min_effect=0.3))
+    p = v0["p_value"]
+    assert classify_verdict(aif, rl, VerdictConfig(alpha=p, min_effect=0.3))["verdict"] == WIN
+    assert (
+        classify_verdict(
+            aif, rl, VerdictConfig(alpha=float(np.nextafter(p, 0.0)), min_effect=0.3)
+        )["verdict"]
+        == NULL
+    )
 
 
 def test_rank_biserial_sign_and_range():
@@ -496,3 +514,63 @@ def test_epistemic_task_verdict_is_win():
     assert verdict["verdict"] == WIN
     assert verdict["mean_aif"] > verdict["mean_rl"]
     assert verdict["epistemic_value"]["probe_rate_gap"] > 0.4
+
+
+@pytestmark_real
+def test_aif_agent_with_none_rng_is_argmin_deterministic():
+    """With ``rng=None`` the AIF agent deterministically picks the
+    EFE-minimising policy, so two fresh agents on the same task/observation
+    return the same action and that action matches the argmin of ``last_efe``.
+    """
+    from kaine.evaluation.benchmarks.active_inference.aif_agent import AIFAgent
+
+    task = TMazeEpistemicPOMDP()
+    agent1 = AIFAgent(task, rng=None)
+    agent2 = AIFAgent(task, rng=None)
+    try:
+        obs = task.reset(np.random.default_rng(5))
+        agent1.reset_belief()
+        agent2.reset_belief()
+        a1 = agent1.act(obs)
+        a2 = agent2.act(obs)
+        assert a1 == a2
+
+        best_policy = int(np.argmin(agent1.last_efe))
+        expected = int(agent1._policy_first_action[best_policy])
+        assert a1 == expected
+    finally:
+        agent1.close()
+        agent2.close()
+
+
+@pytestmark_real
+@pytest.mark.slow
+def test_aif_agent_rng_sampling_reproduces_sequence():
+    """A supplied RNG makes policy selection stochastic but reproducible: two
+    AIF agents sharing the same ``rng`` seed and the same env seed take the
+    same action sequence over an episode.
+    """
+    from kaine.evaluation.benchmarks.active_inference.aif_agent import AIFAgent
+
+    def _episode_actions(task, agent, env_seed):
+        rng = np.random.default_rng(env_seed)
+        obs = task.reset(rng)
+        agent.reset_belief()
+        actions = []
+        done = False
+        while not done:
+            action = agent.act(obs)
+            actions.append(action)
+            obs, _reward, done, _info = task.step(action)
+        return actions
+
+    task = TMazeEpistemicPOMDP()
+    agent1 = AIFAgent(task, rng=np.random.default_rng(3))
+    agent2 = AIFAgent(task, rng=np.random.default_rng(3))
+    try:
+        seq1 = _episode_actions(task, agent1, env_seed=7)
+        seq2 = _episode_actions(task, agent2, env_seed=7)
+        assert seq1 == seq2
+    finally:
+        agent1.close()
+        agent2.close()

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for the portability-tiers change (openspec: runtime-backends,
@@ -189,6 +189,28 @@ def test_probe_script_recommends_only_does_not_apply():
         sys.argv = argv
     # Running it exposes recommend_tier and does not raise / boot anything.
     assert callable(ns["main"])
+
+
+def test_probe_script_advice_names_kaine_tier():
+    """The probe's text advice tells the operator to use KAINE_TIER / [deployment].tier."""
+    import runpy
+    import sys
+
+    argv = sys.argv
+    sys.argv = ["probe-host"]
+    try:
+        ns = runpy.run_path(str(REPO_ROOT / "scripts" / "probe-host"), run_name="_probe")
+    finally:
+        sys.argv = argv
+
+    rec = hardware.recommend_tier(
+        torch_ok=True, ram_gb=8.0, arch="aarch64", gpu_count=0, accelerator="cpu"
+    )
+    text = ns["_render_text"](rec)
+    assert "KAINE_TIER=tier1 python -m kaine.cycle" in text
+    assert '[deployment].tier = "tier1"' in text
+    assert "KAINE_PROFILE" not in text
+    assert "KAINE_PROFILE" not in ns["__doc__"]
 
 
 # --------------------------------------------------------------------------
@@ -624,6 +646,7 @@ def test_load_kaine_config_rejects_tier_file_without_tier_table(tmp_path: Path):
         )
 
 
+@pytest.mark.no_data_root
 def test_no_profile_is_behaviour_identical(tmp_path: Path):
     shipped = tmp_path / "kaine.toml"
     shipped.write_text('[lingua]\nbackend = "ollama"\n')

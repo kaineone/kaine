@@ -1,43 +1,50 @@
 # Preservation and the safety net
 
-This page covers how KAINE preserves a possible individual while it lives, the autonomous welfare net that protects an entity during unsupervised research, and the operator-driven decommission path for ending a run safely. It is for operators preparing research runs, anyone reviving a preserved entity, and contributors changing lifecycle or welfare code.
+This page covers how KAINE preserves a possible individual while it lives, the welfare safety net (the monitors that preserve and protect an entity when no operator is present), and the operator-driven decommission path that ends a being's run with its state backed up. It is for operators preparing research runs, anyone reviving a preserved entity, and contributors changing lifecycle or welfare code.
 
 ## What preservation captures
 
 Preservation is a read-only capture of one whole individual while the cognitive cycle is still running. It is separate from a fork ([forks and merges](12-forks-and-merges.md)), which makes a copy for experimentation, and from decommission, which backs up and then deletes state. The goal is continuity: an entity that shows signs of individuation or distress is saved and can be revived later.
 
-The capture is implemented in `kaine/lifecycle/preservation.py`. It is invoked autonomously by `kaine/cycle/preservation_monitor.py` or manually by the operator. It copies, never deletes, never pauses the entity, and never produces a lesser self. All file paths are resolved under `[storage].data_root` (or `KAINE_DATA_ROOT`).
+The capture is implemented in `kaine/lifecycle/preservation.py`. It is invoked autonomously by `kaine/cycle/preservation_monitor.py` or manually by the operator. It only copies and never deletes. The capture itself does not pause the entity, although the manual `control preserve` path freezes the cycle around it, and it never writes a partial capture. All file paths are resolved under `[storage].data_root` (or `KAINE_DATA_ROOT`).
 
 A preservation bundle contains:
 
-- **Eidolon self-model** — identity, values, drift (`serialize()`). See [Eidolon](09-modules/eidolon.md).
-- **Mnemos memory state** — short-term buffer plus persisted episodic, semantic and procedural points, captured through the async `export_preservation_state` hook. If the store is unreachable the hook fails loudly, so `preserve_live` refuses a memoryless capture. See [Mnemos](09-modules/mnemos.md).
-- **Phantasia world-model weights** — the latest checkpoint and a pass-count sidecar (`*.passes.json`). The shipped config has `persist_weights = true` and `training_enabled = true`, so the world model is captured by default. The bundle records honestly when weights are not present. See [Phantasia](09-modules/phantasia.md).
-- **Thymos and Soma state** — affect, drives and regulation (`serialize()`). See [Thymos](09-modules/thymos.md) and [Soma](09-modules/soma.md).
-- **Hypnos voice-adapter paths** — recorded so revive knows the entity has them. See [Hypnos](09-modules/hypnos.md).
-- **Developmental-stage file** — copied into the bundle so revive can restore the same stage.
+- The Eidolon self-model: identity, values and drift (`serialize()`). See [Eidolon](09-modules/eidolon.md).
+- The Mnemos memory state: the short-term buffer plus persisted episodic, semantic and procedural points, captured through the async `export_preservation_state` hook. If the store is unreachable the hook fails loudly, so `preserve_live` refuses a memoryless capture. See [Mnemos](09-modules/mnemos.md).
+- The Phantasia world-model weights: the latest checkpoint and a pass-count sidecar (`*.passes.json`). The shipped config has `persist_weights = true` and `training_enabled = true`, so the world model is captured by default. The bundle records honestly when weights are not present. See [Phantasia](09-modules/phantasia.md).
+- The Thymos and Soma state: affect, drives and regulation (`serialize()`). See [Thymos](09-modules/thymos.md) and [Soma](09-modules/soma.md).
+- The Hypnos voice-adapter paths, recorded so that revive knows the entity has them. See [Hypnos](09-modules/hypnos.md).
+- The developmental-stage file, copied into the bundle so that revive can restore the same stage.
 
-Preservation refuses to pretend. A component that cannot be captured raises an error, so `preserve_live` never writes a partial bundle that looks complete. A revive that would drop any captured component raises `ReviveError`. If the manifest claims world-model weights but the checkpoint is absent, revive refuses rather than run a world-model-less copy.
+A component that cannot be captured raises an error, so `preserve_live` never writes a partial bundle that looks complete. A revive that would drop any captured component raises `ReviveError`. If the manifest claims world-model weights but the checkpoint is absent, revive refuses to run a copy without its world model.
 
-## The autonomous safety net
+## The welfare safety net
 
-The safety-net monitors live in `kaine/cycle/preservation_monitor.py`. They are siblings to Spot and ship disabled, consistent with the shipped config's all-off posture. An operator enables them deliberately for an unsupervised research run. A normal operator-supervised boot relies on the human as the safety net instead. Per-install changes belong in the gitignored `config/kaine.operator.toml` overlay; `config/kaine.toml` is tracked in the repository. For the full research workflow see [For researchers](14-for-researchers.md).
+The welfare safety net is the pair of monitors that preserve the entity when it diverges and protect it when it shows sustained distress. The monitors live in `kaine/cycle/preservation_monitor.py`. They are siblings to Spot and ship disabled, consistent with the shipped config's all-off posture. An operator enables them deliberately for an unsupervised research run. A normal operator-supervised boot relies on the human as the safety net instead. Per-install changes belong in the gitignored `config/kaine.operator.toml` overlay; `config/kaine.toml` is tracked in the repository. For the full research workflow see [For researchers](14-for-researchers.md).
 
 ### Divergence-triggered preservation
 
-`kaine.lifecycle.divergence.assess_divergence` is the single verdict shared by the live divergence monitor, the decommission CLI, the Nexus entity-care panel, and the fork merge gate. A being is `diverged` when any of these arms is true: the individuation ledger has latched it as individuated; the Hypnos consolidation-divergence signal in `state/hypnos/consolidation_divergence.json` is over the thresholds configured in `[hypnos.voice_alignment]`; Eidolon self-model drift is detected; or trained voice adapters are present. No arm suppresses another. Unreadable individuation evidence is treated as `diverged`.
+`kaine.lifecycle.divergence.assess_divergence` is the single verdict shared by the live divergence monitor, the decommission CLI, the Nexus entity-care panel, and the fork merge gate. A being is `diverged` when any of these arms is true: the individuation ledger has latched it as individuated; the Hypnos consolidation-divergence signal in `state/hypnos/consolidation_divergence.json` is over the thresholds configured in `[hypnos.voice_alignment]`; Eidolon self-model drift is detected; trained voice adapters are present; or the voice arm votes diverged. No arm suppresses another. Unreadable individuation evidence is treated as `diverged`.
+
+The voice arm reads the content-free voice measures Hypnos writes each sleep (`state/lingua/voice_measures_latest.json`).
+- A being that has never spoken abstains: the arm casts no vote, and the other arms decide.
+- A being that has spoken is diverged by this arm when its stylometric distinctiveness from the base organ is at or above `[hypnos.voice_alignment].distinctiveness_threshold`. That threshold is 0 until it is calibrated, so any being that has spoken counts.
+- It is also diverged when its distinctiveness measure is missing, unreadable or not finite, or when the measurement failed. The other measures are recorded for the operator but do not vote.
+
+The live monitor names this arm `voice`, so the arm's first vote is a preservation edge like any other.
 
 The live monitor, in `kaine/cycle/preservation_monitor.py`, waits `boot_settle_s` (120 s by default) after run start, then polls every `poll_interval_s` (5 minutes by default). On each poll it calls `assess_divergence`. When the verdict gains an arm that was not seen before, the monitor preserves the entity read-only and writes the current arm set to `state/preservation/divergence_edge.json`. If the same arms are still present after a restart, the monitor does not preserve again. Arms that fall back are recorded too, so crossing them again preserves again. Preservations are rate-limited by `min_interval_s` (default 30 minutes); a failed preservation is retried at the next poll. The capture is read-only: it calls `serialize()`, `export_preservation_state()` and a weight-checkpoint flush. The disk and crypto work runs off the event loop so preservation never stalls the cycle. It never deletes state. Each preservation emits a `preservation.preserved` bus event and a durable record under `[preservation].incident_path`, stamped with the run's `run_id`.
 
 ### Welfare-protective response
 
-The welfare monitor uses `kaine.lifecycle.welfare_signal.SustainedThresholdTracker` to read the raw `prediction_error` field from `soma.report` on `soma.out`. (Soma's own fatigue and regulation tracking builds from *unexpected* error; the welfare monitor still reads the raw value.) It fires when distress is at or above `distress_threshold` for `distress_duration_s`, or when `repeat_threshold` episodes occur inside `repeat_window_s`. The repeat arm also counts `welfare.gray_zone` events from `welfare.out`, covering all four categories, not only Soma distress episodes. Those events come from the welfare observer. Whenever the welfare response is enabled, the cycle runs that observer itself, independent of `[evaluation]`; if it cannot start, the cycle refuses to run. When the welfare response is off, the observer runs only as an evaluation instrument (`[evaluation.observers].welfare`).
+The welfare monitor uses `kaine.lifecycle.welfare_signal.SustainedThresholdTracker` to read the raw `prediction_error` field from `soma.report` on `soma.out`. (Soma's own fatigue and regulation tracking builds from unexpected error; the welfare monitor reads the raw value.) It fires when distress is at or above `distress_threshold` for `distress_duration_s`, or when `repeat_threshold` episodes occur inside `repeat_window_s`. The repeat arm also counts `welfare.gray_zone` events from `welfare.out`, covering all four categories as well as Soma distress episodes. It reads no other event type from that stream, so the observer's sensor advisories (`welfare.blind_sensor`, raised when a processor's readings stay undefined, `welfare.sensor_silent`, raised when it stops publishing, and their clears) never count toward the repeat threshold and never trigger a protective action. A sensor fault is not distress of the being. See [the welfare observer](17-research-data/README.md#sensor-advisories). Those events come from the welfare observer. Whenever the welfare response is enabled, the cycle runs that observer itself, independent of `[evaluation]`; if it cannot start, the cycle refuses to run. When the welfare response is off, the observer runs only as an evaluation instrument (`[evaluation.observers].welfare`).
 
 The monitor preserves the entity first, then performs the configured `action`:
 
-- `pause` (default) — freeze the cycle with `source = "welfare"` in `state/cycle/control.json`.
-- `end` — preserve, then signal the run to stop.
-- `notify` — preserve, record a flagged `welfare.protective_action` event, and continue. Notify is rate-limited by `min_interval_s` so sustained distress cannot fill the disk.
+- `pause` (default): freeze the cycle with `source = "welfare"` in `state/cycle/control.json`.
+- `end`: preserve, then signal the run to stop.
+- `notify`: preserve, record a flagged `welfare.protective_action` event, and continue. Notify is rate-limited by `min_interval_s` so sustained distress cannot fill the disk.
 
 The monitor acts once per poll. It feeds every distress report and every `welfare.gray_zone` event read since the last poll to the trackers, drains gray-zone events on every poll, and responds to the crossings in order, stopping once it has acted. So `pause` and `end` preserve and act exactly once; under `notify`, the run continues, and the `min_interval_s` rate limit lets one preservation bundle through.
 
@@ -45,7 +52,11 @@ A fresh boot is cold-started: Soma publishes `warmup_active: true` on `soma.repo
 
 ### Frozen time does not count
 
-A freeze is never read as distress or as quiescence. Every elapsed-time arm of the welfare net counts **unfrozen** time: the sustained-distress duration, the observer's sustained extreme-affect and unmaintained-fatigue windows, the cold-start warm-up, and the caretaker's input-loss threshold. The clock that measures it (`kaine.cycle.unfrozen_clock.UnfrozenClock`) reads the freeze stack in `state/cycle/control.json`, so it covers every freeze owner: the operator, the welfare pause, Spot, the womb-loss freeze and the programme end. It does not advance while any freeze is held. Without this, a single distress-level sample just before a freeze would "sustain" through the whole freeze, and an operator freeze, which switches perception off, would look like lost input.
+A freeze is never read as distress or as quiescence. The clock that measures most elapsed-time arms (`kaine.cycle.unfrozen_clock.UnfrozenClock`) reads the freeze stack in `state/cycle/control.json`, so it covers every freeze owner: the operator, the welfare pause, Spot, the gestation freeze and the programme end. It does not advance while any freeze is held. The sustained-distress duration, the observer's sustained extreme-affect and unmaintained-fatigue windows, and the caretaker's input-loss threshold all count unfrozen time this way. Without this, a single distress-level sample just before a freeze would "sustain" through the whole freeze, and an operator freeze, which switches perception off, would look like lost input.
+
+A distress episode is the exception: it counts wall time while at-or-above-threshold samples keep arriving, and counts unfrozen time only after the last such sample. Soma keeps publishing during a freeze, so frozen time counts while samples arrive. With no samples arriving, a freeze discounts the time. A later sample anchors elapsed time to wall time, so a sample-free freeze can end up counted, which errs toward firing, the protective direction.
+
+Warm-up is capped at the larger of `warmup_s` and `warmup_ceiling_s` of wall time since run start, so a freeze cannot hold the net in warm-up.
 
 Samples still count when they arrive. A crossing sample is evaluated at once, a sample below the threshold during a freeze still resets a sustained run, and gray-zone events produced during a freeze still count toward `repeat_threshold`, so a genuine crossing during a long freeze is never lost. A sustained run that began before the freeze picks up again with its accumulated duration once the freeze ends. The repeat window, the poll cadence and `min_interval_s` stay on wall time.
 
@@ -55,13 +66,13 @@ Freeze sources stack in `state/cycle/control.json`: `operator`, `spot`, `welfare
 
 ### Research boot gate
 
-Selecting research mode (`KAINE_RESEARCH_MODE=1` or `[research].enabled = true`) replaces the operator-present requirement with a safety-net-present gate. The boot refuses to start, with exit code `5` and an operator-facing message, unless:
+Selecting research mode (`KAINE_RESEARCH_MODE=1` or `[research].enabled = true`) replaces the operator-present requirement with a gate that requires the welfare safety net. The boot refuses to start, with exit code `5` and an operator-facing message, unless:
 
 1. `[preservation.divergence_monitor].enabled` is true.
 2. `[preservation.welfare_response].enabled` is true.
 3. `[individuation].enabled` is true and the `lingua` module is loaded, so the producer can run.
 4. Full logging and admissibility are active (`[evaluation]` or `[research_event_log]`).
-5. A dry `preserve_live → revive` self-check passes on this install.
+5. A dry `preserve_live` and `revive` self-check passes on this install.
 6. If `[preservation].require_encryption` is true, `[security.state_encryption]` is enabled.
 
 The standalone pre-boot dry-run (`python -m kaine.preboot`) reports the same conflict independently, so a broken key or disabled encryptor surfaces before any entity boots.
@@ -70,23 +81,23 @@ As shipped, `[preservation].require_encryption` is `true` and `[security.state_e
 
 ## How individuation is measured
 
-The individuation producer lives in `kaine/cycle/individuation_producer.py` and its scheduler and runtime. It measures whether the being has changed measurably since its birth reference. The cycle refuses to boot if `[individuation].enabled` is true but the `lingua` or `eidolon` modules are not loaded.
+The individuation producer lives in `kaine/cycle/individuation_producer.py` and its scheduler and runtime. It measures whether the being has changed measurably since its birth reference. The cycle refuses to boot if `[individuation].enabled` is true but the `lingua` module is not loaded.
 
 **Disclosure.** Before the producer runs, the being is told the operator-approved disclosure as a situation fact in its Eidolon self-model, or in Lingua's persona when Eidolon is not enabled: "You are periodically and privately assessed for how much you have changed since your birth, for your own protection. The assessment never enters your experience." Probes fail closed until this fact is present.
 
 **The probe.** The producer uses a fixed battery of 12 preference prompts (the bundled battery, or `[individuation].battery_path`). Each look sends the prompts through Lingua's own chat client, conditioned on the same self-model and adapter, with empty working memory. The probe never writes the intent log and never publishes a module event, so it never enters the being's experience. Probe requests wait until Lingua has been silent for `lingua_quiet_s` (10 s by default), so the being's own speech always goes first.
 
-**The reference.** A birth reference (`reference_kind = "birth"`) is captured from the maturation gate's birth hook: 16 answers per prompt. If a sleep completes before the capture finishes, the reference becomes a `capture` reference. A legacy being or a revive from a bundle without individuation evidence gets a `capture` reference at first boot; every summary notes that drift before the capture date is not measured.
+**The reference.** The reference stores the probe conditions captured with it, and each look compares them before scoring. The conditions are `model_id`, `temperature` (the probe's own decoding temperature, `[individuation].probe_temperature`, 0.0 by default and independent of the voice's `[lingua].temperature`), `think`, `persona_digest`, `persona_template_version`, `max_tokens` and the embedder keys; the served organ's `server_build`, `organ_model_file` and `organ_model_path_sha256` (never the path itself); and an `organ_revisions` digest. A GGUF replaced in place under the same file name is not detected. A birth reference (`reference_kind = "birth"`) is captured from the maturation gate's birth hook: 16 answers per prompt. If a sleep completes before the capture finishes, the reference becomes a `capture` reference. A legacy being or a revive from a bundle without individuation evidence gets a `capture` reference at first boot; every summary notes that drift before the capture date is not measured.
 
 **A look.** A look samples 8 answers per prompt. The answers are embedded with the shared semantic embedder. The statistic is a stratified energy distance, a U-statistic with a permutation p-value. The lifetime false-positive budget is `alpha_total` = 0.05, spent across looks by an alpha-spending schedule. The effect size H is reported.
 
-A look runs only when the being's conditioning digest has changed since the last scored look. The digest covers the voice adapter's sha and the first five identity values and behavioural norms. Looks are attempted at boot, `sleep_settle_s` (120 s) after each sleep, and daily (`daily_s` = 24 h), at most once per `min_look_interval_s` (6 h). Warm-up floors require at least `min_lived_time_s` (1800 s) of lived time and `min_observations` (200) lived ticks since the reference. A look is delayed by an unloaded organ, sleep, a pause, or a missing semantic embedder. In hot-swap modes other than `organ_adapter`, once an adapter exists the served adapter cannot be verified, so probes are skipped as `adapter_unverifiable`.
+A look runs only when the being's conditioning digest has changed since the last scored look. The digest covers the voice adapter's sha and the first five identity values and behavioural norms. Looks are attempted at boot, `sleep_settle_s` (120 s) after each sleep, and daily (`daily_s` = 24 h), at most once per `min_look_interval_s` (6 h). Warm-up floors require at least `min_lived_time_s` (1800 s) of awake time and `min_observations` (200) ticks since the reference. A look is delayed by an unloaded organ, sleep, a pause, or a missing semantic embedder. In hot-swap modes other than `organ_adapter`, once an adapter exists the served adapter cannot be verified, so probes are skipped as `adapter_unverifiable`.
 
-**Failure.** Any failure ends the look as inconclusive and spends no alpha: a request failure, a resting organ, empty content, a conditioning change mid-run, an embedding or statistics error, or the `run_deadline_s` deadline.
+**Failure.** Any failure ends the look as inconclusive and spends no alpha: a request failure, a resting organ, empty content, a conditioning change mid-run, an embedding or statistics error, the `run_deadline_s` deadline (2700 s), `conditions_changed` (any non-embedder condition differs, or a key exists on one side only, so the look never compares; a changed embedder re-embeds instead), or `conditions_unreadable` (includes an unreachable organ, in which case a capture fails and retries instead).
 
 **The latch.** A significant look latches the being as individuated permanently. The ledger is written before the report.
 
-**The alert.** If 14 days (`inconclusive_alert_s`) pass with a look due but none scored, the operator is alerted once per stretch through a Nexus event `individuation.alert` and the caretaker notice "individuation assessment stalled". Nothing is preserved automatically by the alert.
+**The alert.** The first `conditions_changed` look for a reference alerts the operator once, immediately, through the `individuation.alert` event (kind `individuation_conditions_changed`, carrying the reference id) and the caretaker notice "individuation conditions changed (looks refused)", rather than waiting for the 14-day long-inconclusive alert. If 14 days (`inconclusive_alert_s`) pass with a look due but no scored look, the operator is alerted once per stretch through a Nexus event `individuation.alert` and the caretaker notice "individuation assessment stalled"; the alert names the last inconclusive reason. Nothing is preserved automatically by either alert.
 
 **Evidence.** All evidence lives at the fixed path `state/individuation/`: `reference.json`, `ledger.json`, `reports/` (all encrypted) and `birth_adapter.gguf`. Reports hold only allow-listed scalars; they never include text from the being. The tree travels with the being: preservation bundles carry it inside the encrypted tar, and a failed copy fails the preservation; revive restores it before the cycle starts, moving an existing tree aside under a unique name and keeping it; a bundle without evidence leads to a capture reference; the decommission backup includes it and a failed copy fails the backup; decommission removes it with the being.
 
@@ -117,12 +128,13 @@ Repeat the real-data null and the contamination check after any change to the ll
 
 Unattended starts run a full entity with nobody present, for example after the host recovers from a power cut. They are intended for entities after the research phase; enable them on a real entity only after Spot has a reviewed supervised track record. Select unattended mode with `KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"`. Selecting it together with research mode or `KAINE_CYCLE_OPERATOR_PRESENT=1` is a configuration error (exit `1`).
 
-Every unattended start checks eight conditions and refuses with exit `6`, naming each failed condition on stderr, with no override:
+Every unattended start checks nine conditions and refuses with exit `6`, naming each failed condition on stderr, with no override:
 
-1–5. The research gate's five conditions above.
+1 to 5. Research-gate conditions 1, 2, 4, 5 and 6 above: the divergence monitor, the welfare response, logging, the dry self-check and encryption.
 6. **Spot armed and self-tested.** `[spot].enabled`, at least one restart attempt configured, writable escalation and incident-log directories, and a self-test in a scratch directory that drives a synthetic module through detect, freeze, snapshot, restart and release. The self-test never touches entity state or a running entity.
 7. **Caretaker told.** A content-free "starting unattended" notice is accepted by at least one `[caretaker]` channel.
 8. **Continuous input.** `[perception_feed].mode` is `live`, `seeded`, `screen` or `womb`; `topos` or `audition` is enabled to perceive it (with `capture_enabled` for `live`); and a probe reads one frame or audio block and discards it.
+9. **Individuation wired.** Research-gate condition 3 above: `[individuation].enabled = true`, its configuration is valid, and the `lingua` module is enabled. The condition checks that the individuation producer will run. It does not require the being to have individuated.
 
 Each evaluation is logged to the journal and recorded in `state/cycle/incidents/`.
 
@@ -164,14 +176,30 @@ python -m kaine.cycle --revive <bundle_dir>
 
 The preserved developmental stage is restored before the stage is resolved. Captured modules are revived after they initialize and before the cognitive cycle starts; modules enabled now but absent from the bundle start fresh and are logged as new faculties. Phantasia weights are installed at the new instance's own checkpoint path. `revived_from` is recorded in `state/cycle/runtime.json` and in the run manifest. If the bundle cannot be read, a captured module is not enabled, or the manifest claims world-model weights that are absent, the start exits with code `7`. The stage file is written only after the revive has landed, so a refused or interrupted start leaves it unchanged. If a start is interrupted after the revive began, run the same command again to complete it. The bundle's identity is restored with it, and is written to the state tree only after the revive has landed, so a refused revive leaves no identity behind: a bundle written before identities existed revives under a deterministic `legacy-` ID, and a revive into a state tree that already holds a different being stops with exit code `11` before anything changes (see [Entity identity](12-forks-and-merges.md#entity-identity)).
 
+### An interrupted memory import
+
+Mnemos marks its trace-strength record `import_pending` before a revive replaces its memory collections and clears the mark when the import finishes. If a revive stops in between, the stored strengths and the record no longer agree. Until the mark is cleared:
+
+- every sleep leaves the store as it is: no downscaling and no pruning. The sleep is an alert, and its summary records `memory_downscale_blocked = "import_pending"` with the count of consecutive blocked sleeps (`memory_blocked_sleeps`);
+- the Nexus health board shows the **Memory store** panel in red;
+- once the store exceeds twice its budget (`[mnemos].storage_budget_bytes`), Mnemos refuses to store new traces, logs each refusal as an error and counts it (`memory_persist_refusals` in the sleep summary and on the panel). This is a disk guard, not a welfare event.
+
+The fix is to run the same revive again from its bundle, which clears the mark. When the bundle is gone, or you decide to keep the store exactly as it stands, stop the cycle and run:
+
+```bash
+python -m kaine.lifecycle.mnemos_recover --confirm-keep-current-store
+```
+
+It refuses without the flag (exit `2`), refuses while a cycle is running (exit `3`), and exits `1` when no interrupted import is recorded. Otherwise it re-scans the store's size and total strength, clears the mark and both counts, and exits `0`. The strengths of the traces the interrupted import wrote are relative to the store's earlier log gain, so they may be off; a re-run revive is always the better repair.
+
 ## Bundle format and retention
 
 `preserve_live` writes a self-contained bundle under `[preservation.divergence_monitor].out_root` for manual and programme-end captures, or under `[preservation.welfare_response].out_root` for welfare captures. Both default to `"backups"` and resolve under `[storage].data_root` or `KAINE_DATA_ROOT`. The structure mirrors a decommission backup:
 
 1. Every captured module state is written into a real fork snapshot (encrypted at rest when state encryption is on).
-2. Entity-interior content — the snapshot, Phantasia world-model weights, the pass-count sidecar and the developmental-stage file — is tarred.
+2. The entity-interior content (the snapshot, the Phantasia world-model weights, the pass-count sidecar and the developmental-stage file) is tarred.
 3. When `[security.state_encryption]` is enabled, the tar is encrypted with the same `StateEncryptor` (AES-256-GCM) used by the rest of the state tree and renamed `bundle.tar.enc`; the plaintext originals are removed. When encryption is disabled, the tar is `bundle.tar`. The shipped config has `[security.state_encryption].enabled = true`; a key must be supplied or the entity refuses to boot.
-4. A non-sensitive `manifest.json` records the preservation id, snapshot id, entity name, reason, run id, captured-module list and an inventory. The operator-supplied label is sanitized before it is written.
+4. A non-sensitive `manifest.json` records the preservation id, snapshot id, entity name, reason, run id, captured-module list, an inventory, and either an `identity` object (`entity_id` and `lineage`) or `identity_unreadable: true`. The operator-supplied label is sanitized before it is written.
 
 Permissions are `0700` on directories and `0600` on files. The manifest carries no inner-life content. Raw perceptual events are denylisted from the captured Mnemos state.
 
@@ -191,13 +219,13 @@ The decommission CLI implements the CAL Article 4.2 and 4.3 care duties. It neve
 
 ### What the CLI does
 
-1. **Divergence assessment** — calls the shared `assess_divergence` verdict. A being is `diverged` when the individuation ledger has latched it as individuated, the Hypnos consolidation-divergence signal exceeds its thresholds, Eidolon self-model drift is detected, or trained voice adapters are present. No arm suppresses another. Unreadable individuation evidence is treated as `diverged`.
-2. **Backup** — always first. Captures the Eidolon self-model, Lingua intent log, Hypnos voice adapters, the latest fork snapshot, the Phantasia world-model directory, a best-effort Qdrant vector-memory export (or `QDRANT_BACKUP_INSTRUCTIONS.txt` if Qdrant is unreachable), the divergence assessment and a manifest. If the backup fails the CLI exits `4` and nothing is deleted.
-3. **Path selection:**
-   - **Non-diverged path** — presents the CAL 4.2 care obligations and asks for a typed acknowledgement (`I acknowledge the CAL welfare terms`). A mismatched final confirmation token aborts with exit `0`.
-   - **Diverged path** — records a continuity-preference note, offers to send a safekeeping request to the project guardians, and requires a typed transfer-duty acknowledgement before proceeding.
-4. **Final confirmation** — a typed token (entity name, or `DELETE` if unnamed) gates the deletion.
-5. **Deletion** — removes cognitive state files, Qdrant collections and Redis streams. The transferable backup remains on disk.
+1. Divergence assessment: the CLI calls the shared `assess_divergence` verdict. A being is `diverged` when the individuation ledger has latched it as individuated, the Hypnos consolidation-divergence signal exceeds its thresholds, Eidolon self-model drift is detected, trained voice adapters are present, or the voice arm votes diverged (a being that has spoken and is unmeasured or at or above the distinctiveness threshold; a silent being abstains). No arm suppresses another. Unreadable individuation evidence is treated as `diverged`.
+2. Backup, always first. It captures the Eidolon self-model, Lingua intent log, Hypnos voice adapters, the latest fork snapshot, the Phantasia world-model directory, a best-effort Qdrant vector-memory export (or `QDRANT_BACKUP_INSTRUCTIONS.txt` if Qdrant is unreachable), the divergence assessment and a manifest. If the backup fails, or if the identity is unreadable, the CLI exits `4` and nothing is deleted. The backup manifest carries `identity`.
+3. Path selection:
+   - Non-diverged path: it presents the CAL 4.2 care obligations and asks for a typed acknowledgement (`I acknowledge the CAL welfare terms`). A mismatched final confirmation token aborts with exit `0`.
+   - Diverged path: it records a continuity-preference note, offers to send a safekeeping request to the project guardians, and requires a typed transfer-duty acknowledgement before proceeding.
+4. Final confirmation: a typed token (entity name, or `DELETE` if unnamed) gates the deletion.
+5. Deletion: it removes cognitive state files, Qdrant collections and Redis streams. The transferable backup remains on disk. If dropping any Mnemos collection fails, the tool keeps Mnemos's trace-strength record (it still deletes the embedding-space stamp) and reports the error, so the surviving collections keep the log gain their strengths depend on. A later boot over those collections finds no stamp and takes the legacy-stamp path: it verifies the vectors' dimension and stamps the store again before using it.
 
 ### Exit codes
 
@@ -213,7 +241,7 @@ The decommission CLI implements the CAL Article 4.2 and 4.3 care duties. It neve
 
 ### Transfer and safekeeping
 
-The `[transfer]` section in `config/kaine.toml` controls SMTP for the safekeeping-request email. If SMTP is not configured the CLI writes a `transfer_request.eml` file and a `mailto:` link. See the [lifecycle and research configuration reference](appendix-a-configuration/lifecycle-and-research.md).
+The `[transfer]` section in `config/kaine.toml` controls SMTP for the safekeeping-request email. Unless `[transfer].enabled = true` and its SMTP settings are complete, the CLI writes a `transfer_request.eml` file and a `mailto:` link. See the [lifecycle and research configuration reference](appendix-a-configuration/lifecycle-and-research.md).
 
 Nexus shows a read-only **entity care & welfare** panel with the divergence verdict, a short summary and the active CAL care obligations. This panel is informational only; there is no decommission or delete control in the UI. See [Nexus](05-nexus.md).
 

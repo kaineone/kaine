@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for Hypnos fatigue-triggered entry and safety-net interval (tasks 7.1).
@@ -50,9 +50,10 @@ class FakeMnemos:
         self.consolidated += 1
         return 0
 
-    def downscale_activations(self, factor: float) -> int:
-        self.downscale_calls.append(factor)
-        return 0
+    async def downscale(self, protect=()):
+        protect = list(protect)
+        self.downscale_calls.append(protect)
+        return {"n_new": 0, "factor": 1.0, "protected": len(protect), "total_before": 0.0, "total_after": 0.0, "silent": 0}
 
     async def replay_now(self) -> list:
         self.replay_calls += 1

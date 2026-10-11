@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Empatheia — social cognition / theory-of-mind module.
@@ -207,7 +207,10 @@ class Empatheia(BaseModule):
             return
         category = str(payload.get("category") or "neutral")
         confidence = float(payload.get("confidence") or 0.0)
-        prediction_error = float(payload.get("prediction_error") or 0.0)
+        # A skipped reading publishes no error; pass None through so the
+        # agent model does not average a made-up 0.
+        raw_error = payload.get("prediction_error")
+        prediction_error = None if raw_error is None else float(raw_error)
 
         agent_id = self._agent_for(event)
         model = await self._store.get(agent_id)
@@ -222,7 +225,9 @@ class Empatheia(BaseModule):
         )
 
         await self._store.put(model)
-        await self._publish_agent_model(model)
+        await self._publish_agent_model(
+            model, source_label=event.payload.get("source_label")
+        )
 
         if deviation > self._deviation_threshold:
             await self._publish_social_error(model, deviation)
@@ -242,35 +247,47 @@ class Empatheia(BaseModule):
         # A transcription event counts as an interaction but does not
         # change the emotion histogram. We fold it in as a neutral,
         # low-confidence observation so the interaction_count ticks up.
-        # We do NOT record any text from the payload.
+        # The placeholder carries no error, so it leaves the error
+        # average alone. We do NOT record any text from the payload.
         model.update_from_emotion(
             "neutral",
             confidence=0.0,
-            prediction_error=0.0,
+            prediction_error=None,
             deviation_threshold=self._deviation_threshold,
         )
         await self._store.put(model)
-        await self._publish_agent_model(model)
+        await self._publish_agent_model(
+            model, source_label=event.payload.get("source_label")
+        )
 
     # ------------------------------------------------------------------
     # Publications
     # ------------------------------------------------------------------
 
-    async def _publish_agent_model(self, model: AgentModel) -> None:
-        """Publish empatheia.agent_model with numeric metadata only."""
+    async def _publish_agent_model(
+        self, model: AgentModel, *, source_label: str | None = None
+    ) -> None:
+        """Publish empatheia.agent_model: numeric metadata and labels, no content.
+
+        If source_label is provided it is included so listeners can map the
+        model back to the originating audio channel.
+        """
         familiarity = model.familiarity()
         salience = self._baseline_salience + familiarity * (
             self._alert_salience - self._baseline_salience
         )
+        payload = {
+            "agent_id": model.id,
+            "agent_label": model.label,
+            "familiarity": familiarity,
+            "reliability": model.reliability,
+            "interaction_count": model.interaction_count,
+        }
+        if source_label is not None:
+            payload["source_label"] = str(source_label)
         await self.publish(
             "empatheia.agent_model",
-            {
-                "agent_id": model.id,
-                "agent_label": model.label,
-                "familiarity": familiarity,
-                "reliability": model.reliability,
-                "interaction_count": model.interaction_count,
-            },
+            payload,
             salience=salience,
         )
 

@@ -1,22 +1,35 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
-import time
+import math
 from collections import deque
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
+from kaine.cycle.types import WorkspaceSnapshot
+from kaine.entity_clock import EntityClock
+from kaine.modules.context import CONTEXT_DIM, BroadcastContext
+from kaine.modules.intensity import graded_intensity
+from kaine.modules.positive_control import (
+    ControlQueue,
+    PositiveControl,
+    PositiveControlSettings,
+    publish_result,
+)
 
 if TYPE_CHECKING:
     from kaine.modules.vox.coordination import SpeakingGate
 from kaine.modules.audition.acoustic import (
     AcousticEncoder,
     SpectralAcousticEncoder,
+    _decode_audio,
     arousal_to_window,
+    attend_recent,
     cosine_change,
     detect_speech,
     energy_dbfs,
@@ -119,12 +132,20 @@ class Audition(BaseModule):
         # forward-model prediction-error criterion (normalised >= 2.0). Makes the
         # alert embedding-scale-agnostic and self-calibrating.
         acoustic_change_alert_factor: float = 2.0,
+        # Tone-event salience rule. "categorical" is the default of paper A.2;
+        # "error_ratio" is the tone variant of the on arm (paper A.8).
+        tone_rule: str = "categorical",
+        entity_clock: Optional[EntityClock] = None,
+        positive_control: Optional[PositiveControlSettings] = None,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
             raise ValueError("baseline_salience must be in [0, 1]")
         if not 0.0 <= alert_salience <= 1.0:
             raise ValueError("alert_salience must be in [0, 1]")
+        if tone_rule not in ("categorical", "error_ratio"):
+            raise ValueError("tone_rule must be 'categorical' or 'error_ratio'")
+        self._tone_rule = str(tone_rule)
         self._stt_client: STTClient = stt_client or SpeachesClient(
             base_url=speaches_url, timeout_s=request_timeout_s
         )
@@ -160,6 +181,7 @@ class Audition(BaseModule):
             feature_dim=FEATURE_DIM,
             units=int(forward_model_units),
             auditory_buffer_size=int(auditory_buffer_size),
+            context_dim=CONTEXT_DIM,
         )
         self._prediction_error_window_size = max(1, int(prediction_error_window))
         self._prediction_errors: deque[float] = deque(maxlen=self._prediction_error_window_size)
@@ -195,6 +217,7 @@ class Audition(BaseModule):
                 feature_dim=self._acoustic_encoder.embedding_dim,
                 units=int(forward_model_units),
                 auditory_buffer_size=int(auditory_buffer_size),
+                context_dim=CONTEXT_DIM,
             )
         # Arousal seam (wired at boot, like the topos-arousal / affect seams): a
         # zero-arg callable returning the current Thymos arousal in [0, 1] that
@@ -205,6 +228,17 @@ class Audition(BaseModule):
         # Hypnos sleep suspension state.
         self._in_hypnos: bool = False
         self._hypnos_cursor: str = "$"
+        self._clock = entity_clock or EntityClock()
+        self._context = BroadcastContext(self._clock.now)
+        # Latest broadcast tick and context age when the pending prediction was formed (paper A.8).
+        self._prediction_stamp: tuple[Optional[int], Optional[float]] = (None, None)
+        # Positive control of the information-gain measure; study configuration only.
+        self._positive_control: Optional[PositiveControl] = (
+            PositiveControl("audition", positive_control)
+            if positive_control is not None and positive_control.enabled
+            else None
+        )
+        self._pc_queue = ControlQueue()  # Run control steps off the report path.
 
         # Carried-forward acoustic forward-model snapshots for encoders that are
         # not currently running. They are keyed by encoder model_id and never
@@ -258,15 +292,49 @@ class Audition(BaseModule):
         reaches the workspace. Memory-only; never writes audio."""
         assert self._acoustic_encoder is not None
         assert self._acoustic_forward_model is not None
+        # Easterbrook narrowing: arousal selects how much of the recent acoustic
+        # window reaches the encoder and energy estimator.
+        window = arousal_to_window(self._read_arousal(), window_range=self._arousal_window_range)
+        attended_bytes, attended_seconds = await asyncio.to_thread(
+            attend_recent, audio_bytes, window, sample_rate
+        )
+
         # Offload the spectral encoder to a thread so the audio loop does not
         # block the event loop (performance-test-coverage).
-        embedding = await asyncio.to_thread(self._acoustic_encoder.embed, audio_bytes, sample_rate)
-        change = cosine_change(embedding, self._prev_acoustic_embedding)
-        self._prev_acoustic_embedding = embedding
+        embedding = await asyncio.to_thread(self._acoustic_encoder.embed, attended_bytes, sample_rate)
+        # A non-finite embedding is skipped: it scores no change and leaves the
+        # previous embedding and the change history as they were.
+        skipped = not all(math.isfinite(v) for v in embedding)
+        if skipped:
+            change = 0.0
+        else:
+            change = cosine_change(embedding, self._prev_acoustic_embedding)
+            self._prev_acoustic_embedding = embedding
+        # One entity-clock reading per report, for the report and the positive control.
+        entity_time_s = self._clock.now()
+        context_gain: Optional[float] = None
+        null_prediction_error: Optional[float] = None
+        mean_prediction_error: Optional[float] = None
         # Pause adaptation during Hypnos sleep, mirroring Topos.
         self._acoustic_forward_model.suspended = self._in_hypnos
-        prediction_error = self._acoustic_forward_model.step(embedding)
-        self._acoustic_errors.append(prediction_error)
+        ctx = null = None
+        scored_stamp = self._prediction_stamp
+        if getattr(self._acoustic_forward_model, "context_dim", 0) > 0:
+            ctx, null = self._context.context_and_null(("audition",))
+            prediction_error = self._acoustic_forward_model.step(embedding, ctx, null)
+        else:
+            prediction_error = self._acoustic_forward_model.step(embedding)
+        if (
+            getattr(self._acoustic_forward_model, "context_dim", 0) > 0
+            and not getattr(self._acoustic_forward_model, "last_reading_skipped", False)
+        ):
+            self._prediction_stamp = self._context.last_reading
+        else:
+            self._prediction_stamp = (None, None)
+        # Only a defined error enters the running mean: a skipped reading has
+        # none, nor has the first reading after a skip (paper A.2).
+        if getattr(self._acoustic_forward_model, "last_error_defined", True):
+            self._acoustic_errors.append(prediction_error)
         # Normalise the error against its rolling mean (Chronos/Topos convention):
         # steady, predictable sound stays low-salience even at non-zero error.
         mean_err = (
@@ -275,11 +343,38 @@ class Audition(BaseModule):
             else 0.0
         )
         normalised = prediction_error / mean_err if mean_err > 0 else 0.0
+
+        # Cross-module broadcast information gain (Appendix A.8).
+        if (
+            getattr(self._acoustic_forward_model, "last_scored_had_context", False)
+            and getattr(self._acoustic_forward_model, "last_null_error", None) is not None
+            and mean_err > 0
+        ):
+            context_gain = (self._acoustic_forward_model.last_null_error - prediction_error) / mean_err
+            null_prediction_error = self._acoustic_forward_model.last_null_error
+            mean_prediction_error = mean_err
+
+        pc_args: Optional[tuple] = None
+        pc_suspended = False
+        # Positive control (study mode only): shadows of the forward model, never the live one.
+        # It is queued after the report is published, off the report path.
+        if self._positive_control is not None and getattr(self._acoustic_forward_model, "context_dim", 0) > 0:
+            pc_args = (
+                embedding,
+                ctx,
+                null,
+                context_gain,
+                mean_prediction_error,
+                entity_time_s,
+            )
+            pc_suspended = bool(getattr(self._acoustic_forward_model, "suspended", False))
+
         # Self-calibrating change alert (perception-drives-salience): the change is
         # judged RELATIVE to its own rolling baseline, not against an absolute
         # constant mis-scaled for one encoder, with the threshold surviving as a
         # small FLOOR guard. An acoustic onset alerts; steady sound stays baseline.
-        self._acoustic_change_history.append(change)
+        if not skipped:
+            self._acoustic_change_history.append(change)
         mean_change = (
             sum(self._acoustic_change_history) / len(self._acoustic_change_history)
             if self._acoustic_change_history
@@ -291,26 +386,48 @@ class Audition(BaseModule):
             and change >= self._acoustic_change_alert_threshold
         )
         alert = normalised >= 2.0 or change_alert
-        salience = self._alert_salience if alert else self._baseline_salience
+        graded = graded_intensity(self._baseline_salience, self._alert_salience, normalised)
+        salience = self._alert_salience if alert else graded
         self._acoustic_report_count += 1
         if alert:
             self._acoustic_alert_count += 1
-        window = arousal_to_window(self._read_arousal(), window_range=self._arousal_window_range)
-
         # Content-free energy estimate (dBFS), independent of the encoder.
-        energy_db = await asyncio.to_thread(energy_dbfs, audio_bytes)
+        energy_db = await asyncio.to_thread(energy_dbfs, attended_bytes)
 
+        # A report without a defined error publishes none, so consumers such as
+        # Thymos do not pool a made-up 0.
+        published_error: Optional[float] = (
+            None
+            if skipped or not getattr(self._acoustic_forward_model, "last_error_defined", True)
+            else prediction_error
+        )
         payload: dict[str, Any] = {
             "source_label": source_label,
             "change_score": change,
-            "prediction_error": prediction_error,
+            "prediction_error": published_error,
             "energy_dbfs": energy_db,
             # Normalised acoustic prediction error (rolling-window relative) —
             # exposed so the affect layer can scale arousal by acoustic surprise
             # (perception→arousal coupling).
             "normalised_error": normalised,
+            # Cross-module broadcast information gain and context age (Appendix A.8).
+            # Paired evaluations behind the information-gain measure.
+            "context_gain": context_gain,
+            "null_prediction_error": null_prediction_error,
+            "mean_prediction_error": mean_prediction_error,
+            "context_age_s": self._context.age_s(),
+            # The broadcast whose receipt preceded the scored prediction and the age
+            # of the context it used (paper A.8).
+            "prediction_broadcast_tick": scored_stamp[0],
+            "prediction_context_age_s": scored_stamp[1],
+            # The planned test counts a report only when the entity was awake and the
+            # report falls after T_learn, measured in entity time from the start of
+            # the run (paper Appendix A.8).
+            "entity_time_s": entity_time_s,
+            "awake": not self._in_hypnos,
             "encoder_model_id": self._acoustic_encoder.model_id,
             "attended_window": window,
+            "attended_seconds": attended_seconds,
             # Alert-level flag (perception-drives-salience task 4.2): lets the
             # Nexus perception panel count stimulus-driven acoustic events.
             "alert": alert,
@@ -327,6 +444,8 @@ class Audition(BaseModule):
             payload,
             salience=salience,
         )
+        if pc_args is not None:
+            await self._queue_positive_control(pc_args, pc_suspended)
 
     def playlist_audio_position(self) -> tuple[int, float] | None:
         """The audio feed's own delivered position, when a playlist stream is running.
@@ -380,6 +499,121 @@ class Audition(BaseModule):
         except asyncio.CancelledError:
             raise
 
+    async def _fail_positive_control(self, control: PositiveControl, reason: str) -> None:
+        """Publish a failure record and stop the control for this run."""
+        if self._positive_control is not control:
+            # The control already has a terminal record; do not publish another.
+            return
+        log.error(
+            "audition: positive control %s; it is switched off for this run",
+            reason,
+        )
+        try:
+            await publish_result(self._bus, control.failure_result())
+        except Exception:
+            log.error(
+                "audition: could not publish the positive control's failure record; "
+                "the run has no terminal record and cannot pass",
+                exc_info=True,
+            )
+        self._positive_control = None
+
+    async def _queue_positive_control(self, args: tuple, suspended: bool) -> None:
+        """Copy the live model and enqueue a control step after the report."""
+        control = self._positive_control
+        if control is None:
+            return
+        try:
+            control.prepare(self._acoustic_forward_model)
+        except Exception:
+            log.exception("audition: positive control failed")
+            await self._fail_positive_control(control, "raised")
+            return
+        if not self._pc_queue.submit(
+            functools.partial(self._run_positive_control, *args, suspended=suspended)
+        ):
+            await self._fail_positive_control(
+                control, "fell behind the reports; the queue is full"
+            )
+
+    async def _run_positive_control(
+        self,
+        x: list[float],
+        ctx: Optional[list[float]],
+        null: Optional[list[float]],
+        live_gain: Optional[float],
+        live_mean_error: Optional[float],
+        entity_time_s: float,
+        *,
+        suspended: bool,
+    ) -> None:
+        """Step the positive control after the live report and publish its running result."""
+        control = self._positive_control
+        if control is None:
+            return
+        try:
+            control.prepare(self._acoustic_forward_model)
+            result = await asyncio.to_thread(
+                control.after_report,
+                self._acoustic_forward_model,
+                x,
+                ctx,
+                null,
+                live_gain,
+                live_mean_error,
+                entity_time_s=entity_time_s,
+                # Wakefulness as it was at the report: the forward model is suspended
+                # exactly while Hypnos holds the processor asleep.
+                awake=not suspended,
+                suspended=suspended,
+            )
+            if result is not None and self._positive_control is control:
+                await publish_result(self._bus, result)
+        except Exception:
+            log.exception("audition: positive control failed")
+            await self._fail_positive_control(control, "raised")
+
+    async def finish_positive_control(self) -> None:
+        """Publish the control's terminal record and stop the control for this run.
+
+        The cycle calls it before the research log stops; module shutdown calls it
+        again, which then does nothing.
+        """
+        control = self._positive_control
+        if control is None:
+            # Never wait here: a step may still be stuck after the control failed.
+            await self._pc_queue.abort()
+            return
+        budget = control.settings.shutdown_drain_s
+        try:
+            await asyncio.wait_for(self._pc_queue.drain(), timeout=budget)
+        except asyncio.TimeoutError:
+            await self._pc_queue.abort()
+            await self._fail_positive_control(
+                control,
+                f"did not finish its queued steps within {budget} s at shutdown",
+            )
+            await self._pc_queue.abort()
+            return
+        if self._positive_control is not control:
+            # A queued step failed while draining; its failure record is the terminal one.
+            await self._pc_queue.abort()
+            return
+        try:
+            await publish_result(self._bus, control.final_result())
+        except Exception:
+            log.error(
+                "audition: could not publish the positive control's terminal record; "
+                "the run cannot pass",
+                exc_info=True,
+            )
+        self._positive_control = None
+        await self._pc_queue.abort()
+
+    async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
+        # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).
+        self._context.observe(snapshot)
+
     async def initialize(self) -> None:
         await super().initialize()
         # Seed the hypnos cursor from the stream tail before starting the loop,
@@ -420,6 +654,7 @@ class Audition(BaseModule):
             except Exception:
                 log.warning("live mic shutdown failed", exc_info=True)
         await super().shutdown()
+        await self.finish_positive_control()
         for closeable in (self._stt_client, self._emotion_classifier):
             try:
                 shutdown = getattr(closeable, "shutdown", None) or getattr(
@@ -459,6 +694,11 @@ class Audition(BaseModule):
             stream_factory=self._stream_factory,
         )
 
+    @property
+    def tone_rule(self) -> str:
+        """The configured tone-event salience rule."""
+        return self._tone_rule
+
     async def process_audio(
         self,
         audio_bytes: bytes,
@@ -488,8 +728,6 @@ class Audition(BaseModule):
             if not is_speech:
                 return None, None
 
-        start_time = time.monotonic()
-
         emo_task = asyncio.create_task(
             self._emotion_classifier.classify(audio_bytes, sample_rate=sample_rate)
         )
@@ -509,8 +747,6 @@ class Audition(BaseModule):
             stt_result_or_exc = None
             (emo_result_or_exc,) = await asyncio.gather(emo_task, return_exceptions=True)
 
-        duration_s = time.monotonic() - start_time
-
         # ------------------------------------------------------------------
         # Forward model step: build feature vector from emotion result.
         # ------------------------------------------------------------------
@@ -523,18 +759,38 @@ class Audition(BaseModule):
         # Compute a simple mean energy from the audio bytes (in-memory only).
         mean_energy = await asyncio.to_thread(_estimate_energy, audio_bytes)
 
+        # Utterance duration used as a forward-model feature (not latency).
+        utterance_s = await asyncio.to_thread(
+            lambda b, sr: len(_decode_audio(b)) / sr if sr > 0 else 0.0,
+            audio_bytes, sample_rate,
+        )
+
         feature_vec = build_feature_vector(
             emo_scores_for_fm,
             CATEGORIES,
-            duration_s=min(duration_s, 60.0) / 60.0,  # normalise to [0, 1] over 60 s
+            duration_s=min(utterance_s, 30.0) / 30.0,  # normalise over the 30 s maximum utterance length
             mean_energy=mean_energy,
         )
 
         # Pause adaptation during Hypnos sleep, mirroring Topos.
         self._forward_model.suspended = self._in_hypnos
-        prediction_error = self._forward_model.step(feature_vec)
-        self._prediction_errors.append(prediction_error)
+        if getattr(self._forward_model, "context_dim", 0) > 0:
+            ctx = self._context.vector()
+            prediction_error = self._forward_model.step(feature_vec, ctx)
+        else:
+            prediction_error = self._forward_model.step(feature_vec)
+        # Only a defined error enters the running mean: a skipped reading has
+        # none, nor has the first reading after a skip (paper A.2).
+        if getattr(self._forward_model, "last_error_defined", True):
+            self._prediction_errors.append(prediction_error)
+        tone_error_defined = getattr(self._forward_model, "last_error_defined", True)
         error_window = list(self._prediction_errors)
+        # Running ratio of the tone path's error over W_P, 0 when the error is
+        # not defined (paper A.2).
+        tone_ratio = 0.0
+        if tone_error_defined and error_window:
+            mean_err = sum(error_window) / len(error_window)
+            tone_ratio = prediction_error / mean_err if mean_err > 0 else 0.0
 
         # ------------------------------------------------------------------
         # Prosody (gated by prosody_enabled).
@@ -567,6 +823,7 @@ class Audition(BaseModule):
                 len(audio_bytes),
                 prediction_error=prediction_error,
                 error_window=error_window,
+                error_defined=tone_error_defined,
             )
 
         emo_result: Optional[EmotionResult] = None
@@ -574,6 +831,7 @@ class Audition(BaseModule):
             await self._publish_emotion_error(
                 source_label=source_label,
                 exc=emo_result_or_exc,
+                error_ratio=tone_ratio,
             )
         else:
             emo_result = emo_result_or_exc
@@ -581,7 +839,8 @@ class Audition(BaseModule):
                 emo_result,
                 source_label,
                 prediction_error=prediction_error,
-                error_window=error_window,
+                error_ratio=tone_ratio,
+                error_defined=tone_error_defined,
             )
 
         return stt_result, emo_result
@@ -657,6 +916,7 @@ class Audition(BaseModule):
         *,
         prediction_error: float = 0.0,
         error_window: Optional[list[float]] = None,
+        error_defined: bool = True,
     ) -> None:
         salience = self._error_weighted_salience(
             self._baseline_salience,
@@ -672,7 +932,7 @@ class Audition(BaseModule):
                 "sample_rate": int(sample_rate),
                 "audio_bytes_length": int(audio_bytes_length),
                 "latency_ms": result.latency_ms,
-                "prediction_error": prediction_error,
+                "prediction_error": prediction_error if error_defined else None,
                 "backend": self._backend,
             },
             salience=salience,
@@ -697,6 +957,7 @@ class Audition(BaseModule):
                 "latency_ms": 0.0,
                 "error": f"{type(exc).__name__}: {exc}",
                 "backend": self._backend,
+                "alert": True,
             },
             salience=self._alert_salience,
         )
@@ -707,30 +968,35 @@ class Audition(BaseModule):
         source_label: str,
         *,
         prediction_error: float = 0.0,
-        error_window: Optional[list[float]] = None,
+        error_ratio: float = 0.0,
+        error_defined: bool = True,
     ) -> None:
-        # Base salience: alert for non-neutral emotions (existing behaviour).
-        base_salience = (
-            self._baseline_salience if result.category == "neutral" else self._alert_salience
+        # Categorical rule of A.2: a non-neutral tone is an alert. The tone
+        # variant of A.8 grades every tone event by the error ratio alone.
+        degraded = bool(result.raw and result.raw.get("degraded"))
+        alert = self._tone_rule == "categorical" and result.category != "neutral"
+        graded = graded_intensity(
+            self._baseline_salience, self._alert_salience, error_ratio
         )
-        salience = self._error_weighted_salience(
-            base_salience,
-            prediction_error,
-            error_window or [],
-        )
+        salience = self._alert_salience if alert else graded
         payload: dict = {
             "category": result.category,
+            "alert": alert,
             "confidence": result.confidence,
             "scores": result.scores,
             "model": result.model,
             "source_label": source_label,
             "latency_ms": result.latency_ms,
-            "prediction_error": prediction_error,
+            "prediction_error": prediction_error if error_defined else None,
+            "tone_error_ratio": error_ratio,
+            "tone_rule": self._tone_rule,
+            "classified": not degraded,
         }
-        # Surface degraded flag so downstream consumers (e.g. Empatheia) can
-        # tell that the emotion model did not actually run — the category/
-        # confidence values are placeholders, not a real classification.
-        if result.raw and result.raw.get("degraded"):
+        # Surface the degraded flag so downstream consumers (for example
+        # Empatheia) can tell that the emotion model did not actually run. The
+        # category and confidence values are placeholders, not a real
+        # classification.
+        if degraded:
             payload["degraded"] = True
         await self.publish(
             "audition.emotion",
@@ -738,19 +1004,39 @@ class Audition(BaseModule):
             salience=salience,
         )
 
-    async def _publish_emotion_error(self, *, source_label: str, exc: BaseException) -> None:
+    async def _publish_emotion_error(
+        self,
+        *,
+        source_label: str,
+        exc: BaseException,
+        error_ratio: float = 0.0,
+    ) -> None:
+        # The default categorical rule keeps the existing alert behaviour. The
+        # tone variant of A.8 grades every tone event by the error ratio alone.
+        graded = self._tone_rule == "error_ratio"
+        payload: dict = {
+            "category": "neutral",
+            "alert": not graded,
+            "confidence": 0.0,
+            "scores": {c: (1.0 if c == "neutral" else 0.0) for c in CATEGORIES},
+            "model": self._emotion_classifier.model_id,
+            "source_label": source_label,
+            "latency_ms": 0.0,
+            "error": f"{type(exc).__name__}: {exc}",
+            "tone_rule": self._tone_rule,
+            "classified": False,
+        }
+        if graded:
+            payload["tone_error_ratio"] = error_ratio
+            salience = graded_intensity(
+                self._baseline_salience, self._alert_salience, error_ratio
+            )
+        else:
+            salience = self._alert_salience
         await self.publish(
             "audition.emotion",
-            {
-                "category": "neutral",
-                "confidence": 0.0,
-                "scores": {c: (1.0 if c == "neutral" else 0.0) for c in CATEGORIES},
-                "model": self._emotion_classifier.model_id,
-                "source_label": source_label,
-                "latency_ms": 0.0,
-                "error": f"{type(exc).__name__}: {exc}",
-            },
-            salience=self._alert_salience,
+            payload,
+            salience=salience,
         )
 
     def serialize(self) -> dict[str, Any]:
@@ -758,6 +1044,7 @@ class Audition(BaseModule):
             "stt_model": self._stt_model,
             "emotion_model_id": self._emotion_classifier.model_id,
             "forward_model": self._forward_model.state_dict(),
+            "forward_model_features": "utterance_duration_v2",
             "auditory_buffer_summary": self._forward_model.buffer_summary(),
         }
         # Carry forward snapshots for any encoders that are not currently running.
@@ -777,14 +1064,20 @@ class Audition(BaseModule):
 
     def deserialize(self, state: dict[str, Any]) -> None:
         if "forward_model" in state:
-            fm_state = state["forward_model"]
-            if self._forward_model.matches_state_shape(fm_state):
-                self._forward_model.load_state_dict(fm_state)
+            if state.get("forward_model_features") == "utterance_duration_v2":
+                fm_state = state["forward_model"]
+                if self._forward_model.matches_state_shape(fm_state):
+                    self._forward_model.load_state_dict(fm_state)
+                else:
+                    log.warning(
+                        "audition: discarding speech-path forward-model checkpoint — "
+                        "its tensor shapes do not match the running model; the online "
+                        "forward model will re-learn from scratch"
+                    )
             else:
                 log.warning(
-                    "audition: discarding speech-path forward-model checkpoint — "
-                    "its tensor shapes do not match the running model; the online "
-                    "forward model will re-learn from scratch"
+                    "audition: discarding speech-path forward-model checkpoint — it "
+                    "predates the utterance-duration feature; the model will re-learn"
                 )
 
         acoustic_models = state.get("acoustic_forward_models")

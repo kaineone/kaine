@@ -33,6 +33,8 @@ date._
       (`acoustic.py:arousal_to_window`, `module.py:_perceive_acoustic`), the
       design's likely-(a)-first; source separation (b) is Phase 2 (task 2.1),
       still the lead's call to green-light._
+      _2026-10-08: the window was computed and published but not applied to the encoded
+      audio until `audition-window-duration-bands`._
       **Locked 2026-10-05 by the lead: (a).** Source separation is a separate
       future change with its own model and design (design §Amendment).
 - [x] 0.3 Speech gating: keep the voice-activity detector to route the STT+emotion

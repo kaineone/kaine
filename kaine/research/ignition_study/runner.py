@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Study runner: process control, resume, locking, and step recording."""
@@ -505,6 +505,9 @@ class StudyRunner:
         # The child's data root is its line directory via the overlay; never let
         # an ambient KAINE_DATA_ROOT override that sandbox.
         env.pop("KAINE_DATA_ROOT", None)
+        # The step's overlay is its study configuration; an ambient KAINE_STUDY
+        # would override it.
+        env.pop("KAINE_STUDY", None)
         env["KAINE_RESEARCH_MODE"] = "1"
 
         username, password = resolve_redis_auth(

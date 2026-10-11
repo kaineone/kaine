@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Canonical bus stream names.
@@ -15,8 +15,7 @@ from kaine.bus.schema import WORKSPACE_STREAM, module_stream
 
 # --- Workspace, cycle and action selection --------------------------------
 
-# WORKSPACE_STREAM (imported above) is the conscious broadcast, written by
-# Syneidesis.
+# WORKSPACE_STREAM (imported above) is the broadcast, written by Syneidesis.
 #: Tick, rate and time-scale events from the cycle engine.
 CYCLE_STREAM = "cycle.out"
 #: Intents chosen by Volition.

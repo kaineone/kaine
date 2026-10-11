@@ -1,17 +1,26 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import math
 from collections import deque
 from typing import Any, Callable, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
+from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
+from kaine.modules.context import CONTEXT_DIM, BroadcastContext
+from kaine.modules.positive_control import (
+    ControlQueue,
+    PositiveControl,
+    PositiveControlSettings,
+    publish_result,
+)
 from kaine.modules.soma.detector import (
     AnomalyDetector,
     ThresholdAnomalyDetector,
@@ -109,6 +118,7 @@ class Soma(BaseModule):
         self_rhythm: Any | None = None,
         self_rhythm_step_hz: float = 20.0,
         maternal_drive: Callable[[], float] | None = None,
+        positive_control: Optional[PositiveControlSettings] = None,
     ) -> None:
         super().__init__(bus)
         if read_interval_s <= 0:
@@ -129,6 +139,19 @@ class Soma(BaseModule):
         )
         self._read_interval_s = float(read_interval_s)
         self._clock = entity_clock or EntityClock()
+        # Accessed broadcast prediction context for Soma (paper Appendix A.1).
+        self._context = BroadcastContext(self._clock.now)
+        # Latest broadcast tick and context age when the pending prediction was formed (paper A.8).
+        self._prediction_stamp: tuple[Optional[int], Optional[float]] = (None, None)
+        # Positive control of the information-gain measure; study configuration only.
+        self._positive_control: Optional[PositiveControl] = (
+            PositiveControl("soma", positive_control)
+            if positive_control is not None and positive_control.enabled
+            else None
+        )
+        self._pc_queue = ControlQueue()  # Run control steps off the report path.
+        self._feature_layout: int = 2
+        self._last_read_time: float | None = None
         self._weights = dict(weights) if weights is not None else dict(DEFAULT_WEIGHTS)
         self._cycle_latency_target_ms = float(cycle_latency_target_ms)
         self._baseline_salience = float(baseline_salience)
@@ -143,10 +166,14 @@ class Soma(BaseModule):
                 units=int(forward_model_units),
                 backend=cfc_backend,
                 seed=reservoir_seed,
+                context_dim=CONTEXT_DIM,
             )
         else:
             self._forward_model = forward_model
         self._prediction_error_window: deque[float] = deque(
+            maxlen=int(prediction_error_window)
+        )
+        self._action_error_window: deque[float] = deque(
             maxlen=int(prediction_error_window)
         )
         self._last_prediction_error: float = 0.0
@@ -272,10 +299,11 @@ class Soma(BaseModule):
         return not self._warmup_conditions_met()
 
     def _warming_baseline(self, prior_errors: list[float]) -> float:
-        """The forward model's current typical error (rolling mean of the prior
-        window). Cold-start error hovers near this baseline uniformly, so
-        subtracting it strips the model-ignorance contribution while genuine
-        error *above* the baseline still accrues into fatigue."""
+        """Mean of the accumulator's own recent inputs (unexpected error, or
+        raw error during a hard breach) before this tick, so the damping
+        compares like with like. Cold-start error hovers near this baseline
+        uniformly, so subtracting it strips the model-ignorance contribution
+        while genuine error *above* the baseline still accrues into fatigue."""
         if not prior_errors:
             return 0.0
         return sum(prior_errors) / len(prior_errors)
@@ -305,6 +333,7 @@ class Soma(BaseModule):
 
     async def shutdown(self) -> None:
         await super().shutdown()
+        await self.finish_positive_control()
         try:
             await self._reader.shutdown()
         except Exception:
@@ -340,6 +369,123 @@ class Soma(BaseModule):
         """Read-only access to the maternal drive provider."""
         return self._maternal_drive
 
+    async def _fail_positive_control(self, control: PositiveControl, reason: str) -> None:
+        """Publish a failure record and stop the control for this run."""
+        if self._positive_control is not control:
+            # The control already has a terminal record; do not publish another.
+            return
+        log.error(
+            "soma: positive control %s; it is switched off for this run",
+            reason,
+        )
+        try:
+            await publish_result(self._bus, control.failure_result())
+        except Exception:
+            log.error(
+                "soma: could not publish the positive control's failure record; "
+                "the run has no terminal record and cannot pass",
+                exc_info=True,
+            )
+        self._positive_control = None
+
+    async def _queue_positive_control(self, args: tuple, suspended: bool) -> None:
+        """Copy the live model and enqueue a control step after the report."""
+        control = self._positive_control
+        if control is None:
+            return
+        try:
+            control.prepare(self._forward_model)
+        except Exception:
+            log.exception("soma: positive control failed")
+            await self._fail_positive_control(control, "raised")
+            return
+        if not self._pc_queue.submit(
+            functools.partial(self._run_positive_control, *args, suspended=suspended)
+        ):
+            await self._fail_positive_control(
+                control, "fell behind the reports; the queue is full"
+            )
+
+    async def _run_positive_control(
+        self,
+        x: list[float],
+        ctx: Optional[list[float]],
+        null: Optional[list[float]],
+        live_gain: Optional[float],
+        live_mean_error: Optional[float],
+        entity_time_s: float,
+        timespan: Optional[float],
+        *,
+        suspended: bool,
+    ) -> None:
+        """Step the positive control after the live report and publish its running result."""
+        control = self._positive_control
+        if control is None:
+            return
+        try:
+            control.prepare(self._forward_model)
+            result = await asyncio.to_thread(
+                control.after_report,
+                self._forward_model,
+                x,
+                ctx,
+                null,
+                live_gain,
+                live_mean_error,
+                entity_time_s=entity_time_s,
+                # Wakefulness as it was at the report: the forward model is suspended
+                # exactly while Hypnos holds the processor asleep.
+                awake=not suspended,
+                timespan=timespan,
+                suspended=suspended,
+            )
+            if result is not None and self._positive_control is control:
+                await publish_result(self._bus, result)
+        except Exception:
+            log.exception("soma: positive control failed")
+            await self._fail_positive_control(control, "raised")
+
+    async def finish_positive_control(self) -> None:
+        """Publish the control's terminal record and stop the control for this run.
+
+        The cycle calls it before the research log stops; module shutdown calls it
+        again, which then does nothing.
+        """
+        control = self._positive_control
+        if control is None:
+            # Never wait here: a step may still be stuck after the control failed.
+            await self._pc_queue.abort()
+            return
+        budget = control.settings.shutdown_drain_s
+        try:
+            await asyncio.wait_for(self._pc_queue.drain(), timeout=budget)
+        except asyncio.TimeoutError:
+            await self._pc_queue.abort()
+            await self._fail_positive_control(
+                control,
+                f"did not finish its queued steps within {budget} s at shutdown",
+            )
+            await self._pc_queue.abort()
+            return
+        if self._positive_control is not control:
+            # A queued step failed while draining; its failure record is the terminal one.
+            await self._pc_queue.abort()
+            return
+        try:
+            await publish_result(self._bus, control.final_result())
+        except Exception:
+            log.error(
+                "soma: could not publish the positive control's terminal record; "
+                "the run cannot pass",
+                exc_info=True,
+            )
+        self._positive_control = None
+        await self._pc_queue.abort()
+
+    async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
+        # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).
+        self._context.observe(snapshot)
+
     async def tick_once(self) -> dict[str, Any]:
         """Read metrics, evaluate, update forward model / fatigue / regulation, publish."""
         metrics = await self._reader.read_metrics()
@@ -354,12 +500,13 @@ class Soma(BaseModule):
         feature_vec = metrics_to_feature_vector(
             metrics,
             feature_dim=DEFAULT_FEATURE_DIM,
+            layout=self._feature_layout,
             cycle_latency_target_ms=self._cycle_latency_target_ms,
         )
 
         # --- Self-rhythm interoception (fills zero-padded feature slots) ---
         # slots 4..6 keep the width at 8 for the wetware interoceptive model;
-        # sin/cos avoid a jump where the phase wraps. slot 7 stays 0.0.
+        # sin/cos avoid a jump where the phase wraps; slot 7 carries GPU memory use.
         if self._self_rhythm is not None:
             rhythm_state = self.self_rhythm_state()
             if rhythm_state is not None:
@@ -367,19 +514,85 @@ class Soma(BaseModule):
                 feature_vec[4] = 0.5 + 0.5 * math.sin(phase)
                 feature_vec[5] = 0.5 + 0.5 * math.cos(phase)
                 feature_vec[6] = min(1.0, 2.0 * amplitude)
-                # slot 7 intentionally stays 0.0
 
         if self._in_hypnos:
             self._forward_model.suspended = True
         else:
             self._forward_model.suspended = False
-        # The window as it stood BEFORE this tick's error — the warming baseline
-        # is computed against prior errors so a single spike still reads as a
-        # spike (see _warming_baseline / the fatigue dampening below).
-        prior_errors = list(self._prediction_error_window)
-        prediction_error = self._forward_model.step(feature_vec)
+        # The action-error window as it stood BEFORE this tick's error — the
+        # warming baseline is computed against prior action errors so a single
+        # spike still reads as a spike (see _warming_baseline / the fatigue
+        # dampening below).
+        prior_action_errors = list(self._action_error_window)
+
+        now_read = self._clock.now()
+        if self._last_read_time is None:
+            ts = 1.0
+        else:
+            ts = min(10.0, max(0.0, (now_read - self._last_read_time) / self._read_interval_s))
+        self._last_read_time = now_read
+
+        ctx = null = None
+        scored_stamp = self._prediction_stamp
+        if getattr(self._forward_model, "context_dim", 0) > 0:
+            ctx, null = self._context.context_and_null(("soma", "lingua"))
+            if getattr(self._forward_model, "accepts_timespan", False):
+                prediction_error = self._forward_model.step(
+                    feature_vec, timespan=ts, context=ctx, null_context=null
+                )
+            else:
+                prediction_error = self._forward_model.step(
+                    feature_vec, context=ctx, null_context=null
+                )
+        else:
+            if getattr(self._forward_model, "accepts_timespan", False):
+                prediction_error = self._forward_model.step(feature_vec, timespan=ts)
+            else:
+                prediction_error = self._forward_model.step(feature_vec)
         self._last_prediction_error = prediction_error
-        self._prediction_error_window.append(prediction_error)
+        if (
+            getattr(self._forward_model, "context_dim", 0) > 0
+            and not getattr(self._forward_model, "last_reading_skipped", False)
+        ):
+            self._prediction_stamp = self._context.last_reading
+        else:
+            self._prediction_stamp = (None, None)
+        # Only a defined error enters the running mean: a skipped reading has
+        # none, nor has the first reading after a skip (paper A.5).
+        if getattr(self._forward_model, "last_error_defined", True):
+            self._prediction_error_window.append(prediction_error)
+
+        context_gain: Optional[float] = None
+        null_prediction_error: Optional[float] = None
+        mean_prediction_error: Optional[float] = None
+        if (
+            getattr(self._forward_model, "last_scored_had_context", False)
+            and self._forward_model.last_null_error is not None
+            and self._prediction_error_window
+        ):
+            mean_err = sum(self._prediction_error_window) / len(self._prediction_error_window)
+            if mean_err > 0.0:
+                context_gain = (
+                    self._forward_model.last_null_error - prediction_error
+                ) / mean_err
+                null_prediction_error = self._forward_model.last_null_error
+                mean_prediction_error = mean_err
+
+        pc_args: Optional[tuple] = None
+        pc_suspended = False
+        # Positive control (study mode only): shadows of the forward model, never the live one.
+        # It is queued after the report is published, off the report path.
+        if self._positive_control is not None and getattr(self._forward_model, "context_dim", 0) > 0:
+            pc_args = (
+                feature_vec,
+                ctx,
+                null,
+                context_gain,
+                mean_prediction_error,
+                now_read,
+                ts if getattr(self._forward_model, "accepts_timespan", False) else None,
+            )
+            pc_suspended = bool(getattr(self._forward_model, "suspended", False))
 
         # --- Subjective clock / warm-up bookkeeping ---
         # Subjective time: the fatigue dt integral and the regulation
@@ -403,7 +616,11 @@ class Soma(BaseModule):
         self._last_expected_time = now
         learn = not bool(getattr(self._forward_model, "suspended", False))
 
-        if not hasattr(self._forward_model, "last_residuals"):
+        if not getattr(self._forward_model, "last_error_defined", True):
+            # A reading without a defined error neither reports nor teaches an
+            # unexpected error, mirroring the built-in model's null residuals.
+            unexpected_error = 0.0
+        elif not hasattr(self._forward_model, "last_residuals"):
             residuals = (prediction_error,)
             unexpected_error = self._expected_error.unexpected(residuals, dt, learn=learn)
         elif self._forward_model.last_residuals is None:
@@ -451,7 +668,7 @@ class Soma(BaseModule):
         # prediction_error — the "cry" — is untouched and published in full below.
         fatigue_input = action_error
         if gate:
-            baseline = self._warming_baseline(prior_errors)
+            baseline = self._warming_baseline(prior_action_errors)
             fatigue_input = max(0.0, action_error - baseline)
             if fatigue_input < action_error:
                 log.debug(
@@ -472,6 +689,10 @@ class Soma(BaseModule):
                 "no premature maintenance forced",
                 prediction_error,
             )
+        # Record this tick's action error for future warm-up baselines. It is
+        # intentionally NOT included in the baseline used for this tick.
+        if math.isfinite(action_error):
+            self._action_error_window.append(action_error)
 
         # --- Regulation advisory (withheld during warm-up unless overridden) ---
         advisory = self._regulation.update(action_error, now=now)
@@ -485,7 +706,29 @@ class Soma(BaseModule):
             "metrics": metrics,
             "wellness": wellness,
             "alerts": list(alert.keys),
-            "prediction_error": prediction_error,
+            "alert": bool(alert.is_alert),
+            # A reading without a defined error (skipped, or the first after a
+            # skip) publishes none, so no consumer averages a made-up 0.
+            "prediction_error": (
+                prediction_error
+                if getattr(self._forward_model, "last_error_defined", True)
+                else None
+            ),
+            # cross-module broadcast information gain, paper Appendix A.8
+            # paired evaluations behind the information-gain measure
+            "context_gain": context_gain,
+            "null_prediction_error": null_prediction_error,
+            "mean_prediction_error": mean_prediction_error,
+            "context_age_s": self._context.age_s(),
+            # The broadcast whose receipt preceded the scored prediction and the age
+            # of the context it used (paper A.8).
+            "prediction_broadcast_tick": scored_stamp[0],
+            "prediction_context_age_s": scored_stamp[1],
+            # The planned test counts a report only when the entity was awake and the
+            # report falls after T_learn, measured in entity time from the start of
+            # the run (paper Appendix A.8).
+            "entity_time_s": now_read,
+            "awake": not self._in_hypnos,
             "unexpected_error": unexpected_error,
             "fatigue_value": self._fatigue.value,
             "fatigue_threshold": self._fatigue.threshold,
@@ -502,6 +745,8 @@ class Soma(BaseModule):
         salience = self._alert_salience if alert.is_alert else error_salience
         await self.publish("soma.report", payload, salience=salience)
         self._self_rhythm_own_drive = float(salience)
+        if pc_args is not None:
+            await self._queue_positive_control(pc_args, pc_suspended)
 
         # --- Publish soma.fatigue if threshold newly crossed ---
         if fatigue_crossed and not self._fatigue_threshold_emitted:
@@ -512,6 +757,7 @@ class Soma(BaseModule):
                     "value": self._fatigue.value,
                     "threshold": self._fatigue.threshold,
                     "crossed": True,
+                    "alert": True,
                 },
                 salience=self._alert_salience,
             )
@@ -524,7 +770,7 @@ class Soma(BaseModule):
         if advisory is not None:
             await self.publish(
                 "soma.regulation",
-                advisory,
+                {**advisory, "alert": True},
                 salience=self._alert_salience,
             )
 
@@ -724,6 +970,7 @@ class Soma(BaseModule):
         state: dict[str, Any] = {
             "cycle_cursor": self._cycle_cursor,
             "read_interval_s": self._read_interval_s,
+            "feature_layout": self._feature_layout,
             "forward_model": self._forward_model.state_dict(),
             "fatigue": self._fatigue.state_dict(),
         }
@@ -736,6 +983,7 @@ class Soma(BaseModule):
         return state
 
     def deserialize(self, state: dict[str, Any]) -> None:
+        self._feature_layout = int(state.get("feature_layout", 1))
         if "cycle_cursor" in state:
             self._cycle_cursor = str(state["cycle_cursor"])
         if "read_interval_s" in state:
@@ -752,6 +1000,7 @@ class Soma(BaseModule):
                     lr=getattr(fm, "lr", 1e-3),
                     backend=getattr(fm, "backend", "numpy"),
                     seed=seed,
+                    context_dim=getattr(fm, "context_dim", 0),
                 )
             elif hasattr(fm, "reservoir_seed"):
                 log.warning(

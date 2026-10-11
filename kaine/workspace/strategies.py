@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from __future__ import annotations
@@ -66,6 +66,9 @@ class StaticThymosModulator:
         if not 0.0 <= default <= 1.0:
             raise ValueError("default must be in [0, 1]")
         self._default = default
+
+    def contrast_gain(self) -> float:
+        return 0.0
 
     async def modulate(self, event: Event) -> float:
         return self._default

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Consolidation divergence signal — the cheap, continuous organ-level
@@ -67,8 +67,8 @@ class _FakeMnemos:
     async def consolidate_now(self) -> int:
         return 0
 
-    def downscale_activations(self, factor: float) -> int:
-        return 0
+    async def downscale(self, protect=()):
+        return {"n_new": 0, "factor": 1.0, "protected": len(list(protect)), "total_before": 0.0, "total_after": 0.0, "silent": 0}
 
     async def replay_now(self) -> list:
         return []

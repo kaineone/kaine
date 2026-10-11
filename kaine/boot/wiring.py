@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Oscillators, the coherence scorer and salience factors, and the cross-module wiring the cycle applies after the registry is built."""
@@ -6,10 +6,8 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from typing import Any, Mapping, Optional
 
-if TYPE_CHECKING:
-    pass
 from kaine.boot.common import _effective_hot_swap_mode
 from kaine.boot.errors import ConfigurationError, _require_keys
 from kaine.defaults import lingua_section_api_key
@@ -78,6 +76,8 @@ _SYNEIDESIS_ALLOWED_KEYS: set[str] = {
     "novelty_window",
     "salience_thymos_factor",
     "salience_goal_factor",
+    "arousal_contrast_gain",
+    "arm",  # the arm of the planned test, read by the cycle
 }
 
 # Shipped default source per salience factor (wire-salience-goal-thymos, STAGED
@@ -125,7 +125,19 @@ def make_salience_factors(
     goal_factor = str(section.get("salience_goal_factor", _SALIENCE_GOAL_FACTOR_DEFAULT))
 
     if thymos_factor == "state_modulator":
-        thymos_modulator = StateModulator(affect_provider.dimensional_state)
+        arousal_contrast_gain = float(section.get("arousal_contrast_gain", 8.0))
+        if arousal_contrast_gain < 0.0:
+            raise ConfigurationError(
+                "[syneidesis].arousal_contrast_gain must be >= 0"
+            )
+        baseline_arousal = float(
+            (kaine_config.get("thymos") or {}).get("baseline_arousal", 0.3)
+        )
+        thymos_modulator = StateModulator(
+            affect_provider.dimensional_state,
+            contrast_gain_max=arousal_contrast_gain,
+            baseline_arousal=baseline_arousal,
+        )
     elif thymos_factor == "static":
         thymos_modulator = StaticThymosModulator()
     else:
@@ -167,7 +179,6 @@ def make_salience_factors(
         )
 
     return thymos_modulator, goal_scorer, downgraded_factors
-
 
 def _wire_oscillators(registry: ModuleRegistry, kaine_config: dict[str, Any]) -> None:
     """Attach a live `ModuleOscillator` to every registered module when the

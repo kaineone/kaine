@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Static and runtime tests for the cycle's boot phase runner."""
@@ -47,6 +47,7 @@ EXPECTED_PHASE_ORDER = [
 EXPECTED_RETURNS = {
     "_phase_stage": {"IDENTITY_REFUSED_EXIT"},
     "_phase_preconditions": {"3", "INDIVIDUATION_REFUSED_EXIT"},
+    "_phase_run_identity": {"PLANNED_TEST_REFUSED_EXIT"},
     "_phase_gates": {"4", "ORGAN_GATE_REFUSED_EXIT"},
     "_phase_bus": {"WELFARE_PRODUCER_REFUSED_EXIT"},
     "_phase_womb_hold": {"0"},
@@ -123,8 +124,9 @@ def test_every_ctx_attribute_is_boot_context_field() -> None:
             for a in fn.args.args + fn.args.kwonlyargs
         )
     ]
-    # the phases, the run loop, shutdown, and the failed-boot release
-    assert len(boot_fns) == len(EXPECTED_PHASE_ORDER) + 3
+    # the phases, the run loop, shutdown, the failed-boot release, and the
+    # utterance-outcome observer start (called from _phase_watchers)
+    assert len(boot_fns) == len(EXPECTED_PHASE_ORDER) + 4
     for fn in boot_fns:
         for node in ast.walk(fn):
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "ctx":

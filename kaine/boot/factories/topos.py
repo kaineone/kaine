@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """The Topos factory."""
@@ -13,6 +13,7 @@ from kaine.boot.perception_feed import _build_perception_feed_video_factory
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
+from kaine.modules.positive_control import PositiveControlSettings
 
 
 def make_topos(
@@ -83,8 +84,10 @@ def make_topos(
         "perception_feed",
     }
     feed_section = dict(section.pop("perception_feed", {}) or {})
+    pc_section = section.pop("positive_control", None)
     _require_keys(section, allowed - {"perception_feed"})
     kwargs: dict[str, Any] = {}
+    kwargs["positive_control"] = PositiveControlSettings.from_config(pc_section)
     if "encoder_backend" in section:
         kwargs["encoder_backend"] = section["encoder_backend"]
     if "encoder_model_id" in section:

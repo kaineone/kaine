@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Post-run record loader for run admissibility / log validation.
@@ -225,10 +225,65 @@ def load_run_records(
     return out
 
 
+def load_records_for_runs(
+    run_ids: Iterable[str],
+    *,
+    root: Path | str = DEFAULT_ROOT,
+) -> dict[str, RunRecords]:
+    """Load records for several runs in a single pass over sink files.
+
+    Walks all ``*.jsonl`` files once, decrypts + parses each line, and appends
+    records whose ``run_id`` is in ``run_ids`` to that run's ``RunRecords``. A
+    line that cannot be decrypted or parsed increments ``parse_errors`` on every
+    returned run, because it cannot be attributed to a single run. Every
+    requested run id is returned, even if its records are empty.
+    """
+    from kaine.security.crypto import get_state_encryptor
+
+    root = resolve(root)
+    encryptor = get_state_encryptor()
+    # Materialize run_ids first because the iterable is consumed twice below.
+    run_ids = [str(run_id) for run_id in run_ids]
+    targets = set(run_ids)
+    out = {run_id: RunRecords(run_id=run_id) for run_id in run_ids}
+
+    for path in _iter_jsonl_files(root):
+        stream = _stream_name_for(path)
+        try:
+            # Stream the file line-by-line rather than reading it whole into RAM.
+            with path.open("r", encoding="utf-8") as fh:
+                for line in fh:
+                    if not line.strip():
+                        continue
+                    try:
+                        plain = encryptor.decrypt_text(line.rstrip("\n"))
+                        record = json.loads(plain)
+                    except Exception:
+                        for run_records in out.values():
+                            run_records.parse_errors += 1
+                        continue
+                    if not isinstance(record, dict):
+                        for run_records in out.values():
+                            run_records.parse_errors += 1
+                        continue
+                    rid = str(record.get("run_id", ""))
+                    if rid not in targets:
+                        continue
+                    out[rid].by_stream.setdefault(stream, []).append(record)
+        except OSError:
+            # An unreadable file is a parse failure for the whole file.
+            for run_records in out.values():
+                run_records.parse_errors += 1
+            continue
+
+    return out
+
+
 __all__ = [
     "RunRecords",
     "RunDiscovery",
     "load_run_records",
+    "load_records_for_runs",
     "discover_run_ids",
     "DEFAULT_ROOT",
 ]

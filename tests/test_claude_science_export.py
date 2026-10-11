@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for the Claude Science export adapter.
@@ -306,7 +306,10 @@ def test_shipped_config_claude_science_disabled():
 # ---------------------------------------------------------------------------
 
 
-def test_cli_claude_science_eof_fails_safe(tmp_path: Path):
+def test_cli_claude_science_eof_fails_safe(tmp_path: Path, monkeypatch):
+    # Isolate from the repo's operator config (chdir so the relative
+    # OPERATOR_CONFIG_PATH resolves under tmp and finds nothing).
+    monkeypatch.chdir(tmp_path)
     from kaine.research.__main__ import main
 
     eval_root = _make_eval_root(tmp_path)
@@ -333,7 +336,10 @@ def test_cli_claude_science_eof_fails_safe(tmp_path: Path):
     assert "EXCLUDED" in out_buf.getvalue()
 
 
-def test_cli_claude_science_decline_fails_safe(tmp_path: Path):
+def test_cli_claude_science_decline_fails_safe(tmp_path: Path, monkeypatch):
+    # Isolate from the repo's operator config (chdir so the relative
+    # OPERATOR_CONFIG_PATH resolves under tmp and finds nothing).
+    monkeypatch.chdir(tmp_path)
     from kaine.research.__main__ import main
 
     eval_root = _make_eval_root(tmp_path)
@@ -354,7 +360,10 @@ def test_cli_claude_science_decline_fails_safe(tmp_path: Path):
     assert not cs_out.exists() or not list(cs_out.glob("claude_science_project_*"))
 
 
-def test_cli_claude_science_confirm_writes_project(tmp_path: Path):
+def test_cli_claude_science_confirm_writes_project(tmp_path: Path, monkeypatch):
+    # Isolate from the repo's operator config (chdir so the relative
+    # OPERATOR_CONFIG_PATH resolves under tmp and finds nothing).
+    monkeypatch.chdir(tmp_path)
     from kaine.research.__main__ import main
 
     eval_root = _make_eval_root(tmp_path)

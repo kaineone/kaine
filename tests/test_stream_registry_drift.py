@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Drift contract: the three module-stream consumer lists must EXACTLY match
@@ -63,6 +63,7 @@ def test_effective_memberships_are_golden():
             "cycle.out",
             "volition.out",
             "volition_feedback.out",
+            "positive_control.out",
             "soma.out",
             "chronos.out",
             "topos.out",

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for Thymos emergent affect coupling (thymos-emergent-affect-coupling).
@@ -125,6 +125,9 @@ async def test_positive_emotion_moves_valence_up_via_appraisal(bus: AsyncBus):
     before_v = thymos.state.valence
 
     thymos._record_perceived_emotion(_emotion_event("happy"))
+    # Advance one second (inside the coupling's decay window) so valence relaxes
+    # toward the target the perceived joy raised.
+    fake_now[0] += 1.0
     await thymos.on_workspace(_empty_snapshot())
 
     assert thymos.state.valence > before_v, (

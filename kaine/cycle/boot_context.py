@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """The state the cycle's boot phases share.
@@ -81,3 +81,4 @@ class BootContext:
     gestation_task: Any = None  # set by _phase_gestation
     preserve_task: Any = None  # set by _phase_watchers
     programme_end_task: Any = None  # set by _phase_watchers
+    utterance_outcome: Any = None  # set by _phase_watchers

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Prediction-error observer — sliding-window statistics across predictive modules.
@@ -58,7 +58,7 @@ _SOURCES: list[tuple[str, frozenset[str], str]] = [
     ),
     (
         "audition.out",
-        frozenset({"audition.transcription", "audition.emotion"}),
+        frozenset({"audition.transcription", "audition.emotion", "audition.perception"}),
         "prediction_error",
     ),
     (

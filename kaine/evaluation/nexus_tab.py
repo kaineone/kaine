@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Evaluation tab for the Nexus diagnostics surface.
@@ -153,6 +153,10 @@ def _aggregate_welfare(
             "sustained_extreme_vad": wo.sustained_extreme_vad_count,
             "replay_overload": wo.replay_overload_count,
             "sustained_interoceptive_distress": wo.sustained_interoceptive_distress_count,
+            "blind_sensor_advisories": wo.blind_sensor_count,
+            "blind_sensors": list(wo.blind_sensors),
+            "sensor_silent_advisories": wo.sensor_silent_count,
+            "silent_sensors": list(wo.silent_sensors),
             "source": "live",
         }
 

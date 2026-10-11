@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for the eight passive + active sidecar observers."""
@@ -639,11 +639,11 @@ def _real_mnemos():
     Imported lazily and locally so the import lives in the test module, never in
     kaine.evaluation (the sidecar boundary forbids kaine.modules.* there).
     """
-    from kaine.modules.mnemos.embeddings import FakeEmbedder
     from kaine.modules.mnemos.memory import MnemosCore
     from kaine.modules.mnemos.storage import InMemoryStorage
+    from kaine.text_embedding import HashEmbedder
 
-    emb = FakeEmbedder(latent_dim=32)
+    emb = HashEmbedder(dim=32)
     storage = InMemoryStorage(latent_dim=emb.latent_dim)
     return MnemosCore(embedder=emb, storage=storage, short_term_capacity=8)
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Curated research event observer (export-eligible).
@@ -35,7 +35,10 @@ Plus per-type redactions:
   position hash + region label.
 
 Every record carries ``ts`` (ISO-8601 UTC), ``event_type``, ``source``, and
-``tick_index`` / ``incident_id`` when present.
+``tick_index`` / ``incident_id`` when present. ``audition.emotion`` records also
+carry the stream-qualified id ``<stream>:<entry_id>``, the same id as the
+broadcast member's ``entry_id``, so the tone analysis can join them to broadcast
+members (paper A.8).
 
 READ-ONLY: never publishes to the bus.
 """
@@ -47,10 +50,17 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from kaine.bus.schema import Event
+from kaine.bus.schema import Event, stream_entry_key
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver, WorkspaceSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.evaluation.stream_registry import curated_module_streams
+from kaine.lifecycle.welfare_signal import (
+    BLIND_SENSOR_CLEARED_TYPE,
+    BLIND_SENSOR_PROCESSORS,
+    BLIND_SENSOR_TYPE,
+    SENSOR_SILENT_CLEARED_TYPE,
+    SENSOR_SILENT_TYPE,
+)
 from kaine.modules.praxis.audit_log import _sanitize as _praxis_sanitize
 from kaine.privacy_filter import PrivacyFilter
 
@@ -86,7 +96,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "target_duration_ms",
             "is_experiential",
             "error",
-            # Adaptive conscious access: the rate used on this tick, the drive
+            # Adaptive access: the rate used on this tick, the drive
             # behind it, and the processing rate it is bounded by.
             "experiential_rate_hz",
             "access_drive",
@@ -116,7 +126,24 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     # started/completed/abandoned; reason is a fixed code on abandon.
     "perception.transition": frozenset({"phase", "transition_seconds", "reason"}),
     # --- Prediction / precision ---
-    "soma.report": frozenset({"prediction_error", "unexpected_error", "wellness", "fatigue_value", "alerts"}),
+    "soma.report": frozenset(
+        {
+            "prediction_error",
+            "unexpected_error",
+            "wellness",
+            "fatigue_value",
+            "alerts",
+            "alert",
+            "context_gain",
+            "null_prediction_error",
+            "mean_prediction_error",
+            "context_age_s",
+            "prediction_broadcast_tick",
+            "prediction_context_age_s",
+            "entity_time_s",
+            "awake",
+        }
+    ),
     "topos.report": frozenset(
         {
             "prediction_error",
@@ -124,6 +151,14 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "change_score",
             "habituation_score",
             "alert",
+            "context_gain",
+            "null_prediction_error",
+            "mean_prediction_error",
+            "context_age_s",
+            "prediction_broadcast_tick",
+            "prediction_context_age_s",
+            "entity_time_s",
+            "awake",
         }
     ),
     # Chronos report (kaine/modules/chronos/module.py) — content-free
@@ -136,6 +171,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "rumination_detected",
             "temporal_prediction_error",
             "time_since_last_interaction_s",
+            "alert",
         }
     ),
     "phantasia.world_error": frozenset({"error"}),
@@ -155,12 +191,64 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     "thymos.state": frozenset(
         {"state", "drives", "emotion", "emotion_category", "valence", "arousal", "dominance"}
     ),
-    "thymos.emotion": frozenset({"emotion", "scores", "norm_compatibility_available"}),
-    "thymos.drive": frozenset({"drive", "value"}),
+    "thymos.emotion": frozenset({"emotion", "scores", "norm_compatibility_available", "alert"}),
+    "thymos.drive": frozenset({"drive", "value", "alert"}),
     "thymos.goal": frozenset({"action", "goal_id"}),
     # --- Perception (derived only) ---
-    "audition.emotion": frozenset({"category", "confidence", "scores"}),
+    # The tone error ratio, the tone rule and whether the tone was classified,
+    # for the tone analysis (paper A.8).
+    "audition.emotion": frozenset(
+        {"category", "confidence", "scores", "alert", "tone_error_ratio", "tone_rule", "classified"}
+    ),
     "audition.prosody": frozenset({"f0_mean_hz", "f0_std_hz"}),
+    # Acoustic report (base-thesis hearing path): numeric fields only; the playlist item title is not logged.
+    "audition.perception": frozenset(
+        {
+            "prediction_error",
+            "normalised_error",
+            "change_score",
+            "energy_dbfs",
+            "attended_window",
+            "attended_seconds",
+            "alert",
+            "context_gain",
+            "null_prediction_error",
+            "mean_prediction_error",
+            "context_age_s",
+            "prediction_broadcast_tick",
+            "prediction_context_age_s",
+            "entity_time_s",
+            "awake",
+        }
+    ),
+    # Positive control of the information-gain measure: numbers and flags only.
+    "positive_control.result": frozenset(
+        {
+            "processor",
+            "mode",
+            "n_reports",
+            "ig_with",
+            "ig_without",
+            "ig_noise",
+            "effect",
+            "noise_effect",
+            "min_effect",
+            "min_reports",
+            "snr",
+            "t_learn_s",
+            "settings_sha256",
+            "pc_sha256",
+            "detected",
+            "noise_detected",
+            "passed",
+            "failed",
+            "final",
+        }
+    ),
+    # Positive control ladder record for the pilot runs, numbers only.
+    "positive_control.ladder": frozenset(
+        {"processor", "entity_time_s", "gain", "gain_with", "gain_noise", "snr", "pc_sha256"}
+    ),
     # NOTE: `audition.transcription` is intentionally ABSENT — never logged.
     # --- Memory / sleep ---
     "mnemos.recall": frozenset(
@@ -169,7 +257,18 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     "mnemos.replay": frozenset({"memory_ids", "max_affect_intensity", "selection_scores", "count"}),
     "hypnos.sleep.started": frozenset({"started_at"}),
     "hypnos.sleep.completed": frozenset(
-        {"phases_completed", "replay_count", "consolidation_summary_counts"}
+        {
+            "phases_completed",
+            "replay_count",
+            "consolidation_summary_counts",
+            "alert",
+            "memory_pruned_floor",
+            "memory_pruned_budget",
+            "memory_store_bytes",
+            "memory_downscale_blocked",
+            "memory_blocked_sleeps",
+            "memory_persist_refusals",
+        }
     ),
     # Organ-level consolidation divergence (content-free aggregates only):
     # breadth (rate) + depth (magnitude) of how the entity's conditioned output
@@ -323,6 +422,10 @@ _TAXONOMY: dict[str, frozenset[str]] = {
         }
     ),
     "welfare.gray_zone": frozenset({"gray_zone_event"}),  # + numeric scalars passthrough
+    BLIND_SENSOR_TYPE: frozenset({"processor"}),  # + numeric scalars via exact allowlist
+    BLIND_SENSOR_CLEARED_TYPE: frozenset({"processor"}),  # + numeric scalars via exact allowlist
+    SENSOR_SILENT_TYPE: frozenset({"processor"}),  # + numeric scalars via exact allowlist
+    SENSOR_SILENT_CLEARED_TYPE: frozenset({"processor"}),  # + numeric scalars via exact allowlist
     "individuation.divergence": frozenset({"divergence_scalar", "significant"}),
     "individuation.alert": frozenset({"inconclusive_since", "days"}),
     "perception.locus.changed": frozenset({"locus", "changed_by"}),
@@ -360,6 +463,30 @@ _WELFARE_NUMERIC_FIELDS = frozenset(
         "interoceptive_distress_threshold",
         "interoceptive_distress_duration_s",
         "sustained_interoceptive_distress_count",
+    }
+)
+
+# EXACT numeric-field allowlist for welfare blind-sensor advisories.
+# Only these five scalar counters may pass through; processor labels are
+# gated independently by BLIND_SENSOR_PROCESSORS.
+_BLIND_SENSOR_NUMERIC_FIELDS = frozenset(
+    {
+        "undefined_samples",
+        "undefined_seconds",
+        "blind_sensor_samples",
+        "blind_sensor_duration_s",
+        "blind_sensor_count",
+    }
+)
+
+# EXACT numeric-field allowlist for welfare sensor-silent advisories.
+# Only these three scalar counters may pass through; processor labels are
+# gated independently by BLIND_SENSOR_PROCESSORS.
+_SENSOR_SILENT_NUMERIC_FIELDS = frozenset(
+    {
+        "silent_seconds",
+        "sensor_silent_duration_s",
+        "sensor_silent_count",
     }
 )
 
@@ -436,12 +563,12 @@ class ResearchEventObserver(StreamSubscriberObserver):
     # --- Record construction --------------------------------------------
 
     async def handle(self, stream: str, entry_id: str, event: Event) -> None:
-        record = self._build_record(event)
+        record = self._build_record(event, stream_entry_key(stream, entry_id))
         if record is None:
             return
         await self._sink.write(record)
 
-    def _build_record(self, event: Event) -> dict[str, Any] | None:
+    def _build_record(self, event: Event, entry_id: str | None = None) -> dict[str, Any] | None:
         allowed = _allowed_fields(event.type)
         if allowed is None:
             # Not in the curated taxonomy — never logged (covers
@@ -468,6 +595,11 @@ class ResearchEventObserver(StreamSubscriberObserver):
             record["tick_index"] = payload.get("tick_index")
         if "incident_id" in payload:
             record["incident_id"] = payload.get("incident_id")
+
+        # Tone events are joined to broadcast members by the stream-qualified id
+        # ``<stream>:<entry_id>``, the id the cycle gives each candidate (paper A.8).
+        if event.type == "audition.emotion" and entry_id is not None:
+            record["entry_id"] = entry_id
 
         # 3) mundus.proprio: opaque hash + region label only, NEVER coordinates.
         if event.type == "mundus.proprio":
@@ -533,10 +665,10 @@ def _apply_taxonomy_fields(
 ) -> dict[str, Any]:
     """Copy ONLY allowlisted payload fields onto `record`.
 
-    Welfare gray-zone is the one special case: the exact numeric-field
-    allowlist (`_WELFARE_NUMERIC_FIELDS`) instead of the taxonomy set, so a
-    payload field cannot smuggle content through. Anything not in the
-    taxonomy produces no additional fields at all.
+    Welfare gray-zone and blind-sensor advisories are special cases: an exact
+    numeric-field allowlist instead of the taxonomy set, so a payload field
+    cannot smuggle content through. Anything not in the taxonomy produces no
+    additional fields at all.
     """
     allowed = _allowed_fields(event_type)
     if allowed is None:
@@ -545,6 +677,24 @@ def _apply_taxonomy_fields(
         if "gray_zone_event" in payload:
             record["gray_zone_event"] = payload.get("gray_zone_event")
         for k in _WELFARE_NUMERIC_FIELDS:
+            v = payload.get(k)
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                record[k] = v
+        return record
+    if event_type in {BLIND_SENSOR_TYPE, BLIND_SENSOR_CLEARED_TYPE}:
+        processor = payload.get("processor")
+        if processor in set(BLIND_SENSOR_PROCESSORS.values()):
+            record["processor"] = processor
+        for k in _BLIND_SENSOR_NUMERIC_FIELDS:
+            v = payload.get(k)
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                record[k] = v
+        return record
+    if event_type in {SENSOR_SILENT_TYPE, SENSOR_SILENT_CLEARED_TYPE}:
+        processor = payload.get("processor")
+        if processor in set(BLIND_SENSOR_PROCESSORS.values()):
+            record["processor"] = processor
+        for k in _SENSOR_SILENT_NUMERIC_FIELDS:
             v = payload.get(k)
             if isinstance(v, (int, float)) and not isinstance(v, bool):
                 record[k] = v
@@ -559,9 +709,12 @@ def _apply_taxonomy_fields(
 def _workspace_metadata_record(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Build a `workspace.broadcast` metadata record from a snapshot.
 
-    Reads the `selected` key (written by kaine/cycle/engine.py) — per-entry
-    metadata ONLY ({source, type, salience, causal_parent}), never the entry
-    `payload`/content field.
+    Reads the `selected` key (written by kaine/cycle/engine.py): per-entry
+    metadata ONLY ({entry_id, source, type, salience, causal_parent}), never the
+    entry `payload`/content field.
+
+    Also copies `access_threshold`, `arm` and `coalition_capacity` from
+    `metadata` and `published_at` from the snapshot when present.
     """
     record: dict[str, Any] = {
         "ts": _iso_now(),
@@ -575,12 +728,22 @@ def _workspace_metadata_record(snapshot: dict[str, Any]) -> dict[str, Any]:
     if "salience_scores" in snapshot:
         record["salience_scores"] = snapshot.get("salience_scores")
 
+    metadata = snapshot.get("metadata")
+    if isinstance(metadata, dict) and "access_threshold" in metadata:
+        record["access_threshold"] = metadata["access_threshold"]
+    if isinstance(metadata, dict) and "arm" in metadata:
+        record["arm"] = metadata["arm"]
+    if isinstance(metadata, dict) and "coalition_capacity" in metadata:
+        record["coalition_capacity"] = metadata["coalition_capacity"]
+    if "published_at" in snapshot:
+        record["published_at"] = snapshot.get("published_at")
+
     entries_meta: list[dict[str, Any]] = []
     for entry in snapshot.get("selected", []) or []:
         if not isinstance(entry, dict):
             continue
         meta: dict[str, Any] = {}
-        for k in ("source", "type", "salience", "causal_parent"):
+        for k in ("entry_id", "source", "type", "salience", "causal_parent"):
             if k in entry:
                 meta[k] = entry[k]
         if meta:

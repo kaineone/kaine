@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Per-block snapshot builders for the Nexus health board.
@@ -107,11 +107,12 @@ def preservation_block(
 
 
 def welfare_block(evaluation_logs_path: Path) -> dict[str, Any]:
-    """Read-only welfare gray-zone counters for the entity-care panel.
+    """Read-only welfare counters for the entity-care panel.
 
-    Numeric only — the four §5.5 gray-zone counts from the evaluation JSONL
-    rollup (the Nexus process holds no live sidecar registry). Never raises;
-    a missing rollup yields a ``source: none`` block.
+    Numeric only: the four §5.5 gray-zone counts plus blind-sensor and
+    sensor-silent advisory state from the evaluation JSONL rollup (the Nexus
+    process holds no live sidecar registry). Never raises; a missing rollup
+    yields a ``source: none`` block.
     """
     try:
         from kaine.experiment.welfare_counts import welfare_counts_from_jsonl
@@ -124,6 +125,10 @@ def welfare_block(evaluation_logs_path: Path) -> dict[str, Any]:
             "sustained_extreme_vad": None,
             "replay_overload": None,
             "sustained_interoceptive_distress": None,
+            "blind_sensor_advisories": None,
+            "blind_sensors": [],
+            "sensor_silent_advisories": None,
+            "silent_sensors": [],
             "source": "none",
         }
 
@@ -231,8 +236,9 @@ def cycle_pacing_block(cycle_runtime_path: Path) -> dict[str, Any]:
 
 
 def entity_care_block(
-    consolidation_thresholds: tuple[float, float] | None,
+    consolidation_thresholds: tuple[float, float, float] | None,
     adapter_output_dir: Path | None = None,
+    voice_paths: Any | None = None,
 ) -> dict[str, Any]:
     """Read-only entity-care status for the operator (CAL 4.2/4.3).
 
@@ -260,11 +266,14 @@ def entity_care_block(
 
         kwargs: dict[str, Any] = {}
         if consolidation_thresholds is not None:
-            rate, mag = consolidation_thresholds
+            rate, mag, distinct = consolidation_thresholds
             kwargs["consolidation_rate_threshold"] = rate
             kwargs["consolidation_magnitude_threshold"] = mag
+            kwargs["distinctiveness_threshold"] = distinct
         if adapter_output_dir is not None:
             kwargs["adapter_output_dir"] = adapter_output_dir
+        if voice_paths is not None:
+            kwargs["voice_paths"] = voice_paths
         assessment = assess_divergence(**kwargs)
         diverged = bool(assessment.diverged)
         summary = assessment.summary
@@ -507,6 +516,50 @@ def gpu_preflight_block(gpu_preflight_path: Path) -> dict[str, Any]:
         "kaine_services_up": data.get("kaine_services_up", {}),
         "message": data.get("message", ""),
         "since": data.get("checked_at"),
+    }
+
+
+def mnemos_store_block(health_path: Path, mnemos_enabled: bool) -> dict[str, Any]:
+    """Read-only Mnemos store health from the shared health file.
+
+    Reads ``state/mnemos/store_health.json`` (written by Mnemos). Never raises;
+    a missing, unreadable, or non-object file yields state ``"unknown"``.
+    Surfaces only non-content operational state: import status, blocked sleep
+    count, persist refusals, store size and budget.
+    """
+    if not mnemos_enabled:
+        return {"state": "disabled", "message": "Mnemos is not enabled"}
+    try:
+        with health_path.open("r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:
+        log.debug("mnemos_store_block failed", exc_info=True)
+        data = None
+    if not isinstance(data, dict):
+        return {"state": "unknown", "message": "no store health recorded"}
+    import_pending = bool(data.get("import_pending"))
+    refusals = int(data.get("persist_refusals", 0) or 0)
+    if import_pending:
+        state = "critical"
+        message = (
+            "an interrupted import is blocking sleep; re-run the revive or run "
+            "python -m kaine.lifecycle.mnemos_recover"
+        )
+    elif refusals > 0:
+        state = "warning"
+        message = data.get("message", "")
+    else:
+        state = "ok"
+        message = data.get("message", "")
+    return {
+        "state": state,
+        "import_pending": import_pending,
+        "blocked_sleeps": data.get("blocked_sleeps", 0),
+        "persist_refusals": refusals,
+        "store_bytes": data.get("store_bytes"),
+        "budget_bytes": data.get("budget_bytes"),
+        "message": message,
+        "since": data.get("updated_at"),
     }
 
 

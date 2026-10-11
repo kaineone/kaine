@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """``HealthProber`` — caching, timeout-bounded orchestration over the health
@@ -36,6 +36,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
+
+from kaine.memory_kinds import MNEMOS_STORE_HEALTH_PATH
 
 from . import blocks
 from .probes import (
@@ -92,8 +94,9 @@ class HealthProber:
     # Graded consolidation-divergence thresholds for the entity-care block's
     # divergence assessment (rate, magnitude). Defaults to None → the
     # assess_divergence shipped conservative defaults.
-    consolidation_thresholds: tuple[float, float] | None = None
+    consolidation_thresholds: tuple[float, float, float] | None = None
     adapter_output_dir: Path | None = None
+    voice_paths: Any | None = None
     cycle_runtime_path: Path = Path("state/cycle/runtime.json")
     # Autonomous safety-net incident-log dir (preservation/welfare-protective
     # records) and the run-manifest root, for the preservation + admissibility
@@ -105,6 +108,7 @@ class HealthProber:
     spot_control_path: Path = Path("state/cycle/control.json")
     spot_escalation_path: Path = Path("state/cycle/escalation.json")
     gpu_preflight_path: Path = Path("state/cycle/gpu_preflight.json")
+    mnemos_store_health_path: Path = Path(MNEMOS_STORE_HEALTH_PATH)
     probe_timeout_s: float = DEFAULT_PROBE_TIMEOUT_S
     cache_ttl_s: float = DEFAULT_CACHE_TTL_S
     _cache: dict[str, Any] | None = field(default=None, repr=False)
@@ -193,6 +197,7 @@ class HealthProber:
             "model_server": await self._model_server_block(),
             "voice_alignment_window": self._voice_alignment_window_block(),
             "gpu_preflight": self._gpu_preflight_block(),
+            "mnemos_store": self._mnemos_store_block(),
             "preservation": self._preservation_block(),
             "welfare": self._welfare_block(),
             "admissibility": self._admissibility_block(),
@@ -242,6 +247,7 @@ class HealthProber:
         return blocks.entity_care_block(
             self.consolidation_thresholds,
             adapter_output_dir=self.adapter_output_dir,
+            voice_paths=self.voice_paths,
         )
 
     def _research_block(self) -> dict[str, Any]:
@@ -265,6 +271,11 @@ class HealthProber:
 
     def _gpu_preflight_block(self) -> dict[str, Any]:
         return blocks.gpu_preflight_block(self.gpu_preflight_path)
+
+    def _mnemos_store_block(self) -> dict[str, Any]:
+        return blocks.mnemos_store_block(
+            self.mnemos_store_health_path, self._module_enabled("mnemos")
+        )
 
     def _spot_block(self) -> dict[str, Any]:
         return blocks.spot_block(self.spot_control_path, self.spot_escalation_path)

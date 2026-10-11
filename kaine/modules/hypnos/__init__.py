@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from kaine.modules.hypnos.module import Hypnos, HypnosBusyError
@@ -10,7 +10,6 @@ from kaine.modules.hypnos.voice_alignment import (
     FakeTrainer,
     Trainer,
     TrainingResult,
-    UnslothDPOTrainer,
     VoiceAlignmentConfig,
 )
 
@@ -24,6 +23,5 @@ __all__ = [
     "RestScheduler",
     "Trainer",
     "TrainingResult",
-    "UnslothDPOTrainer",
     "VoiceAlignmentConfig",
 ]

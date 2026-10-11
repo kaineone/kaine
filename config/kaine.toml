@@ -39,13 +39,14 @@ max_connections = 1024
 
 [cycle]
 # Default cycle pacing. Benchmarked on this host (RTX 4070 SUPER): ~17 Hz tick
-# headroom — operator-approved raise to 10 Hz processing (alpha-band sampling /
-# workspace tick; 10.0 s^-1 → 100 ms/tick). experiential_rate_hz is the rate at
-# which a tick is promoted to a CONSCIOUS broadcast — held at the resting P3b
-# conscious-access band (~3.33 Hz) so the senses (10 Hz vision) genuinely outrun
-# awareness and several samples inform one conscious update. This is the RESTING
-# rate: with [cycle.access_rate] enabled, conscious access speeds up with arousal
-# and with salient module reports, toward one broadcast per processing tick.
+# headroom - operator-approved raise to 10 Hz processing (alpha-band sampling /
+# workspace tick; 10.0 s^-1 -> 100 ms/tick). experiential_rate_hz is the rate at
+# which a tick is promoted to an accessed broadcast - held at the resting access
+# rate (~3.33 Hz), a provisional design value below the 10 Hz processing rate,
+# so the senses (10 Hz vision) outrun access and several samples inform one
+# broadcast. This is the RESTING rate: with [cycle.access_rate] enabled, access
+# speeds up with arousal and with salient module reports, toward one broadcast
+# per processing tick.
 processing_rate_hz = 10.0
 experiential_rate_hz = 3.333
 # Global time dilation of the entity's subjective clock. 1.0 = real-time (the
@@ -71,18 +72,18 @@ auto_time_scale_dwell_s = 10.0
 auto_time_scale_window_s = 30.0
 
 [cycle.access_rate]
-# Adaptive conscious access. The P3 is read as the cortical signature of the locus
+# Adaptive access. The access rate is grounded in the locus
 # coeruleus-noradrenaline (LC-NE) response to salient or unexpected events
-# (Nieuwenhuis, Aston-Jones & Cohen 2005); LC-NE has a tonic mode tracking arousal
-# and a phasic mode driven by salient events (Aston-Jones & Cohen 2005). Each tick:
+# (Aston-Jones & Cohen 2005): LC-NE has a tonic mode tracking arousal and a
+# phasic mode driven by salient events. Each tick:
 #   drive = max(tonic, phasic)
 #   tonic  = Thymos arousal above baseline_arousal, scaled to [0, 1]
 #            (Thymos arousal rises with perceptual prediction error)
 #   phasic = the most salient module report above salience_floor, scaled to
 #            [0, 1], held as a peak that decays over phasic_decay_s (subjective)
 #   rate   = experiential_rate_hz + (processing_rate_hz - experiential_rate_hz) * drive
-# The linear map is a modelling assumption bounded by the resting P3b rate and the
-# processing rate. enabled = false restores the fixed resting rate exactly.
+# The linear map is a modelling assumption bounded by the resting access rate and
+# the processing rate. enabled = false restores the fixed resting rate exactly.
 enabled = true
 salience_floor = 0.5       # routine module reports sit at or below this; alerts rise above
 phasic_decay_s = 1.0       # subjective seconds for a salient report's effect to decay by 1/e
@@ -109,6 +110,19 @@ salience_thymos_factor = "state_modulator"
 # would shift the research baseline. It is staged behind this flag pending
 # validation on logged runs; flip to "drive_relevance" once validated.
 salience_goal_factor = "static"
+
+# Arousal contrast (adaptive gain). Above baseline arousal the score is the level
+# factor times a logistic of the priority whose slope rises to this gain at full
+# arousal, amplifying high priorities and suppressing low ones. 0 disables it.
+arousal_contrast_gain = 8.0
+
+# Arm of the planned workspace-mediation test (paper §6.3, A.8). "competitive"
+# is selection and access as built. "matched" draws each broadcast's coalition
+# at random, of the size competitive selection keeps, seeded from the run seed,
+# with access by the same threshold. "pooled" broadcasts every candidate with no
+# scoring, selection or access gate. The two controls need the coherence layer
+# off. Every broadcast records its arm in the research log.
+arm = "competitive"
 
 [experiment]
 # Per-run identity, seeding, and manifest (research reproducibility).
@@ -441,10 +455,10 @@ encoder_model_id = "revliter/internvideo_next_base_p14_res224_f16"
 encoder_revision = "ff2659b9be360a6b1e94b1eb381778a960da6019"
 encoder_local_dir = "state/models/internvideo_next_base_p14_res224_f16"
 # Clip seam (topos-temporal-video-encoder §1b/§2). clip_len is the encoder's
-# fixed frame count; clip_stride is the strided sliding window — one clip latent
+# fixed frame count; clip_stride is the strided sliding window - one clip latent
 # every clip_stride frame-ticks once the 16-frame ring buffer fills. At the
 # shipped vision_sample_hz = 10, clip_stride = 3 emits ~3.33 Hz, aligning the
-# visual percept with the experiential / conscious-access rate. PROVISIONAL
+# visual percept with the access rate. PROVISIONAL
 # pending the shakedown GPU benchmark on the secondary GPU (same gate that
 # cleared vision_sample_hz). Warmup: no topos.report until the buffer first
 # fills (~1.6 s at 10 Hz). pooling: "attention" uses the model's native
@@ -589,6 +603,11 @@ short_term_capacity = 128
 recall_top_k = 5
 baseline_salience = 0.15
 alert_salience = 0.6
+# Storage budget of the persisted memory stores, in bytes (paper A.10, Table A1
+# row B). Set it from the disk this installation can give Mnemos. When a sleep
+# leaves the stores above it, the weakest traces are deleted first until they
+# fit. The paper gives no value; 10 GiB is a safe default, not a recommendation.
+storage_budget_bytes = 10737418240
 
 [mnemos.qdrant]
 host = "127.0.0.1"
@@ -602,8 +621,24 @@ affect_weight = 0.7
 # Weight on recency in the selection score (newer = higher).
 recency_weight = 0.3
 # When true (default), sidecar/observer payloads carry only memory IDs,
-# not trace text — keeps memory content out of operational logs.
+# not trace text, so memory content stays out of operational logs.
 redact_content = true
+# Newest episodic traces sleep's cross-period selection (associative
+# replay) reads, without vectors. Matches short_term_capacity.
+cross_period_candidates = 128
+
+[mnemos.strength]
+# Strength a trace that is never replayed keeps over one entity day of storage
+# at the resting broadcast rate (paper A.10 and Table A1, after the mean
+# decrease of synaptic size in sleep that de Vivo et al. 2017 measured).
+retention_per_day = 0.82
+# Traces stored by one entity day at the resting broadcast rate, N_day =
+# 86400 x f0 with f0 = 10/3 Hz (paper A.10, Table A1). The paper's design value;
+# it does not follow [cycle].experiential_rate_hz.
+traces_per_day = 288000
+# A trace whose strength falls below this floor is deleted in the sleep that
+# weakened it (paper A.10).
+prune_floor = 0.01
 
 [eidolon]
 persistence_path = "state/eidolon/self_model.json"
@@ -649,9 +684,22 @@ baseline_arousal = 0.3
 baseline_dominance = 0.0
 drift_rate_per_s = 0.05
 publish_interval_s = 1.0
+# Valence relaxes toward the appraisal's pleasantness (learning progress + coupling)
+# shifted by wellness (Joffily and Coricelli 2013). The time constant is subjective seconds.
+volition_stream = "volition.out"
+# Fast time constant for prediction-error averaging and alert-rate fast habituation (subjective s).
+fast_time_constant_s = 10.0
+# Slow time constant for prediction-error averaging and alert-rate slow habituation (subjective s).
+slow_time_constant_s = 100.0
+# Learning-progress floor: progress below this is treated as zero.
+learning_progress_floor = 0.05
+# Alert excess margin: alert rate must exceed the habituated rate by this fraction to count as novel.
+alert_excess_margin = 0.5
+intent_rate_weight = 0.05
+valence_time_constant_s = 30.0
+valence_progress_gain = 2.0
 baseline_salience = 0.1
 alert_salience = 0.7
-social_drive_time_scale_s = 600.0
 soma_stream = "soma.out"
 chronos_stream = "chronos.out"
 mnemos_stream = "mnemos.out"
@@ -676,25 +724,33 @@ decay_s = 10.0
 # coupling_max_rate_per_s is legacy (the DriftSafeguard it fed was removed when
 # coupling became appraisal-routed); if present it is ignored, not an error.
 
+# relief_gain: curiosity and boredom are relieved continuously at relief_gain per second times
+# learning progress (curiosity) or alert excess (boredom); social_drive and restlessness lose
+# relief_gain of their value per event (social: a new operator interaction; restlessness: a non-rest Volition intent).
+# Under full deprivation a drive settles at build_rate / (build_rate + decay_rate), about 0.9 here, so it can cross its 0.7 threshold.
 [thymos.drives.curiosity]
 build_rate = 0.05
-decay_rate = 0.02
+decay_rate = 0.0055
 threshold = 0.7
+relief_gain = 0.5
 
 [thymos.drives.boredom]
 build_rate = 0.04
-decay_rate = 0.02
+decay_rate = 0.0045
 threshold = 0.7
+relief_gain = 0.3
 
 [thymos.drives.social_drive]
 build_rate = 0.01
-decay_rate = 0.005
+decay_rate = 0.0011
 threshold = 0.7
+relief_gain = 0.8
 
 [thymos.drives.restlessness]
 build_rate = 0.03
-decay_rate = 0.02
+decay_rate = 0.0033
 threshold = 0.7
+relief_gain = 0.5
 
 [praxis]
 sandbox_path = "state/praxis/files"
@@ -732,10 +788,12 @@ chat_url = "http://127.0.0.1:11434/v1"
 # Inspect the served list with: curl -s http://127.0.0.1:11434/v1/models
 # Ships an ABLITERATED model (served as a GGUF): the refusal direction is removed
 # so the cognitive stack (Eidolon values, Thymos, the workspace) governs behavior,
-# not the model's baked-in refusals — core to the sovereignty thesis (see
-# lingua/ABLITERATION.md). The published KAINE organ (a GGUF) is served under this
-# exact alias; it is downloaded by the first-run wizard's organ step and served by
-# scripts/model-server-bootstrap.sh under the same name. Published at
+# not the model's baked-in refusals - the language organ's refusal training is
+# removed so a trained refusal stance cannot override what the workspace supplies
+# to the organ (see lingua/ABLITERATION.md). The published KAINE organ (a GGUF)
+# is served under this exact alias; it is downloaded by the first-run wizard's
+# organ step and served by scripts/model-server-bootstrap.sh under the same
+# name. Published at
 # huggingface.co/kaineone/Qwen3.5-4B-abliterated-GGUF (safetensors base:
 # huggingface.co/kaineone/Qwen3.5-4B-abliterated). Operators with larger hardware
 # scale up to a bigger abliterated model in config/kaine.operator.toml (the eval
@@ -808,17 +866,25 @@ prediction_error_window = 32
 # Number of recent utterance feature vectors kept in the recurrent buffer.
 auditory_buffer_size = 16
 # General auditory perception (auditory-perception; enabled via general_audition,
-# operator-set). Its acoustic change alert is self-calibrating, mirroring Topos
+# operator-set). `acoustic_encoder` selects the acoustic feature extractor:
+# "spectral" (default), "dasheng", or "wavjepa"; `acoustic_device` selects where
+# it runs. Its acoustic change alert is self-calibrating, mirroring Topos
 # (perception-drives-salience): an acoustic onset alerts when its change reaches
 # acoustic_change_alert_factor times the rolling-window mean; acoustic_change_alert_
-# threshold survives only as a small absolute FLOOR guard (was an absolute threshold
-# mis-scaled for the encoder). Defaults: factor = 2.0, threshold = 0.35. The
+# threshold survives only as a small absolute FLOOR guard (an absolute threshold
+# mis-scales across encoders). Defaults: factor = 2.0, threshold = 0.35. The
 # forward-model prediction-error path (normalised error >= 2.0) is always active
 # here and is the primary driver.
 # In-memory speaker prosody extraction (librosa). Off by default. When
 # enabled, publishes audition.prosody with numeric features only — no raw
 # audio on the bus, no disk writes.
 prosody_enabled = false
+
+# "categorical" gives a non-neutral tone the alert intensity and a neutral one
+# the graded intensity of the tone error ratio (paper A.2); "error_ratio",
+# the tone variant of the planned test, grades every tone event by the ratio
+# alone (paper A.8); studies set it.
+tone_rule = "categorical"
 
 # Unified deterministic perception feed (reproducible research stimulus). A
 # SINGLE top-level section that drives BOTH the vision surface (Topos) and the
@@ -1024,7 +1090,6 @@ decay_s = 10.0
 interval_seconds = 3600.0      # one sleep per hour by default; also the max-interval safety net
 max_deferral_seconds = 600.0   # 10 minutes of deferral allowed
 per_defer_seconds = 60.0
-nous_step_burst = 200
 baseline_salience = 0.5
 alert_salience = 0.8
 # Minimum entity-time seconds between a sleep's end and a Nous-requested rest; bounds rest requests from an exploring Nous.
@@ -1034,10 +1099,7 @@ requested_rest_min_interval_s = 1800.0
 # Whether Hypnos subscribes to soma.fatigue and triggers on threshold crossing.
 # interval_seconds above remains as a max-interval safety net regardless.
 fatigue_triggered = true
-# Synaptic homeostasis downscaling factor (Tononi & Cirelli 2014).
-# Applied to all in-memory activation vectors during phase 2.
-downscale_factor = 0.9
-# Replay window duration (seconds) — informational; replay completes synchronously.
+# Replay window duration in seconds (informational; replay completes synchronously).
 replay_window_s = 5.0
 # Phase-3 associative cross-period replay. When true, Hypnos selects traces
 # spanning >= 2 memory periods, cues Phantasia for scenario extensions, and
@@ -1077,6 +1139,9 @@ seed = 42
 # voice alignment training. Lingua inference should be paused during
 # the training pass to avoid contention.
 training_device = "cuda:0"
+# "bf16" (default) or "4bit". Never a silent fallback: a run that does not fit
+# fails closed with its measured peak memory.
+train_precision = "bf16"
 # How many accepted adapters to keep under adapter_output_dir. 0 = keep
 # every accepted adapter: they are the entity's learned voice, so
 # infrastructure does not cull them. A positive value evicts the oldest
@@ -1090,7 +1155,7 @@ adapter_retention = 0
 # the operator triggers the reload themselves.
 #
 # On-device single-GPU note: a 4B LoRA training step (~9.8 GB) and the
-# served organ (~3 GB) do not fit on one 12 GB device at once. With
+# served organ (~4.1 GB) do not fit on one 12 GB device at once. With
 # "reload_endpoint" or "restart_service" the sleep-cycle training window
 # time-shares the GPU — it UNLOADS the served organ, trains, then RELOADS
 # it (applying the accepted adapter via the server's --lora flag). While the
@@ -1421,6 +1486,9 @@ disclosure = "You are periodically and privately assessed for how much you have 
 battery_path = ""
 # Probe requests wait until Lingua has been silent this long, so the being speaks first.
 lingua_quiet_s = 10.0
+# Decoding temperature of the probe, fixed apart from the voice's [lingua].temperature
+# so study or voice settings never change the probe's conditions. 0 is greedy.
+probe_temperature = 0.0
 # Answers per battery prompt in the reference.
 n_reference = 16
 # Answers per battery prompt at each look.
@@ -1575,9 +1643,10 @@ distress_duration_s = 30.0
 # welfare.out — so the protective response covers all four categories.
 repeat_window_s = 300.0
 repeat_threshold = 3
-# Cold-start warm-up: during the first warmup_s after run start, gray-zone /
-# distress events are observed and LOGGED but do NOT count toward the repeat
-# threshold or trigger the preserve-then-act response. This stops boot transients
+# Cold-start warm-up: warm-up counts unfrozen time, with a wall-time cap of
+# max(`warmup_s`, `warmup_ceiling_s`). During warm-up, gray-zone / distress
+# events are observed and LOGGED but do NOT count toward the repeat threshold
+# or trigger the preserve-then-act response. This stops boot transients
 # (distress reported before homeostatic setpoints settle) from being mistaken for
 # sustained welfare problems. Short relative to "sustained" — genuine sustained
 # distress re-accrues immediately once warm-up ends; both arms then function
@@ -1603,6 +1672,33 @@ auto_evict = false
 # verified, never neither. SHIPS DISABLED — first boot is operator-supervised;
 # human involvement returns AFTER research to socialize any emerged individuals.
 enabled = false
+
+[positive_control]
+# Positive control of the broadcast information-gain measure (paper §6.3,
+# Appendix A.8). Off by default; only the workspace-mediation study
+# configurations enable it, each in one mode:
+#   mode = "estimate_pc"  the preliminary run. Each of Topos, Audition and Soma
+#                         accumulates its inputs' mean and covariance and, at
+#                         shutdown, writes the first principal component and
+#                         the mean under data/evaluation/positive_control/.
+#   mode = "ladder"       pilot runs of the on arm. Shadow forward models carry
+#                         an informative component (the next input projected
+#                         on that principal component, plus noise) and an
+#                         uninformative one with the same mean and variance,
+#                         at every SNR from 4^-2 to 4^4; set
+#                         principal_components_run to the preliminary run.
+#   mode = "control"      the control itself, with SNR_j, min_effect,
+#                         min_reports and the learning period T_learn read from
+#                         the settings record named by settings_record, which
+#                         `python -m kaine.experiment.calibrate` derives from
+#                         the pilot runs.
+# The live model, its reports, intensities and the competition are untouched.
+# Check complete control runs with
+# `python -m kaine.experiment.positive_control <run_id> [<run_id> ...]`.
+# snr, min_effect and min_reports are not configuration keys: they come from
+# the settings record.
+enabled = false
+seed = 0
 
 [nexus]
 host = "127.0.0.1"
@@ -1845,7 +1941,7 @@ level = "INFO"
 #
 # install_label = "kaine"          # Operator-chosen label for this install (1-64 chars).
 # reminder_interval_s = 14400.0    # Seconds between reminder notices (minimum 900).
-# input_loss_after_s = 60.0        # Seconds without input before the input-lost notice (later slice).
+# input_loss_after_s = 60.0        # Seconds without input before the input-lost notice.
 # nexus_url = "http://127.0.0.1:8088/"  # Address shown in notices for Nexus.
 #
 # Desktop notification on the D-Bus session bus of the user running the unit.

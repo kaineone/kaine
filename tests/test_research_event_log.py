@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for the research-event-log change.
@@ -35,6 +35,7 @@ from kaine.evaluation.observers.research_event_observer import (
 )
 from kaine.evaluation.registry import SidecarRegistry
 from kaine.evaluation.sink import AsyncJsonlSink
+from kaine.experiment.log_schema import NONNEG, _bound_for
 from kaine.nexus.privacy import CONTENT_FIELDS
 from kaine.research.submission import (
     DENY_PATTERNS,
@@ -1119,6 +1120,129 @@ def test_workspace_selected_yields_coalition_metadata():
     assert "secret" not in str(record)
 
 
+def test_audition_perception_numeric_fields_logged_item_dropped():
+    record = _taxonomy_record(
+        "audition.perception",
+        {
+            "prediction_error": 0.4,
+            "normalised_error": 1.2,
+            "alert": False,
+            "context_gain": 0.12,
+            "null_prediction_error": 0.5,
+            "mean_prediction_error": 0.8,
+            "context_age_s": 0.3,
+            "item": "film.mp4",
+            "source_label": "playlist",
+        },
+    )
+    assert record["context_gain"] == 0.12
+    assert record["null_prediction_error"] == 0.5
+    assert record["mean_prediction_error"] == 0.8
+    assert record["alert"] is False
+    assert record["context_age_s"] == 0.3
+    assert "item" not in record
+
+
+def test_processor_reports_carry_alert_and_context_gain():
+    for event_type in ("topos.report", "soma.report"):
+        record = _taxonomy_record(
+            event_type,
+            {
+                "prediction_error": 0.5,
+                "alert": True,
+                "context_gain": -0.05,
+                "null_prediction_error": 0.5,
+                "mean_prediction_error": 0.8,
+                "context_age_s": 1.0,
+            },
+        )
+        assert record["alert"] is True
+        assert record["context_gain"] == -0.05
+        assert record["null_prediction_error"] == 0.5
+        assert record["mean_prediction_error"] == 0.8
+
+    assert _taxonomy_record("chronos.report", {"alert": True})["alert"] is True
+
+
+def test_positive_control_result_is_logged():
+    from kaine.modules.positive_control import RESULT_FIELDS
+
+    payload = {
+        "processor": "topos",
+        "n_reports": 5,
+        "min_reports": 100,
+        "ig_with": 0.1,
+        "ig_without": 0.05,
+        "ig_noise": 0.04,
+        "effect": 0.05,
+        "noise_effect": 0.01,
+        "min_effect": 0.01,
+        "snr": 10.0,
+        "detected": True,
+        "noise_detected": False,
+        "passed": True,
+        "failed": False,
+        "final": True,
+        "mode": "control",
+        "t_learn_s": 120.0,
+        "settings_sha256": "a" * 64,
+        "pc_sha256": "b" * 64,
+        "extra": "x",
+    }
+    record = _taxonomy_record("positive_control.result", payload)
+    for field in RESULT_FIELDS:
+        assert record[field] == payload[field]
+    assert "extra" not in record
+
+
+def test_workspace_record_carries_access_threshold_and_publication_time():
+    from kaine.evaluation.observers.research_event_observer import (
+        _workspace_metadata_record,
+    )
+
+    record = _workspace_metadata_record(
+        {
+            "tick_index": 1,
+            "inhibited": False,
+            "metadata": {"access_threshold": 0.35, "coherence": {"x": 1}},
+            "published_at": 12.5,
+            "selected": [],
+        }
+    )
+    assert record["access_threshold"] == 0.35
+    assert record["published_at"] == 12.5
+    assert "coherence" not in record
+    assert "metadata" not in record
+
+
+def test_workspace_record_carries_arm():
+    from kaine.evaluation.observers.research_event_observer import (
+        _workspace_metadata_record,
+    )
+
+    record = _workspace_metadata_record(
+        {
+            "tick_index": 2,
+            "inhibited": False,
+            "metadata": {"access_threshold": 0.35, "arm": "matched"},
+            "selected": [],
+        }
+    )
+    assert record["arm"] == "matched"
+    assert record["access_threshold"] == 0.35
+
+    pooled = _workspace_metadata_record(
+        {
+            "tick_index": 3,
+            "inhibited": False,
+            "metadata": {"arm": "pooled"},
+            "selected": [],
+        }
+    )
+    assert pooled["arm"] == "pooled"
+    assert "access_threshold" not in pooled
+
+
 def test_workspace_selected_events_key_no_longer_used():
     from kaine.evaluation.observers.research_event_observer import (
         _workspace_metadata_record,
@@ -1223,3 +1347,235 @@ def test_raw_bus_archive_lingua_aggregate():
     assert "lingua.out" in _MODULE_OUT_STREAMS
     assert "lingua.external" not in _MODULE_OUT_STREAMS
     assert "lingua.internal" not in _MODULE_OUT_STREAMS
+
+
+@pytest.mark.asyncio
+async def test_observer_drains_streams_on_stop():
+    from datetime import datetime, timezone
+
+    from kaine.bus.schema import Event
+
+    bus = FakeBus()
+    sink = FakeSink()
+    obs = ResearchEventObserver(bus, sink, poll_interval_s=10.0)
+    await obs.start()
+    await asyncio.sleep(0.05)
+    event = Event(
+        source="positive_control",
+        type="positive_control.result",
+        payload={"processor": "topos", "n_reports": 5, "final": True},
+        salience=0.0,
+        timestamp=datetime.now(timezone.utc),
+    )
+    bus.push("positive_control.out", event)
+    await obs.stop()
+    assert len(sink.rows) == 1
+    assert sink.rows[0]["event_type"] == "positive_control.result"
+    assert sink.rows[0]["final"] is True
+
+
+@pytest.mark.asyncio
+async def test_welfare_blind_sensor_advisories_captured_with_exact_allowlist():
+    """B3 - welfare blind-sensor advisories are copied with the processor label
+    and exact numeric allowlist; unknown labels and bools are dropped."""
+    bus = FakeBus()
+    sink = FakeSink()
+    obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
+    bus.push(
+        "welfare.out",
+        _event(
+            "welfare",
+            "welfare.blind_sensor",
+            {
+                "processor": "topos",
+                "undefined_samples": 4,
+                "undefined_seconds": 30.0,
+                "blind_sensor_samples": 0,
+                "blind_sensor_duration_s": 30.0,
+                "blind_sensor_count": 1,
+                # Content and future fields must be dropped by the allowlist.
+                "internal_speech": "SECRET",
+                "some_future_field": "leak",
+            },
+        ),
+    )
+    bus.push(
+        "welfare.out",
+        _event(
+            "welfare",
+            "welfare.blind_sensor_cleared",
+            {
+                "processor": "<script>",
+                "undefined_samples": True,
+                "blind_sensor_count": 1,
+            },
+        ),
+    )
+    await _run(obs)
+    assert len(sink.rows) == 2
+
+    rec = sink.rows[0]
+    assert rec["event_type"] == "welfare.blind_sensor"
+    assert rec["processor"] == "topos"
+    assert rec["undefined_samples"] == 4
+    assert rec["undefined_seconds"] == 30.0
+    assert rec["blind_sensor_samples"] == 0
+    assert rec["blind_sensor_duration_s"] == 30.0
+    assert rec["blind_sensor_count"] == 1
+    assert "internal_speech" not in rec
+    assert "some_future_field" not in rec
+    assert _no_content_anywhere(rec)
+
+    cleared = sink.rows[1]
+    assert cleared["event_type"] == "welfare.blind_sensor_cleared"
+    assert "processor" not in cleared
+    assert "undefined_samples" not in cleared
+    assert cleared["blind_sensor_count"] == 1
+    assert _no_content_anywhere(cleared)
+
+
+async def test_welfare_sensor_silent_advisories_captured_with_exact_allowlist():
+    """B3 - welfare sensor-silent advisories are copied with the processor label
+    and exact numeric allowlist; unknown labels and bools are dropped."""
+    bus = FakeBus()
+    sink = FakeSink()
+    obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
+    bus.push(
+        "welfare.out",
+        _event(
+            "welfare",
+            "welfare.sensor_silent",
+            {
+                "processor": "audition_acoustic",
+                "silent_seconds": 30.0,
+                "sensor_silent_duration_s": 30.0,
+                "sensor_silent_count": 1,
+                # Content and future fields must be dropped by the allowlist.
+                "internal_speech": "SECRET",
+                "some_future_field": "leak",
+            },
+        ),
+    )
+    bus.push(
+        "welfare.out",
+        _event(
+            "welfare",
+            "welfare.sensor_silent_cleared",
+            {
+                "processor": "<b>",
+                "silent_seconds": True,
+                "sensor_silent_count": 1,
+            },
+        ),
+    )
+    await _run(obs)
+    assert len(sink.rows) == 2
+
+    rec = sink.rows[0]
+    assert rec["event_type"] == "welfare.sensor_silent"
+    assert rec["processor"] == "audition_acoustic"
+    assert rec["silent_seconds"] == 30.0
+    assert rec["sensor_silent_duration_s"] == 30.0
+    assert rec["sensor_silent_count"] == 1
+    assert "internal_speech" not in rec
+    assert "some_future_field" not in rec
+    assert _no_content_anywhere(rec)
+
+    cleared = sink.rows[1]
+    assert cleared["event_type"] == "welfare.sensor_silent_cleared"
+    assert "processor" not in cleared
+    assert "silent_seconds" not in cleared
+    assert cleared["sensor_silent_count"] == 1
+    assert _no_content_anywhere(cleared)
+
+
+def test_audition_emotion_record_carries_entry_id(tmp_path):
+    observer = ResearchEventObserver(
+        bus=None, sink=AsyncJsonlSink(tmp_path / "re", name="research_events")
+    )
+    event = Event(
+        timestamp=datetime.now(timezone.utc),
+        source="audition",
+        type="audition.emotion",
+        salience=0.8,
+        payload={
+            "category": "happy",
+            "confidence": 0.9,
+            "scores": {"happy": 0.9},
+            "alert": True,
+            "tone_error_ratio": 0.3,
+            "tone_rule": "error_ratio",
+            "classified": True,
+            "latency_ms": 12.0,
+        },
+    )
+    record = observer._build_record(event, "audition.out:5-0")
+    assert record is not None
+    assert record["entry_id"] == "audition.out:5-0"
+    assert record["tone_error_ratio"] == 0.3
+    assert record["tone_rule"] == "error_ratio"
+    assert record["classified"] is True
+    assert record["alert"] is True
+    assert "latency_ms" not in record
+
+
+@pytest.mark.asyncio
+async def test_handle_writes_stream_qualified_tone_id(tmp_path):
+    observer = ResearchEventObserver(
+        bus=None, sink=AsyncJsonlSink(tmp_path / "re", name="research_events")
+    )
+    event = Event(
+        timestamp=datetime.now(timezone.utc),
+        source="audition",
+        type="audition.emotion",
+        salience=0.8,
+        payload={
+            "category": "happy",
+            "confidence": 0.9,
+            "scores": {"happy": 0.9},
+            "alert": True,
+            "tone_error_ratio": 0.3,
+            "tone_rule": "error_ratio",
+            "classified": True,
+            "latency_ms": 12.0,
+        },
+    )
+    written = []
+    class _FakeSink:
+        async def write(self, record):
+            written.append(record)
+    observer._sink = _FakeSink()
+    await observer.handle("audition.out", "5-0", event)
+    assert len(written) == 1
+    assert written[0]["entry_id"] == "audition.out:5-0"
+
+
+def test_workspace_metadata_record_copies_entry_id():
+    from kaine.evaluation.observers.research_event_observer import (
+        _workspace_metadata_record,
+    )
+
+    snapshot = {
+        "tick_index": 42,
+        "inhibited": False,
+        "salience_scores": {"audition.out:5-0": 0.7},
+        "selected": [
+            {
+                "entry_id": "audition.out:5-0",
+                "source": "audition",
+                "type": "audition.emotion",
+                "salience": 0.7,
+                "causal_parent": None,
+                "payload": {"secret": "never-logged"},
+            }
+        ],
+    }
+    record = _workspace_metadata_record(snapshot)
+    assert record["entries"][0]["entry_id"] == "audition.out:5-0"
+    assert record["entries"][0]["source"] == "audition"
+    assert "payload" not in record["entries"][0]
+    assert "secret" not in str(record)
+
+
+def test_audition_emotion_tone_error_ratio_bound():
+    assert _bound_for("audition.emotion", "tone_error_ratio") == NONNEG

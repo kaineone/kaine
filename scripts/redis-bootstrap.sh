@@ -23,7 +23,7 @@
 #   bash scripts/redis-bootstrap.sh --keep-password
 #   bash scripts/redis-bootstrap.sh --rotate
 
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 set -euo pipefail

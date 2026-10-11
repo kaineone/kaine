@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Family-wise multiple-comparisons correction for the evaluation suite.
@@ -22,9 +22,10 @@ Given ``m`` raw p-values ``p_(1) <= ... <= p_(m)`` (ascending):
 - The **adjusted** p-value for the rank-``k`` (1-indexed) test is
   ``p̃_(k) = max_{j<=k} min( (m - j + 1) * p_(j), 1 )`` — the cumulative-max
   enforces the monotonicity Holm requires.
-- Reject H0 for a test iff its adjusted p-value ``< alpha`` (equivalent to the
+- Reject H0 for a test iff its adjusted p-value ``<= alpha`` (equivalent to the
   step-down rule: reject the smallest raw p-values until the first one that
-  fails ``p_(k) < alpha / (m - k + 1)``, then stop).
+  fails ``p_(k) <= alpha / (m - k + 1)``, then stop).
+  Both inequalities are non-strict, as in Holm (1979).
 """
 from __future__ import annotations
 
@@ -70,7 +71,7 @@ def holm_bonferroni(
     list[Comparison]
         One entry per input, in the SAME order the inputs were given (not sorted
         by p-value), each carrying ``raw_p``, the monotone Holm-adjusted
-        ``holm_p``, and the ``reject`` decision (``holm_p < alpha``).
+        ``holm_p``, and the ``reject`` decision (``holm_p <= alpha``).
     """
     if not (0.0 < alpha < 1.0):
         raise ValueError("alpha must be in (0, 1).")
@@ -104,7 +105,7 @@ def holm_bonferroni(
             name=items[i][0],
             raw_p=float(items[i][1]),
             holm_p=float(holm_by_index[i]),
-            reject=bool(holm_by_index[i] < alpha),
+            reject=bool(holm_by_index[i] <= alpha),
         )
         for i in range(m)
     ]

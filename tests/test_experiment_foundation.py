@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for the experiment foundation: seeding, run identity, manifest, verdict.
@@ -147,6 +147,35 @@ def test_mint_run_context_and_manifest_round_trip(tmp_path):
     assert loaded["model_ids"] == {"lingua": "model:x"}
     assert loaded["config_digest"] == ctx.config_digest
     assert loaded["kaine_version"] == "26.06.0a1"
+
+
+def test_run_context_and_manifest_record_the_study(tmp_path):
+    ctx = mint_run_context(
+        seed=42,
+        started_at="2026-06-14T00:00:00+00:00",
+        config={"a": 1, "b": {"c": 2}},
+        model_ids={"lingua": "model:x"},
+        version="26.06.0a1",
+        study="workspace_mediation_matched",
+    )
+    assert ctx.study == "workspace_mediation_matched"
+
+    path = write_manifest(ctx, root=tmp_path)
+    loaded = json.loads(path.read_text())
+    assert loaded["study"] == "workspace_mediation_matched"
+
+    ctx_default = mint_run_context(
+        seed=43,
+        started_at="2026-06-14T00:00:00+00:00",
+        config={"a": 1},
+        model_ids={"lingua": "model:x"},
+        version="26.06.0a1",
+    )
+    assert ctx_default.study is None
+
+    path_default = write_manifest(ctx_default, root=tmp_path)
+    loaded_default = json.loads(path_default.read_text())
+    assert loaded_default["study"] is None
 
 
 def test_two_minted_contexts_have_distinct_run_ids():
@@ -327,6 +356,14 @@ def test_manifest_is_content_free(tmp_path):
         # Operator revive (operator-revive-and-preserve): the preservation id
         # this run was revived from, or None for a fresh start. An id only.
         "revived_from",
+        # The study configuration name (KAINE_STUDY), or None. A name only.
+        "study",
+        # The digest of the planned-test settings record that gated the run
+        # (paper Appendix A.8), or None for runs the record does not gate. A hash only.
+        "settings_record_sha256",
+        # Verification status of the pilot run data behind the record:
+        # "verified", "absent" or "partial"; None when no record gated the run.
+        "settings_record_run_data",
         # Timing settings (slip-driven-time-dilation): the configured
         # time_scale and the automatic-dilation parameters. Numbers only.
         "timing",
@@ -427,7 +464,12 @@ def test_verdict_to_dict_stable():
 
 
 def test_outcome_covers_both_vocabularies():
-    assert {o.value for o in Outcome} == {"WIN", "NULL", "NEGATIVE", "PASS", "FAIL"}
+    assert {o.value for o in Outcome} == {"WIN", "NULL", "NEGATIVE", "NOT_EXERCISED", "PASS", "FAIL"}
+
+
+def test_not_exercised_serialises_apart_from_null():
+    assert Verdict(outcome=Outcome.NOT_EXERCISED).to_dict()["outcome"] == "NOT_EXERCISED"
+    assert Outcome.NOT_EXERCISED is not Outcome.NULL
 
 
 def test_aif_report_contains_shared_verdict():

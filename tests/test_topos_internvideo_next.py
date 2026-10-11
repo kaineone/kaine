@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Phase 1 tests for the InternVideo-Next encoder foundation.
@@ -261,6 +261,7 @@ def test_internvideo_next_rejects_unknown_pooling():
 # --------------------------------------------------------------------------
 
 
+@pytest.mark.no_data_root
 def test_download_cmd_pins_revision_and_local_dir():
     from kaine.setup.internvideo_next import (
         INTERNVIDEO_NEXT_REPO,

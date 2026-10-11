@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """The factory tables and registry construction: build, construct and rewire modules."""
@@ -70,7 +70,7 @@ SIMPLE_FACTORIES: dict[str, ModuleFactory] = {
 # clock dilates their integrals/cadences coherently with the cycle's tick
 # pacing. Every other module is purely event-driven (paces off the subjective
 # cycle already) or times only infrastructure, so it gets no clock.
-_CLOCKED_FACTORIES: frozenset[str] = frozenset({"soma", "topos", "mnemos", "thymos", "perception", "chronos", "vox"})
+_CLOCKED_FACTORIES: frozenset[str] = frozenset({"audition", "chronos", "mnemos", "perception", "soma", "thymos", "topos", "vox"})
 
 
 def plugin_injections(plugins: Any, name: str) -> Optional[dict[str, Any]]:
@@ -267,9 +267,6 @@ def build_registry(
 
     if bool(toggles.get("hypnos", False)):
         # construct_module hands Hypnos its sibling modules from the registry.
-        # Nous is now a pymdp/JAX active-inference engine with no NAR subprocess,
-        # so there is no process for Hypnos's belief-revision phase to step;
-        # that phase skips cleanly when nous_process is None.
         hypnos = construct_module(
             "hypnos",
             bus,
@@ -321,6 +318,7 @@ def construct_module(
     section = dict(kaine_config.get(name) or {})
     if name in ("topos", "audition", "soma"):
         section["perception_feed"] = dict(kaine_config.get("perception_feed") or {})
+        section["positive_control"] = dict(kaine_config.get("positive_control") or {})
 
     if name in ("mnemos", "empatheia"):
         section["_embedder"] = shared_embedder(registry, kaine_config)
@@ -333,7 +331,6 @@ def construct_module(
             bus,
             section,
             mnemos=mnemos,
-            nous_process=None,
             thymos=thymos,
             phantasia=phantasia,
             kaine_config=kaine_config,
@@ -343,7 +340,7 @@ def construct_module(
 
     factory = SIMPLE_FACTORIES[name]
     if name in _CLOCKED_FACTORIES:
-        if name in {"chronos", "soma", "nous"}:
+        if name in {"audition", "chronos", "soma", "nous"}:
             return factory(
                 bus, section, entity_clock=entity_clock, injections=injections
             )
@@ -351,8 +348,6 @@ def construct_module(
     if name == "praxis":
         return factory(bus, section, intent_secret=intent_secret)
     if name in {"chronos", "soma", "nous"}:
-        return factory(bus, section, injections=injections)
-    if name == "audition":
         return factory(bus, section, injections=injections)
     return factory(bus, section)
 

@@ -27,7 +27,7 @@
   {% elif metrics.supervision_mode == "unattended" %}
     <div class="supervision-badge supervision-badge--unattended" role="status">
       <strong>UNATTENDED</strong>
-      <span class="muted">no person present — gated by the eight-condition safety net</span>
+      <span class="muted">no person present — gated by the nine-condition safety net</span>
       {% if metrics.gate_checks %}
         <ul class="gate-checks">
           {% for name, ok in metrics.gate_checks.items() %}

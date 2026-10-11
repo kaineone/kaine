@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Operator entrypoint: `python -m kaine.nexus` boots uvicorn against
@@ -75,7 +75,7 @@ def make_metrics_snapshot(
             "tick_index": raw.get("tick_index"),
             "processing_rate_hz": raw.get("processing_rate_hz"),
             "experiential_rate_hz": raw.get("experiential_rate_hz"),
-            # Adaptive conscious access: the rate used on the latest tick and
+            # Adaptive access: the rate used on the latest tick and
             # the drive behind it; experiential_rate_hz above is the resting rate.
             "experiential_rate_effective_hz": raw.get("experiential_rate_effective_hz"),
             "access_drive": raw.get("access_drive"),

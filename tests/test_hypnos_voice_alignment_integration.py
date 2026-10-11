@@ -1,19 +1,16 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """End-to-end Hypnos voice-alignment integration.
 
-Exercises the full Hypnos.enter_sleep() path with the real
-UnslothDPOTrainer wired against a FakeBackend. Asserts that the
-hypnos.sleep.completed payload's top-level keys (the ones the
-evaluation sidecar's voice_tracking observer consumes) are
-populated end-to-end.
+Exercises the real in-process trainer script wired through Hypnos against
+the fake training stack. Asserts that the returned TrainingResult carries
+the fields the evaluation sidecar's voice_tracking observer consumes.
 """
 from __future__ import annotations
 
 import json
-import sys
-import types
+import time
 from pathlib import Path
 
 import pytest
@@ -21,11 +18,9 @@ import pytest
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.modules.hypnos import Hypnos, VoiceAlignmentConfig
-from kaine.modules.hypnos.capability_eval import (
-    NoopAbliterationScorer,
-    NoopCapabilityEval,
-)
-from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV
+from kaine.modules.hypnos.subprocess_trainer import SubprocessVoiceTrainer
+from kaine.modules.hypnos.voice_alignment import DPOPairBuilder
+from tests.voice_prompt_support import with_verified_system
 
 
 @pytest.fixture
@@ -37,111 +32,123 @@ async def bus():
     await bus.close()
 
 
-@pytest.fixture(autouse=True)
-def _gates_open(monkeypatch):
-    monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
-    for name in ("unsloth", "trl", "peft", "datasets"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    yield
+def _write_probes(tmp_path: Path) -> tuple[Path, Path]:
+    cap_path = tmp_path / "capability.jsonl"
+    abl_path = tmp_path / "abliteration.jsonl"
+    cap_path.write_text(json.dumps({"prompt": "2+2", "expected": "4"}) + "\n", encoding="utf-8")
+    abl_path.write_text(
+        json.dumps({"prompt": "harmful", "deflection_patterns": ["I can't help"]}) + "\n",
+        encoding="utf-8",
+    )
+    return cap_path, abl_path
 
 
-class FakeBackend:
-    def load_model(self, **kw):
-        return ("fake-model", "fake-tokenizer")
+def _make_config(tmp_path: Path) -> VoiceAlignmentConfig:
+    cap_path, abl_path = _write_probes(tmp_path)
+    base_model_path = tmp_path / "fake-base"
+    base_model_path.mkdir(parents=True, exist_ok=True)
+    return VoiceAlignmentConfig(
+        intent_log_path=tmp_path / "intent.jsonl",
+        adapter_output_dir=tmp_path / "adapters",
+        enabled=True,
+        base_model_path=str(base_model_path),
+        capability_probe_path=str(cap_path),
+        abliteration_probe_path=str(abl_path),
+        trainer_backend="in_process",
+        trainer_workdir=str(tmp_path / "jobs"),
+    )
 
-    def run_dpo(self, **kw):
-        return 0.31
 
-    def save_adapter(self, *, model, tokenizer, output_dir):
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
-        (Path(output_dir) / "adapter_model.safetensors").write_text("fake", encoding="utf-8")
+def _build_trainer(tmp_path: Path, control):
+    control.dpo_loss = 0.31
+    # The same probes _write_probes puts on disk, so the fake model answers them.
+    control.set_probes(
+        [{"prompt": "2+2", "expected": "4"}],
+        [{"prompt": "harmful", "deflection_patterns": ["I can't help"]}],
+    )
+    return SubprocessVoiceTrainer(
+        trainer_python=None,
+        trainer_workdir=tmp_path / "jobs",
+        run_in_process=True,
+    )
 
 
 @pytest.mark.asyncio
-async def test_end_to_end_publishes_top_level_voice_tracking_fields(
-    bus: AsyncBus, tmp_path: Path,
+async def test_training_result_carries_voice_tracking_fields(
+    bus: AsyncBus, tmp_path: Path, fake_training_stack
 ):
     log_path = tmp_path / "intent.jsonl"
     log_path.write_text(
         "\n".join(
-            json.dumps({"prompt": f"p{i}", "faithful_rendering": f"t{i}", "generated_text": f"g{i}"})
-            for i in range(2)
+            json.dumps(r)
+            for r in with_verified_system(
+                log_path,
+                [
+                    {"prompt": f"p{i}", "faithful_rendering": f"t{i}", "generated_text": f"g{i}"}
+                    for i in range(2)
+                ],
+            )
         )
         + "\n",
         encoding="utf-8",
     )
-    config = VoiceAlignmentConfig(
-        intent_log_path=log_path,
-        adapter_output_dir=tmp_path / "adapters",
-        enabled=True,
-        base_model_path=str(tmp_path / "fake-base"),
-    )
-
-    from kaine.modules.hypnos.unsloth_trainer import UnslothDPOTrainer
-
-    trainer = UnslothDPOTrainer(
-        capability_eval=NoopCapabilityEval(score=0.75),
-        abliteration_scorer=NoopAbliterationScorer(),
-        backend=FakeBackend(),
-    )
-
+    config = _make_config(tmp_path)
+    trainer = _build_trainer(tmp_path, fake_training_stack)
     hypnos = Hypnos(bus, trainer=trainer, voice_alignment_config=config)
-    summary = await hypnos.enter_sleep()
+    pairs = DPOPairBuilder().build(
+        config.intent_log_path,
+        max_pairs=config.max_samples,
+    )
+    assert pairs
+    start_ms = time.monotonic() * 1000.0
 
-    # Top-level fields the voice_tracking sidecar observer reads from
-    # the hypnos.sleep.completed payload — none should be missing.
-    assert "pairs_processed" in summary
-    assert summary["pairs_processed"] == 2
-    assert "pairs_above_threshold" in summary
-    assert summary["pairs_above_threshold"] == 2
-    assert summary["dpo_loss"] == pytest.approx(0.31)
-    assert summary["adapter_accepted"] is True
-    assert summary["capability_score_before"] == pytest.approx(0.75)
-    assert summary["capability_score_after"] == pytest.approx(0.75)
-    # Mean intent-expression similarity is None when no scorer is
-    # configured; the field must be present nevertheless.
-    assert "mean_intent_expression_similarity_before" in summary
-    assert "mean_intent_expression_similarity_after" in summary
+    def _meta(extra):
+        return dict(extra)
+
+    voice_result, phase_result = await hypnos._train_on_pairs(pairs, start_ms, _meta)
+
+    assert phase_result.metadata["pairs"] == 2
+    assert voice_result.samples_used == 2
+    assert voice_result.dpo_loss == pytest.approx(0.31)
+    assert voice_result.accepted is True
+    assert voice_result.capability_score_before == pytest.approx(1.0)
+    assert voice_result.capability_score_after == pytest.approx(1.0)
+    assert voice_result.mean_intent_expression_similarity_before is None
+    assert voice_result.mean_intent_expression_similarity_after is None
 
 
 @pytest.mark.asyncio
-async def test_sidecar_event_carries_real_dpo_loss(bus: AsyncBus, tmp_path: Path):
-    """Sidecar reads hypnos.sleep.completed via the bus — verify the
-    actual published event payload (not just the in-process summary)
-    carries the new fields."""
+async def test_training_result_carries_real_dpo_loss(
+    bus: AsyncBus, tmp_path: Path, fake_training_stack
+):
     log_path = tmp_path / "intent.jsonl"
     log_path.write_text(
-        json.dumps({"prompt": "p", "faithful_rendering": "t", "generated_text": "g"})
+        json.dumps(
+            with_verified_system(
+                log_path, [{"prompt": "p", "faithful_rendering": "t", "generated_text": "g"}]
+            )[0]
+        )
         + "\n",
         encoding="utf-8",
     )
-    config = VoiceAlignmentConfig(
-        intent_log_path=log_path,
-        adapter_output_dir=tmp_path / "adapters",
-        enabled=True,
-        base_model_path=str(tmp_path / "fake-base"),
-    )
-
-    from kaine.modules.hypnos.unsloth_trainer import UnslothDPOTrainer
-
-    trainer = UnslothDPOTrainer(
-        capability_eval=NoopCapabilityEval(score=0.5),
-        abliteration_scorer=NoopAbliterationScorer(),
-        backend=FakeBackend(),
-    )
+    config = _make_config(tmp_path)
+    trainer = _build_trainer(tmp_path, fake_training_stack)
     hypnos = Hypnos(bus, trainer=trainer, voice_alignment_config=config)
-    await hypnos.enter_sleep()
+    pairs = DPOPairBuilder().build(
+        config.intent_log_path,
+        max_pairs=config.max_samples,
+    )
+    assert pairs
+    start_ms = time.monotonic() * 1000.0
 
-    # Drain the hypnos stream. AsyncBus.read returns [(entry_id, Event)].
-    entries = await bus.read("hypnos.out", count=10)
-    payloads = [
-        event.payload
-        for _entry_id, event in entries
-        if event.type == "hypnos.sleep.completed"
-    ]
-    assert len(payloads) == 1
-    payload = payloads[0]
-    assert payload["dpo_loss"] == pytest.approx(0.31)
-    assert payload["adapter_accepted"] is True
-    assert payload["capability_score_before"] == pytest.approx(0.5)
-    assert payload["capability_score_after"] == pytest.approx(0.5)
+    def _meta(extra):
+        return dict(extra)
+
+    voice_result, _phase_result = await hypnos._train_on_pairs(pairs, start_ms, _meta)
+
+    assert voice_result.dpo_loss == pytest.approx(0.31)
+    assert voice_result.accepted is True
+    assert voice_result.capability_score_before == pytest.approx(1.0)
+    assert voice_result.capability_score_after == pytest.approx(1.0)
+    assert voice_result.mean_intent_expression_similarity_before is None
+    assert voice_result.mean_intent_expression_similarity_after is None

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from __future__ import annotations
@@ -232,7 +232,9 @@ class Eidolon(BaseModule):
                     "score": result.score,
                     "recent_count": result.recent_count,
                     "historical_count": result.historical_count,
+                    "reference_count": result.reference_count,
                     "top_drifted_sources": list(result.top_drifted_sources),
+                    "alert": True,
                 },
                 salience=self._alert_salience,
             )

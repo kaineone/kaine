@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 """unit tests of the Soma wetware backend on the simulator."""
 from __future__ import annotations
 
@@ -47,6 +47,29 @@ def test_first_step_error_is_zero_and_units_match(substrate):
     assert second > 0.0
 
 
+def test_first_error_is_defined_and_reset_clears_the_skip(substrate):
+    broker, territory = substrate
+    model = WetwareInteroceptiveModel(broker, territory)
+    assert model.last_error_defined is True
+    assert model.last_reading_skipped is False
+
+    first = model.step(STEADY)
+    assert first == 0.0
+    assert model.last_error_defined is True
+
+    err = model.step([float("nan")] + [0.0] * 7)
+    assert err == 0.0
+    assert model.last_error_defined is False
+
+    model.reset()
+    assert model.last_error_defined is True
+    assert model.last_reading_skipped is False
+
+    again = model.step(STEADY)
+    assert again == 0.0
+    assert model.last_error_defined is True
+
+
 def test_wrong_length_raises(substrate):
     broker, territory = substrate
     model = WetwareInteroceptiveModel(broker, territory)
@@ -66,14 +89,31 @@ def test_non_finite_feature_skips_the_tick(substrate, monkeypatch):
 
     monkeypatch.setattr(broker, "run_cognitive_tick", counting)
     before_state = model.state_dict()
-    model.step(STEADY)
+    first = model.step(STEADY)
+    assert first == 0.0
     assert calls[0] == 1
+    assert model.last_error_defined is True
 
     err = model.step([float("nan")] + [0.0] * 7)
     assert err == 0.0
     assert calls[0] == 1
     assert model.adaptation_steps == 0
     assert model.state_dict() == before_state
+    assert model.last_reading_skipped is True
+    assert model.last_error_defined is False
+
+    steady = model.step(STEADY)
+    assert steady == 0.0
+    assert model.last_reading_skipped is False
+    assert model.last_error_defined is False
+    assert calls[0] == 2
+    assert model.adaptation_steps == 0
+
+    third = model.step(STEADY)
+    assert math.isfinite(third)
+    assert third > 0.0
+    assert model.last_error_defined is True
+    assert model.adaptation_steps == 1
 
 
 def test_suspension_freezes_adaptation(substrate):

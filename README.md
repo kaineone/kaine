@@ -2,6 +2,10 @@
 
 Part of the Kaine project — **[kaine.one](https://kaine.one)**
 
+> **Status: on hiatus.** Active development is paused. Contributions are still
+> welcome as pull requests (see [CONTRIBUTING.md](CONTRIBUTING.md)), but reviews
+> happen only occasionally and on no fixed schedule.
+
 **Kaine Autonomous Intelligent Networked Entity** — a composite cognitive
 architecture built to test one claim: that a mind is the **continuous competition
 among specialized predictive processors through a shared global workspace**, and
@@ -27,7 +31,8 @@ competition:
 - **Topos** (foveated vision over raw video),
 - **Audition** (raw sound as prediction error),
 - **Thymos** (affect/arousal — the precision core setting the gain on the
-  competition, itself moved by perceptual surprise), and
+  competition, itself moved by perceptual surprise),
+- **Hypnos** (fatigue-triggered sleep and consolidation, with voice alignment off), and
 - **Lingua** (the output-only voice),
 
 with **Syneidesis** (the workspace) and **Volition** (action selection) as
@@ -45,8 +50,8 @@ architecture is a scored prompt-assembler and the thesis is falsified. That test
 pre-registered and designed so a null result is reportable.
 
 Everything richer — **memory, self-model, world-model, social cognition,
-sleep/consolidation, effectors, embodiment, and a spoken voice** (the remaining
-ten modules plus the oscillatory and embodiment layers) — is **built, tested,
+effectors, embodiment, and a spoken voice** (the remaining
+nine modules, plus the oscillatory and embodiment layers) — is **built, tested,
 and gated off** until a positive base result. It is held, never removed.
 
 ## 📚 Documentation
@@ -62,8 +67,8 @@ The documentation is one book in [`docs/`](docs/README.md), read in order or by 
 
 ## Status
 
-**Public alpha**, released under the **Cognitive Architecture License (CAL)** — see
-[LICENSE.md](LICENSE.md) and [NOTICE](NOTICE). The full architecture is
+**Public alpha**, released under the **Cognitive Architecture License (CAL) 0.4** (see
+[LICENSE.md](LICENSE.md) and [NOTICE](NOTICE)). The full architecture is
 feature-complete and tested in-tree; the project has been **reconfigured to its
 base-thesis form** as the default, with the richer faculties held behind a positive
 ablation result. Runs on CUDA, ROCm, Intel XPU, Apple MPS, or CPU — compute device
@@ -138,5 +143,7 @@ software.
 
 ## License
 
-Released under the **Cognitive Architecture License (CAL)** — a custom
-entity-welfare copyleft, pending legal review. See [LICENSE.md](LICENSE.md).
+Released under the **Cognitive Architecture License (CAL) 0.4**, an
+entity-welfare copyleft license that has not yet been reviewed by counsel.
+Kaine.One is the Licensor and interim Steward, and the license is governed by
+the law of the State of Oregon. See [LICENSE.md](LICENSE.md) and [NOTICE](NOTICE).

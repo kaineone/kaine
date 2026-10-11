@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for EmpatheiaMergeStrategy — fork/merge semantics."""
@@ -133,3 +133,82 @@ def test_merge_one_none_returns_other():
     assert "profiles" in merged_a
     merged_b = strategy.merge(None, state)
     assert "profiles" in merged_b
+
+
+def test_merge_summary_missing_error_on_one_side_is_absent():
+    strategy = EmpatheiaMergeStrategy()
+    a = _make_model("x", ["happy"], n=3).to_dict()
+    a["behavioral_summary"]["mean_prediction_error"] = 0.6
+    b = _make_model("x", ["sad"], n=5).to_dict()
+    del b["behavioral_summary"]["mean_prediction_error"]
+
+    merged = strategy.merge(
+        _store_snapshot(AgentModel(**a)), _store_snapshot(AgentModel(**b))
+    )
+    summary = merged["profiles"]["x"]["behavioral_summary"]
+    assert summary["mean_prediction_error"] == pytest.approx(0.6)
+    assert summary["mean_confidence"] == pytest.approx(0.8)
+
+
+def test_merge_summary_none_error_is_absent():
+    strategy = EmpatheiaMergeStrategy()
+    a = _make_model("x", ["happy"], n=3).to_dict()
+    a["behavioral_summary"]["mean_prediction_error"] = 0.6
+    b = _make_model("x", ["sad"], n=5).to_dict()
+    b["behavioral_summary"]["mean_prediction_error"] = None
+
+    merged = strategy.merge(
+        _store_snapshot(AgentModel(**a)), _store_snapshot(AgentModel(**b))
+    )
+    summary = merged["profiles"]["x"]["behavioral_summary"]
+    assert summary["mean_prediction_error"] == pytest.approx(0.6)
+
+    merged_swap = strategy.merge(
+        _store_snapshot(AgentModel(**b)), _store_snapshot(AgentModel(**a))
+    )
+    assert (
+        merged_swap["profiles"]["x"]["behavioral_summary"]["mean_prediction_error"]
+        == pytest.approx(0.6)
+    )
+
+
+def test_merge_summary_error_absent_on_both_sides_stays_absent():
+    strategy = EmpatheiaMergeStrategy()
+    a = _make_model("x", ["happy"], n=3).to_dict()
+    del a["behavioral_summary"]["mean_prediction_error"]
+    b = _make_model("x", ["sad"], n=5).to_dict()
+    b["behavioral_summary"]["mean_prediction_error"] = None
+
+    merged = strategy.merge(
+        _store_snapshot(AgentModel(**a)), _store_snapshot(AgentModel(**b))
+    )
+    assert "mean_prediction_error" not in merged["profiles"]["x"]["behavioral_summary"]
+
+
+def test_merge_summary_both_defined_is_weighted():
+    strategy = EmpatheiaMergeStrategy()
+    a = _make_model("x", ["happy"], n=3).to_dict()
+    a["behavioral_summary"]["mean_prediction_error"] = 0.2
+    b = _make_model("x", ["sad"], n=5).to_dict()
+    b["behavioral_summary"]["mean_prediction_error"] = 0.6
+
+    merged = strategy.merge(
+        _store_snapshot(AgentModel(**a)), _store_snapshot(AgentModel(**b))
+    )
+    summary = merged["profiles"]["x"]["behavioral_summary"]
+    assert summary["mean_prediction_error"] == pytest.approx((3 * 0.2 + 5 * 0.6) / 8)
+
+
+def test_merge_summary_zero_count_side_does_not_divide_by_zero():
+    strategy = EmpatheiaMergeStrategy()
+    a = _make_model("x", ["happy"], n=1).to_dict()
+    a["interaction_count"] = 0
+    a["behavioral_summary"]["mean_prediction_error"] = 0.4
+    b = _make_model("x", ["sad"], n=5).to_dict()
+    del b["behavioral_summary"]["mean_prediction_error"]
+
+    merged = strategy.merge(
+        _store_snapshot(AgentModel(**a)), _store_snapshot(AgentModel(**b))
+    )
+    summary = merged["profiles"]["x"]["behavioral_summary"]
+    assert summary["mean_prediction_error"] == pytest.approx(0.4)

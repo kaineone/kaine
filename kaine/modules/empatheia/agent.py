@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """AgentModel — per-agent social model for Empatheia.
@@ -16,7 +16,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 # Canonical emotion categories matching audition.emotion payloads.
 EMOTION_CATEGORIES: tuple[str, ...] = (
@@ -107,7 +107,7 @@ class AgentModel:
         self,
         category: str,
         confidence: float,
-        prediction_error: float = 0.0,
+        prediction_error: Optional[float] = 0.0,
         *,
         deviation_threshold: float = 0.5,
         now: float | None = None,
@@ -120,8 +120,9 @@ class AgentModel:
             Observed emotion category (from ``audition.emotion`` payload).
         confidence : float
             Classifier confidence in [0, 1].
-        prediction_error : float
-            Forward-model prediction error from the audition event.
+        prediction_error : Optional[float]
+            Forward-model prediction error from the audition event, or
+            None when the observation has no defined error.
         deviation_threshold : float
             Above this deviation the agent is considered out-of-character.
         now : float | None
@@ -155,11 +156,15 @@ class AgentModel:
             (1.0 - _EMA_ALPHA) * self.behavioral_summary.get("mean_confidence", confidence)
             + _EMA_ALPHA * confidence
         )
-        self.behavioral_summary["mean_prediction_error"] = (
-            (1.0 - _EMA_ALPHA)
-            * self.behavioral_summary.get("mean_prediction_error", prediction_error)
-            + _EMA_ALPHA * prediction_error
-        )
+
+        # An observation without a defined error leaves the error average
+        # alone, so it is never seeded or pulled toward a made-up 0.
+        if prediction_error is not None:
+            self.behavioral_summary["mean_prediction_error"] = (
+                (1.0 - _EMA_ALPHA)
+                * self.behavioral_summary.get("mean_prediction_error", prediction_error)
+                + _EMA_ALPHA * prediction_error
+            )
 
         # Update reliability: decay when out-of-character, recover otherwise.
         if deviation > deviation_threshold:

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Integration tests of the real unattended gate stack.
@@ -54,7 +54,9 @@ def _make_config(port: int) -> dict[str, Any]:
             "channels": [{"kind": "http", "url": f"http://127.0.0.1:{port}/notify"}]
         },
         "perception_feed": {"mode": "seeded", "seed": 0},
-        "modules": {"topos": True},
+        # Condition 9 needs the individuation producer wired, which needs lingua.
+        "individuation": {"enabled": True},
+        "modules": {"topos": True, "lingua": True},
         "topos": {"capture_width": 64, "capture_height": 48},
     }
 
@@ -145,7 +147,7 @@ def test_unattended_gate_healthy(
     assert rc == 0
     assert len(calls) == 1
     assert calls[0]["supervision_mode"] == "unattended"
-    assert len(calls[0]["gate_checks"]) == 8
+    assert len(calls[0]["gate_checks"]) == 9
     assert all(calls[0]["gate_checks"].values())
 
     assert len(server.posts) == 1
@@ -166,6 +168,7 @@ def test_unattended_gate_healthy(
         (["evaluation", "enabled"], False, 3),
         (["spot", "enabled"], False, 6),
         (["perception_feed", "mode"], "off", 8),
+        (["individuation", "enabled"], False, 9),
     ],
 )
 def test_unattended_gate_refuses_one_condition(

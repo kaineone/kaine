@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from kaine.lifecycle.decommission import delete_entity_state
-from kaine.memory_kinds import MNEMOS_STAMP_COLLECTION, stamp_key, stamp_point_id
+from kaine.memory_kinds import MNEMOS_STAMP_COLLECTION, stamp_key, stamp_point_id, strength_key
 
 HAS_QDRANT = importlib.util.find_spec("qdrant_client") is not None
 
@@ -142,3 +142,60 @@ def test_decommission_deletes_stamp_point(tmp_path, monkeypatch):
         for coll, pids in fake.deleted_points
     )
     assert "mnemos_episodic" in fake.deleted_collections
+
+    strength_key_str = strength_key("mnemos_")
+    strength_pid = stamp_point_id(strength_key_str)
+    assert f"{MNEMOS_STAMP_COLLECTION}:{strength_key_str}" in result.dropped_collections
+    assert any(
+        coll == MNEMOS_STAMP_COLLECTION and strength_pid in pids
+        for coll, pids in fake.deleted_points
+    )
+
+
+@pytest.mark.skipif(not HAS_QDRANT, reason="qdrant_client not installed")
+def test_decommission_keeps_strength_meta_when_a_drop_fails(tmp_path, monkeypatch):
+    """A failed collection drop keeps the Mnemos strength meta point."""
+    state_root = tmp_path / "state"
+    _seed(state_root)
+
+    class FragileQdrant(_DecommissionFakeQdrantClient):
+        def delete_collection(self, collection_name: str) -> None:
+            if collection_name == "mnemos_semantic":
+                raise RuntimeError("semantic drop failed")
+            super().delete_collection(collection_name)
+
+    fake = FragileQdrant()
+    monkeypatch.setattr(
+        "kaine.lifecycle.decommission._qdrant_client",
+        lambda _cfg: fake,
+    )
+    result = delete_entity_state(
+        state_root=state_root,
+        qdrant_cfg={
+            "mnemos": {
+                "qdrant": {
+                    "host": "127.0.0.1",
+                    "port": 6533,
+                    "api_key": "test",
+                }
+            }
+        },
+        redis_cfg=None,
+        dry_run=False,
+    )
+    stamp = stamp_key("mnemos_")
+    stamp_pid = stamp_point_id(stamp)
+    strength = strength_key("mnemos_")
+    strength_pid = stamp_point_id(strength)
+
+    assert f"{MNEMOS_STAMP_COLLECTION}:{stamp}" in result.dropped_collections
+    assert any(
+        coll == MNEMOS_STAMP_COLLECTION and stamp_pid in pids
+        for coll, pids in fake.deleted_points
+    )
+    assert not any(
+        coll == MNEMOS_STAMP_COLLECTION and strength_pid in pids
+        for coll, pids in fake.deleted_points
+    )
+    assert f"{MNEMOS_STAMP_COLLECTION}:{strength}" not in result.dropped_collections
+    assert any("strength meta kept" in err for err in result.errors)
