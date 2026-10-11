@@ -466,7 +466,10 @@ def calibrate(
     now: str | None = None,
 ) -> dict[str, Any]:
     """Build the planned-test settings record from ``plan`` without its digest."""
-    root = resolve(root)
+    # The record stores the principal-component paths as given (relative to the
+    # data root), so no operator path enters the committed record.
+    given_root = Path(root)
+    root = resolve(given_root)
 
     # ------------------------------------------------------------------
     # a. Validate the plan and load all runs once
@@ -619,6 +622,9 @@ def calibrate(
         pc_path = principal_component_path(
             root / "positive_control", preliminary_run, processor
         )
+        record_path = principal_component_path(
+            given_root / "positive_control", preliminary_run, processor
+        )
         try:
             pc = load_principal_component(pc_path)
         except Exception as exc:
@@ -633,7 +639,7 @@ def calibrate(
             )
 
         principal_components[processor] = {
-            "path": str(pc_path),
+            "path": str(record_path),
             "sha256": file_sha256(pc_path),
             "dim": pc.dim,
             "n_inputs": pc.n_inputs,

@@ -201,3 +201,28 @@ def test_refusal_checks_positive_control_mode(tmp_path: Path) -> None:
 
     config["positive_control"]["mode"] = "control"
     assert planned_test_refusal("workspace_mediation_positive_control", config, 99) is None
+
+
+def test_load_settings_record_with_relative_pc_paths(monkeypatch, tmp_path):
+    """Relative principal-component paths are resolved against the data root."""
+    from pathlib import Path
+
+    from kaine.experiment.calibrate import PROCESSORS
+    from kaine.experiment.planned_test_settings import (
+        load_settings_record,
+        write_settings_record,
+    )
+
+    record, path = _build_record(tmp_path)
+    for processor in PROCESSORS:
+        record["values"]["principal_components"][processor]["path"] = f"pc_{processor}.json"
+
+    monkeypatch.setattr(
+        "kaine.experiment.planned_test_settings.resolve",
+        lambda p: tmp_path / p if not Path(p).is_absolute() else Path(p),
+    )
+
+    write_settings_record(record, path)
+    loaded = load_settings_record(path)
+    for processor in PROCESSORS:
+        assert loaded.principal_components[processor].path == f"pc_{processor}.json"

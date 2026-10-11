@@ -23,6 +23,7 @@ from kaine.experiment.principal_component import (
     canonical_bytes,
     file_sha256,
 )
+from kaine.storage import resolve
 
 SCHEMA = "kaine.planned_test_settings"
 SCHEMA_VERSION = 1
@@ -274,7 +275,7 @@ def load_settings_record(path: str | Path) -> PlannedTestSettings:
                 f"settings record {str(path)!r} value 'principal_components."
                 f"{proc}.sha256' must be 64 lowercase hex characters"
             )
-        pc_path = Path(p)
+        pc_path = resolve(p)
         if not pc_path.is_file():
             raise PlannedTestSettingsError(
                 f"settings record {str(path)!r} references a missing principal-"
