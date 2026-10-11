@@ -5,3 +5,4 @@
 def report(log):
     """Tell Mnemos what happened."""
     log.info("Thymos store failed")
+    log.info("a being woke")

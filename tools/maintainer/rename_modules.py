@@ -1764,8 +1764,6 @@ def _apply_phrases(
     table,
 ) -> list[tuple[int, int, str, str, str, str]]:
     replacements: list[tuple[int, int, str, str, str, str]] = []
-    if "prose" not in scopes:
-        return replacements
     regex, group_map = _name_regex(table)
     phrases: list[tuple[str, str, str]] = []
     for old_p, new_p in getattr(table, "PHRASES", ()):
@@ -1787,13 +1785,20 @@ def _apply_phrases(
             if idx == -1:
                 break
             end = idx + len(old_p)
+            before_ok = idx == 0 or not _is_word_char(text[idx - 1])
+            after_ok = end == len(text) or not _is_word_char(text[end])
+            ctx = _context_at(idx, intervals)
             if (
-                not _blocked(idx, end, blocked)
+                before_ok
+                and after_ok
+                and not _blocked(idx, end, blocked)
                 and _same_context(idx, end, intervals)
-                and _is_prose_like(_context_at(idx, intervals))
+                and _is_prose_like(ctx)
             ):
-                replacements.append((idx, end, new_p, "prose", "phrase", attr))
-                blocked.append((idx, end))
+                scope = "operator" if ctx in {"py_text", "toml_text"} else "prose"
+                if scope in scopes:
+                    replacements.append((idx, end, new_p, scope, "phrase", attr))
+                    blocked.append((idx, end))
                 pos = end
             else:
                 pos = idx + 1

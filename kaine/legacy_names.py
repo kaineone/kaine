@@ -700,6 +700,8 @@ EXCLUDED_GLOBS = (
     # These documents record the rename itself and must keep the old names.
     "openspec/changes/functional-module-names/",
     "docs/appendix-e-module-names.md",
+    # The agent tooling under .claude/ holds third-party OpenSpec command and skill templates.
+    ".claude/",
     # Licence and notice files are never touched by the codemod,
     # because the licence text belongs to its author alone.
     "LICENSE*",
