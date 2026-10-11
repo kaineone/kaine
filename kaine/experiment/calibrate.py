@@ -1003,9 +1003,9 @@ def calibrate(
         blocked["n_run_planned"] = blocked_n_run_planned
 
     blocked["theta_band"] = (
-        "requires the rdrobust package (Calonico, Cattaneo and Titiunik 2014), "
-        "which is not in the environment, and the reports do not yet record "
-        "which broadcast preceded each prediction"
+        "requires the method of Calonico, Cattaneo and Titiunik (2014); "
+        "its authors' rdrobust package is GPL-3.0-only, which is incompatible "
+        "with CAL 0.4, so the operator must decide how it is provided"
     )
     blocked["b_band"] = blocked["theta_band"]
     blocked["age_bins"] = (

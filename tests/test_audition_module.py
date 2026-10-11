@@ -578,6 +578,10 @@ async def test_perception_event_is_content_free(bus: AsyncBus):
             "null_prediction_error",
             "mean_prediction_error",
             "context_age_s",
+            # The broadcast whose receipt preceded the scored prediction and the age
+            # of the context it used (paper A.8).
+            "prediction_broadcast_tick",
+            "prediction_context_age_s",
             # Entity-time gating: count only reports after learning while awake.
             "entity_time_s",
             "awake",

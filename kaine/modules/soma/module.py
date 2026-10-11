@@ -141,6 +141,8 @@ class Soma(BaseModule):
         self._clock = entity_clock or EntityClock()
         # Accessed broadcast prediction context for Soma (paper Appendix A.1).
         self._context = BroadcastContext(self._clock.now)
+        # Latest broadcast tick and context age when the pending prediction was formed (paper A.8).
+        self._prediction_stamp: tuple[Optional[int], Optional[float]] = (None, None)
         # Positive control of the information-gain measure; study configuration only.
         self._positive_control: Optional[PositiveControl] = (
             PositiveControl("soma", positive_control)
@@ -531,6 +533,7 @@ class Soma(BaseModule):
         self._last_read_time = now_read
 
         ctx = null = None
+        scored_stamp = self._prediction_stamp
         if getattr(self._forward_model, "context_dim", 0) > 0:
             ctx, null = self._context.context_and_null(("soma", "lingua"))
             if getattr(self._forward_model, "accepts_timespan", False):
@@ -547,6 +550,13 @@ class Soma(BaseModule):
             else:
                 prediction_error = self._forward_model.step(feature_vec)
         self._last_prediction_error = prediction_error
+        if (
+            getattr(self._forward_model, "context_dim", 0) > 0
+            and not getattr(self._forward_model, "last_reading_skipped", False)
+        ):
+            self._prediction_stamp = self._context.last_reading
+        else:
+            self._prediction_stamp = (None, None)
         # Only a defined error enters the running mean: a skipped reading has
         # none, nor has the first reading after a skip (paper A.5).
         if getattr(self._forward_model, "last_error_defined", True):
@@ -710,6 +720,10 @@ class Soma(BaseModule):
             "null_prediction_error": null_prediction_error,
             "mean_prediction_error": mean_prediction_error,
             "context_age_s": self._context.age_s(),
+            # The broadcast whose receipt preceded the scored prediction and the age
+            # of the context it used (paper A.8).
+            "prediction_broadcast_tick": scored_stamp[0],
+            "prediction_context_age_s": scored_stamp[1],
             # The planned test counts a report only when the entity was awake and the
             # report falls after T_learn, measured in entity time from the start of
             # the run (paper Appendix A.8).
