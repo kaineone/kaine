@@ -155,6 +155,8 @@ def _aggregate_welfare(
             "sustained_interoceptive_distress": wo.sustained_interoceptive_distress_count,
             "blind_sensor_advisories": wo.blind_sensor_count,
             "blind_sensors": list(wo.blind_sensors),
+            "sensor_silent_advisories": wo.sensor_silent_count,
+            "silent_sensors": list(wo.silent_sensors),
             "source": "live",
         }
 

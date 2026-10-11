@@ -785,7 +785,8 @@ async def test_welfare_observer_noop_when_streams_absent():
     assert obs.unmaintained_fatigue_count == 0
     assert obs.sustained_extreme_vad_count == 0
     assert obs.replay_overload_count == 0
-    assert sink.rows == []
+    # The only sink row is the reset line the observer writes when it starts.
+    assert [row.get("advisory") for row in sink.rows] == ["reset"]
     assert bus.published == []
 
 

@@ -39,15 +39,30 @@ It NEVER copies any field from a source event payload into the emitted (or
 sink-written) gray-zone dict. The published payload is byte-for-byte the same
 content-free dict written to the sink.
 
-The observer also follows ``topos.out`` and ``audition.out`` and publishes a
+The observer also follows ``topos.out`` and ``audition.out``. At start it
+writes a one-time ``{"advisory": "reset"}`` line to its JSONL sink and begins
+reading ``topos.out`` and ``audition.out`` from their current tail, so a
+restart never replays stale history and rollup readers treat the reset as
+clearing every processor's blind and silent state. It publishes a
 ``welfare.blind_sensor`` advisory on ``welfare.out`` when a processor's
 readings stay undefined (N consecutive null ``prediction_error`` samples,
 ``[evaluation.welfare].blind_sensor_samples``, or by default a run spanning
 one interoceptive-distress duration), and ``welfare.blind_sensor_cleared``
-when a defined sample returns. It is an operator advisory about a sensor, not
-a gray-zone event, and the protective monitor does not act on it.
-Its payload is the processor label from the observer's own table plus numbers
-the observer computed, and it is written to the JSONL log as well.
+when a defined sample returns. It also publishes a
+``welfare.sensor_silent`` advisory when a processor that reports on a steady
+cadence (``soma``, ``topos`` or ``audition_acoustic``) has published at least
+once and then publishes nothing for one interoceptive-distress duration of
+unfrozen time, plus ``welfare.sensor_silent_cleared`` when it publishes
+again. ``audition_tone`` is left out because ``audition.emotion`` reports only
+when speech is heard, so a quiet room is a normal reason for it to publish
+nothing. ``audition.transcription`` is not a blind-sensor sample: it carries
+the same tone-path prediction error as the ``audition.emotion`` event for the
+same utterance, so counting it would count each utterance twice, and it
+carries the transcript, which this observer has no reason to read. These
+advisories are operator advisories about sensors, not gray-zone events, and
+the protective monitor does not act on them. Their payloads are the processor
+label from the observer's own table plus numbers the observer computed, and
+they are written to the JSONL log as well.
 """
 
 from __future__ import annotations
@@ -71,10 +86,16 @@ from kaine.evaluation.sink import AsyncJsonlSink
 # blind-sensor constants and run tracker live there too, so the research log and
 # Nexus read the same processor labels.
 from kaine.lifecycle.welfare_signal import (  # noqa: F401  (re-export)
+    ADVISORY_RESET,
     BLIND_SENSOR_CLEARED_TYPE,
     BLIND_SENSOR_PROCESSORS,
     BLIND_SENSOR_TYPE,
+    SENSOR_SILENT_CLEARED_TYPE,
+    SENSOR_SILENT_TYPE,
+    SILENCE_TRACKED_PROCESSORS,
     RunTransition,
+    SilenceTracker,
+    SilenceTransition,
     SustainedThresholdTracker,
     UndefinedRunTracker,
     WindowedEventCounter,
@@ -178,8 +199,13 @@ class WelfareObserver(StreamSubscriberObserver):
         )
 
         # --- State for blind-sensor advisory (operator advisory, not gray-zone). ---
+        self._started_wall: datetime | None = None
         self._blind_sensor_count: int = 0
         self._undefined_runs: dict[str, UndefinedRunTracker] = {}
+
+        # --- State for sensor-silent advisory (operator advisory, not gray-zone). ---
+        self._sensor_silent_count: int = 0
+        self._silence_trackers: dict[str, SilenceTracker] = {}
 
     # --- Public counters for Nexus diagnostics ---------------------------
 
@@ -209,14 +235,59 @@ class WelfareObserver(StreamSubscriberObserver):
             sorted(label for label, tracker in self._undefined_runs.items() if tracker.active)
         )
 
+    @property
+    def sensor_silent_count(self) -> int:
+        return self._sensor_silent_count
+
+    @property
+    def silent_sensors(self) -> tuple[str, ...]:
+        return tuple(
+            sorted(label for label, tracker in self._silence_trackers.items() if tracker.active)
+        )
+
     # --- Main loop -------------------------------------------------------
 
     async def handle(self, stream: str, entry_id: str, event: Event) -> None:
-        await self._track_blind_sensor(event)
         handler = self._stream_handlers.get(stream)
-        if handler is None:
-            return
-        await handler(entry_id, event)
+        try:
+            if handler is not None:
+                await handler(entry_id, event)
+        finally:
+            await self._track_sensor_safely(event)
+
+    async def _track_sensor_safely(self, event: Event) -> None:
+        try:
+            await self._track_blind_sensor(event)
+        except Exception:
+            log.warning("welfare_observer sensor tracking failed", exc_info=True)
+
+    async def _initial_cursors(self) -> dict[str, str]:
+        self._started_wall = datetime.now(timezone.utc)
+        try:
+            await self._sink.write(
+                {"ts": self._started_wall.isoformat(), "advisory": ADVISORY_RESET}
+            )
+        except Exception:
+            log.warning("welfare_observer reset sink write failed", exc_info=True)
+
+        cursors: dict[str, str] = {}
+        for stream in self.streams:
+            if stream in (_TOPOS_STREAM, _AUDITION_STREAM):
+                cursors[stream] = await self._tail_cursor(stream)
+            else:
+                cursors[stream] = "0"
+        return cursors
+
+    async def _tail_cursor(self, stream: str) -> str:
+        try:
+            if hasattr(self._bus, "last_entry_id"):
+                return await self._bus.last_entry_id(stream)
+            if hasattr(self._bus, "latest"):
+                entry = await self._bus.latest(stream)
+                return entry[0] if entry is not None else "0-0"
+        except Exception:
+            log.warning("welfare_observer tail lookup failed for %s", stream, exc_info=True)
+        return "0"
 
     async def _tick(self) -> None:
         # Read the clock first so an unreadable freeze state seen on this tick
@@ -239,6 +310,11 @@ class WelfareObserver(StreamSubscriberObserver):
         # Check time-based conditions on every poll cycle.
         await self._check_timed_conditions()
 
+        try:
+            await self._check_silence()
+        except Exception:
+            log.warning("welfare_observer silence check failed", exc_info=True)
+
     @property
     def freeze_clock_diagnostic(self) -> dict:
         return self._unfrozen.diagnostic()
@@ -252,6 +328,22 @@ class WelfareObserver(StreamSubscriberObserver):
             _MNEMOS_STREAM: self._handle_mnemos,
         }
 
+    @staticmethod
+    def _ensure_aware(ts: datetime) -> datetime:
+        if ts.tzinfo is None or ts.tzinfo.utcoffset(ts) is None:
+            return ts.replace(tzinfo=timezone.utc)
+        return ts
+
+    def _is_before_start(self, event: Event) -> bool:
+        if self._started_wall is None or event.timestamp is None:
+            return False
+        return self._ensure_aware(event.timestamp) < self._started_wall
+
+    def _event_timestamp_seconds(self, event: Event) -> float | None:
+        if event.timestamp is None:
+            return None
+        return self._ensure_aware(event.timestamp).timestamp()
+
     async def _track_blind_sensor(self, event: Event) -> None:
         """Follow forward-model reports and emit operator advisories for blind sensors.
 
@@ -260,11 +352,30 @@ class WelfareObserver(StreamSubscriberObserver):
         processor = BLIND_SENSOR_PROCESSORS.get(event.type)
         if processor is None:
             return
+
+        now = self._unfrozen.now()
+
+        # Ignore samples that predate this observer start (e.g. Soma backlog).
+        if self._is_before_start(event):
+            return
+
+        if processor in SILENCE_TRACKED_PROCESSORS:
+            silence_tracker = self._silence_trackers.get(processor)
+            if silence_tracker is None:
+                silence_tracker = SilenceTracker(
+                    duration_s=self._interoceptive_distress_duration_s
+                )
+                self._silence_trackers[processor] = silence_tracker
+            change = silence_tracker.seen(now)
+            if change is not None and change.transition == "cleared":
+                await self._emit_sensor_silent(SENSOR_SILENT_CLEARED_TYPE, processor, change)
+
         payload = event.payload or {}
         if "prediction_error" not in payload:
             return
+
+        event_time = self._event_timestamp_seconds(event)
         defined = payload["prediction_error"] is not None
-        now = self._unfrozen.now()
         tracker = self._undefined_runs.get(processor)
         if tracker is None:
             tracker = UndefinedRunTracker(
@@ -272,7 +383,7 @@ class WelfareObserver(StreamSubscriberObserver):
                 duration_s=self._interoceptive_distress_duration_s,
             )
             self._undefined_runs[processor] = tracker
-        change = tracker.observe(defined, now)
+        change = tracker.observe(defined, now, event_time=event_time)
         if change is None:
             return
         if change.transition == "raised":
@@ -379,6 +490,59 @@ class WelfareObserver(StreamSubscriberObserver):
             )
         except Exception:
             log.warning("welfare_observer blind-sensor publish failed", exc_info=True)
+
+    async def _emit_sensor_silent(
+        self, event_type: str, processor: str, change: SilenceTransition
+    ) -> None:
+        """Write a sensor-silent advisory to the sink and publish it to the bus.
+
+        CONTENT CONTRACT: the published payload is content-free. The
+        ``processor`` label comes from this observer's fixed lookup table and
+        every other value is a number the observer computed. Nothing is copied
+        from the source event payload.
+        """
+        advisory = "sensor_silent" if event_type == SENSOR_SILENT_TYPE else "sensor_silent_cleared"
+        record: dict[str, Any] = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "advisory": advisory,
+            "processor": processor,
+            "silent_seconds": change.seconds,
+            "sensor_silent_duration_s": self._interoceptive_distress_duration_s,
+            "sensor_silent_count": self._sensor_silent_count,
+        }
+        try:
+            await self._sink.write(dict(record))
+        except Exception:
+            log.warning("welfare_observer sink write failed", exc_info=True)
+
+        payload: dict[str, Any] = {
+            "processor": processor,
+            "silent_seconds": change.seconds,
+            "sensor_silent_duration_s": self._interoceptive_distress_duration_s,
+            "sensor_silent_count": self._sensor_silent_count,
+        }
+        try:
+            await self._bus.publish(
+                validate_event(
+                    source=_GRAY_ZONE_SOURCE,
+                    type=event_type,
+                    payload=payload,
+                    salience=_GRAY_ZONE_SALIENCE,
+                    timestamp=datetime.now(timezone.utc),
+                )
+            )
+        except Exception:
+            log.warning("welfare_observer sensor-silent publish failed", exc_info=True)
+
+    async def _check_silence(self) -> None:
+        now = self._unfrozen.now()
+        for processor, tracker in self._silence_trackers.items():
+            change = tracker.check(now)
+            if change is None:
+                continue
+            if change.transition == "raised":
+                self._sensor_silent_count += 1
+                await self._emit_sensor_silent(SENSOR_SILENT_TYPE, processor, change)
 
     async def _emit_sustained_interoceptive_distress(self, seconds_sustained: float) -> None:
         self._sustained_interoceptive_distress_count += 1

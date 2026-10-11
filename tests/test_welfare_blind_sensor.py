@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Blind-sensor advisory: the tracker, the welfare observer, and the protective monitor ignoring it."""
+"""Blind-sensor and sensor-silent advisories: trackers, welfare observer, and the protective monitor ignoring them."""
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -22,9 +22,14 @@ from kaine.cycle.unfrozen_clock import UnfrozenClock
 from kaine.evaluation.config import WelfareConfig
 from kaine.evaluation.observers.welfare_observer import WelfareObserver
 from kaine.lifecycle.welfare_signal import (
+    ADVISORY_RESET,
     BLIND_SENSOR_CLEARED_TYPE,
     BLIND_SENSOR_TYPE,
+    SENSOR_SILENT_CLEARED_TYPE,
+    SENSOR_SILENT_TYPE,
     RunTransition,
+    SilenceTracker,
+    SilenceTransition,
     UndefinedRunTracker,
 )
 from kaine.modules.registry import ModuleRegistry
@@ -90,13 +95,13 @@ class FakeSink:
         self.rows.append(row)
 
 
-def _event(source: str, type_: str, payload: dict) -> Event:
+def _event(source: str, type_: str, payload: dict, ts: datetime | None = None) -> Event:
     return Event(
         source=source,
         type=type_,
         payload=payload,
         salience=0.5,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=ts if ts is not None else datetime.now(timezone.utc),
     )
 
 
@@ -185,6 +190,29 @@ def test_tracker_rejects_bad_settings():
         UndefinedRunTracker(min_samples=-1, duration_s=1.0)
     with pytest.raises(ValueError):
         UndefinedRunTracker(min_samples=0, duration_s=0.0)
+
+
+def test_tracker_span_needs_event_time_too():
+    t = UndefinedRunTracker(min_samples=0, duration_s=30.0)
+    assert t.observe(False, 0.0, event_time=0.0) is None
+    assert t.observe(False, 40.0, event_time=5.0) is None
+    change = t.observe(False, 70.0, event_time=31.0)
+    assert change == RunTransition("raised", 3, 31.0)
+
+
+def test_silence_tracker_raises_and_clears():
+    tracker = SilenceTracker(duration_s=30.0)
+    assert tracker.check(100.0) is None
+    assert tracker.seen(0.0) is None
+    assert tracker.check(29.0) is None
+    raised = tracker.check(30.0)
+    assert raised == SilenceTransition("raised", 30.0)
+    assert tracker.active is True
+    assert tracker.check(60.0) is None
+    cleared = tracker.seen(61.0)
+    assert cleared == SilenceTransition("cleared", 61.0)
+    assert tracker.active is False
+    assert tracker.check(70.0) is None
 
 
 @pytest.mark.asyncio
@@ -334,7 +362,12 @@ async def test_observer_default_n_spans_one_distress_duration():
         await obs.handle(
             "soma.out",
             "1-0",
-            _event("soma", "soma.report", {"prediction_error": None}),
+            _event(
+                "soma",
+                "soma.report",
+                {"prediction_error": None},
+                ts=datetime.fromtimestamp(1_000_000.0 + t, timezone.utc),
+            ),
         )
 
     assert not bus.published
@@ -343,13 +376,186 @@ async def test_observer_default_n_spans_one_distress_duration():
     await obs.handle(
         "soma.out",
         "2-0",
-        _event("soma", "soma.report", {"prediction_error": None}),
+        _event(
+            "soma",
+            "soma.report",
+            {"prediction_error": None},
+            ts=datetime.fromtimestamp(1_000_030.0, timezone.utc),
+        ),
     )
 
     blind = [e for e in bus.published if e.type == BLIND_SENSOR_TYPE]
     assert len(blind) == 1
     assert blind[0].payload["processor"] == "soma"
     assert obs.sustained_interoceptive_distress_count == 0
+
+
+@pytest.mark.asyncio
+async def test_observer_writes_a_reset_line_and_starts_new_streams_at_the_tail():
+    bus = FakeBus()
+    sink = FakeSink()
+    obs = WelfareObserver(
+        bus,
+        sink,
+        blind_sensor_samples=1,
+        poll_interval_s=0.5,
+        unfrozen_clock=_unfrozen_clock(_Mono(0.0)),
+    )
+    for payload in ({"prediction_error": None}, {"prediction_error": None}):
+        bus.push(
+            "topos.out",
+            _event("topos", "topos.report", payload),
+        )
+    bus.push(
+        "soma.out",
+        _event("soma", "soma.report", {"prediction_error": None}),
+    )
+
+    cursors = await obs._initial_cursors()
+
+    assert sink.rows
+    assert sink.rows[0]["advisory"] == ADVISORY_RESET
+    topos_entries = bus.streams["topos.out"]
+    assert cursors["topos.out"] == topos_entries[-1][0]
+    assert cursors["soma.out"] == "0"
+
+    obs._cursors = cursors
+    await obs._drain()
+
+    assert "topos" not in obs._undefined_runs
+    assert not any(e.type.startswith("welfare.") for e in bus.published)
+
+
+@pytest.mark.asyncio
+async def test_observer_ignores_events_from_before_its_start():
+    u = _Mono(0.0)
+    bus = FakeBus()
+    sink = FakeSink()
+    obs = WelfareObserver(
+        bus,
+        sink,
+        blind_sensor_samples=1,
+        poll_interval_s=0.5,
+        unfrozen_clock=_unfrozen_clock(u),
+    )
+    obs._started_wall = datetime.now(timezone.utc)
+
+    hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+    await obs.handle(
+        "soma.out",
+        "1-0",
+        _event("soma", "soma.report", {"prediction_error": None}, ts=hour_ago),
+    )
+    assert not bus.published
+
+    await obs.handle(
+        "soma.out",
+        "2-0",
+        _event("soma", "soma.report", {"prediction_error": None}),
+    )
+    assert len(bus.published) == 1
+    assert bus.published[0].type == BLIND_SENSOR_TYPE
+
+
+@pytest.mark.asyncio
+async def test_tracking_failure_does_not_skip_distress_handling(monkeypatch):
+    u = _Mono(0.0)
+    bus = FakeBus()
+    sink = FakeSink()
+    obs = WelfareObserver(
+        bus,
+        sink,
+        interoceptive_distress_threshold=0.5,
+        interoceptive_distress_duration_s=30.0,
+        poll_interval_s=0.5,
+        unfrozen_clock=_unfrozen_clock(u),
+    )
+
+    async def _broken_track(event):
+        raise RuntimeError("tracking failure")
+
+    monkeypatch.setattr(obs, "_track_blind_sensor", _broken_track)
+
+    await obs.handle(
+        "soma.out",
+        "1-0",
+        _event("soma", "soma.report", {"prediction_error": 0.9}),
+    )
+
+    assert obs._interoceptive_distress.active_since is not None
+
+
+@pytest.mark.asyncio
+async def test_observer_raises_and_clears_a_silence_advisory():
+    u = _Mono(0.0)
+    bus = FakeBus()
+    sink = FakeSink()
+    obs = WelfareObserver(
+        bus,
+        sink,
+        interoceptive_distress_duration_s=30.0,
+        poll_interval_s=0.5,
+        unfrozen_clock=_unfrozen_clock(u),
+    )
+
+    await obs.handle(
+        "topos.out",
+        "1-0",
+        _event("topos", "topos.report", {"prediction_error": 0.1}),
+    )
+
+    u.value = 29.0
+    await obs._tick()
+    assert not any(e.type == SENSOR_SILENT_TYPE for e in bus.published)
+
+    u.value = 30.0
+    await obs._tick()
+    silent = [e for e in bus.published if e.type == SENSOR_SILENT_TYPE]
+    assert len(silent) == 1
+    assert set(silent[0].payload.keys()) == {
+        "processor",
+        "silent_seconds",
+        "sensor_silent_duration_s",
+        "sensor_silent_count",
+    }
+    assert silent[0].payload["processor"] == "topos"
+    assert obs.silent_sensors == ("topos",)
+    assert obs.sensor_silent_count == 1
+
+    u.value = 35.0
+    await obs._tick()
+    assert len([e for e in bus.published if e.type == SENSOR_SILENT_TYPE]) == 1
+
+    await obs.handle(
+        "topos.out",
+        "2-0",
+        _event("topos", "topos.report", {"prediction_error": 0.2}),
+    )
+    cleared = [e for e in bus.published if e.type == SENSOR_SILENT_CLEARED_TYPE]
+    assert len(cleared) == 1
+    assert obs.silent_sensors == ()
+
+
+@pytest.mark.asyncio
+async def test_audition_tone_is_never_silence_tracked():
+    u = _Mono(0.0)
+    bus = FakeBus()
+    sink = FakeSink()
+    obs = WelfareObserver(
+        bus,
+        sink,
+        interoceptive_distress_duration_s=30.0,
+        poll_interval_s=0.5,
+        unfrozen_clock=_unfrozen_clock(u),
+    )
+    await obs.handle(
+        "audition.out",
+        "1-0",
+        _event("audition", "audition.emotion", {"prediction_error": 0.3}),
+    )
+    u.value = 100.0
+    await obs._tick()
+    assert not bus.published
 
 
 @pytest.mark.asyncio
@@ -389,13 +595,33 @@ async def test_blind_sensor_advisories_never_feed_the_protective_monitor(bus, tm
             _event("soma", "soma.report", {"prediction_error": 0.1}),
         )
 
+    for _ in range(2):
+        u.value += 1.0
+        await obs.handle(
+            "topos.out",
+            "3-0",
+            _event("topos", "topos.report", {"prediction_error": 0.1}),
+        )
+        u.value += 35.0
+        await obs._tick()
+        await obs.handle(
+            "topos.out",
+            "4-0",
+            _event("topos", "topos.report", {"prediction_error": 0.2}),
+        )
+
     entries, _ = await bus.read_entries(
         "welfare.out", last_id="0", count=256, block_ms=0
     )
-    assert len(entries) == 10
-    assert all(
-        e[1].type in (BLIND_SENSOR_TYPE, BLIND_SENSOR_CLEARED_TYPE) for e in entries
-    )
+    advisory_types = {
+        BLIND_SENSOR_TYPE,
+        BLIND_SENSOR_CLEARED_TYPE,
+        SENSOR_SILENT_TYPE,
+        SENSOR_SILENT_CLEARED_TYPE,
+    }
+    assert all(e[1].type in advisory_types for e in entries)
+    silence = [e for e in entries if e[1].type in (SENSOR_SILENT_TYPE, SENSOR_SILENT_CLEARED_TYPE)]
+    assert len(silence) >= 4
 
     reasons = await mon._drain_gray_zone()
     assert reasons == []

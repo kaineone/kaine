@@ -55,11 +55,13 @@
         <dt>replay overload</dt><dd>{{ welfare.replay_overload if welfare.replay_overload is not none else "—" }}</dd>
         <dt>sustained interoceptive distress</dt><dd>{{ welfare.sustained_interoceptive_distress if welfare.sustained_interoceptive_distress is not none else "—" }}</dd>
       </dl>
-      <h3>blind-sensor advisories</h3>
-      <p class="muted">A processor whose readings stay undefined. This is a sensor fault, not a welfare event, and no protective action follows from it.</p>
+      <h3>sensor advisories</h3>
+      <p class="muted">A processor whose readings stay undefined (blind) or that has stopped publishing (silent). This is a sensor fault, and no protective action follows from it.</p>
       <dl class="kv welfare-blind-sensors">
-        <dt>advisories raised</dt><dd>{{ welfare.blind_sensor_advisories if welfare.blind_sensor_advisories is not none else "—" }}</dd>
+        <dt>blind advisories raised</dt><dd>{{ welfare.blind_sensor_advisories if welfare.blind_sensor_advisories is not none else "—" }}</dd>
         <dt>blind now</dt><dd>{{ welfare.blind_sensors|join(", ") if welfare.blind_sensors else "none" }}</dd>
+        <dt>silent advisories raised</dt><dd>{{ welfare.sensor_silent_advisories if welfare.sensor_silent_advisories is not none else "—" }}</dd>
+        <dt>silent now</dt><dd>{{ welfare.silent_sensors|join(", ") if welfare.silent_sensors else "none" }}</dd>
       </dl>
     {% endif %}
     {% endif %}

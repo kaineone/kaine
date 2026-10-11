@@ -65,7 +65,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | verdict-not-exercised | 11/11 (100%) | NOT EXERCISED becomes an outcome of the shared verdict vocabulary, kept out of the sign tests and held in the suite's Holm family at p = 1; the suite uses the paper's p <= alpha; the retired minimal experiment profile is removed. |
 | perception-skip-nonfinite | 13/13 (100%) | Topos and Audition skip a non-finite reading as Soma does: no buffer append, no weight update, no gain on that report or the next, and the reading stays out of the error window and the change score. |
 | sleep-loose-ends | 7/7 (100%) | Hypnos opens Phantasia's scenario window around the phases that cue it, settles an in-flight sleep at shutdown, and every memory backend ranks a non-finite timestamp as the oldest. |
-| blind-sensor-advisory | 8/8 (100%) | A processor whose readings stay undefined raises a content-free `welfare.blind_sensor` advisory on `welfare.out`, and a clear when defined readings resume; the protective monitor does not act on it, the research log records it and the Nexus entity-care panel lists the processors that are blind now. |
+| blind-sensor-advisory | 10/10 (100%) | A processor whose readings stay undefined raises a content-free `welfare.blind_sensor` advisory on `welfare.out`, and one that stops publishing raises `welfare.sensor_silent`, each with a clear; the protective monitor does not act on them, the research log records them and the Nexus entity-care panel lists the processors that are blind or silent now. |
 
 ## Open operator and device steps
 

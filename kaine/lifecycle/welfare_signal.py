@@ -165,6 +165,12 @@ class WindowedEventCounter:
 BLIND_SENSOR_TYPE = "welfare.blind_sensor"
 BLIND_SENSOR_CLEARED_TYPE = "welfare.blind_sensor_cleared"
 
+#: Operator advisory published when a tracked processor publishes nothing for a
+#: sustained stretch, and its clear. Like the blind-sensor advisory, neither is a
+#: gray-zone event and the protective monitor never acts on them.
+SENSOR_SILENT_TYPE = "welfare.sensor_silent"
+SENSOR_SILENT_CLEARED_TYPE = "welfare.sensor_silent_cleared"
+
 #: Report event type -> processor label, for each report that carries a
 #: forward-model prediction error.
 BLIND_SENSOR_PROCESSORS: dict[str, str] = {
@@ -174,6 +180,15 @@ BLIND_SENSOR_PROCESSORS: dict[str, str] = {
     "audition.emotion": "audition_tone",
 }
 
+#: Processors that report on a steady cadence, so a long silence means the
+#: sensor stopped. ``audition_tone`` is left out: it reports only when speech
+#: is heard, so a silent room is a normal reason for it to publish nothing.
+SILENCE_TRACKED_PROCESSORS: frozenset[str] = frozenset({"soma", "topos", "audition_acoustic"})
+
+#: The ``advisory`` label of the rollup line the observer writes when it starts.
+#: Readers treat it as clearing every processor's blind and silent state.
+ADVISORY_RESET = "reset"
+
 
 class RunTransition(NamedTuple):
     """A blind-sensor state change: ``"raised"`` or ``"cleared"``, with the run's size."""
@@ -181,6 +196,56 @@ class RunTransition(NamedTuple):
     transition: str
     samples: int
     seconds: float
+
+
+class SilenceTransition(NamedTuple):
+    """A silence-advisory state change: ``"raised"`` or ``"cleared"``, with elapsed seconds."""
+
+    transition: str
+    seconds: float
+
+
+class SilenceTracker:
+    """Track one processor's silence after it has been seen at least once.
+
+    ``duration_s`` is the unfrozen-time silence that raises the advisory.
+    ``seen`` records a publication and clears a raised advisory. ``check``
+    raises the advisory when ``now - last_seen`` reaches the duration. A
+    processor that has never been seen is never silent; it may simply be
+    disabled.
+    """
+
+    def __init__(self, *, duration_s: float) -> None:
+        if duration_s <= 0:
+            raise ValueError("duration_s must be positive")
+        self._duration_s = float(duration_s)
+        self._seen: bool = False
+        self._last_seen: float = 0.0
+        self._raised: bool = False
+
+    @property
+    def active(self) -> bool:
+        return self._raised
+
+    def seen(self, now: float) -> SilenceTransition | None:
+        """Record a publication at unfrozen time ``now`` and lower any advisory."""
+        transition: SilenceTransition | None = None
+        if self._raised:
+            transition = SilenceTransition("cleared", now - self._last_seen)
+            self._raised = False
+        self._seen = True
+        self._last_seen = float(now)
+        return transition
+
+    def check(self, now: float) -> SilenceTransition | None:
+        """Raise the advisory if ``now - last_seen`` has reached the duration."""
+        if not self._seen or self._raised:
+            return None
+        elapsed = now - self._last_seen
+        if elapsed >= self._duration_s:
+            self._raised = True
+            return SilenceTransition("raised", elapsed)
+        return None
 
 
 class UndefinedRunTracker:
@@ -194,6 +259,18 @@ class UndefinedRunTracker:
     the processor's own rate. The advisory is raised once per run when the
     threshold is met, and a cleared transition is returned when a defined
     sample follows a raised advisory.
+
+    ``now`` is the observer's unfrozen read time. It excludes frozen time,
+    but it stretches when the observer lags and then reads a backlog. The
+    optional ``event_time`` is the event's own wall-clock timestamp; it does
+    not stretch with lag, but it includes frozen time. With ``min_samples == 0``
+    the span threshold requires both ``now - start >= duration_s`` and, when
+    both the first and current sample carry an event time, ``event_time -
+    first_event_time >= duration_s``. Requiring both means neither a lagging
+    observer nor a freeze can raise the advisory early. The reported
+    ``seconds`` of a transition is the smaller of the two spans when both
+    exist, otherwise the read-time span. When ``event_time`` is None the
+    behaviour is unchanged from before.
     """
 
     def __init__(self, *, min_samples: int, duration_s: float) -> None:
@@ -205,6 +282,7 @@ class UndefinedRunTracker:
         self.duration_s = float(duration_s)
         self._samples: int = 0
         self._start: float | None = None
+        self._first_event_time: float | None = None
         self._raised: bool = False
 
     @property
@@ -215,50 +293,73 @@ class UndefinedRunTracker:
     def active(self) -> bool:
         return self._raised
 
-    def observe(self, defined: bool, now: float) -> RunTransition | None:
+    def observe(
+        self, defined: bool, now: float, event_time: float | None = None
+    ) -> RunTransition | None:
         """Record one sample and return a transition if the run changes state."""
         if not defined:
             if self._samples == 0:
                 self._start = float(now)
+                self._first_event_time = event_time
             self._samples += 1
-            if not self._raised and self._threshold_met(now):
+            if not self._raised and self._threshold_met(now, event_time):
                 self._raised = True
                 return RunTransition(
                     "raised",
                     self._samples,
-                    now - self._start,
+                    self._effective_seconds(now, event_time),
                 )
             return None
         if self._raised:
             transition = RunTransition(
                 transition="cleared",
                 samples=self._samples,
-                seconds=(now - self._start) if self._start is not None else 0.0,
+                seconds=self._effective_seconds(now, event_time),
             )
         else:
             transition = None
         self._reset()
         return transition
 
-    def _threshold_met(self, now: float) -> bool:
+    def _effective_seconds(self, now: float, event_time: float | None) -> float:
+        """Return the run span, preferring the smaller of the two clocks when both exist."""
+        if self._start is None:
+            return 0.0
+        read_span = now - self._start
+        if self._first_event_time is not None and event_time is not None:
+            return min(read_span, event_time - self._first_event_time)
+        return read_span
+
+    def _threshold_met(self, now: float, event_time: float | None) -> bool:
         if self.min_samples > 0:
             return self._samples >= self.min_samples
         if self._start is None:
             return False
-        return (now - self._start) >= self.duration_s
+        if (now - self._start) < self.duration_s:
+            return False
+        if self._first_event_time is not None and event_time is not None:
+            return (event_time - self._first_event_time) >= self.duration_s
+        return True
 
     def _reset(self) -> None:
         self._samples = 0
         self._start = None
+        self._first_event_time = None
         self._raised = False
 
 
 __all__ = [
     "SustainedThresholdTracker",
     "WindowedEventCounter",
+    "ADVISORY_RESET",
     "BLIND_SENSOR_CLEARED_TYPE",
     "BLIND_SENSOR_PROCESSORS",
     "BLIND_SENSOR_TYPE",
     "RunTransition",
+    "SENSOR_SILENT_CLEARED_TYPE",
+    "SENSOR_SILENT_TYPE",
+    "SILENCE_TRACKED_PROCESSORS",
+    "SilenceTracker",
+    "SilenceTransition",
     "UndefinedRunTracker",
 ]
