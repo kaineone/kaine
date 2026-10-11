@@ -664,26 +664,111 @@ def _toml_contexts(text: str) -> list[tuple[int, int, str]]:
     multiline = False
     ml_kind = ""
     ml_quote = ""
+    array_depth = 0
 
     def add(start: int, end: int, ctx: str) -> None:
         intervals.append((start, end, ctx))
 
+    def ctx_for(has_space) -> str:
+        return "toml_text" if has_space else "toml_string"
+
+    def scan_value(line: str, line_start: int, line_end: int, start: int, depth: int) -> int:
+        i = start
+        in_string = False
+        quote = ""
+        string_start = 0
+        is_literal = False
+
+        while i < len(line):
+            ch = line[i]
+            if not in_string:
+                if ch == "#":
+                    add(line_start + i, line_end, "toml_comment")
+                    break
+                if ch == "[":
+                    depth += 1
+                    i += 1
+                    continue
+                if ch == "]":
+                    depth = max(0, depth - 1)
+                    i += 1
+                    continue
+                if ch in "\"'":
+                    if line.startswith('"""', i):
+                        quote = '"""'
+                        is_literal = False
+                        q_len = 3
+                    elif line.startswith("'''", i):
+                        quote = "'''"
+                        is_literal = True
+                        q_len = 3
+                    elif ch == '"':
+                        quote = '"'
+                        is_literal = False
+                        q_len = 1
+                    else:
+                        quote = "'"
+                        is_literal = True
+                        q_len = 1
+                    in_string = True
+                    string_start = i
+                    i += q_len
+                    continue
+                i += 1
+                continue
+
+            if quote in ('"""', "'''"):
+                close = line.find(quote, i)
+                if close == -1:
+                    add(line_start + string_start, line_end, ctx_for(" " in line[i:]))
+                    break
+                add(line_start + string_start, line_start + close + 3, ctx_for(" " in line[i:close]))
+                i = close + 3
+                in_string = False
+                continue
+
+            if is_literal:
+                close = line.find(quote, i)
+                if close == -1:
+                    add(line_start + string_start, line_end, ctx_for(" " in line[i:]))
+                    break
+                add(line_start + string_start, line_start + close + 1, ctx_for(" " in line[i:close]))
+                i = close + 1
+                in_string = False
+                continue
+
+            rel_end = _find_quote_end(line[i:], quote)
+            close_abs = i + rel_end
+            add(line_start + string_start, line_start + close_abs, ctx_for(" " in line[i:close_abs - 1]))
+            i = close_abs
+            in_string = False
+            continue
+
+        return depth
+
     for lno, raw_line in enumerate(lines, start=1):
         line_start = starts[lno - 1]
         line_end = line_start + len(raw_line)
+
         if multiline:
-            add(line_start, line_end, "toml_string" if ml_kind == "string" else "toml_text")
             close_idx = raw_line.find(ml_quote)
             if close_idx != -1:
                 close_abs = line_start + close_idx + len(ml_quote)
-                add(line_start, close_abs, "toml_string" if ml_kind == "string" else "toml_text")
+                add(line_start, close_abs, "toml_text" if ml_kind == "text" else "toml_string")
                 multiline = False
                 comment_pos = raw_line.find("#", close_idx + len(ml_quote))
                 if comment_pos != -1:
                     add(line_start + comment_pos, line_end, "toml_comment")
+            else:
+                add(line_start, line_end, "toml_text" if ml_kind == "text" else "toml_string")
             continue
 
         stripped = raw_line.lstrip()
+
+        if array_depth > 0:
+            array_depth = scan_value(raw_line, line_start, line_end, 0, array_depth)
+            continue
+
         if stripped.startswith("[") and stripped.endswith("]"):
             bracket_start = line_start + raw_line.index("[")
             add(bracket_start, line_end, "toml_header")
@@ -692,8 +777,8 @@ def _toml_contexts(text: str) -> list[tuple[int, int, str]]:
         eq_pos = _find_unquoted_equal(raw_line)
         if eq_pos != -1:
             key_end = line_start + eq_pos
-            value_start = line_start + eq_pos + 1
             add(line_start, key_end, "toml_key")
+            value_start = line_start + eq_pos + 1
             value = raw_line[eq_pos + 1 :]
             voff = value_start
             s = value.lstrip()
@@ -710,11 +795,7 @@ def _toml_contexts(text: str) -> list[tuple[int, int, str]]:
                 else:
                     close_abs = voff + 3 + close + 3
                     has_space = " " in s[: close + 3]
-                    add(
-                        voff,
-                        min(close_abs, line_end),
-                        "toml_text" if has_space else "toml_string",
-                    )
+                    add(voff, min(close_abs, line_end), ctx_for(has_space))
                     comment_pos = raw_line.find("#", eq_pos + 1 + close + 6)
                     if comment_pos != -1:
                         add(line_start + comment_pos, line_end, "toml_comment")
@@ -722,14 +803,12 @@ def _toml_contexts(text: str) -> list[tuple[int, int, str]]:
                 quote = s[0]
                 end_idx = _find_quote_end(s, quote)
                 has_space = " " in s[:end_idx]
-                add(voff, voff + end_idx, "toml_text" if has_space else "toml_string")
+                add(voff, voff + end_idx, ctx_for(has_space))
                 comment_pos = raw_line.find("#", eq_pos + 1 + end_idx)
                 if comment_pos != -1:
                     add(line_start + comment_pos, line_end, "toml_comment")
             else:
-                comment_pos = raw_line.find("#", eq_pos + 1)
-                if comment_pos != -1:
-                    add(line_start + comment_pos, line_end, "toml_comment")
+                array_depth = scan_value(raw_line, line_start, line_end, eq_pos + 1, array_depth)
             continue
 
         if stripped.startswith("#"):
@@ -2042,6 +2121,19 @@ def rewrite_text(
 # --------------------------------------------------------------------------- #
 
 
+def _path_move_scope(rel_norm: str) -> str:
+    """Return the move scope for a repo-relative path."""
+    if rel_norm.startswith("openspec/specs/") or re.match(
+        r"openspec/changes/[^/]+/specs/", rel_norm
+    ):
+        return "keys"
+    if rel_norm.startswith("docs/"):
+        return "prose"
+    if rel_norm.startswith("quadlet/") or rel_norm.startswith("compose/"):
+        return "operator"
+    return "identifiers"
+
+
 def new_path(
     rel_path: str,
     table,
@@ -2052,15 +2144,14 @@ def new_path(
     """Compute the new repo-relative path for a file, if any."""
     path_overrides = getattr(table, "PATH_OVERRIDES", {})
     rel_norm = rel_path.replace("\\", "/")
+    move_scope = _path_move_scope(rel_norm)
     override_applied = False
     new_norm = rel_norm
-    move_scope: str | None = None
 
     if rel_norm in path_overrides:
-        if "identifiers" in scopes or "persisted" in scopes:
+        if move_scope in scopes:
             new_norm = path_overrides[rel_norm]
             override_applied = True
-            move_scope = "identifiers"
     else:
         best_prefix: str | None = None
         best_new: str | None = None
@@ -2070,14 +2161,13 @@ def new_path(
                     best_prefix = old_prefix
                     best_new = new_prefix
         if best_prefix is not None and best_new is not None:
-            if "identifiers" in scopes or "persisted" in scopes:
+            if move_scope in scopes:
                 remainder = rel_norm[len(best_prefix) :]
                 base = best_new
                 if remainder and not base.endswith("/"):
                     base += "/"
                 new_norm = base + remainder
                 override_applied = True
-                move_scope = "identifiers"
 
     parts = new_norm.split("/")
     id_segment: str | None = None
@@ -2088,18 +2178,6 @@ def new_path(
         and original_parts[1] == "changes"
     ):
         id_segment = original_parts[2]
-
-    if move_scope is None:
-        if rel_norm.startswith("openspec/specs/") or re.match(
-            r"openspec/changes/[^/]+/specs/", rel_norm
-        ):
-            move_scope = "keys"
-        elif rel_norm.startswith("docs/"):
-            move_scope = "prose"
-        elif rel_norm.startswith("quadlet/") or rel_norm.startswith("compose/"):
-            move_scope = "operator"
-        else:
-            move_scope = "identifiers"
 
     kebab_dir = rel_norm.startswith("openspec/specs/") or re.match(
         r"openspec/changes/[^/]+/specs/", rel_norm
