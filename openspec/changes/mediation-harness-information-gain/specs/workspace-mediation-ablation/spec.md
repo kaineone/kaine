@@ -71,10 +71,14 @@ The harness SHALL classify a run as WIN when `dIG` is at least the minimum effec
 - **THEN** it returns WIN, NULL and NEGATIVE respectively
 
 ### Requirement: Suite aggregation of the development harness
-The offline suite SHALL run the harness over several seeds and apply two one-sided exact sign tests to the per-seed `dIG`: the WIN test on `dIG - min_effect` and the NEGATIVE test on `-min_effect - dIG`, dropping exact zeros. The suite SHALL report WIN when the WIN test's p-value is strictly less than alpha, NEGATIVE when the NEGATIVE test's p-value is strictly less than alpha, NOT EXERCISED when no seed was exercised, and NULL otherwise. The WIN test's p-value SHALL enter the suite's Holm family.
+The offline suite SHALL run the harness over several seeds and apply two one-sided exact sign tests to the per-seed `dIG`: the WIN test on `dIG - min_effect` and the NEGATIVE test on `-min_effect - dIG`, dropping exact zeros. The suite SHALL report WIN when the WIN test's p-value is at most alpha, NEGATIVE when the NEGATIVE test's p-value is at most alpha, NOT EXERCISED when no seed was exercised, and NULL otherwise. The WIN test's p-value SHALL enter the suite's Holm family.
 
 #### Scenario: Five positive contrasts at alpha equal to the p-value
 - **WHEN** five seeds each give `dIG` above the minimum effect and alpha equals 1/32
+- **THEN** the suite reports a WIN
+
+#### Scenario: Five positive contrasts with alpha below the p-value
+- **WHEN** five seeds each give `dIG` above the minimum effect and alpha is 0.03
 - **THEN** the suite does not report a WIN
 
 #### Scenario: Five positive contrasts below alpha

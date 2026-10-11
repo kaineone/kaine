@@ -214,9 +214,9 @@ def _mediation_aggregate_verdict(digs: list[Any], config: SuiteConfig) -> Verdic
     """Aggregate the multi-seed dIG values into a WIN / NULL / NEGATIVE / NOT_EXERCISED verdict.
 
     The two one-sided exact sign tests of paper Appendix A.8 are applied to the
-    per-seed dIG, with the strict inequality the Holm correction uses. A None or
-    non-finite entry marks a seed that was not exercised; such seeds are left out
-    of the tests.
+    per-seed dIG, with the non-strict rule p <= alpha of Appendix A.8, the same
+    rule the Holm step applies. A None or non-finite entry marks a seed that was
+    not exercised; such seeds are left out of the tests.
     """
     harness = (
         "Development harness: a reduced pair against a pooled arm only; "
@@ -262,22 +262,22 @@ def _mediation_aggregate_verdict(digs: list[Any], config: SuiteConfig) -> Verdic
         "alpha": config.alpha,
     }
 
-    if pvalue < config.alpha:
+    if pvalue <= config.alpha:
         return Verdict(
             outcome=Outcome.WIN,
             detail=(
                 f"competitive selection gives a higher information gain than pooling "
-                f"across seeds (WIN sign test p={pvalue:.4f} < {config.alpha}). "
+                f"across seeds (WIN sign test p={pvalue:.4f} <= {config.alpha}). "
                 f"{harness}"
             ),
             metrics=metrics,
         )
-    if pvalue_negative < config.alpha:
+    if pvalue_negative <= config.alpha:
         return Verdict(
             outcome=Outcome.NEGATIVE,
             detail=(
                 f"pooling gives a higher information gain than competitive selection "
-                f"across seeds (NEGATIVE sign test p={pvalue_negative:.4f} < "
+                f"across seeds (NEGATIVE sign test p={pvalue_negative:.4f} <= "
                 f"{config.alpha}). {harness}"
             ),
             metrics=metrics,

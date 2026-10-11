@@ -8,6 +8,7 @@
 - [x] 2.1 `runner.py`: an unexercised run returns `Outcome.NOT_EXERCISED` with its reason; the redundant flag leaves the verdict metrics.
 - [x] 2.2 `suite.py`: unexercised seeds stay out of the sign tests; the aggregate is NOT_EXERCISED when no seed is exercised; such an experiment stays in the Holm family at p = 1, is marked and is listed under `not_exercised`; the printed report names it. The same rule for an individuation result passed in as NOT_EXERCISED.
 - [x] 2.3 Tests: classification, seed exclusion, the aggregate, and the family view with and without an unexercised experiment.
+- [x] 2.4 `suite.py` and `multiple_comparisons.py`: the mediation verdict and the Holm step use p <= alpha (Appendix A.8, Holm 1979); correct the `suite-strict-alpha` and `mediation-harness-information-gain` spec deltas.
 
 ## 3. Retire the minimal profile
 

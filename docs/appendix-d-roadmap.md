@@ -35,7 +35,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | reservoir-timespan-soma-vram | 8/8 (100%) | Pass real timespans to the CfC reservoir and keep Soma's model within its memory budget. |
 | sleep-restart-continuity | 10/10 (100%) | Carry Thymos and Chronos state correctly across sleep, pauses and restarts. |
 | soma-warmup-fatigue-baseline | 4/4 (100%) | Compare like with like in Soma's warm-up fatigue baseline. |
-| suite-strict-alpha | 3/3 (100%) | Use the strict inequality p < alpha for the suite's mediation verdict. |
+| suite-strict-alpha | 3/3 (100%) | One significance inequality for the suite's mediation verdict and its Holm step; corrected by verdict-not-exercised to the paper's p <= alpha. |
 | test-isolation-operator-overlay | 3/3 (100%) | Keep the operator overlay and the data root out of tests that do not ask for them. |
 | thymos-rate-invariant-timely-state | 6/6 (100%) | Make Thymos's appraisal independent of the broadcast rate and its published state timely. |
 | thymos-research-affect | 13/13 (100%) | Setpoint drive dynamics with relief, grounded in the affect literature. |
@@ -55,7 +55,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | config-dead-keys | 9/9 (100%) | Remove configuration keys and an environment variable that drive nothing, and point the host probe at KAINE_TIER. |
 | mediation-harness-information-gain | 12/12 (100%) | Rebuild the offline development harness of the workspace-mediation test around the information-gain measure, with a pooled arm, and retire the coupling and utterance measures. |
 | flaky-group-kill-test | 3/3 (100%) | The group-kill tests wait for the job to finish before reading its status. |
-| verdict-not-exercised | 10/10 (100%) | NOT EXERCISED becomes an outcome of the shared verdict vocabulary, kept out of the sign tests and held in the suite's Holm family at p = 1; the retired minimal experiment profile is removed. |
+| verdict-not-exercised | 11/11 (100%) | NOT EXERCISED becomes an outcome of the shared verdict vocabulary, kept out of the sign tests and held in the suite's Holm family at p = 1; the suite uses the paper's p <= alpha; the retired minimal experiment profile is removed. |
 
 ## Open operator and device steps
 

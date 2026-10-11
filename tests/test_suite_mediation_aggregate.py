@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Suite-level strict-alpha tests for the mediation aggregate verdict."""
+"""Suite-level tests for the mediation aggregate verdict and the family-wise view."""
 from __future__ import annotations
 
 import pytest
@@ -15,16 +15,19 @@ from kaine.evaluation.benchmarks.suite import (
 from kaine.experiment.verdict import Outcome
 
 
-def test_strict_alpha_not_win_when_pvalue_equals_alpha():
-    """Five positive dIG values give a sign-test p-value of exactly 1/32."""
+def test_win_when_pvalue_equals_alpha():
+    """Five positive dIG values give a sign-test p-value of exactly 1/32.
+
+    That is a WIN at alpha = 1/32, because the rule is p <= alpha.
+    """
     digs = [0.2, 0.2, 0.2, 0.2, 0.2]
     config = SuiteConfig(alpha=1 / 32, mediation_min_effect=0.15)
     verdict = _mediation_aggregate_verdict(digs, config)
-    assert verdict.outcome is not Outcome.WIN
+    assert verdict.outcome is Outcome.WIN
 
 
-def test_strict_alpha_win_when_pvalue_below_alpha():
-    """A slightly larger alpha makes the strict inequality pass."""
+def test_win_when_pvalue_below_alpha():
+    """A p-value below alpha is a WIN."""
     digs = [0.2, 0.2, 0.2, 0.2, 0.2]
     config = SuiteConfig(alpha=0.04, mediation_min_effect=0.15)
     verdict = _mediation_aggregate_verdict(digs, config)
@@ -40,6 +43,14 @@ def test_negative_dig_is_negative_verdict():
     assert verdict.outcome is Outcome.NEGATIVE
 
 
+def test_negative_when_pvalue_equals_alpha():
+    """Five negative dIG values at alpha = 1/32 (p equals alpha) are NEGATIVE."""
+    digs = [-0.2, -0.2, -0.2, -0.2, -0.2]
+    config = SuiteConfig(alpha=1 / 32, mediation_min_effect=0.15)
+    verdict = _mediation_aggregate_verdict(digs, config)
+    assert verdict.outcome is Outcome.NEGATIVE
+
+
 def test_all_none_is_not_exercised():
     """Missing dIG values mean the comparison was not exercised."""
     config = SuiteConfig(alpha=0.04, mediation_min_effect=0.15)
@@ -47,6 +58,14 @@ def test_all_none_is_not_exercised():
     assert verdict.outcome is Outcome.NOT_EXERCISED
     assert verdict.metrics["pvalue"] is None
     assert verdict.metrics["n_exercised"] == 0
+
+
+def test_win_not_reached_just_below_the_pvalue():
+    """Five positive dIG values with alpha just below 1/32 are not a WIN."""
+    digs = [0.2, 0.2, 0.2, 0.2, 0.2]
+    config = SuiteConfig(alpha=0.03, mediation_min_effect=0.15)
+    verdict = _mediation_aggregate_verdict(digs, config)
+    assert verdict.outcome is not Outcome.WIN
 
 
 def test_unexercised_seeds_are_left_out_of_the_sign_tests():
