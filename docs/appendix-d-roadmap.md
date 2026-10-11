@@ -68,7 +68,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | missing-error-consistency | 7/7 (100%) | The CL1 wetware Soma model marks a skipped reading and the next one as having no defined error, as the built-in model does, and Soma teaches no unexpected error from such a reading; an Empatheia merge treats a missing or null behavioural-summary entry as absent, not 0. |
 | blind-sensor-advisory | 10/10 (100%) | A processor whose readings stay undefined raises a content-free `welfare.blind_sensor` advisory on `welfare.out`, and one that stops publishing raises `welfare.sensor_silent`, each with a clear; the protective monitor does not act on them, the research log records them and the Nexus entity-care panel lists the processors that are blind or silent now. |
 | pilot-calibration | 19/21 (90%) | The tool that derives the planned test's settings from the pilot runs into one versioned record, the positive control on the inputs' first principal component with per-processor SNR and the learning period, and a boot check that refuses live runs without a complete record. |
-| salience-score-keys | 6/6 (100%) | The cycle names each candidate `<stream>:<entry_id>`, so two streams that issue the same bus entry id in one millisecond no longer share one slot in the broadcast's score table. |
+| salience-score-keys | 7/8 (88%) | The cycle names each candidate `<stream>:<entry_id>`, so two streams that issue the same bus entry id in one millisecond no longer share one slot in the broadcast's score table. |
 
 ## Open operator and device steps
 

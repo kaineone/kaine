@@ -28,8 +28,10 @@ ablation's top score and candidate count are affected.
   `split_stream_entry_key(key)`, which returns `(None, key)` for a bare entry
   id written before this change.
 - The canonical within-tick order stays the paper's: source, event type, then
-  the bus entry id. The stream is a final tie-break, reached only when one
-  source publishes the same type on two streams.
+  the bus entry id. The id is now compared as the integer pair (milliseconds,
+  sequence), which is arrival order within a stream; compared as text,
+  `x-10` sorted before `x-2`. The stream is a final tie-break, reached only
+  when one source publishes the same type on two streams.
 - Syneidesis refuses a candidate list in which two candidates share an id,
   in every arm, so a collision can no longer pass silently.
 - Readers are unchanged in code: each looks up a member's score with the

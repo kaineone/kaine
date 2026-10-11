@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from kaine.bus.client import AsyncBus
-from kaine.bus.schema import Event, stream_entry_key
+from kaine.bus.schema import Event, entry_id_sort_key, stream_entry_key
 from kaine.cycle.protocols import (
     CycleHook,
     ModuleRegistryProtocol,
@@ -561,22 +561,30 @@ class CognitiveCycle:
                 for entry_id, event in entries:
                     gathered.append((stream, entry_id, event))
 
-        # Canonical within-tick event ordering. Sort the gathered candidates by a
-        # total deterministic key (source, type, bus entry id, stream) before
-        # selection so tie-breaks resolve identically regardless of async gather /
-        # stream declaration order. The stream is a final tie-break only. After
-        # sorting, each candidate is named "<stream>:<entry_id>" because a bus
-        # entry id is unique only within its stream (two streams can issue the
-        # same id in the same millisecond); that makes the id unique across the
-        # tick's batch and the score table keeps one score per candidate
-        # (paper A.1). Applied unconditionally (not gated to deterministic
-        # mode): production and deterministic runs share one ordering rule, so
-        # the oscillatory ablation's "only the layer differs" claim is airtight.
-        # The selection score sort is stable, so this only pins the equal-score
-        # tie-break input; for the already-ordered common case it is a no-op.
-        # A 0- or 1-event tick is already ordered, so skip the sort call entirely.
+        # Canonical within-tick event ordering. Sort the gathered candidates by a total
+        # deterministic key (source, type, bus entry id, stream) before selection so
+        # tie-breaks resolve identically regardless of async gather / stream declaration
+        # order. The bus entry id is compared as the number pair (ms, seq), which is
+        # arrival order within a stream (paper A.1); compared as text, x-10 would sort
+        # before x-2. The stream is a final tie-break only. After sorting, each candidate
+        # is named "<stream>:<entry_id>" because a bus entry id is unique only within its
+        # stream (two streams can issue the same id in the same millisecond); that makes
+        # the id unique across the tick's batch and the score table keeps one score per
+        # candidate (paper A.1). Applied unconditionally (not gated to deterministic
+        # mode): production and deterministic runs share one ordering rule, so the
+        # oscillatory ablation's "only the layer differs" claim is airtight. The selection
+        # score sort is stable, so this only pins the equal-score tie-break input; for the
+        # already-ordered common case it is a no-op. A 0- or 1-event tick is already
+        # ordered, so skip the sort call entirely.
         if len(gathered) > 1:
-            gathered.sort(key=lambda item: (item[2].source, item[2].type, item[1], item[0]))
+            gathered.sort(
+                key=lambda item: (
+                    item[2].source,
+                    item[2].type,
+                    entry_id_sort_key(item[1]),
+                    item[0],
+                )
+            )
 
         events = [
             (stream_entry_key(stream, entry_id), event)

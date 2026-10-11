@@ -6,7 +6,7 @@ Related: [The cognitive cycle](README.md) · [Architecture](../02-architecture/R
 
 ## Selection pipeline
 
-Every processing tick the cycle reads the events published since its previous read of each active module stream, sorts them by source, type and bus entry id (the stream breaks any remaining tie) so that a seeded run reproduces, names each candidate `<stream>:<entry_id>`, refreshes the affect snapshot the scorer reads, updates the access rate, and passes the list to `Syneidesis.select`. A bus entry id is unique only within its stream, and two streams can issue the same id in the same millisecond, so the stream-qualified name is what keeps one score per candidate in the score table. Selection runs on every processing tick. Only on a broadcast tick (the code's `is_experiential`) is the result published; on other ticks the candidates are scored and then discarded.
+Every processing tick the cycle reads the events published since its previous read of each active module stream, sorts them by source, type and bus entry id (compared as the number pair milliseconds, sequence, which is arrival order within a stream; the stream breaks any remaining tie) so that a seeded run reproduces, names each candidate `<stream>:<entry_id>`, refreshes the affect snapshot the scorer reads, updates the access rate, and passes the list to `Syneidesis.select`. A bus entry id is unique only within its stream, and two streams can issue the same id in the same millisecond, so the stream-qualified name is what keeps one score per candidate in the score table. Selection runs on every processing tick. Only on a broadcast tick (the code's `is_experiential`) is the result published; on other ticks the candidates are scored and then discarded.
 
 ```mermaid
 flowchart TD

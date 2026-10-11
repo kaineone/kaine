@@ -78,6 +78,18 @@ def split_stream_entry_key(key: str) -> tuple[Optional[str], str]:
     return (None, key)
 
 
+def entry_id_sort_key(entry_id: str) -> tuple[int, int, int, str]:
+    """Return a comparable key that orders Redis entry ids by arrival.
+
+    Redis entry ids order by arrival as the pair (milliseconds, sequence),
+    and comparing them as text puts x-10 before x-2.
+    """
+    ms, sep, seq = entry_id.partition("-")
+    if sep and ms.isdigit() and seq.isdigit():
+        return (0, int(ms), int(seq), "")
+    return (1, 0, 0, entry_id)
+
+
 def ensure_writable(stream: str, source: str) -> None:
     if stream == WORKSPACE_STREAM and source != SYNEIDESIS_SOURCE:
         raise ReservedStreamError(

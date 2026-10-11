@@ -14,6 +14,7 @@ from kaine.bus.config import BusConfig
 from kaine.bus.schema import (
     WORKSPACE_STREAM,
     Event,
+    entry_id_sort_key,
     split_stream_entry_key,
     stream_entry_key,
 )
@@ -328,3 +329,34 @@ async def test_select_dual_keeps_one_score_per_candidate():
         assert set(snapshot.salience_scores.keys()) == set(ids)
         for event_id, _event in snapshot.selected_events:
             assert event_id in snapshot.salience_scores
+
+
+@pytest.mark.asyncio
+async def test_entry_ids_order_numerically_within_a_millisecond():
+    client = fakeredis.FakeRedis(decode_responses=True)
+    syn = FakeSyneidesis()
+    cycle, bus = _make_cycle(syn, ["soma.out"], client)
+    try:
+        for i in range(12):
+            event = Event(
+                source="soma",
+                type="soma.report",
+                payload={"i": i},
+                salience=0.5,
+                timestamp=datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+            )
+            await client.xadd("soma.out", _encode_event(event), id=f"1760000000000-{i}")
+        await cycle.tick()
+        assert len(syn.calls) == 1
+        events = syn.calls[0]["events"]
+        ids = [entry_id for entry_id, _ in events]
+        assert ids == [f"soma.out:1760000000000-{i}" for i in range(12)]
+    finally:
+        await bus.close()
+
+
+def test_entry_id_sort_key():
+    assert entry_id_sort_key("1760000000000-2") < entry_id_sort_key("1760000000000-10")
+    assert entry_id_sort_key("1760000000000-11") < entry_id_sort_key("1760000000001-0")
+    assert entry_id_sort_key("e1") == (1, 0, 0, "e1")
+    assert entry_id_sort_key("9999999999999-99") < entry_id_sort_key("e1")
