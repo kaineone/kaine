@@ -1,110 +1,180 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Runner-level tests for the workspace-mediation ablation: determinism, the
-three-way verdict reachability, and the underpowered flag."""
+"""Runner-level tests for the workspace-mediation development harness."""
 from __future__ import annotations
+
+import asyncio
+import socket
 
 import pytest
 
 from kaine.evaluation.benchmarks.workspace_mediation_ablation.runner import (
     MediationConfig,
     _classify,
+    format_summary,
     run_ablation,
 )
-from kaine.evaluation.benchmarks.workspace_mediation_ablation.stimulus import (
-    NEUTRAL_STIMULUS,
-    SOMA_SALIENT_STIMULUS,
+from kaine.evaluation.benchmarks.workspace_mediation_ablation.stability import (
+    run_mediation_stability,
 )
-from kaine.experiment.verdict import Outcome
+from kaine.evaluation.benchmarks.workspace_mediation_ablation.stimulus import (
+    COUPLED_STIMULUS,
+    INDEPENDENT_STIMULUS,
+)
+from kaine.experiment.stability import StabilityReport
+from kaine.experiment.verdict import Outcome, Verdict
+
+
+def _effect(dig, *, competing=10, accessed=10, not_exercised=False, reason=None):
+    """Build an effect dictionary with every key _classify reads."""
+    return {
+        "dig": dig,
+        "competing_ticks": competing,
+        "competing_fraction": (competing / 100.0) if competing is not None else 0.0,
+        "accessed_broadcasts": accessed,
+        "not_exercised": not_exercised,
+        "not_exercised_reason": reason,
+        "ig_on": 0.1,
+        "ig_pooled": 0.05,
+        "ig_on_by_processor": {"soma": 0.1, "topos": 0.1},
+        "ig_pooled_by_processor": {"soma": 0.05, "topos": 0.05},
+    }
 
 
 @pytest.mark.asyncio
 async def test_same_seed_reproduces_effect_and_verdict():
-    cfg = MediationConfig(seed=7, ticks=20)
+    cfg = MediationConfig(seed=7, ticks=60, warmup_ticks=20)
     r1 = await run_ablation(cfg)
     r2 = await run_ablation(cfg)
     assert r1["effect"] == r2["effect"]
     assert r1["verdict"].to_dict() == r2["verdict"].to_dict()
 
-
-@pytest.mark.asyncio
-async def test_arms_produce_the_expected_records():
-    r = await run_ablation(MediationConfig(seed=3, ticks=16))
-    kinds = [rec["kind"] for rec in r["records"]]
-    assert kinds == ["arm", "arm", "verdict", "summary"]
-    on = next(rec for rec in r["records"] if rec.get("arm") == "workspace_on")
-    off = next(rec for rec in r["records"] if rec.get("arm") == "workspace_off")
-    # Both arms produce a full Chronos error series (fair-null: off is not silenced).
-    assert len(on["chronos_error"]) == 16
-    assert len(off["chronos_error"]) == 16
+    arms1 = [rec for rec in r1["records"] if rec["kind"] == "arm"]
+    arms2 = [rec for rec in r2["records"] if rec["kind"] == "arm"]
+    for field in ("soma_gain", "topos_gain", "soma_error", "topos_error"):
+        assert arms1[0][field] == arms2[0][field]
+        assert arms1[1][field] == arms2[1][field]
 
 
 @pytest.mark.asyncio
-async def test_soma_salient_battery_gives_coverage_and_competition():
-    r = await run_ablation(MediationConfig(seed=1, ticks=24), stimulus=SOMA_SALIENT_STIMULUS)
-    eff = r["effect"]
-    # The coverage battery makes Soma enter the coalition and forces competition.
-    assert eff["soma_salient_ticks"] > 0
-    assert eff["competing_fraction"] > 0.0
-    assert not eff["underpowered"]
-
-
-# --------------------------- verdict reachability -------------------------- #
-
-
-def _effect(delta, *, ent_frac=0.6, salient=10, underpowered=False):
-    return {
-        "coupling_on": (delta or 0.0) + 0.5,
-        "coupling_off": 0.5,
-        "coupling_delta": delta,
-        "coalition_entropy_bits": 0.9,
-        "coalition_entropy_fraction": ent_frac,
-        "mean_conditioning_divergence": 0.1,
-        "soma_salient_ticks": salient,
-        "competing_ticks": 8,
-        "competing_fraction": 0.5,
-        "n_ticks": 20,
-        "underpowered": underpowered,
-    }
-
-
-def test_classify_win_reachable():
-    v = _classify(_effect(0.30), MediationConfig())
-    assert v.outcome is Outcome.WIN
-
-
-def test_classify_null_on_small_delta():
-    v = _classify(_effect(0.05), MediationConfig())
-    assert v.outcome is Outcome.NULL
-    assert "prompt-assembler" in v.detail
-
-
-def test_classify_negative_reachable():
-    v = _classify(_effect(-0.30), MediationConfig())
-    assert v.outcome is Outcome.NEGATIVE
-
-
-def test_classify_win_requires_nontrivial_selection():
-    # A meaningful delta but degenerate selection (entropy fraction at the
-    # extreme) is not a WIN — competitive selection must actually be selecting.
-    v = _classify(_effect(0.30, ent_frac=1.0), MediationConfig())
-    assert v.outcome is not Outcome.WIN
-
-
-def test_classify_underpowered_flagged_not_clean_null():
-    v = _classify(_effect(0.0, salient=0, underpowered=True), MediationConfig())
-    assert v.outcome is Outcome.NULL
-    assert "UNDERPOWERED" in v.detail
-    assert v.metrics["underpowered"] is True
+async def test_records_have_expected_shape():
+    cfg = MediationConfig(seed=1, ticks=60, warmup_ticks=20)
+    result = await run_ablation(cfg)
+    records = result["records"]
+    assert [r["kind"] for r in records] == ["arm", "arm", "verdict", "summary"]
+    assert records[0]["arm"] == "workspace_on"
+    assert records[1]["arm"] == "pooled"
+    for record in records[:2]:
+        assert len(record["soma_gain"]) == cfg.ticks
+        assert len(record["topos_gain"]) == cfg.ticks
+        assert len(record["soma_error"]) == cfg.ticks
+        assert len(record["topos_error"]) == cfg.ticks
 
 
 @pytest.mark.asyncio
-async def test_batteries_keep_null_reachable_on_neutral():
-    # The neutral battery should not be engineered to force a WIN; a NULL (or
-    # adverse) result must be reachable there.
-    outcomes = set()
-    for seed in (7, 42):
-        r = await run_ablation(MediationConfig(seed=seed, ticks=24), stimulus=NEUTRAL_STIMULUS)
-        outcomes.add(r["verdict"].outcome)
-    assert Outcome.WIN not in outcomes or len(outcomes) > 1
+async def test_coupled_battery_exercises_and_reports_float_gains():
+    cfg = MediationConfig(seed=3, ticks=60, warmup_ticks=20)
+    result = await run_ablation(cfg, stimulus=COUPLED_STIMULUS)
+    effect = result["effect"]
+    assert effect["competing_ticks"] > 0
+    assert effect["accessed_broadcasts"] > 0
+    assert effect["not_exercised"] is False
+    assert isinstance(effect["ig_on"], float)
+    assert isinstance(effect["ig_pooled"], float)
+    assert isinstance(effect["dig"], float)
+    for key in ("ig_on_by_processor", "ig_pooled_by_processor"):
+        for proc in ("soma", "topos"):
+            assert isinstance(effect[key][proc], float)
+    assert effect["included_reports_on"]["soma"] > 0
+    assert effect["included_reports_on"]["topos"] > 0
+
+
+@pytest.mark.asyncio
+async def test_workspace_on_and_pooled_soma_gain_series_differ():
+    cfg = MediationConfig(seed=4, ticks=60, warmup_ticks=20)
+    result = await run_ablation(cfg)
+    on = result["records"][0]
+    pooled = result["records"][1]
+    assert on["soma_gain"] != pooled["soma_gain"]
+
+
+@pytest.mark.asyncio
+async def test_stimulus_is_pure_function_and_independent_runs():
+    first = COUPLED_STIMULUS.script(5, 30)
+    second = COUPLED_STIMULUS.script(5, 30)
+    assert first == second
+
+    different = COUPLED_STIMULUS.script(6, 30)
+    assert different.topos_frames != first.topos_frames
+
+    cfg = MediationConfig(seed=8, ticks=30, warmup_ticks=10)
+    result = await run_ablation(cfg, stimulus=INDEPENDENT_STIMULUS)
+    assert isinstance(result["verdict"], Verdict)
+
+
+def test_config_validation():
+    """MediationConfig rejects invalid parameter combinations."""
+    with pytest.raises(ValueError):
+        MediationConfig(seed=1, ticks=20, warmup_ticks=20)
+    with pytest.raises(ValueError):
+        MediationConfig(seed=1, ticks=30, warmup_ticks=10, top_k=0)
+    with pytest.raises(ValueError):
+        MediationConfig(seed=1, ticks=30, warmup_ticks=10, access_threshold=-0.1)
+    with pytest.raises(ValueError):
+        MediationConfig(seed=1, ticks=30, warmup_ticks=10, access_threshold=1.1)
+
+
+def test_no_network(monkeypatch):
+    """The harness completes without opening a network connection."""
+    def deny(*args, **kwargs):
+        raise AssertionError("network")
+
+    monkeypatch.setattr(socket.socket, "connect", deny)
+    monkeypatch.setattr(socket, "create_connection", deny)
+
+    result = asyncio.run(
+        run_ablation(MediationConfig(seed=2, ticks=30, warmup_ticks=10))
+    )
+    assert result["verdict"] is not None
+    assert result["summary"]["kind"] == "summary"
+
+
+def test_classify_outcomes():
+    """_classify maps hand-built effects to the correct verdict outcomes."""
+    cfg = MediationConfig(min_effect=0.05)
+
+    win = _classify(_effect(0.2), cfg)
+    assert win.outcome is Outcome.WIN
+
+    null = _classify(_effect(0.01), cfg)
+    assert null.outcome is Outcome.NULL
+
+    negative = _classify(_effect(-0.2), cfg)
+    assert negative.outcome is Outcome.NEGATIVE
+
+    unexercised = _classify(
+        _effect(None, not_exercised=True, reason="test reason"), cfg
+    )
+    assert unexercised.outcome is Outcome.NULL
+    assert unexercised.detail.startswith("NOT EXERCISED")
+    assert unexercised.metrics["not_exercised"] is True
+
+    for verdict in (win, null, negative, unexercised):
+        assert "does not test the thesis" in verdict.detail
+
+
+@pytest.mark.asyncio
+async def test_format_summary_contains_disclaimers():
+    """The formatted summary carries the harness disclaimer and the dIG label."""
+    result = await run_ablation(MediationConfig(seed=5, ticks=30, warmup_ticks=10))
+    text = format_summary(result)
+    assert "does not test the thesis" in text
+    assert "dIG" in text
+
+
+def test_mediation_stability_counts_verdicts():
+    """run_mediation_stability returns a report covering every seed."""
+    report = run_mediation_stability([1, 2], ticks=30, warmup_ticks=10)
+    assert isinstance(report, StabilityReport)
+    assert sum(report.verdict_counts.values()) == 2
