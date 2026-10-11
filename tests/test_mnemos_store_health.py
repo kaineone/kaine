@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from kaine.lifecycle.mnemos_recover import main
 from kaine.modules.mnemos import FakeEmbedder, InMemoryStorage
@@ -129,7 +129,7 @@ async def test_health_prober_mnemos_store(tmp_path):
 
 def test_mnemos_store_template_critical(tmp_path):
     """The Mnemos store template renders a critical block with a down chip."""
-    env = Environment(loader=FileSystemLoader("kaine/nexus/templates"))
+    env = Environment(loader=FileSystemLoader("kaine/nexus/templates"), autoescape=select_autoescape(["html"]))
     template = env.get_template("_mnemos_store.html")
     html = template.render(
         mnemos_store={
@@ -149,7 +149,7 @@ def test_mnemos_store_template_critical(tmp_path):
 
 def test_mnemos_store_template_unavailable(tmp_path):
     """The Mnemos store template shows unavailable when the block is missing."""
-    env = Environment(loader=FileSystemLoader("kaine/nexus/templates"))
+    env = Environment(loader=FileSystemLoader("kaine/nexus/templates"), autoescape=select_autoescape(["html"]))
     template = env.get_template("_mnemos_store.html")
     html = template.render(mnemos_store=None)
     assert "unavailable" in html.lower()

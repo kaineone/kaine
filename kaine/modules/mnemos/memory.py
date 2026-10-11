@@ -681,7 +681,6 @@ class MnemosCore:
         else:
             n_all = await self._storage.count(coll_name, strict=True)
             m = min(4 * k, max(n_all, 1), _RECALL_SEARCH_CAP)
-            cap_logged = False
             while True:
                 hits = await self._storage.search(
                     coll_name, query_vector=vec, limit=m
@@ -708,13 +707,12 @@ class MnemosCore:
                 ):
                     break
                 if not exhausted and m >= _RECALL_SEARCH_CAP:
-                    if not cap_logged:
-                        log.info(
-                            "mnemos: recall ranked the %d nearest of %d traces; beyond that the order is approximate",
-                            m,
-                            n_all,
-                        )
-                        cap_logged = True
+                    # The cap binds: log once for this recall and keep the ranking so far.
+                    log.info(
+                        "mnemos: recall ranked the %d nearest of %d traces; beyond that the order is approximate",
+                        m,
+                        n_all,
+                    )
                     break
                 m = min(m * 8, n_all, _RECALL_SEARCH_CAP)
             results = [

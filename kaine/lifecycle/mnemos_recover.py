@@ -30,7 +30,6 @@ def main(argv: list[str] | None = None, *, out=None, err=None) -> int:
     """Operator recovery command for a blocked Mnemos store."""
     import argparse
     import asyncio
-    import inspect
     import os
     from pathlib import Path
 
@@ -162,9 +161,7 @@ def main(argv: list[str] | None = None, *, out=None, err=None) -> int:
                 health_path=health_path,
             )
         finally:
-            close = storage.shutdown()
-            if inspect.isawaitable(close):
-                await close
+            await storage.shutdown()
 
     try:
         result = asyncio.run(_run())
