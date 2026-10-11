@@ -171,6 +171,10 @@ INDIVIDUATION_REFUSED_EXIT = 10
 IDENTITY_REFUSED_EXIT = 11
 
 
+# Exit code when a live planned-test study lacks a valid settings record (paper Appendix A.8).
+PLANNED_TEST_REFUSED_EXIT = 12
+
+
 def _individuation_refusal(kaine_config: dict[str, Any]) -> tuple[Any | None, str | None]:
     """Parse [individuation] and check its prerequisites.
 
@@ -1511,6 +1515,17 @@ async def _phase_run_identity(ctx: BootContext) -> int | None:
 
     ctx.experiment_cfg = ctx.kaine_config.get("experiment") or {}
     seed = _resolve_seed(ctx.kaine_config)
+
+    # A live run of the planned test needs the settings derived from the pilot
+    # runs (paper Appendix A.8); ordinary boots and other studies are untouched.
+    from kaine.config import resolve_study_name
+    from kaine.experiment.planned_test_settings import planned_test_refusal
+
+    planned_test_reason = planned_test_refusal(resolve_study_name(), ctx.kaine_config, seed)
+    if planned_test_reason is not None:
+        sys.stderr.write(f"Refusing to boot KAINE cycle: {planned_test_reason}\n")
+        return PLANNED_TEST_REFUSED_EXIT
+
     set_global_seed(seed)
     from kaine.boot import gather_perception_feed_descriptor
     from kaine.plugins import load_plugins
@@ -1534,7 +1549,6 @@ async def _phase_run_identity(ctx: BootContext) -> int | None:
         timing["window_s"] = float(_timing_cfg.get("auto_time_scale_window_s", 30.0))
 
     # The same resolution load_runtime_config used for this run's config.
-    from kaine.config import resolve_study_name
 
     ctx.run_ctx = mint_run_context(
         seed=seed,

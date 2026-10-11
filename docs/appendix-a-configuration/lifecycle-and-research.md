@@ -235,15 +235,24 @@ Unsupervised-research boot mode. When enabled (or `KAINE_RESEARCH_MODE=1`), the 
 
 ## `[positive_control]`
 
-The positive control of the broadcast information-gain measure (paper §6.3 and Appendix A.8). Off by default and set only in the study configuration. When enabled, Topos, Audition and Soma each run two shadow forward models and publish `positive_control.result` records (see [Research event streams](../17-research-data/event-streams.md#positive-control-records)). The live model, its reports and the competition are unchanged.
+The positive control of the broadcast information-gain measure (paper §6.3 and Appendix A.8). Off by default; the workspace-mediation study configurations enable it. Topos, Audition and Soma then run in the selected mode and publish `positive_control.result` and, in the pilots, `positive_control.ladder` records (see [Research event streams](../17-research-data/event-streams.md#positive-control-records)). The live model, its reports and the competition are unchanged. `snr`, `min_effect` and `min_reports` are not keys: they come from the planned test's settings record, and setting one fails the boot.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `enabled` | boolean | `false` | Runs the control. Requires `snr`, `min_effect` and `min_reports`; the boot fails without them. |
-| `snr` | number | none | Signal-to-noise ratio of the informative component, as variance of the projection over variance of the added noise. Must be above 0. Fixed before the live runs and required when the control is enabled. |
-| `min_effect` | number | none | Minimum rise in information gain the informative component must produce, and the non-informative one must not, for the measure to pass. Above 0. Fixed before the live runs and required when the control is enabled. |
-| `min_reports` | integer | none | Counted reports a processor needs before it can pass. At least 1. Fixed before the live runs and required when the control is enabled. |
-| `seed` | integer | `0` | Seed of the projection direction and of the two noise series. |
+| `enabled` | boolean | `false` | Runs the control in `mode`. |
+| `mode` | string | none | Required when enabled. `estimate_pc`: the preliminary run, which writes each processor's first principal component and input mean at shutdown. `ladder`: the pilot runs of the on arm, which carry the informative and uninformative components at every SNR from 4^-2 to 4^4. `control`: the control itself, with every setting read from the settings record. |
+| `principal_components_run` | string | none | Mode `ladder` only, and required there: the id of the preliminary run whose principal-component files the pilots use. The boot fails while it is empty or the files are missing. |
+| `settings_record` | string | none | Mode `control` only, and required there: the path of the settings record written by `python -m kaine.experiment.calibrate`. The boot fails unless the record is complete and verifies. |
+| `seed` | integer | `0` | Seed of the components' noise, combined with the run's seed so different runs draw independent noise. |
+
+## `[planned_test]`
+
+Set only by the workspace-mediation study configurations (`config/studies/workspace_mediation_*.toml`). A study whose name starts with `workspace_mediation_` must set `role`, and the boot checks it in the run-identity phase before any module starts.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `role` | string | none | `preliminary` (the one run that estimates the positive control's principal components), `pilot` (a pilot run of one arm), `test` (a live run of one arm) or `positive_control` (a run of the positive control). |
+| `settings_record` | string | none | Roles `test` and `positive_control`: the settings record derived from the pilot runs. The boot refuses to start, with exit code 12, unless the record's schema and digest verify, it is complete with nothing blocked, its values are in range and its principal-component files match their hashes; it also refuses a seed that the preliminary or a pilot run used. For role `positive_control`, `[positive_control]` must be enabled in mode `control` with the same record. |
 
 ## `[transfer]`
 

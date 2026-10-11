@@ -128,6 +128,8 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "null_prediction_error",
             "mean_prediction_error",
             "context_age_s",
+            "entity_time_s",
+            "awake",
         }
     ),
     "topos.report": frozenset(
@@ -141,6 +143,8 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "null_prediction_error",
             "mean_prediction_error",
             "context_age_s",
+            "entity_time_s",
+            "awake",
         }
     ),
     # Chronos report (kaine/modules/chronos/module.py) — content-free
@@ -193,27 +197,37 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "null_prediction_error",
             "mean_prediction_error",
             "context_age_s",
+            "entity_time_s",
+            "awake",
         }
     ),
     # Positive control of the information-gain measure: numbers and flags only.
     "positive_control.result": frozenset(
         {
             "processor",
+            "mode",
             "n_reports",
-            "min_reports",
             "ig_with",
             "ig_without",
             "ig_noise",
             "effect",
             "noise_effect",
             "min_effect",
+            "min_reports",
             "snr",
+            "t_learn_s",
+            "settings_sha256",
+            "pc_sha256",
             "detected",
             "noise_detected",
             "passed",
             "failed",
             "final",
         }
+    ),
+    # Positive control ladder record for the pilot runs, numbers only.
+    "positive_control.ladder": frozenset(
+        {"processor", "entity_time_s", "gain", "gain_with", "gain_noise", "snr", "pc_sha256"}
     ),
     # NOTE: `audition.transcription` is intentionally ABSENT — never logged.
     # --- Memory / sleep ---
@@ -613,12 +627,12 @@ def _apply_taxonomy_fields(
 def _workspace_metadata_record(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Build a `workspace.broadcast` metadata record from a snapshot.
 
-    Reads the `selected` key (written by kaine/cycle/engine.py) — per-entry
+    Reads the `selected` key (written by kaine/cycle/engine.py): per-entry
     metadata ONLY ({source, type, salience, causal_parent}), never the entry
     `payload`/content field.
 
-    Also copies `access_threshold` and `arm` from `metadata` and `published_at`
-    from the snapshot when present.
+    Also copies `access_threshold`, `arm` and `coalition_capacity` from
+    `metadata` and `published_at` from the snapshot when present.
     """
     record: dict[str, Any] = {
         "ts": _iso_now(),
@@ -637,6 +651,8 @@ def _workspace_metadata_record(snapshot: dict[str, Any]) -> dict[str, Any]:
         record["access_threshold"] = metadata["access_threshold"]
     if isinstance(metadata, dict) and "arm" in metadata:
         record["arm"] = metadata["arm"]
+    if isinstance(metadata, dict) and "coalition_capacity" in metadata:
+        record["coalition_capacity"] = metadata["coalition_capacity"]
     if "published_at" in snapshot:
         record["published_at"] = snapshot.get("published_at")
 

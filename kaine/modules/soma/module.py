@@ -371,6 +371,7 @@ class Soma(BaseModule):
         null: Optional[list[float]],
         live_gain: Optional[float],
         live_mean_error: Optional[float],
+        entity_time_s: float,
         timespan: Optional[float],
     ) -> None:
         """Step the positive control after the live report and publish its running result."""
@@ -387,6 +388,7 @@ class Soma(BaseModule):
                 null,
                 live_gain,
                 live_mean_error,
+                entity_time_s=entity_time_s,
                 awake=not self._in_hypnos,
                 timespan=timespan,
             )
@@ -520,6 +522,7 @@ class Soma(BaseModule):
                 null,
                 context_gain,
                 mean_prediction_error,
+                now_read,
                 ts if getattr(self._forward_model, "accepts_timespan", False) else None,
             )
 
@@ -639,6 +642,11 @@ class Soma(BaseModule):
             "null_prediction_error": null_prediction_error,
             "mean_prediction_error": mean_prediction_error,
             "context_age_s": self._context.age_s(),
+            # The planned test counts a report only when the entity was awake and the
+            # report falls after T_learn, measured in entity time from the start of
+            # the run (paper Appendix A.8).
+            "entity_time_s": now_read,
+            "awake": not self._in_hypnos,
             "unexpected_error": unexpected_error,
             "fatigue_value": self._fatigue.value,
             "fatigue_threshold": self._fatigue.threshold,

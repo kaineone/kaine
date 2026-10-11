@@ -62,6 +62,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | ablation-positive-control | 9/10 (90%) | The positive control of the information-gain measure: shadow forward models with an informative and a non-informative component, a per-processor verdict in the research log, and an offline all-processors check. Off by default. |
 | sleep-phase-order-and-replay-window | 7/7 (100%) | Sleep runs its phases in the paper's order and ends with the affective reset; Hypnos opens the replay window itself, and associative replay reads episodic memory on every backend. |
 | ablation-matched-pooled-arms | 15/15 (100%) | The matched and pooled control arms of the workspace-mediation test run in the live cycle; greedy decoding moves from the default profile into study configurations. |
+| pilot-calibration | 12/15 (80%) | The tool that derives the planned test's settings from the pilot runs into one versioned record, the positive control on the inputs' first principal component with per-processor SNR and the learning period, and a boot check that refuses live runs without a complete record. |
 
 ## Open operator and device steps
 
@@ -82,7 +83,7 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 56 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 57 active changes, 268 archived changes and 104 capability specs.
 
 The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 

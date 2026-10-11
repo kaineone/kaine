@@ -538,6 +538,8 @@ class Topos(BaseModule):
             and change >= self._change_alert_threshold
         )
 
+        # One entity-clock reading per report, for the report and the positive control.
+        entity_time_s = self._clock.now()
         # Forward-prediction salience path.
         prediction_error: float = 0.0
         context_gain: Optional[float] = None
@@ -580,7 +582,14 @@ class Topos(BaseModule):
 
             # Positive control (study mode only): shadows of the forward model, never the live one.
             if self._positive_control is not None and getattr(self._forward_model, "context_dim", 0) > 0:
-                await self._run_positive_control(embedding, ctx, null, context_gain, mean_prediction_error)
+                await self._run_positive_control(
+                    embedding,
+                    ctx,
+                    null,
+                    context_gain,
+                    mean_prediction_error,
+                    entity_time_s,
+                )
 
             # Alert on EITHER a surprising forward-model prediction error OR a
             # self-calibrating perceptual discontinuity — both relative to their
@@ -632,6 +641,11 @@ class Topos(BaseModule):
             "null_prediction_error": null_prediction_error,
             "mean_prediction_error": mean_prediction_error,
             "context_age_s": self._context.age_s(),
+            # The planned test counts a report only when the entity was awake and the
+            # report falls after T_learn, measured in entity time from the start of
+            # the run (paper Appendix A.8).
+            "entity_time_s": entity_time_s,
+            "awake": not self._in_hypnos,
             # Whether this report crossed alert level (perception-drives-salience):
             # lets the Nexus perception panel and off-bus analysis count stimulus-
             # driven perceptual events without re-deriving the salience decision.
@@ -670,6 +684,7 @@ class Topos(BaseModule):
         null: Optional[list[float]],
         live_gain: Optional[float],
         live_mean_error: Optional[float],
+        entity_time_s: float,
     ) -> None:
         """Step the positive control after the live report and publish its running result."""
         control = self._positive_control
@@ -685,6 +700,7 @@ class Topos(BaseModule):
                 null,
                 live_gain,
                 live_mean_error,
+                entity_time_s=entity_time_s,
                 awake=not self._in_hypnos,
             )
             if result is not None and self._positive_control is control:

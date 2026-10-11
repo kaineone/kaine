@@ -61,7 +61,14 @@ STUDY_ENV_VAR = "KAINE_STUDY"
 # The only tables a study configuration may set; anything else (the module set,
 # preservation, the coherence layer) stays the operator's.
 STUDY_ALLOWED_TABLES: frozenset[str] = frozenset(
-    {"lingua", "syneidesis", "experiment", "individuation"}
+    {
+        "lingua",
+        "syneidesis",
+        "experiment",
+        "individuation",
+        "planned_test",
+        "positive_control",
+    }
 )
 
 # A profile/tier name is a filesystem-safe slug (no path traversal): lowercase
@@ -648,8 +655,9 @@ def load_kaine_config(
     not set module toggles; tiers only bound backends and devices"), because a
     deployment tier must never silently change the enabled module set.
 
-    A study file may set only the ``[lingua]``, ``[syneidesis]``, ``[experiment]``
-    and ``[individuation]`` tables; any other table, ``[modules]`` included,
+    A study file may set only the ``[lingua]``, ``[syneidesis]``,
+    ``[experiment]``, ``[individuation]``, ``[planned_test]`` and
+    ``[positive_control]`` tables; any other table, ``[modules]`` included,
     raises :class:`ProfileError`.
 
     A missing operator file is harmless; a malformed one is tolerated by

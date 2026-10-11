@@ -23,7 +23,9 @@ from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.evaluation.config import EvaluationConfig, ResearchEventLogConfig
+from kaine.evaluation.observers.research_event_observer import _apply_taxonomy_fields
 from kaine.evaluation.registry import SidecarRegistry
+from kaine.experiment.principal_component import PrincipalComponent
 from kaine.experiment.run_context import RunContext, set_run_context
 from kaine.experiment.run_records import load_run_records
 from kaine.modules.audition import Audition, FakeEmotionClassifier, FakeSTTClient
@@ -31,6 +33,7 @@ from kaine.modules.audition.acoustic import FakeAcousticEncoder
 from kaine.modules.base import BaseModule
 from kaine.modules.context import CONTEXT_DIM
 from kaine.modules.positive_control import (
+    LADDER_FIELDS,
     RESULT_FIELDS,
     PositiveControlSettings,
     finish_positive_controls,
@@ -164,6 +167,35 @@ def _rng_states_equal(a, b):
     assert a[2:] == b[2:]
 
 
+def _pc(processor: str, dim: int) -> PrincipalComponent:
+    return PrincipalComponent(
+        processor=processor,
+        run_id="prelim",
+        n_inputs=100,
+        dim=dim,
+        mean=tuple(0.0 for _ in range(dim)),
+        direction=tuple(1.0 if i == 0 else 0.0 for i in range(dim)),
+        variance=1.0,
+        total_variance=float(dim),
+    )
+
+
+def _control(dims: dict[str, int], **overrides) -> PositiveControlSettings:
+    settings = {
+        "enabled": True,
+        "mode": "control",
+        "principal_components": {p: _pc(p, d) for p, d in dims.items()},
+        "pc_sha256": {p: "0" * 64 for p in dims},
+        "snr": {p: 10.0 for p in dims},
+        "min_effect": 0.01,
+        "min_reports": 1,
+        "t_learn_s": 0.0,
+        "settings_sha256": "1" * 64,
+    }
+    settings.update(overrides)
+    return PositiveControlSettings(**settings)
+
+
 def test_shipped_config_leaves_the_control_off():
     path = Path(__file__).resolve().parents[1] / "config" / "kaine.toml"
     with path.open("rb") as fh:
@@ -180,13 +212,15 @@ def test_soma_factory_builds_the_control_only_when_enabled():
     assert make_soma(bus, {})._positive_control is None
     controlled = make_soma(
         bus,
-        {"positive_control": {"enabled": True, "snr": 10.0, "min_effect": 0.01, "min_reports": 1}},
+        {"positive_control": {"enabled": True, "mode": "estimate_pc"}},
     )
     from kaine.modules.positive_control import PositiveControl
 
     assert isinstance(controlled._positive_control, PositiveControl)
     with pytest.raises(ValueError):
         make_soma(bus, {"positive_control": {"enabled": True}})
+    with pytest.raises(ValueError):
+        make_soma(bus, {"positive_control": {"enabled": True, "snr": 10.0}})
 
 
 def test_construct_module_passes_the_section():
@@ -196,7 +230,7 @@ def test_construct_module_passes_the_section():
         bus,
         {
             "soma": {},
-            "positive_control": {"enabled": True, "snr": 5.0, "min_effect": 0.01, "min_reports": 1},
+            "positive_control": {"enabled": True, "mode": "estimate_pc"},
         },
         registry=ModuleRegistry(),
     )
@@ -227,7 +261,7 @@ async def test_topos_control_publishes_and_leaves_the_live_report_untouched() ->
         encoder=Varying(),
         forward_prediction=True,
         entity_clock=_FixedClock(),
-        positive_control=PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1),
+        positive_control=_control({"topos": 4}),
     )
     controlled._forward_model = LatentForwardModel(
         latent_dim=4,
@@ -279,9 +313,10 @@ async def test_soma_control_publishes_results(bus: AsyncBus) -> None:
         bus,
         reader=FakeMetricsReader({"cpu_percent": 10.0, "ram_percent": 20.0}),
         detector=NeverAlertDetector(),
-        # Built directly, not from config, to check that no verdict is recorded
-        # without a minimum effect.
-        positive_control=PositiveControlSettings(enabled=True, snr=10.0),
+        # Built directly, not from config, to check the payload shape in control
+        # mode. In control mode the minimum effect comes from the settings
+        # record, so every tick records a verdict.
+        positive_control=_control({"soma": 8}),
     )
     await soma.on_workspace(_workspace("topos", 0.7, 0.5))
     for _ in range(6):
@@ -291,7 +326,10 @@ async def test_soma_control_publishes_results(bus: AsyncBus) -> None:
     assert events
     payloads = _payloads(events)
     assert all(p.get("processor") == "soma" for p in payloads)
-    assert all(p.get("passed") is None for p in payloads)
+    assert all(p.get("mode") == "control" for p in payloads)
+    assert all(p.get("min_effect") == 0.01 for p in payloads)
+    assert all(p.get("min_reports") == 1 for p in payloads)
+    assert all(isinstance(p.get("passed"), bool) for p in payloads)
 
 
 @pytest.mark.asyncio
@@ -300,7 +338,7 @@ async def test_failing_control_switches_itself_off(bus: AsyncBus) -> None:
         bus,
         encoder=Varying(),
         forward_prediction=True,
-        positive_control=PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1),
+        positive_control=_control({"topos": 4}),
     )
     topos._forward_model = LatentForwardModel(
         latent_dim=4,
@@ -337,7 +375,7 @@ async def test_shutdown_publishes_a_terminal_record() -> None:
             encoder=Varying(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
-            positive_control=PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1),
+            positive_control=_control({"topos": 4}),
         )
         topos._forward_model = LatentForwardModel(
             latent_dim=4,
@@ -369,7 +407,7 @@ async def test_soma_shutdown_publishes_a_terminal_record() -> None:
             bus,
             reader=FakeMetricsReader({"cpu_percent": 10.0, "ram_percent": 20.0}),
             detector=NeverAlertDetector(),
-            positive_control=PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1),
+            positive_control=_control({"soma": 8}),
         )
         await soma.on_workspace(_workspace("topos", 0.7, 0.5))
         for _ in range(6):
@@ -392,7 +430,7 @@ async def test_unpublishable_failure_is_logged_at_error(bus: AsyncBus, caplog) -
         bus,
         encoder=Varying(),
         forward_prediction=True,
-        positive_control=PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1),
+        positive_control=_control({"topos": 4}),
     )
     topos._forward_model = LatentForwardModel(
         latent_dim=4,
@@ -461,9 +499,7 @@ async def _topos_run(control_settings):
 @pytest.mark.asyncio
 async def test_topos_control_leaves_live_weights_and_rng_states_identical() -> None:
     off = await _topos_run(None)
-    on = await _topos_run(
-        PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1)
-    )
+    on = await _topos_run(_control({"topos": 4}))
 
     assert off[0] == on[0]
     _rng_states_equal(off[1], on[1])
@@ -517,9 +553,7 @@ async def _soma_run(control_settings):
 @pytest.mark.asyncio
 async def test_soma_control_leaves_live_weights_and_rng_states_identical() -> None:
     off = await _soma_run(None)
-    on = await _soma_run(
-        PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1)
-    )
+    on = await _soma_run(_control({"soma": 8}))
 
     assert off[0] == on[0]
     _rng_states_equal(off[1], on[1])
@@ -563,9 +597,7 @@ async def _audition_run(control_settings):
 @pytest.mark.asyncio
 async def test_audition_control_leaves_live_weights_and_rng_states_identical() -> None:
     off = await _audition_run(None)
-    on = await _audition_run(
-        PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1)
-    )
+    on = await _audition_run(_control({"audition": 8}))
 
     assert off[0] == on[0]
     _rng_states_equal(off[1], on[1])
@@ -600,9 +632,7 @@ async def test_terminal_record_reaches_the_research_log(tmp_path) -> None:
             encoder=Varying(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
-            positive_control=PositiveControlSettings(
-                enabled=True, snr=10.0, min_effect=0.01, min_reports=1
-            ),
+            positive_control=_control({"topos": 4}),
         )
         topos._forward_model = LatentForwardModel(
             latent_dim=4,
@@ -629,7 +659,53 @@ async def test_terminal_record_reaches_the_research_log(tmp_path) -> None:
         assert pc_records
         assert pc_records[-1]["final"] is True
         assert pc_records[-1]["failed"] is False
+        assert pc_records[-1]["mode"] == "control"
+        assert pc_records[-1]["t_learn_s"] == 0.0
         assert sum(1 for r in pc_records if r.get("final") is True) == 1
     finally:
         set_run_context(None)
         await bus.close()
+
+
+@pytest.mark.asyncio
+async def test_topos_report_carries_entity_time_and_awake() -> None:
+    bus = _bus()
+    try:
+        clock = _FixedClock()
+        topos = topos_module.Topos(
+            bus,
+            encoder=Varying(),
+            forward_prediction=True,
+            entity_clock=clock,
+        )
+        topos._forward_model = LatentForwardModel(
+            latent_dim=4,
+            units=8,
+            context_dim=CONTEXT_DIM,
+            seed=4,
+        )
+
+        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+        await topos.process_frame(None)
+
+        reports = await _reports(bus, "topos.out")
+        assert reports
+        assert reports[0]["entity_time_s"] == clock.now()
+        assert reports[0]["awake"] is True
+
+        topos._in_hypnos = True
+        await topos.process_frame(None)
+        reports = await _reports(bus, "topos.out")
+        assert reports[-1]["awake"] is False
+    finally:
+        await bus.close()
+
+
+def test_research_observer_keeps_ladder_fields() -> None:
+    payload = {field: 0.0 for field in LADDER_FIELDS}
+    payload["processor"] = "topos"
+    payload["pc_sha256"] = "0" * 64
+    payload["x"] = "extra"
+    result = _apply_taxonomy_fields("positive_control.ladder", payload, {})
+    assert set(LADDER_FIELDS).issubset(result.keys())
+    assert "x" not in result

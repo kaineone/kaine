@@ -292,6 +292,8 @@ class Audition(BaseModule):
         embedding = await asyncio.to_thread(self._acoustic_encoder.embed, attended_bytes, sample_rate)
         change = cosine_change(embedding, self._prev_acoustic_embedding)
         self._prev_acoustic_embedding = embedding
+        # One entity-clock reading per report, for the report and the positive control.
+        entity_time_s = self._clock.now()
         context_gain: Optional[float] = None
         null_prediction_error: Optional[float] = None
         mean_prediction_error: Optional[float] = None
@@ -325,7 +327,14 @@ class Audition(BaseModule):
 
         # Positive control (study mode only): shadows of the forward model, never the live one.
         if self._positive_control is not None and getattr(self._acoustic_forward_model, "context_dim", 0) > 0:
-            await self._run_positive_control(embedding, ctx, null, context_gain, mean_prediction_error)
+            await self._run_positive_control(
+                embedding,
+                ctx,
+                null,
+                context_gain,
+                mean_prediction_error,
+                entity_time_s,
+            )
 
         # Self-calibrating change alert (perception-drives-salience): the change is
         # judged RELATIVE to its own rolling baseline, not against an absolute
@@ -366,6 +375,11 @@ class Audition(BaseModule):
             "null_prediction_error": null_prediction_error,
             "mean_prediction_error": mean_prediction_error,
             "context_age_s": self._context.age_s(),
+            # The planned test counts a report only when the entity was awake and the
+            # report falls after T_learn, measured in entity time from the start of
+            # the run (paper Appendix A.8).
+            "entity_time_s": entity_time_s,
+            "awake": not self._in_hypnos,
             "encoder_model_id": self._acoustic_encoder.model_id,
             "attended_window": window,
             "attended_seconds": attended_seconds,
@@ -445,6 +459,7 @@ class Audition(BaseModule):
         null: Optional[list[float]],
         live_gain: Optional[float],
         live_mean_error: Optional[float],
+        entity_time_s: float,
     ) -> None:
         """Step the positive control after the live report and publish its running result."""
         control = self._positive_control
@@ -460,6 +475,7 @@ class Audition(BaseModule):
                 null,
                 live_gain,
                 live_mean_error,
+                entity_time_s=entity_time_s,
                 awake=not self._in_hypnos,
             )
             if result is not None and self._positive_control is control:
