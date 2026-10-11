@@ -77,6 +77,7 @@ _SYNEIDESIS_ALLOWED_KEYS: set[str] = {
     "salience_thymos_factor",
     "salience_goal_factor",
     "arousal_contrast_gain",
+    "arm",  # the arm of the planned test, read by the cycle
 }
 
 # Shipped default source per salience factor (wire-salience-goal-thymos, STAGED

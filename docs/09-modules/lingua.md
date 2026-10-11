@@ -4,7 +4,7 @@ Lingua is the language organ. It turns accessed workspace content into words, sp
 
 ## Status
 
-Lingua ships disabled in the default config (`[modules].lingua = false`). The `thesis_test` profile enables it and sets `[lingua].temperature = 0.0`, so the planned runs use greedy decoding and what the organ voices is a deterministic function of its input. Lingua needs a running OpenAI-compatible server that serves the published KAINE organ under the alias in `model_id`. The Python `[training]` extras are not needed for inference; only Hypnos's voice-alignment phase uses them.
+Lingua ships disabled in the default config (`[modules].lingua = false`). The `thesis_test` profile enables it. In general use the organ samples at the shipped `temperature` (0.7). The study configurations of the planned runs (the module-addition study's overlay and `config/studies/workspace_mediation_*.toml`) set `temperature = 0.0`, so in those runs the organ decodes greedily and what it voices is a deterministic function of its input. Lingua needs a running OpenAI-compatible server that serves the published KAINE organ under the alias in `model_id`. The Python `[training]` extras are not needed for inference; only Hypnos's voice-alignment phase uses them.
 
 ## Role in the base-thesis form
 
@@ -86,7 +86,7 @@ The full `[lingua]` reference is in the [modules configuration page](../appendix
 | `chat_url` | string | `"http://127.0.0.1:11434/v1"` | OpenAI-compatible server base URL; a missing `/v1` is appended |
 | `model_id` | string | `"kaineone/Qwen3.5-4B-abliterated-GGUF"` | Alias the server serves the organ under |
 | `api_key` | string | unset | Bearer token for a keyed server; when unset, `KAINE_MODEL_SERVER_API_KEY` is used. Keep it in `config/kaine.operator.toml` or the environment |
-| `temperature` | float | `0.7` (`0.0` in `thesis_test`) | Sampling temperature |
+| `temperature` | float | `0.7` (`0.0` in study configurations) | Sampling temperature |
 | `max_tokens` | int | `512` | Maximum completion tokens |
 | `think` | bool or unset | `false` | `false` asks the server for no chain of thought, `true` allows one, unset sends neither field |
 | `request_timeout_s` | float | `60.0` | HTTP timeout per request |

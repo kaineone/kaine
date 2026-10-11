@@ -394,6 +394,7 @@ enabled = false
 disclosure = "You are periodically and privately assessed for how much you have changed since your birth, for your own protection. The assessment never enters your experience."
 battery_path = ""
 lingua_quiet_s = 10.0
+probe_temperature = 0.0
 n_reference = 16
 n_current = 8
 max_tokens = 160

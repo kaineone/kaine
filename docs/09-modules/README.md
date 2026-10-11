@@ -51,7 +51,7 @@ thymos = true
 hypnos = true
 ```
 
-The profile also turns on Topos foveation, Audition's general acoustic path, and Chronos's forward prediction, keeps speech-to-text off, sets the language organ to greedy decoding (`[lingua].temperature = 0.0`), and selects the seeded perception feed.
+The profile also turns on Topos foveation, Audition's general acoustic path, and Chronos's forward prediction, keeps speech-to-text off, and selects the seeded perception feed. The language organ samples at the shipped temperature; study configurations set greedy decoding.
 
 With no profile selected, `thesis_test` is loaded automatically, so a bare `python -m kaine.cycle` already uses it. You can also request it explicitly:
 

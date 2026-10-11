@@ -1210,6 +1210,34 @@ def test_workspace_record_carries_access_threshold_and_publication_time():
     assert "metadata" not in record
 
 
+def test_workspace_record_carries_arm():
+    from kaine.evaluation.observers.research_event_observer import (
+        _workspace_metadata_record,
+    )
+
+    record = _workspace_metadata_record(
+        {
+            "tick_index": 2,
+            "inhibited": False,
+            "metadata": {"access_threshold": 0.35, "arm": "matched"},
+            "selected": [],
+        }
+    )
+    assert record["arm"] == "matched"
+    assert record["access_threshold"] == 0.35
+
+    pooled = _workspace_metadata_record(
+        {
+            "tick_index": 3,
+            "inhibited": False,
+            "metadata": {"arm": "pooled"},
+            "selected": [],
+        }
+    )
+    assert pooled["arm"] == "pooled"
+    assert "access_threshold" not in pooled
+
+
 def test_workspace_selected_events_key_no_longer_used():
     from kaine.evaluation.observers.research_event_observer import (
         _workspace_metadata_record,
