@@ -75,7 +75,8 @@ def classify_verdict(
 
     Uses a two-sided Mann–Whitney U test. Direction is read from the
     rank-biserial effect size (AIF as group ``a``): positive ``r`` means AIF
-    tends to score higher. A significant result with ``|r| >= min_effect`` is a
+    tends to score higher. A significant result (``p_value <= alpha``, the same
+    non-strict rule as the suite's other tests) with ``|r| >= min_effect`` is a
     WIN (r > 0) or NEGATIVE (r < 0); everything else is NULL.
 
     Degenerate inputs (identical constant distributions, or n < 2) are reported
@@ -115,7 +116,7 @@ def classify_verdict(
     base["p_value"] = float(p_value)
     base["effect_size_r"] = r
 
-    if p_value < cfg.alpha and abs(r) >= cfg.min_effect:
+    if p_value <= cfg.alpha and abs(r) >= cfg.min_effect:
         base["verdict"] = WIN if r > 0 else NEGATIVE
     else:
         base["verdict"] = NULL

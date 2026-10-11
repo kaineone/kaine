@@ -3,10 +3,11 @@
 
 """Shared verdict vocabulary for experiments.
 
-One schema so every experiment reports outcomes the same way: the active-
-inference benchmark reports WIN / NULL / NEGATIVE (comparative), the enforcement
-red-team reports PASS / FAIL (a safety gate). Adoption is additive — each report
-includes a ``verdict`` object using this schema alongside its existing fields.
+One schema so every experiment reports outcomes the same way: comparative
+experiments such as the active-inference benchmark report WIN / NULL / NEGATIVE /
+NOT_EXERCISED, and the enforcement red-team reports PASS / FAIL (a safety gate). Adoption is
+additive: each report includes a ``verdict`` object using this schema alongside
+its existing fields.
 """
 from __future__ import annotations
 
@@ -18,14 +19,18 @@ from typing import Any
 class Outcome(str, Enum):
     """The shared outcome vocabulary.
 
-    Comparative experiments use WIN / NULL / NEGATIVE; safety gates use
-    PASS / FAIL. Being a ``str`` Enum, members serialize to their plain string
-    value in JSON.
+    Comparative experiments use WIN / NULL / NEGATIVE / NOT_EXERCISED; safety
+    gates use PASS / FAIL. NOT_EXERCISED means the comparison did not take
+    place (the tested condition never occurred or no run had a defined contrast),
+    so it is neither a WIN nor a NULL and must not be counted as evidence for or
+    against an effect. Being a ``str`` Enum, members serialize to their plain
+    string value in JSON.
     """
 
     WIN = "WIN"
     NULL = "NULL"
     NEGATIVE = "NEGATIVE"
+    NOT_EXERCISED = "NOT_EXERCISED"
     PASS = "PASS"
     FAIL = "FAIL"
 

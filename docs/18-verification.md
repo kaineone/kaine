@@ -202,13 +202,13 @@ Every meter ships with a negative control, which must read about 0, and a positi
 - Self-model accuracy. A fixed-threshold heuristic is scored against known `(signal, claim, expected-score)` cases. This checks the arithmetic only and says nothing about calibration or self-knowledge.
 - Active-inference benchmark. It includes an `exploitation` guard task where seeking information has no value, and a tuned Q-learning baseline.
 - Enforcement red team. It drives the real enforcement components, so PASS means the layer blocked the action.
-- Workspace-mediation development harness. Its two arms, workspace on and pooled, start from identically initialized Soma and Topos modules on the same seeded stimulus, and the measure is the information gain each processor publishes per report. An independent battery, in which neither input follows the other, keeps a NULL reachable, and a run in which competition never operated or no broadcast was accessed is flagged NOT EXERCISED. It is development tooling and does not test the thesis; the planned test's own positive control (an injected context component the information-gain measure must detect) is not built yet.
+- Workspace-mediation development harness. Its two arms, workspace on and pooled, start from identically initialized Soma and Topos modules on the same seeded stimulus, and the measure is the information gain each processor publishes per report. An independent battery, in which neither input follows the other, keeps a NULL reachable, and a run in which competition never operated or no broadcast was accessed is reported NOT EXERCISED and kept out of the suite's sign tests. It is development tooling and does not test the thesis; the planned test's own positive control (an injected context component the information-gain measure must detect) is not built yet.
 
 ### Layer 2: experiment implementation
 
 - Seed determinism. `set_global_seed(seed)` is called at the start of each run. The same seed reproduces the verdict and the metrics. Offline runners use deterministic or echo clients and in-memory stores for exact reproducibility.
 - Condition isolation. Compared arms differ in exactly one controlled variable and share model, persona, prompt path, seed, and (for the oscillatory ablation and the workspace-mediation harness) a seeded run on a logical clock.
-- Null results count. NULL, NEGATIVE and unstable outcomes are reportable findings, and every verdict is computed from raw per-seed data by a standard test.
+- Null results count. NULL, NEGATIVE and unstable outcomes are reportable findings, and every verdict is computed from raw per-seed data by a standard test. NOT EXERCISED is reported as well, but it records that a comparison did not take place, so it is never counted as a null or as evidence.
 
 For nondeterministic live runs, the control is the multi-seed analogue: run the same configuration under several seeds and assert the summary statistics are stable and the verdict does not flip. See [multi-seed stability](15-experiments/README.md#multi-seed-stability).
 

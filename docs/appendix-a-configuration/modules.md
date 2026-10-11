@@ -395,7 +395,7 @@ Lingua is the language organ. It calls a local OpenAI-compatible model server at
 |---|---|---|---|
 | `chat_url` | string | `"http://127.0.0.1:11434/v1"` | Base URL of the model server. The client posts to `/v1/chat/completions`. |
 | `model_id` | string | `"kaineone/Qwen3.5-4B-abliterated-GGUF"` | Served alias of the published KAINE organ. It must match a model the server serves. |
-| `temperature` | float | `0.7` | Sampling temperature. Ordinary boots, including the `thesis_test` profile, sample at `0.7`. The study configurations (`config/studies/workspace_mediation_*.toml` and the module-addition study's overlay) and the `minimal_experiment` profile set `0.0` (greedy decoding), so the organ's output is a deterministic function of its input. |
+| `temperature` | float | `0.7` | Sampling temperature. Ordinary boots, including the `thesis_test` profile, sample at `0.7`. The study configurations (`config/studies/workspace_mediation_*.toml` and the module-addition study's overlay) set `0.0` (greedy decoding), so the organ's output is a deterministic function of its input. |
 | `max_tokens` | integer | `512` | Maximum tokens per generation. |
 | `request_timeout_s` | float | `60.0` | HTTP request timeout for model server calls. |
 | `model_server_sleep_idle_seconds` | integer | `600` | Seconds of inactivity before the natively launched organ server unloads the model; `-1` keeps it loaded. |
