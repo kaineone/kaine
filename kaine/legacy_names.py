@@ -471,8 +471,148 @@ GUARDED = {
     },
 }
 
+_MODULE_CLASSES = "Topos|Soma|Chronos|Thymos|Hypnos|Mnemos|Phantasia|Lingua|Vox|Nous|Volition|Eidolon|Empatheia|Syneidesis|Praxis|Mundus|Spot|Nexus|Echo|Audition"
+
 # Explicit overrides for review-queue items are added by later pull requests.
-RESOLUTIONS = []
+RESOLUTIONS = [
+    {
+        "name": "perception",
+        "action": "keep",
+        "pattern": r"audition\.perception\b",
+        "why": "an Audition event type, not the module",
+    },
+    {
+        "name": "perception",
+        "action": "keep",
+        "pattern": r"PerceptionUnavailableError",
+        "why": "an exception class about the senses",
+    },
+    {
+        "name": "perception",
+        "action": "rename",
+        "pattern": r"\b(?:" + _MODULE_CLASSES + r")\**,? (?:and |or )?\**\[?Perception\b",
+        "why": "named in a list of modules",
+    },
+    {
+        "name": "perception",
+        "action": "rename",
+        "pattern": r"\bPerception\]?(?:\([^)]*\))?\**,? (?:and |or )?\**\[?(?:" + _MODULE_CLASSES + r")\b",
+        "why": "named in a list of modules",
+    },
+    {
+        "name": "perception",
+        "action": "rename",
+        "pattern": r"\[Perception\]\([^)]*perception\.md\)",
+        "why": "link to the module page",
+    },
+    {
+        "name": "perception",
+        "action": "rename",
+        "pattern": r"perception\.md\b",
+        "contexts": ["md_prose", "path"],
+        "files": ["docs/*"],
+        "why": "the module page",
+    },
+    {
+        "name": "perception",
+        "action": "rename",
+        "pattern": r"(?<![A-Za-z])Perception(?![a-z])",
+        "contexts": ["md_prose"],
+        "files": ["docs/09-modules/perception.md"],
+        "why": "the module's own page",
+    },
+    {
+        "name": "perception",
+        "action": "rename",
+        "pattern": r"\bPerception module\b",
+        "why": "the module",
+    },
+    {
+        "name": "perception",
+        "action": "rename",
+        "pattern": r"\bPerception arbitrates\b",
+        "why": "the module",
+    },
+    {
+        "name": "perception",
+        "action": "rename",
+        "pattern": r"\[modules\]\.perception\b",
+        "why": "module flag",
+    },
+    {
+        "name": "perception",
+        "action": "keep",
+        "pattern": r"(?<![A-Za-z])(?:[Pp]erception|PERCEPTION)(?![A-Za-z_]|\.[A-Za-z_])",
+        "contexts": ["md_prose", "comment", "docstring", "toml_comment"],
+        "why": "the faculty, not the module",
+    },
+    {
+        "name": "echo",
+        "action": "rename",
+        "pattern": r"\b(?:" + _MODULE_CLASSES + r")\**,? (?:and |or )?\**Echo\b",
+        "why": "named in a list of modules",
+    },
+    {
+        "name": "echo",
+        "action": "rename",
+        "pattern": r"\[Echo\]\([^)]*echo\.md\)",
+        "why": "link to the module page",
+    },
+    {
+        "name": "echo",
+        "action": "rename",
+        "pattern": r"echo\.md\b",
+        "contexts": ["md_prose", "path"],
+        "files": ["docs/*"],
+        "why": "the module page",
+    },
+    {
+        "name": "echo",
+        "action": "rename",
+        "pattern": r"(?<![A-Za-z])Echo(?![a-z])",
+        "contexts": ["md_prose"],
+        "files": ["docs/09-modules/echo.md"],
+        "why": "the module's own page",
+    },
+    {
+        "name": "echo",
+        "action": "rename",
+        "pattern": r"\bEcho is always off\b|\bembodiment modules and Echo\b",
+        "why": "the module",
+    },
+    {
+        "name": "echo",
+        "action": "rename",
+        "contexts": ["comment", "docstring"],
+        "files": [
+            "kaine/setup/steps.py",
+            "tests/test_drive_sources_from_modules.py",
+            "tests/test_no_nonblocking_dollar_reads.py",
+            "tests/test_phase_1_endtoend.py",
+            "tests/test_stream_registry_drift.py",
+            "tests/test_setup_wizard.py",
+        ],
+        "why": "the module, in code about modules",
+    },
+    {
+        "name": "echo",
+        "action": "keep",
+        "contexts": ["md_prose", "comment", "docstring", "toml_comment"],
+        "why": "the English word or the shell builtin",
+    },
+    {
+        "name": "spot",
+        "action": "keep",
+        "pattern": r"(?i)\b(?:blind|sweet) spots?\b",
+        "why": "English: blind spot, sweet spot",
+    },
+    {
+        "name": "spot",
+        "action": "rename",
+        "contexts": ["comment", "docstring", "toml_comment"],
+        "why": "the module, in code comments",
+    },
+]
 
 KEY_OVERRIDES = (
     ("eidolon.self_model", "self_model.document"),
@@ -483,6 +623,8 @@ KEY_OVERRIDES = (
     ("perception_locus", "perceptual_locus"),
     # The capability folder and name "spot-supervisor" would otherwise become a stutter.
     ("spot-supervisor", "supervisor"),
+    # The locus page and capability name would otherwise become a stutter.
+    ("perception-locus", "perceptual-locus"),
 )
 
 PHRASES = (
@@ -497,12 +639,15 @@ PHRASES = (
     ("every being", "every entity"),
     ("preserved being", "preserved entity"),
     ("a womb", "a stimulus source"),
+    ("perception-locus.md", "perceptual-locus.md"),
 )
 
 PATH_OVERRIDES = {
     "kaine/workspace/syneidesis.py": "kaine/workspace/core.py",
     # Keys ending in "/" are directory prefixes.
     "openspec/specs/spot-supervisor/": "openspec/specs/supervisor/",
+    "docs/08-cognitive-cycle/perception-locus.md": "docs/08-cognitive-cycle/perceptual-locus.md",
+    "openspec/specs/perception-locus/": "openspec/specs/perceptual-locus/",
 }
 
 PERSISTED_EXACT = {
@@ -552,6 +697,9 @@ EXCLUDED_GLOBS = (
     "kaine/modules/*/eval_probes/*.jsonl",
     "kaine/legacy_names.py",
     "tests/fixtures/rename_modules/",
+    # These documents record the rename itself and must keep the old names.
+    "openspec/changes/functional-module-names/",
+    "docs/appendix-e-module-names.md",
     # Licence and notice files are never touched by the codemod,
     # because the licence text belongs to its author alone.
     "LICENSE*",
@@ -737,3 +885,5 @@ PACKAGING = (
     {"kind": "quadlet_unit", "old": "kaine-nexus.container", "new": "kaine-dashboard.container", "scope": "operator"},
     {"kind": "compose_service", "old": "nexus", "new": "dashboard", "scope": "operator"},
 )
+
+del _MODULE_CLASSES

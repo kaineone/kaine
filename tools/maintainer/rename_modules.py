@@ -1145,9 +1145,11 @@ def _assign_scope(
     if _in_pip_extra(text, start, end):
         return "operator"
 
-    if _is_prose_like(ctx) and shape == "bare":
-        if T == W or T.endswith(".md") or T.startswith("docs/"):
-            return "prose"
+    if ctx in {"py_text", "toml_text"}:
+        return "operator"
+
+    if ctx in {"md_prose", "comment", "docstring", "toml_comment"} and shape == "bare":
+        return "prose"
     if T.endswith(".md") or T.startswith("docs/"):
         return "prose"
 
@@ -1433,6 +1435,8 @@ def _replacement_for(
     old_key: str,
     plural: bool,
     table,
+    ctx: str | None,
+    T: str,
 ) -> str:
     entry = _all_entries(table)[old_key]
     forms = _new_forms(entry, plural)
@@ -1445,11 +1449,11 @@ def _replacement_for(
         kebab = True
 
     if matched[0].islower():
-        if kebab:
+        if kebab or T.endswith(".md") or "docs/" in T:
             return forms["kebab"]
         if shape == "camel_lower":
             return forms["lower_camel"]
-        if scope == "prose":
+        if _is_prose_like(ctx) and shape == "bare":
             if forms["prose"][0].isupper():
                 return forms["prose"][0].lower() + forms["prose"][1:]
             return forms["prose"]
@@ -1461,11 +1465,11 @@ def _replacement_for(
         return forms["upper"]
 
     if matched[0].isupper():
-        if scope == "prose" and shape == "bare":
+        if _is_prose_like(ctx) and shape == "bare":
             return forms["prose"]
         return forms["class"]
 
-    if scope == "prose":
+    if _is_prose_like(ctx) and shape == "bare":
         return forms["prose"]
     return forms["key"]
 
@@ -1821,7 +1825,7 @@ def _apply_word_matches(
                 )
                 if scope in scopes:
                     new_text = _replacement_for(
-                        text, start, end, scope, shape, old_key, plural, table
+                        text, start, end, scope, shape, old_key, plural, table, ctx, T
                     )
                     replacements.append(
                         (start, end, new_text, scope, rule_text, old_key)
@@ -1854,7 +1858,7 @@ def _apply_word_matches(
                 )
                 if scope in scopes:
                     new_text = _replacement_for(
-                        text, start, end, scope, shape, old_key, plural, table
+                        text, start, end, scope, shape, old_key, plural, table, ctx, T
                     )
                     replacements.append(
                         (start, end, new_text, scope, rule_text, old_key)
@@ -1883,7 +1887,7 @@ def _apply_word_matches(
             )
             if scope in scopes:
                 new_text = _replacement_for(
-                    text, start, end, scope, shape, old_key, plural, table
+                    text, start, end, scope, shape, old_key, plural, table, ctx, T
                 )
                 replacements.append((start, end, new_text, scope, rule_text, old_key))
                 blocked.append((start, end))
@@ -2198,6 +2202,7 @@ def new_path(
     kebab_dir = rel_norm.startswith("openspec/specs/") or re.match(
         r"openspec/changes/[^/]+/specs/", rel_norm
     )
+    docs_path = rel_norm.startswith("docs/")
 
     full_path = "/".join(parts)
     new_parts: list[str] = []
@@ -2283,7 +2288,7 @@ def new_path(
                 end < len(segment) and segment[end] == "-"
             )
             if matched[0].islower():
-                new_sub = forms["kebab"] if (kebab_neighbor or kebab_dir) else forms["key"]
+                new_sub = forms["kebab"] if (kebab_neighbor or kebab_dir or docs_path) else forms["key"]
             elif matched[0].isupper() and (
                 len(matched) == 1 or matched[1:].isupper()
             ):
