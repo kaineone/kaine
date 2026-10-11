@@ -1069,7 +1069,7 @@ def test_estimate_pc_records_principal_component(tmp_path, monkeypatch):
     # Provide a seed because PositiveControl now reads the run context seed.
     monkeypatch.setattr(
         "kaine.modules.positive_control.get_run_context",
-        lambda: type("RC", (), {"run_id": "prelim", "seed": 0})(),
+        type("RC", (), {"run_id": "prelim", "seed": 0}),
     )
 
     rng = np.random.default_rng(21)

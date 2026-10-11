@@ -124,7 +124,6 @@ def _binomial_power_for_n(
     threshold_den = alpha.denominator
     tail = 0
     binom = 1
-    k = n + 1
     # Walk downward; the last qualifying k is candidate + 1.
     for candidate in range(n, -1, -1):
         if candidate < n:
