@@ -1182,6 +1182,10 @@ def test_positive_control_result_is_logged():
         "passed": True,
         "failed": False,
         "final": True,
+        "mode": "control",
+        "t_learn_s": 120.0,
+        "settings_sha256": "a" * 64,
+        "pc_sha256": "b" * 64,
         "extra": "x",
     }
     record = _taxonomy_record("positive_control.result", payload)

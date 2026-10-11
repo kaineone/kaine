@@ -1,0 +1,24 @@
+# Study configuration: a pilot run of the on arm for the workspace-mediation test
+# (paper §6.3, A.8). Select it for a run with KAINE_STUDY=workspace_mediation_pilot_competitive.
+# It is applied after the operator config, so these settings hold for the run.
+# The run's seed comes from [experiment].seed; run r of every arm uses the same
+# seed.
+
+[lingua]
+# Greedy decoding in the planned runs (paper §6.1).
+temperature = 0.0
+
+[syneidesis]
+arm = "competitive"
+
+[planned_test]
+# A pilot run of the on arm, which also carries the positive control's SNR
+# ladder (paper A.8).
+role = "pilot"
+
+[positive_control]
+enabled = true
+mode = "ladder"
+# Set to the preliminary run's id before the pilots; the boot fails while it is
+# empty.
+principal_components_run = ""

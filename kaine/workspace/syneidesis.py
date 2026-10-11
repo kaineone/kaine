@@ -110,7 +110,7 @@ class Syneidesis:
                 selected_events=[],
                 inhibited=True,
                 salience_scores={},
-                metadata={"arm": self._arm},
+                metadata={"arm": self._arm, "coalition_capacity": self._top_k},
             )
 
         scored: list[tuple[float, str, Event]] = []
@@ -188,7 +188,12 @@ class Syneidesis:
             top_score = top[0][0] if top else 0.0
             inhibited = top_score < self._threshold
         # Modules need the threshold to decide which coalition members were accessed.
-        metadata = {**metadata, "access_threshold": self._threshold, "arm": self._arm}
+        metadata = {
+            **metadata,
+            "access_threshold": self._threshold,
+            "arm": self._arm,
+            "coalition_capacity": self._top_k,
+        }
         return WorkspaceSnapshot(
             tick_index=tick_index,
             selected_events=[(entry_id, event) for (_, entry_id, event) in top],
@@ -231,14 +236,14 @@ class Syneidesis:
                     selected_events=[],
                     inhibited=True,
                     salience_scores={},
-                    metadata={"arm": self._arm},
+                    metadata={"arm": self._arm, "coalition_capacity": self._top_k},
                 ),
                 WorkspaceSnapshot(
                     tick_index=tick_index,
                     selected_events=[],
                     inhibited=True,
                     salience_scores={},
-                    metadata={"arm": self._arm},
+                    metadata={"arm": self._arm, "coalition_capacity": self._top_k},
                 ),
             )
 

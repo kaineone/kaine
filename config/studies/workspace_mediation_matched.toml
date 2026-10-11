@@ -10,3 +10,11 @@ temperature = 0.0
 
 [syneidesis]
 arm = "matched"
+
+[planned_test]
+# A live run of the planned test (paper §6.3, Appendix A.8). The boot refuses to
+# start without a valid settings record derived from the pilot runs by
+# `python -m kaine.experiment.calibrate`, or with a seed the preliminary or pilot
+# runs used.
+role = "test"
+settings_record = "config/studies/workspace_mediation_settings.json"

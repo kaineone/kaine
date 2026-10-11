@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
 import random
+import threading
 import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,7 +25,9 @@ from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.evaluation.config import EvaluationConfig, ResearchEventLogConfig
+from kaine.evaluation.observers.research_event_observer import _apply_taxonomy_fields
 from kaine.evaluation.registry import SidecarRegistry
+from kaine.experiment.principal_component import PrincipalComponent
 from kaine.experiment.run_context import RunContext, set_run_context
 from kaine.experiment.run_records import load_run_records
 from kaine.modules.audition import Audition, FakeEmotionClassifier, FakeSTTClient
@@ -31,7 +35,9 @@ from kaine.modules.audition.acoustic import FakeAcousticEncoder
 from kaine.modules.base import BaseModule
 from kaine.modules.context import CONTEXT_DIM
 from kaine.modules.positive_control import (
+    LADDER_FIELDS,
     RESULT_FIELDS,
+    ControlQueue,
     PositiveControlSettings,
     finish_positive_controls,
 )
@@ -164,6 +170,35 @@ def _rng_states_equal(a, b):
     assert a[2:] == b[2:]
 
 
+def _pc(processor: str, dim: int) -> PrincipalComponent:
+    return PrincipalComponent(
+        processor=processor,
+        run_id="prelim",
+        n_inputs=100,
+        dim=dim,
+        mean=tuple(0.0 for _ in range(dim)),
+        direction=tuple(1.0 if i == 0 else 0.0 for i in range(dim)),
+        variance=1.0,
+        total_variance=float(dim),
+    )
+
+
+def _control(dims: dict[str, int], **overrides) -> PositiveControlSettings:
+    settings = {
+        "enabled": True,
+        "mode": "control",
+        "principal_components": {p: _pc(p, d) for p, d in dims.items()},
+        "pc_sha256": {p: "0" * 64 for p in dims},
+        "snr": {p: 10.0 for p in dims},
+        "min_effect": 0.01,
+        "min_reports": 1,
+        "t_learn_s": 0.0,
+        "settings_sha256": "1" * 64,
+    }
+    settings.update(overrides)
+    return PositiveControlSettings(**settings)
+
+
 def test_shipped_config_leaves_the_control_off():
     path = Path(__file__).resolve().parents[1] / "config" / "kaine.toml"
     with path.open("rb") as fh:
@@ -180,13 +215,15 @@ def test_soma_factory_builds_the_control_only_when_enabled():
     assert make_soma(bus, {})._positive_control is None
     controlled = make_soma(
         bus,
-        {"positive_control": {"enabled": True, "snr": 10.0, "min_effect": 0.01, "min_reports": 1}},
+        {"positive_control": {"enabled": True, "mode": "estimate_pc"}},
     )
     from kaine.modules.positive_control import PositiveControl
 
     assert isinstance(controlled._positive_control, PositiveControl)
     with pytest.raises(ValueError):
         make_soma(bus, {"positive_control": {"enabled": True}})
+    with pytest.raises(ValueError):
+        make_soma(bus, {"positive_control": {"enabled": True, "snr": 10.0}})
 
 
 def test_construct_module_passes_the_section():
@@ -196,7 +233,7 @@ def test_construct_module_passes_the_section():
         bus,
         {
             "soma": {},
-            "positive_control": {"enabled": True, "snr": 5.0, "min_effect": 0.01, "min_reports": 1},
+            "positive_control": {"enabled": True, "mode": "estimate_pc"},
         },
         registry=ModuleRegistry(),
     )
@@ -227,7 +264,7 @@ async def test_topos_control_publishes_and_leaves_the_live_report_untouched() ->
         encoder=Varying(),
         forward_prediction=True,
         entity_clock=_FixedClock(),
-        positive_control=PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1),
+        positive_control=_control({"topos": 4}),
     )
     controlled._forward_model = LatentForwardModel(
         latent_dim=4,
@@ -259,6 +296,8 @@ async def test_topos_control_publishes_and_leaves_the_live_report_untouched() ->
         ):
             assert a[key] == b[key]
 
+    # Wait for all queued control steps before inspecting their results.
+    await controlled._pc_queue.drain()
     pc_events = await controlled_bus.read("positive_control.out", last_id="0")
     assert pc_events
     pc_payloads = _payloads(pc_events)
@@ -279,19 +318,25 @@ async def test_soma_control_publishes_results(bus: AsyncBus) -> None:
         bus,
         reader=FakeMetricsReader({"cpu_percent": 10.0, "ram_percent": 20.0}),
         detector=NeverAlertDetector(),
-        # Built directly, not from config, to check that no verdict is recorded
-        # without a minimum effect.
-        positive_control=PositiveControlSettings(enabled=True, snr=10.0),
+        # Built directly, not from config, to check the payload shape in control
+        # mode. In control mode the minimum effect comes from the settings
+        # record, so every tick records a verdict.
+        positive_control=_control({"soma": 8}),
     )
     await soma.on_workspace(_workspace("topos", 0.7, 0.5))
     for _ in range(6):
         await soma.tick_once()
 
+    # Wait for all queued control steps before inspecting their results.
+    await soma._pc_queue.drain()
     events = await bus.read("positive_control.out", last_id="0")
     assert events
     payloads = _payloads(events)
     assert all(p.get("processor") == "soma" for p in payloads)
-    assert all(p.get("passed") is None for p in payloads)
+    assert all(p.get("mode") == "control" for p in payloads)
+    assert all(p.get("min_effect") == 0.01 for p in payloads)
+    assert all(p.get("min_reports") == 1 for p in payloads)
+    assert all(isinstance(p.get("passed"), bool) for p in payloads)
 
 
 @pytest.mark.asyncio
@@ -300,7 +345,7 @@ async def test_failing_control_switches_itself_off(bus: AsyncBus) -> None:
         bus,
         encoder=Varying(),
         forward_prediction=True,
-        positive_control=PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1),
+        positive_control=_control({"topos": 4}),
     )
     topos._forward_model = LatentForwardModel(
         latent_dim=4,
@@ -318,6 +363,8 @@ async def test_failing_control_switches_itself_off(bus: AsyncBus) -> None:
     for _ in range(3):
         await topos.process_frame(None)
 
+    # The failure is handled asynchronously on the control queue.
+    await topos._pc_queue.drain()
     assert topos._positive_control is None
     assert len(await _reports(bus, "topos.out")) == 3
     positive_reports = await _reports(bus, "positive_control.out")
@@ -337,7 +384,7 @@ async def test_shutdown_publishes_a_terminal_record() -> None:
             encoder=Varying(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
-            positive_control=PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1),
+            positive_control=_control({"topos": 4}),
         )
         topos._forward_model = LatentForwardModel(
             latent_dim=4,
@@ -369,7 +416,7 @@ async def test_soma_shutdown_publishes_a_terminal_record() -> None:
             bus,
             reader=FakeMetricsReader({"cpu_percent": 10.0, "ram_percent": 20.0}),
             detector=NeverAlertDetector(),
-            positive_control=PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1),
+            positive_control=_control({"soma": 8}),
         )
         await soma.on_workspace(_workspace("topos", 0.7, 0.5))
         for _ in range(6):
@@ -392,7 +439,7 @@ async def test_unpublishable_failure_is_logged_at_error(bus: AsyncBus, caplog) -
         bus,
         encoder=Varying(),
         forward_prediction=True,
-        positive_control=PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1),
+        positive_control=_control({"topos": 4}),
     )
     topos._forward_model = LatentForwardModel(
         latent_dim=4,
@@ -418,6 +465,8 @@ async def test_unpublishable_failure_is_logged_at_error(bus: AsyncBus, caplog) -
     finally:
         topos_module.publish_result = original_publish
 
+    # The failure is handled asynchronously on the control queue.
+    await topos._pc_queue.drain()
     assert topos._positive_control is None
     assert await _reports(bus, "positive_control.out") == []
     error_messages = [r.message for r in caplog.records if r.levelname == "ERROR"]
@@ -461,9 +510,7 @@ async def _topos_run(control_settings):
 @pytest.mark.asyncio
 async def test_topos_control_leaves_live_weights_and_rng_states_identical() -> None:
     off = await _topos_run(None)
-    on = await _topos_run(
-        PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1)
-    )
+    on = await _topos_run(_control({"topos": 4}))
 
     assert off[0] == on[0]
     _rng_states_equal(off[1], on[1])
@@ -517,9 +564,7 @@ async def _soma_run(control_settings):
 @pytest.mark.asyncio
 async def test_soma_control_leaves_live_weights_and_rng_states_identical() -> None:
     off = await _soma_run(None)
-    on = await _soma_run(
-        PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1)
-    )
+    on = await _soma_run(_control({"soma": 8}))
 
     assert off[0] == on[0]
     _rng_states_equal(off[1], on[1])
@@ -563,9 +608,7 @@ async def _audition_run(control_settings):
 @pytest.mark.asyncio
 async def test_audition_control_leaves_live_weights_and_rng_states_identical() -> None:
     off = await _audition_run(None)
-    on = await _audition_run(
-        PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1)
-    )
+    on = await _audition_run(_control({"audition": 8}))
 
     assert off[0] == on[0]
     _rng_states_equal(off[1], on[1])
@@ -600,9 +643,7 @@ async def test_terminal_record_reaches_the_research_log(tmp_path) -> None:
             encoder=Varying(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
-            positive_control=PositiveControlSettings(
-                enabled=True, snr=10.0, min_effect=0.01, min_reports=1
-            ),
+            positive_control=_control({"topos": 4}),
         )
         topos._forward_model = LatentForwardModel(
             latent_dim=4,
@@ -629,10 +670,56 @@ async def test_terminal_record_reaches_the_research_log(tmp_path) -> None:
         assert pc_records
         assert pc_records[-1]["final"] is True
         assert pc_records[-1]["failed"] is False
+        assert pc_records[-1]["mode"] == "control"
+        assert pc_records[-1]["t_learn_s"] == 0.0
         assert sum(1 for r in pc_records if r.get("final") is True) == 1
     finally:
         set_run_context(None)
         await bus.close()
+
+
+@pytest.mark.asyncio
+async def test_topos_report_carries_entity_time_and_awake() -> None:
+    bus = _bus()
+    try:
+        clock = _FixedClock()
+        topos = topos_module.Topos(
+            bus,
+            encoder=Varying(),
+            forward_prediction=True,
+            entity_clock=clock,
+        )
+        topos._forward_model = LatentForwardModel(
+            latent_dim=4,
+            units=8,
+            context_dim=CONTEXT_DIM,
+            seed=4,
+        )
+
+        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+        await topos.process_frame(None)
+
+        reports = await _reports(bus, "topos.out")
+        assert reports
+        assert reports[0]["entity_time_s"] == clock.now()
+        assert reports[0]["awake"] is True
+
+        topos._in_hypnos = True
+        await topos.process_frame(None)
+        reports = await _reports(bus, "topos.out")
+        assert reports[-1]["awake"] is False
+    finally:
+        await bus.close()
+
+
+def test_research_observer_keeps_ladder_fields() -> None:
+    payload = {field: 0.0 for field in LADDER_FIELDS}
+    payload["processor"] = "topos"
+    payload["pc_sha256"] = "0" * 64
+    payload["x"] = "extra"
+    result = _apply_taxonomy_fields("positive_control.ladder", payload, {})
+    assert set(LADDER_FIELDS).issubset(result.keys())
+    assert "x" not in result
 
 
 class _VaryingWithGap(Varying):
@@ -655,9 +742,7 @@ async def test_topos_control_stays_paired_across_a_skip():
             encoder=_VaryingWithGap(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
-            positive_control=PositiveControlSettings(
-                enabled=True, snr=10.0, min_effect=0.01, min_reports=1
-            ),
+            positive_control=_control({"topos": 4}),
         )
         topos._forward_model = LatentForwardModel(
             latent_dim=4,
@@ -672,7 +757,9 @@ async def test_topos_control_stays_paired_across_a_skip():
             if i == 3:
                 await topos.on_workspace(_workspace("thymos", 0.75, 0.75))
             await topos.process_frame(None)
-            for probe in (control._probe_info, control._probe_noise):
+            # Drain the queued control step before comparing shadow and live state.
+            await topos._pc_queue.drain()
+            for probe in control._probes:
                 assert [
                     list(v) for v in probe._shadow._buffer
                 ] == [list(v) for v in topos._forward_model._buffer]
@@ -684,9 +771,200 @@ async def test_topos_control_stays_paired_across_a_skip():
         assert isinstance(gains[7], float)
         assert control._n == sum(1 for g in gains if g is not None)
 
+        await topos._pc_queue.drain()
         for p in _payloads(await bus.read("positive_control.out", last_id="0")):
             for v in p.values():
                 if isinstance(v, float):
                     assert math.isfinite(v)
     finally:
         await bus.close()
+
+
+@pytest.mark.asyncio
+async def test_report_is_published_before_positive_control_steps() -> None:
+    """The live report reaches the bus while the queued control step is still blocked."""
+    bus = _bus()
+    try:
+        topos = topos_module.Topos(
+            bus,
+            encoder=Varying(),
+            forward_prediction=True,
+            entity_clock=_FixedClock(),
+            positive_control=_control({"topos": 4}),
+        )
+        topos._forward_model = LatentForwardModel(
+            latent_dim=4,
+            units=8,
+            context_dim=CONTEXT_DIM,
+            seed=4,
+        )
+        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+
+        # Process three frames with the control unblocked so the shadow has a baseline.
+        for _ in range(3):
+            await topos.process_frame(None)
+        await topos._pc_queue.drain()
+        initial_pc = await bus.read("positive_control.out", last_id="0")
+
+        blocker = threading.Event()
+        original_after_report = topos._positive_control.after_report
+
+        def _blocked_after_report(*args, **kwargs):  # noqa: ARG001
+            blocker.wait()
+            return original_after_report(*args, **kwargs)
+
+        topos._positive_control.after_report = _blocked_after_report
+
+        await topos.process_frame(None)
+
+        reports = await _reports(bus, "topos.out")
+        assert len(reports) == 4
+        pc_while_blocked = await bus.read("positive_control.out", last_id="0")
+        assert len(pc_while_blocked) == len(initial_pc)
+
+        blocker.set()
+        await topos._pc_queue.drain()
+
+        final_pc = await bus.read("positive_control.out", last_id="0")
+        assert len(final_pc) == len(initial_pc) + 1
+    finally:
+        await bus.close()
+
+
+@pytest.mark.asyncio
+async def test_full_queue_fails_the_control_once() -> None:
+    """A full queue fails the control once and only one terminal record is published."""
+    bus = _bus()
+    try:
+        topos = topos_module.Topos(
+            bus,
+            encoder=Varying(),
+            forward_prediction=True,
+            entity_clock=_FixedClock(),
+            positive_control=_control({"topos": 4}),
+        )
+        topos._forward_model = LatentForwardModel(
+            latent_dim=4,
+            units=8,
+            context_dim=CONTEXT_DIM,
+            seed=4,
+        )
+        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+
+        import threading
+
+        hold = threading.Event()
+        control = topos._positive_control
+        original_after_report = control.after_report
+
+        def _held_then_raises(*args, **kwargs):
+            # The in-flight control step blocks, then raises after the control
+            # has already failed for a full queue.
+            hold.wait()
+            raise RuntimeError("released")
+
+        control.after_report = _held_then_raises
+        topos._pc_queue = ControlQueue(max_pending=1)
+
+        # Report 1: its step runs and blocks. Report 2: queued. Report 3: the
+        # queue is full, so the control fails and publishes its failure record.
+        for _ in range(3):
+            await topos.process_frame(None)
+            await asyncio.sleep(0.05)
+        assert topos._positive_control is None
+
+        hold.set()
+        await asyncio.wait_for(topos._pc_queue.drain(), timeout=5)
+        await topos.finish_positive_control()
+        control.after_report = original_after_report
+
+        events = await bus.read("positive_control.out", last_id="0")
+        payloads = _payloads(events)
+        assert sum(1 for p in payloads if p["failed"]) == 1
+        assert sum(1 for p in payloads if p["final"]) == 1
+    finally:
+        await bus.close()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_drain_has_a_budget() -> None:
+    """finish_positive_control times out a stuck queue and publishes one terminal record."""
+    bus = _bus()
+    try:
+        import dataclasses
+        settings = dataclasses.replace(
+            _control({"topos": 4}),
+            shutdown_drain_s=0.2,
+        )
+        topos = topos_module.Topos(
+            bus,
+            encoder=Varying(),
+            forward_prediction=True,
+            entity_clock=_FixedClock(),
+            positive_control=settings,
+        )
+        topos._forward_model = LatentForwardModel(
+            latent_dim=4,
+            units=8,
+            context_dim=CONTEXT_DIM,
+            seed=4,
+        )
+        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+
+        for _ in range(3):
+            await topos.process_frame(None)
+
+        never = asyncio.Event()
+
+        async def _hung_job():
+            await never.wait()
+
+        assert topos._pc_queue.submit(_hung_job) is True
+
+        await asyncio.wait_for(topos.finish_positive_control(), timeout=5)
+
+        events = await bus.read("positive_control.out", last_id="0")
+        payloads = _payloads(events)
+        assert sum(1 for p in payloads if p["failed"] and p["final"]) == 1
+        assert topos._positive_control is None
+    finally:
+        await bus.close()
+
+
+@pytest.mark.asyncio
+async def test_fail_positive_control_publishes_once() -> None:
+    """Calling _fail_positive_control twice publishes a single failure record."""
+    bus = _bus()
+    try:
+        control = _control({"topos": 4})
+        topos = topos_module.Topos(
+            bus,
+            encoder=Varying(),
+            forward_prediction=True,
+            entity_clock=_FixedClock(),
+            positive_control=control,
+        )
+        pc = topos._positive_control
+        assert pc is not None
+        await topos._fail_positive_control(pc, "x")
+        await topos._fail_positive_control(pc, "x")
+
+        events = await bus.read("positive_control.out", last_id="0")
+        assert len(_payloads(events)) == 1
+        assert topos._positive_control is None
+    finally:
+        await bus.close()
+
+
+def test_from_config_shutdown_drain_s() -> None:
+    """from_config accepts shutdown_drain_s in every mode and rejects bad values."""
+    settings = PositiveControlSettings.from_config(
+        {"enabled": True, "mode": "estimate_pc", "shutdown_drain_s": 2.5},
+    )
+    assert settings.shutdown_drain_s == 2.5
+
+    with pytest.raises(ValueError):
+        PositiveControlSettings.from_config({"enabled": False, "shutdown_drain_s": 0})
+
+    with pytest.raises(ValueError):
+        PositiveControlSettings.from_config({"enabled": False, "shutdown_drain_s": "x"})

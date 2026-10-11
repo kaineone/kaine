@@ -1,0 +1,23 @@
+# Study configuration: the preliminary run of the workspace-mediation test (paper
+# §6.3, A.8). Select it for a run with KAINE_STUDY=workspace_mediation_preliminary.
+# It is applied after the operator config, so these settings hold for the run.
+# The run's seed comes from [experiment].seed; this run uses a seed never used
+# again.
+
+[lingua]
+# Greedy decoding in the planned runs (paper §6.1).
+temperature = 0.0
+
+[syneidesis]
+arm = "competitive"
+
+[planned_test]
+# The one preliminary run, on a seed never used again, that estimates each
+# processor's first principal component and input mean for the positive control
+# (paper A.8); it writes them under data/evaluation/positive_control/<run_id>/
+# at shutdown.
+role = "preliminary"
+
+[positive_control]
+enabled = true
+mode = "estimate_pc"

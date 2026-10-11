@@ -1665,25 +1665,30 @@ enabled = false
 
 [positive_control]
 # Positive control of the broadcast information-gain measure (paper §6.3,
-# Appendix A.8). When enabled, Topos, Audition and Soma each run shadow
-# forward models whose context carries one extra synthetic component: a
-# seeded projection of the processor's own next input plus noise at the
-# signal-to-noise ratio `snr`, and, as the non-informative check, a seeded
-# series with the same mean and variance that is independent of the input.
+# Appendix A.8). Off by default; only the workspace-mediation study
+# configurations enable it, each in one mode:
+#   mode = "estimate_pc"  the preliminary run. Each of Topos, Audition and Soma
+#                         accumulates its inputs' mean and covariance and, at
+#                         shutdown, writes the first principal component and
+#                         the mean under data/evaluation/positive_control/.
+#   mode = "ladder"       pilot runs of the on arm. Shadow forward models carry
+#                         an informative component (the next input projected
+#                         on that principal component, plus noise) and an
+#                         uninformative one with the same mean and variance,
+#                         at every SNR from 4^-2 to 4^4; set
+#                         principal_components_run to the preliminary run.
+#   mode = "control"      the control itself, with SNR_j, min_effect,
+#                         min_reports and the learning period T_learn read from
+#                         the settings record named by settings_record, which
+#                         `python -m kaine.experiment.calibrate` derives from
+#                         the pilot runs.
 # The live model, its reports, intensities and the competition are untouched.
-# Results go to the research log as positive_control.result records; the
-# measure passes for a processor when the informative component raises its
-# information gain by at least `min_effect` and the non-informative one
-# does not, over at least `min_reports` counted reports. Check a finished
-# run with `python -m kaine.experiment.positive_control <run_id>`.
-# Off by default; set it only in the study configuration. `min_effect`,
-# `min_reports` and `snr` have no defaults and are fixed with the
-# preregistration; enabling the control without all three fails the boot.
+# Check complete control runs with
+# `python -m kaine.experiment.positive_control <run_id> [<run_id> ...]`.
+# snr, min_effect and min_reports are not configuration keys: they come from
+# the settings record.
 enabled = false
 seed = 0
-# min_effect = <fixed before the live runs>
-# snr = <fixed before the live runs>
-# min_reports = <fixed before the live runs>
 
 [nexus]
 host = "127.0.0.1"
