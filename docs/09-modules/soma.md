@@ -52,7 +52,7 @@ Alongside each prediction, the readout also predicts from a null context. Soma's
 context_gain = (null-context error − error) / running mean error
 ```
 
-over the last `prediction_error_window` errors. It is `null` when the scored prediction had no context or the running mean is zero. Each report also carries `null_prediction_error` and `mean_prediction_error`, the null-context error and the running mean the gain is computed from; both are `null` when `context_gain` is. A reading skipped as non-finite reports no gain. The null prediction never enters learning or the competition, and its running means restart with each boot. The matched-selection and pooled arms of the planned test, and its positive control, are not built yet.
+over the last `prediction_error_window` errors. It is `null` when the scored prediction had no context or the running mean is zero. Each report also carries `null_prediction_error` and `mean_prediction_error`, the null-context error and the running mean the gain is computed from; both are `null` when `context_gain` is. A reading skipped as non-finite reports no gain, stays out of the running mean, and leaves no prediction behind, so the reading after it reports no gain either. The null prediction never enters learning or the competition, and its running means restart with each boot. The matched-selection and pooled arms of the planned test, and its positive control, are not built yet.
 
 ## Intensity and the alert flag
 

@@ -5,12 +5,15 @@ import asyncio
 import io
 import os
 import wave
+from datetime import datetime, timezone
 
 import numpy as np
 import pytest
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
+from kaine.bus.schema import Event
+from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.audition import (
     CATEGORIES,
     Audition,
@@ -722,5 +725,69 @@ async def test_acoustic_processing_yields_event_loop(bus: AsyncBus):
         await audition.process_audio(_tone(300), sample_rate=16000)
         _ = await marker
         assert loop_progressed
+    finally:
+        await audition.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_acoustic_report_carries_the_paired_evaluations(bus: AsyncBus) -> None:
+    audition = _general_audition(bus)
+    await audition.initialize()
+    try:
+        soma_entry = (
+            "1-0",
+            Event(
+                source="soma",
+                type="soma.report",
+                payload={"k": 1},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            ),
+        )
+        await audition.on_workspace(
+            WorkspaceSnapshot(
+                tick_index=1,
+                selected_events=[soma_entry],
+                inhibited=False,
+                salience_scores={soma_entry[0]: 0.5},
+                metadata={"access_threshold": 0.35},
+            )
+        )
+        await audition.process_audio(_tone(7000), sample_rate=16000)
+
+        thymos_entry = (
+            "2-0",
+            Event(
+                source="thymos",
+                type="thymos.report",
+                payload={"k": 1},
+                salience=0.75,
+                timestamp=datetime.now(timezone.utc),
+            ),
+        )
+        await audition.on_workspace(
+            WorkspaceSnapshot(
+                tick_index=2,
+                selected_events=[thymos_entry],
+                inhibited=False,
+                salience_scores={thymos_entry[0]: 0.75},
+                metadata={"access_threshold": 0.35},
+            )
+        )
+        await audition.process_audio(_tone(5000), sample_rate=16000)
+        await audition.process_audio(_tone(6000), sample_rate=16000)
+        await audition.process_audio(_tone(4000), sample_rate=16000)
+
+        entries = await bus.read("audition.out", last_id="0", count=50)
+        perceptions = [e.payload for _, e in entries if e.type == "audition.perception"]
+        payload = perceptions[-1]
+
+        assert payload is not None
+        assert isinstance(payload["null_prediction_error"], float)
+        assert isinstance(payload["mean_prediction_error"], float)
+        assert payload["context_gain"] == pytest.approx(
+            (payload["null_prediction_error"] - payload["prediction_error"])
+            / payload["mean_prediction_error"]
+        )
     finally:
         await audition.shutdown()

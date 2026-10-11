@@ -12,7 +12,7 @@ When Topos, Audition or Soma forms a prediction, it SHALL build its broadcast co
 - **THEN** each report's `context_gain` is exactly 0 and its `null_prediction_error` equals its `prediction_error`
 
 ### Requirement: Reports carry the paired evaluations behind the gain
-Each report of Topos, Audition's acoustic path and Soma that carries a `context_gain` SHALL also carry `null_prediction_error`, the error of the prediction formed with the null context, and `mean_prediction_error`, the running mean error the gain is divided by, so that `context_gain` equals their difference from `prediction_error` over the mean. When `context_gain` is null both SHALL be null. A reading Soma skips as non-finite SHALL report no gain.
+Each report of Topos, Audition's acoustic path and Soma that carries a `context_gain` SHALL also carry `null_prediction_error`, the error of the prediction formed with the null context, and `mean_prediction_error`, the running mean error the gain is divided by, so that `context_gain` equals their difference from `prediction_error` over the mean. When `context_gain` is null both SHALL be null. A reading Soma skips as non-finite SHALL report no gain and SHALL NOT enter the running mean, and it SHALL leave no prediction behind, so the next reading also reports no gain and makes no update.
 
 #### Scenario: The gain is recoverable from the paired evaluations
 - **WHEN** Topos reports after adopting two different broadcasts
@@ -20,4 +20,4 @@ Each report of Topos, Audition's acoustic path and Soma that carries a `context_
 
 #### Scenario: A skipped reading reports no gain
 - **WHEN** Soma's forward model receives a non-finite feature vector after scoring a prediction formed with a context
-- **THEN** it returns an error of 0 and holds no null error, so no gain is published for that reading
+- **THEN** it returns an error of 0 and holds no null error, so no gain is published for that reading, the running mean error is unchanged, and the next reading publishes no gain either

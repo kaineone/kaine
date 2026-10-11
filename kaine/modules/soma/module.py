@@ -417,7 +417,9 @@ class Soma(BaseModule):
             else:
                 prediction_error = self._forward_model.step(feature_vec)
         self._last_prediction_error = prediction_error
-        self._prediction_error_window.append(prediction_error)
+        # A skipped reading carries no real error to average.
+        if not getattr(self._forward_model, "last_reading_skipped", False):
+            self._prediction_error_window.append(prediction_error)
 
         context_gain: Optional[float] = None
         null_prediction_error: Optional[float] = None

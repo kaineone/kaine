@@ -6,7 +6,7 @@ An audit of the code against A.8 finds the per-report gain (`context_gain`) alre
 
 - The context and its null are built by two calls that each read the clock for the age. With a live clock the two ages differ, so the null differs from the context in a component A.8 keeps, and the gain picks up a term that has nothing to do with other modules' contributions.
 - §6.2 lists the processors' paired evaluations among a study's records. A report carries its error and the gain but not the error under the null context or the running mean it was divided by, and Soma's running mean cannot be recovered from the research log.
-- Soma's forward model skips a non-finite reading but keeps the previous reading's null error, so Soma would publish a gain from a stale null error against an error of 0.
+- Soma's forward model skips a non-finite reading but keeps the previous reading's null error and prediction, so Soma would publish a gain from a stale null error against an error of 0, score the next reading against a prediction from two readings back, and average the skipped reading's 0 into its running mean.
 
 The positive control (§6.3, A.8) is not built in this change. The paper leaves open what the synthetic component carries for each processor and how it can carry information about the next input when the prediction is formed before that input exists, whether "IG_j with the component" and "IG_j without it" come from one run or from paired runs, and how the control's minimum effect is set. Those questions go to the operator; the tasks for the control stay open here until they are answered.
 
@@ -14,7 +14,7 @@ The positive control (§6.3, A.8) is not built in this change. The paper leaves 
 
 - `BroadcastContext.context_and_null(kept_sources)` returns the context and its null from one reading of the clock, so the two share the age and flags exactly. Topos, Audition and Soma use it.
 - Each of `topos.report`, `audition.perception` and `soma.report` carries `null_prediction_error` and `mean_prediction_error`, set exactly when `context_gain` is set, so that the gain equals the null error minus the error over the mean. The curated research log copies both, and the post-run range sweep declares them non-negative.
-- Soma's forward model clears its null error when it skips a non-finite reading, so that reading reports no gain.
+- When Soma's forward model skips a non-finite reading it clears its null error and its stored prediction, context and hidden state, so neither that reading nor the next one reports a gain and the next one makes no update from stale state. Soma leaves the skipped reading out of its running mean error.
 
 ## Capabilities
 
