@@ -197,7 +197,7 @@ def test_unattended_conflicts_with_operator_present(tmp_path):
 
 
 def test_unattended_gate_passes_to_boot_in_process(monkeypatch):
-    """A passing unattended gate threads supervision_mode and all eight
+    """A passing unattended gate threads supervision_mode and all nine
     gate_checks into _boot_and_run."""
     m = cycle_main
     from kaine.cycle.research_gate import evaluate_research_gate
