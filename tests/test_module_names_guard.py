@@ -87,10 +87,10 @@ def scan_capitalized(root: pathlib.Path, files: list[str], names: tuple[str, ...
     found: list[str] = []
     for rel in files:
         path = root / rel
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
+        data = path.read_bytes()
+        if b"\x00" in data[:8192]:
             continue
+        text = data.decode("utf-8", errors="replace")
         for line_no, line in enumerate(text.splitlines(), start=1):
             for name in names:
                 pattern = rf"(?<![A-Za-z]){re.escape(name)}(?![a-z])"

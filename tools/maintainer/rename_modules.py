@@ -55,6 +55,10 @@ class TableError(Exception):
     """Raised when the mapping table fails validation."""
 
 
+class RootError(Exception):
+    """Raised when the repository root cannot be read by git."""
+
+
 @dataclasses.dataclass(frozen=True)
 class Change:
     path: str
@@ -999,6 +1003,7 @@ def _assign_scope(
     T: str,
     shape: str,
     toml_table: str | None,
+    tokens: list[dict],
     table,
 ) -> str:
     """Assign a scope to a candidate match using the rules from the spec."""
@@ -1011,7 +1016,7 @@ def _assign_scope(
             if full_content in persisted:
                 return "persisted"
         if ctx.startswith("py"):
-            if _operand_of_div(text, start, end):
+            if _operand_of_div(tokens, start, end):
                 return "persisted"
         if ("/" in T) or any(
             T.endswith(ext)
@@ -1109,11 +1114,76 @@ def _strip_quotes(raw: str) -> str | None:
     return None
 
 
-def _operand_of_div(text: str, start: int, end: int) -> bool:
-    window_start = max(0, start - 40)
-    window_end = min(len(text), end + 40)
-    snippet = text[window_start:window_end]
-    return " / " in snippet or " /" in snippet or "/ " in snippet
+def _operand_of_div(tokens: list[dict], start: int, end: int) -> bool:
+    """Return True when the match is a Python string operand of ``/``."""
+    if not tokens:
+        return False
+
+    fstring_start = getattr(tokenize, "FSTRING_START", None)
+    fstring_middle = getattr(tokenize, "FSTRING_MIDDLE", None)
+    fstring_end = getattr(tokenize, "FSTRING_END", None)
+    fstring_types = tuple(
+        t for t in (fstring_start, fstring_middle, fstring_end) if t is not None
+    )
+
+    skip = {
+        tokenize.NL,
+        tokenize.NEWLINE,
+        tokenize.COMMENT,
+        tokenize.INDENT,
+        tokenize.DEDENT,
+    }
+
+    containing = None
+    for idx, tok in enumerate(tokens):
+        if tok["start"] <= start < tok["end"]:
+            containing = idx
+            break
+    if containing is None:
+        return False
+
+    start_idx = containing
+    end_idx = containing
+
+    if fstring_types and tokens[containing]["type"] in fstring_types:
+        depth = 0
+        for j in range(containing - 1, -1, -1):
+            ttype = tokens[j]["type"]
+            if ttype == fstring_end:
+                depth += 1
+            elif ttype == fstring_start:
+                if depth == 0:
+                    start_idx = j
+                    break
+                depth -= 1
+
+        depth = 0
+        for j in range(start_idx + 1, len(tokens)):
+            ttype = tokens[j]["type"]
+            if ttype == fstring_start:
+                depth += 1
+            elif ttype == fstring_end:
+                if depth == 0:
+                    end_idx = j
+                    break
+                depth -= 1
+
+    prev_tok = None
+    for j in range(start_idx - 1, -1, -1):
+        if tokens[j]["type"] not in skip:
+            prev_tok = tokens[j]
+            break
+
+    next_tok = None
+    for j in range(end_idx + 1, len(tokens)):
+        if tokens[j]["type"] not in skip:
+            next_tok = tokens[j]
+            break
+
+    return (
+        (prev_tok is not None and prev_tok["type"] == tokenize.OP and prev_tok["string"] == "/")
+        or (next_tok is not None and next_tok["type"] == tokenize.OP and next_tok["string"] == "/")
+    )
 
 
 def _pattern_covers(
@@ -1377,6 +1447,7 @@ def _apply_key_overrides(
     scopes: set[str],
     only: set[str] | None,
     rel_path: str,
+    tokens: list[dict],
     table,
 ) -> list[tuple[int, int, str, str, str, str]]:
     replacements: list[tuple[int, int, str, str, str, str]] = []
@@ -1432,6 +1503,7 @@ def _apply_key_overrides(
                             text[t_start:t_end],
                             shape,
                             toml_table,
+                            tokens,
                             table,
                         )
                         if scope in scopes:
@@ -1560,17 +1632,16 @@ def _apply_word_matches(
     only: set[str] | None,
     change_ids: frozenset[str],
     rel_path: str,
+    tokens: list[dict],
     table,
 ) -> tuple[
     list[tuple[int, int, str, str, str, str]],
     dict[str, int],
     list[Queued],
-    dict[str, int],
 ]:
     replacements: list[tuple[int, int, str, str, str, str]] = []
     queued: list[Queued] = []
     kept: dict[str, int] = {}
-    queued_counts: dict[str, int] = {}
 
     regex, group_map = _name_regex(table)
     starts = _line_starts(text)
@@ -1606,7 +1677,7 @@ def _apply_word_matches(
             action, rule_text = resolution
             if action == "rename":
                 scope = _assign_scope(
-                    rel_path, ctx, text, start, end, W, T, shape, toml_table, table
+                    rel_path, ctx, text, start, end, W, T, shape, toml_table, tokens, table
                 )
                 if scope in scopes:
                     new_text = _replacement_for(
@@ -1621,7 +1692,6 @@ def _apply_word_matches(
                 kept[old_key] = kept.get(old_key, 0) + 1
                 continue
             if action == "queue":
-                queued_counts[old_key] = queued_counts.get(old_key, 0) + 1
                 queued.append(
                     Queued(
                         rel_path,
@@ -1640,7 +1710,7 @@ def _apply_word_matches(
             action, rule_text = guarded_result
             if action == "rename":
                 scope = _assign_scope(
-                    rel_path, ctx, text, start, end, W, T, shape, toml_table, table
+                    rel_path, ctx, text, start, end, W, T, shape, toml_table, tokens, table
                 )
                 if scope in scopes:
                     new_text = _replacement_for(
@@ -1655,9 +1725,8 @@ def _apply_word_matches(
                 kept[old_key] = kept.get(old_key, 0) + 1
                 continue
             if action == "queue":
-                queued_counts[old_key] = queued_counts.get(old_key, 0) + 1
                 queued.append(
-                   Queued(
+                    Queued(
                         rel_path,
                         _line_number(starts, start),
                         old_key,
@@ -1670,7 +1739,7 @@ def _apply_word_matches(
         rename, rule_text = _resolve_non_guarded(ctx, T, rel_path, table)
         if rename:
             scope = _assign_scope(
-                rel_path, ctx, text, start, end, W, T, shape, toml_table, table
+                rel_path, ctx, text, start, end, W, T, shape, toml_table, tokens, table
             )
             if scope in scopes:
                 new_text = _replacement_for(
@@ -1681,7 +1750,7 @@ def _apply_word_matches(
         else:
             kept[old_key] = kept.get(old_key, 0) + 1
 
-    return replacements, kept, queued, queued_counts
+    return replacements, kept, queued
 
 
 def _contains_change_id(token_text: str, change_ids: frozenset[str]) -> bool:
@@ -1841,7 +1910,11 @@ def rewrite_text(
     """
     starts = _line_starts(text)
     intervals = _context_intervals(rel_path, text)
-    if not intervals and _file_kind(rel_path, text) == "python":
+    kind = _file_kind(rel_path, text)
+    tokens: list[dict] = []
+    if kind == "python":
+        tokens = _python_token_analysis(text)
+    if not intervals and kind == "python":
         return FileResult(text, [], [], {}, [], "tokenize error")
 
     blocked = _mask_excluded_regions(rel_path, text, table)
@@ -1849,7 +1922,7 @@ def rewrite_text(
     replacements: list[tuple[int, int, str, str, str, str]] = []
 
     overrides = _apply_key_overrides(
-        text, intervals, blocked, scopes, only, rel_path, table
+        text, intervals, blocked, scopes, only, rel_path, tokens, table
     )
     replacements.extend(overrides)
 
@@ -1859,12 +1932,12 @@ def rewrite_text(
     phrases = _apply_phrases(text, intervals, blocked, scopes, only, table)
     replacements.extend(phrases)
 
-    word_reps, kept, queued, queued_counts = _apply_word_matches(
-        text, intervals, blocked, scopes, only, change_ids, rel_path, table
+    word_reps, kept, queued = _apply_word_matches(
+        text, intervals, blocked, scopes, only, change_ids, rel_path, tokens, table
     )
     replacements.extend(word_reps)
 
-    if _file_kind(rel_path, text) == "python":
+    if kind == "python":
         replacements, seq_collisions = _sequence_alias_adjustments(
             text, replacements, table
         )
@@ -1893,9 +1966,6 @@ def rewrite_text(
                 new=new_sub,
             )
         )
-
-    for old_key, count in queued_counts.items():
-        kept[old_key] = kept.get(old_key, 0) + count
 
     return FileResult(
         new_text=new_text,
@@ -2091,10 +2161,14 @@ def tracked_files(root: Path) -> list[str]:
             ["git", "ls-files", "-z"],
             cwd=root,
             capture_output=True,
-            check=True,
         )
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return []
+    except FileNotFoundError as exc:
+        raise RootError(f"root {root}: git not found") from exc
+
+    if proc.returncode != 0:
+        stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+        raise RootError(f"root {root}: git ls-files failed: {stderr}")
+
     raw = proc.stdout.split(b"\0")
     files = [p.decode("utf-8") for p in raw if p]
     files.sort()
@@ -2577,10 +2651,18 @@ def main(argv: list[str] | None = None) -> int:
                 only.add(n)
 
     if args.survey:
-        print(survey(root, table), end="")
+        try:
+            print(survey(root, table), end="")
+        except RootError as exc:
+            print(f"rename_modules: root: {exc}", file=sys.stderr)
+            return 2
         return 0
 
-    rename_plan = plan(root, table, scopes, only)
+    try:
+        rename_plan = plan(root, table, scopes, only)
+    except RootError as exc:
+        print(f"rename_modules: root: {exc}", file=sys.stderr)
+        return 2
 
     if args.apply:
         try:
