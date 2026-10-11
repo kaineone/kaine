@@ -35,7 +35,7 @@ def make_mnemos(
         "recall_on_workspace",
         "recall_cooldown_s",
         "qdrant",
-        "replay",  # nested sub-table: selection_top_k, affect_weight, recency_weight, redact_content
+        "replay",  # nested sub-table: selection_top_k, affect_weight, recency_weight, redact_content, cross_period_candidates
     }
     if "embedder_model_id" in section:
         raise ConfigurationError(
@@ -64,5 +64,7 @@ def make_mnemos(
         kwargs["replay_recency_weight"] = float(replay["recency_weight"])
     if "redact_content" in replay:
         kwargs["replay_redact_content"] = bool(replay["redact_content"])
+    if "cross_period_candidates" in replay:
+        kwargs["cross_period_candidates"] = int(replay["cross_period_candidates"])
     kwargs["embedder"] = embedder
     return Mnemos(bus, entity_clock=entity_clock, **kwargs)

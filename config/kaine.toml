@@ -610,6 +610,9 @@ recency_weight = 0.3
 # When true (default), sidecar/observer payloads carry only memory IDs,
 # not trace text — keeps memory content out of operational logs.
 redact_content = true
+# Newest episodic traces sleep's cross-period selection (associative
+# replay) reads, without vectors. Matches short_term_capacity.
+cross_period_candidates = 128
 
 [eidolon]
 persistence_path = "state/eidolon/self_model.json"
