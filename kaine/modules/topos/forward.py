@@ -113,6 +113,7 @@ class LatentForwardModel:
         self.last_scored_had_context: bool = False
 
         self.suspended: bool = False
+        self._hindsight_resume: bool = False
 
     # ------------------------------------------------------------------
     # Public properties
@@ -346,10 +347,17 @@ class LatentForwardModel:
         *latent* from the same input with *context* (unless suspended) and
         appends *latent* to the buffer.
 
-        A non-finite input is skipped and leaves the state as it was, so it
-        cannot poison the shadow for the rest of the run.
+        A non-finite input is skipped without touching the buffer or the
+        weights, and the next input only re-seeds the state, so no prediction
+        is scored or learned across the gap.
         """
         if any(not math.isfinite(v) for v in latent):
+            self._hindsight_resume = True  # next finite input re-seeds pairing
+            return None, None
+        if self._hindsight_resume:
+            # Re-seed the pairing afresh after a skipped non-finite input.
+            self._buffer.append(list(latent))
+            self._hindsight_resume = False
             return None, None
         if not self._buffer:
             self._buffer.append(list(latent))

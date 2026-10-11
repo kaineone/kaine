@@ -127,11 +127,12 @@ class PositiveControlSettings:
 
 
 class ComponentSource:
-    """A source that either copies the input projection or replaces it.
+    """The seeded synthetic context component for one processor.
 
-    The informative value is the projection of the current input plus scaled
-    noise. The non-informative value is the mean of previous projections plus
-    scaled noise; it uses only the statistics gathered before the current input.
+    Both values scale their noise by the standard deviation of the earlier
+    projections only. The informative value is the projection of the current
+    input plus scaled noise. The non-informative value is the mean of previous
+    projections plus scaled noise.
     """
 
     def __init__(self, *, informative: bool, snr: float, seed: int, processor: str) -> None:
@@ -176,11 +177,10 @@ class ComponentSource:
         self._mean += delta / self._count
         delta2 = p - self._mean
         self._m2 += delta * delta2
-        s = math.sqrt(self._m2 / (self._count - 1)) if self._count >= 2 else 0.0
 
         noise = float(self._noise_rng.standard_normal(1)[0])
         if self._informative:
-            return p + (s / math.sqrt(self._snr)) * noise
+            return p + (prev_s / math.sqrt(self._snr)) * noise
         return prev_mean + prev_s * math.sqrt(1.0 + 1.0 / self._snr) * noise
 
 

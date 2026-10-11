@@ -149,7 +149,13 @@ def test_hindsight_skips_a_non_finite_input(model_cls, dim, init_kw):
     result = twin.hindsight_step([float("nan")] * dim, [0.0] * 25, None)
     assert result == (None, None)
     assert len(twin._buffer) == buf_len
+    # The first finite reading after a skip only re-seeds the pairing.
     error, null_error = twin.hindsight_step([0.3] * dim, [0.0] * 25, [0.0] * 25)
+    assert error is None
+    assert null_error is None
+    assert len(twin._buffer) == buf_len + 1
+    # The next reading is the first one scored from the re-seeded state.
+    error, null_error = twin.hindsight_step([0.4] * dim, [0.0] * 25, [0.0] * 25)
     assert error is not None
     assert null_error is not None
     assert math.isfinite(error)

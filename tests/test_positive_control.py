@@ -444,3 +444,32 @@ def test_failure_result_cannot_pass():
     assert failed["failed"] is True
     assert failed["passed"] is False
     assert failed["final"] is True
+
+
+def test_informative_noise_scale_ignores_the_current_input():
+    snr = 10.0
+    seed = 7
+    processor = "topos"
+    shared = [[float(i), float(i + 1), float(i + 2), float(i + 3)] for i in range(20)]
+    a = [1.0, 2.0, 3.0, 4.0]
+    b = [-5.0, 0.5, 2.0, 1.0]
+
+    src_a = ComponentSource(informative=True, snr=snr, seed=seed, processor=processor)
+    src_b = ComponentSource(informative=True, snr=snr, seed=seed, processor=processor)
+
+    for x in shared:
+        src_a.next(x)
+        src_b.next(x)
+
+    out_a = src_a.next(a)
+    out_b = src_b.next(b)
+
+    expected = float(np.dot(src_a._u, np.asarray(a))) - float(
+        np.dot(src_a._u, np.asarray(b))
+    )
+    assert out_a - out_b == pytest.approx(expected, abs=1e-9)
+
+    src = ComponentSource(informative=True, snr=snr, seed=seed + 1, processor=processor)
+    x = [1.0, 2.0, 3.0, 4.0]
+    out = src.next(x)
+    assert out == pytest.approx(float(np.dot(src._u, np.asarray(x))), abs=1e-9)
