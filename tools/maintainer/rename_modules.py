@@ -38,6 +38,7 @@ import fnmatch
 import importlib.util
 import io
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -858,7 +859,7 @@ def _markdown_contexts(text: str) -> list[tuple[int, int, str]]:
         info = m.group(3).strip().split()[0] if m.group(3).strip() else ""
         start = m.start()
         close_re = re.compile(
-            rf"^(?: {0,3})({re.escape(fence_char)}{{{fence_len},}})\s*\n?$",
+            rf"^(?: {{0,3}})({re.escape(fence_char)}{{{fence_len},}})\s*\n?$",
             re.MULTILINE,
         )
         close = close_re.search(text, m.end())
@@ -1067,6 +1068,24 @@ def _repo_top_prefixes(table) -> tuple[str, ...]:
     return tuple(f"{d}/" for d in dirs)
 
 
+def _link_target(rel_path: str, T: str, table) -> str | None:
+    """Resolve a markdown link target to a repo-relative path if it ends in .md."""
+    target = T.rsplit("#", 1)[0]
+    if not target.endswith(".md"):
+        return None
+    top_dirs = set(getattr(table, "REPO_TOP_DIRS", ()))
+    parts = target.split("/")
+    if parts and parts[0] in top_dirs:
+        resolved = target
+    else:
+        base_dir = posixpath.dirname(rel_path.replace("\\", "/"))
+        joined = posixpath.join(base_dir, target)
+        resolved = posixpath.normpath(joined)
+    if resolved.startswith(".."):
+        return None
+    return resolved
+
+
 def _in_pip_extra(text: str, start: int, end: int) -> bool:
     """Return True when ``text[start:end]`` lies inside a ``kaine[...]`` pip extra."""
     line_start = text.rfind("\n", 0, start) + 1
@@ -1150,7 +1169,10 @@ def _assign_scope(
 
     if ctx in {"md_prose", "comment", "docstring", "toml_comment"} and shape == "bare":
         return "prose"
-    if T.endswith(".md") or T.startswith("docs/"):
+    target = _link_target(rel_path, T, table)
+    if target is not None:
+        return _path_move_scope(target)
+    if T.startswith("docs/"):
         return "prose"
 
     if ctx == "py_name":
@@ -1437,6 +1459,7 @@ def _replacement_for(
     table,
     ctx: str | None,
     T: str,
+    rel_path: str,
 ) -> str:
     entry = _all_entries(table)[old_key]
     forms = _new_forms(entry, plural)
@@ -1449,7 +1472,16 @@ def _replacement_for(
         kebab = True
 
     if matched[0].islower():
-        if kebab or T.endswith(".md") or "docs/" in T:
+        force_kebab = False
+        if T.endswith(".md") or "docs/" in T:
+            link_target = _link_target(rel_path, T, table)
+            if link_target is not None and (
+                link_target.startswith("docs/")
+                or link_target.startswith("openspec/specs/")
+                or re.match(r"openspec/changes/[^/]+/specs/", link_target)
+            ):
+                force_kebab = True
+        if kebab or force_kebab:
             return forms["kebab"]
         if shape == "camel_lower":
             return forms["lower_camel"]
@@ -1825,7 +1857,7 @@ def _apply_word_matches(
                 )
                 if scope in scopes:
                     new_text = _replacement_for(
-                        text, start, end, scope, shape, old_key, plural, table, ctx, T
+                        text, start, end, scope, shape, old_key, plural, table, ctx, T, rel_path
                     )
                     replacements.append(
                         (start, end, new_text, scope, rule_text, old_key)
@@ -1858,7 +1890,7 @@ def _apply_word_matches(
                 )
                 if scope in scopes:
                     new_text = _replacement_for(
-                        text, start, end, scope, shape, old_key, plural, table, ctx, T
+                        text, start, end, scope, shape, old_key, plural, table, ctx, T, rel_path
                     )
                     replacements.append(
                         (start, end, new_text, scope, rule_text, old_key)
@@ -1887,7 +1919,7 @@ def _apply_word_matches(
             )
             if scope in scopes:
                 new_text = _replacement_for(
-                    text, start, end, scope, shape, old_key, plural, table, ctx, T
+                    text, start, end, scope, shape, old_key, plural, table, ctx, T, rel_path
                 )
                 replacements.append((start, end, new_text, scope, rule_text, old_key))
                 blocked.append((start, end))
