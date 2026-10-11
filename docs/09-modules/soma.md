@@ -100,7 +100,7 @@ All events are published to the `soma.out` stream.
 
 | Event type | Payload fields | Intensity |
 |---|---|---|
-| `soma.report` | `metrics`, `wellness`, `alerts`, `alert`, `prediction_error`, `context_gain`, `null_prediction_error`, `mean_prediction_error`, `context_age_s`, `entity_time_s`, `awake`, `unexpected_error`, `fatigue_value`, `fatigue_threshold`, `warmup_active` | `alert_salience` on an alert, otherwise graded by the error ratio |
+| `soma.report` | `metrics`, `wellness`, `alerts`, `alert`, `prediction_error`, `context_gain`, `null_prediction_error`, `mean_prediction_error`, `context_age_s`, `prediction_broadcast_tick`, `prediction_context_age_s`, `entity_time_s`, `awake`, `unexpected_error`, `fatigue_value`, `fatigue_threshold`, `warmup_active` | `alert_salience` on an alert, otherwise graded by the error ratio |
 | `soma.fatigue` | `value`, `threshold`, `crossed: true` | `alert_salience` |
 | `soma.regulation` | `action`, `reason`, `severity` | `alert_salience` |
 | `soma.warmup.started` | `min_samples`, `min_seconds`, `samples_seen`, `lived_seconds` | `baseline_salience` |

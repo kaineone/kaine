@@ -97,6 +97,9 @@ class BroadcastContext:
         self._clock = clock
         self._members: list[tuple[str, str, float]] = []
         self._received_at: Optional[float] = None
+        self._latest_tick: Optional[int] = None  # latest broadcast received, accessed or inhibited
+        # Latest received broadcast's tick and the context age at the most recent context_and_null call.
+        self.last_reading: tuple[Optional[int], Optional[float]] = (None, None)
         self._n = 0
         self._running_sum_components_0_3: list[float] = [0.0] * 4
         self._source_running_sums: dict[str, list[float]] = {}
@@ -107,7 +110,11 @@ class BroadcastContext:
         return self._received_at is not None
 
     def observe(self, snapshot: WorkspaceSnapshot) -> bool:
-        """Adopt an accessed broadcast if possible; return whether adoption occurred."""
+        """Adopt an accessed broadcast if possible; return whether adoption occurred.
+
+        Every received broadcast updates the latest tick, even inhibited ones.
+        """
+        self._latest_tick = int(snapshot.tick_index)
         if snapshot.inhibited:
             return False
 
@@ -168,10 +175,11 @@ class BroadcastContext:
         contributions (Appendix A.8).
         """
         if not self.has_context:
+            self.last_reading = (self._latest_tick, None)
             return None, None
-        vec = self.vector()
-        if vec is None:
-            return None, None
+        age = max(0.0, self._clock() - self._received_at)
+        vec = featurize_events(self._members, age)
+        self.last_reading = (self._latest_tick, age)
         return vec, self._null_from(list(vec), kept_sources)
 
     def _null_from(

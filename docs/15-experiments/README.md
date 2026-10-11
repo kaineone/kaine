@@ -61,7 +61,7 @@ The arms of a pilot must differ only in the workspace manipulation, and the on a
 
 A rule that cannot be applied fails closed: its value is null, `blocked` gives the reason, and the record is incomplete. Today two groups of settings are always blocked, so no record is complete yet:
 
-- The threshold band, its bias-correction bandwidth, the age bins and the threshold contrast's minimum effect. They need the rdrobust package (Calonico, Cattaneo and Titiunik 2014), which is not installed, and the reports do not yet record which broadcast preceded each prediction.
+- The threshold band, its bias-correction bandwidth, the age bins and the threshold contrast's minimum effect. They need the bandwidth selector and bias-corrected estimator of Calonico, Cattaneo and Titiunik (2014). Its authors' Python package, rdrobust, is licensed GPL-3.0-only, which does not allow the use restrictions of CAL 0.4, so it is not a dependency and the operator decides how the method is provided. The reports already record what the contrast needs: `prediction_broadcast_tick`, the broadcast that preceded each scored prediction, and `prediction_context_age_s`, the age of the context it used.
 - The tone bins and the tone analysis's minimum effect. The tone variant of the on arm is not built.
 
 4. **Positive control.** With a complete record, run `KAINE_STUDY=workspace_mediation_positive_control` over complete runs of the film program and check them with `python -m kaine.experiment.positive_control <run ids>`.
