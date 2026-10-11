@@ -55,7 +55,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | config-dead-keys | 9/9 (100%) | Remove configuration keys and an environment variable that drive nothing, and point the host probe at KAINE_TIER. |
 | mediation-harness-information-gain | 12/12 (100%) | Rebuild the offline development harness of the workspace-mediation test around the information-gain measure, with a pooled arm, and retire the coupling and utterance measures. |
 | flaky-group-kill-test | 3/3 (100%) | The group-kill tests wait for the job to finish before reading its status. |
-| verdict-not-exercised | 10/10 (100%) | NOT EXERCISED becomes an outcome of the shared verdict vocabulary, kept out of the sign tests and the suite's Holm family; the retired minimal experiment profile is removed. |
+| verdict-not-exercised | 10/10 (100%) | NOT EXERCISED becomes an outcome of the shared verdict vocabulary, kept out of the sign tests and held in the suite's Holm family at p = 1; the retired minimal experiment profile is removed. |
 
 ## Open operator and device steps
 

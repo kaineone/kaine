@@ -127,24 +127,33 @@ def test_run_workspace_mediation_all_unexercised_has_no_pvalue(monkeypatch):
     assert result["verdict"]["outcome"] == "NOT_EXERCISED"
 
 
-def test_family_wise_leaves_unexercised_experiment_out():
-    """NOT_EXERCISED members stay out of the Holm family but are recorded."""
+def test_family_wise_keeps_unexercised_experiment_at_p_one():
+    """NOT_EXERCISED members stay in the Holm family at p = 1."""
     report = suite._family_wise(
         {"active_inference:a": 0.01, "active_inference:b": 0.04, "workspace_mediation": None},
         0.05,
     )
-    assert report["n"] == 2
+    assert report["n"] == 3
     names = {c["name"] for c in report["comparisons"]}
-    assert names == {"active_inference:a", "active_inference:b"}
+    assert names == {"active_inference:a", "active_inference:b", "workspace_mediation"}
+    wm = next(c for c in report["comparisons"] if c["name"] == "workspace_mediation")
+    assert wm["raw_p"] == 1.0
+    assert wm["reject"] is False
+    assert wm["not_exercised"] is True
+    for name in ("active_inference:a", "active_inference:b"):
+        c = next(cmp for cmp in report["comparisons"] if cmp["name"] == name)
+        assert c["not_exercised"] is False
     assert report["not_exercised"] == ["workspace_mediation"]
     a = next(c for c in report["comparisons"] if c["name"] == "active_inference:a")
-    assert a["holm_p"] == pytest.approx(0.02)
+    assert a["holm_p"] == pytest.approx(0.03)
 
 
 def test_family_wise_without_unexercised_members():
     """When every member has a p-value the not_exercised list is empty."""
     report = suite._family_wise({"x": 0.01}, 0.05)
     assert report["not_exercised"] == []
+    for c in report["comparisons"]:
+        assert c["not_exercised"] is False
 
 
 def test_format_suite_report_names_unexercised_experiment():
@@ -164,4 +173,4 @@ def test_format_suite_report_names_unexercised_experiment():
     output = format_suite_report(minimal_report)
     assert "NOT EXERCISED" in output
     assert "NOT_EXERCISED" in output
-    assert "not a member of the family" in output
+    assert "in the family at p = 1" in output

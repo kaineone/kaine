@@ -19,16 +19,19 @@ SHALL NOT be counted as evidence for or against an effect.
 
 ## ADDED Requirements
 
-### Requirement: Unexercised experiments stay out of the family-wise correction
-The suite SHALL leave an experiment whose verdict is NOT_EXERCISED out of the
-Holm-Bonferroni family, because it ran no test and has no p-value. The family-wise
-view SHALL list such experiments by name under `not_exercised`, and the printed
-report SHALL name them as not exercised and outside the family.
+### Requirement: Unexercised experiments stay in the family-wise correction at p = 1
+The suite's Holm-Bonferroni family SHALL be the set of p-value-producing
+experiments fixed before the run. An experiment whose verdict is NOT_EXERCISED ran
+no test; it SHALL stay in the family with a p-value of 1, so the family does not
+shrink once the outcomes are known. Its own verdict SHALL stay NOT_EXERCISED and
+SHALL NOT be reported as NULL. The family-wise view SHALL list such experiments by
+name under `not_exercised` and mark their comparisons, and the printed report SHALL
+name them as not exercised.
 
-#### Scenario: An unexercised harness is not a member of the family
+#### Scenario: An unexercised harness stays in the family at p = 1
 - **WHEN** the workspace-mediation harness is NOT_EXERCISED in a suite run
-- **THEN** `workspace_mediation` is absent from the family-wise comparisons, the family size counts only the remaining p-values, and `workspace_mediation` appears under `not_exercised`
+- **THEN** `workspace_mediation` is a family-wise comparison with raw p-value 1, the family size is unchanged, the harness appears under `not_exercised`, and its experiment verdict is NOT_EXERCISED
 
-#### Scenario: An exercised harness stays in the family
+#### Scenario: An exercised harness enters with its own p-value
 - **WHEN** the workspace-mediation harness gives WIN, NULL or NEGATIVE
-- **THEN** its WIN sign-test p-value is a member of the family and `not_exercised` is empty
+- **THEN** its WIN sign-test p-value is its family member and `not_exercised` is empty

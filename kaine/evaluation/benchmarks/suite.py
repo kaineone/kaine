@@ -36,8 +36,10 @@ benchmark contributes one p-value per task; an optional individuation run (folde
 in by the caller) contributes its permutation p-value. The correction is a
 family-wise VIEW; each experiment's own raw verdict is preserved unchanged.
 
-An experiment whose verdict is NOT_EXERCISED ran no test, has no p-value, and
-stays out of the family; the report lists it under ``not_exercised``.
+The family is fixed before the run. An experiment whose verdict is NOT_EXERCISED
+ran no test; it stays in the family with a p-value of 1, so the family does not
+shrink once outcomes are known, and the report lists it under ``not_exercised``.
+Its own verdict stays NOT_EXERCISED.
 
 GPU/cuDNN determinism (opt-in) is requested once at the top of the run via
 ``set_global_seed(master_seed, deterministic=True)`` — the offline/deterministic
@@ -299,7 +301,7 @@ def _run_workspace_mediation(
     Per seed, the dIG is kept only when the comparison was exercised. Seeds that
     were not exercised contribute None, even if their dIG happened to be defined.
     The family contribution is the WIN sign-test p-value when at least one seed
-    was exercised, otherwise None.
+    was exercised, otherwise None, which the family view enters as p = 1.
     """
     digs: list[Any] = []
     for s in config.mediation_seeds:
@@ -340,22 +342,28 @@ def _redteam_verdict(results: list[Any]) -> dict[str, Any]:
 
 
 def _family_wise(family_pvalues: dict[str, Optional[float]], alpha: float) -> dict[str, Any]:
-    """Apply Holm-Bonferroni to the experiments that ran a test.
+    """Apply Holm-Bonferroni across the fixed family of experiments.
 
-    Members whose p-value is None are NOT_EXERCISED experiments: they ran no
-    test and have no p-value, so they stay out of the Holm family. The returned
-    report is ``holm_report`` over the members with a p-value, plus the key
-    ``not_exercised``: the list of names with a None p-value, in input order.
+    A None p-value marks a NOT_EXERCISED experiment, which ran no test; it
+    stays in the family with p = 1 because the family is fixed before the runs
+    and must not shrink once outcomes are known (Holm 1979; paper section 6.6);
+    its own verdict stays NOT_EXERCISED. The returned report is ``holm_report``
+    over the full family, plus the key ``not_exercised``: the list of names with
+    a None p-value, in input order.
     """
-    active: dict[str, float] = {}
-    not_exercised: list[str] = []
+    not_exercised_names: list[str] = []
+    full_family: dict[str, float] = {}
     for name, p in family_pvalues.items():
         if p is None:
-            not_exercised.append(name)
+            not_exercised_names.append(name)
+            full_family[name] = 1.0
         else:
-            active[name] = p
-    report = holm_report(active, alpha=alpha)
-    report["not_exercised"] = not_exercised
+            full_family[name] = p
+    report = holm_report(full_family, alpha=alpha)
+    not_exercised_set = set(not_exercised_names)
+    for c in report["comparisons"]:
+        c["not_exercised"] = c["name"] in not_exercised_set
+    report["not_exercised"] = not_exercised_names
     return report
 
 
@@ -427,14 +435,14 @@ def run_suite(
     experiments["enforcement_red_team"] = {"verdict": _redteam_verdict(rt_results)}
 
     # 8. Workspace-mediation development harness, the second family-wise p-value
-    # contributor (the WIN sign test over per-seed dIG). It contributes a p-value
-    # only when exercised; otherwise it is listed as not_exercised. It does not
+    # contributor (the WIN sign test over per-seed dIG). When it is not exercised
+    # it enters the family with p = 1 and is listed as not_exercised. It does not
     # test the thesis.
     wm = _run_workspace_mediation(config, derived["workspace_mediation"])
     experiments["workspace_mediation"] = {"verdict": wm["verdict"]}
     family_pvalues["workspace_mediation"] = wm["pvalue"]
 
-    # Optional individuation p-value into the family, but only when it ran a test.
+    # Optional individuation p-value into the family; a NOT_EXERCISED result enters it with p = 1.
     if individuation is not None:
         ind_verdict = individuation["verdict"]
         ind_p = (
@@ -490,14 +498,15 @@ def format_suite_report(report: dict[str, Any]) -> str:
     if fw["n"] == 0:
         lines.append("  (no p-value-producing experiments in this run)")
     for c in fw["comparisons"]:
+        suffix = (
+            " (NOT EXERCISED: no test ran; in the family at p = 1)"
+            if c.get("not_exercised")
+            else ""
+        )
         decision = "REJECT H0 (significant)" if c["reject"] else "fail to reject"
         lines.append(
             f"  {c['name']:<28} raw_p={c['raw_p']:.4f} holm_p={c['holm_p']:.4f} "
-            f"-> {decision}"
-        )
-    for name in fw.get("not_exercised", []):
-        lines.append(
-            f"  {name:<28} NOT EXERCISED: no test ran; not a member of the family"
+            f"-> {decision}{suffix}"
         )
     lines.append(
         f"  any significant after correction: {fw['any_significant']}"
