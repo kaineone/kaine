@@ -27,15 +27,7 @@ Detects and counts four welfare-relevant conditions:
     ``prediction_error`` is already a scalar float published by Soma's
     forward model — no reduction is required.
 
-The observer also follows ``topos.out`` and ``audition.out`` and publishes a
-``welfare.blind_sensor`` advisory on ``welfare.out`` when a processor's
-readings stay undefined (N consecutive null ``prediction_error`` samples,
-``[evaluation.welfare].blind_sensor_samples``, or by default a run spanning
-one interoceptive-distress duration), and ``welfare.blind_sensor_cleared``
-when a defined sample returns. It is an operator advisory about a sensor, not
-a gray-zone event, and the protective monitor does not act on it.
-
-Each event type surfaces as an in-memory count exposed as a property for
+Each of the four gray-zone conditions surfaces as an in-memory count exposed as a property for
 Nexus diagnostics, is written to the JSONL log, AND is published to the bus as a
 ``welfare.gray_zone`` event on ``welfare.out`` (source ``welfare``) so the
 cycle-layer autonomous welfare-protective monitor can act on ALL four categories.
@@ -46,6 +38,16 @@ signal — numeric scalars/counters plus the ``gray_zone_event`` enum label only
 It NEVER copies any field from a source event payload into the emitted (or
 sink-written) gray-zone dict. The published payload is byte-for-byte the same
 content-free dict written to the sink.
+
+The observer also follows ``topos.out`` and ``audition.out`` and publishes a
+``welfare.blind_sensor`` advisory on ``welfare.out`` when a processor's
+readings stay undefined (N consecutive null ``prediction_error`` samples,
+``[evaluation.welfare].blind_sensor_samples``, or by default a run spanning
+one interoceptive-distress duration), and ``welfare.blind_sensor_cleared``
+when a defined sample returns. It is an operator advisory about a sensor, not
+a gray-zone event, and the protective monitor does not act on it.
+Its payload is the processor label from the observer's own table plus numbers
+the observer computed, and it is written to the JSONL log as well.
 """
 
 from __future__ import annotations
