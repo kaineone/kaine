@@ -1,0 +1,1 @@
+{"args": ["--apply"], "expect_exit": 0, "report_contains": ["docs/guide.md"], "report_excludes": ["LICENSE", "NOTICE", "COPYING", "COPYRIGHT", "LICENSES/"]}

@@ -442,6 +442,11 @@ GUARDED = {
                 "why": "English: human being",
             },
             {
+                "action": "keep",
+                "pattern": r"(?i)\bwell[\s_-]?beings?\b",
+                "why": "English: well-being",
+            },
+            {
                 "action": "rename",
                 "pattern": r"(?<![A-Za-z])beings\b",
                 "why": "plural noun",
@@ -547,6 +552,18 @@ EXCLUDED_GLOBS = (
     "kaine/modules/*/eval_probes/*.jsonl",
     "kaine/legacy_names.py",
     "tests/fixtures/rename_modules/",
+    # Licence and notice files are never touched by the codemod,
+    # because the licence text belongs to its author alone.
+    "LICENSE*",
+    "*/LICENSE*",
+    "LICENSES/",
+    "*/LICENSES/*",
+    "NOTICE*",
+    "*/NOTICE*",
+    "COPYING*",
+    "*/COPYING*",
+    "COPYRIGHT*",
+    "*/COPYRIGHT*",
 )
 
 EXCLUDED_TOML_KEYS = (

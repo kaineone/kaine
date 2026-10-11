@@ -177,6 +177,52 @@ def test_dry_run_deterministic(codemod, tmp_path: pathlib.Path, capsys):
     assert run_once() == run_once()
 
 
+def test_only_restricts_moves(codemod, table, tmp_path: pathlib.Path, capsys):
+    case_dir = _fixture_dir("rename_all")
+    repo = tmp_path / "repo"
+    _copy_fixture(case_dir / "before", repo)
+    _git_init(repo)
+
+    affect_key = next(k for k, v in table.MODULES.items() if v["new_class"] == "Affect")
+    exit_code = codemod.main(["--only", affect_key, "--root", str(repo)])
+    out = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "kaine/modules/affect/module.py" in out
+    assert "kaine/workspace/core.py" not in out
+    assert "kaine/cycle/supervisor.py" not in out
+    assert "tests/test_dashboard_routers.py" not in out
+
+
+def test_only_and_scope_restrict_override_moves(codemod, table, tmp_path: pathlib.Path, capsys):
+    affect_key = next(k for k, v in table.MODULES.items() if v["new_class"] == "Affect")
+    sup_key = next(k for k, v in table.MODULES.items() if v["new_class"] == "Supervisor")
+
+    repo = tmp_path / "repo"
+    old_dir = repo / "openspec" / "specs" / f"{sup_key}-supervisor"
+    old_dir.mkdir(parents=True)
+    (old_dir / "spec.md").write_text("# spec\n")
+    (repo / "docs").mkdir(parents=True)
+    (repo / "docs" / "x.md").write_text("x\n")
+    _git_init(repo)
+
+    codemod.main(["--only", affect_key, "--root", str(repo)])
+    out = capsys.readouterr().out
+    assert "openspec/specs/supervisor/spec.md" not in out
+
+    codemod.main(["--only", sup_key, "--scope", "identifiers", "--root", str(repo)])
+    out = capsys.readouterr().out
+    assert "openspec/specs/supervisor/spec.md" not in out
+
+    exit_code = codemod.main(["--only", sup_key, "--scope", "keys", "--root", str(repo)])
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert (
+        f"openspec/specs/{sup_key}-supervisor/spec.md -> openspec/specs/supervisor/spec.md [keys]"
+        in out
+    )
+
+
 def _table_namespace(table) -> types.SimpleNamespace:
     ns = types.SimpleNamespace()
     for attr in dir(table):

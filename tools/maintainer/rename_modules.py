@@ -2134,6 +2134,18 @@ def _path_move_scope(rel_norm: str) -> str:
     return "identifiers"
 
 
+def _override_old_keys(
+    key: str, regex: re.Pattern[str], group_map: dict[int, tuple[str, bool]]
+) -> set[str]:
+    """Return the old keys whose forms appear in a PATH_OVERRIDES key."""
+    old_keys: set[str] = set()
+    for m in regex.finditer(key):
+        gkey = _matched_group(m, group_map)
+        if gkey:
+            old_keys.add(gkey[0])
+    return old_keys
+
+
 def new_path(
     rel_path: str,
     table,
@@ -2147,9 +2159,12 @@ def new_path(
     move_scope = _path_move_scope(rel_norm)
     override_applied = False
     new_norm = rel_norm
+    regex, group_map = _name_regex(table)
 
     if rel_norm in path_overrides:
-        if move_scope in scopes:
+        override_key = rel_norm
+        override_old_keys = _override_old_keys(override_key, regex, group_map)
+        if move_scope in scopes and (only is None or not override_old_keys.isdisjoint(only)):
             new_norm = path_overrides[rel_norm]
             override_applied = True
     else:
@@ -2161,7 +2176,8 @@ def new_path(
                     best_prefix = old_prefix
                     best_new = new_prefix
         if best_prefix is not None and best_new is not None:
-            if move_scope in scopes:
+            override_old_keys = _override_old_keys(best_prefix, regex, group_map)
+            if move_scope in scopes and (only is None or not override_old_keys.isdisjoint(only)):
                 remainder = rel_norm[len(best_prefix) :]
                 base = best_new
                 if remainder and not base.endswith("/"):
@@ -2183,7 +2199,6 @@ def new_path(
         r"openspec/changes/[^/]+/specs/", rel_norm
     )
 
-    regex, group_map = _name_regex(table)
     full_path = "/".join(parts)
     new_parts: list[str] = []
     queued: list[Queued] = []
