@@ -1,0 +1,467 @@
+## Context
+
+The mapping in proposal.md is decided and is not revisited here. This document
+records where the old names occur, how one codemod replaces them, what stays
+readable under the old names and for how long, the order of the PRs, and the
+tests.
+
+The survey was measured on `origin/main` at 0d1661fd (2026-10-11) with
+`git ls-files` (3,084 tracked files) and a script that counts every match of an
+old name whose neighbours are not letters, so `ToposModule`, `topos_tile` and
+`TOPOS_STREAM` count and `somatic` does not. The script and its raw output are
+reproduced by task 2.5; the numbers below are its output.
+
+## Survey
+
+### Occurrences by category
+
+Columns: tracked file paths containing the name; matches in Python under
+`kaine/`, `plugins/`, `tools/`, `scripts/`, `eval_probes/` (Code); `tests/`;
+`config/`; `quadlet/`, `compose/`, `docker/` and `Dockerfile` (Container);
+`kaine/nexus/static` and `kaine/nexus/templates` without vendor files (UI);
+`docs/` without `docs/records/` plus top-level Markdown (Docs);
+`openspec/specs/` (Specs); `openspec/changes/` without the archive (Active
+changes); `openspec/changes/archive/`; `docs/records/`; `CHANGELOG.md`; vendored
+JavaScript, `external/` and `unsloth_compiled_cache/` (Third-party); everything
+else (Other: the kaine-cl1 plugin's tests and specs, `pyproject.toml`,
+`.github/`, shell scripts).
+
+| Name | Paths | Code | Tests | Config | Container | UI | Docs | Specs | Active changes | Archive | Records | CHANGELOG | Third-party | Other |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| topos | 51 | 522 | 1640 | 25 | 2 | 0 | 307 | 82 | 210 | 523 | 11 | 3 | 4 | 9 |
+| soma | 65 | 519 | 1956 | 25 | 0 | 6 | 413 | 163 | 217 | 889 | 8 | 3 | 8 | 76 |
+| chronos | 59 | 315 | 725 | 10 | 0 | 0 | 190 | 96 | 79 | 438 | 9 | 3 | 0 | 120 |
+| thymos | 64 | 453 | 1181 | 21 | 0 | 11 | 295 | 96 | 155 | 536 | 9 | 2 | 0 | 14 |
+| hypnos | 84 | 794 | 1262 | 28 | 7 | 9 | 546 | 166 | 237 | 865 | 25 | 1 | 0 | 17 |
+| mnemos | 54 | 440 | 1293 | 18 | 2 | 7 | 286 | 109 | 128 | 613 | 13 | 0 | 0 | 5 |
+| phantasia | 40 | 303 | 490 | 16 | 0 | 0 | 225 | 97 | 68 | 387 | 14 | 3 | 6 | 11 |
+| lingua | 42 | 556 | 1292 | 45 | 2 | 1 | 338 | 158 | 254 | 726 | 9 | 2 | 0 | 5 |
+| vox | 28 | 252 | 576 | 12 | 0 | 0 | 170 | 92 | 20 | 245 | 11 | 0 | 0 | 1 |
+| nous | 81 | 589 | 876 | 20 | 0 | 10 | 324 | 139 | 64 | 651 | 19 | 4 | 11 | 81 |
+| volition | 3 | 230 | 255 | 8 | 0 | 0 | 180 | 63 | 8 | 289 | 1 | 1 | 0 | 12 |
+| eidolon | 39 | 236 | 572 | 16 | 0 | 14 | 177 | 72 | 56 | 368 | 9 | 1 | 0 | 3 |
+| empatheia | 28 | 162 | 307 | 12 | 0 | 0 | 150 | 76 | 64 | 267 | 11 | 2 | 0 | 4 |
+| syneidesis | 19 | 116 | 255 | 13 | 0 | 1 | 107 | 45 | 60 | 236 | 1 | 2 | 0 | 2 |
+| praxis | 21 | 208 | 209 | 9 | 0 | 0 | 153 | 61 | 8 | 236 | 3 | 0 | 0 | 12 |
+| mundus | 12 | 165 | 336 | 13 | 0 | 0 | 225 | 19 | 17 | 211 | 5 | 1 | 0 | 2 |
+| perception | 73 | 714 | 756 | 40 | 7 | 107 | 471 | 117 | 122 | 592 | 8 | 6 | 0 | 19 |
+| perception, locus sense | n/a | 43 | 103 | 5 | 0 | 8 | 94 | 20 | 0 | 41 | 0 | 1 | 0 | 5 |
+| spot | 33 | 293 | 566 | 13 | 3 | 110 | 120 | 160 | 22 | 583 | 4 | 1 | 152 | 2 |
+| spot, module sense | n/a | 283 | 492 | 13 | 3 | 103 | 120 | 159 | 21 | 577 | 4 | 1 | n/a | 1 |
+| nexus | 165 | 498 | 1032 | 18 | 67 | 242 | 440 | 194 | 62 | 964 | 14 | 2 | 2 | 63 |
+| echo | 2 | 36 | 156 | 5 | 12 | 0 | 46 | 15 | 0 | 49 | 0 | 0 | 12 | 289 |
+| echo, module sense | n/a | 25 | 133 | 5 | 1 | 0 | 38 | 13 | 0 | 35 | 0 | 0 | n/a | n/a |
+| gestation | 23 | 348 | 581 | 14 | 0 | 3 | 160 | 101 | 45 | 442 | 2 | 0 | 0 | 0 |
+| gestational | 13 | 1 | 0 | 0 | 0 | 0 | 20 | 5 | 2 | 39 | 0 | 0 | 0 | 0 |
+| womb | 38 | 684 | 850 | 32 | 0 | 0 | 93 | 121 | 24 | 557 | 2 | 0 | 0 | 0 |
+| birth | 16 | 446 | 454 | 12 | 1 | 10 | 80 | 71 | 122 | 282 | 1 | 0 | 0 | 0 |
+| being | 1 | 228 | 93 | 11 | 1 | 1 | 182 | 83 | 239 | 264 | 0 | 0 | 3 | 19 |
+| being, entity sense | n/a | 125 | 58 | 9 | 1 | 0 | 141 | 62 | 180 | 193 | 0 | 0 | 0 | 4 |
+| audition (unchanged) | 57 | 601 | 1571 | 21 | 0 | 0 | 473 | 214 | 290 | 583 | 12 | 2 | 0 | 15 |
+| workspace (target) | 61 | 554 | 985 | 48 | 5 | 3 | 395 | 202 | 227 | 852 | 8 | 6 | 4 | 28 |
+
+The "sense" rows are a heuristic filter (identifier or key context, or a
+listed phrase such as "the being") and only size the false-positive problem;
+the codemod's own rules decide. What the false positives are:
+
+- `spot`: all 152 third-party matches are three.js `spotLight` in the vendored
+  `three.module.js`. In first-party files almost every match is Spot.
+- `echo`: the 289 "Other" matches are the shell builtin in scripts, and the 12
+  container matches are `echo` in quadlet `ExecStart` lines. The module is
+  `EchoModule` and the `echo` key only.
+- `being`: in code about 45% of matches are the English verb ("being overwhelmed",
+  "being stopped"), including 4 in the K1-Jev question text in
+  `kaine/decision/schema.py`.
+- `perception`: about 6% of code matches mean the locus arbiter. The rest is
+  `perception_feed`, `perception_preview`, `perception_state`, the `perception`
+  pip extra, `KAINE_PERCEPTION_PREVIEW` and the ordinary word, none of which
+  is renamed.
+- `workspace` is a target, not an old name: 554 code matches already exist,
+  including the `kaine/workspace/` package, `WorkspaceSnapshot` and the
+  `workspace.broadcast` stream.
+
+### Distinct names by kind (live files only)
+
+Live means everything except `tests/`, `openspec/`, `docs/records/`,
+`CHANGELOG.md` and vendored files.
+
+- Python packages and modules: 18 packages under `kaine/modules/<name>/`
+  (Audition stays), plus `kaine/modules/echo.py`, `womb_drive.py`,
+  `womb_signal.py`, `kaine/nexus/` (63 tracked files), `kaine/cycle/spot.py`,
+  `spot_selftest.py`, `gestation.py`, `womb_presence.py`, `womb_watch.py`,
+  `kaine/workspace/syneidesis.py`, `volition.py`, `nous_proposals.py`,
+  `kaine/lifecycle/birth_ack.py`, `womb_liveness.py`,
+  `kaine/distributed/fork_being.py`, `kaine/nexus/birth.py`,
+  `kaine/boot/factories/<name>.py`, 18 pages under `docs/09-modules/`, and 33
+  folders under `openspec/specs/`.
+- Class and function definitions whose names contain an old name: 283
+  (womb 33, birth 34, nous 22, perception 22, hypnos 18, mnemos 16, thymos 16,
+  soma 13, chronos 12, lingua 11, phantasia 10, nexus 10, the rest fewer).
+- Dotted literals (bus streams, event types, config paths): 98, for example
+  `thymos.state`, `hypnos.sleep.completed`, `volition_feedback.out`,
+  `intent.perception.switch`, `stage.gestation.womb_lost`, `stage.birth.ready`,
+  `gestation.womb`, `nexus.snapshot`. Streams are named in
+  `kaine/bus/streams.py`, and a module's output stream is
+  `module_stream(<module name>)`, so the module `name` ClassVar drives the
+  stream, the config table, the snapshot and bundle keys and the bus `source`.
+- Config: 44 tables and 17 `[modules]` flags in `config/kaine.toml`, 80 table
+  headers across the shipped config, profiles and studies, the keys
+  `womb_ready_retry_seconds`, `womb_check_seconds`, `womb_loss_after_seconds`,
+  `womb_arm_timeout_seconds`, `womb_presence_window_seconds`,
+  `womb_prediction_error_ceiling` and `birth_transition_seconds`, the value
+  `[perception_feed].mode = "womb"`, `[mnemos].collection_prefix = "mnemos_"`,
+  `[empatheia].collection = "empatheia_agents"`, and `STUDY_ALLOWED_TABLES`
+  (`lingua`, `syneidesis`) in `kaine/config.py`.
+- Environment variables: operator-facing `KAINE_NEXUS_TOKEN`,
+  `KAINE_NEXUS_ACCESS`, `KAINE_NEXUS_ALLOWED_ORIGINS`,
+  `KAINE_NEXUS_CONVERSATION_ENABLED`, `KAINE_NEXUS_EXTRA_HOSTS`,
+  `KAINE_NEXUS_HOST`, `KAINE_NEXUS_HOST_PORT`, `KAINE_NEXUS_NON_LOOPBACK_ALLOWED`,
+  `KAINE_NEXUS_PORT`, `KAINE_NEXUS_PUBLISHED_PORT`, `KAINE_NEXUS_READ_ONLY` and
+  `KAINE_MUNDUS_OPERATOR_APPROVED` (12), plus the compose variables
+  `NEXUS_HOST_PORT`, `NEXUS_EXTRA_HOSTS`, `NEXUS_TOKEN`, `NEXUS_ACCESS`.
+  Test-only: `KAINE_TOPOS_RUN_REAL_ENCODER`, `KAINE_NOUS_RUN_REAL_PYMDP`,
+  `KAINE_NOUS_RUN_REAL_NAR`, `KAINE_VOX_RUN_REAL`, `KAINE_LINGUA_RUN_REAL_CHAT`.
+- CLI flags: `--serve-nexus` (`scripts/prepare-headless-host.sh`),
+  `--db-gestation` and `--gestation-budget-seconds`
+  (`python -m kaine.research.ignition_study`).
+- Plugin seams: `oscillator.<module>`, `soma.forward_model`, `chronos.network`,
+  `nous.engine`, `nous.engine_wrapper` (`kaine/plugins.py`), used by the
+  in-tree `plugins/kaine-cl1`.
+- Packaging and entry points: the `nexus` pip extra, `python -m kaine.nexus`,
+  the import-linter contracts and package-data keys in `pyproject.toml`.
+- Containers: `quadlet/kaine-nexus.container`, `quadlet/kaine-nexus-record.volume`,
+  the compose service `nexus` and volume `nexus-record`.
+- Persisted names: Qdrant collections `mnemos_*` and `empatheia_agents`;
+  `state/mnemos/mnemos.db`, `state/mnemos/store_health.json`,
+  `state/lingua/intent_expression.jsonl`, `state/lingua/utterance_outcomes.jsonl`,
+  `state/eidolon/self_model.json`, `state/hypnos/consolidation_divergence.json`,
+  `state/hypnos/organ_window.json`, `state/perception/desired.json`,
+  `state/perception/runtime.json`, `state/praxis/audit.log`,
+  `state/praxis/notifications.log`, `state/lifecycle/gestation_readout.json`,
+  `state/lifecycle/birth_request.json`, `state/lifecycle/birth_ack.json`,
+  `gestation_progress.json`, `gestation_viability.json`, `birth_adapter.gguf`;
+  in `state/lifecycle/stage.json` the stage value `gestation` and the fields
+  `gestation_started_at`, `womb_t_at_birth`, `womb_seed`, `womb_params_digest`,
+  `birth_bloom_ends_at`; the control-file requester `spot`; snapshot and bundle
+  module keys (`modules[module.name]`, the manifest's `modules` list) and the
+  bundle member directory `gestation/`; `OWN_LIVED_ARTIFACTS` in
+  `kaine/lifecycle/identity.py` (`phantasia/world_model.ckpt`,
+  `hypnos/consolidation_divergence.json`, `perception/desired.json`).
+- Recorded data on this host: four preservation and backup bundles under
+  `backups/` whose manifests list the modules by old name, nine fork trees under
+  `state/forks/`, and evaluation sidecar files under `data/evaluation/` whose
+  directories (`eidolon_accuracy`, `empatheia`, `nous_policy`) and fields
+  (`thymos_state`, per-module keys such as `chronos`, stream names such as
+  `soma.out`) carry old names.
+- K1-Jev records: no old module or developmental name occurs in
+  `.git/kaine-tools/k1jev/gold/items.jsonl` (350 items),
+  `items.v0-rejected.jsonl` (242) or `labels.jsonl`. The only matches in the
+  K1-Jev code are the English "being" in four question texts.
+- Entity-facing text: `[individuation].disclosure` says "since your birth".
+  `kaine/persistence/system_prompts.py` has no old name.
+
+### Collisions with the target names
+
+| Target | Already bound to | Measured | Resolution |
+| --- | --- | --- | --- |
+| `WorldModel` | Protocol in `kaine/modules/phantasia/world_model.py` | 12 uses | Renamed to `WorldModelBackend` before the module rename (PR 2). `[phantasia.world_model]` becomes `[world_model.backend]` by an explicit override, not `[world_model.world_model]`. |
+| `SelfModel` | Self-model document class in `kaine/modules/eidolon/document.py` | 32 uses | Renamed to `SelfModelDocument` in PR 2. The stream `eidolon.self_model` becomes `self_model.document` by override. |
+| `Sequence` | `typing.Sequence` and `collections.abc.Sequence` | 158 uses | In a file that already binds `Sequence`, the codemod imports the module class as `SequenceModule`. It never shadows the ABC. |
+| `Workspace` | the `kaine/workspace/` package, `WorkspaceSnapshot`, `workspace.broadcast` | 554 code matches, no class `Workspace`, no `[workspace]` table | `kaine/workspace/syneidesis.py` becomes `kaine/workspace/core.py`, exported as `kaine.workspace.Workspace`. `SYNEIDESIS_SOURCE` becomes `WORKSPACE_SOURCE` with value `workspace`. The broadcast stream keeps its name. `WorkspaceSnapshot` is unchanged. |
+| `affect` | the Mnemos trace payload field `affect` and faithful-renderer payloads | 45 string literals | No rename touches these. The collision check lists every file where a new `"affect"` key would sit beside an existing one, for review. |
+| `self_model`, `vision`, `world_model`, `effectors`, `entity` | literals 13, 10, 6, 3, 19 (the `vision` pip extra already holds Vision's dependencies) | | Listed by the collision check for review. File-path stutters such as `kaine/modules/effectors/effectors.py` are accepted. |
+| `maturation` | `kaine/lifecycle/maturation_gate.py` (39 word uses) | | Congruent: the gate decides maturation. No identifier clashes. |
+
+## Goals / Non-Goals
+
+**Goals**
+
+- Every live name matches the paper.
+- The rename is reviewable as rules, and its output is mechanical.
+- Each PR passes the gate and can merge alone.
+- No operator setup breaks without a warning, no preserved entity becomes
+  unreadable, and the never-regress invariant holds across the rename.
+
+**Non-Goals**
+
+- Rewriting history: archived changes, `docs/records/`, released CHANGELOG
+  entries and commit messages keep the old names.
+- Renaming active change IDs such as `mnemos-trace-strength`. They are
+  identifiers of past and present work, and the ROADMAP keys on them.
+- Changing what the entity is told (see "Entity-facing text").
+- Changing behaviour. Every PR in the sequence is a rename or an alias.
+
+## Decisions
+
+### One mapping table
+
+`kaine/legacy_names.py` holds the mapping as data: for each module the old and
+new class form, key form and prose form, and a layer tag; the developmental
+terms with their key forms; explicit overrides for compounds that a
+component-wise rename would get wrong (`eidolon.self_model` to
+`self_model.document`, `[phantasia.world_model]` to `[world_model.backend]`,
+`fork_being` to `fork_entity`, "gestational stimulus" to "developmental
+stimulus", "gestation entrainment marker" to "heartbeat entrainment marker");
+and the alias tables the runtime reads (config tables and keys, environment
+variables, CLI flags, plugin seams, stream names and record fields for
+readers, state paths, collection names, stage values and fields, bundle keys).
+Each entry carries the PR scope that completes it, which the guard reads. It is
+the only file in live code where an old name is spelled, besides the codemod's
+fixtures. It imports nothing, so the import-linter layers are unaffected.
+
+The table is injective, and no new name contains an old name as a component.
+The codemod asserts both at start, which is what makes a second run a no-op.
+
+### The codemod
+
+`tools/maintainer/rename_modules.py [--scope S] [--only NAMES] [--apply | --check]`.
+
+- **Scopes.** `prose` (Markdown prose and code comments: capitalized proper
+  names and the listed developmental phrases), `identifiers` (Python names,
+  module paths, file and directory names, test file names, import-linter
+  contracts, docs code spans that name Python paths), `keys` (module `name`
+  values, config tables and keys, bus streams and event types, plugin seams,
+  `STUDY_ALLOWED_TABLES`, docs code spans that name them), `operator`
+  (environment variables, CLI flags, pip extras, quadlet and compose names, UI
+  strings) and `persisted` (state paths, file names, collection names). A PR
+  runs one scope, optionally for a subset of names.
+- **Parsing.** Python through `tokenize`, so NAME tokens, string tokens and
+  comments get different rules. TOML line by line (table headers, keys, string
+  values). Markdown with fence and code-span awareness: code gets the
+  identifier and key rules, prose gets the prose rules. YAML, shell, quadlet,
+  HTML, JS and CSS get key rules on listed patterns only.
+- **Identifier rule.** The old name is replaced as a component of an
+  identifier split at underscores and case changes: `ThymosModulator` to
+  `AffectModulator`, `thymos_state` to `affect_state`, `THYMOS_STREAM` to
+  `AFFECT_STREAM`. CamelCase takes the class form, snake_case the key form,
+  upper case the upper key form.
+- **Context rules for English words.** `spot`: `Spot` as a proper name, and
+  lowercase only in key or identifier position (`[spot]`, `spot.`, `spot_`,
+  `"spot"`, `kaine/cycle/spot.py`), never "spot check" or `spotLight`. `echo`:
+  `EchoModule`, `ECHO_STREAM`, and `echo` as a module key in Python and TOML;
+  never in shell, Dockerfiles or quadlet `ExecStart`. `perception`:
+  `PerceptionLocus`, `kaine/modules/perception/`, the `[perception]` table,
+  `[modules].perception`, the module key `"perception"`, `perception.out`,
+  `perception.locus.*`, `intent.perception.switch`, `state/perception/`, and
+  the prose "Perception locus"; never `perception_feed`, `perception_preview`,
+  `perception_state`, `perception_transition` and `perception.transition`
+  (the stimulus-source-to-world crossfade), `perception_prng`,
+  `KAINE_PERCEPTION_PREVIEW`, the `perception` pip extra or the plain word.
+  The bare string `"perception"` is ambiguous: the feed in
+  `kaine/boot/perception_feed.py` also publishes with `source="perception"`.
+  So the key rule applies to it only in the locus's own files and in the
+  module lists (`[modules]`, the setup wizard, the stream registry); every other
+  occurrence goes to the review queue.
+  `being`: identifier components (`fork_being`), `beings`, `being's`, and the
+  listed phrases ("the being", "a being", "each being", "this being", "every
+  being", "preserved being"); never the verb. `birth`, `gestation`, `womb`:
+  every match, through the phrase table first so "gestational stimulus" and
+  "birth bloom" come out right.
+- **Review queue.** A match that no rule decides (a sentence-initial
+  "Perception", a lowercase "spot" in prose) is left unchanged and listed in
+  the report for a person to resolve with an explicit override.
+- **Collision check.** Before writing, the codemod lists every file where a
+  new name is already bound or already used as a string key. For `Sequence` it
+  applies the `SequenceModule` import alias. Any other collision stops `--apply`
+  until the table has an override for it.
+- **Exclusions.** `openspec/changes/archive/**`, `docs/records/**` (with
+  `history/`, `audits/` and `shakedowns/`), `CHANGELOG.md` below the
+  `[Unreleased]` heading, `kaine/nexus/static/vendor/**`,
+  `kaine/nexus/static/fonts/**`, `external/**`, `THIRD_PARTY_LICENSES.md`,
+  `unsloth_compiled_cache/**`, `kaine.egg-info/**`, `data/**`, `state/**`,
+  `backups/**`, `secrets/**`, `.git/**`, `kaine/decision/schema.py` and
+  `kaine/decision/systemone.jinja` (K1-Jev question and prompt text),
+  `eval_probes/**` and `kaine/modules/hypnos/eval_probes/*.jsonl` (data files;
+  the directory moves with its package, the bytes do not change), the
+  `[individuation].disclosure` value, active change directory names, and
+  `kaine/legacy_names.py` itself. Only tracked files are visited.
+- **Moves.** Directory and file renames go through `git mv` first, then
+  contents are rewritten, so history follows the files.
+- **Report.** The dry run prints, in sorted order with no timestamps: moves,
+  per-file counts per rule, the collision list and the review queue. Two runs
+  on the same tree print byte-identical reports. `--check` exits non-zero if
+  anything in the requested scope would change.
+- **Idempotence.** A second `--apply` changes nothing, which a test asserts.
+- **Gate files.** `tools/maintainer/preflight-gate.sh`,
+  `.github/workflows/redteam.yml` and `.github/slow-test-paths.txt` name test
+  files such as `tests/test_nexus_routers.py` and `tests/test_praxis_effectors.py`.
+  They are in scope, so the PR that moves a test file also updates the gate
+  that runs it.
+
+### Entity-facing text
+
+The disclosure string in `[individuation].disclosure` is read to the entity.
+The codemod does not change it, and neither does any later PR in this change.
+Whether "since your birth" becomes "since your maturation", or stays, is an
+owner decision (task 10.4), since changing it changes the entity's stimulus.
+
+### Compatibility
+
+There has been no live run and development is paused, so internal names can
+break cleanly. Two kinds of data must stay readable: preserved entity state
+and recorded datasets. Operator-facing names get a bounded window.
+
+**Clean break, no alias.** Python packages, modules, classes and functions
+(the only consumer outside `kaine/` is the in-tree kaine-cl1 plugin, renamed
+in the same PRs, and nothing under `kaine/` pickles a class path, so no stored
+file names a Python module); the module `name` values on the live bus and the live stream and
+event names (producers and consumers rename in one PR, Redis streams are
+capped by `maxlen`, and no recorded live run exists); Nexus UI strings, cookie
+names and local-storage keys (a dashboard user signs in again); docs; tests;
+the five test-only `KAINE_*_RUN_REAL_*` variables; log file names
+(`spot.log`, `nexus.log`), which start fresh.
+
+**Operator names, read with a warning for a bounded window.**
+
+- Config: `kaine.config` normalizes each layer (shipped, profile, tier,
+  operator, study) before it merges, using the table. An old table or key is
+  moved to its new name and the layer logs one line, for example
+  `config: config/kaine.operator.toml uses deprecated names [thymos] -> [affect], [modules].thymos -> [modules].affect; they are read until 27.01`.
+  A layer that sets both the old and the new name for the same table or key
+  fails to load. Value aliases are covered too (`mode = "womb"` reads as
+  `mode = "stimulus_source"`). The study allowlist and `require_known_keys`
+  run after normalization, so their messages name the new tables.
+- Environment variables: a lookup helper reads the new name, then the old one
+  with the same one-line warning. If both are set and differ, startup fails.
+  That matters for `KAINE_NEXUS_TOKEN` (a secret, never printed) and
+  `KAINE_MUNDUS_OPERATOR_APPROVED` (a safety approval): two disagreeing
+  values must not silently resolve either way. The compose `NEXUS_*` variables
+  get the same treatment in the compose files.
+- CLI flags: `--serve-nexus`, `--db-gestation` and `--gestation-budget-seconds`
+  stay as hidden argparse aliases with the warning.
+- Plugin seams: `oscillator.<old>` and `<old>.<seam>` resolve to the new
+  seam with the warning; run manifests record the new name.
+- Packaging: `kaine[nexus]` stays as an extra that pulls `kaine[dashboard]`,
+  and `python -m kaine.nexus` stays as a three-line shim that warns and runs
+  `kaine.dashboard`, so an installed unit keeps working after an image pull.
+- Window: the warning names the last release that reads the old names, which
+  is the second release after the one that ships the rename and no earlier
+  than 90 days after it (versions are `YY.MM.patch`). A follow-up change,
+  `functional-module-names-drop-aliases`, removes these aliases.
+
+**Preserved entity state and recorded datasets, readable for good.**
+
+- Preservation bundles, snapshots and fork sidecars are never rewritten: they
+  are hashed, and some are encrypted. Import maps old module keys, the
+  manifest's `modules` list, the `gestation/` member directory, stage values
+  and field names to the new names. The four bundles in `backups/` and the
+  nine fork trees in `state/forks/` on this host are the test of record.
+- Recorded datasets (research event log, raw bus archive, Nexus record,
+  ignition log, evaluation sidecar JSONL, sleep snapshots) are append-only and
+  in places encrypted, so they are never rewritten. Their readers map old
+  stream names, `source` values, per-module record fields (`thymos_state`,
+  `chronos`) and sidecar directory names on read. New records use new names.
+- The K1-Jev records carry no old name (measured above), so they need no
+  alias. They and the K1-Jev question text are excluded from the codemod,
+  because the dataset manifest hashes them and any byte change invalidates the
+  build.
+
+**The live state tree, migrated once.** A boot step,
+`kaine.lifecycle.rename_state`, runs under the state lock before the identity
+and stage reads. It moves `state/<old>/` to `state/<new>/` and old file names
+to new ones, rewrites the stage file's value and field names, renames the
+sqlite-vec database file and rewrites its `collection` column in one
+transaction, and points a Qdrant alias with the new collection name at the old
+collection (no copy). It writes a manifest of every move so `--revert` can undo
+it, is a no-op on a migrated tree, and fails the boot if an old and a new name
+both exist for one item. The same function runs on a fork tree when it is
+revived or merged and on an extracted bundle before import. Podman volume names
+(`kaine-nexus-record`) cannot be renamed and keep their `VolumeName=`; only the
+unit file names change.
+
+**Never-regress.** Two old names guard the developmental arc and keep their
+meaning for good. `_coerce_stage` maps the stored value `gestation` to
+`development`. Without that, an unknown value reads as embodied, which would
+end the developmental phase of an entity still in it. `OWN_LIVED_ARTIFACTS`
+lists both the old and the new paths, so a tree that has not been migrated,
+such as a fork root or bundle root, is still recognized as lived.
+
+### PR sequence
+
+Each PR runs the codemod (or adds infrastructure), passes
+`tools/maintainer/preflight-gate.sh`, and leaves main consistent, because the
+compatibility readers land before anything they read is renamed. The owner's
+outline (prose, then code by layer, then config aliases, then persisted names)
+is kept, with the compatibility readers moved ahead of the first rename: a
+renamed config table, stream or state path is only safe to merge alone if its
+alias already exists.
+
+1. **Codemod and table.** `kaine/legacy_names.py`, the codemod, its fixture
+   tests, and the grep guard with every scope marked pending. No rename.
+2. **Collision pre-renames.** `WorldModel` protocol to `WorldModelBackend`,
+   `SelfModel` document to `SelfModelDocument`, by hand, small.
+3. **Docs prose.** `--scope prose`: the book, READMEs, live spec prose and
+   active-change prose; code spans untouched. Adds a "Module names" page that
+   maps old to new names for readers during the transition. The 18
+   `docs/09-modules/` page files move here.
+4. **Compatibility readers.** The config normalizer, the environment-variable
+   helper, CLI aliases, seam aliases, bundle and dataset read-maps, the
+   `rename_state` step and the never-regress aliases. Each alias is inert until
+   the table marks its scope done, and each is tested with a synthetic entry.
+5. **Identifiers by layer.** `--scope identifiers`, four PRs: (a) Vision,
+   Interoception, Sequence; (b) Affect, Sleep, Episodic memory, World model;
+   (c) Language, Vocal, Planning, Action selection, Effectors, Self-model,
+   Social cognition, Workspace; (d) Embodiment, Perceptual locus, Supervisor,
+   Dashboard, Recorder and the developmental terms. Module `name` values,
+   streams, tables and paths keep their old strings.
+6. **Keys and wire names.** `--scope keys`, one PR: module `name` values,
+   streams and event types, config tables and keys in the shipped config,
+   profiles and studies, plugin seams, `STUDY_ALLOWED_TABLES`, live spec folder
+   names with the matching delta folders in active changes. The config,
+   seam, bundle-key and dataset aliases from PR 4 go live here. This cannot be
+   split by module, because one stream links modules from different layers.
+7. **Operator surface.** `--scope operator`: environment variables, CLI flags,
+   the pip extra and entry-point shim, quadlet and compose names, UI strings.
+8. **Persisted names.** `--scope persisted`: state paths, file names,
+   collection names and stage values in code; `rename_state` goes live.
+9. **Close-out.** The guard turns strict, the CHANGELOG gets its
+   `[Unreleased]` entry, the configuration appendix lists the deprecated
+   names and the last release that reads them, and the follow-up change for
+   alias removal is opened.
+
+PRs 3 and 4 do not depend on each other. PRs 5a to 5d can merge in any order
+after 2. PRs 7 and 8 can swap.
+
+## Risks / Trade-offs
+
+- **In-flight branches conflict.** About 30 worktrees exist. Mitigation: the
+  codemod is deterministic, so a branch takes main's side of a conflict and
+  re-runs `--scope <done scopes>` on its own diff.
+- **A false positive slips through.** Mitigation: rules, not judgement, decide
+  every change; undecided matches go to the review queue; the fixture tests
+  carry each known false positive (`spotLight`, shell `echo`, "being
+  overwhelmed", `perception_feed`, `KAINE_PERCEPTION_PREVIEW`).
+- **A rename reaches data it must not.** Mitigation: exclusions are tested,
+  `data/`, `state/`, `backups/` and `.git/` are not tracked or are excluded,
+  and the K1-Jev and evaluation datasets are checked byte for byte before and
+  after.
+- **Aliases outlive their window.** Mitigation: the warning names the release,
+  and the follow-up change is opened by PR 9.
+- **The paper changes a name after the codemod runs.** Mitigation: the table is
+  one file; a later change edits the entry and re-runs the codemod.
+
+## Test strategy
+
+- The full suite, through `tools/maintainer/preflight-gate.sh`, on every PR.
+- Codemod fixtures: each rule and scope; each known false positive left
+  unchanged; exclusions untouched; the `Sequence` alias; idempotence (a second
+  apply is empty); a byte-identical report on two runs; the injectivity check.
+- Config with old names: a fixture operator overlay with `[thymos]`,
+  `[modules].thymos`, `[perception_feed.womb]`, `mode = "womb"`, `[nexus]`,
+  `[spot]` and a study with `[syneidesis]` loads into the new tables with
+  exactly one warning line per layer; a layer with both names fails; an
+  unknown key's error names the new table.
+- Environment and CLI: old variable alone is read with a warning; both equal is
+  read; both different fails startup, including for the token and the
+  embodiment approval; old flags parse with a warning.
+- Persisted data: a bundle with old module keys and a `gestation/` member
+  imports; `stage.json` with `gestation` reads as `development`; an
+  unmigrated tree counts as lived; `rename_state` is idempotent, reversible
+  and refuses an old-and-new pair; Qdrant and sqlite-vec stores found under
+  old names are reachable under new ones; dataset readers return identical
+  records from an old-named and a new-named fixture.
+- Grep guard (`tests/test_module_names_guard.py`): for every scope the table
+  marks done, `rename_modules.py --check --scope <scope>` must be clean, and a
+  scan of tracked files outside the exclusions, `kaine/legacy_names.py` and the
+  codemod's fixtures must find no capitalized old module name. The test names
+  the file and line of each hit.
