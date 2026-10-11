@@ -255,8 +255,8 @@ async def test_cancel_in_phase_two_closes_the_window(bus: AsyncBus, tmp_path: Pa
     task = asyncio.create_task(hypnos.enter_sleep())
     await asyncio.wait_for(mnemos.entered.wait(), 5)
     task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
+    (outcome,) = await asyncio.gather(task, return_exceptions=True)
+    assert isinstance(outcome, asyncio.CancelledError)
 
     assert "ph_open" in calls
     assert "ph_close" in calls

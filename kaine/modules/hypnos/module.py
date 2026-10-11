@@ -348,10 +348,9 @@ class Hypnos(BaseModule):
             if pending:
                 log.warning("hypnos: shutdown wait expired with sleep still pending")
             for task in done:
-                try:
+                # Retrieve the exception so it is not reported at garbage collection.
+                if not task.cancelled():
                     task.exception()
-                except asyncio.CancelledError:
-                    pass
 
         held = set(self._shielded_tasks)
         if held:
@@ -362,10 +361,9 @@ class Hypnos(BaseModule):
                     len(pending),
                 )
             for task in done:
-                try:
+                # Retrieve the exception so it is not reported at garbage collection.
+                if not task.cancelled():
                     task.exception()
-                except asyncio.CancelledError:
-                    pass
 
     async def _soma_consumer_loop(self) -> None:
         """Background loop: watch soma.out for maintenance triggers.
