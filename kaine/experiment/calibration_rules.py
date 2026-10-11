@@ -25,7 +25,6 @@ from dataclasses import dataclass
 from fractions import Fraction
 
 import numpy as np
-from scipy.stats import chi2, norm
 
 
 class CalibrationError(ValueError):
@@ -380,6 +379,10 @@ def browne_ucl_factor(n_cal: int = N_CAL, level: float = UCL_LEVEL) -> float:
         raise CalibrationError("browne ucl factor: n_cal must be at least 2")
     if not (0.0 < level < 1.0):
         raise CalibrationError("browne ucl factor: level must be between 0 and 1")
+    # Imported here so that importing the rules (the positive control does, for
+    # the SNR ladder) never needs scipy.
+    from scipy.stats import chi2
+
     return (n_cal - 1) / chi2.ppf(1.0 - level, n_cal - 1)
 
 
@@ -395,6 +398,8 @@ def detection_z(alpha: float = ALPHA_PC) -> float:
     """
     if not (0.0 < alpha < 1.0):
         raise CalibrationError("detection z: alpha must be between 0 and 1")
+    from scipy.stats import norm
+
     return float(norm.ppf(1.0 - alpha))
 
 
