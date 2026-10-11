@@ -66,7 +66,6 @@ class Thymos(BaseModule):
         soma_stream: str = "soma.out",
         chronos_stream: str = "chronos.out",
         mnemos_stream: str = "mnemos.out",
-        social_drive_time_scale_s: float = 600.0,
         volition_stream: str = "volition.out",
         fast_time_constant_s: float = 10.0,
         slow_time_constant_s: float = 100.0,
@@ -78,8 +77,7 @@ class Thymos(BaseModule):
         clock: Optional[Callable[[], float]] = None,
         # Shared subjective clock (injected at boot). Affect drift and the
         # publish interval are cognitive time constants, so they run in subjective
-        # time. social_drive_time_scale_s is accepted for compatibility but unused.
-        # When given, it supplies `now()` as this
+        # time. When given, it supplies `now()` as this
         # module's clock; an explicit `clock` callable still wins (tests inject a
         # fake monotonic). Absent both, a real-time EntityClock →
         # behavior-identical.
@@ -95,8 +93,6 @@ class Thymos(BaseModule):
             raise ValueError("drift_rate_per_s must be >= 0")
         if publish_interval_s <= 0:
             raise ValueError("publish_interval_s must be positive")
-        if social_drive_time_scale_s <= 0:
-            raise ValueError("social_drive_time_scale_s must be positive")
         if not math.isfinite(fast_time_constant_s) or fast_time_constant_s <= 0:
             raise ValueError("fast_time_constant_s must be finite and > 0")
         if not math.isfinite(slow_time_constant_s) or slow_time_constant_s <= 0:
@@ -134,7 +130,6 @@ class Thymos(BaseModule):
         self._soma_stream = soma_stream
         self._chronos_stream = chronos_stream
         self._mnemos_stream = mnemos_stream
-        self._social_drive_time_scale_s = float(social_drive_time_scale_s)
         self._volition_stream = volition_stream
         self._fast_time_constant_s = float(fast_time_constant_s)
         self._slow_time_constant_s = float(slow_time_constant_s)

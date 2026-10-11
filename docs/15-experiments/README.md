@@ -202,25 +202,25 @@ The stimulus is synthetic. The runner exercises selection and coherence under co
 
 ## Development harness of the workspace-mediation test
 
-[`kaine/evaluation/benchmarks/workspace_mediation_ablation/`](../../kaine/evaluation/benchmarks/workspace_mediation_ablation/) is development tooling that exercises the test's pipeline offline. It is not the planned test and does not test the thesis. It runs a reduced pair of real modules, Soma and Chronos, over an in-memory bus, against a pooled arm only, and it measures coupling between their error series instead of information gain. It is to be rebuilt around the information-gain measure.
+[`kaine/evaluation/benchmarks/workspace_mediation_ablation/`](../../kaine/evaluation/benchmarks/workspace_mediation_ablation/) is development tooling that exercises the test's pipeline offline. It is not the planned test and does not test the thesis. It runs a reduced pair of real processors, Soma and Topos, over an in-memory bus, compares the workspace-on arm with the pooled arm only, and measures the cross-module broadcast information gain. It boots no entity, opens no network connection and does not use the language organ.
 
-Its two arms are:
+Its two arms run from the same seed and stimulus with identically initialized modules:
 
-- workspace on: on each tick Syneidesis selects a coalition of at most `top_k` candidates (Soma's report, injected utterances and the previous tick's Chronos report), Chronos predicts that coalition, and the coalition conditions the language organ;
-- workspace off: the same candidates go to Chronos and the organ as a flat snapshot, with no scoring, top-k or inhibition.
+- workspace on: on each tick Syneidesis selects a coalition of at most `top_k` candidates, and each processor adopts as its context the members whose scores reach `access_threshold`;
+- pooled: every candidate of the tick enters the context, weighted by its reported intensity, with no scoring, selection, access threshold or inhibition.
 
-Soma runs against a scripted `MetricsReader` and an injected clock. Both Chronos arms are built from the same seeds, so they start identical and diverge only because they receive different snapshots. Soma's error series is computed once and shared between the arms.
+The candidates on each tick are Soma's report, Topos's report and `n_background` scripted background events, so the candidate count exceeds `top_k` and selection excludes. Soma reads scripted host metrics through a `ScriptedMetricsReader`. Topos sees synthetic frames through a vector encoder double whose latent is the frame itself, and the harness gives its forward model a higher learning rate (`topos_lr`) so that a short run shows learning. Both modules run on an injected clock.
 
-Its measures are `coupling_delta`, the mean sliding-window Pearson correlation between Soma's and Chronos's error series, workspace on minus workspace off; `coalition_entropy`, the Shannon entropy of the selected-source sequence in the on arm; and `conditioning_divergence`, the cosine distance between the two arms' rendered workspace content. The verdict is WIN when `coupling_delta` exceeds `min_effect` with non-trivial selection, NEGATIVE when it is at or below `-min_effect`, and NULL otherwise. A run where Soma never enters the coalition, or where the correlation is undefined, is reported as NULL with an explicit underpowered flag.
+The measure is the one the planned test uses, read from each processor's report. Soma and Topos evaluate their forward models with the context they hold and with the null context and publish the per-report gain as `context_gain`. The harness averages each processor's gain over its reports after the initial learning period (`warmup_ticks`) to get `IG_j`, averages the two processors to get the headline `IG`, and reports `dIG`, the workspace-on headline minus the pooled one. The verdict is WIN when `dIG` is at least `min_effect`, NEGATIVE when it is at most `-min_effect`, and NULL otherwise. A run is NOT EXERCISED when the workspace-on arm never had more candidates than `top_k`, had no accessed broadcast, or left the gain undefined; the shared verdict vocabulary has no NOT EXERCISED member yet, so such a run is reported as NULL with a `not_exercised` flag and its reason.
 
 ```bash
 python -m kaine.evaluation.benchmarks.workspace_mediation_ablation \
-    --seed 1234 --ticks 24 --top-k 2 --window 6 \
-    --min-effect 0.15 --stimulus soma_salient \
+    --seed 1234 --ticks 160 --warmup-ticks 40 --top-k 2 \
+    --access-threshold 0.05 --min-effect 0.05 --stimulus coupled \
     --out data/evaluation/benchmarks/workspace_mediation_ablation.jsonl
 ```
 
-The values shown are the defaults. The other batteries are `neutral` (a quiet substrate, where NULL or underpowered is reachable) and `decoupled` (a control where coupling should be weak). The same seed reproduces the verdict and the JSONL record.
+The values shown are the defaults. The `coupled` battery makes each processor's input follow events the other processor reported two ticks earlier, which is the delay with which a report reaches the context that conditions a prediction. The `independent` battery has no relation between the two inputs, so the gain should stay near zero in both arms. At the default sizes the forward models have not yet learned the relation in the `coupled` battery either: the gain stays within about 0.005 of zero in both arms and the verdict is NULL. The harness checks that the pipeline runs and reproduces; whether the measure detects information it should is the job of the planned test's positive control. The same seed reproduces the per-report gains, the verdict and the JSONL record apart from its timestamp.
 
 ## Shared-seed suite orchestrator
 
@@ -248,13 +248,13 @@ Useful flags:
 5. `self_model`: the fixed-threshold scorer battery.
 6. `multi_seed_stability`: the stability harness, run offline on the oscillatory ablation.
 7. `enforcement_red_team`: the real enforcement layer against a case battery.
-8. `workspace_mediation`: the development harness above, giving a sign-test p-value over per-seed coupling deltas.
+8. `workspace_mediation`: the development harness above, run over several seeds. Two one-sided sign tests on the per-seed `dIG`, offset by the minimum effect, give WIN or NEGATIVE when their p-value is below `alpha`, and NULL otherwise.
 
 The orchestrator calls `set_global_seed(master_seed, deterministic=True)` once at the start to request GPU and cuDNN determinism on the offline path. It then spawns an independent child seed per experiment with `numpy.random.SeedSequence.spawn`, so each experiment stays reproducible. The active-inference benchmark receives its child seed through `BenchmarkConfig.master_seed`, which also seeds the environments and the Q-learner.
 
 ### Family-wise correction
 
-The suite collects the p-values of the active-inference benchmark (one per task) and of the development harness (the sign-test p-value that the median per-seed `coupling_delta` exceeds 0). It applies the Holm-Bonferroni correction across them at level `alpha` and reports, for each, the raw p-value, the corrected p-value and a reject or no-reject decision. Each experiment's own verdict is kept unchanged, and the family-wise view is reported beside it. An individuation result can be passed to the orchestrator's API and joins the family when it is; individuation evidence needs a live being and is collected by the cycle's individuation producer.
+The suite collects the p-values of the active-inference benchmark (one per task) and of the development harness (the p-value of the sign test that the per-seed `dIG` exceeds the minimum effect). It applies the Holm-Bonferroni correction across them at level `alpha` and reports, for each, the raw p-value, the corrected p-value and a reject or no-reject decision. Each experiment's own verdict is kept unchanged, and the family-wise view is reported beside it. An individuation result can be passed to the orchestrator's API and joins the family when it is; individuation evidence needs a live being and is collected by the cycle's individuation producer.
 
 Everything in the suite runs offline with deterministic or echo clients, in-memory stores, scripted buses and the real headless enforcement layer.
 

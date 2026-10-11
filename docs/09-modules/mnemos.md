@@ -115,13 +115,13 @@ Every store on the broadcast path attaches this cache to the `StoredMemory`.
 
 Hypnos calls Mnemos in its consolidation phases.
 
-1. Phase 1 calls `consolidate_now()`, which moves every short-term entry to `episodic` and drops nothing.
-2. Phase 2 calls `downscale_activations(factor)` (synaptic homeostasis, Tononi and Cirelli 2014). It multiplies every in-memory vector by `factor` in (0, 1), which keeps cosine similarity and shrinks the L2 norms. It is a no-op on the Qdrant and sqlite-vec backends, which keep no vectors in memory. Phase 2 then suspends external perception and calls `replay_now()`.
+1. Phase 1 calls `consolidate_now()`, which moves every short-term entry to `episodic` and drops nothing. Mnemos keeps the moved entries, each with the episodic point id it was stored under, for the rest of the sleep.
+2. Phase 2 calls `downscale_activations(factor)` (synaptic homeostasis, Tononi and Cirelli 2014). It multiplies every in-memory vector by `factor` in (0, 1), which keeps cosine similarity and shrinks the L2 norms. It is a no-op on the Qdrant and sqlite-vec backends, which keep no vectors in memory. Phase 2 then calls `replay_now()`, with perception already suspended for the whole sleep.
 3. Phase 3 (associative replay, off by default with `[hypnos.consolidation].associative_replay = false`) calls `select_cross_period_traces()`.
 
-`replay_now()` builds its candidates from the short-term buffer only. The `ReplayEngine` raises `ReplayWindowError` if the window is not open, scores each candidate as `affect_weight × intensity + recency_weight × recency`, where recency runs from 0 for the oldest candidate to 1 for the newest, keeps the `selection_top_k` best, and publishes each as `mnemos.replay`. It also returns an observer copy of each payload, with `text` removed when `redact_content = true`. The selection follows the replay of selectively strengthened traces during sleep (Wilson and McNaughton 1994; Wei et al. 2016).
+`replay_now()` builds its candidates from the entries phase 1 moved, identified by their episodic point ids, and from anything stored short-term since. A preservation import also drops the kept entries. The `ReplayEngine` raises `ReplayWindowError` if the window is not open, scores each candidate as `affect_weight × intensity + recency_weight × recency`, where recency runs from 0 for the oldest candidate to 1 for the newest, keeps the `selection_top_k` best, and publishes each as `mnemos.replay`. It also returns an observer copy of each payload, with `text` removed when `redact_content = true`. The selection follows the replay of selectively strengthened traces during sleep (Wilson and McNaughton 1994; Wei et al. 2016).
 
-Because phase 1 empties the short-term buffer before phase 2 runs, a replay in the same sleep can find only traces stored in the moment between the two phases, and it usually finds none.
+Each consolidation pass replaces the kept entries, and Mnemos drops them when it sees `hypnos.sleep.completed`, so a sleep never replays an earlier sleep's traces.
 
 `select_cross_period_traces(periods, per_period)` sorts the available traces by timestamp, splits the time span into `periods` equal windows and takes up to `per_period` traces from each. With the in-memory backend the available traces are the short-term buffer and the episodic collection. The Qdrant and sqlite-vec backends do not expose their collections in memory, so only short-term traces are used.
 
@@ -155,7 +155,7 @@ mnemos.replay_engine.close_window()
 
 ## What Mnemos keeps
 
-The stored `text` is a content view of the snapshot. It starts with `active` or `inhibited`, then lists `{source}:{type}={payload}` for each coalition member. Every payload passes through `kaine.privacy_filter.strip_vectors` first, which removes named vector fields and any numeric list of 16 or more items. The payloads of `audition.transcription` and `mundus.visual.raw` are replaced by `<raw-perceptual omitted>`. The tick index is kept in the stored payload, with the inhibited flag and the coalition size, and is not repeated in the text; bus entry ids are left out because they lose meaning once the stream is trimmed. Affect tags are plain numbers.
+The stored `text` is a content view of the snapshot. It starts with `active` or `inhibited`, then lists `{source}:{type}={payload}` for each coalition member. Every payload passes through `kaine.privacy_filter.strip_vectors` first, which removes named vector fields and any numeric list of 16 or more items. The payloads of `audition.transcription` and `mundus.visual.raw` are replaced by `<raw-perceptual omitted>`. A `mnemos.replay` member is recorded as `<replay of {memory_id}>` without the replayed text, so a trace stored during sleep never contains the trace it replayed. The tick index is kept in the stored payload, with the inhibited flag and the coalition size, and is not repeated in the text; bus entry ids are left out because they lose meaning once the stream is trimmed. Affect tags are plain numbers.
 
 `Mnemos.serialize()` emits `short_term_size`, `collection_prefix` and `embedding_space`, and no memory content. `export_preservation_state()` captures the full store, short-term buffer included, and fails loudly if the backend cannot be read; see [Preservation and the safety net](../11-preservation.md).
 

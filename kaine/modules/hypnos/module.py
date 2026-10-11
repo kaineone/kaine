@@ -77,7 +77,6 @@ class Hypnos(BaseModule):
         bus: AsyncBus,
         *,
         mnemos: Optional[Any] = None,
-        nous_process: Optional[Any] = None,
         thymos: Optional[Any] = None,
         chronos_resetters: Optional[list[Any]] = None,
         trainer: Optional[Trainer] = None,
@@ -99,7 +98,6 @@ class Hypnos(BaseModule):
         interval_seconds: float = 3600.0,
         max_deferral_seconds: float = 600.0,
         per_defer_seconds: float = 60.0,
-        nous_step_burst: int = 200,
         baseline_salience: float = 0.5,
         alert_salience: float = 0.8,
         # Consolidation config (hypnos-fatigue-phases)
@@ -145,7 +143,6 @@ class Hypnos(BaseModule):
         if not 0.0 < downscale_factor <= 1.0:
             raise ValueError("downscale_factor must be in (0, 1]")
         self._mnemos = mnemos
-        self._nous_process = nous_process
         self._thymos = thymos
         self._chronos_resetters = list(chronos_resetters or [])
         self._trainer: Trainer = trainer or FakeTrainer()
@@ -165,7 +162,6 @@ class Hypnos(BaseModule):
             # the schedule is unchanged.
             clock=self._clock.now,
         )
-        self._nous_step_burst = int(nous_step_burst)
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
         # Consolidation config

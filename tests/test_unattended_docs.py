@@ -31,7 +31,7 @@ def test_refusal_table_keeps_2_and_5_and_adds_6():
         "| `5` | Research safety net not live and verified "
         "(one or more of the six conditions failed) |"
     )
-    assert "unattended" in rows["6"].lower()
+    assert rows["6"] == "| `6` | Unattended gate: one or more of its nine conditions failed |"
     # The organ content gate and the individuation refusal have their own codes.
     assert "organ content gate" in rows["9"].lower()
     assert "individuation" in rows["10"].lower()
@@ -45,3 +45,15 @@ def test_operations_guide_documents_unattended_starts():
     )
     assert "KAINE_CYCLE_UNATTENDED" in operations
     assert re.search(r"exit\s+`?6`?", operations)
+
+
+def test_preservation_guide_lists_nine_unattended_conditions():
+    operations = (_REPO_ROOT / "docs" / "11-preservation.md").read_text()
+    assert "Every unattended start checks nine conditions" in operations
+    assert "The individuation requirement applies to research mode only" not in operations
+
+
+def test_researchers_guide_counts_all_six_net_conditions_for_unattended():
+    researchers = (_REPO_ROOT / "docs" / "14-for-researchers.md").read_text()
+    assert "Besides the six research-safety-net conditions" in researchers
+    assert "all but the individuation" not in researchers

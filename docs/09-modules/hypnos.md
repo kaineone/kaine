@@ -89,7 +89,8 @@ The full reference is in [Perception feed and sleep](../appendix-a-configuration
 | `requested_rest_min_interval_s` | float `> 0` | `1800.0` | Minimum time from the end of a sleep before a rest request is accepted |
 | `baseline_salience` | float `[0, 1]` | `0.5` | Intensity of routine sleep events |
 | `alert_salience` | float `[0, 1]` | `0.8` | Intensity of a completed event after a failed phase |
-| `nous_step_burst` | int | `200` | Accepted and stored but unused |
+
+The retired key `nous_step_burst` is accepted and ignored with a warning, so older local configs still boot.
 
 `[hypnos.consolidation]`:
 
@@ -170,6 +171,7 @@ The metric is computed whether or not training runs and is persisted to `state/h
 | `tests/test_hypnos_associative_replay.py` | Phase 3 |
 | `tests/test_hypnos_oscillator_hook.py` | Phase-1 oscillator hook |
 | `tests/test_hypnos_nar_removal.py` | Replay reaching the workspace through the normal cycle |
+| `tests/test_hypnos_replay_handoff.py` | Phase 2 replaying the traces phase 1 consolidated, with Mnemos |
 | `tests/test_soma_hypnos_flag.py` | Soma's `crossed` flag |
 | `tests/test_sleep_suspension_cursor.py` | Topos, Audition and Chronos suspending adaptation during sleep |
 | `tests/test_hypnos_voice_alignment.py`, `tests/test_hypnos_voice_alignment_integration.py` | Pair builder, gates and vetoes |
