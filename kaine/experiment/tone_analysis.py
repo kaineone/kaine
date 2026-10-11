@@ -24,6 +24,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from kaine.bus.schema import split_stream_entry_key
 from kaine.experiment.calibration_rules import N_EXACT, SignTestResult, sign_test_verdict
 
 TONE_EVENT_TYPE = "audition.emotion"
@@ -54,6 +55,10 @@ def accessed_members(records: Iterable[Mapping[str, Any]]) -> set[tuple[str, str
     score is ``salience_scores.get(entry_id, member salience)``, as in
     ``kaine.modules.context`` (paper A.1). An inhibited broadcast contributes
     nothing.
+
+    Both member ids and matching tone event ids are the stream-qualified ids
+    ``<stream>:<entry_id>`` (a bus entry id alone is unique only within its
+    stream).
 
     Raises:
         ToneAnalysisError: on malformed broadcast metadata.
@@ -99,14 +104,17 @@ def accessed_members(records: Iterable[Mapping[str, Any]]) -> set[tuple[str, str
             type_ = member.get("type")
             if not isinstance(entry_id, str) or not entry_id:
                 raise ToneAnalysisError("broadcast member entry_id must be a non-empty string")
+            if split_stream_entry_key(entry_id)[0] is None:
+                raise ToneAnalysisError(
+                    "broadcast member entry_id has no stream; the analysis needs the stream-qualified id <stream>:<entry_id>"
+                )
             if not isinstance(source, str) or not source:
                 raise ToneAnalysisError("broadcast member source must be a non-empty string")
             if not isinstance(type_, str) or not type_:
                 raise ToneAnalysisError("broadcast member type must be a non-empty string")
 
-            # The cycle keys salience_scores by entry id alone, so a broadcast
-            # with duplicate entry ids would have ambiguous scores. Remove this
-            # check once scores are keyed by stream and id.
+            # Candidate ids are unique within a tick, so two members with one id
+            # mean a corrupt record.
             if entry_id in seen_entry_ids:
                 raise ToneAnalysisError(
                     f"a broadcast has two members with entry_id {entry_id!r}"
@@ -166,6 +174,10 @@ def tone_events(
         source = record.get("source")
         if not isinstance(entry_id, str) or not entry_id:
             raise ToneAnalysisError("tone event entry_id must be a non-empty string")
+        if split_stream_entry_key(entry_id)[0] is None:
+            raise ToneAnalysisError(
+                "tone event entry_id has no stream; the analysis needs the stream-qualified id <stream>:<entry_id>"
+            )
         if not isinstance(source, str) or not source:
             raise ToneAnalysisError("tone event source must be a non-empty string")
 

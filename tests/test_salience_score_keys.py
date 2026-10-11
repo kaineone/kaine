@@ -20,6 +20,12 @@ from kaine.bus.schema import (
 )
 from kaine.cycle import CognitiveCycle
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.evaluation.observers.research_event_observer import (
+    ResearchEventObserver,
+    _workspace_metadata_record,
+)
+from kaine.evaluation.sink import AsyncJsonlSink
+from kaine.experiment.tone_analysis import tone_events
 from kaine.modules.context import BroadcastContext
 from kaine.workspace import (
     NoveltyTracker,
@@ -360,3 +366,68 @@ def test_entry_id_sort_key():
     assert entry_id_sort_key("1760000000000-11") < entry_id_sort_key("1760000000001-0")
     assert entry_id_sort_key("e1") == (1, 0, 0, "e1")
     assert entry_id_sort_key("9999999999999-99") < entry_id_sort_key("e1")
+
+
+@pytest.mark.asyncio
+async def test_tone_event_is_accessed_through_the_engine_path(tmp_path):
+    client = fakeredis.FakeRedis(decode_responses=True)
+    syneidesis = Syneidesis(
+        strategy=_strategy(),
+        top_k=5,
+        publication_threshold=0.35,
+    )
+    cycle, bus = _make_cycle(syneidesis, ["audition.out", "soma.out"], client)
+
+    tone_event = Event(
+        source="audition",
+        type="audition.emotion",
+        salience=0.9,
+        timestamp=datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+        payload={
+            "category": "happy",
+            "confidence": 0.9,
+            "scores": {"happy": 0.9},
+            "alert": False,
+            "tone_error_ratio": 0.5,
+            "tone_rule": "error_ratio",
+            "classified": True,
+        },
+    )
+
+    try:
+        await client.xadd(
+            "audition.out", _encode_event(tone_event), id="1760000000000-0"
+        )
+        await client.xadd(
+            "soma.out", _encode_event(_soma_event(0.1)), id="1760000000000-0"
+        )
+        result = await cycle.tick()
+        assert result.is_experiential
+
+        # Build the research records the research log would write.
+        observer = ResearchEventObserver(
+            bus=None, sink=AsyncJsonlSink(tmp_path / "re", name="research_events")
+        )
+        written = []
+
+        class _FakeSink:
+            async def write(self, record):
+                written.append(record)
+
+        observer._sink = _FakeSink()
+        await observer.handle("audition.out", "1760000000000-0", tone_event)
+        tone_record = written[0]
+
+        entries = await client.xrange(WORKSPACE_STREAM)
+        assert len(entries) == 1
+        _entry_id, fields = entries[0]
+        broadcast_record = _workspace_metadata_record(json.loads(fields["snapshot"]))
+
+        events = tone_events([tone_record, broadcast_record])
+        assert len(events) == 1
+        assert events[0].accessed is True
+        assert events[0].entry_id == "audition.out:1760000000000-0"
+        # With ids keyed by entry id alone, soma's 0.1 overwrote the tone
+        # event's score and the tone event read as not accessed.
+    finally:
+        await bus.close()

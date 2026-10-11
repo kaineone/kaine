@@ -10,4 +10,4 @@
 ## 2. Coordinator follow-ups
 
 - [x] 2.1 The canonical sort compares bus entry ids as (ms, seq); a test with twelve entries in one millisecond
-- [ ] 2.2 After #478 merges: the research log records the stream-qualified id for tone events, the tone analysis joins on it, and a test finds a tone event accessed through the engine path
+- [x] 2.2 After #478 merges: the research log records the stream-qualified id for tone events, the tone analysis joins on it, and a test finds a tone event accessed through the engine path

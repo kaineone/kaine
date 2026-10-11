@@ -32,7 +32,7 @@ def _run(n_emotional, accessed_emotional, n_neutral, accessed_neutral):
 
     for i in range(total):
         emotional = i < n_emotional
-        entry_id = f"{i}-0"
+        entry_id = f"audition.out:{i}-0"
         accessed = i in accessed_set
         records.append(
             {
@@ -89,10 +89,10 @@ def test_join_is_on_source_type_id():
             "event_type": "workspace.broadcast",
             "inhibited": False,
             "access_threshold": 0.35,
-            "salience_scores": {"0-0": 0.9},
+            "salience_scores": {"audition.out:0-0": 0.9},
             "entries": [
                 {
-                    "entry_id": "0-0",
+                    "entry_id": "audition.out:0-0",
                     "source": "other",
                     "type": "audition.emotion",
                     "salience": 0.5,
@@ -164,7 +164,7 @@ def test_duplicate_entry_ids_in_one_broadcast_raise():
     records = _run(1, 1, 0, 0)
     records[1]["entries"].append(
         {
-            "entry_id": "0-0",
+            "entry_id": "audition.out:0-0",
             "source": "topos",
             "type": "topos.report",
             "salience": 0.5,
@@ -220,3 +220,17 @@ def test_adjusted_statistic_none_when_every_bin_has_one_class():
 def test_tone_runs_still_needed_counts_defined_differences():
     assert tone_runs_still_needed([0.1] * 100 + [None] * 5) == 2
     assert tone_runs_still_needed([0.1] * 102) == 0
+
+
+def test_bare_tone_event_id_is_refused():
+    records = _run(1, 1, 0, 0)
+    records[0]["entry_id"] = "0-0"
+    with pytest.raises(ToneAnalysisError):
+        tone_events(records)
+
+
+def test_bare_member_id_is_refused():
+    records = _run(1, 1, 0, 0)
+    records[1]["entries"][0]["entry_id"] = "0-0"
+    with pytest.raises(ToneAnalysisError):
+        tone_events(records)

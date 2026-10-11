@@ -43,17 +43,25 @@ ablation's top score and candidate count are affected.
 - Docs describe the key; the oscillatory-ablation stimulus comment that
   relied on unique ids across streams is corrected.
 
-## Coordination
+## Coordination with tone-analysis-inputs
 
-PR #478 (tone-analysis-inputs) joins an `audition.emotion` record to a
-broadcast member on (source, type, entry_id). Its research-log record must
-carry the stream-qualified key, `stream_entry_key(stream, entry_id)`, since
-the member's id now has that form.
+Change `tone-analysis-inputs` (#478, merged first) joined an `audition.emotion`
+record to a broadcast member on (source, type, bare entry id). This change
+adopts the new key there: the research log records the tone event's
+stream-qualified id, the tone analysis joins on it and refuses a bare id, and
+its fixtures use the qualified form. The duplicate-id check #478 added stays
+as a cheap assertion on the qualified id.
+
+No pilot or live run has happened, and the calibration records have never
+been complete, so no derived setting depends on records with bare keys.
 
 ## Impact
 
 - Specs: `syneidesis` (one added requirement), `cognitive-cycle` (the
-  canonical ordering requirement).
+  canonical ordering requirement), `research-event-log` and
+  `planned-test-calibration` (one added requirement each).
 - Code: `kaine/bus/schema.py`, `kaine/cycle/engine.py`,
-  `kaine/workspace/syneidesis.py`; docs under `docs/08-cognitive-cycle/` and
+  `kaine/workspace/syneidesis.py`,
+  `kaine/evaluation/observers/research_event_observer.py`,
+  `kaine/experiment/tone_analysis.py`; docs under `docs/08-cognitive-cycle/` and
   `docs/17-research-data/`.
