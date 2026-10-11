@@ -219,12 +219,30 @@ def _linear_variance(w, var_i):
     return float(np.sum(w ** 2 * var_i))
 
 
-def _cluster_variance(w, e, cluster):
-    """Liang-Zeger cluster sandwich: sum_g (sum_i w_i e_i)^2."""
+def _cluster_variance(w, e, cluster, active, k):
+    """Liang-Zeger cluster sandwich with the CR1 small-sample adjustment.
+
+    var_CR1 = G/(G-1) * (N-1)/(N-k) * sum_g (sum_i w_i e_i)^2, with N the units of
+    positive weight, G their distinct clusters and k the parameters of the two
+    side fits (Cameron and Miller 2015, "A Practitioner's Guide to Cluster-Robust
+    Inference", Journal of Human Resources 50(2), 317-372, doi:10.3368/jhr.50.2.317).
+    Without the adjustment the sandwich understates the variance when there are
+    few clusters. The per-bin intervals of the contrast at threshold use it; they
+    are reported and do not enter a test.
+    """
     labels, inv = np.unique(cluster, return_inverse=True)
     # bincount accumulates repeated labels; fancy-index += would not.
     sums = np.bincount(inv, weights=w * e, minlength=labels.size)
-    return float(np.sum(sums ** 2))
+    sandwich = float(np.sum(sums ** 2))
+    active_labels = np.unique(cluster[active])
+    n_active = int(np.sum(active))
+    g = active_labels.size
+    if g < 2:
+        raise RDError("cluster variance needs at least two active clusters")
+    if n_active <= k:
+        raise RDError("cluster variance needs more active units than parameters")
+    factor = (g / (g - 1)) * ((n_active - 1) / (n_active - k))
+    return factor * sandwich
 
 
 def rd_estimate(
@@ -244,6 +262,8 @@ def rd_estimate(
     """Sharp RD estimate with conventional and bias-corrected coefficients.
 
     CCT Section 2.1, Appendix A.2, Theorem A.1(V) and Section 5.
+    With ``cluster`` the variances are the run-clustered sandwich with the CR1
+    adjustment of Cameron and Miller (2015), doi:10.3368/jhr.50.2.317.
     """
     x, y = _validate_x_y(x, y)
     n = x.size
@@ -306,8 +326,14 @@ def rd_estimate(
             var_conv = float(np.sum(w_conv ** 2 * e_conv ** 2))
             var_robust = float(np.sum(w_bc ** 2 * e_robust ** 2))
         else:
-            var_conv = _cluster_variance(w_conv, e_conv, cluster)
-            var_robust = _cluster_variance(w_bc, e_robust, cluster)
+            active_conv = np.abs(x) < h
+            active_robust = np.abs(x) < max(h, b)
+            var_conv = _cluster_variance(
+                w_conv, e_conv, cluster, active_conv, 2 * (p + 1)
+            )
+            var_robust = _cluster_variance(
+                w_bc, e_robust, cluster, active_robust, 2 * (q + 1)
+            )
 
     se_conv = math.sqrt(max(var_conv, 0.0))
     se_robust = math.sqrt(max(var_robust, 0.0))

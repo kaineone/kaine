@@ -112,7 +112,7 @@ def test_exact_quadratic_equal_bandwidth():
     assert est.tau_bias_corrected == pytest.approx(2.25, abs=1e-10)
 
 
-def test_cluster_singleton_matches_hc0():
+def test_cluster_singleton_is_hc0_times_cr1():
     case = _REFERENCE["cases"][0]
     x, y = dataset(case["n"], case["jump"], case["shape"], case["noise"],
                    case.get("shift", 0.0))
@@ -120,8 +120,18 @@ def test_cluster_singleton_matches_hc0():
     est_hc0 = rd_estimate(x, y, h, b, vce="hc0")
     est_cl = rd_estimate(x, y, h, b, vce="hc0",
                          cluster=np.arange(x.size))
-    assert est_cl.se_robust == pytest.approx(est_hc0.se_robust, abs=1e-12)
-    assert est_cl.se_conventional == pytest.approx(est_hc0.se_conventional, abs=1e-12)
+    active_conv = np.abs(x) < h
+    active_robust = np.abs(x) < max(h, b)
+    n_robust = int(np.sum(active_robust))
+    n_conv = int(np.sum(active_conv))
+    factor_robust = (n_robust / (n_robust - 1)) * ((n_robust - 1) / (n_robust - 6))
+    factor_conv = (n_conv / (n_conv - 1)) * ((n_conv - 1) / (n_conv - 4))
+    assert est_cl.se_robust == pytest.approx(
+        est_hc0.se_robust * math.sqrt(factor_robust), rel=1e-12
+    )
+    assert est_cl.se_conventional == pytest.approx(
+        est_hc0.se_conventional * math.sqrt(factor_conv), rel=1e-12
+    )
 
 
 def _direct_wls(x_side, y_side, bw, m):
@@ -184,7 +194,11 @@ def test_cluster_groups_match_direct():
     cluster = (x * 10.0).astype(int)
     est = rd_estimate(x, y, h, b, vce="hc0", cluster=cluster)
     direct = _direct_clustered_robust_se(x, y, h, b, cluster)
-    assert est.se_robust == pytest.approx(direct, abs=1e-10)
+    active = np.abs(x) < max(h, b)
+    g = np.unique(cluster[active]).size
+    n = int(np.sum(active))
+    factor = (g / (g - 1)) * ((n - 1) / (n - 6))
+    assert est.se_robust == pytest.approx(direct * math.sqrt(factor), abs=1e-10)
 
 
 def test_bias_constant_p1():
@@ -338,3 +352,10 @@ def test_validation_errors():
                      cluster=np.array([1, 1, 2, 2]))
     with pytest.raises(RDError):
         rd_estimate(x, y, 0.2, 0.3, level=1.2)
+
+
+def test_cluster_needs_two_clusters():
+    x, y = dataset(100, 0.2, "linear", 0.1)
+    h, b = 0.3, 0.5
+    with pytest.raises(RDError):
+        rd_estimate(x, y, h, b, vce="hc0", cluster=np.zeros(x.size, dtype=int))
