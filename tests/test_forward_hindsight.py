@@ -46,6 +46,61 @@ def test_widened_copy_leaves_the_global_rng(model_cls, init_kw):
 
 
 @pytest.mark.parametrize(
+    "model_cls, init_kw",
+    [
+        (
+            LatentForwardModel,
+            {"latent_dim": 4, "units": 8, "context_dim": 24, "seed": 3},
+        ),
+        (
+            AuditoryForwardModel,
+            {"feature_dim": 6, "units": 8, "context_dim": 24, "seed": 3},
+        ),
+        (
+            SubstrateForwardModel,
+            {
+                "feature_dim": 4,
+                "units": 8,
+                "context_dim": 24,
+                "seed": 3,
+                "backend": "numpy",
+            },
+        ),
+    ],
+)
+def test_widened_copy_draws_no_random_numbers(model_cls, init_kw, monkeypatch):
+    def _raise(**kwargs):
+        raise RuntimeError("fork_rng must not be called")
+
+    monkeypatch.setattr(torch.random, "fork_rng", _raise)
+    live = model_cls(**init_kw)
+    state = torch.get_rng_state()
+    twin = live.widened_copy(1)
+    assert twin.context_dim == live.context_dim + 1
+    assert torch.equal(torch.get_rng_state(), state)
+
+
+def test_widened_copy_draws_no_random_numbers_soma_torch(monkeypatch):
+    pytest.importorskip("ncps")
+
+    def _raise(**kwargs):
+        raise RuntimeError("fork_rng must not be called")
+
+    monkeypatch.setattr(torch.random, "fork_rng", _raise)
+    live = SubstrateForwardModel(
+        feature_dim=4,
+        units=8,
+        context_dim=24,
+        seed=3,
+        backend="torch",
+    )
+    state = torch.get_rng_state()
+    twin = live.widened_copy(1)
+    assert twin.context_dim == 25
+    assert torch.equal(torch.get_rng_state(), state)
+
+
+@pytest.mark.parametrize(
     "model_cls, dim, init_kw",
     [
         (LatentForwardModel, 4, {"latent_dim": 4, "units": 8, "context_dim": 24, "seed": 3}),

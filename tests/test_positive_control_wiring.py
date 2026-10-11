@@ -22,11 +22,18 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.evaluation.config import EvaluationConfig, ResearchEventLogConfig
+from kaine.evaluation.registry import SidecarRegistry
+from kaine.experiment.run_context import RunContext, set_run_context
+from kaine.experiment.run_records import load_run_records
+from kaine.modules.audition import Audition, FakeEmotionClassifier, FakeSTTClient
+from kaine.modules.audition.acoustic import FakeAcousticEncoder
 from kaine.modules.base import BaseModule
 from kaine.modules.context import CONTEXT_DIM
 from kaine.modules.positive_control import (
     RESULT_FIELDS,
     PositiveControlSettings,
+    finish_positive_controls,
 )
 from kaine.modules.registry import ModuleRegistry
 from kaine.modules.soma.detector import AlertResult
@@ -82,6 +89,12 @@ def _payloads(events):
         else:
             out.append(ev)
     return out
+
+
+def _tone(freq: float, seconds: float = 0.2, amp: float = 0.3, sr: int = 16000) -> bytes:
+    samples = np.arange(int(sr * seconds))
+    wave = (amp * np.sin(2.0 * np.pi * freq * samples / sr) * 32767).astype(np.int16)
+    return wave.tobytes()
 
 
 async def _reports(bus: AsyncBus, stream: str = "topos.out") -> list[dict]:
@@ -184,7 +197,7 @@ def test_construct_module_passes_the_section():
         bus,
         {
             "soma": {},
-            "positive_control": {"enabled": True, "snr": 5.0},
+            "positive_control": {"enabled": True, "snr": 5.0, "min_effect": 0.01, "min_reports": 1},
         },
         registry=ModuleRegistry(),
     )
@@ -267,6 +280,8 @@ async def test_soma_control_publishes_results(bus: AsyncBus) -> None:
         bus,
         reader=FakeMetricsReader({"cpu_percent": 10.0, "ram_percent": 20.0}),
         detector=NeverAlertDetector(),
+        # Built directly, not from config, to check that no verdict is recorded
+        # without a minimum effect.
         positive_control=PositiveControlSettings(enabled=True, snr=10.0),
     )
     await soma.on_workspace(_workspace("topos", 0.7, 0.5))
@@ -511,3 +526,111 @@ async def test_soma_control_leaves_live_weights_and_rng_states_identical() -> No
     _rng_states_equal(off[1], on[1])
     _rng_states_equal(off[2], on[2])
     assert torch.equal(off[3], on[3])
+
+
+async def _audition_run(control_settings):
+    random.seed(0)
+    np.random.seed(0)
+    torch.manual_seed(0)
+    bus = _bus()
+    try:
+        audition = Audition(
+            bus,
+            stt_client=FakeSTTClient(responses=["x"]),
+            emotion_classifier=FakeEmotionClassifier(),
+            stt_model="fake-stt",
+            general_audition=True,
+            acoustic_encoder=FakeAcousticEncoder(embedding_dim=8),
+            entity_clock=_FixedClock(),
+            positive_control=control_settings,
+        )
+        await audition.initialize()
+        await audition.on_workspace(_workspace("soma", 0.6, 0.6))
+        for i, freq in enumerate(range(4000, 9000, 500)):
+            if i == 5:
+                await audition.on_workspace(_workspace("thymos", 0.75, 0.75))
+            await audition.process_audio(_tone(freq), sample_rate=16000)
+        return (
+            audition._acoustic_forward_model.state_dict(),
+            random.getstate(),
+            np.random.get_state(),
+            torch.get_rng_state(),
+        )
+    finally:
+        await audition.shutdown()
+        await bus.close()
+
+
+@pytest.mark.asyncio
+async def test_audition_control_leaves_live_weights_and_rng_states_identical() -> None:
+    off = await _audition_run(None)
+    on = await _audition_run(
+        PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.01, min_reports=1)
+    )
+
+    assert off[0] == on[0]
+    _rng_states_equal(off[1], on[1])
+    _rng_states_equal(off[2], on[2])
+    assert torch.equal(off[3], on[3])
+
+
+@pytest.mark.asyncio
+async def test_terminal_record_reaches_the_research_log(tmp_path) -> None:
+    set_run_context(
+        RunContext(
+            run_id="run-pc",
+            seed=1,
+            started_at="2026-10-10T00:00:00+00:00",
+            git_sha=None,
+        )
+    )
+    bus = _bus()
+    try:
+        sidecar = SidecarRegistry(
+            bus=bus,
+            config=EvaluationConfig.from_mapping({"enabled": False}),
+            research_event_log_config=ResearchEventLogConfig(
+                enabled=True, log_dir=str(tmp_path / "research_events")
+            ),
+        )
+        sidecar.build()
+        await sidecar.start()
+
+        topos = Topos(
+            bus,
+            encoder=Varying(),
+            forward_prediction=True,
+            entity_clock=_FixedClock(),
+            positive_control=PositiveControlSettings(
+                enabled=True, snr=10.0, min_effect=0.01, min_reports=1
+            ),
+        )
+        topos._forward_model = LatentForwardModel(
+            latent_dim=4,
+            units=8,
+            context_dim=CONTEXT_DIM,
+            seed=4,
+        )
+
+        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+        for _ in range(6):
+            await topos.process_frame(None)
+
+        await finish_positive_controls([topos])
+        await sidecar.stop()
+        await topos.shutdown()
+
+        run = load_run_records("run-pc", root=tmp_path)
+        pc_records = [
+            rec
+            for _, rec in run.all_records()
+            if rec.get("event_type") == "positive_control.result"
+            and rec.get("processor") == "topos"
+        ]
+        assert pc_records
+        assert pc_records[-1]["final"] is True
+        assert pc_records[-1]["failed"] is False
+        assert sum(1 for r in pc_records if r.get("final") is True) == 1
+    finally:
+        set_run_context(None)
+        await bus.close()

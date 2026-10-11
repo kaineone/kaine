@@ -94,6 +94,7 @@ from kaine.lifecycle.maturation_gate import (
     MaturationConfig,
     gestation_started_payload,
 )
+from kaine.modules.positive_control import finish_positive_controls
 from kaine.modules.thymos.modulator import StateModulator
 from kaine.perception_state import (
     read_desired,
@@ -2693,6 +2694,9 @@ async def _shutdown(ctx: BootContext) -> None:
             await ctx.remote_bridge.stop()
         except Exception:
             log.warning("remote bridge stop failed", exc_info=True)
+    # The positive control's terminal records must reach the research log, so
+    # publish them while the evaluation sidecar still runs.
+    await finish_positive_controls(ctx.registry.all_modules())
     if ctx.sidecar is not None:
         try:
             await ctx.sidecar.stop()

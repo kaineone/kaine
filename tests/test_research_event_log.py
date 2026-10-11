@@ -1314,3 +1314,28 @@ def test_raw_bus_archive_lingua_aggregate():
     assert "lingua.out" in _MODULE_OUT_STREAMS
     assert "lingua.external" not in _MODULE_OUT_STREAMS
     assert "lingua.internal" not in _MODULE_OUT_STREAMS
+
+
+@pytest.mark.asyncio
+async def test_observer_drains_streams_on_stop():
+    from datetime import datetime, timezone
+
+    from kaine.bus.schema import Event
+
+    bus = FakeBus()
+    sink = FakeSink()
+    obs = ResearchEventObserver(bus, sink, poll_interval_s=10.0)
+    await obs.start()
+    await asyncio.sleep(0.05)
+    event = Event(
+        source="positive_control",
+        type="positive_control.result",
+        payload={"processor": "topos", "n_reports": 5, "final": True},
+        salience=0.0,
+        timestamp=datetime.now(timezone.utc),
+    )
+    bus.push("positive_control.out", event)
+    await obs.stop()
+    assert len(sink.rows) == 1
+    assert sink.rows[0]["event_type"] == "positive_control.result"
+    assert sink.rows[0]["final"] is True

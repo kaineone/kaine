@@ -26,9 +26,9 @@ def _result(processor: str, passed: Any, **overrides: Any) -> dict[str, Any]:
         "processor": processor,
         "n_reports": 200,
         "min_reports": 100,
-        "ig_with": 0.1,
-        "ig_without": 0.05,
-        "ig_noise": 0.04,
+        "ig_with": 0.06,
+        "ig_without": 0.01,
+        "ig_noise": 0.01,
         "effect": 0.05,
         "noise_effect": 0.0,
         "min_effect": 0.01,
@@ -65,7 +65,7 @@ def test_verdict_fails_when_last_record_does_not_pass():
     records = [
         _result("topos", True),
         _result("audition", True),
-        _result("soma", True, effect=0.005),
+        _result("soma", True, effect=0.005, ig_with=0.015),
     ]
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
@@ -73,16 +73,80 @@ def test_verdict_fails_when_last_record_does_not_pass():
     assert verdict["reasons"]["soma"] == "the informative component was not detected"
 
 
-def test_verdict_uses_last_record_for_each_processor():
+def test_verdict_checks_every_record_for_each_processor():
+    # An earlier failed record defeats a later passing terminal record.
     records = [
-        _result("topos", False),
         _result("topos", True),
         _result("audition", True),
+        _result("soma", True, failed=True),
         _result("soma", True),
     ]
     verdict = verdict_from_records(records)
-    assert verdict["passed"] is True
-    assert verdict["processors"]["topos"]["passed"] is True
+    assert verdict["passed"] is False
+    assert "soma" in verdict["not_passed"]
+    assert verdict["reasons"]["soma"] == "the control failed"
+
+    # Two terminal records mean the control restarted.
+    records = [
+        _result("topos", True),
+        _result("audition", True),
+        _result("soma", True),
+        _result("soma", True),
+    ]
+    verdict = verdict_from_records(records)
+    assert verdict["passed"] is False
+    assert "soma" in verdict["not_passed"]
+    assert (
+        verdict["reasons"]["soma"]
+        == "more than one terminal record (the control restarted)"
+    )
+
+    # A cumulative record after the terminal record is a protocol violation.
+    records = [
+        _result("topos", True),
+        _result("audition", True),
+        _result("soma", True),
+        _result("soma", True, final=False, n_reports=250),
+    ]
+    verdict = verdict_from_records(records)
+    assert verdict["passed"] is False
+    assert "soma" in verdict["not_passed"]
+    assert (
+        verdict["reasons"]["soma"] == "a record follows the terminal record"
+    )
+
+    # A fresh control inside the same run_id creates more than one terminal record.
+    records = [
+        _result("topos", True),
+        _result("audition", True),
+        _result("soma", True, n_reports=100, final=False),
+        _result("soma", True, n_reports=200, final=False),
+        _result("soma", True, n_reports=200),
+        _result("soma", True, n_reports=50, final=False),
+        _result("soma", True, n_reports=150),
+    ]
+    verdict = verdict_from_records(records)
+    assert verdict["passed"] is False
+    assert "soma" in verdict["not_passed"]
+    assert (
+        verdict["reasons"]["soma"]
+        == "more than one terminal record (the control restarted)"
+    )
+
+
+def test_terminal_record_must_have_consistent_ig_fields():
+    records = [
+        _result("topos", True),
+        _result("audition", True),
+        _result("soma", True, ig_with=0.03, ig_without=0.01),
+    ]
+    verdict = verdict_from_records(records)
+    assert verdict["passed"] is False
+    assert "soma" in verdict["not_passed"]
+    assert (
+        verdict["reasons"]["soma"]
+        == "effect does not match ig_with minus ig_without"
+    )
 
 
 def test_verdict_ignores_other_event_types():
@@ -166,7 +230,7 @@ def test_stale_cumulative_pass_fails_without_terminal_record():
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
     assert "soma" in verdict["not_passed"]
-    assert verdict["reasons"]["soma"] == "no terminal record"
+    assert verdict["reasons"]["soma"] == "a record follows the terminal record"
 
 
 def test_passed_flag_is_not_trusted():
@@ -179,7 +243,7 @@ def test_passed_flag_is_not_trusted():
 
 def test_low_effect_fails():
     records = [_result(p, True) for p in PROCESSORS]
-    records[-1] = _result("soma", True, effect=0.005)
+    records[-1] = _result("soma", True, effect=0.005, ig_with=0.015)
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
     assert "soma" in verdict["not_passed"]

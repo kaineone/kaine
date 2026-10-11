@@ -23,6 +23,7 @@ ForwardPredictionHead pattern)
 """
 from __future__ import annotations
 
+import copy
 import logging
 import math
 from collections import deque
@@ -344,30 +345,34 @@ class AuditoryForwardModel:
         The new inputs start with zero weights, so the copy predicts exactly
         as this model does whatever they hold.  It copies the weights, the
         buffer, the learning rate and the suspended flag, gets its own
-        optimiser, and leaves the global torch RNG untouched.
+        optimiser, and draws no random numbers.
         """
         if extra < 1:
             raise ValueError("extra must be >= 1")
-        with self._torch.random.fork_rng(devices=[]):
-            twin = AuditoryForwardModel(
-                self._feature_dim,
-                self._units,
-                auditory_buffer_size=self._auditory_buffer_size,
-                lr=self._lr,
-                seed=None,
-                context_dim=self._context_dim + extra,
-            )
+
+        # Deep-copy the model but share the torch module itself; nothing here
+        # draws from the global RNG.
+        twin = copy.deepcopy(self, {id(self._torch): self._torch})
+
         old_in = 2 * self._feature_dim + self._context_dim
         with self._torch.no_grad():
-            twin._net[0].weight.zero_()
-            twin._net[0].weight[:, :old_in].copy_(self._net[0].weight)
-            twin._net[0].bias.copy_(self._net[0].bias)
-            twin._net[2].weight.copy_(self._net[2].weight)
-            twin._net[2].bias.copy_(self._net[2].bias)
-        twin._buffer = deque(
-            (list(v) for v in self._buffer), maxlen=self._auditory_buffer_size
-        )
-        twin.suspended = self.suspended
+            first = self._torch.nn.utils.skip_init(
+                self._torch.nn.Linear, old_in + extra, self._units
+            )
+            first.weight.zero_()
+            first.weight[:, :old_in].copy_(self._net[0].weight)
+            first.bias.copy_(self._net[0].bias)
+            twin._net[0] = first
+
+        twin._context_dim = self._context_dim + extra
+        twin._optim = self._torch.optim.SGD(twin._net.parameters(), lr=self._lr)
+        twin._last_prediction = None
+        twin._last_null_prediction = None
+        twin._last_input_context = None
+        twin.last_null_error = None
+        twin.last_scored_had_context = False
+        twin._hindsight_resume = False
+
         return twin
 
     def hindsight_step(

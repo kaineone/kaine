@@ -306,7 +306,7 @@ class Topos(BaseModule):
             except Exception:
                 log.warning("live camera shutdown failed", exc_info=True)
         await super().shutdown()
-        await self._finish_positive_control()
+        await self.finish_positive_control()
         try:
             await self._encoder.shutdown()
         except Exception:
@@ -676,6 +676,7 @@ class Topos(BaseModule):
         if control is None:
             return
         try:
+            control.prepare(self._forward_model)
             result = await asyncio.to_thread(
                 control.after_report,
                 self._forward_model,
@@ -702,8 +703,12 @@ class Topos(BaseModule):
                 )
             self._positive_control = None
 
-    async def _finish_positive_control(self) -> None:
-        """Publish the control's terminal record at a clean shutdown."""
+    async def finish_positive_control(self) -> None:
+        """Publish the control's terminal record and stop the control for this run.
+
+        The cycle calls it before the research log stops; module shutdown calls it
+        again, which then does nothing.
+        """
         control = self._positive_control
         if control is None:
             return
@@ -715,6 +720,7 @@ class Topos(BaseModule):
                 "the run cannot pass",
                 exc_info=True,
             )
+        self._positive_control = None
 
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).

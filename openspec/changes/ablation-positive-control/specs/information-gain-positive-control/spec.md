@@ -12,8 +12,8 @@ When `[positive_control].enabled` is true, Topos, Audition and Soma SHALL each r
 - **THEN** their reports carry equal `prediction_error`, `context_gain`, `null_prediction_error` and `mean_prediction_error`
 
 #### Scenario: Live weights and random states are untouched
-- **WHEN** a full Topos or Soma run with the control enabled is compared with the same run without it, from the same seeds
-- **THEN** the live model's weights and the Python, numpy and torch random states are identical
+- **WHEN** a full Topos, Audition or Soma run with the control enabled is compared with the same run without it, from the same seeds
+- **THEN** the live model's weights and the Python, numpy and torch random states are identical, for Topos, Audition and Soma
 
 ### Requirement: Within-run verdict per processor
 The control SHALL count an awake report when the live gain, the live model's running mean error and both shadow error differences are defined and finite and the mean error is above 0. All three gains SHALL be divided by that same live mean error. It SHALL report the cumulative means `ig_with`, `ig_without` (the live gain) and `ig_noise`, `effect = ig_with - ig_without` and `noise_effect = ig_noise - ig_without`. With `min_effect` (above 0) and `min_reports` (at least 1) configured, the processor SHALL pass when at least `min_reports` reports were counted, `effect` reaches `min_effect` and `noise_effect` does not. Without either, the verdict fields SHALL be null.
@@ -31,17 +31,25 @@ The control SHALL count an awake report when the live gain, the live model's run
 - **THEN** the information-gain means are numbers and `detected`, `noise_detected` and `passed` are null
 
 ### Requirement: Off by default, set only from the study configuration
-The shipped configuration SHALL leave `[positive_control]` disabled with no `min_effect` or `snr`. The control SHALL be read only from that section, SHALL refuse to start when enabled without `snr`, and SHALL reject unknown keys. A control that raises SHALL publish a last result marked failed, final and not passed, and SHALL be switched off for the run without interrupting perception; a failure to publish that record SHALL be logged at ERROR level. The shadows SHALL skip a non-finite input without changing their state, and SHALL run off the event loop.
+The shipped configuration SHALL leave `[positive_control]` disabled with no `min_effect` or `snr`. The control SHALL be read only from that section, SHALL refuse to start when enabled without `snr`, `min_effect` or `min_reports`, and SHALL reject unknown keys. A control that raises SHALL publish a last result marked failed, final and not passed, and SHALL be switched off for the run without interrupting perception; a failure to publish that record SHALL be logged at ERROR level. The shadows SHALL skip a non-finite input without changing their state, SHALL be copied without drawing random numbers on the event-loop thread, and SHALL be stepped off the event loop. The null context SHALL carry the mean of the components before the current one.
 
 #### Scenario: Enabled without a signal-to-noise ratio
 - **WHEN** a processor is built with `[positive_control]` enabled and no `snr`
 - **THEN** construction fails with an error naming `[positive_control].snr`
 
 ### Requirement: Results are recorded and checked for every processor
-Each counted report SHALL publish the cumulative result as `positive_control.result` on `positive_control.out`, a stream the cycle never reads as candidates, and a clean shutdown SHALL publish a terminal record marked `final`. An offline check SHALL take each processor's last result in a run and re-derive its verdict from the numbers, never from the record's `passed`: the record SHALL be terminal and not failed, its numbers finite, `min_effect` above 0, `n_reports` at least `min_reports`, `effect` at least `min_effect` and `noise_effect` below it. The run SHALL pass only when Topos, Audition and Soma all pass and no record line failed to parse.
+Each counted report SHALL publish the cumulative result as `positive_control.result` on `positive_control.out`, a stream the cycle never reads as candidates, and the cycle's shutdown SHALL have each processor publish a terminal record marked `final` before the research log stops, after which the control stops; stream observers SHALL drain their streams when they stop. An offline check SHALL fail a processor with any failed record, with no terminal record or more than one, or with a record after its terminal record, and SHALL re-derive the verdict from the terminal record's numbers, never from its `passed`: its numbers finite, `effect` and `noise_effect` equal to the differences of the IG means, `min_effect` above 0, `n_reports` at least `min_reports`, `effect` at least `min_effect` and `noise_effect` below it. The run SHALL pass only when Topos, Audition and Soma all pass and no record line failed to parse.
 
 #### Scenario: A stale cumulative pass
 - **WHEN** a processor's last record says `passed` true but is not a terminal record
+- **THEN** the check reports no pass for that processor
+
+#### Scenario: The terminal record reaches the log
+- **WHEN** a run with the control enabled shuts down in the cycle's order, finishing the controls and then stopping the evaluation sidecar
+- **THEN** the research log read back for the run holds exactly one terminal record for the processor, and it is the last
+
+#### Scenario: A module restarted within the run
+- **WHEN** a processor's records hold two terminal records in one run
 - **THEN** the check reports no pass for that processor
 
 #### Scenario: Unreadable records

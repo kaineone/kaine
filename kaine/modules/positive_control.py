@@ -19,14 +19,17 @@ The control is off by default and configured only from the
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Iterable, Mapping, Optional, Sequence
 
 import numpy as np
 
 from kaine.bus.schema import validate_event
+
+log = logging.getLogger(__name__)
 
 PROCESSORS: tuple[str, ...] = ("topos", "audition", "soma")
 POSITIVE_CONTROL_SOURCE: str = "positive_control"
@@ -112,9 +115,18 @@ class PositiveControlSettings:
         if isinstance(seed, bool) or not isinstance(seed, int):
             raise ValueError(f"[positive_control].seed must be an int, got {seed!r}")
 
+        # Fail at boot if the control is enabled but missing required thresholds.
         if enabled and snr is None:
             raise ValueError(
                 "[positive_control].snr must be set when the control is enabled"
+            )
+        if enabled and min_effect is None:
+            raise ValueError(
+                "[positive_control].min_effect must be set when the control is enabled"
+            )
+        if enabled and min_reports is None:
+            raise ValueError(
+                "[positive_control].min_reports must be set when the control is enabled"
             )
 
         return cls(
@@ -194,6 +206,17 @@ class ShadowProbe:
         self._prev_null_context: Optional[list[float]] = None
         self._component_sum = 0.0
         self._component_count = 0
+        # The first call only stores the baseline contexts.
+        self._started = False
+
+    def prepare(self, live_model: Any) -> None:
+        """Build the shadow on the calling thread if it has not been built yet."""
+        if not hasattr(live_model, "widened_copy") or not hasattr(
+            live_model, "hindsight_step"
+        ):
+            raise TypeError("live model lacks widened_copy or hindsight_step")
+        if self._shadow is None:
+            self._shadow = live_model.widened_copy(1)
 
     def step(
         self,
@@ -209,12 +232,15 @@ class ShadowProbe:
         ):
             raise TypeError("live model lacks widened_copy or hindsight_step")
 
-        if self._shadow is None:
-            self._shadow = live_model.widened_copy(1)
+        # First call: create the shadow if still absent and record the baseline.
+        if not self._started:
+            if self._shadow is None:
+                self._shadow = live_model.widened_copy(1)
             self._prev_context = list(context) if context is not None else None
             self._prev_null_context = (
                 list(null_context) if null_context is not None else None
             )
+            self._started = True
             return None
 
         full_width = getattr(self._shadow, "context_dim", None)
@@ -241,9 +267,12 @@ class ShadowProbe:
             return None
 
         c = self._source.next(x_list)
+        # The null context must use the running mean of earlier components only.
+        c_mean = (
+            self._component_sum / self._component_count if self._component_count else 0.0
+        )
         self._component_sum += c
         self._component_count += 1
-        c_mean = self._component_sum / self._component_count
 
         ctx = prev + [c]
         null_ctx = (prev_null + [c_mean]) if prev_null is not None else None
@@ -307,6 +336,21 @@ class PositiveControl:
         self._sum_without = 0.0
         self._sum_noise = 0.0
         self._n = 0
+
+    def prepare(self, live_model: Any) -> None:
+        """Build the shadows on the calling thread.
+
+        The modules call it on the event-loop thread before stepping the
+        control in a worker thread.
+        """
+        if not hasattr(live_model, "widened_copy") or not hasattr(
+            live_model, "hindsight_step"
+        ):
+            raise TypeError(
+                f"live model for {self._processor} lacks widened_copy or hindsight_step"
+            )
+        self._probe_info.prepare(live_model)
+        self._probe_noise.prepare(live_model)
 
     def after_report(
         self,
@@ -418,3 +462,23 @@ async def publish_result(bus: Any, result: Mapping[str, Any]) -> str:
         timestamp=datetime.now(timezone.utc),
     )
     return await bus.publish(event)
+
+
+async def finish_positive_controls(modules: Iterable[Any]) -> None:
+    """Publish every module's positive-control terminal record.
+
+    The cycle calls this during shutdown before it stops the research log, so
+    the terminal records reach the log. A module without a control is skipped.
+    """
+    for module in modules:
+        finish = getattr(module, "finish_positive_control", None)
+        if finish is None:
+            continue
+        try:
+            await finish()
+        except Exception:
+            log.error(
+                "%s: finishing the positive control failed",
+                getattr(module, "name", module),
+                exc_info=True,
+            )

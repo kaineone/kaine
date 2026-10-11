@@ -16,6 +16,7 @@ from kaine.modules.positive_control import (
     ComponentSource,
     PositiveControl,
     PositiveControlSettings,
+    ShadowProbe,
     publish_result,
 )
 from kaine.modules.topos.forward import LatentForwardModel
@@ -48,6 +49,18 @@ def test_settings_unknown_key():
 def test_settings_enabled_requires_snr():
     with pytest.raises(ValueError, match="snr must be set"):
         PositiveControlSettings.from_config({"enabled": True})
+
+
+def test_settings_enabled_requires_min_effect():
+    with pytest.raises(ValueError, match="min_effect must be set"):
+        PositiveControlSettings.from_config({"enabled": True, "snr": 10.0})
+
+
+def test_settings_enabled_requires_min_reports():
+    with pytest.raises(ValueError, match="min_reports must be set"):
+        PositiveControlSettings.from_config(
+            {"enabled": True, "snr": 10.0, "min_effect": 0.1}
+        )
 
 
 def test_settings_min_effect_validation():
@@ -89,6 +102,63 @@ def test_settings_valid_section():
     assert settings == PositiveControlSettings(
         enabled=True, min_effect=0.02, min_reports=10, snr=100.0, seed=5
     )
+
+
+def test_null_uses_the_component_mean_before_this_step():
+    calls = []
+
+    class StubShadow:
+        context_dim = 25
+
+        def hindsight_step(self, x, ctx, null_ctx, **kwargs):
+            calls.append((list(ctx), list(null_ctx)))
+            return (1.0, 1.0)
+
+    class StubLive:
+        def widened_copy(self, extra):
+            return StubShadow()
+
+        def hindsight_step(self, *args, **kwargs):
+            raise AssertionError("the live model is never stepped in hindsight")
+
+    class StubSource:
+        def __init__(self):
+            self._values = iter([1.0, 3.0, 5.0])
+
+        def next(self, x):
+            return next(self._values)
+
+    probe = ShadowProbe(
+        ComponentSource(informative=True, snr=1.0, seed=0, processor="topos")
+    )
+    probe._source = StubSource()
+
+    for _ in range(4):
+        probe.step(StubLive(), [0.0], [0.0] * 24, [0.0] * 24)
+
+    assert len(calls) == 3
+    assert calls[0][0][-1] == 1.0
+    assert calls[0][1][-1] == 0.0
+    assert calls[1][0][-1] == 3.0
+    assert calls[1][1][-1] == pytest.approx(1.0)
+    assert calls[2][0][-1] == 5.0
+    assert calls[2][1][-1] == pytest.approx(2.0)
+
+
+def test_prepare_builds_the_shadows():
+    settings = PositiveControlSettings(
+        enabled=True, snr=1.0, min_effect=0.1, min_reports=1
+    )
+    live = LatentForwardModel(2, 4, context_dim=8, seed=0)
+    control = PositiveControl("topos", settings)
+    control.prepare(live)
+    assert control._probe_info._shadow is not None
+    assert control._probe_noise._shadow is not None
+    result = control.after_report(
+        live, [0.0] * 2, [0.0] * 8, [0.0] * 8, 0.5, 1.0, awake=True
+    )
+    assert result is None
+    assert control._n == 0
 
 
 def test_component_source():

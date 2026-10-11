@@ -35,6 +35,26 @@ def _is_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+def _reason_for_processor(records: Sequence[Mapping[str, Any]]) -> str:
+    """Return the failure reason for a processor's records, or "passed"."""
+    if any(record.get("failed") is True for record in records):
+        return "the control failed"
+
+    final_records = [record for record in records if record.get("final") is True]
+    if not final_records:
+        return "no terminal record"
+    if len(final_records) > 1:
+        return "more than one terminal record (the control restarted)"
+
+    terminal_index = next(
+        i for i, record in enumerate(records) if record.get("final") is True
+    )
+    if terminal_index != len(records) - 1:
+        return "a record follows the terminal record"
+
+    return derive(final_records[-1])[1]
+
+
 def derive(record: Mapping[str, Any]) -> tuple[bool, str]:
     """Derive the verdict from a single positive-control record."""
     if record.get("failed") is True:
@@ -42,7 +62,14 @@ def derive(record: Mapping[str, Any]) -> tuple[bool, str]:
     if record.get("final") is not True:
         return False, "no terminal record"
 
-    for name in ("effect", "noise_effect", "min_effect"):
+    for name in (
+        "effect",
+        "noise_effect",
+        "min_effect",
+        "ig_with",
+        "ig_without",
+        "ig_noise",
+    ):
         value = record.get(name)
         if not _is_number(value) or not math.isfinite(value):
             return False, f"{name} is missing or not finite"
@@ -57,9 +84,25 @@ def derive(record: Mapping[str, Any]) -> tuple[bool, str]:
         return False, "min_reports is below 1"
     if record["n_reports"] < record["min_reports"]:
         return False, "n_reports is below min_reports"
-    if record["effect"] < record["min_effect"]:
+
+    effect = record["effect"]
+    noise_effect = record["noise_effect"]
+    ig_with = record["ig_with"]
+    ig_without = record["ig_without"]
+    ig_noise = record["ig_noise"]
+
+    if not math.isclose(
+        effect, ig_with - ig_without, rel_tol=1e-9, abs_tol=1e-12
+    ):
+        return False, "effect does not match ig_with minus ig_without"
+    if not math.isclose(
+        noise_effect, ig_noise - ig_without, rel_tol=1e-9, abs_tol=1e-12
+    ):
+        return False, "noise_effect does not match ig_noise minus ig_without"
+
+    if effect < record["min_effect"]:
         return False, "the informative component was not detected"
-    if record["noise_effect"] >= record["min_effect"]:
+    if noise_effect >= record["min_effect"]:
         return False, "the non-informative component was detected"
 
     return True, "passed"
@@ -67,30 +110,35 @@ def derive(record: Mapping[str, Any]) -> tuple[bool, str]:
 
 def verdict_from_records(records: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     """Return the cumulative positive-control verdict across ``records``."""
-    last_by_processor: dict[str, Mapping[str, Any]] = {}
+    all_by_processor: dict[str, list[Mapping[str, Any]]] = {
+        processor: [] for processor in PROCESSORS
+    }
     for record in records:
         if record.get("event_type") != RESULT_EVENT_TYPE:
             continue
         processor = record.get("processor")
         if processor not in PROCESSORS:
             continue
-        last_by_processor[processor] = record
+        all_by_processor[processor].append(record)
 
     processors: dict[str, Mapping[str, Any] | None] = {
-        processor: last_by_processor.get(processor) for processor in PROCESSORS
+        processor: (
+            all_by_processor[processor][-1] if all_by_processor[processor] else None
+        )
+        for processor in PROCESSORS
     }
     missing = [processor for processor in PROCESSORS if processors[processor] is None]
     reasons: dict[str, str] = {}
     not_passed: list[str] = []
 
     for processor in PROCESSORS:
-        record = processors[processor]
-        if record is None:
+        proc_records = all_by_processor[processor]
+        if not proc_records:
             reasons[processor] = "no result"
         else:
-            passed, reason = derive(record)
+            reason = _reason_for_processor(proc_records)
             reasons[processor] = reason
-            if not passed:
+            if reason != "passed":
                 not_passed.append(processor)
 
     return {

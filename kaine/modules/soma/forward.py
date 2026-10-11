@@ -44,6 +44,7 @@ pattern)
 """
 from __future__ import annotations
 
+import copy
 import logging
 import math
 from typing import Any, Optional
@@ -583,15 +584,27 @@ class SubstrateForwardModel:
             raise ValueError("extra must be >= 1")
 
         if self._backend == "torch":
-            with self._torch.random.fork_rng(devices=[]):
-                twin = SubstrateForwardModel(
+            # Deep-copy the model but share the torch module itself; nothing here
+            # draws from the global RNG.
+            twin = copy.deepcopy(self, {id(self._torch): self._torch})
+            with self._torch.no_grad():
+                readout = self._torch.nn.utils.skip_init(
+                    self._torch.nn.Linear,
+                    self._units + self._context_dim + extra,
                     self._feature_dim,
-                    self._units,
-                    lr=self._lr,
-                    seed=self.reservoir_seed,
-                    backend=self._backend,
-                    context_dim=self._context_dim + extra,
                 )
+                readout.weight.zero_()
+                readout.weight[:, : self._units + self._context_dim].copy_(
+                    self._readout.weight
+                )
+                readout.bias.copy_(self._readout.bias)
+                twin._readout = readout
+            twin._readout.train()
+            twin._context_dim = self._context_dim + extra
+            twin._optim = self._torch.optim.SGD(
+                twin._readout.parameters(), lr=self._lr
+            )
+            twin._hx = self._hx.clone() if self._hx is not None else None
         else:
             twin = SubstrateForwardModel(
                 self._feature_dim,
@@ -612,14 +625,6 @@ class SubstrateForwardModel:
                 b,
             )
             twin._hx = list(self._hx) if self._hx is not None else None
-        else:
-            with self._torch.no_grad():
-                twin._readout.weight.zero_()
-                twin._readout.weight[:, : self._units + self._context_dim].copy_(
-                    self._readout.weight
-                )
-                twin._readout.bias.copy_(self._readout.bias)
-            twin._hx = self._hx.clone() if self._hx is not None else None
 
         twin._last_hidden = (
             list(self._last_hidden) if self._last_hidden is not None else None
