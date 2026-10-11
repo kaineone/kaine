@@ -1,0 +1,127 @@
+{
+ "generator": "x = 2*frac(i*phi + shift) - 1, e = noise*sin(i*12.9898 + 78.233*frac(...)), i = 1..n",
+ "rdrobust": "2.1.1",
+ "kernel": "triangular",
+ "p": 1,
+ "q": 2,
+ "cases": [
+  {
+   "name": "lee",
+   "n": 500,
+   "jump": 0.0,
+   "shape": "lee",
+   "noise": 0.1295,
+   "h": 0.2,
+   "b": 0.33,
+   "nn": {
+    "coef_conventional": 0.05224428051029023,
+    "coef_bias_corrected": 0.043284752638902746,
+    "se_conventional": 0.05037548778019493,
+    "se_robust": 0.05889303501357799,
+    "ci_robust": [
+     -0.07214347492796648,
+     0.15871298020577196
+    ]
+   },
+   "hc0": {
+    "coef_conventional": 0.05224428051029023,
+    "coef_bias_corrected": 0.043284752638902746,
+    "se_conventional": 0.04049744756254151,
+    "se_robust": 0.04718454323540343,
+    "ci_robust": [
+     -0.049195252729461014,
+     0.1357647580072665
+    ]
+   }
+  },
+  {
+   "name": "linear_jump",
+   "n": 400,
+   "jump": 0.25,
+   "shape": "linear",
+   "noise": 0.1,
+   "h": 0.3,
+   "b": 0.45,
+   "nn": {
+    "coef_conventional": 0.23914402242542898,
+    "coef_bias_corrected": 0.24260439993307042,
+    "se_conventional": 0.03025786126251808,
+    "se_robust": 0.03722352563569021,
+    "ci_robust": [
+     0.16964763030951419,
+     0.31556116955662666
+    ]
+   },
+   "hc0": {
+    "coef_conventional": 0.23914402242542898,
+    "coef_bias_corrected": 0.24260439993307042,
+    "se_conventional": 0.028953944941568614,
+    "se_robust": 0.03510288060229695,
+    "ci_robust": [
+     0.17380401819895872,
+     0.3114047816671821
+    ]
+   }
+  },
+  {
+   "name": "curved_jump",
+   "n": 600,
+   "jump": -0.4,
+   "shape": "curved",
+   "noise": 0.2,
+   "h": 0.25,
+   "b": 0.4,
+   "shift": 0.31,
+   "nn": {
+    "coef_conventional": -0.4094346365278482,
+    "coef_bias_corrected": -0.42831667591689243,
+    "se_conventional": 0.0650753615159094,
+    "se_robust": 0.07672271230507444,
+    "ci_robust": [
+     -0.5786904288310664,
+     -0.2779429230027185
+    ]
+   },
+   "hc0": {
+    "coef_conventional": -0.4094346365278482,
+    "coef_bias_corrected": -0.42831667591689243,
+    "se_conventional": 0.05259515967586982,
+    "se_robust": 0.062130814521116795,
+    "ci_robust": [
+     -0.5500908347084196,
+     -0.3065425171253653
+    ]
+   }
+  },
+  {
+   "name": "equal_bw",
+   "n": 300,
+   "jump": 0.1,
+   "shape": "curved",
+   "noise": 0.05,
+   "h": 0.35,
+   "b": 0.35,
+   "shift": 0.77,
+   "nn": {
+    "coef_conventional": 0.12635446236904724,
+    "coef_bias_corrected": 0.11087056567162651,
+    "se_conventional": 0.013756626724126095,
+    "se_robust": 0.021583578997676087,
+    "ci_robust": [
+     0.06856752817870626,
+     0.15317360316454676
+    ]
+   },
+   "hc0": {
+    "coef_conventional": 0.12635446236904724,
+    "coef_bias_corrected": 0.11087056567162651,
+    "se_conventional": 0.014948705289338228,
+    "se_robust": 0.021502648489207292,
+    "ci_robust": [
+     0.0687261490605556,
+     0.15301498228269741
+    ]
+   }
+  }
+ ]
+}

@@ -225,6 +225,10 @@ def _write_settings_record(tmp_path, complete=True):
             "min_effect_tone": 0.05,
             "min_effect_tone_adjusted": 0.04,
             "tone_bins": [0.5, 0.8, 1.1, 1.6],
+            "theta_band": 0.1,
+            "b_band": 0.18,
+            "age_bins": [0.5, 1.0, 2.0, 4.0],
+            "min_effect_threshold_contrast": 0.02,
             "principal_components": pc_refs,
         },
     }
