@@ -19,7 +19,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | decision-server | 3/10 (30%) | Serve the K1-Jev decision model on its own loopback llama-server, apart from the language organ, with a fail-closed client (the client is built). |
 | deterministic-grader-fixes | 13/15 (87%) | Replace bare substring matching in the capability, refusal and hedge graders with exact, tested rules; two tasks need organ runs. |
 | hypnos-sleep-like-replay | 1/3 (33%) | Protect what the small online learners learned from later interference with sleep-like replay (Wei, Krishnan and Bazhenov). Design only. |
-| k1-jev-decision-model | 10/26 (38%) | Train K1-Jev, a small local model that answers typed questions about the entity's external speech for the instruments and welfare signals (data and trainer built; schema v2 and operator gold labels next). |
+| k1-jev-decision-model | 11/33 (33%) | Train K1-Jev, a small local model that answers typed questions about the entity's external speech for the instruments and welfare signals (data and trainer built). Schema v2 is designed but blocked on the hiatus (labelling and training frozen) and on the integrator's design check (task 0.1). |
 | mnemos-retrieval-energy | 1/3 (33%) | Publish a familiarity signal from Mnemos as the modern-Hopfield retrieval energy of the current content. Design only. |
 | thymos-active-inference-affect | 1/4 (25%) | Derive Thymos's affect from active inference over the body's internal state. Design only, after the workspace-mediation test. |
 | voice-development | 7/17 (41%) | Let the entity individuate a voice of its own instead of reciting workspace readings, in stages, with heard speech never persisted. |
