@@ -40,7 +40,9 @@ competitive selection today, so neither control can be run.
   A new study layer, `config/studies/<name>.toml` selected by `KAINE_STUDY`,
   is applied after the operator config. Three study configurations,
   `workspace_mediation_competitive`, `_matched` and `_pooled`, set greedy
-  decoding and the arm. The module-addition runner clears `KAINE_STUDY` for its
+  decoding and the arm. A study file may set only the `[lingua]`,
+  `[syneidesis]`, `[experiment]` and `[individuation]` tables, and the run
+  context and manifest record the study's name. The module-addition runner clears `KAINE_STUDY` for its
   child processes, whose overlay is their study configuration.
 - The matched arm refuses a selection whose context does not say whether the
   tick is a broadcast tick. Its generator is not persisted: draws reproduce
@@ -72,7 +74,8 @@ competitive selection today, so neither control can be run.
   `kaine/cycle/__main__.py`, `kaine/research/ignition_study/overlay.py`,
   `kaine/research/ignition_study/runner.py`, `kaine/boot/wiring.py`,
   `kaine/config.py`, `kaine/modules/lingua/module.py`,
-  `kaine/cycle/individuation_runtime.py`, `config/kaine.toml`,
+  `kaine/cycle/individuation_runtime.py`, `kaine/experiment/run_context.py`,
+  `config/kaine.toml`,
   `config/profiles/thesis_test.toml`, `config/studies/`, docs, tests.
 - The individuation probe decodes at its own temperature,
   `[individuation].probe_temperature` (default 0.0), which Lingua's probe

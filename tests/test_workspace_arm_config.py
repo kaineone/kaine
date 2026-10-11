@@ -143,6 +143,27 @@ def test_study_may_not_change_modules(tmp_path):
         )
 
 
+def test_study_file_allowlist(tmp_path):
+    for body in (
+        "[preservation]\nenabled = false\n",
+        "[oscillator]\nenabled = true\n",
+    ):
+        table = body[1:].split("]")[0]
+        (tmp_path / "bad2.toml").write_text(body)
+        with pytest.raises(ProfileError) as exc_info:
+            load_kaine_config(operator_path=_MISSING, study="bad2", studies_dir=tmp_path)
+        assert table in str(exc_info.value)
+
+    (tmp_path / "ok.toml").write_text(
+        "[lingua]\ntemperature = 0.0\n"
+        "[syneidesis]\narm = \"pooled\"\n"
+        "[experiment]\nseed = 5\n"
+        "[individuation]\nprobe_temperature = 0.0\n"
+    )
+    cfg = load_kaine_config(operator_path=_MISSING, study="ok", studies_dir=tmp_path)
+    assert cfg["experiment"]["seed"] == 5
+
+
 def test_study_wins_over_operator(tmp_path):
     (tmp_path / "op.toml").write_text(
         '[lingua]\ntemperature = 0.9\n[syneidesis]\narm = "competitive"\n'

@@ -58,6 +58,12 @@ STUDIES_DIR = Path("config/studies")
 # e.g. KAINE_STUDY=workspace_mediation_matched.
 STUDY_ENV_VAR = "KAINE_STUDY"
 
+# The only tables a study configuration may set; anything else (the module set,
+# preservation, the coherence layer) stays the operator's.
+STUDY_ALLOWED_TABLES: frozenset[str] = frozenset(
+    {"lingua", "syneidesis", "experiment", "individuation"}
+)
+
 # A profile/tier name is a filesystem-safe slug (no path traversal): lowercase
 # letters, digits, and underscores only. The name is turned into
 # ``config/profiles/<name>.toml`` — the slug guard keeps a hostile or fat-
@@ -587,9 +593,11 @@ def _load_merged_config(
             )
         with study_cfg_path.open("rb") as fh:
             study_raw = tomllib.load(fh)
-        if "modules" in study_raw:
+        extra = sorted(set(study_raw) - STUDY_ALLOWED_TABLES)
+        if extra:
             raise ProfileError(
-                f"study {study!r} may not set module toggles; a study changes settings, not the module set"
+                f"study {study!r} may set only the tables "
+                f"{', '.join(sorted(STUDY_ALLOWED_TABLES))}; it also sets {', '.join(extra)}"
             )
         merged = deep_merge(merged, study_raw)
 
@@ -640,8 +648,9 @@ def load_kaine_config(
     not set module toggles; tiers only bound backends and devices"), because a
     deployment tier must never silently change the enabled module set.
 
-    A study file may not contain a ``[modules]`` table; a study changes settings,
-    not the enabled module set.
+    A study file may set only the ``[lingua]``, ``[syneidesis]``, ``[experiment]``
+    and ``[individuation]`` tables; any other table, ``[modules]`` included,
+    raises :class:`ProfileError`.
 
     A missing operator file is harmless; a malformed one is tolerated by
     default (falls back with a logged warning). When ``strict_operator`` is true,

@@ -1532,6 +1532,9 @@ async def _phase_run_identity(ctx: BootContext) -> int | None:
         timing["dwell_s"] = float(_timing_cfg.get("auto_time_scale_dwell_s", 10.0))
         timing["window_s"] = float(_timing_cfg.get("auto_time_scale_window_s", 30.0))
 
+    # The same resolution load_runtime_config used for this run's config.
+    from kaine.config import resolve_study_name
+
     ctx.run_ctx = mint_run_context(
         seed=seed,
         started_at=datetime.now(timezone.utc).isoformat(),
@@ -1545,6 +1548,7 @@ async def _phase_run_identity(ctx: BootContext) -> int | None:
         ),
         plugins=ctx.plugins.manifest_entry(),
         revived_from=ctx.revive.revived_from if ctx.revive is not None else None,
+        study=resolve_study_name(),
         timing=timing,
     )
     set_run_context(ctx.run_ctx)

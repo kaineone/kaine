@@ -16,3 +16,5 @@
 - [x] 2.5 Greedy decoding out of `thesis_test`; the study layer and the three workspace-mediation study configurations
 - [x] 2.6 Docs and specs: the study layer, how an ablation run selects its arm, the unpersisted matched generator, sampling in general use
 - [x] 2.7 The individuation probe decodes at its own `[individuation].probe_temperature`
+- [x] 2.8 The run context and manifest record the study; study files are limited to four tables
+- [x] 2.9 Docs: which entry points load a study, and running lifecycle and revive commands under the run's study
