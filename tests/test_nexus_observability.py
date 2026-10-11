@@ -1376,3 +1376,151 @@ def test_single_multiplexed_eventsource_across_the_bundle():
     # The formerly-independent counter-only metrics stream now delegates to the
     # shared dispatcher instead of opening a second EventSource.
     assert "NexusSSE" in js and "subscribeMetrics" in js
+
+
+def test_welfare_block_lists_blind_sensors_until_cleared(tmp_path):
+    welfare_dir = tmp_path / "eval" / "welfare"
+    welfare_dir.mkdir(parents=True)
+    lines = [
+        {
+            "gray_zone_event": "replay_overload",
+            "unmaintained_fatigue_count": 1,
+            "sustained_extreme_vad_count": 2,
+            "replay_overload_count": 4,
+            "sustained_interoceptive_distress_count": 0,
+        },
+        {"advisory": "blind_sensor", "processor": "topos", "blind_sensor_count": 1},
+        {"advisory": "blind_sensor", "processor": "soma", "blind_sensor_count": 2},
+        {"advisory": "blind_sensor_cleared", "processor": "topos", "blind_sensor_count": 2},
+        {"advisory": "blind_sensor", "processor": "not_a_processor", "blind_sensor_count": 2},
+    ]
+    (welfare_dir / "welfare-2026-06-15.jsonl").write_text(
+        "".join(json.dumps(line) + "\n" for line in lines)
+    )
+    block = _prober(tmp_path)._welfare_block()
+    assert block["source"] == "jsonl"
+    assert block["replay_overload"] == 4
+    assert block["sustained_extreme_vad"] == 2
+    assert block["blind_sensor_advisories"] == 2
+    assert block["blind_sensors"] == ["soma"]
+    assert block["sensor_silent_advisories"] == 0
+    assert block["silent_sensors"] == []
+
+
+def test_welfare_block_without_rollup_has_empty_blind_sensors(tmp_path):
+    block = _prober(tmp_path)._welfare_block()
+    assert block["source"] == "none"
+    assert block["blind_sensors"] == []
+    assert block["blind_sensor_advisories"] is None
+    assert block["silent_sensors"] == []
+    assert block["sensor_silent_advisories"] is None
+
+
+def test_entity_care_template_renders_blind_sensors(tmp_path):
+    from jinja2 import Environment, FileSystemLoader
+
+    templates_dir = Path(__file__).resolve().parents[1] / "kaine" / "nexus" / "templates"
+    env = Environment(loader=FileSystemLoader(str(templates_dir)), autoescape=True)
+    template = env.get_template("_entity_care.html")
+    entity_care = {"diverged": False, "summary": "s", "signals": None, "care_obligations": []}
+    welfare = {
+        "source": "jsonl",
+        "unmaintained_fatigue": 0,
+        "sustained_extreme_vad": 0,
+        "replay_overload": 0,
+        "sustained_interoceptive_distress": 0,
+        "blind_sensor_advisories": 2,
+        "blind_sensors": ["audition_acoustic", "soma"],
+        "sensor_silent_advisories": 1,
+        "silent_sensors": ["topos"],
+    }
+    defaults = {
+        "entity": {"name": "Test Entity"},
+        "divergence": None,
+        "signals": None,
+        "metrics": None,
+        "care_obligations": [],
+        "summary": None,
+        "model": None,
+        "registry": None,
+    }
+    output = template.render(entity_care=entity_care, welfare=welfare, **defaults)
+    assert "sensor advisories" in output
+    assert "audition_acoustic, soma" in output
+    assert "silent now" in output
+    assert "topos" in output
+
+    empty_output = template.render(
+        entity_care=entity_care,
+        welfare={
+            **welfare,
+            "blind_sensor_advisories": None,
+            "blind_sensors": [],
+            "sensor_silent_advisories": None,
+            "silent_sensors": [],
+        },
+        **defaults,
+    )
+    assert "none" in empty_output
+
+
+def test_welfare_block_reset_clears_stale_blind_state(tmp_path):
+    welfare_dir = tmp_path / "eval" / "welfare"
+    welfare_dir.mkdir(parents=True)
+    lines = [
+        {"advisory": "blind_sensor", "processor": "topos", "blind_sensor_count": 1},
+        {"advisory": "sensor_silent", "processor": "soma", "sensor_silent_count": 1},
+        {"advisory": "reset"},
+        {"advisory": "blind_sensor", "processor": "audition_acoustic", "blind_sensor_count": 1},
+    ]
+    (welfare_dir / "welfare-2026-06-15.jsonl").write_text(
+        "".join(json.dumps(line) + "\n" for line in lines)
+    )
+    block = _prober(tmp_path)._welfare_block()
+    assert block["source"] == "jsonl"
+    assert block["blind_sensors"] == ["audition_acoustic"]
+    assert block["silent_sensors"] == []
+    assert block["blind_sensor_advisories"] == 1
+    assert block["sensor_silent_advisories"] == 0
+
+
+def test_welfare_block_long_rollup_keeps_a_still_blind_processor(tmp_path):
+    welfare_dir = tmp_path / "eval" / "welfare"
+    welfare_dir.mkdir(parents=True)
+    older = [
+        {"advisory": "reset"},
+        {"advisory": "blind_sensor", "processor": "soma", "blind_sensor_count": 1},
+    ]
+    (welfare_dir / "welfare-2026-06-14.jsonl").write_text(
+        "".join(json.dumps(line) + "\n" for line in older)
+    )
+    newer = [
+        {"gray_zone_event": "replay_overload", "replay_overload_count": i}
+        for i in range(2000)
+    ]
+    newer.append({"advisory": "sensor_silent_cleared", "processor": "topos", "sensor_silent_count": 0})
+    (welfare_dir / "welfare-2026-06-15.jsonl").write_text(
+        "".join(json.dumps(line) + "\n" for line in newer)
+    )
+    block = _prober(tmp_path)._welfare_block()
+    assert block["source"] == "jsonl"
+    assert block["blind_sensors"] == ["soma"]
+    assert block["silent_sensors"] == []
+
+
+def test_welfare_block_reads_encrypted_lines(tmp_path, monkeypatch):
+    class _Reverser:
+        def decrypt_text(self, text: str) -> str:
+            return text[::-1]
+
+    monkeypatch.setattr("kaine.security.crypto.get_state_encryptor", lambda: _Reverser())
+    welfare_dir = tmp_path / "eval" / "welfare"
+    welfare_dir.mkdir(parents=True)
+    plain = {"advisory": "blind_sensor", "processor": "topos", "blind_sensor_count": 1}
+    (welfare_dir / "welfare-2026-06-15.jsonl").write_text(
+        json.dumps(plain)[::-1] + "\n"
+    )
+    block = _prober(tmp_path)._welfare_block()
+    assert block["source"] == "jsonl"
+    assert block["blind_sensors"] == ["topos"]
+    assert block["blind_sensor_advisories"] == 1
