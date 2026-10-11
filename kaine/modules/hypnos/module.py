@@ -701,14 +701,7 @@ class Hypnos(BaseModule):
             )
         )
 
-        # --- Phase 4: Affective Reset + (implicit) Soma fatigue reset ---
-        # The Soma fatigue accumulator is reset via the hypnos.sleep.completed
-        # event that Soma subscribes to (soma-forward-model-fatigue wiring).
-        # Publishing that event at the end of this pipeline zeroes Soma's
-        # FatigueAccumulator without requiring a direct module reference.
-        phase_results.append(await affective_reset(self._thymos))
-
-        # --- Phase 5: Voice Alignment ---
+        # --- Phase 4: Voice Alignment ---
         voice_result, voice_phase = await self._run_voice_alignment()
         phase_results.append(voice_phase)
 
@@ -841,6 +834,13 @@ class Hypnos(BaseModule):
                     "hypnos: failed to write measurement_failed marker",
                     exc_info=True,
                 )
+
+        # --- Phase 5: Affective Reset + (implicit) Soma fatigue reset ---
+        # Sleep ends with the affective reset (paper §3.5), so it runs after
+        # voice alignment and its bookkeeping. The Soma fatigue accumulator is
+        # reset by the hypnos.sleep.completed event published below
+        # (soma-forward-model-fatigue wiring).
+        phase_results.append(await affective_reset(self._thymos))
 
         elapsed_ms = (time.monotonic() - start) * 1000.0
         # Capture the previous sleep mark BEFORE overwriting it; the ignition

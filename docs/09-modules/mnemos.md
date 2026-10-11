@@ -17,7 +17,7 @@ On every broadcast, accessed or inhibited, Mnemos serializes the snapshot to tex
 
 - Recall runs before store. The cue retrieves earlier related traces, so it cannot return the trace being stored on the same tick. Recall is internal and is not gated on whether the broadcast was inhibited.
 - Every trace carries an affect tag: the latest Thymos state at store time, as plain numbers (`intensity`, which is the arousal, plus `valence` and `dominance`).
-- Replay happens only inside a sleep. `replay()` raises `ReplayWindowError` if it is called while the entity is awake.
+- Replay happens only inside a sleep. Hypnos opens the replay window with `open_replay_window()` immediately before phase 2's replay and closes it with `close_replay_window()` afterwards; `replay()` raises `ReplayWindowError` at any other time.
 
 ## Inputs
 
@@ -25,10 +25,9 @@ On every broadcast, accessed or inhibited, Mnemos serializes the snapshot to tex
 |---|---|---|
 | Syneidesis | `workspace.broadcast` | The snapshot, serialized to text for the store and the recall cue |
 | Thymos | `thymos.out` / `thymos.state` | Arousal, valence and dominance, cached as the affect tag for the next store |
-| Hypnos | `hypnos.out` / `hypnos.sleep.started` | Opens the replay window |
-| Hypnos | `hypnos.out` / `hypnos.sleep.completed` | Closes the replay window |
+| Hypnos | `hypnos.out` / `hypnos.sleep.completed` | Closes the replay window if it is still open and drops the consolidated entries |
 
-A background task, `_peer_consumer_loop`, reads the Thymos and Hypnos events, so the affect tag stays current between broadcasts.
+A background task, `_peer_consumer_loop`, reads the Thymos and Hypnos events, so the affect tag stays current between broadcasts. `hypnos.sleep.started` does not open the replay window: the poll runs every 50 ms, and a sleep whose phase 1 is quicker than that would reach its replay with the window still closed.
 
 ## Outputs
 
@@ -116,14 +115,14 @@ Every store on the broadcast path attaches this cache to the `StoredMemory`.
 Hypnos calls Mnemos in its consolidation phases.
 
 1. Phase 1 calls `consolidate_now()`, which moves every short-term entry to `episodic` and drops nothing. Mnemos keeps the moved entries, each with the episodic point id it was stored under, for the rest of the sleep.
-2. Phase 2 calls `downscale_activations(factor)` (synaptic homeostasis, Tononi and Cirelli 2014). It multiplies every in-memory vector by `factor` in (0, 1), which keeps cosine similarity and shrinks the L2 norms. It is a no-op on the Qdrant and sqlite-vec backends, which keep no vectors in memory. Phase 2 then calls `replay_now()`, with perception already suspended for the whole sleep.
+2. Phase 2 opens the replay window, calls `replay_now()` with perception already suspended for the whole sleep, and closes the window. It then calls `downscale_activations(factor)` (synaptic homeostasis, Tononi and Cirelli 2014). That multiplies every in-memory vector by `factor` in (0, 1), which keeps cosine similarity and shrinks the L2 norms. It is a no-op on the Qdrant and sqlite-vec backends, which keep no vectors in memory. Replay never reads vectors, so the order does not change which traces replay.
 3. Phase 3 (associative replay, off by default with `[hypnos.consolidation].associative_replay = false`) calls `select_cross_period_traces()`.
 
 `replay_now()` builds its candidates from the entries phase 1 moved, identified by their episodic point ids, and from anything stored short-term since. A preservation import also drops the kept entries. The `ReplayEngine` raises `ReplayWindowError` if the window is not open, scores each candidate as `affect_weight × intensity + recency_weight × recency`, where recency runs from 0 for the oldest candidate to 1 for the newest, keeps the `selection_top_k` best, and publishes each as `mnemos.replay`. It also returns an observer copy of each payload, with `text` removed when `redact_content = true`. The selection follows the replay of selectively strengthened traces during sleep (Wilson and McNaughton 1994; Wei et al. 2016).
 
 Each consolidation pass replaces the kept entries, and Mnemos drops them when it sees `hypnos.sleep.completed`, so a sleep never replays an earlier sleep's traces.
 
-`select_cross_period_traces(periods, per_period)` sorts the available traces by timestamp, splits the time span into `periods` equal windows and takes up to `per_period` traces from each. With the in-memory backend the available traces are the short-term buffer and the episodic collection. The Qdrant and sqlite-vec backends do not expose their collections in memory, so only short-term traces are used.
+`select_cross_period_traces(periods, per_period)` sorts the available traces by timestamp, splits the time span into `periods` equal windows and takes up to `per_period` traces from each. The available traces are the short-term buffer, the entries phase 1 moved, and the episodic collection, which it reads through the storage backend's `export()`, so it works on the in-memory, Qdrant and sqlite-vec backends alike. Each trace counts once, and a storage error propagates so phase 3 records it.
 
 ## Key files
 

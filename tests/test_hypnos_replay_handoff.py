@@ -55,7 +55,7 @@ async def test_phase_two_replays_what_phase_one_consolidated(bus: AsyncBus):
                 collection="short_term",
             )
 
-        # Open the Hypnos window manually; in production sleep.started does this.
+        # Open the window by hand; in a sleep, phase 2 opens it through open_replay_window().
         mnemos.replay_engine.open_window()
 
         # Phase 1 consolidates the batch; phase 2 should replay it.

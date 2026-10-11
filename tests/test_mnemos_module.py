@@ -561,8 +561,8 @@ async def test_recall_affect_bias_intact(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_hypnos_window_events_toggle_replay_engine(bus: AsyncBus):
-    """hypnos.sleep.started/completed toggle the replay engine window flag."""
+async def test_hypnos_owns_the_replay_window(bus: AsyncBus):
+    """Hypnos opens the replay window through Mnemos; sleep start on the bus does not open it, and sleep completion closes it."""
     mnemos = await _new_mnemos(bus)
     await mnemos.initialize()
     try:
@@ -580,6 +580,9 @@ async def test_hypnos_window_events_toggle_replay_engine(bus: AsyncBus):
             timestamp=datetime.now(timezone.utc),
         )
         mnemos._handle_peer_event(mnemos._hypnos_stream, started)
+        assert not mnemos.replay_engine.window_active
+
+        mnemos.open_replay_window()
         assert mnemos.replay_engine.window_active
 
         completed = BusEvent(
@@ -590,6 +593,11 @@ async def test_hypnos_window_events_toggle_replay_engine(bus: AsyncBus):
             timestamp=datetime.now(timezone.utc),
         )
         mnemos._handle_peer_event(mnemos._hypnos_stream, completed)
+        assert not mnemos.replay_engine.window_active
+
+        mnemos.open_replay_window()
+        assert mnemos.replay_engine.window_active
+        mnemos.close_replay_window()
         assert not mnemos.replay_engine.window_active
     finally:
         await mnemos.shutdown()

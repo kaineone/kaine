@@ -118,13 +118,13 @@ async def test_enter_sleep_runs_all_five_phases(bus: AsyncBus, tmp_path: Path):
     hypnos = _make_hypnos(bus, tmp_path)
     summary = await hypnos.enter_sleep()
     phases = [p["phase"] for p in summary["phases"]]
-    # Paper §3.3.5 five-phase order (hypnos-fatigue-phases restructure)
+    # Paper §3.5 order: sleep ends with the affective reset
     assert phases == [
         "light_consolidation",
         "deep_consolidation",
         "associative_replay",
-        "affective_reset",
         "voice_alignment",
+        "affective_reset",
     ]
     assert all(p["success"] for p in summary["phases"])
     assert hypnos._mnemos.consolidated == 1

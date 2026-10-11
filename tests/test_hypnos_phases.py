@@ -251,6 +251,59 @@ async def test_deep_consolidation_restores_even_on_replay_error():
 
 
 @pytest.mark.asyncio
+async def test_deep_consolidation_replays_inside_its_window_then_downscales():
+    """The replay window opens, replays, closes, and only then activations downscale."""
+    class OrderedMnemos(FakeFullMnemos):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls: list[str] = []
+
+        def open_replay_window(self) -> None:
+            self.calls.append("open")
+
+        def close_replay_window(self) -> None:
+            self.calls.append("close")
+
+        async def replay_now(self) -> list:
+            self.calls.append("replay")
+            return []
+
+        def downscale_activations(self, factor: float) -> int:
+            self.calls.append("downscale")
+            return 0
+
+    m = OrderedMnemos()
+    r = await deep_consolidation(m, downscale_factor=0.9)
+    assert r.success is True
+    assert m.calls == ["open", "replay", "close", "downscale"]
+
+
+@pytest.mark.asyncio
+async def test_deep_consolidation_closes_its_window_when_replay_raises():
+    """A replay error still closes the window before reporting failure."""
+    class ReplayBoomOrdered(FakeFullMnemos):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls: list[str] = []
+
+        def open_replay_window(self) -> None:
+            self.calls.append("open")
+
+        def close_replay_window(self) -> None:
+            self.calls.append("close")
+
+        async def replay_now(self) -> list:
+            self.calls.append("replay")
+            raise RuntimeError("replay boom")
+
+    m = ReplayBoomOrdered()
+    r = await deep_consolidation(m, downscale_factor=0.9)
+    assert r.success is False
+    assert "close" in m.calls
+    assert m.calls.index("close") > m.calls.index("replay")
+
+
+@pytest.mark.asyncio
 async def test_deep_consolidation_no_mnemos():
     r = await deep_consolidation(None)
     assert r.success is True
@@ -377,15 +430,15 @@ async def test_five_phase_pipeline_order_via_module(tmp_path: Path):
         "light_consolidation",
         "deep_consolidation",
         "associative_replay",
-        "affective_reset",
         "voice_alignment",
+        "affective_reset",
     ]
     # Phase 1: consolidation ran
     assert mnemos.consolidate_calls == 1
     # Phase 2: downscale ran, replay ran
     assert len(mnemos.downscale_calls) == 1
     assert mnemos.replay_calls == 1
-    # Phase 4: thymos reset ran
+    # Phase 5: thymos reset ran, last
     assert thymos.reset_calls == 1
 
     await bus.close()

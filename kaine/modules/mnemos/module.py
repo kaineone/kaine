@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from typing import Any, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
@@ -228,11 +229,11 @@ class Mnemos(BaseModule):
         return self._clock.now() - self._last_recall_monotonic >= self._recall_cooldown_s
 
     # ------------------------------------------------------------------
-    # Affect subscription (thymos.state) + Hypnos window tracking
+    # Affect subscription (thymos.state) + Hypnos sleep-end tracking
     # ------------------------------------------------------------------
 
     async def _peer_consumer_loop(self) -> None:
-        """Background loop: read thymos.out and hypnos.out for affect + window."""
+        """Background loop: read thymos.out for affect and hypnos.out for sleep end."""
         try:
             while not self._stopped.is_set():
                 progressed = False
@@ -274,10 +275,9 @@ class Mnemos(BaseModule):
             except Exception:
                 log.warning("mnemos: failed to parse thymos.state payload", exc_info=True)
         elif stream == self._hypnos_stream:
-            if event.type == "hypnos.sleep.started":
-                self._replay_engine.open_window()
-                log.debug("mnemos: Hypnos maintenance window opened")
-            elif event.type == "hypnos.sleep.completed":
+            # The window is opened by Hypnos through open_replay_window(),
+            # so a late sleep.started on the bus cannot reopen it after the sleep ended.
+            if event.type == "hypnos.sleep.completed":
                 self._replay_engine.close_window()
                 self._core.clear_last_consolidated()
                 log.debug("mnemos: Hypnos maintenance window closed")
@@ -292,6 +292,14 @@ class Mnemos(BaseModule):
         """The replay engine (for tests and Hypnos orchestration)."""
         return self._replay_engine
 
+    def open_replay_window(self) -> None:
+        """Open the replay window. Hypnos calls this inside a sleep, immediately before phase 2's replay."""
+        self._replay_engine.open_window()
+
+    def close_replay_window(self) -> None:
+        """Close the replay window. Hypnos calls this once phase 2's replay is done."""
+        self._replay_engine.close_window()
+
     async def replay_now(self) -> list[ReplayEvent]:
         """Run the replay selection during the active Hypnos maintenance window.
 
@@ -299,7 +307,7 @@ class Mnemos(BaseModule):
         consolidation pass moved (phase 1 of the same sleep), publishes them
         as ``mnemos.replay`` events, and returns the list of published events.
 
-        Raises `ReplayWindowError` if called outside an active Hypnos window.
+        Raises `ReplayWindowError` unless Hypnos has opened the replay window (`open_replay_window()`).
         """
         # Build candidates from the short-term buffer (these have timestamps
         # and affect tags stored on StoredMemory objects) plus the traces
@@ -418,10 +426,12 @@ class Mnemos(BaseModule):
         """Select traces spanning *periods* contiguous time windows.
 
         "Memory period" is defined as a contiguous time bucket: all available
-        traces (short-term buffer + persisted episodic points) are sorted by
-        timestamp, then divided into *periods* equal-width windows
-        (oldest → newest).  Up to *per_period* traces are sampled from each
-        non-empty bucket.
+        traces (short-term buffer, the traces the latest consolidation pass
+        moved during phase 1 of this sleep, and persisted episodic points from
+        storage export) are gathered once each, sorted by timestamp, and divided
+        into *periods* equal-width windows (oldest to newest). Up to
+        *per_period* traces are sampled from each non-empty bucket. This works
+        on every storage backend.
 
         Returns a mapping ``{period_label: [trace_dict, ...]}`` where each
         trace dict carries ``point_id`` (str) and ``text`` (str) — the shape
@@ -457,28 +467,45 @@ class Mnemos(BaseModule):
                 }
             )
 
-        # Episodic storage — use InMemoryStorage._collections directly when
-        # available (same pattern as downscale_activations).  For remote
-        # backends that don't expose _collections we skip (no in-process data
-        # to bucket; phase 3 degrades gracefully).
-        storage = self._core._storage
-        collections = getattr(storage, "_collections", None)
-        if collections is not None:
-            episodic_key = self._core.collection_name("episodic")
-            for point in collections.get(episodic_key, []):
-                payload = dict(point.get("payload", {}))
-                affect_raw = point.get("affect") or {}
-                ts = float(payload.get("timestamp", 0.0))
-                all_traces.append(
-                    {
-                        "point_id": str(point.get("id", "")),
-                        "text": str(point.get("text", "")),
-                        "timestamp": ts,
-                        "affect_intensity": float(affect_raw.get("intensity", 0.0)),
-                        "valence": float(affect_raw.get("valence", 0.0)),
-                        "dominance": float(affect_raw.get("dominance", 0.0)),
-                    }
-                )
+        # Traces phase 1 consolidated into episodic storage this sleep.
+        seen: set[str] = set()
+        for point_id, memory in self._core.last_consolidated:
+            seen.add(_point_key(point_id))
+            affect = dict(memory.affect) if memory.affect else {}
+            all_traces.append(
+                {
+                    "point_id": str(point_id),
+                    "text": memory.text,
+                    "timestamp": memory.timestamp,
+                    "affect_intensity": float(affect.get("intensity", 0.0)),
+                    "valence": float(affect.get("valence", 0.0)),
+                    "dominance": float(affect.get("dominance", 0.0)),
+                }
+            )
+
+        # Persisted episodic memory through the storage export every backend
+        # implements. Let StorageError propagate so phase 3 records a failure
+        # instead of combining from a partial pool.
+        episodic_key = self._core.collection_name("episodic")
+        exported = await self._core.storage.export([episodic_key])
+        for point in exported.get(episodic_key, []):
+            key = _point_key(point.get("id", ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            payload = dict(point.get("payload", {}))
+            affect_raw = point.get("affect") or {}
+            ts = float(payload.get("timestamp", 0.0))
+            all_traces.append(
+                {
+                    "point_id": str(point.get("id", "")),
+                    "text": str(point.get("text", "")),
+                    "timestamp": ts,
+                    "affect_intensity": float(affect_raw.get("intensity", 0.0)),
+                    "valence": float(affect_raw.get("valence", 0.0)),
+                    "dominance": float(affect_raw.get("dominance", 0.0)),
+                }
+            )
 
         if not all_traces:
             return {}
@@ -635,6 +662,19 @@ def _replay_entry(point_id: str, memory: Any) -> ReplayEntry:
         payload=dict(memory.payload),
         affect=dict(affect) if affect else None,
     )
+
+
+def _point_key(point_id: Any) -> str:
+    """Comparable form of a storage point id.
+
+    Qdrant stores the hex UUID that upsert returns and gives it back in
+    hyphenated form, so ids that parse as UUIDs compare by their hex.
+    """
+    text = str(point_id)
+    try:
+        return uuid.UUID(text).hex
+    except ValueError:
+        return text
 
 
 def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:

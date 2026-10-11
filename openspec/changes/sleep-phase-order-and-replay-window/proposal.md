@@ -1,0 +1,78 @@
+## Why
+
+The paper (§3.5, Hypnos) lists the consolidation phases as memory replay,
+synaptic downscaling, associative replay, and adaptation of the language
+organ's voice, and says that sleep ends with the affective reset. The code
+differs in three ways that #460 left for this change.
+
+1. Phase order. Phase 2 downscales before it replays, and the voice
+   alignment phase runs after the affective reset, so sleep does not end with
+   the reset.
+2. Replay window race. Mnemos opens its replay window only when its 50 ms
+   peer poll sees `hypnos.sleep.started` on the bus. When phase 1 finishes
+   inside that interval (an empty short-term buffer is enough), phase 2's
+   `replay_now()` raises `ReplayWindowError`, phase 2 is recorded as failed,
+   and the sleep summary goes out at alert intensity. The same bus-driven open
+   also leaves the window open while awake if the poll sees a late
+   `hypnos.sleep.started` after the sleep has ended.
+3. Cross-period traces. `select_cross_period_traces()` reads the short-term
+   buffer and the episodic collection only through the in-memory backend's
+   private `_collections`. On the Qdrant and sqlite-vec backends it sees only
+   the short-term buffer, which phase 1 has just emptied, so phase 3
+   (associative replay, off by default) has nothing to combine.
+
+## What Changes
+
+- Phase 2 runs the replay first and the synaptic downscaling after it. Replay
+  ranks candidates by affect intensity and recency and never reads vectors,
+  and downscaling changes only the vectors, so the same traces replay in
+  either order. The change brings the order into line with the paper.
+- Voice alignment, with its intent-log rotation and voice measures, runs
+  before the affective reset, and the affective reset is the last phase of
+  every sleep. `hypnos.sleep.completed`, which resets Soma's fatigue, still
+  follows it. The phase list in the completion summary becomes
+  `light_consolidation`, `deep_consolidation`, `associative_replay`,
+  `voice_alignment`, `affective_reset`. With voice training on, Thymos now
+  resets after the training pass, so affect that moves during a long pass is
+  not carried into waking.
+- Hypnos owns the replay window. Mnemos gains `open_replay_window()` and
+  `close_replay_window()`. Phase 2 opens the window immediately before it calls
+  `replay_now()` and closes it in a `finally` once replay is done, inside the
+  sleep lock and with perception suspended for the whole sleep.
+  `hypnos.sleep.started` no longer opens the window; `hypnos.sleep.completed`
+  still closes it and drops the consolidated batch, as a backstop. The guard in
+  `ReplayEngine.replay()` is unchanged, so a replay outside that bracket still
+  raises `ReplayWindowError`.
+- `select_cross_period_traces()` draws on the short-term buffer, the traces
+  phase 1 consolidated (`MnemosCore.last_consolidated`), and the persisted
+  episodic collection read through `MemoryStorage.export()`, which every
+  backend implements. Traces are de-duplicated by point id (Qdrant returns a
+  hex id in canonical hyphenated form, so ids are compared as UUIDs where they
+  parse as one). A storage error propagates, so phase 3 records a failure
+  instead of combining from a partial pool.
+
+## Capabilities
+
+### Modified Capabilities
+
+- `hypnos`: the fixed phase order matches the paper and ends with the
+  affective reset.
+- `hypnos-fatigue-phases`: phase 2 replays before it downscales, inside a
+  window that Hypnos opens and closes; the fatigue reset follows the affective
+  reset that ends sleep.
+- `mnemos-replay`: the replay window is opened and closed by Hypnos through
+  Mnemos's API around phase 2's replay call.
+- `hypnos-consolidation`: cross-period selection draws on the consolidated
+  batch and on persisted episodic memory on every backend.
+
+## Impact
+
+- `kaine/modules/hypnos/phases.py`, `kaine/modules/hypnos/module.py`,
+  `kaine/modules/mnemos/module.py`, `kaine/modules/mnemos/replay.py`
+  (docstrings), tests, and the Hypnos, Mnemos and sleep pages of the book.
+- Behaviour with Mnemos enabled: phase 2 no longer fails when phase 1 is
+  quick. The base-thesis form has no Mnemos, so there the change is the phase
+  order only: voice alignment is gated off and takes no time, so the reset
+  still comes at the end of a sleep that otherwise does no work.
+- `enter_sleep()`'s perception suspension (a `try`/`finally` under the sleep
+  lock) is unchanged.

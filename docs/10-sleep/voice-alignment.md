@@ -1,6 +1,6 @@
 # Voice alignment
 
-This page covers phase 5 of a sleep: the operator-gated preference-training pass that would fit a small LoRA adapter to the language organ. Read it if you are enabling voice alignment, choosing a trainer backend, setting up an external trainer environment, or reading why an adapter was rejected.
+This page covers phase 4 of a sleep: the operator-gated preference-training pass that would fit a small LoRA adapter to the language organ. Read it if you are enabling voice alignment, choosing a trainer backend, setting up an external trainer environment, or reading why an adapter was rejected.
 
 Related pages: [Sleep and maintenance](README.md), [Hypnos](../09-modules/hypnos.md), [Lingua](../09-modules/lingua.md), [Verification](../18-verification.md)
 
@@ -21,7 +21,7 @@ Training needs every gate below open. A closed gate returns a successful `PhaseR
 
 ```mermaid
 flowchart TD
-    A[Phase 5 begins] --> M[Build pairs; publish consolidation divergence]
+    A[Phase 4 begins] --> M[Build pairs; publish consolidation divergence]
     M --> B{"[hypnos.voice_alignment]\nenabled = true?"}
     B -- no --> C["Skip: training_skipped=true"]
     B -- yes --> D{"KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1?"}
@@ -57,7 +57,7 @@ The builder skips records with an empty field and records where `chosen == rejec
 
 ```mermaid
 sequenceDiagram
-    participant Hypnos as Hypnos Phase 5
+    participant Hypnos as Hypnos Phase 4
     participant Builder as DPOPairBuilder
     participant Log as intent_expression.jsonl
     participant Trainer as Trainer backend
@@ -168,7 +168,7 @@ For GGUF conversion use mainline llama.cpp. Ollama's GGUF converter writes a non
 
 ### Job queue backend
 
-For containerized deployments, set `trainer_backend = "job_queue"` and point `trainer_jobs_dir` at the shared jobs volume (default `state/hypnos/voice_align_jobs`; the module-addition study overlay uses `/trainer-jobs`). The cycle writes each job spec (DPO pairs, base-model path, LoRA and DPO settings, and the relative output directory `out`), marks it ready, and polls for the service's `DONE` marker. The polling is asynchronous, so the event loop is not blocked, but Phase 5 awaits the result, so the sleep pipeline itself waits up to `trainer_timeout_s` (default 21600). A timeout, a non-zero exit or a missing adapter raises an error.
+For containerized deployments, set `trainer_backend = "job_queue"` and point `trainer_jobs_dir` at the shared jobs volume (default `state/hypnos/voice_align_jobs`; the module-addition study overlay uses `/trainer-jobs`). The cycle writes each job spec (DPO pairs, base-model path, LoRA and DPO settings, and the relative output directory `out`), marks it ready, and polls for the service's `DONE` marker. The polling is asynchronous, so the event loop is not blocked, but phase 4 awaits the result, so the sleep pipeline itself waits up to `trainer_timeout_s` (default 21600). A timeout, a non-zero exit or a missing adapter raises an error.
 
 `result.json` is written during the run, so the cycle decides completion by the `DONE` marker.
 
