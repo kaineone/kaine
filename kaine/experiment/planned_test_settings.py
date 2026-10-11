@@ -132,6 +132,10 @@ class PlannedTestSettings:
     min_effect_tone: float
     min_effect_tone_adjusted: float
     tone_bins: tuple[float, ...]
+    theta_band: float
+    b_band: float
+    age_bins: tuple[float, ...]
+    min_effect_threshold_contrast: float
     principal_components: Mapping[str, PcRef]
     excluded_seeds: frozenset[int]
     runs: tuple[RunRef, ...]
@@ -496,6 +500,75 @@ def load_settings_record(path: str | Path) -> PlannedTestSettings:
         previous = value
         tone_bins.append(value)
 
+    # theta_band
+    raw_theta_band = values.get("theta_band")
+    if (
+        isinstance(raw_theta_band, bool)
+        or not isinstance(raw_theta_band, (int, float))
+        or not math.isfinite(raw_theta_band)
+        or raw_theta_band <= 0
+    ):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} value 'theta_band' "
+            "must be a positive finite number"
+        )
+    theta_band = float(raw_theta_band)
+
+    # b_band
+    raw_b_band = values.get("b_band")
+    if (
+        isinstance(raw_b_band, bool)
+        or not isinstance(raw_b_band, (int, float))
+        or not math.isfinite(raw_b_band)
+        or raw_b_band <= 0
+    ):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} value 'b_band' "
+            "must be a positive finite number"
+        )
+    b_band = float(raw_b_band)
+
+    # age_bins
+    raw_age_bins = values.get("age_bins")
+    if (
+        not isinstance(raw_age_bins, list)
+        or len(raw_age_bins) != rules.N_BINS - 1
+    ):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} value 'age_bins' must be a list of "
+            f"exactly {rules.N_BINS - 1} numbers"
+        )
+    age_bins: list[float] = []
+    previous_age: float | None = None
+    for v in raw_age_bins:
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+            raise PlannedTestSettingsError(
+                f"settings record {str(path)!r} value 'age_bins' must contain "
+                "only finite numbers"
+            )
+        value = float(v)
+        if previous_age is not None and value < previous_age:
+            raise PlannedTestSettingsError(
+                f"settings record {str(path)!r} value 'age_bins' must be in "
+                "non-decreasing order"
+            )
+        previous_age = value
+        age_bins.append(value)
+
+    # min_effect_threshold_contrast
+    raw_min_effect_threshold_contrast = values.get("min_effect_threshold_contrast")
+    if (
+        isinstance(raw_min_effect_threshold_contrast, bool)
+        or not isinstance(raw_min_effect_threshold_contrast, (int, float))
+        or not math.isfinite(raw_min_effect_threshold_contrast)
+        or raw_min_effect_threshold_contrast <= 0
+    ):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} value 'min_effect_threshold_contrast' "
+            "must be a positive finite number"
+        )
+    min_effect_threshold_contrast = float(raw_min_effect_threshold_contrast)
+
     # principal_components
     raw_pcs = values.get("principal_components")
     if not isinstance(raw_pcs, dict):
@@ -657,6 +730,10 @@ def load_settings_record(path: str | Path) -> PlannedTestSettings:
         min_effect_tone=min_effect_tone,
         min_effect_tone_adjusted=min_effect_tone_adjusted,
         tone_bins=tuple(tone_bins),
+        theta_band=theta_band,
+        b_band=b_band,
+        age_bins=tuple(age_bins),
+        min_effect_threshold_contrast=min_effect_threshold_contrast,
         principal_components=principal_components,
         excluded_seeds=frozenset(seeds),
         runs=tuple(runs),

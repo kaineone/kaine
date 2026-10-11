@@ -115,6 +115,10 @@ def _build_record(
             "min_effect_tone": 0.05,
             "min_effect_tone_adjusted": 0.04,
             "tone_bins": [0.5, 0.8, 1.1, 1.6],
+            "theta_band": 0.1,
+            "b_band": 0.18,
+            "age_bins": [0.5, 1.0, 2.0, 4.0],
+            "min_effect_threshold_contrast": 0.02,
             "principal_components": principal_components,
         },
     }
@@ -875,3 +879,71 @@ def test_loaded_record_exposes_tone_fields(tmp_path: Path) -> None:
     assert settings.min_effect_tone == pytest.approx(0.05)
     assert settings.min_effect_tone_adjusted == pytest.approx(0.04)
     assert settings.tone_bins == (0.5, 0.8, 1.1, 1.6)
+
+
+def test_loader_refuses_missing_theta_band(tmp_path: Path) -> None:
+    path = _write_mutated(tmp_path, lambda r: r["values"].pop("theta_band", None))
+    with pytest.raises(PlannedTestSettingsError, match="theta_band"):
+        load_settings_record(path)
+
+
+def test_loader_refuses_invalid_theta_band(tmp_path: Path) -> None:
+    path = _write_mutated(tmp_path, lambda r: r["values"].update({"theta_band": 0}))
+    with pytest.raises(PlannedTestSettingsError, match="theta_band"):
+        load_settings_record(path)
+
+
+def test_loader_refuses_missing_b_band(tmp_path: Path) -> None:
+    path = _write_mutated(tmp_path, lambda r: r["values"].pop("b_band", None))
+    with pytest.raises(PlannedTestSettingsError, match="b_band"):
+        load_settings_record(path)
+
+
+def test_loader_refuses_invalid_b_band(tmp_path: Path) -> None:
+    path = _write_mutated(tmp_path, lambda r: r["values"].update({"b_band": -0.1}))
+    with pytest.raises(PlannedTestSettingsError, match="b_band"):
+        load_settings_record(path)
+
+
+def test_loader_refuses_missing_age_bins(tmp_path: Path) -> None:
+    path = _write_mutated(tmp_path, lambda r: r["values"].pop("age_bins", None))
+    with pytest.raises(PlannedTestSettingsError, match="age_bins"):
+        load_settings_record(path)
+
+
+def test_loader_refuses_age_bins_of_wrong_length(tmp_path: Path) -> None:
+    path = _write_mutated(tmp_path, lambda r: r["values"].update({"age_bins": [0.5, 1.0, 2.0]}))
+    with pytest.raises(PlannedTestSettingsError, match="age_bins"):
+        load_settings_record(path)
+
+
+def test_loader_refuses_decreasing_age_bins(tmp_path: Path) -> None:
+    path = _write_mutated(
+        tmp_path, lambda r: r["values"].update({"age_bins": [4.0, 2.0, 1.0, 0.5]})
+    )
+    with pytest.raises(PlannedTestSettingsError, match="age_bins"):
+        load_settings_record(path)
+
+
+def test_loader_refuses_missing_min_effect_threshold_contrast(tmp_path: Path) -> None:
+    path = _write_mutated(
+        tmp_path, lambda r: r["values"].pop("min_effect_threshold_contrast", None)
+    )
+    with pytest.raises(PlannedTestSettingsError, match="min_effect_threshold_contrast"):
+        load_settings_record(path)
+
+
+def test_loader_refuses_invalid_min_effect_threshold_contrast(tmp_path: Path) -> None:
+    path = _write_mutated(
+        tmp_path, lambda r: r["values"].update({"min_effect_threshold_contrast": 0})
+    )
+    with pytest.raises(PlannedTestSettingsError, match="min_effect_threshold_contrast"):
+        load_settings_record(path)
+
+
+def test_loaded_record_exposes_threshold_contrast_fields(tmp_path: Path) -> None:
+    settings, _ = _make_record_with_run_data(tmp_path)
+    assert settings.theta_band == pytest.approx(0.1)
+    assert settings.b_band == pytest.approx(0.18)
+    assert settings.age_bins == (0.5, 1.0, 2.0, 4.0)
+    assert settings.min_effect_threshold_contrast == pytest.approx(0.02)

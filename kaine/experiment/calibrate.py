@@ -16,7 +16,9 @@ settings record. It applies the rules from the paper's Appendix A.8,
 * positive-control SNR and report count from the competitive ladder; s2_j
   is the larger of the two components' variances at the two ladder rungs
   that bracket SNR_j, which approximates the variance at SNR_j itself
-* values still blocked: the threshold band and its dependants
+* contrast-at-threshold bandwidth, age bins, per-pilot contrast and minimum
+  effect from the competitive pilots
+* nothing is always blocked any more
 
 A rule that cannot be applied fails closed: its value is null, ``blocked``
 gives the reason, ``complete`` is ``False``, and the boot check refuses a live
@@ -75,8 +77,15 @@ from kaine.experiment.principal_component import (
     load_principal_component,
     principal_component_path,
 )
+from kaine.experiment.rd_robust import RDError, mse_bandwidths
 from kaine.experiment.run_context import compute_git_sha
 from kaine.experiment.run_records import DEFAULT_ROOT, RunRecords, load_records_for_runs
+from kaine.experiment.threshold_contrast import (
+    ThresholdContrastError,
+    bandwidth_observations,
+    near_threshold_ages,
+    run_contrast,
+)
 from kaine.experiment.tone_analysis import (
     ToneAnalysisError,
     ToneEvent,
@@ -963,6 +972,92 @@ def calibrate(
             )
 
     # ------------------------------------------------------------------
+    # Contrast at threshold
+    # ------------------------------------------------------------------
+    theta_band: float | None = None
+    b_band: float | None = None
+    bandwidth_details: dict[str, Any] | None = None
+    age_bins: list[float] | None = None
+    threshold_contrasts: list[float | None] | None = None
+    min_effect_threshold_contrast: float | None = None
+    band_error: str | None = None
+    age_bins_error: str | None = None
+    contrast_error: str | None = None
+
+    if n_counted < n_cal:
+        band_error = "depends on pilots"
+        age_bins_error = "depends on pilots"
+        contrast_error = "depends on pilots"
+    elif t_learn_s is None:
+        band_error = "depends on t_learn_s"
+        age_bins_error = "depends on t_learn_s"
+        contrast_error = "depends on t_learn_s"
+    else:
+        x_all: list[float] = []
+        y_all: list[float] = []
+        try:
+            for index in counted_indices:
+                run_id = pilots[index]["competitive"]
+                x, y = bandwidth_observations(
+                    _flatten_records(records_by_run[run_id]), t_learn_s
+                )
+                x_all.extend(x)
+                y_all.extend(y)
+            sel = mse_bandwidths(x_all, y_all)
+        except (RDError, ThresholdContrastError) as exc:
+            band_error = f"theta_band: {exc}"
+            age_bins_error = "depends on theta_band"
+            contrast_error = "depends on theta_band"
+        else:
+            theta_band = sel.h
+            b_band = sel.b
+            bandwidth_details = {"v": sel.v, "c": sel.c, "n": sel.n}
+            try:
+                ages: list[float] = []
+                for index in counted_indices:
+                    run_id = pilots[index]["competitive"]
+                    ages.extend(
+                        near_threshold_ages(
+                            _flatten_records(records_by_run[run_id]),
+                            t_learn_s,
+                            theta_band,
+                        )
+                    )
+                age_bins = quintile_edges(ages)
+            except (CalibrationError, ThresholdContrastError) as exc:
+                age_bins_error = str(exc)
+                contrast_error = "depends on age_bins"
+            else:
+                threshold_contrasts = []
+                contrast_error = None
+                for index in counted_indices:
+                    run_id = pilots[index]["competitive"]
+                    try:
+                        threshold_contrasts.append(
+                            run_contrast(
+                                _flatten_records(records_by_run[run_id]),
+                                t_learn_s,
+                                theta_band,
+                                b_band,
+                                age_bins,
+                            ).contrast
+                        )
+                    except (RDError, ThresholdContrastError) as exc:
+                        if contrast_error is None:
+                            contrast_error = f"threshold contrast: {exc}"
+                        threshold_contrasts.append(None)
+                defined = [c for c in threshold_contrasts if c is not None]
+                # A pilot whose log could not be read blocks the minimum effect.
+                if contrast_error is None:
+                    try:
+                        min_effect_threshold_contrast = minimum_effect(sample_sd(defined))
+                    except CalibrationError as exc:
+                        contrast_error = (
+                            f"the threshold contrast is defined in {len(defined)} "
+                            f"counted pilots: {exc}"
+                        )
+
+    # ------------------------------------------------------------------
     # f. Positive control and report count
     # s2_j is the larger of the two components' variances at the two ladder
     # rungs that bracket SNR_j; this approximates the variance at SNR_j itself,
@@ -1099,17 +1194,13 @@ def calibrate(
     if blocked_n_run_planned is not None:
         blocked["n_run_planned"] = blocked_n_run_planned
 
-    blocked["theta_band"] = (
-        "requires the method of Calonico, Cattaneo and Titiunik (2014); "
-        "its authors' rdrobust package is GPL-3.0-only, which is incompatible "
-        "with CAL 0.4, so the operator must decide how it is provided"
-    )
-    blocked["b_band"] = blocked["theta_band"]
-    blocked["age_bins"] = (
-        "depends on theta_band (the bins are quintiles over the reports that "
-        "follow near-threshold broadcasts in the pilot runs of the on arm)"
-    )
-    blocked["min_effect_threshold_contrast"] = "depends on theta_band and b_band"
+    if band_error is not None:
+        blocked["theta_band"] = band_error
+        blocked["b_band"] = band_error
+    if age_bins_error is not None:
+        blocked["age_bins"] = age_bins_error
+    if contrast_error is not None:
+        blocked["min_effect_threshold_contrast"] = contrast_error
     if tone_bins_error is not None:
         blocked["tone_bins"] = tone_bins_error
     if tone_adjusted_error is not None:
@@ -1144,10 +1235,12 @@ def calibrate(
         "min_reports": min_reports,
         "ucl_factor": ucl_factor,
         "detection_z": detection_z_value,
-        "theta_band": None,
-        "b_band": None,
-        "age_bins": None,
-        "min_effect_threshold_contrast": None,
+        "theta_band": theta_band,
+        "b_band": b_band,
+        "bandwidth_selection": bandwidth_details,
+        "age_bins": age_bins,
+        "threshold_contrasts": threshold_contrasts,
+        "min_effect_threshold_contrast": min_effect_threshold_contrast,
         "tone_bins": tone_bins,
         "tone_statistics": tone_statistics,
         "min_effect_tone": min_effect_tone,
@@ -1234,6 +1327,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"tone_bins={values.get('tone_bins')}")
     print(f"min_effect_tone={values.get('min_effect_tone')}")
     print(f"min_effect_tone_adjusted={values.get('min_effect_tone_adjusted')}")
+    print(f"theta_band={values.get('theta_band')}")
+    print(f"b_band={values.get('b_band')}")
+    print(f"age_bins={values.get('age_bins')}")
+    print(f"min_effect_threshold_contrast={values.get('min_effect_threshold_contrast')}")
     for key, reason in record.get("blocked", {}).items():
         print(f"blocked {key}: {reason}")
 
