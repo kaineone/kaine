@@ -1179,6 +1179,7 @@ def test_positive_control_result_is_logged():
         "detected": True,
         "noise_detected": False,
         "passed": True,
+        "failed": False,
         "extra": "x",
     }
     record = _taxonomy_record("positive_control.result", payload)

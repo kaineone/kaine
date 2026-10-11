@@ -275,3 +275,25 @@ def test_after_report_requires_model_methods():
 
     with pytest.raises(TypeError, match="topos"):
         control.after_report(NoMethods(), [0.0], None, None, None, awake=True)
+
+
+def test_non_informative_value_ignores_the_current_input():
+    shared = [1.0, 2.0, 3.0, 4.0]
+    source_a = ComponentSource(informative=False, snr=10.0, seed=7, processor="topos")
+    source_b = ComponentSource(informative=False, snr=10.0, seed=7, processor="topos")
+    for _ in range(20):
+        source_a.next(shared)
+        source_b.next(shared)
+    assert source_a.next([1.0, 2.0, 3.0, 4.0]) == source_b.next([-50.0, 9.0, 0.0, 7.0])
+
+    fresh = ComponentSource(informative=False, snr=10.0, seed=9, processor="audition")
+    assert fresh.next([1.0, 2.0, 3.0]) == 0.0
+
+
+def test_failure_result_cannot_pass():
+    settings = PositiveControlSettings(enabled=True, snr=10.0, min_effect=0.0)
+    control = PositiveControl("topos", settings)
+    assert control.result()["failed"] is False
+    failed = control.failure_result()
+    assert failed["failed"] is True
+    assert failed["passed"] is False

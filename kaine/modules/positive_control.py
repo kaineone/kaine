@@ -42,6 +42,7 @@ RESULT_FIELDS: tuple[str, ...] = (
     "detected",
     "noise_detected",
     "passed",
+    "failed",
 )
 
 
@@ -104,6 +105,13 @@ class PositiveControlSettings:
 
 
 class ComponentSource:
+    """A source that either copies the input projection or replaces it.
+
+    The informative value is the projection of the current input plus scaled
+    noise. The non-informative value is the mean of previous projections plus
+    scaled noise; it uses only the statistics gathered before the current input.
+    """
+
     def __init__(self, *, informative: bool, snr: float, seed: int, processor: str) -> None:
         if processor not in PROCESSORS:
             raise ValueError(
@@ -139,6 +147,8 @@ class ComponentSource:
             )
 
         p = float(self._u @ arr)
+        prev_mean = self._mean
+        prev_s = math.sqrt(self._m2 / (self._count - 1)) if self._count >= 2 else 0.0
         self._count += 1
         delta = p - self._mean
         self._mean += delta / self._count
@@ -149,7 +159,7 @@ class ComponentSource:
         noise = float(self._noise_rng.standard_normal(1)[0])
         if self._informative:
             return p + (s / math.sqrt(self._snr)) * noise
-        return self._mean + s * math.sqrt(1.0 + 1.0 / self._snr) * noise
+        return prev_mean + prev_s * math.sqrt(1.0 + 1.0 / self._snr) * noise
 
 
 class ShadowProbe:
@@ -347,7 +357,15 @@ class PositiveControl:
             "detected": detected,
             "noise_detected": noise_detected,
             "passed": passed,
+            "failed": False,
         }
+
+    def failure_result(self) -> dict[str, Any]:
+        """The current result marked as failed, so a run whose control stopped cannot pass."""
+        result = self.result()
+        result["failed"] = True
+        result["passed"] = False
+        return result
 
 
 async def publish_result(bus: Any, result: Mapping[str, Any]) -> str:

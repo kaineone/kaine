@@ -41,7 +41,8 @@ def verdict_from_records(records: Iterable[Mapping[str, Any]]) -> dict[str, Any]
     not_passed = [
         processor
         for processor in PROCESSORS
-        if processors[processor] is not None and processors[processor].get("passed") is not True
+        if processors[processor] is not None
+        and (processors[processor].get("passed") is not True or processors[processor].get("failed") is True)
     ]
     return {
         "passed": not missing and not not_passed,

@@ -210,6 +210,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "detected",
             "noise_detected",
             "passed",
+            "failed",
         }
     ),
     # NOTE: `audition.transcription` is intentionally ABSENT — never logged.

@@ -690,8 +690,13 @@ class Topos(BaseModule):
             if result is not None:
                 await publish_result(self._bus, result)
         except Exception:
-            # A failing control must not break perception; it stops for this run, so no verdict is recorded.
+            # A failing control must not break perception. It stops for this run
+            # and records a failure, so the run cannot pass.
             log.exception("topos: positive control failed and is switched off for this run")
+            try:
+                await publish_result(self._bus, control.failure_result())
+            except Exception:
+                log.exception("topos: could not record the positive control's failure")
             self._positive_control = None
 
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:

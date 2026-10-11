@@ -292,3 +292,8 @@ async def test_failing_control_switches_itself_off(bus: AsyncBus) -> None:
 
     assert topos._positive_control is None
     assert len(await _reports(bus, "topos.out")) == 3
+    positive_reports = await _reports(bus, "positive_control.out")
+    assert len(positive_reports) == 1
+    assert positive_reports[0]["failed"] is True
+    assert positive_reports[0]["passed"] is False
+    assert positive_reports[0]["processor"] == "topos"

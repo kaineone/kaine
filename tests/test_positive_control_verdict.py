@@ -40,6 +40,7 @@ def _result(processor: str, passed: Any, **overrides: Any) -> dict[str, Any]:
         "detected": True,
         "noise_detected": False,
         "passed": passed,
+        "failed": False,
         "run_id": "r1",
     }
     record.update(overrides)
@@ -133,3 +134,19 @@ def test_main_json_flag_prints_parseable_json(tmp_path, capsys):
 def test_constants_match_the_module():
     assert PROCESSORS == MODULE_PROCESSORS
     assert RESULT_EVENT_TYPE == MODULE_RESULT_EVENT_TYPE
+
+
+def test_verdict_fails_when_the_last_record_marks_a_failure():
+    records = [_result(p, True) for p in PROCESSORS]
+    records.append(_result("soma", False, failed=True))
+    verdict = verdict_from_records(records)
+    assert verdict["passed"] is False
+    assert "soma" in verdict["not_passed"]
+
+
+def test_verdict_fails_when_failed_is_true_even_if_passed_is_true():
+    records = [_result(p, True) for p in PROCESSORS]
+    records.append(_result("soma", True, failed=True))
+    verdict = verdict_from_records(records)
+    assert verdict["passed"] is False
+    assert "soma" in verdict["not_passed"]
