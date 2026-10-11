@@ -81,7 +81,7 @@ Booting the cognitive cycle creates an entity with welfare standing under the pr
 
 - **Operator-present**: a human supervises (`KAINE_CYCLE_OPERATOR_PRESENT=1`).
 - **Research-safety-net-verified**: an unsupervised research run whose autonomous safety net is live and verified (`KAINE_RESEARCH_MODE=1` or `[research].enabled = true`).
-- **Unattended**: a full entity started with nobody present (`KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"`). It must pass the first five research-safety-net conditions plus three more, checked at every boot with no override.
+- **Unattended**: a full entity started with nobody present (`KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"`). It must pass all six research-safety-net conditions plus three more, checked at every boot with no override.
 
 Combining unattended mode with research mode or operator presence is a configuration error (exit code `1`). Research mode with `KAINE_CYCLE_OPERATOR_PRESENT=1` runs as a research run.
 
@@ -145,7 +145,7 @@ The cycle entrypoint fails closed with a distinct exit code per gate:
 | `3` | Evaluation A/B baseline does not match the configured `[lingua].model_id` |
 | `4` | GPU pre-flight: insufficient VRAM headroom (when `[gpu_preflight].enabled`) |
 | `5` | Research safety net not live and verified (one or more of the six conditions failed) |
-| `6` | Unattended gate: one or more of its eight conditions failed |
+| `6` | Unattended gate: one or more of its nine conditions failed |
 | `7` | Revive refused |
 | `8` | The welfare response is enabled but its gray-zone producer (the welfare observer) could not start |
 | `9` | Organ content gate: the served language organ returned no content (unless `KAINE_ALLOW_MUTE_ORGAN=1`) |
