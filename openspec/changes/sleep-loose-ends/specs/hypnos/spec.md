@@ -37,3 +37,13 @@ a task still pending after it SHALL be logged and left.
 #### Scenario: The wait is bounded
 - **WHEN** a held task does not finish
 - **THEN** shutdown returns after the bound and logs the pending task
+
+### Requirement: Hypnos shuts down before the other modules
+The cycle's shutdown and Spot's halt SHALL shut Hypnos down first and the other
+modules after it in registration order, so a sleep still in flight ends while
+Mnemos, Thymos and Phantasia are up.
+
+#### Scenario: The reset runs while Thymos is up
+- **WHEN** the cycle shuts its modules down during a sleep, with Hypnos
+  registered after Thymos
+- **THEN** the affective reset runs before Thymos shuts down

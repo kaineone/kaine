@@ -36,10 +36,19 @@ downscaled quantity is, so that question goes to the operator.
 - Phantasia answers a replay cue while the window is open, and also a cue
   handled after the window closed whose timestamp lies inside the latest
   window, so the poll interval cannot drop cues that phase 2 published.
+  While a window is open, a cue stamped before it opened is ignored, and the
+  last four closed windows are kept, so a late cue from the first of two
+  back-to-back sleeps is still answered. `initialize()` clears the sleep state
+  and the window, so a light restart that misses `hypnos.sleep.completed`
+  cannot leave the waking path off.
 - Hypnos gains `shutdown()`. It stops the background loops, cancels a sleep
   still in flight and waits for it, so the sleep ends with the affective reset
   and the aborted completion, then waits for the held shielded tasks. Each
   wait is bounded; a task still pending after it is logged.
+  The cycle's shutdown and Spot's halt shut Hypnos down first (new
+  `shutdown_order()` in `kaine/modules/registry.py`), so the sleep ends while
+  Mnemos, Thymos and Phantasia are still up. Only Hypnos moves; the other
+  modules keep their registration order.
 - `_payload_timestamp` returns 0.0 for a NaN or infinite timestamp, and the
   sqlite-vec `recent_points` query maps a NULL or infinite timestamp to 0.0,
   so every backend ranks such a point as the oldest.
@@ -58,7 +67,8 @@ downscaled quantity is, so that question goes to the operator.
 ## Impact
 
 - `kaine/modules/phantasia/module.py`, `kaine/modules/hypnos/module.py`,
-  `kaine/modules/mnemos/storage.py`, tests, and the Phantasia, Hypnos and
+  `kaine/modules/mnemos/storage.py`, `kaine/modules/registry.py`,
+  `kaine/cycle/__main__.py`, `kaine/cycle/spot.py`, tests, and the Phantasia, Hypnos and
   sleep pages of the book.
 - Base-thesis form: no Phantasia and no Mnemos, so the change there is the
   shutdown path only.

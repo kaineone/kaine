@@ -61,7 +61,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | ablation-null-context-positive-control | 10/10 (100%) | The null context differs from the held context only where other modules contributed, and reports carry the paired evaluations behind the gain. The positive control waits on operator decisions. |
 | ablation-positive-control | 9/10 (90%) | The positive control of the information-gain measure: shadow forward models with an informative and a non-informative component, a per-processor verdict in the research log, and an offline all-processors check. Off by default. |
 | sleep-phase-order-and-replay-window | 7/7 (100%) | Sleep runs its phases in the paper's order and ends with the affective reset; Hypnos opens the replay window itself, and associative replay reads episodic memory on every backend. |
-| sleep-loose-ends | 6/6 (100%) | Hypnos opens Phantasia's scenario window around the phases that cue it, settles an in-flight sleep at shutdown, and every memory backend ranks a non-finite timestamp as the oldest. |
+| sleep-loose-ends | 7/7 (100%) | Hypnos opens Phantasia's scenario window around the phases that cue it, settles an in-flight sleep at shutdown, and every memory backend ranks a non-finite timestamp as the oldest. |
 
 ## Open operator and device steps
 

@@ -76,6 +76,14 @@ from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
+# How many closed scenario windows Phantasia remembers for late replay cues.
+_KEPT_WINDOWS = 4
+
+
+def _utc_now() -> datetime:
+    """Wall-clock time on the clock BaseModule.publish stamps on events."""
+    return datetime.now(timezone.utc)
+
 
 class Phantasia(BaseModule):
     name: ClassVar[str] = "phantasia"
@@ -151,10 +159,10 @@ class Phantasia(BaseModule):
         # whole sleep. Hypnos itself opens and closes the scenario window.
         self._asleep: bool = False
         self._window_active: bool = False
-        # Wall-clock bounds of the latest window, compared with the timestamps
-        # of replay cues handled after it closed.
+        # Wall-clock bounds of the open window and of the last few closed ones,
+        # compared with the timestamps of replay cues.
         self._window_opened_at: Optional[datetime] = None
-        self._window_closed_at: Optional[datetime] = None
+        self._closed_windows: deque[tuple[datetime, datetime]] = deque(maxlen=_KEPT_WINDOWS)
 
         self._mnemos_stream = mnemos_stream
         self._hypnos_stream = hypnos_stream
@@ -202,6 +210,10 @@ class Phantasia(BaseModule):
     # ------------------------------------------------------------------
 
     async def initialize(self) -> None:
+        # A light restart re-seeds the peer cursors, so a sleep that ended
+        # during the restart is never observed. Reset sleep state explicitly.
+        self._asleep = False
+        self.close_scenario_window()
         # Load persisted world-model weights BEFORE anything else so an
         # incompatible checkpoint fails the boot closed (an operator decision,
         # never a silent discard of learned experience).
@@ -447,32 +459,34 @@ class Phantasia(BaseModule):
     def open_scenario_window(self) -> None:
         """Open the scenario window. Hypnos calls this inside a sleep, before phase 2's replay."""
         self._window_active = True
-        self._window_opened_at = datetime.now(timezone.utc)
-        self._window_closed_at = None
+        self._window_opened_at = _utc_now()
 
     def close_scenario_window(self) -> None:
         """Close the scenario window. Hypnos calls this once phase 3 is done; closing a closed window does nothing."""
         if not self._window_active:
             return
         self._window_active = False
-        self._window_closed_at = datetime.now(timezone.utc)
+        self._closed_windows.append((self._window_opened_at, _utc_now()))
 
     def _cue_in_window(self, event: Event) -> bool:
         """Whether a replay cue belongs to a scenario window.
 
-        The peer poll can handle a cue after Hypnos has closed the window that
-        it was published in. Such a cue still counts when its timestamp lies
-        inside the latest window.
+        A cue counts when published inside the open window or inside one of the
+        last _KEPT_WINDOWS closed windows, so a stale cue from an earlier sleep
+        is ignored and a late cue from the first of two back-to-back sleeps is
+        still answered.
         """
-        if self._window_active:
+        ts = event.timestamp
+        if (
+            self._window_active
+            and self._window_opened_at is not None
+            and ts >= self._window_opened_at
+        ):
             return True
-        opened, closed = self._window_opened_at, self._window_closed_at
-        if opened is None or closed is None:
-            return False
-        return opened <= event.timestamp <= closed
+        return any(opened <= ts <= closed for opened, closed in self._closed_windows)
 
     async def _handle_replay_cue(self, event: Event) -> None:
-        """On a mnemos.replay cue inside the latest scenario window, generate a scenario.
+        """On a mnemos.replay cue inside a scenario window, generate a scenario.
 
         Offline only: a cue published while awake is ignored, since the live
         loop never produces scenarios (paper §3.3.5 phase 3).

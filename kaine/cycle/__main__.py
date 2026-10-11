@@ -34,7 +34,7 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Iterable
 
 from kaine.boot import (
     build_registry,
@@ -95,6 +95,7 @@ from kaine.lifecycle.maturation_gate import (
     gestation_started_payload,
 )
 from kaine.modules.positive_control import finish_positive_controls
+from kaine.modules.registry import shutdown_order
 from kaine.modules.thymos.modulator import StateModulator
 from kaine.perception_state import (
     read_desired,
@@ -2591,6 +2592,15 @@ async def _run_until_stopped(ctx: BootContext) -> None:
             continue
 
 
+async def _shutdown_modules(modules: Iterable[Any]) -> None:
+    """Shut every module down, Hypnos first (see shutdown_order)."""
+    for module in shutdown_order(modules):
+        try:
+            await module.shutdown()
+        except Exception:
+            log.warning("module %s shutdown failed", module.name, exc_info=True)
+
+
 async def _shutdown(ctx: BootContext) -> None:
     """Stop every task, service and module the boot started, in a fixed order, then close the bus."""
     if ctx.womb_presence_task is not None:
@@ -2719,11 +2729,7 @@ async def _shutdown(ctx: BootContext) -> None:
         await ctx.cycle_task
     except (asyncio.CancelledError, Exception):
         log.debug("cycle task ended", exc_info=True)
-    for module in list(ctx.registry.all_modules()):
-        try:
-            await module.shutdown()
-        except Exception:
-            log.warning("module %s shutdown failed", module.name, exc_info=True)
+    await _shutdown_modules(ctx.registry.all_modules())
     await ctx.bus.close()
     _clear_runtime_state()
 

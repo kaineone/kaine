@@ -9,10 +9,11 @@ trajectory buffer is bounded; no raw sense data lands on the bus.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
+import kaine.modules.phantasia.module as phantasia_module
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
@@ -267,18 +268,129 @@ async def test_cue_published_in_window_is_answered_after_close(bus: AsyncBus):
         await ph.shutdown()
 
 
-async def test_cue_published_before_the_window_is_ignored(bus: AsyncBus):
-    """A cue whose timestamp is earlier than the latest window is ignored."""
+async def test_cue_published_before_the_window_is_ignored(bus: AsyncBus, monkeypatch):
+    """A cue whose timestamp is earlier than the open window is ignored."""
     ph = Phantasia(bus, backend="fake")
     await ph.initialize()
     try:
-        cue = _event("mnemos", "mnemos.replay", {"memory_id": "m-early"})
+        t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        cue = Event(
+            timestamp=t0,
+            source="mnemos",
+            type="mnemos.replay",
+            payload={"memory_id": "m-early"},
+            salience=0.0,
+        )
+        monkeypatch.setattr(phantasia_module, "_utc_now", lambda: t0 + timedelta(seconds=10))
         ph.open_scenario_window()
+        monkeypatch.setattr(phantasia_module, "_utc_now", lambda: t0 + timedelta(seconds=20))
         ph.close_scenario_window()
         await ph._handle_peer_event("mnemos.out", cue)
 
         events = await _drain(bus)
         assert [e for e in events if e.type == "phantasia.scenario"] == []
+    finally:
+        await ph.shutdown()
+
+
+async def test_stale_cue_during_an_open_window_is_ignored(bus: AsyncBus, monkeypatch):
+    """A cue stamped before the window opened is ignored even while it is open."""
+    ph = Phantasia(bus, backend="fake", rollout_horizon=5)
+    await ph.initialize()
+    try:
+        for i in range(4):
+            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
+
+        t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        stale = Event(
+            timestamp=t0,
+            source="mnemos",
+            type="mnemos.replay",
+            payload={"memory_id": "m-stale"},
+            salience=0.0,
+        )
+        monkeypatch.setattr(phantasia_module, "_utc_now", lambda: t0 + timedelta(seconds=10))
+        ph.open_scenario_window()
+        await ph._handle_peer_event("mnemos.out", stale)
+
+        events = await _drain(bus)
+        assert [e for e in events if e.type == "phantasia.scenario"] == []
+
+        fresh = Event(
+            timestamp=t0 + timedelta(seconds=15),
+            source="mnemos",
+            type="mnemos.replay",
+            payload={"memory_id": "m-fresh"},
+            salience=0.0,
+        )
+        await ph._handle_peer_event("mnemos.out", fresh)
+        events = await _drain(bus)
+        scenarios = [e for e in events if e.type == "phantasia.scenario"]
+        assert len(scenarios) == 1
+        assert scenarios[0].payload["seed_memory_id"] == "m-fresh"
+    finally:
+        await ph.shutdown()
+
+
+async def test_late_cue_from_back_to_back_windows_is_answered(bus: AsyncBus, monkeypatch):
+    """A late cue from the first of two back-to-back windows is still answered."""
+    ph = Phantasia(bus, backend="fake", rollout_horizon=5)
+    await ph.initialize()
+    try:
+        for i in range(4):
+            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
+
+        t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        monkeypatch.setattr(phantasia_module, "_utc_now", lambda: t0 + timedelta(seconds=10))
+        ph.open_scenario_window()
+        monkeypatch.setattr(phantasia_module, "_utc_now", lambda: t0 + timedelta(seconds=20))
+        ph.close_scenario_window()
+
+        monkeypatch.setattr(phantasia_module, "_utc_now", lambda: t0 + timedelta(seconds=30))
+        ph.open_scenario_window()
+
+        first = Event(
+            timestamp=t0 + timedelta(seconds=15),
+            source="mnemos",
+            type="mnemos.replay",
+            payload={"memory_id": "m-first"},
+            salience=0.0,
+        )
+        await ph._handle_peer_event("mnemos.out", first)
+        events = await _drain(bus)
+        scenarios = [e for e in events if e.type == "phantasia.scenario"]
+        assert len(scenarios) == 1
+        assert scenarios[0].payload["seed_memory_id"] == "m-first"
+
+        between = Event(
+            timestamp=t0 + timedelta(seconds=25),
+            source="mnemos",
+            type="mnemos.replay",
+            payload={"memory_id": "m-between"},
+            salience=0.0,
+        )
+        await ph._handle_peer_event("mnemos.out", between)
+        events = await _drain(bus)
+        seeds = [e.payload["seed_memory_id"] for e in events if e.type == "phantasia.scenario"]
+        assert seeds == ["m-first"]
+    finally:
+        await ph.shutdown()
+
+
+async def test_restart_clears_sleep_state(bus: AsyncBus):
+    """A light restart resets the sleep flag and scenario window."""
+    ph = Phantasia(bus, backend="fake")
+    await ph.initialize()
+    try:
+        await ph._handle_peer_event("hypnos.out", _event("hypnos", "hypnos.sleep.started"))
+        ph.open_scenario_window()
+        await ph.restart()
+
+        assert ph._window_active is False
+
+        await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=0))
+        events = await _drain(bus)
+        assert any(e.type == "phantasia.world_error" for e in events)
     finally:
         await ph.shutdown()
 

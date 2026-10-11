@@ -6,3 +6,4 @@
 - [x] 1.4 A non-finite payload timestamp ranks as 0.0 in `recent_points` on every backend
 - [x] 1.5 Tests: the window through a real sleep on the bus, the window closing on a cancel, shutdown during a sleep and during a held reset, non-finite timestamps on the in-memory, sqlite-vec and Qdrant backends
 - [x] 1.6 Docs: Phantasia, Hypnos and sleep pages
+- [x] 1.7 Review follow-ups: a cue counts only inside the open window or one of the last four closed windows; the cycle and Spot shut Hypnos down first; Phantasia's `initialize()` clears the sleep state
