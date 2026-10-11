@@ -12,7 +12,9 @@ settings record. It applies the rules from the paper's Appendix A.8,
 * pilot classification (not-exercised replacement and r_NE)
 * learning period via MSER-5 over ensemble-averaged processor gains
 * minimum effects from the on-versus-control contrasts
-* positive-control SNR and report count from the competitive ladder
+* positive-control SNR and report count from the competitive ladder; s2_j
+  is the larger of the two components' variances at the two ladder rungs
+  that bracket SNR_j, which approximates the variance at SNR_j itself
 * always-blocked values that require software or records not yet built
 
 A rule that cannot be applied fails closed: its value is null, ``blocked``
@@ -33,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 import kaine
+import kaine.experiment.calibration_rules as rules
 from kaine.experiment.calibration_rules import (
     ALPHA_PC,
     ALPHA_TEST,
@@ -91,13 +94,8 @@ PILOT_STUDIES = {
     "matched": "workspace_mediation_pilot_matched",
     "pooled": "workspace_mediation_pilot_pooled",
 }
-MSER_IGNORE_END: int | None = None
-"""The paper's MSER-5 rule minimizes over 0 <= d < b, where the statistic is 0 at
-d = b - 1 for every series, so the literal rule always truncates at the last
-batch. How many final batches to leave out of the search is an open question for
-the operator; until it is fixed here the learning period, and every setting that
-counts reports after it, is blocked.
-"""
+
+_DEFAULT = object()
 
 
 def _is_finite_number(value: Any) -> bool:
@@ -243,21 +241,19 @@ def learning_period(
     """Return the learning period T_learn in entity seconds.
 
     ``per_arm_reports[arm]`` is a list over the counted pilots of
-    ``{processor: included reports}``. When ``ignore_end`` is ``None`` the
-    learning period is blocked. When any truncation point lies in the second half
-    of its ensemble, the pilot runs are too short.
+    ``{processor: included reports}``. The MSER-5 search runs over
+    0 <= d <= b - ignore_end (paper Appendix A.8). When any arm or processor
+    has too few batch means for the search to reach the second half, or when
+    the truncation point lies in the second half, the pilot runs are too short.
     """
     if ignore_end is None:
         return (
             None,
             {},
             (
-                "The paper's MSER-5 rule minimizes over 0 <= d < b, where the "
-                "statistic is 0 at d = b - 1 for every series, so the literal "
-                "rule always truncates at the last batch. How many final "
-                "batches to leave out of the search is an open question for the "
-                "operator; until it is fixed here the learning period, and every "
-                "setting that counts reports after it, is blocked."
+                "The MSER-5 search range is not set (ignore_end is None). "
+                "The learning period, and every setting that counts reports after it, "
+                "is blocked until ignore_end is configured."
             ),
         )
 
@@ -278,7 +274,11 @@ def learning_period(
                     for pilot in pilots
                 ]
                 averaged = ensemble_average(series, batch=MSER_BATCH)
-                result = mser_truncation(averaged, ignore_end=ignore_end)
+                result = mser_truncation(
+                    averaged,
+                    ignore_end=ignore_end,
+                    min_batches=rules.MSER_MIN_BATCHES,
+                )
 
                 proc_details: dict[str, Any] = {
                     "n_values": result.n_values,
@@ -306,8 +306,13 @@ def learning_period(
                 proc_details["median_time_s"] = median_time
                 arm_details[processor] = proc_details
 
-                if not result.first_half:
-                    failures.append(f"{arm}/{processor}")
+                if not result.long_enough:
+                    failures.append(
+                        f"fewer than {rules.MSER_MIN_BATCHES} batch means for "
+                        f"{arm}/{processor} (b = {result.n_batches})"
+                    )
+                elif not result.first_half:
+                    failures.append(f"d* > b/2 for {arm}/{processor}")
 
                 if median_time > max_time:
                     max_time = median_time
@@ -320,9 +325,7 @@ def learning_period(
         return (
             None,
             details,
-            "truncation point in the second half for "
-            + ", ".join(failures)
-            + ": the pilot runs are too short (paper A.8)",
+            "; ".join(failures) + ": the pilot runs are too short (paper A.8)",
         )
 
     return math.ceil(max_time), details, None
@@ -464,10 +467,14 @@ def calibrate(
     *,
     root: Path | str = DEFAULT_ROOT,
     n_cal: int = N_CAL,
-    mser_ignore_end: int | None = MSER_IGNORE_END,
+    mser_ignore_end: int | None | object = _DEFAULT,
     now: str | None = None,
 ) -> dict[str, Any]:
     """Build the planned-test settings record from ``plan`` without its digest."""
+    # Read MSER_IGNORE_END at call time from the rules module.
+    if mser_ignore_end is _DEFAULT:
+        mser_ignore_end = rules.MSER_IGNORE_END
+
     # The record stores the principal-component paths as given (relative to the
     # data root), so no operator path enters the committed record.
     given_root = Path(root)
@@ -723,12 +730,87 @@ def calibrate(
         blocked_n_run_planned = None
 
     # ------------------------------------------------------------------
+    # Report-rate check (not a paper rule; it guards paper §6.3, which
+    # requires that the arms differ only in the workspace manipulation).
+    # ------------------------------------------------------------------
+    report_rate_error: str | None = None
+    report_rates: dict[str, dict[str, list[float]]] | None = None
+    report_rate_check: dict[str, dict[str, dict[str, float]]] | None = None
+
+    if n_counted >= n_cal:
+        report_rates = {
+            arm: {processor: [] for processor in PROCESSORS} for arm in ARMS
+        }
+
+        for index in counted_indices:
+            for arm in ARMS:
+                run_id = pilots[index][arm]
+                for processor in PROCESSORS:
+                    times: list[float] = []
+                    for record in _flatten_records(records_by_run[run_id]):
+                        if record.get("event_type") != REPORT_TYPES[processor]:
+                            continue
+                        ets = record.get("entity_time_s")
+                        if (
+                            isinstance(ets, bool)
+                            or not isinstance(ets, (int, float))
+                            or not math.isfinite(ets)
+                        ):
+                            raise CalibrationError(
+                                f"run {run_id!r} has a {processor} report with a "
+                                "missing or non-finite entity_time_s"
+                            )
+                        times.append(float(ets))
+                    times.sort()
+                    if len(times) < 2:
+                        raise CalibrationError(
+                            f"run {run_id!r} processor {processor} has fewer "
+                            "than 2 reports"
+                        )
+                    span = times[-1] - times[0]
+                    if span <= 0:
+                        raise CalibrationError(
+                            f"run {run_id!r} processor {processor} report span "
+                            "is not above 0"
+                        )
+                    report_rates[arm][processor].append((len(times) - 1) / span)
+
+        report_rate_check = {processor: {} for processor in PROCESSORS}
+        report_rate_failures: list[str] = []
+
+        for processor in PROCESSORS:
+            on_rates = report_rates["competitive"][processor]
+            for ctl in CONTROLS:
+                ctl_rates = report_rates[ctl][processor]
+                mean_on = sum(on_rates) / len(on_rates)
+                mean_ctl = sum(ctl_rates) / len(ctl_rates)
+                sd_ctl = sample_sd(ctl_rates)
+                report_rate_check[processor][ctl] = {
+                    "mean_on": mean_on,
+                    "mean_ctl": mean_ctl,
+                    "sd_ctl": sd_ctl,
+                }
+                if abs(mean_on - mean_ctl) > sd_ctl:
+                    report_rate_failures.append(
+                        f"{processor}/{ctl} (on arm={mean_on:.4g}, "
+                        f"{ctl}={mean_ctl:.4g}, sd={sd_ctl:.4g})"
+                    )
+
+        if report_rate_failures:
+            report_rate_error = (
+                "the on arm's report rate differs from the control's by more "
+                "than the control's run-to-run spread, so the arms differ in "
+                "more than the manipulation: "
+                + "; ".join(report_rate_failures)
+            )
+
+    # ------------------------------------------------------------------
     # d. Learning period over the counted pilots
     # ------------------------------------------------------------------
     t_learn_s: int | None = None
     mser_details: dict[str, Any] | None = None
 
-    if n_counted >= n_cal:
+    if n_counted >= n_cal and report_rate_error is None:
         per_arm_reports = {
             arm: [pilot_arm_reports[i][arm] for i in counted_indices]
             for arm in ARMS
@@ -807,6 +889,9 @@ def calibrate(
 
     # ------------------------------------------------------------------
     # f. Positive control and report count
+    # s2_j is the larger of the two components' variances at the two ladder
+    # rungs that bracket SNR_j; this approximates the variance at SNR_j itself,
+    # because run-level variances are measured only on the ladder's rungs.
     # ------------------------------------------------------------------
     ladder_mean_effect: dict[str, Any] | None = None
     snr: dict[str, float] | None = None
@@ -832,16 +917,23 @@ def calibrate(
 
             for index in counted_indices:
                 run_id = pilots[index]["competitive"]
-                informative, uninformative, count = ladder_effects(
-                    _flatten_records(records_by_run[run_id]),
-                    processor,
-                    t_learn_s,  # type: ignore[arg-type]
-                    run_id=run_id,
-                    pc_sha256=principal_components[processor]["sha256"],
-                )
+                try:
+                    informative, uninformative, count = ladder_effects(
+                        _flatten_records(records_by_run[run_id]),
+                        processor,
+                        t_learn_s,  # type: ignore[arg-type]
+                        run_id=run_id,
+                        pc_sha256=principal_components[processor]["sha256"],
+                    )
+                except CalibrationError as exc:
+                    snr_error = f"{processor}: {exc}"
+                    break
                 informative_series.append(informative)
                 uninformative_series.append(uninformative)
                 counts.append(count)
+
+            if snr_error is not None:
+                break
 
             mean_informative = [
                 sum(pilot[i] for pilot in informative_series) / len(informative_series)
@@ -898,6 +990,7 @@ def calibrate(
     def _chain_after(first_key: str) -> None:
         order = [
             "pilots",
+            "report_rate",
             "t_learn_s",
             "s_cal",
             "theta_eff",
@@ -913,6 +1006,9 @@ def calibrate(
     if n_counted < n_cal:
         blocked["pilots"] = f"{n_counted} of {n_cal} pilot runs count"
         _chain_after("pilots")
+    elif report_rate_error is not None:
+        blocked["report_rate"] = report_rate_error
+        _chain_after("report_rate")
     elif learn_reason is not None:
         blocked["t_learn_s"] = learn_reason
         _chain_after("t_learn_s")
@@ -959,6 +1055,8 @@ def calibrate(
         "k_n_exact": k_n_exact,
         "power_at_n_exact": power_at_n_exact,
         "n_run_planned": n_run_planned,
+        "report_rates": report_rates,
+        "report_rate_check": report_rate_check,
         "t_learn_s": t_learn_s,
         "mser": mser_details,
         "dig": dig,
@@ -1007,6 +1105,7 @@ def calibrate(
             "ucl_level": UCL_LEVEL,
             "mser_batch": MSER_BATCH,
             "mser_ignore_end": mser_ignore_end,
+            "mser_min_batches": rules.MSER_MIN_BATCHES,
             "n_bins": N_BINS,
             "snr_ladder": list(SNR_LADDER),
             "power_horizon": POWER_HORIZON,
@@ -1046,7 +1145,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     digest = write_settings_record(record, args.out)
     print(f"wrote {args.out}")
-    print(f"digest {digest}")
+    print(f"record_sha256 {digest}")
+    print("put this record_sha256 in the preregistration")
 
     values = record["values"]
     print(f"t_learn_s={values.get('t_learn_s')}")

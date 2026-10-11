@@ -19,8 +19,15 @@
 - [x] 3.3 Preliminary, pilot and positive-control studies; live arms declare role `test`
 - [x] 3.4 Docs: researchers, experiments, configuration reference, research event streams, verification
 
-## 4. Open (operator)
+## 4. Review changes
 
-- [ ] 4.1 Fix the MSER-5 search range in the paper and set `MSER_IGNORE_END`
-- [ ] 4.2 Add rdrobust and record which broadcast preceded each prediction, for theta_band, b_band and the age bins
-- [ ] 4.3 Build the tone variant and log the tone model's error ratio, for the tone bins
+- [x] 4.1 Gate on the role whatever the study, study-to-role map, test role refuses a non-control positive control
+- [x] 4.2 Loader checks the paper's constants, n_counted and n_exact; digest in the run manifest and printed by the tool
+- [x] 4.3 Positive control after the report, off the report path; report-rate check in the tool
+- [x] 4.4 Ladder errors block instead of stopping the tool; s2 approximation documented
+- [x] 4.5 MSER-5 per paper PR #27: 0 <= d <= b - 5, b >= 10, d* <= b/2
+
+## 5. Open (operator)
+
+- [ ] 5.1 Add rdrobust and record which broadcast preceded each prediction, for theta_band, b_band and the age bins
+- [ ] 5.2 Build the tone variant and log the tone model's error ratio, for the tone bins

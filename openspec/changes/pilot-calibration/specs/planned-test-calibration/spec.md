@@ -12,34 +12,42 @@
 - **THEN** the planned run count is ceil(102 / (1 - 3/33)) = 113, and runs are added until at least 102 enter each control's test
 
 #### Scenario: MSER-5 on a known transient
-- **WHEN** MSER-5 runs on a series with an exponential transient that has decayed below the noise by about the 90th value, with the final batches left out of the search
+- **WHEN** MSER-5 runs on a series with an exponential transient that has decayed below the noise by about the 90th value, searching 0 <= d <= b - 5
 - **THEN** the truncation point lies in the first half and between the 30th and 120th value
 
-#### Scenario: The literal MSER range is degenerate
-- **WHEN** MSER-5 searches every d with 0 <= d < b
-- **THEN** it returns d = b - 1, in the second half, for any series
+#### Scenario: A degenerate end of the series no longer wins
+- **WHEN** the last batch means of a series are equal
+- **THEN** a search over 0 <= d <= b - 1 picks a final batch, and the paper's search over 0 <= d <= b - 5 does not
 
 #### Scenario: The ladder does not reach the minimum effect
 - **WHEN** the informative component's mean effect stays below theta_PC at SNR 256
 - **THEN** the SNR rule raises `CalibrationError`, and the live test does not run
 
 ### Requirement: The calibration tool writes one versioned settings record
-`python -m kaine.experiment.calibrate PLAN --out PATH` SHALL read the preliminary run and every attempted pilot run named in the plan, in attempt order, and write one JSON record with a schema name and version, the tool name and version, the git sha, the fixed constants, its inputs (each run's id, seed, manifest sha256 and records sha256) and every derived value. It SHALL check that each run's manifest names the expected study, that the three runs of a pilot share a seed, that no seed repeats and the preliminary seed is not a pilot seed, that every run used the same film program, and that every report carries `entity_time_s` and `awake`; a failed check SHALL write nothing and exit 2. It SHALL apply, in the paper's order: NOT EXERCISED classification and r_NE; T_learn by MSER-5 on cross-pilot averages of each arm's and processor's gains, the largest median entity time of the truncated report, rounded up to a whole second, failing closed when any truncation point lies in the second half; s_cal and theta_eff = 0.5 s_cal per control over reports after T_learn; theta_PC as the smaller theta_eff and min_effect = theta_PC / 2; SNR_j by log-linear interpolation on the ladder; n_PC from the larger of the two components' run-level variances at the bracketing rungs, the mean reports per run and Browne's factor; and the principal-component files' paths and hashes. A rule that cannot be applied SHALL leave its value null, name the reason under `blocked`, mark the record incomplete and make the tool exit 1.
+`python -m kaine.experiment.calibrate PLAN --out PATH` SHALL read the preliminary run and every attempted pilot run named in the plan, in attempt order, and write one JSON record with a schema name and version, the tool name and version, the git sha, the fixed constants, its inputs (each run's id, seed, manifest sha256 and records sha256) and every derived value. It SHALL check that each run's manifest names the expected study, that the three runs of a pilot share a seed, that no seed repeats and the preliminary seed is not a pilot seed, that every run used the same film program, and that every report carries `entity_time_s` and `awake`; a failed check SHALL write nothing and exit 2. It SHALL apply, in the paper's order: NOT EXERCISED classification and r_NE; T_learn by MSER-5 on cross-pilot averages of each arm's and processor's gains, searching 0 <= d <= b - 5, the largest median entity time of the truncated report, rounded up to a whole second, failing closed when any series has fewer than ten batch means or d* > b/2; s_cal and theta_eff = 0.5 s_cal per control over reports after T_learn; theta_PC as the smaller theta_eff and min_effect = theta_PC / 2; SNR_j by log-linear interpolation on the ladder; n_PC from the larger of the two components' run-level variances at the two rungs that bracket SNR_j (an approximation to the variance at SNR_j, which the ladder does not measure), the mean reports per run and Browne's factor; and the principal-component files' paths and hashes. A rule that cannot be applied SHALL leave its value null, name the reason under `blocked`, mark the record incomplete and make the tool exit 1.
 
 #### Scenario: Synthetic pilots with known spreads
 - **WHEN** the tool runs on synthetic pilots whose contrasts against the matched arm have standard deviation 0.0258 and one of five pilots never has more candidates than the coalition holds
 - **THEN** r_NE is 0.2, the planned run count is 128, s_cal for the matched arm is within 0.003 of 0.0258, min_effect is theta_PC / 2 and each processor's SNR lies between the bracketing rungs
 
-#### Scenario: The MSER search range is not fixed
-- **WHEN** the tool runs with `MSER_IGNORE_END` unset
-- **THEN** `t_learn_s`, `s_cal`, `snr` and `min_reports` are null with reasons under `blocked`, and the record is incomplete
+#### Scenario: Pilot runs too short for the learning period
+- **WHEN** the pilot series have fewer than ten batch means, or a truncation point lies beyond half of its series
+- **THEN** `t_learn_s` and every later value are null with reasons under `blocked`, and the record is incomplete
+
+#### Scenario: The on arm reports at another rate
+- **WHEN** the on arm's mean report rate differs from a control arm's by more than that arm's run-to-run standard deviation
+- **THEN** `report_rate` is blocked and `t_learn_s` and every later value depend on it
+
+#### Scenario: A ladder that did not finish
+- **WHEN** a counted on-arm pilot's ladder has a failed result
+- **THEN** the record is written with `snr` and `min_reports` blocked, and the tool exits 1
 
 #### Scenario: Settings the environment cannot compute
 - **WHEN** the tool runs
 - **THEN** `theta_band`, `b_band`, `age_bins` and the threshold contrast's minimum effect are blocked as requiring rdrobust, and the tone bins and the tone analysis's minimum effect are blocked because the tone variant is not built
 
 ### Requirement: A live planned-test run needs a valid settings record
-A study whose name starts with `workspace_mediation_` SHALL set `[planned_test].role` to `preliminary`, `pilot`, `test` or `positive_control`. For roles `test` and `positive_control` the boot SHALL refuse to start, with exit code 12 and a message naming the reason, unless `[planned_test].settings_record` names a record whose schema, version and digest verify, that is complete with nothing blocked, whose values are in range, and whose principal-component files match their recorded sha256; and unless the run's seed was not used by the preliminary or any pilot run. Role `positive_control` SHALL also require `[positive_control]` enabled in mode `control` with the same record. Boots without a study, and other studies, SHALL be unaffected.
+Each shipped study whose name starts with `workspace_mediation_` SHALL set the `[planned_test].role` that matches its name (`test` for the three live arms, `pilot` for the three pilot studies, `preliminary`, `positive_control`), and an unknown `workspace_mediation_*` study SHALL be refused. Whatever the study is called, including none, roles `test` and `positive_control` SHALL refuse to start, with exit code 12 and a message naming the reason, unless `[planned_test].settings_record` names a record whose schema, version and digest verify, that is complete with nothing blocked, whose constants equal the paper's (n_cal 30, c_eff 0.5, q_pow 0.65, power 0.9, alpha 0.05, the MSER batch, search end and minimum batches, five bins, the SNR ladder), with thirty counted pilots and n_exact 102, whose values are in range, and whose principal-component files match their recorded sha256; and unless the run's seed was not used by the preliminary or any pilot run. Role `test` SHALL refuse an enabled `[positive_control]` in any mode but `control`; role `positive_control` SHALL require `[positive_control]` enabled in mode `control` with the same record. A gated run SHALL record the record's digest in its run manifest as `settings_record_sha256`. Configurations without a role SHALL be unaffected.
 
 #### Scenario: No record
 - **WHEN** a run starts with `KAINE_STUDY=workspace_mediation_competitive` and the record file does not exist
@@ -52,6 +60,18 @@ A study whose name starts with `workspace_mediation_` SHALL set `[planned_test].
 #### Scenario: An edited record
 - **WHEN** a value in the record was changed after the tool wrote it
 - **THEN** the loader reports that the record was edited after it was written
+
+#### Scenario: A renamed study cannot skip the record
+- **WHEN** a configuration sets `[planned_test].role = "test"` under a study that is not one of the shipped names, or with no study
+- **THEN** the boot stops unless a valid record is named
+
+#### Scenario: A study with the wrong role
+- **WHEN** `workspace_mediation_competitive` sets role `pilot`
+- **THEN** the boot stops and names the expected role
+
+#### Scenario: The manifest names the record
+- **WHEN** a live arm boots with a valid record
+- **THEN** its run manifest carries the record's digest in `settings_record_sha256`
 
 #### Scenario: Pilots need no record
 - **WHEN** a run starts with `KAINE_STUDY=workspace_mediation_pilot_matched`

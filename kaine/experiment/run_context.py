@@ -62,6 +62,8 @@ class RunContext:
     revived_from: Optional[str] = None
     # Study configuration the run was loaded with (KAINE_STUDY), or None.
     study: Optional[str] = None
+    # Digest of the planned-test settings record that gated this run, or None.
+    settings_record_sha256: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         """Plain-dict view suitable for JSON serialization (manifest, stamping)."""
@@ -123,8 +125,12 @@ def mint_run_context(
     timing: Mapping[str, Any] | None = None,
     revived_from: str | None = None,
     study: str | None = None,
+    settings_record_sha256: str | None = None,
 ) -> RunContext:
     """Assemble a fresh ``RunContext``.
+
+    ``settings_record_sha256`` is the digest of the planned-test settings record
+    that gated this run, or ``None``.
 
     ``run_id`` is a fresh uuid4 hex; ``git_sha`` is resolved best-effort; the
     config digest is computed from ``config``. The caller passes ``started_at``
@@ -159,6 +165,7 @@ def mint_run_context(
         timing=dict(timing or {}),
         revived_from=revived_from,
         study=study,
+        settings_record_sha256=settings_record_sha256,
     )
 
 

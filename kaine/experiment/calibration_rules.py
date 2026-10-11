@@ -48,6 +48,20 @@ POWER_HORIZON = 1000
 # The search checks every n up to this horizon, which is far past the point where the
 # binomial power settles (at q = 0.65 the minimum of the power over 102 <= n <= 600 is 0.9075).
 
+N_EXACT = 102
+# n_exact of the paper (Appendix A.8): stable_run_count() at the defaults. A test checks they agree;
+# the settings loader compares a record's n_exact with this value.
+
+MSER_IGNORE_END = 5
+# Where the MSER-5 search stops (paper Appendix A.8): it runs over 0 <= d <= b - MSER_IGNORE_END,
+# so at least five batch means remain after d, because a few final batch
+# means that happen to lie close together give the statistic a spuriously small value and at
+# d = b - 1 it is 0 for every series (following Hoad, Robinson and Davies 2010).
+
+MSER_MIN_BATCHES = 10
+# A series of fewer than ten batch means is too short, since its search cannot reach the second
+# half (paper Appendix A.8).
+
 
 def sign_test_critical_count(n: int, alpha: Fraction = ALPHA_TEST) -> int:
     """Return k_n, the critical count for a one-sided sign test.
@@ -304,6 +318,7 @@ class MserResult:
     d_star: int  # truncation point in batches
     truncated_report: int  # batch * d_star, the last report removed (0 when nothing is removed)
     first_half: bool  # True when 2 * d_star <= n_batches
+    long_enough: bool  # True when n_batches >= min_batches
 
 
 def mser_truncation(
@@ -311,6 +326,7 @@ def mser_truncation(
     *,
     ignore_end: int,
     batch: int = MSER_BATCH,
+    min_batches: int = MSER_MIN_BATCHES,
 ) -> MserResult:
     """Return the MSER-5 truncation point.
 
@@ -322,25 +338,27 @@ def mser_truncation(
 
     and takes d* as the d with the smallest value (the smallest d on a tie).
 
-    The search range is 0 <= d < b - ignore_end. ``ignore_end`` is keyword-only with no
-    default: the paper writes the range as 0 <= d < b, but at d = b - 1 the statistic is
-    0 for every series, so the literal range always returns the last batch. The caller
-    must choose how many final batches to leave out of the search, and passing 0
-    reproduces the literal range.
+    The search range is 0 <= d <= b - ignore_end (inclusive). ``ignore_end`` is
+    keyword-only with no default: it is the number of batch means that always remain
+    after d. Pass 1 to reproduce the paper's original range 0 <= d < b; larger values
+    leave more final batches out of the search.
+
+    A series is too short when it has fewer than ``min_batches`` batch means or when
+    the truncation point lies in the second half, 2 * d* > b (paper Appendix A.8).
 
     Raises:
-        CalibrationError: if ignore_end is not a non-negative integer, if b < 2, if
-            b - ignore_end < 1, or if any value is not finite.
+        CalibrationError: if ignore_end is not an integer >= 1, if b < 2, if
+            b - ignore_end < 0, or if any value is not finite.
 
     Source: White (1997); Hoad, Robinson and Davies (2010).
     """
-    if not isinstance(ignore_end, int) or isinstance(ignore_end, bool) or ignore_end < 0:
-        raise CalibrationError("mser truncation: ignore_end must be a non-negative integer")
+    if not isinstance(ignore_end, int) or isinstance(ignore_end, bool) or ignore_end < 1:
+        raise CalibrationError("mser truncation: ignore_end must be an integer >= 1")
     n = len(values)
     b = n // batch
     if b < 2:
         raise CalibrationError("mser truncation: need at least two whole batches")
-    if b - ignore_end < 1:
+    if b - ignore_end < 0:
         raise CalibrationError("mser truncation: ignore_end leaves no batches for the search")
     for v in values:
         if not math.isfinite(v):
@@ -348,7 +366,7 @@ def mser_truncation(
     means = [sum(values[i * batch : (i + 1) * batch]) / batch for i in range(b)]
     min_ms = float("inf")
     d_star = 0
-    for d in range(b - ignore_end):
+    for d in range(b - ignore_end + 1):
         window = means[d:]
         m = sum(window) / len(window)
         ms = sum((y - m) ** 2 for y in window) / (len(window) ** 2)
@@ -361,6 +379,7 @@ def mser_truncation(
         d_star=d_star,
         truncated_report=batch * d_star,
         first_half=2 * d_star <= b,
+        long_enough=b >= min_batches,
     )
 
 
@@ -550,6 +569,9 @@ __all__ = [
     "N_BINS",
     "N_CAL",
     "POWER_HORIZON",
+    "N_EXACT",
+    "MSER_IGNORE_END",
+    "MSER_MIN_BATCHES",
     "Q_POW",
     "SNR_LADDER",
     "TARGET_POWER",

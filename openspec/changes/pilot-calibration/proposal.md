@@ -18,11 +18,18 @@ Paper PR #26 fixed every setting of the planned test by a rule stated in advance
 - Topos, Audition and Soma reports carry `entity_time_s` and `awake`; competitive and matched broadcasts carry `coalition_capacity`; the research log and the range sweep know the new fields.
 - Studies may set `[planned_test]` and `[positive_control]`. New studies: `workspace_mediation_preliminary`, `workspace_mediation_pilot_competitive`, `_pilot_matched`, `_pilot_pooled` and `workspace_mediation_positive_control`; the three live arm studies declare role `test` and the record path.
 
+## Review changes (independent second review, 2026-10-11)
+
+- The boot gate keys on `[planned_test].role` whatever the study is called, maps each shipped workspace-mediation study to its role, refuses unknown `workspace_mediation_*` studies, and refuses a live test run that carries the positive control in a mode other than `control`.
+- The loader checks the record's constants against the paper's (n_cal, c_eff, q_pow, power, alpha, the MSER settings, bins, ladder), n_counted == n_cal and n_exact == 102; the record's digest goes into the run manifest as `settings_record_sha256`, and the tool prints it for the preregistration.
+- The positive control runs after the report is published, off the report path, one queued step per report in order. The tool records every pilot run's report rate and blocks when the on arm's mean rate differs from a control arm's by more than that arm's run-to-run spread, because the arms must differ only in the manipulation (§6.3). The paper does not say where the ladder runs; it says only "Every pilot run of the on arm carries the two components of each processor at SNR in {4^-2, ..., 4^4}".
+- A malformed or unfinished ladder blocks the SNR and the report count instead of stopping the tool. s2_j over the two bracketing rungs is documented as an approximation.
+- The MSER-5 rule follows paper PR #27: the search runs over 0 <= d <= b - 5, and the pilots are too short when b < 10 or d* > b/2 for any arm and processor (`MSER_IGNORE_END = 5`, `MSER_MIN_BATCHES = 10`).
+
 ## Open questions (operator)
 
-1. **MSER-5 search range.** The paper takes d* = argmin over 0 <= d < b. At d = b - 1 the statistic is 0 for every series, so the literal rule always truncates at the last batch and the learning period always fails closed. The tool implements the formula with the number of final batches left out of the search as a named constant, `MSER_IGNORE_END`, set to `None`; until it is fixed, T_learn and everything counted after it are blocked. Recommendation: amend A.8 to leave the final batches out of the search, as the reference implementations of MSER do, and keep the paper's second-half failure test.
-2. **theta_band and b_band** need the rdrobust package of Calonico, Cattaneo and Titiunik (2014), which is not in the environment, and the reports do not yet record which broadcast preceded each prediction. They, the age bins and the threshold contrast's minimum effect are recorded as blocked.
-3. **The tone variant** of the on arm is not built and `audition.emotion` does not carry the tone model's error ratio, so the tone bins and the tone analysis's minimum effect are recorded as blocked.
+1. **theta_band and b_band** need the rdrobust package of Calonico, Cattaneo and Titiunik (2014), which is not in the environment, and the reports do not yet record which broadcast preceded each prediction. They, the age bins and the threshold contrast's minimum effect are recorded as blocked.
+2. **The tone variant** of the on arm is not built and `audition.emotion` does not carry the tone model's error ratio, so the tone bins and the tone analysis's minimum effect are recorded as blocked.
 
 Every record is therefore incomplete today, and the boot check refuses live runs, as the paper requires until every setting is recorded.
 

@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
 import random
+import threading
 import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +37,7 @@ from kaine.modules.context import CONTEXT_DIM
 from kaine.modules.positive_control import (
     LADDER_FIELDS,
     RESULT_FIELDS,
+    ControlQueue,
     PositiveControlSettings,
     finish_positive_controls,
 )
@@ -293,6 +296,8 @@ async def test_topos_control_publishes_and_leaves_the_live_report_untouched() ->
         ):
             assert a[key] == b[key]
 
+    # Wait for all queued control steps before inspecting their results.
+    await controlled._pc_queue.drain()
     pc_events = await controlled_bus.read("positive_control.out", last_id="0")
     assert pc_events
     pc_payloads = _payloads(pc_events)
@@ -322,6 +327,8 @@ async def test_soma_control_publishes_results(bus: AsyncBus) -> None:
     for _ in range(6):
         await soma.tick_once()
 
+    # Wait for all queued control steps before inspecting their results.
+    await soma._pc_queue.drain()
     events = await bus.read("positive_control.out", last_id="0")
     assert events
     payloads = _payloads(events)
@@ -356,6 +363,8 @@ async def test_failing_control_switches_itself_off(bus: AsyncBus) -> None:
     for _ in range(3):
         await topos.process_frame(None)
 
+    # The failure is handled asynchronously on the control queue.
+    await topos._pc_queue.drain()
     assert topos._positive_control is None
     assert len(await _reports(bus, "topos.out")) == 3
     positive_reports = await _reports(bus, "positive_control.out")
@@ -456,6 +465,8 @@ async def test_unpublishable_failure_is_logged_at_error(bus: AsyncBus, caplog) -
     finally:
         topos_module.publish_result = original_publish
 
+    # The failure is handled asynchronously on the control queue.
+    await topos._pc_queue.drain()
     assert topos._positive_control is None
     assert await _reports(bus, "positive_control.out") == []
     error_messages = [r.message for r in caplog.records if r.levelname == "ERROR"]
@@ -746,6 +757,8 @@ async def test_topos_control_stays_paired_across_a_skip():
             if i == 3:
                 await topos.on_workspace(_workspace("thymos", 0.75, 0.75))
             await topos.process_frame(None)
+            # Drain the queued control step before comparing shadow and live state.
+            await topos._pc_queue.drain()
             for probe in control._probes:
                 assert [
                     list(v) for v in probe._shadow._buffer
@@ -758,9 +771,111 @@ async def test_topos_control_stays_paired_across_a_skip():
         assert isinstance(gains[7], float)
         assert control._n == sum(1 for g in gains if g is not None)
 
+        await topos._pc_queue.drain()
         for p in _payloads(await bus.read("positive_control.out", last_id="0")):
             for v in p.values():
                 if isinstance(v, float):
                     assert math.isfinite(v)
+    finally:
+        await bus.close()
+
+
+@pytest.mark.asyncio
+async def test_report_is_published_before_positive_control_steps() -> None:
+    """The live report reaches the bus while the queued control step is still blocked."""
+    bus = _bus()
+    try:
+        topos = topos_module.Topos(
+            bus,
+            encoder=Varying(),
+            forward_prediction=True,
+            entity_clock=_FixedClock(),
+            positive_control=_control({"topos": 4}),
+        )
+        topos._forward_model = LatentForwardModel(
+            latent_dim=4,
+            units=8,
+            context_dim=CONTEXT_DIM,
+            seed=4,
+        )
+        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+
+        # Process three frames with the control unblocked so the shadow has a baseline.
+        for _ in range(3):
+            await topos.process_frame(None)
+        await topos._pc_queue.drain()
+        initial_pc = await bus.read("positive_control.out", last_id="0")
+
+        blocker = threading.Event()
+        original_after_report = topos._positive_control.after_report
+
+        def _blocked_after_report(*args, **kwargs):  # noqa: ARG001
+            blocker.wait()
+            return original_after_report(*args, **kwargs)
+
+        topos._positive_control.after_report = _blocked_after_report
+
+        await topos.process_frame(None)
+
+        reports = await _reports(bus, "topos.out")
+        assert len(reports) == 4
+        pc_while_blocked = await bus.read("positive_control.out", last_id="0")
+        assert len(pc_while_blocked) == len(initial_pc)
+
+        blocker.set()
+        await topos._pc_queue.drain()
+
+        final_pc = await bus.read("positive_control.out", last_id="0")
+        assert len(final_pc) == len(initial_pc) + 1
+    finally:
+        await bus.close()
+
+
+@pytest.mark.asyncio
+async def test_full_queue_fails_the_control() -> None:
+    """When the control queue is full, the control is disabled and a failure record is published."""
+    bus = _bus()
+    try:
+        topos = topos_module.Topos(
+            bus,
+            encoder=Varying(),
+            forward_prediction=True,
+            entity_clock=_FixedClock(),
+            positive_control=_control({"topos": 4}),
+        )
+        topos._forward_model = LatentForwardModel(
+            latent_dim=4,
+            units=8,
+            context_dim=CONTEXT_DIM,
+            seed=4,
+        )
+        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+
+        hold = asyncio.Event()
+
+        async def _blocking_job():
+            await hold.wait()
+
+        # Hold the single worker and allow only one pending job.
+        topos._pc_queue = ControlQueue(max_pending=1)
+        assert topos._pc_queue.submit(_blocking_job) is True
+
+        # First report enqueues the control step behind the blocker.
+        await topos.process_frame(None)
+        # Second report finds the queue full and fails the control.
+        await topos.process_frame(None)
+
+        assert topos._positive_control is None
+
+        hold.set()
+        await topos._pc_queue.drain()
+        await topos._pc_queue.close()
+
+        events = await bus.read("positive_control.out", last_id="0")
+        assert events
+        payload = _payloads(events)[-1]
+        assert payload["processor"] == "topos"
+        assert payload["final"] is True
+        assert payload["failed"] is True
     finally:
         await bus.close()

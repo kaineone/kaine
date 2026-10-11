@@ -22,12 +22,13 @@ The control is off by default and configured only from the
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional, Sequence
+from typing import Any, Awaitable, Callable, Iterable, Mapping, Optional, Sequence
 
 import numpy as np
 
@@ -370,6 +371,7 @@ class ShadowProbe:
         null_context: Optional[Sequence[float]],
         *,
         timespan: Optional[float] = None,
+        suspended: Optional[bool] = None,
     ) -> Optional[float]:
         if not hasattr(live_model, "widened_copy") or not hasattr(
             live_model, "hindsight_step"
@@ -392,7 +394,10 @@ class ShadowProbe:
             full_width = getattr(self._shadow, "_context_dim")
         width = int(full_width) - 1
 
-        self._shadow.suspended = bool(getattr(live_model, "suspended", False))
+        if suspended is None:
+            self._shadow.suspended = bool(getattr(live_model, "suspended", False))
+        else:
+            self._shadow.suspended = bool(suspended)
 
         prev = self._prev_context if self._prev_context is not None else [0.0] * width
         prev_null = self._prev_null_context
@@ -608,6 +613,7 @@ class PositiveControl:
         awake: bool,
         entity_time_s: float,
         timespan: Optional[float] = None,
+        suspended: Optional[bool] = None,
     ) -> Optional[dict[str, Any]]:
         if self._mode != "estimate_pc":
             if not hasattr(live_model, "widened_copy") or not hasattr(
@@ -628,7 +634,12 @@ class PositiveControl:
             deltas: list[Optional[float]] = []
             for probe in self._probes:
                 d = probe.step(
-                    live_model, x, context, null_context, timespan=timespan
+                    live_model,
+                    x,
+                    context,
+                    null_context,
+                    timespan=timespan,
+                    suspended=suspended,
                 )
                 deltas.append(d)
 
@@ -656,10 +667,12 @@ class PositiveControl:
 
         # control mode
         d_with = self._probes[0].step(
-            live_model, x, context, null_context, timespan=timespan
+            live_model, x, context, null_context, timespan=timespan,
+            suspended=suspended,
         )
         d_noise = self._probes[1].step(
-            live_model, x, context, null_context, timespan=timespan
+            live_model, x, context, null_context, timespan=timespan,
+            suspended=suspended,
         )
 
         if (
@@ -811,6 +824,56 @@ class PositiveControl:
         result["passed"] = False
         result["final"] = True
         return result
+
+
+class ControlQueue:
+    """Runs a processor's positive-control steps one at a time, in submission order, off the report path."""
+
+    def __init__(self, *, max_pending: int = 256) -> None:
+        self._max_pending = max_pending
+        self._queue: asyncio.Queue[Callable[[], Awaitable[None]]] = asyncio.Queue(
+            maxsize=max_pending
+        )
+        self._worker: Optional[asyncio.Task[None]] = None
+
+    def submit(self, job: Callable[[], Awaitable[None]]) -> bool:
+        """Enqueue a job; start the single worker task on the running loop if needed."""
+        try:
+            self._queue.put_nowait(job)
+        except asyncio.QueueFull:
+            return False
+        if self._worker is None or self._worker.done():
+            self._worker = asyncio.get_running_loop().create_task(self._run())
+        return True
+
+    async def drain(self) -> None:
+        """Return when every submitted job has finished."""
+        await self._queue.join()
+
+    async def close(self) -> None:
+        """Drain, then cancel and await the worker task; submit after close restarts it."""
+        await self.drain()
+        if self._worker is not None and not self._worker.done():
+            self._worker.cancel()
+            try:
+                await self._worker
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self._worker = None
+        else:
+            self._worker = None
+
+    async def _run(self) -> None:
+        """Worker loop that awaits each job in order and logs exceptions."""
+        while True:
+            job = await self._queue.get()
+            try:
+                await job()
+            except Exception:
+                log.exception("Positive-control job failed.")
+            finally:
+                self._queue.task_done()
 
 
 async def publish_result(bus: Any, result: Mapping[str, Any]) -> str:

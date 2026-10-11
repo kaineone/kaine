@@ -162,6 +162,7 @@ def test_settings_control_needs_record(tmp_path):
 
 
 def _write_settings_record(tmp_path, complete=True):
+    from kaine.experiment import calibration_rules as rules
     run_id = "prelim"
     pc_refs = {}
     for processor in ("topos", "audition", "soma"):
@@ -173,17 +174,32 @@ def _write_settings_record(tmp_path, complete=True):
             "sha256": file_sha256(path),
         }
 
+    theta_eff = {"matched": 0.02, "pooled": 0.03}
     record = {
         "schema": "kaine.planned_test_settings",
         "schema_version": 1,
         "complete": complete,
         "blocked": {},
-        "inputs": {"preliminary": {"seed": 1}, "pilots": [{"seed": 2}]},
+        "inputs": {"preliminary": {"run_id": "prelim", "seed": 1}, "pilots": [{"seed": 2}]},
+        "constants": {
+            "n_cal": rules.N_CAL,
+            "c_eff": rules.C_EFF,
+            "q_pow": float(rules.Q_POW),
+            "target_power": float(rules.TARGET_POWER),
+            "alpha_test": float(rules.ALPHA_TEST),
+            "mser_batch": rules.MSER_BATCH,
+            "mser_ignore_end": rules.MSER_IGNORE_END,
+            "mser_min_batches": rules.MSER_MIN_BATCHES,
+            "n_bins": rules.N_BINS,
+            "snr_ladder": list(rules.SNR_LADDER),
+        },
         "values": {
             "t_learn_s": 120.0,
-            "theta_eff": {"matched": 0.02, "pooled": 0.03},
-            "min_effect": 0.01,
+            "theta_eff": theta_eff,
+            "min_effect": min(theta_eff.values()) / 2.0,
             "min_reports": 500,
+            "n_counted": rules.N_CAL,
+            "n_exact": rules.N_EXACT,
             "snr": {"topos": 4.0, "audition": 4.0, "soma": 4.0},
             "principal_components": pc_refs,
         },
@@ -1137,3 +1153,114 @@ def test_estimate_pc_requires_run_context():
     control = PositiveControl("topos", settings)
     with pytest.raises(PrincipalComponentError, match="run context"):
         control.final_result()
+
+
+@pytest.mark.asyncio
+async def test_control_queue_runs_jobs_in_order():
+    import asyncio
+
+    from kaine.modules.positive_control import ControlQueue
+
+    queue = ControlQueue()
+    results: list[int] = []
+
+    async def make_job(n: int) -> None:
+        await asyncio.sleep(0)
+        results.append(n)
+
+    for i in range(5):
+        assert queue.submit(lambda i=i: make_job(i)) is True
+
+    await queue.drain()
+    assert results == list(range(5))
+
+    await queue.close()
+    assert queue.submit(lambda: make_job(99)) is True
+    await queue.drain()
+    assert results[-1] == 99
+    await queue.close()
+
+
+@pytest.mark.asyncio
+async def test_control_queue_refuses_at_max_pending():
+    import asyncio
+
+    from kaine.modules.positive_control import ControlQueue
+
+    queue = ControlQueue(max_pending=2)
+    event = asyncio.Event()
+
+    async def wait_job() -> None:
+        await event.wait()
+
+    assert queue.submit(wait_job) is True
+    assert queue.submit(wait_job) is True
+    assert queue.submit(wait_job) is False
+
+    event.set()
+    await queue.drain()
+    await queue.close()
+
+
+@pytest.mark.asyncio
+async def test_control_queue_exception_continues(caplog):
+    import logging
+
+    from kaine.modules.positive_control import ControlQueue
+
+    queue = ControlQueue()
+    ran: list[int] = []
+
+    async def bad_job() -> None:
+        raise RuntimeError("control job failed")
+
+    async def good_job() -> None:
+        ran.append(1)
+
+    with caplog.at_level(logging.ERROR):
+        assert queue.submit(bad_job) is True
+        assert queue.submit(good_job) is True
+        await queue.drain()
+
+    assert ran == [1]
+    assert "control job failed" in caplog.text
+    await queue.close()
+
+
+def test_shadow_probe_step_uses_suspended_override():
+    """The shadow's suspended flag follows the value captured at the report when given."""
+
+    class StubShadow:
+        context_dim = 25
+
+        def __init__(self) -> None:
+            self.suspended = False
+
+        def hindsight_step(self, x, ctx, null_ctx, **kwargs):
+            return (1.0, 1.0)
+
+    class StubLive:
+        suspended = False
+
+        def widened_copy(self, extra):
+            return StubShadow()
+
+        def hindsight_step(self, *args, **kwargs):
+            raise AssertionError("the live model is never stepped in hindsight")
+
+    pc = _pc("topos", 2)
+    probe = ShadowProbe(
+        ComponentSource(informative=True, snr=1.0, seed=0, processor="topos", slot=0, pc=pc)
+    )
+    live = StubLive()
+    ctx = [0.0] * 24
+    probe.step(live, [0.0, 0.0], ctx, ctx)  # the first step only stores the baseline
+    probe.step(live, [1.0, 0.0], ctx, ctx, suspended=True)
+    assert probe._shadow.suspended is True
+
+    live.suspended = True
+    probe.step(live, [0.5, 0.0], ctx, ctx, suspended=False)
+    assert probe._shadow.suspended is False
+
+    probe.step(live, [0.2, 0.0], ctx, ctx)
+    assert probe._shadow.suspended is True

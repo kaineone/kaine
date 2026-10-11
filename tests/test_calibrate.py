@@ -12,8 +12,10 @@ from typing import Any
 import numpy as np
 import pytest
 
+import kaine.experiment.calibration_rules as calibration_rules
 from kaine.experiment.calibrate import (
     ARMS,
+    CONTROLS,
     PROCESSORS,
     calibrate,
     headline,
@@ -67,13 +69,17 @@ def _build_evaluation_tree(
     tmp_path: Path,
     *,
     n_pilots: int = 5,
+    n_reports: int = 200,
     scale: float = 1.0,
+    competitive_time_step: float = 1.0,
     wrong_entity_time_run: str | None = None,
     wrong_pc_sha_run_processor: tuple[str, str] | None = None,
     wrong_study_run_arm: tuple[str, str] | None = None,
     not_exercised_pilots: set[int] | None = None,
 ) -> tuple[dict[str, Any], Path]:
     root = tmp_path
+    # The existing body was written against the module constant; bind it to the parameter.
+    N_REPORTS = n_reports
     prelim_id = "prelim"
     _write_manifest(
         root / "runs" / prelim_id / "manifest.json",
@@ -126,6 +132,8 @@ def _build_evaluation_tree(
 
             path = _record_path(root, run_id)
 
+            time_step = competitive_time_step if arm == "competitive" else 1.0
+
             if arm == "competitive":
                 level = 0.10
             elif arm == "matched":
@@ -150,7 +158,7 @@ def _build_evaluation_tree(
                         "run_id": run_id,
                         "event_type": _report_type(processor),
                         "processor": processor,
-                        "entity_time_s": float(k),
+                        "entity_time_s": float(k * time_step),
                         "context_gain": float(gain),
                         "awake": True,
                     }
@@ -165,7 +173,7 @@ def _build_evaluation_tree(
                         "run_id": run_id,
                         "event_type": _report_type(processor),
                         "processor": processor,
-                        "entity_time_s": float(N_REPORTS + 1),
+                        "entity_time_s": float((N_REPORTS + 1) * time_step),
                         "context_gain": None,
                         "awake": True,
                     },
@@ -176,7 +184,7 @@ def _build_evaluation_tree(
                         "run_id": run_id,
                         "event_type": _report_type(processor),
                         "processor": processor,
-                        "entity_time_s": float(N_REPORTS + 2),
+                        "entity_time_s": float((N_REPORTS + 2) * time_step),
                         "context_gain": 0.5,
                         "awake": False,
                     },
@@ -223,7 +231,7 @@ def _build_evaluation_tree(
                                 "run_id": run_id,
                                 "event_type": "positive_control.ladder",
                                 "processor": processor,
-                                "entity_time_s": float(k),
+                                "entity_time_s": float(k * time_step),
                                 "gain": float(gain),
                                 "gain_with": gain_with,
                                 "gain_noise": gain_noise,
@@ -308,40 +316,80 @@ def test_calibrate_completes_except_always_blocked(tmp_path: Path) -> None:
 
     assert values["min_reports"] == max(values["n_pc"].values())
 
+    for arm in ARMS:
+        for processor in PROCESSORS:
+            assert len(values["report_rates"][arm][processor]) == 4
+
+    for processor in PROCESSORS:
+        for ctl in CONTROLS:
+            check = values["report_rate_check"][processor][ctl]
+            assert "mean_on" in check
+            assert "mean_ctl" in check
+            assert "sd_ctl" in check
+
+    assert "report_rate" not in record["blocked"]
+
     out = tmp_path / "settings.json"
     digest = write_settings_record(record, out)
     loaded = json.loads(out.read_text(encoding="utf-8"))
     assert loaded["record_sha256"] == digest
 
 
-def test_calibrate_default_mser_blocks_t_learn(tmp_path: Path) -> None:
+def test_calibrate_default_mser_computes_t_learn(tmp_path: Path) -> None:
     plan, root = _build_evaluation_tree(tmp_path, n_pilots=5)
     record = calibrate(plan, root=root, n_cal=4)
 
-    assert record["values"]["t_learn_s"] is None
-    assert "t_learn_s" in record["blocked"]
-    assert "MSER" in record["blocked"]["t_learn_s"]
-    assert not record["complete"]
+    assert isinstance(record["values"]["t_learn_s"], int)
+    assert "t_learn_s" not in record["blocked"]
     assert record["values"]["n_run_planned"] == 128
 
+    constants = record["constants"]
+    assert constants["mser_ignore_end"] == calibration_rules.MSER_IGNORE_END
+    assert constants["mser_min_batches"] == calibration_rules.MSER_MIN_BATCHES
+
     values = record["values"]
-    assert values["s_cal"] is None
-    assert values["snr"] is None
-    assert values["min_reports"] is None
-
-    assert record["blocked"]["s_cal"] == "depends on t_learn_s"
-    assert record["blocked"]["snr"] == "depends on t_learn_s"
-    assert record["blocked"]["min_reports"] == "depends on t_learn_s"
+    assert values["s_cal"] is not None
+    assert values["snr"] is not None
+    assert values["min_reports"] is not None
 
 
-def test_main_writes_record_and_returns_incomplete(tmp_path: Path) -> None:
+def test_calibrate_reads_mser_ignore_end_from_rules(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(calibration_rules, "MSER_IGNORE_END", 6)
+    plan, root = _build_evaluation_tree(tmp_path, n_pilots=5)
+    record = calibrate(plan, root=root, n_cal=4)
+    assert isinstance(record["values"]["t_learn_s"], int)
+    assert record["constants"]["mser_ignore_end"] == 6
+
+
+def test_calibrate_explicit_none_mser_ignore_end_blocks_t_learn(tmp_path: Path) -> None:
+    plan, root = _build_evaluation_tree(tmp_path, n_pilots=5)
+    record = calibrate(plan, root=root, n_cal=4, mser_ignore_end=None)
+    assert record["values"]["t_learn_s"] is None
+    assert "t_learn_s" in record["blocked"]
+
+
+def test_calibrate_short_pilots_blocks_t_learn(tmp_path: Path) -> None:
+    plan, root = _build_evaluation_tree(tmp_path, n_pilots=5, n_reports=45)
+    record = calibrate(plan, root=root, n_cal=4)
+    assert record["values"]["t_learn_s"] is None
+    assert "t_learn_s" in record["blocked"]
+    reason = record["blocked"]["t_learn_s"]
+    assert "batch means" in reason
+    assert "too short" in reason
+
+
+def test_main_writes_record_and_returns_incomplete(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     plan, root = _build_evaluation_tree(tmp_path, n_pilots=5)
     plan_path = tmp_path / "plan.json"
     plan_path.write_text(json.dumps(plan), encoding="utf-8")
     out = tmp_path / "settings.json"
     ret = main([str(plan_path), "--out", str(out), "--root", str(root)])
+    captured = capsys.readouterr().out
     assert ret == 1
     assert out.is_file()
+    assert "record_sha256" in captured
 
 
 def test_main_missing_run_returns_two_and_writes_nothing(tmp_path: Path) -> None:
@@ -370,12 +418,16 @@ def test_wrong_manifest_study_raises(tmp_path: Path) -> None:
         calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
 
 
-def test_ladder_different_pc_sha256_raises(tmp_path: Path) -> None:
+def test_ladder_different_pc_sha256_blocks_snr(tmp_path: Path) -> None:
     plan, root = _build_evaluation_tree(
         tmp_path, n_pilots=5, wrong_pc_sha_run_processor=("competitive_0", "topos")
     )
-    with pytest.raises(CalibrationError, match="different principal component"):
-        calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
+    record = calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
+
+    assert record["values"]["snr"] is None
+    assert "snr" in record["blocked"]
+    assert "different principal component" in record["blocked"]["snr"]
+    assert record["blocked"]["min_reports"] == "depends on snr"
 
 
 def test_ladder_means_below_theta_pc_blocks_snr(tmp_path: Path) -> None:
@@ -417,7 +469,7 @@ def test_all_not_exercised_blocks_n_run_planned(tmp_path: Path) -> None:
     assert "pilots" in record["blocked"]
 
 
-def test_ladder_failed_true_raises(tmp_path: Path) -> None:
+def test_ladder_failed_true_blocks_snr(tmp_path: Path) -> None:
     plan, root = _build_evaluation_tree(tmp_path, n_pilots=5)
     path = _record_path(root, "competitive_0")
     _append_record(
@@ -431,8 +483,27 @@ def test_ladder_failed_true_raises(tmp_path: Path) -> None:
             "failed": True,
         },
     )
-    with pytest.raises(CalibrationError, match="did not finish cleanly"):
-        calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
+    record = calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
+
+    assert record["values"]["snr"] is None
+    assert "snr" in record["blocked"]
+    assert "did not finish cleanly" in record["blocked"]["snr"]
+    assert record["blocked"]["min_reports"] == "depends on snr"
+
+
+def test_report_rate_mismatch_blocks_chain(tmp_path: Path) -> None:
+    plan, root = _build_evaluation_tree(
+        tmp_path, n_pilots=5, competitive_time_step=2.0
+    )
+    record = calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
+
+    assert "report_rate" in record["blocked"]
+    assert "on arm" in record["blocked"]["report_rate"]
+    assert record["values"]["t_learn_s"] is None
+    assert record["blocked"]["t_learn_s"] == "depends on report_rate"
+    assert record["values"]["s_cal"] is None
+    assert record["blocked"]["snr"] == "depends on report_rate"
+    assert record["values"]["min_reports"] is None
 
 
 def test_not_exercised_reason_never_operated() -> None:

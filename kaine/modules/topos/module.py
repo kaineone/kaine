@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import math
 from typing import Any, ClassVar, Optional
@@ -15,6 +16,7 @@ from kaine.modules.base import BaseModule
 from kaine.modules.context import CONTEXT_DIM, BroadcastContext
 from kaine.modules.intensity import graded_intensity
 from kaine.modules.positive_control import (
+    ControlQueue,
     PositiveControl,
     PositiveControlSettings,
     publish_result,
@@ -188,6 +190,7 @@ class Topos(BaseModule):
             if positive_control is not None and positive_control.enabled
             else None
         )
+        self._pc_queue = ControlQueue()  # Run control steps off the report path.
         self._live_camera: Optional[LiveCamera] = None
         if self._capture_enabled or live_camera is not None:
             self._live_camera = live_camera or self._build_default_live_camera(live_camera_config)
@@ -568,6 +571,8 @@ class Topos(BaseModule):
 
         # One entity-clock reading per report, for the report and the positive control.
         entity_time_s = self._clock.now()
+        pc_args: Optional[tuple] = None
+        pc_suspended = False
         # Forward-prediction salience path.
         prediction_error: float = 0.0
         context_gain: Optional[float] = None
@@ -612,8 +617,9 @@ class Topos(BaseModule):
                 mean_prediction_error = mean_err
 
             # Positive control (study mode only): shadows of the forward model, never the live one.
+            # It is queued after the report is published, off the report path.
             if self._positive_control is not None and getattr(self._forward_model, "context_dim", 0) > 0:
-                await self._run_positive_control(
+                pc_args = (
                     embedding,
                     ctx,
                     null,
@@ -621,6 +627,7 @@ class Topos(BaseModule):
                     mean_prediction_error,
                     entity_time_s,
                 )
+                pc_suspended = bool(getattr(self._forward_model, "suspended", False))
 
             # Alert on EITHER a surprising forward-model prediction error OR a
             # self-calibrating perceptual discontinuity — both relative to their
@@ -709,11 +716,43 @@ class Topos(BaseModule):
             if position is not None:
                 report["item"] = position.title
                 report["item_order"] = position.order
-        return await self.publish(
+        event_id = await self.publish(
             "topos.report",
             report,
             salience=salience,
         )
+        if pc_args is not None:
+            await self._queue_positive_control(pc_args, pc_suspended)
+        return event_id
+
+    async def _fail_positive_control(self, control: PositiveControl) -> None:
+        """Publish a failure record and stop the control for this run."""
+        log.exception("topos: positive control failed and is switched off for this run")
+        try:
+            await publish_result(self._bus, control.failure_result())
+        except Exception:
+            log.error(
+                "topos: could not publish the positive control's failure record; "
+                "the run has no terminal record and cannot pass",
+                exc_info=True,
+            )
+        self._positive_control = None
+
+    async def _queue_positive_control(self, args: tuple, suspended: bool) -> None:
+        """Copy the live model and enqueue a control step after the report."""
+        control = self._positive_control
+        if control is None:
+            return
+        try:
+            control.prepare(self._forward_model)
+        except Exception:
+            await self._fail_positive_control(control)
+            return
+        if not self._pc_queue.submit(
+            functools.partial(self._run_positive_control, *args, suspended=suspended)
+        ):
+            log.error("topos: positive control fell behind the reports; the queue is full")
+            await self._fail_positive_control(control)
 
     async def _run_positive_control(
         self,
@@ -723,6 +762,8 @@ class Topos(BaseModule):
         live_gain: Optional[float],
         live_mean_error: Optional[float],
         entity_time_s: float,
+        *,
+        suspended: bool,
     ) -> None:
         """Step the positive control after the live report and publish its running result."""
         control = self._positive_control
@@ -739,23 +780,15 @@ class Topos(BaseModule):
                 live_gain,
                 live_mean_error,
                 entity_time_s=entity_time_s,
-                awake=not self._in_hypnos,
+                # Wakefulness as it was at the report: the forward model is suspended
+                # exactly while Hypnos holds the processor asleep.
+                awake=not suspended,
+                suspended=suspended,
             )
             if result is not None and self._positive_control is control:
                 await publish_result(self._bus, result)
         except Exception:
-            # A failing control must not break perception. It stops for this run
-            # and records a failure, so the run cannot pass.
-            log.exception("topos: positive control failed and is switched off for this run")
-            try:
-                await publish_result(self._bus, control.failure_result())
-            except Exception:
-                log.error(
-                    "topos: could not publish the positive control's failure record; "
-                    "the run has no terminal record and cannot pass",
-                    exc_info=True,
-                )
-            self._positive_control = None
+            await self._fail_positive_control(control)
 
     async def finish_positive_control(self) -> None:
         """Publish the control's terminal record and stop the control for this run.
@@ -766,6 +799,7 @@ class Topos(BaseModule):
         control = self._positive_control
         if control is None:
             return
+        await self._pc_queue.drain()
         try:
             await publish_result(self._bus, control.final_result())
         except Exception:
@@ -775,6 +809,7 @@ class Topos(BaseModule):
                 exc_info=True,
             )
         self._positive_control = None
+        await self._pc_queue.close()
 
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).

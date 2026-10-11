@@ -247,12 +247,12 @@ The positive control of the broadcast information-gain measure (paper §6.3 and 
 
 ## `[planned_test]`
 
-Set only by the workspace-mediation study configurations (`config/studies/workspace_mediation_*.toml`). A study whose name starts with `workspace_mediation_` must set `role`, and the boot checks it in the run-identity phase before any module starts.
+Set only by the workspace-mediation study configurations (`config/studies/workspace_mediation_*.toml`). The boot checks it in the run-identity phase before any module starts. A study whose name starts with `workspace_mediation_` must be one of the shipped ones and must set the role that matches its name: `test` for the three live arms, `pilot` for the three pilot studies, `preliminary` and `positive_control` for those two. A role of `test` or `positive_control` needs the settings record whatever the study is called, including no study.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `role` | string | none | `preliminary` (the one run that estimates the positive control's principal components), `pilot` (a pilot run of one arm), `test` (a live run of one arm) or `positive_control` (a run of the positive control). |
-| `settings_record` | string | none | Roles `test` and `positive_control`: the settings record derived from the pilot runs. The boot refuses to start, with exit code 12, unless the record's schema and digest verify, it is complete with nothing blocked, its values are in range and its principal-component files match their hashes; it also refuses a seed that the preliminary or a pilot run used. For role `positive_control`, `[positive_control]` must be enabled in mode `control` with the same record. |
+| `settings_record` | string | none | Roles `test` and `positive_control`: the settings record derived from the pilot runs. The boot refuses to start, with exit code 12, unless the record's schema and digest verify, it is complete with nothing blocked, its values are in range and its principal-component files match their hashes; it also refuses a seed that the preliminary or a pilot run used. The record's constants must be the paper's, with thirty counted pilots and n_exact 102. For role `positive_control`, `[positive_control]` must be enabled in mode `control` with the same record; for role `test`, an enabled `[positive_control]` must be in mode `control`. The record's digest goes into the run manifest as `settings_record_sha256`. |
 
 ## `[transfer]`
 

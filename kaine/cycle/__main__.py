@@ -1519,9 +1519,11 @@ async def _phase_run_identity(ctx: BootContext) -> int | None:
     # A live run of the planned test needs the settings derived from the pilot
     # runs (paper Appendix A.8); ordinary boots and other studies are untouched.
     from kaine.config import resolve_study_name
-    from kaine.experiment.planned_test_settings import planned_test_refusal
+    from kaine.experiment.planned_test_settings import planned_test_gate
 
-    planned_test_reason = planned_test_refusal(resolve_study_name(), ctx.kaine_config, seed)
+    planned_test_reason, settings_record_sha256 = planned_test_gate(
+        resolve_study_name(), ctx.kaine_config, seed
+    )
     if planned_test_reason is not None:
         sys.stderr.write(f"Refusing to boot KAINE cycle: {planned_test_reason}\n")
         return PLANNED_TEST_REFUSED_EXIT
@@ -1564,6 +1566,7 @@ async def _phase_run_identity(ctx: BootContext) -> int | None:
         plugins=ctx.plugins.manifest_entry(),
         revived_from=ctx.revive.revived_from if ctx.revive is not None else None,
         study=resolve_study_name(),
+        settings_record_sha256=settings_record_sha256,
         timing=timing,
     )
     set_run_context(ctx.run_ctx)

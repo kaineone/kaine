@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+from kaine.experiment import calibration_rules as rules
 from kaine.experiment.principal_component import (
     canonical_bytes,
     file_sha256,
@@ -39,6 +40,18 @@ _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
 class PlannedTestSettingsError(ValueError):
     """A planned-test settings record failed validation."""
+
+
+STUDY_ROLES = {
+    "workspace_mediation_competitive": "test",
+    "workspace_mediation_matched": "test",
+    "workspace_mediation_pooled": "test",
+    "workspace_mediation_pilot_competitive": "pilot",
+    "workspace_mediation_pilot_matched": "pilot",
+    "workspace_mediation_pilot_pooled": "pilot",
+    "workspace_mediation_preliminary": "preliminary",
+    "workspace_mediation_positive_control": "positive_control",
+}
 
 
 def record_digest(record: Mapping[str, Any]) -> str:
@@ -87,6 +100,45 @@ class PlannedTestSettings:
     snr: Mapping[str, float]
     principal_components: Mapping[str, PcRef]
     excluded_seeds: frozenset[int]
+
+
+def _check_constant(
+    path: Path,
+    constants: Mapping[str, Any],
+    key: str,
+    expected: Any,
+) -> None:
+    """Fail if ``constants[key]`` does not equal the paper's ``expected``."""
+    actual = constants.get(key)
+    if actual != expected:
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} constants.{key} is {actual!r}; "
+            f"the paper's value is {expected!r}"
+        )
+
+
+def _check_constant_float(
+    path: Path,
+    constants: Mapping[str, Any],
+    key: str,
+    expected: float,
+) -> None:
+    """Fail if ``constants[key]`` is not the expected finite number."""
+    actual = constants.get(key)
+    if (
+        isinstance(actual, bool)
+        or not isinstance(actual, (int, float))
+        or not math.isfinite(actual)
+    ):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} constants.{key} is {actual!r}; "
+            f"the paper's value is {expected!r}"
+        )
+    if float(actual) != expected:
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} constants.{key} is {actual!r}; "
+            f"the paper's value is {expected!r}"
+        )
 
 
 def load_settings_record(path: str | Path) -> PlannedTestSettings:
@@ -151,10 +203,63 @@ def load_settings_record(path: str | Path) -> PlannedTestSettings:
             f"settings record {str(path)!r} is not marked complete"
         )
 
+    raw_constants = payload.get("constants")
+    if not isinstance(raw_constants, dict):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} must contain a 'constants' object"
+        )
+
+    _check_constant(path, raw_constants, "n_cal", rules.N_CAL)
+    _check_constant(path, raw_constants, "c_eff", rules.C_EFF)
+    _check_constant_float(path, raw_constants, "q_pow", float(rules.Q_POW))
+    _check_constant_float(path, raw_constants, "target_power", float(rules.TARGET_POWER))
+    _check_constant_float(path, raw_constants, "alpha_test", float(rules.ALPHA_TEST))
+    _check_constant(path, raw_constants, "mser_batch", rules.MSER_BATCH)
+    _check_constant(path, raw_constants, "mser_min_batches", rules.MSER_MIN_BATCHES)
+    _check_constant(path, raw_constants, "n_bins", rules.N_BINS)
+
+    raw_snr_ladder = raw_constants.get("snr_ladder")
+    expected_snr_ladder = list(rules.SNR_LADDER)
+    if raw_snr_ladder != expected_snr_ladder:
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} constants.snr_ladder is "
+            f"{raw_snr_ladder!r}; the paper's value is {expected_snr_ladder!r}"
+        )
+
+    raw_mser_ignore_end = raw_constants.get("mser_ignore_end")
+    if (
+        raw_mser_ignore_end is None
+        or isinstance(raw_mser_ignore_end, bool)
+        or not isinstance(raw_mser_ignore_end, int)
+    ):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} constants.mser_ignore_end is "
+            f"{raw_mser_ignore_end!r}; the learning-period rule is not fixed"
+        )
+    if raw_mser_ignore_end != rules.MSER_IGNORE_END:
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} constants.mser_ignore_end is "
+            f"{raw_mser_ignore_end!r}; the paper's value is {rules.MSER_IGNORE_END!r}"
+        )
+
     values = payload.get("values")
     if not isinstance(values, dict):
         raise PlannedTestSettingsError(
             f"settings record {str(path)!r} has no values object"
+        )
+
+    n_counted = values.get("n_counted")
+    if n_counted != rules.N_CAL:
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} values.n_counted is {n_counted!r}; "
+            f"the paper's value is {rules.N_CAL!r}"
+        )
+
+    n_exact = values.get("n_exact")
+    if n_exact != rules.N_EXACT:
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} values.n_exact is {n_exact!r}; "
+            f"the paper's value is {rules.N_EXACT!r}"
         )
 
     inputs = payload.get("inputs")
@@ -322,32 +427,62 @@ def load_settings_record(path: str | Path) -> PlannedTestSettings:
     )
 
 
-def planned_test_refusal(
+def planned_test_gate(
     study: str | None,
     config: Mapping[str, Any],
     seed: int,
-) -> str | None:
-    """Return a one-line refusal reason, or ``None`` if the boot may proceed."""
-    if study is None or not study.startswith(STUDY_PREFIX):
-        return None
+) -> tuple[str | None, str | None]:
+    """Return a refusal reason and the settings digest, or ``(None, None)``.
 
+    A live run of the planned test needs the settings derived from the pilot
+    runs (paper Appendix A.8). This function checks the study name, the role,
+    the settings record, and the seed before the boot proceeds.
+    """
     planned_test = config.get("planned_test")
-    if not isinstance(planned_test, dict) or planned_test.get("role") not in ROLES:
+    role = None
+    if planned_test is not None:
+        if not isinstance(planned_test, dict):
+            return (
+                f"[planned_test] must be a table, got {type(planned_test).__name__!r}",
+                None,
+            )
+        role = planned_test.get("role")
+
+    if study is not None and study.startswith(STUDY_PREFIX):
+        if study not in STUDY_ROLES:
+            known = ", ".join(sorted(STUDY_ROLES))
+            return (
+                f"unknown workspace-mediation study {study!r}; known studies are {known}",
+                None,
+            )
+        expected_role = STUDY_ROLES[study]
+        if role != expected_role:
+            return (
+                f"study {study!r} must set [planned_test].role = {expected_role!r}, got {role!r}",
+                None,
+            )
+
+    if role is not None and role not in ROLES:
         return (
-            f"study {study!r} is a workspace-mediation study and must set "
-            f"[planned_test].role to one of {ROLES!r}"
+            f"planned_test role {role!r} is not one of {ROLES!r}",
+            None,
         )
 
-    role = planned_test["role"]
-    if role in ("preliminary", "pilot"):
-        return None
+    if role is None:
+        return (None, None)
 
-    settings_record = planned_test.get("settings_record")
+    if role in ("preliminary", "pilot"):
+        return (None, None)
+
+    settings_record = (
+        planned_test.get("settings_record") if isinstance(planned_test, dict) else None
+    )
     if not isinstance(settings_record, str) or not settings_record:
         return (
             f"study {study!r} with role {role!r} needs the settings record "
             "derived from the pilot runs (paper Appendix A.8); run "
-            "python -m kaine.experiment.calibrate"
+            "python -m kaine.experiment.calibrate",
+            None,
         )
 
     try:
@@ -355,14 +490,30 @@ def planned_test_refusal(
     except PlannedTestSettingsError as exc:
         return (
             f"study {study!r} cannot start without a valid planned-test "
-            f"settings record: {exc}"
+            f"settings record: {exc}",
+            None,
         )
 
     if seed in settings.excluded_seeds:
         return (
             f"seed {seed} was used by the preliminary or a pilot run and is not "
-            "used again (paper A.8)"
+            "used again (paper A.8)",
+            None,
         )
+
+    if role == "test":
+        pc = config.get("positive_control")
+        if (
+            isinstance(pc, dict)
+            and pc.get("enabled") is True
+            and pc.get("mode") != "control"
+        ):
+            mode = pc.get("mode")
+            return (
+                f"a live test run may not carry the positive control in mode {mode!r}; "
+                "only mode control",
+                None,
+            )
 
     if role == "positive_control":
         pc = config.get("positive_control")
@@ -374,7 +525,17 @@ def planned_test_refusal(
         ):
             return (
                 f"study {study!r} [positive_control] must enable control mode "
-                "and use the same settings_record as [planned_test]"
+                "and use the same settings_record as [planned_test]",
+                None,
             )
 
-    return None
+    return (None, settings.record_sha256)
+
+
+def planned_test_refusal(
+    study: str | None,
+    config: Mapping[str, Any],
+    seed: int,
+) -> str | None:
+    """Return a one-line refusal reason, or ``None`` if the boot may proceed."""
+    return planned_test_gate(study, config, seed)[0]

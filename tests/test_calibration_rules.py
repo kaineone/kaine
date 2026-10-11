@@ -33,6 +33,10 @@ from kaine.experiment.calibration_rules import (
 
 def test_stable_run_count_paper_values() -> None:
     assert stable_run_count() == 102
+    # The loader compares records with this constant.
+    from kaine.experiment.calibration_rules import N_EXACT
+
+    assert N_EXACT == stable_run_count()
     assert sign_test_critical_count(102) == 60
     assert float(sign_test_power(102)) == pytest.approx(0.9197, abs=5e-5)
     assert stable_run_count(target=Fraction(4, 5)) == 76
@@ -97,6 +101,12 @@ def test_minimum_effect() -> None:
         minimum_effect(float("nan"))
 
 
+def test_mser_constants() -> None:
+    from kaine.experiment.calibration_rules import MSER_IGNORE_END, MSER_MIN_BATCHES
+    assert MSER_IGNORE_END == 5
+    assert MSER_MIN_BATCHES == 10
+
+
 def test_mser_recovers_short_transient() -> None:
     rng = np.random.default_rng(7)
     t = np.arange(400)
@@ -104,10 +114,24 @@ def test_mser_recovers_short_transient() -> None:
     values = (1.0 + 3.0 * np.exp(-t / 15.0) + noise).tolist()
     result = mser_truncation(values, ignore_end=5)
     assert result.first_half is True
+    assert result.long_enough is True
     assert 30 <= result.truncated_report <= 120
-    degenerate = mser_truncation(values, ignore_end=0)
+    degenerate = mser_truncation(values, ignore_end=1)
     assert degenerate.d_star == degenerate.n_batches - 1
     assert degenerate.first_half is False
+
+
+def test_mser_degenerate_end_no_longer_wins() -> None:
+    rng = np.random.default_rng(3)
+    values = rng.normal(0.0, 1.0, size=200).tolist()
+    # Make the last batch means equal by pinning the final 15 values.
+    values[-15:] = [0.0] * 15
+    n_batches = len(values) // 5
+    degenerate = mser_truncation(values, ignore_end=1)
+    assert degenerate.d_star >= n_batches - 3
+    fixed = mser_truncation(values, ignore_end=5)
+    assert fixed.d_star <= n_batches - 5
+    assert fixed.first_half is True
 
 
 def test_mser_fails_closed_on_long_transient() -> None:
@@ -119,11 +143,22 @@ def test_mser_fails_closed_on_long_transient() -> None:
     assert result.first_half is False
 
 
+def test_mser_short_series_is_not_long_enough() -> None:
+    result = mser_truncation([1.0] * 45, ignore_end=5)
+    assert result.n_batches == 9
+    assert result.long_enough is False
+    result = mser_truncation([1.0] * 50, ignore_end=5)
+    assert result.n_batches == 10
+    assert result.long_enough is True
+
+
 def test_mser_rejects_invalid_inputs() -> None:
     with pytest.raises(CalibrationError):
-        mser_truncation([1.0] * 20, ignore_end=4)
+        mser_truncation([1.0] * 20, ignore_end=0)
     with pytest.raises(CalibrationError):
-        mser_truncation([1.0, 2.0, float("nan")], ignore_end=0)
+        mser_truncation([1.0] * 20, ignore_end=5)
+    with pytest.raises(CalibrationError):
+        mser_truncation([1.0, 2.0, float("nan")], ignore_end=1)
 
 
 def test_ensemble_average() -> None:
