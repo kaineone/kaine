@@ -171,3 +171,66 @@ async def test_sleep_completed_drops_the_consolidated_batch(bus: AsyncBus):
         assert await mnemos.replay_now() == []
     finally:
         await mnemos.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_entry_stored_after_phase_one_is_replayed_with_the_batch(bus: AsyncBus):
+    """A trace that lands in short-term after phase 1 is still replayed in phase 2."""
+    mnemos = await _new_mnemos(
+        bus,
+        capacity=8,
+        replay_selection_top_k=5,
+        replay_redact_content=False,
+    )
+    await mnemos.initialize()
+    try:
+        for i in range(2):
+            await mnemos.core.store(
+                f"trace {i}",
+                payload={"idx": i},
+                affect={
+                    "intensity": 0.2 * (i + 1),
+                    "valence": 0.0,
+                    "dominance": 0.0,
+                },
+                collection="short_term",
+            )
+
+        mnemos.replay_engine.open_window()
+
+        p1 = await light_consolidation(mnemos)
+        assert p1.success
+
+        await mnemos.core.store(
+            "late trace",
+            payload={"idx": 2},
+            affect={
+                "intensity": 0.5,
+                "valence": 0.0,
+                "dominance": 0.0,
+            },
+            collection="short_term",
+        )
+
+        p2 = await deep_consolidation(mnemos)
+        assert p2.success
+        assert p2.metadata["replay_events"] == 3
+
+        bus_entries = await bus.read("mnemos.out", last_id="0")
+        replay_events = [e for _, e in bus_entries if e.type == "mnemos.replay"]
+
+        texts = sorted(ev.payload["text"] for ev in replay_events)
+        assert texts == ["late trace", "trace 0", "trace 1"]
+
+        memory_ids = {ev.payload["memory_id"] for ev in replay_events}
+        assert len(memory_ids) == 3
+
+        episodic_ids = {
+            str(p["id"])
+            for p in mnemos.core.storage._collections[
+                mnemos.core.collection_name("episodic")
+            ]
+        }
+        assert memory_ids == episodic_ids | {"short_term:0"}
+    finally:
+        await mnemos.shutdown()

@@ -645,6 +645,8 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
     either stored in the payload or meaningless after stream trimming). Every
     payload that is kept passes through ``strip_vectors``, so memory text never
     carries perceptual embeddings; raw-perceptual payloads are not kept at all.
+    Replay events are recorded by id only; storing the replayed text would nest
+    the old trace inside the new one on every sleep.
     """
     pieces: list[str] = []
     pieces.append("inhibited" if snapshot.inhibited else "active")
@@ -653,6 +655,10 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
             # Record that a raw-perceptual event was in the workspace, but never
             # its verbatim payload (raw sense data must not persist into memory).
             pieces.append(f"{event.source}:{event.type}=<raw-perceptual omitted>")
+            continue
+        if event.type == "mnemos.replay":
+            # Storing the text would nest the old trace inside the new one on every sleep.
+            pieces.append(f"{event.source}:{event.type}=<replay of {event.payload.get('memory_id')}>")
             continue
         pieces.append(f"{event.source}:{event.type}={strip_vectors(event.payload)}")
     return " | ".join(pieces) if pieces else ""

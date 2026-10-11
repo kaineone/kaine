@@ -309,14 +309,17 @@ class MnemosCore:
         draw on them.
         """
         self._rebuild_embeddings_if_desynced()
-        self._last_consolidated = []
+        batch: list[tuple[str, StoredMemory]] = []
         moved = 0
-        while self._short_term:
-            entry = self._short_term.popleft()
-            self._short_term_embeddings.popleft()
-            point_id = await self._persist(entry, "episodic")
-            self._last_consolidated.append((point_id, entry))
-            moved += 1
+        try:
+            while self._short_term:
+                entry = self._short_term.popleft()
+                self._short_term_embeddings.popleft()
+                point_id = await self._persist(entry, "episodic")
+                batch.append((point_id, entry))
+                moved += 1
+        finally:
+            self._last_consolidated = batch
         return moved
 
     @property
@@ -426,6 +429,8 @@ class MnemosCore:
         # Rebuild short-term only after persisted replaces succeed.
         self._short_term.clear()
         self._short_term_embeddings.clear()
+        # A restored store must not keep a batch whose ids point at replaced points.
+        self._last_consolidated = []
         for entry in state.get("short_term") or []:
             affect = entry.get("affect")
             self._short_term.append(

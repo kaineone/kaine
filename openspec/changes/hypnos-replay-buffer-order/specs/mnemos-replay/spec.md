@@ -20,3 +20,14 @@ held short-term.
   empty short-term buffer
 - **THEN** a replay after the later pass finds no candidates and publishes
   nothing
+
+### Requirement: A stored broadcast records a replay by id only
+When a `mnemos.replay` event is a member of a broadcast that Mnemos stores,
+the stored text SHALL record the event and the replayed trace's `memory_id`
+and SHALL NOT include the replayed trace's text.
+
+#### Scenario: Replay text is not nested into a new trace
+- **WHEN** a broadcast containing a `mnemos.replay` event with `memory_id`
+  `abc123` is serialized for storage
+- **THEN** the text contains `mnemos:mnemos.replay=<replay of abc123>` and none
+  of the replayed trace's text

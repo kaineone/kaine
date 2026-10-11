@@ -18,7 +18,11 @@ this as a known gap. Mnemos is held, so the base-thesis form is unaffected.
   point id as the replayed `memory_id`. Selection, the window guard and
   redaction are unchanged.
 - Mnemos drops the batch when it sees `hypnos.sleep.completed`, so the batch
-  lives only for the sleep that made it.
+  lives only for the sleep that made it. A preservation import drops it too.
+- When a `mnemos.replay` event is a member of a stored broadcast, Mnemos
+  records it as `<replay of {memory_id}>` without the replayed text. Storing
+  the text would nest the old trace inside the new one on every sleep, now
+  that replay publishes events.
 - The phase order, the perception suspension for the whole sleep, and the
   phase metadata keys are unchanged.
 
