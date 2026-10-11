@@ -116,6 +116,8 @@ FIELD_RANGES: dict[str, tuple[float, float]] = {
     "confidence": UNIT,
     "familiarity_scalar": UNIT,
     "prediction_error": NONNEG,
+    "null_prediction_error": NONNEG,
+    "mean_prediction_error": NONNEG,
     "wellness": UNIT,
     "fatigue_value": NONNEG,
     "unexpected_error": NONNEG,

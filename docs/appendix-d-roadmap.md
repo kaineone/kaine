@@ -58,6 +58,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | hypnos-replay-buffer-order | 4/4 (100%) | Sleep's replay draws on the traces that sleep's consolidation moved, so it no longer finds an empty buffer. |
 | unattended-gate-individuation | 3/3 (100%) | The unattended gate covers every research-net condition, adding condition 9: the individuation producer wired. |
 | dinov2-unload-test-load-flake | 2/2 (100%) | Give the reversible-unload tests time for the garbage collection that ends every unload. |
+| ablation-null-context-positive-control | 5/10 (50%) | The null context differs from the held context only where other modules contributed, and reports carry the paired evaluations behind the gain. The positive control waits on operator decisions. |
 
 ## Open operator and device steps
 
@@ -78,7 +79,7 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 52 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 53 active changes, 268 archived changes and 104 capability specs.
 
 The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 

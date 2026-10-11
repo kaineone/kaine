@@ -10,6 +10,7 @@ from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.chronos.featurizer import SnapshotFeaturizer
 from kaine.modules.context import (
+    ADDITIVE_INDICES,
     BroadcastContext,
     featurize_events,
 )
@@ -245,3 +246,148 @@ def test_no_context_before_first_adoption():
     assert ctx.vector() is None
     assert ctx.null_vector({"topos"}) is None
     assert ctx.age_s() is None
+
+
+def test_null_replaces_only_other_sources_by_their_running_mean():
+    clock = [0.0]
+
+    def tick():
+        clock[0] += 1.0
+        return clock[0]
+
+    ctx = BroadcastContext(clock=tick)
+
+    broadcasts = [
+        [
+            ("topos", "topos.report", 0.5),
+            ("soma", "soma.report", 0.125),
+            ("audition", "audition.report", 0.25),
+            ("lingua", "lingua.report", 0.375),
+        ],
+        [
+            ("topos", "topos.report", 0.75),
+            ("soma", "soma.report", 0.875),
+            ("audition", "audition.report", 0.5),
+            ("praxis", "praxis.report", 0.625),
+        ],
+        [
+            ("topos", "topos.report", 0.25),
+            ("soma", "soma.report", 0.5),
+            ("soma", "soma.report", 0.625),
+            ("audition", "audition.report", 0.125),
+            ("lingua", "lingua.report", 0.375),
+        ],
+    ]
+
+    def _snapshot(tick_index, members):
+        selected_events = []
+        salience_scores = {}
+        for j, (source, type_, weight) in enumerate(members):
+            eid = f"{tick_index}-{j}"
+            selected_events.append((eid, _ev(source, type_, weight)))
+            salience_scores[eid] = weight
+        return WorkspaceSnapshot(
+            tick_index=tick_index,
+            selected_events=selected_events,
+            inhibited=False,
+            salience_scores=salience_scores,
+            metadata={"access_threshold": 0.0},
+            is_experiential=True,
+        )
+
+    for idx, members in enumerate(broadcasts):
+        assert ctx.observe(_snapshot(idx, members)) is True
+
+    b, null = ctx.context_and_null({"topos"})
+    assert null is not b
+
+    topos_current = featurize_events(
+        [(s, t, w) for (s, t, w) in broadcasts[2] if s == "topos"], 0.0
+    )
+    non_topos_means = [
+        sum(
+            featurize_events(
+                [(s, t, w) for (s, t, w) in broadcast if s != "topos"], 0.0
+            )[i]
+            for broadcast in broadcasts
+        ) / len(broadcasts)
+        for i in range(len(b))
+    ]
+    for i in ADDITIVE_INDICES:
+        assert null[i] == pytest.approx(topos_current[i] + non_topos_means[i])
+
+    all_means = [
+        sum(
+            featurize_events(broadcast, 0.0)[i]
+            for broadcast in broadcasts
+        ) / len(broadcasts)
+        for i in range(len(b))
+    ]
+    for i in range(4):
+        assert null[i] == pytest.approx(all_means[i])
+
+    for i in (20, 21, 22):
+        assert null[i] == b[i]
+
+    b2, null2 = ctx.context_and_null({"soma", "lingua"})
+    kept_current = featurize_events(
+        [(s, t, w) for (s, t, w) in broadcasts[2] if s in {"soma", "lingua"}], 0.0
+    )
+    non_kept_means = [
+        sum(
+            featurize_events(
+                [(s, t, w) for (s, t, w) in broadcast if s not in {"soma", "lingua"}], 0.0
+            )[i]
+            for broadcast in broadcasts
+        ) / len(broadcasts)
+        for i in range(len(b2))
+    ]
+    for i in ADDITIVE_INDICES:
+        assert null2[i] == pytest.approx(kept_current[i] + non_kept_means[i])
+    for i in range(4):
+        assert null2[i] == pytest.approx(all_means[i])
+    for i in (20, 21, 22):
+        assert null2[i] == b2[i]
+
+
+def test_null_equals_context_when_other_sources_never_vary():
+    clock = [0.0]
+
+    def tick():
+        clock[0] += 1.0
+        return clock[0]
+
+    ctx = BroadcastContext(clock=tick)
+
+    members = [
+        ("topos", "topos.report", 0.5),
+        ("soma", "soma.report", 0.25),
+        ("audition", "audition.report", 0.75),
+    ]
+
+    def _snapshot(tick_index, members):
+        selected_events = []
+        salience_scores = {}
+        for j, (source, type_, weight) in enumerate(members):
+            eid = f"{tick_index}-{j}"
+            selected_events.append((eid, _ev(source, type_, weight)))
+            salience_scores[eid] = weight
+        return WorkspaceSnapshot(
+            tick_index=tick_index,
+            selected_events=selected_events,
+            inhibited=False,
+            salience_scores=salience_scores,
+            metadata={"access_threshold": 0.0},
+            is_experiential=True,
+        )
+
+    for i in range(3):
+        assert ctx.observe(_snapshot(i, members)) is True
+
+    b, null = ctx.context_and_null({"topos"})
+    assert null == b
+
+
+def test_context_and_null_before_adoption():
+    ctx = BroadcastContext(clock=lambda: 0.0)
+    assert ctx.context_and_null({"topos"}) == (None, None)

@@ -138,3 +138,101 @@ async def test_topos_reports_context_gain(bus):
     assert "context_age_s" in payload
     assert isinstance(payload["context_age_s"], float)
     assert payload["context_age_s"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_topos_gain_is_zero_when_the_context_carries_nothing(bus):
+    topos = Topos(bus, encoder=FakeSmall(), forward_prediction=True)
+    topos._forward_model = LatentForwardModel(
+        latent_dim=4, units=8, context_dim=24, seed=4
+    )
+
+    for i in range(4):
+        snapshot = WorkspaceSnapshot(
+            tick_index=i,
+            selected_events=[
+                (
+                    f"{i}-0",
+                    Event(
+                        source="soma",
+                        type="soma.report",
+                        payload={"k": 1},
+                        salience=0.5,
+                        timestamp=datetime.now(timezone.utc),
+                    ),
+                )
+            ],
+            inhibited=False,
+            salience_scores={f"{i}-0": 0.5},
+            metadata={"access_threshold": 0.35},
+        )
+        await topos.on_workspace(snapshot)
+        await topos.process_frame(None)
+
+    entries = await bus.read("topos.out", last_id="0")
+    payload = _last_payload(entries)
+    assert payload["context_gain"] == 0.0
+    assert payload["null_prediction_error"] == payload["prediction_error"]
+    assert payload["mean_prediction_error"] > 0.0
+
+
+@pytest.mark.asyncio
+async def test_topos_report_carries_the_paired_evaluations(bus):
+    topos = Topos(bus, encoder=FakeSmall(), forward_prediction=True)
+    topos._forward_model = LatentForwardModel(
+        latent_dim=4, units=8, context_dim=24, seed=4
+    )
+
+    first = WorkspaceSnapshot(
+        tick_index=1,
+        selected_events=[
+            (
+                "1-0",
+                Event(
+                    source="soma",
+                    type="soma.report",
+                    payload={"k": 1},
+                    salience=0.5,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+            )
+        ],
+        inhibited=False,
+        salience_scores={"1-0": 0.5},
+        metadata={"access_threshold": 0.35},
+    )
+    await topos.on_workspace(first)
+    await topos.process_frame(None)
+
+    second = WorkspaceSnapshot(
+        tick_index=2,
+        selected_events=[
+            (
+                "2-0",
+                Event(
+                    source="thymos",
+                    type="thymos.report",
+                    payload={"k": 1},
+                    salience=0.75,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+            )
+        ],
+        inhibited=False,
+        salience_scores={"2-0": 0.75},
+        metadata={"access_threshold": 0.35},
+    )
+    await topos.on_workspace(second)
+    await topos.process_frame(None)
+
+    for _ in range(2):
+        await topos.process_frame(None)
+
+    entries = await bus.read("topos.out", last_id="0")
+    payload = _last_payload(entries)
+    assert isinstance(payload["null_prediction_error"], float)
+    assert isinstance(payload["mean_prediction_error"], float)
+    assert payload["context_gain"] == pytest.approx(
+        (payload["null_prediction_error"] - payload["prediction_error"])
+        / payload["mean_prediction_error"]
+    )

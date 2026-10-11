@@ -1127,12 +1127,16 @@ def test_audition_perception_numeric_fields_logged_item_dropped():
             "normalised_error": 1.2,
             "alert": False,
             "context_gain": 0.12,
+            "null_prediction_error": 0.5,
+            "mean_prediction_error": 0.8,
             "context_age_s": 0.3,
             "item": "film.mp4",
             "source_label": "playlist",
         },
     )
     assert record["context_gain"] == 0.12
+    assert record["null_prediction_error"] == 0.5
+    assert record["mean_prediction_error"] == 0.8
     assert record["alert"] is False
     assert record["context_age_s"] == 0.3
     assert "item" not in record
@@ -1146,11 +1150,15 @@ def test_processor_reports_carry_alert_and_context_gain():
                 "prediction_error": 0.5,
                 "alert": True,
                 "context_gain": -0.05,
+                "null_prediction_error": 0.5,
+                "mean_prediction_error": 0.8,
                 "context_age_s": 1.0,
             },
         )
         assert record["alert"] is True
         assert record["context_gain"] == -0.05
+        assert record["null_prediction_error"] == 0.5
+        assert record["mean_prediction_error"] == 0.8
 
     assert _taxonomy_record("chronos.report", {"alert": True})["alert"] is True
 

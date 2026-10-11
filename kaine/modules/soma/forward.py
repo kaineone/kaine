@@ -204,6 +204,7 @@ class SubstrateForwardModel:
         # Context bookkeeping for information-gain reporting.
         self.last_null_error: Optional[float] = None
         self.last_scored_had_context: bool = False
+        self.last_reading_skipped: bool = False
         self._last_input_context: Optional[list[float]] = None
         self._last_null_prediction: Optional[list[float]] = None
 
@@ -297,6 +298,7 @@ class SubstrateForwardModel:
         self._last_null_prediction = None
         self.last_null_error = None
         self.last_scored_had_context = False
+        self.last_reading_skipped = False
 
     accepts_timespan: bool = True
 
@@ -430,7 +432,18 @@ class SubstrateForwardModel:
                 "SubstrateForwardModel: non-finite feature vector; skipping tick"
             )
             self._last_residuals = None
+            # A skipped reading scores nothing and leaves no prediction behind,
+            # so the next reading reports no gain and makes no update.
+            self.last_null_error = None
+            self.last_scored_had_context = False
+            self._last_prediction = None
+            self._last_null_prediction = None
+            self._last_input_context = None
+            self._last_hidden = None
+            self.last_reading_skipped = True
             return 0.0
+
+        self.last_reading_skipped = False
 
         # 1. Prediction error from the previous tick's prediction.
         if self._last_prediction is None:

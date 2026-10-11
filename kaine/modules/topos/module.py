@@ -528,14 +528,15 @@ class Topos(BaseModule):
         # Forward-prediction salience path.
         prediction_error: float = 0.0
         context_gain: Optional[float] = None
+        null_prediction_error: Optional[float] = None
+        mean_prediction_error: Optional[float] = None
         normalised_error: float = 0.0  # exposed on the report for the affect coupling
         if self._forward_prediction and self._forward_model is not None:
             self._forward_model.suspended = self._in_hypnos
             # Offload the MLP forward/backward step to a thread so the event loop
             # stays responsive during vision processing (performance-test-coverage).
             if getattr(self._forward_model, "context_dim", 0) > 0:
-                ctx = self._context.vector()
-                null = self._context.null_vector(("topos",)) if ctx is not None else None
+                ctx, null = self._context.context_and_null(("topos",))
                 prediction_error = await asyncio.to_thread(
                     self._forward_model.step, embedding, ctx, null
                 )
@@ -560,6 +561,8 @@ class Topos(BaseModule):
                 and mean_err > 0
             ):
                 context_gain = (self._forward_model.last_null_error - prediction_error) / mean_err
+                null_prediction_error = self._forward_model.last_null_error
+                mean_prediction_error = mean_err
 
             # Alert on EITHER a surprising forward-model prediction error OR a
             # self-calibrating perceptual discontinuity — both relative to their
@@ -606,7 +609,10 @@ class Topos(BaseModule):
             # scale arousal by perceptual surprise (perception→arousal coupling).
             "normalised_error": normalised_error,
             # Cross-module broadcast information gain and context age (Appendix A.8).
+            # Paired evaluations behind the information-gain measure.
             "context_gain": context_gain,
+            "null_prediction_error": null_prediction_error,
+            "mean_prediction_error": mean_prediction_error,
             "context_age_s": self._context.age_s(),
             # Whether this report crossed alert level (perception-drives-salience):
             # lets the Nexus perception panel and off-bus analysis count stimulus-

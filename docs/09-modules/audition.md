@@ -57,7 +57,7 @@ The acoustic path also predicts from a null context, which keeps Audition's own 
 context_gain = (null-context error − error) / running mean error
 ```
 
-over the last `prediction_error_window` acoustic errors. It is `null` when the scored prediction had no context or the running mean is zero. The null prediction never enters learning or the competition, and its running means restart with each boot. The tone path takes the context but computes no null prediction and reports no `context_gain`. The matched-selection and pooled arms of the planned test, and its positive control, are not built yet.
+over the last `prediction_error_window` acoustic errors. It is `null` when the scored prediction had no context or the running mean is zero. Each report also carries `null_prediction_error` and `mean_prediction_error`, the null-context error and the running mean the gain is computed from; both are `null` when `context_gain` is. The null prediction never enters learning or the competition, and its running means restart with each boot. The tone path takes the context but computes no null prediction and reports no `context_gain`. The matched-selection and pooled arms of the planned test, and its positive control, are not built yet.
 
 ## Intensity and the alert flag
 
@@ -91,7 +91,7 @@ All events are published to the `audition.out` stream.
 
 | Event type | Payload fields | Intensity |
 |---|---|---|
-| `audition.perception` (general audition only) | `source_label`, `change_score`, `prediction_error`, `normalised_error`, `context_gain`, `context_age_s`, `alert`, `energy_dbfs`, `encoder_model_id`, `attended_window`, `attended_seconds`; `item` and `item_order` with a playlist feed | `alert_salience` on an alert, otherwise graded by the acoustic error ratio |
+| `audition.perception` (general audition only) | `source_label`, `change_score`, `prediction_error`, `normalised_error`, `context_gain`, `null_prediction_error`, `mean_prediction_error`, `context_age_s`, `alert`, `energy_dbfs`, `encoder_model_id`, `attended_window`, `attended_seconds`; `item` and `item_order` with a playlist feed | `alert_salience` on an alert, otherwise graded by the acoustic error ratio |
 | `audition.emotion` | `category`, `alert`, `confidence`, `scores`, `model`, `source_label`, `latency_ms`, `prediction_error`; `degraded` when the classifier did not run | `alert_salience` for a non-neutral tone, otherwise graded by the tone error ratio |
 | `audition.emotion` (failure) | `category` (`neutral`), `confidence`, `scores`, `model`, `source_label`, `latency_ms`, `error` | `alert_salience` |
 | `audition.transcription` (only with `transcription_enabled = true`) | `text`, `backend`, `source_label`, `model`, `sample_rate`, `audio_bytes_length`, `latency_ms`, `prediction_error`; `error` on failure | Graded by the tone error ratio; `alert_salience` on failure |

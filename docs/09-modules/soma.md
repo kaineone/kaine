@@ -52,7 +52,7 @@ Alongside each prediction, the readout also predicts from a null context. Soma's
 context_gain = (null-context error − error) / running mean error
 ```
 
-over the last `prediction_error_window` errors. It is `null` when the scored prediction had no context or the running mean is zero. The null prediction never enters learning or the competition, and its running means restart with each boot. The matched-selection and pooled arms of the planned test, and its positive control, are not built yet.
+over the last `prediction_error_window` errors. It is `null` when the scored prediction had no context or the running mean is zero. Each report also carries `null_prediction_error` and `mean_prediction_error`, the null-context error and the running mean the gain is computed from; both are `null` when `context_gain` is. A reading skipped as non-finite reports no gain, stays out of the running mean, and leaves no prediction behind, so the reading after it reports no gain either. The null prediction never enters learning or the competition, and its running means restart with each boot. The matched-selection and pooled arms of the planned test, and its positive control, are not built yet.
 
 ## Intensity and the alert flag
 
@@ -100,7 +100,7 @@ All events are published to the `soma.out` stream.
 
 | Event type | Payload fields | Intensity |
 |---|---|---|
-| `soma.report` | `metrics`, `wellness`, `alerts`, `alert`, `prediction_error`, `context_gain`, `context_age_s`, `unexpected_error`, `fatigue_value`, `fatigue_threshold`, `warmup_active` | `alert_salience` on an alert, otherwise graded by the error ratio |
+| `soma.report` | `metrics`, `wellness`, `alerts`, `alert`, `prediction_error`, `context_gain`, `null_prediction_error`, `mean_prediction_error`, `context_age_s`, `unexpected_error`, `fatigue_value`, `fatigue_threshold`, `warmup_active` | `alert_salience` on an alert, otherwise graded by the error ratio |
 | `soma.fatigue` | `value`, `threshold`, `crossed: true` | `alert_salience` |
 | `soma.regulation` | `action`, `reason`, `severity` | `alert_salience` |
 | `soma.warmup.started` | `min_samples`, `min_seconds`, `samples_seen`, `lived_seconds` | `baseline_salience` |
