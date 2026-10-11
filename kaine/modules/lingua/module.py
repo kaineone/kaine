@@ -323,7 +323,8 @@ class Lingua(BaseModule):
                         continue
                     # Only cache non-inhibited coalitions: the entity speaks from
                     # what was accessed and not inhibited.
-                    if not snap.inhibited:
+                    # An empty pooled broadcast is not inhibited but has nothing to speak from.
+                    if not snap.inhibited and snap.selected_events:
                         self._latest_snapshot = snap
             except asyncio.CancelledError:
                 raise

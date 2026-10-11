@@ -52,6 +52,12 @@ PROFILE_ENV_VAR = "KAINE_PROFILE"
 # Env var the operator sets to override a recorded tier, e.g. KAINE_TIER=tier1.
 TIER_ENV_VAR = "KAINE_TIER"
 
+# Study configurations: overlays a study run selects, applied over the operator config.
+STUDIES_DIR = Path("config/studies")
+
+# e.g. KAINE_STUDY=workspace_mediation_matched.
+STUDY_ENV_VAR = "KAINE_STUDY"
+
 # A profile/tier name is a filesystem-safe slug (no path traversal): lowercase
 # letters, digits, and underscores only. The name is turned into
 # ``config/profiles/<name>.toml`` — the slug guard keeps a hostile or fat-
@@ -102,6 +108,33 @@ def resolve_profile_name(
     if not _PROFILE_NAME_RE.match(name):
         raise ProfileError(
             f"invalid profile name {name!r}: expected a slug of [a-z0-9_]"
+        )
+    return name
+
+
+def resolve_study_name(
+    explicit: str | None = None,
+    *,
+    env: dict[str, str] | None = None,
+) -> str | None:
+    """Resolve the selected study configuration name from explicit value or env var.
+
+    Resolution order (later layers only consulted when earlier layers are unset):
+
+    1. ``explicit`` value.
+    2. ``KAINE_STUDY`` environment variable (or the supplied ``env`` mapping).
+
+    Returns ``None`` when neither is set. Validates the slug and raises
+    :class:`ProfileError` on a malformed name.
+    """
+    source = os.environ if env is None else env
+    name = (explicit if explicit is not None else source.get(STUDY_ENV_VAR)) or ""
+    name = name.strip()
+    if not name:
+        return None
+    if not _PROFILE_NAME_RE.match(name):
+        raise ProfileError(
+            f"invalid study name {name!r}: expected a slug of [a-z0-9_]"
         )
     return name
 
@@ -169,6 +202,19 @@ def profile_path(name: str, *, profiles_dir: str | os.PathLike[str] | None = Non
     if not _PROFILE_NAME_RE.match(name or ""):
         raise ProfileError(f"invalid profile name {name!r}")
     return Path(profiles_dir) / f"{name}.toml"
+
+
+def study_path(name: str, *, studies_dir: str | os.PathLike[str] | None = None) -> Path:
+    """Return the overlay path for a validated study ``name``.
+
+    Raises :class:`ProfileError` on a malformed name (defence in depth against
+    path traversal even if a caller skips :func:`resolve_study_name`).
+    """
+    if studies_dir is None:
+        studies_dir = STUDIES_DIR
+    if not _PROFILE_NAME_RE.match(name or ""):
+        raise ProfileError(f"invalid study name {name!r}")
+    return Path(studies_dir) / f"{name}.toml"
 
 
 def _require_tier_profile(
@@ -473,10 +519,14 @@ def _load_merged_config(
     profiles_dir: str | os.PathLike[str] | None = None,
     tier: str | None = None,
     strict_operator: bool = False,
+    study: str | None = None,
+    studies_dir: str | os.PathLike[str] | None = None,
 ) -> dict[str, Any]:
     """Load and merge layered KAINE configuration files (internal helper)."""
     if profiles_dir is None:
         profiles_dir = PROFILES_DIR
+    if studies_dir is None:
+        studies_dir = STUDIES_DIR
     shipped_path = Path(path)
     if not shipped_path.exists():
         raise FileNotFoundError(f"config/kaine.toml not found at {shipped_path}")
@@ -508,28 +558,41 @@ def _load_merged_config(
                 )
             merged = deep_merge(merged, tier_raw)
 
-    # Layer 4: the operator's local working config (still wins over everything).
+    # Layer 4: the operator's local working config.
     op_path = Path(operator_path)
-    if not op_path.exists():
-        validate_config_shape(merged)
-        return merged
-    try:
-        with op_path.open("rb") as fh:
-            override = tomllib.load(fh)
-    except (OSError, tomllib.TOMLDecodeError) as exc:
-        if strict_operator:
+    if op_path.exists():
+        try:
+            with op_path.open("rb") as fh:
+                override = tomllib.load(fh)
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            if strict_operator:
+                raise ProfileError(
+                    f"operator config {op_path} could not be read or parsed: {type(exc).__name__}: {exc}"
+                ) from exc
+            log.warning(
+                "operator config %s could not be read or parsed: %s: %s",
+                op_path,
+                type(exc).__name__,
+                exc,
+            )
+        else:
+            merged = deep_merge(merged, override)
+
+    # Layer 5: the selected study overlay (applied last, after operator).
+    if study:
+        study_cfg_path = study_path(study, studies_dir=studies_dir)
+        if not study_cfg_path.exists():
             raise ProfileError(
-                f"operator config {op_path} could not be read or parsed: {type(exc).__name__}: {exc}"
-            ) from exc
-        log.warning(
-            "operator config %s could not be read or parsed: %s: %s",
-            op_path,
-            type(exc).__name__,
-            exc,
-        )
-        validate_config_shape(merged)
-        return merged
-    merged = deep_merge(merged, override)
+                f"study {study!r} selected but {study_cfg_path} does not exist"
+            )
+        with study_cfg_path.open("rb") as fh:
+            study_raw = tomllib.load(fh)
+        if "modules" in study_raw:
+            raise ProfileError(
+                f"study {study!r} may not set module toggles; a study changes settings, not the module set"
+            )
+        merged = deep_merge(merged, study_raw)
+
     validate_config_shape(merged)
     return merged
 
@@ -542,8 +605,10 @@ def load_kaine_config(
     profiles_dir: str | os.PathLike[str] | None = None,
     tier: str | None = None,
     strict_operator: bool = False,
+    study: str | None = None,
+    studies_dir: str | os.PathLike[str] | None = None,
 ) -> dict[str, Any]:
-    """Load the layered KAINE config: shipped → profile → tier → operator override.
+    """Load the layered KAINE config: shipped → profile → tier → operator override → study overlay.
 
     Load order (each layer deep-merged over the last, later wins):
 
@@ -556,7 +621,10 @@ def load_kaine_config(
        changes which modules are enabled);
     4. an optional operator override at ``operator_path`` — the operator's local
        working config, which STILL WINS so their toggles and private voice are
-       never overridden by a profile or tier.
+       never overridden by a profile or tier;
+    5. an optional study configuration ``config/studies/<study>.toml``, which
+       wins over the operator override, so a study run cannot be changed by the
+       operator's local file.
 
     ``profile`` is the resolved module profile name (see
     :func:`resolve_profile_name`). ``tier`` is the resolved deployment tier name
@@ -571,6 +639,9 @@ def load_kaine_config(
     ``[oscillator].enabled`` key raises :class:`ProfileError` ("tier <name> may
     not set module toggles; tiers only bound backends and devices"), because a
     deployment tier must never silently change the enabled module set.
+
+    A study file may not contain a ``[modules]`` table; a study changes settings,
+    not the enabled module set.
 
     A missing operator file is harmless; a malformed one is tolerated by
     default (falls back with a logged warning). When ``strict_operator`` is true,
@@ -593,6 +664,8 @@ def load_kaine_config(
             profiles_dir=profiles_dir,
             tier=tier,
             strict_operator=strict_operator,
+            study=study,
+            studies_dir=studies_dir,
         )
     )
 
@@ -602,8 +675,10 @@ def load_runtime_config(
     operator_path: str | os.PathLike[str] = OPERATOR_CONFIG_PATH,
     *,
     profile: str | None = None,
+    study: str | None = None,
     env: dict[str, str] | None = None,
     profiles_dir: str | os.PathLike[str] | None = None,
+    studies_dir: str | os.PathLike[str] | None = None,
 ) -> dict[str, Any]:
     """Load the runtime configuration used by the cycle and the pre-boot check.
 
@@ -623,6 +698,8 @@ def load_runtime_config(
     * The deployment tier is resolved by :func:`resolve_tier_name` (``KAINE_TIER``
       env, then ``[deployment].tier`` from the operator overlay) and layered on
       top of the module profile.
+    * The study configuration is resolved from ``study``, then ``KAINE_STUDY``,
+      and applied last.
 
     The tier only bounds backends and devices for the host hardware; it never
     replaces the selected module set. An explicit profile selection is honored
@@ -640,6 +717,7 @@ def load_runtime_config(
     resolved_tier = resolve_tier_name(
         env=env, operator_path=operator_path, profiles_dir=profiles_dir
     )
+    resolved_study = resolve_study_name(study, env=env)
     return load_kaine_config(
         path,
         operator_path,
@@ -647,4 +725,6 @@ def load_runtime_config(
         tier=resolved_tier,
         profiles_dir=profiles_dir,
         strict_operator=True,
+        study=resolved_study,
+        studies_dir=studies_dir,
     )

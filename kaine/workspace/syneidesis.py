@@ -93,6 +93,11 @@ class Syneidesis:
         tick_index = int(context.get("tick_index", 0))
         if self._arm == "pooled":
             return self._pooled(tick_index, events)
+        if self._arm == "matched" and "is_experiential" not in context:
+            raise ValueError(
+                "the matched arm draws only on broadcast ticks, so the context "
+                "must say whether this is one (is_experiential)"
+            )
         if not events:
             # Observe phases even with no events so windows stay aligned, then
             # return the empty inhibited snapshot (no coherence to report).

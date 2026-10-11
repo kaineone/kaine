@@ -6,7 +6,7 @@ This page is for the operator installing and starting those services. The superv
 
 ## What the default entity needs
 
-Besides the `[modules]` flags, `thesis_test` sets `[perception_feed]` mode `"seeded"` and seed `0`, `[topos].foveation = true`, `[chronos].forward_prediction = true`, `[audition].transcription_enabled = false` and `general_audition = true`, `[lingua].temperature = 0.0`, and `[volition]` `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`. Everything else comes from the shipped `config/kaine.toml`. For a default run, start:
+Besides the `[modules]` flags, `thesis_test` sets `[perception_feed]` mode `"seeded"` and seed `0`, `[topos].foveation = true`, `[chronos].forward_prediction = true`, `[audition].transcription_enabled = false` and `general_audition = true`, and `[volition]` `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`. Everything else comes from the shipped `config/kaine.toml`. For a default run, start:
 
 - Redis, the cycle's event bus.
 - Qdrant, which `scripts/first-boot.sh` requires even though Mnemos is off in the default profile.

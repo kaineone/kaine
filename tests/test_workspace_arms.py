@@ -226,6 +226,15 @@ async def test_competitive_and_matched_empty_ticks_are_inhibited_and_name_the_ar
         assert snap.metadata["arm"] == arm
 
 
+@pytest.mark.asyncio
+async def test_matched_requires_the_broadcast_flag():
+    syn = _syn(arm="matched", seed=1)
+    with pytest.raises(ValueError):
+        await syn.select(_tick(3, 0), {"tick_index": 0})
+    snap = await syn.select(_tick(3, 1), {"tick_index": 1, "is_experiential": False})
+    assert len(snap.selected_events) == 3
+
+
 def test_arm_validation():
     with pytest.raises(ValueError):
         _syn(arm="random")

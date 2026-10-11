@@ -77,11 +77,6 @@ transcription_enabled = false
 # forward-model prediction error → audition.perception competes in the workspace.
 general_audition = true
 
-[lingua]
-# Greedy decoding (temperature 0) for the planned runs, so what the language organ
-# voices is a deterministic function of its input (paper §6).
-temperature = 0.0
-
 [volition]
 # Self-initiated voice: speech comes from the entity's OWN precision-weighted
 # surprise (a report threshold above the access threshold, novelty- and

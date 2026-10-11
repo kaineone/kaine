@@ -172,10 +172,12 @@ This per-report gain is the measurement the planned workspace-mediation test is 
 `[syneidesis].arm` selects the arm the live cycle runs (paper §6.3, A.8), and every broadcast records it in `metadata["arm"]`, which the research log copies.
 
 - `competitive`, the default, is selection and access as described above.
-- `matched` scores every candidate as usual, then on each broadcast tick draws `min(top_k, n)` of the `n` candidates uniformly without regard to score, from a generator seeded from the run seed (`[experiment].seed`). The drawn members are ordered by score. A drawn member is accessed when its score reaches `θ`, and the broadcast is inhibited when none does. Ticks that are not broadcast ticks draw nothing, so the same seed and the same broadcast ticks give the same coalitions.
+- `matched` scores every candidate as usual, then on each broadcast tick draws `min(top_k, n)` of the `n` candidates uniformly without regard to score, from a generator seeded from the run seed (`[experiment].seed`). The drawn members are ordered by score. A drawn member is accessed when its score reaches `θ`, and the broadcast is inhibited when none does. Ticks that are not broadcast ticks draw nothing, so the same seed and the same broadcast ticks give the same coalitions. A matched selection whose context does not say whether the tick is a broadcast tick is refused. The generator's state is not saved: the draws reproduce within one uninterrupted run, and a restart or revive starts the stream again from the seed.
 - `pooled` scores nothing. Every candidate of the tick is a member, the broadcast is never inhibited, the score table carries each candidate's intensity (Volition applies its report bars to intensities), and the metadata has no access threshold, so every member enters the context. An empty pooled broadcast replaces the context with the featurization of the empty set.
 
 The two controls need the coherence layer off, as it is in the base-thesis form; Syneidesis refuses the combination at construction.
+
+A run selects its arm through a study configuration, which also sets greedy decoding: `KAINE_STUDY=workspace_mediation_matched` (or `_competitive`, `_pooled`) applies `config/studies/workspace_mediation_matched.toml` after the operator file. See [How configuration is loaded](../appendix-a-configuration/README.md#how-configuration-is-loaded).
 
 ## Oscillatory coherence multiplier
 

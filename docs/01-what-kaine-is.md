@@ -52,7 +52,6 @@ Besides the seven modules, the `thesis_test` profile sets:
 - `[topos].foveation = true`;
 - `[chronos].forward_prediction = true`;
 - `[audition].transcription_enabled = false` and `general_audition = true`;
-- `[lingua].temperature = 0.0`, greedy decoding, so the organ's text is a deterministic function of its input;
 - `[volition]` policy `"self_initiated_report"`, `drive_initiative = false`, and `sig_expiry_s = 300.0`.
 
 Every other value comes from the shipped `config/kaine.toml`. State encryption at rest is enabled there, and an empty encryption key makes the cycle refuse to boot. See [Security and privacy](13-security-and-privacy.md).
