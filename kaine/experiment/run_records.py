@@ -242,7 +242,9 @@ def load_records_for_runs(
 
     root = resolve(root)
     encryptor = get_state_encryptor()
-    targets = {str(run_id) for run_id in run_ids}
+    # Materialize run_ids first because the iterable is consumed twice below.
+    run_ids = [str(run_id) for run_id in run_ids]
+    targets = set(run_ids)
     out = {run_id: RunRecords(run_id=run_id) for run_id in run_ids}
 
     for path in _iter_jsonl_files(root):

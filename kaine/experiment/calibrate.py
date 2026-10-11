@@ -116,7 +116,9 @@ def _flatten_records(run_records: RunRecords) -> Iterable[dict[str, Any]]:
 
 def _records_sha256(run_records: RunRecords) -> str:
     h = hashlib.sha256()
-    for stream, records in run_records.by_stream.items():
+    # Iterate streams in sorted order so the digest is independent of dict insertion order.
+    for stream in sorted(run_records.by_stream):
+        records = run_records.by_stream[stream]
         for record in records:
             h.update(canonical_bytes({"stream": stream, "record": record}))
             h.update(b"\n")
@@ -474,6 +476,11 @@ def calibrate(
     # ------------------------------------------------------------------
     # a. Validate the plan and load all runs once
     # ------------------------------------------------------------------
+    # Reject lists or strings before calling .get() so the CLI exits cleanly.
+    if not isinstance(plan, dict):
+        raise CalibrationError(
+            "the plan must be a JSON object with preliminary_run and pilots"
+        )
     preliminary_run = plan.get("preliminary_run")
     if not isinstance(preliminary_run, str) or not preliminary_run:
         raise CalibrationError("plan preliminary_run must be a non-empty string")

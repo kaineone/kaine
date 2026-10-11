@@ -35,6 +35,7 @@ from kaine.experiment.principal_component import (
     principal_component_path,
     write_principal_component,
 )
+from kaine.experiment.run_records import load_records_for_runs
 
 E_LADDER = [0.0, 0.001, 0.004, 0.01, 0.02, 0.03, 0.04]
 N_REPORTS = 200
@@ -483,3 +484,25 @@ def test_information_gain_uses_strictly_after_t_learn() -> None:
     }
     ig = information_gain(reports, 2.0)
     assert ig == {processor: 3.0 for processor in PROCESSORS}
+
+
+
+def test_main_rejects_non_object_plan(tmp_path: Path) -> None:
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text("[1, 2]")
+    out = tmp_path / "settings.json"
+    assert main([str(plan_path), "--out", str(out), "--root", str(tmp_path)]) == 2
+    assert not out.exists()
+
+
+def test_load_records_for_runs_accepts_generator(tmp_path: Path) -> None:
+    records_file = tmp_path / "research_events-2026-10-11.jsonl"
+    records_file.write_text(
+        '{"run_id": "a", "event_type": "x"}\n'
+        '{"run_id": "b", "event_type": "x"}\n'
+    )
+    result = load_records_for_runs((run_id for run_id in ["a", "b"]), root=tmp_path)
+    assert set(result) == {"a", "b"}
+    for run_id in ("a", "b"):
+        total = sum(len(records) for records in result[run_id].by_stream.values())
+        assert total == 1
