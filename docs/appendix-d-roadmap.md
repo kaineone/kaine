@@ -57,6 +57,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | flaky-group-kill-test | 3/3 (100%) | The group-kill tests wait for the job to finish before reading its status. |
 | hypnos-replay-buffer-order | 4/4 (100%) | Sleep's replay draws on the traces that sleep's consolidation moved, so it no longer finds an empty buffer. |
 | unattended-gate-individuation | 3/3 (100%) | The unattended gate covers every research-net condition, adding condition 9: the individuation producer wired. |
+| dinov2-unload-test-load-flake | 2/2 (100%) | Give the reversible-unload tests time for the garbage collection that ends every unload. |
 
 ## Open operator and device steps
 
@@ -77,7 +78,7 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 51 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 52 active changes, 268 archived changes and 104 capability specs.
 
 The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 
