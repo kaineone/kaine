@@ -13,7 +13,7 @@ authors = [{ name = "KAINE contributors" }]
 dependencies = [
     "redis>=8.1.0,<9",
     "pydantic>=2.6,<3",
-    "psutil>=5.9,<7",
+    "psutil>=7.2.2,<8",
     "numpy>=2.4.6,<3",
     "httpx>=0.28.1,<1",
     # AES-256-GCM encryption-at-rest for persisted cognitive state
