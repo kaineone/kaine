@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 
 import pytest
@@ -236,3 +237,181 @@ async def test_topos_report_carries_the_paired_evaluations(bus):
         (payload["null_prediction_error"] - payload["prediction_error"])
         / payload["mean_prediction_error"]
     )
+
+
+def _non_finite_numbers(value):
+    """Every non-finite number anywhere inside *value*."""
+    if isinstance(value, bool):
+        return []
+    if isinstance(value, (int, float)):
+        return [] if math.isfinite(value) else [value]
+    if isinstance(value, dict):
+        return [n for v in value.values() for n in _non_finite_numbers(v)]
+    if isinstance(value, (list, tuple)):
+        return [n for v in value for n in _non_finite_numbers(v)]
+    return []
+
+
+class _ScriptedEncoder(FakeSmall):
+    """Returns the queued embeddings in order."""
+
+    def __init__(self, embeddings):
+        self._embeddings = list(embeddings)
+
+    async def encode(self, image):  # noqa: ARG002
+        return self._embeddings.pop(0)
+
+
+@pytest.mark.asyncio
+async def test_topos_skips_a_non_finite_latent(bus):
+    torch = pytest.importorskip("torch")
+    nan = float("nan")
+    embeddings = [
+        [0.1, 0.2, 0.3, 0.4],
+        [0.2, 0.1, 0.4, 0.3],
+        [0.3, 0.3, 0.1, 0.2],
+        [nan, 0.2, 0.3, 0.4],
+        [0.4, 0.1, 0.2, 0.3],
+        [0.1, 0.4, 0.3, 0.2],
+    ]
+
+    topos = Topos(
+        bus, encoder=_ScriptedEncoder(embeddings), forward_prediction=True
+    )
+    topos._forward_model = LatentForwardModel(
+        latent_dim=4, units=8, context_dim=24, seed=4
+    )
+
+    snapshot = WorkspaceSnapshot(
+        tick_index=1,
+        selected_events=[
+            (
+                "1-0",
+                Event(
+                    source="soma",
+                    type="soma.report",
+                    payload={"k": 1},
+                    salience=0.6,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+            )
+        ],
+        inhibited=False,
+        salience_scores={"1-0": 0.5},
+        metadata={"access_threshold": 0.35},
+    )
+    await topos.on_workspace(snapshot)
+
+    for _ in range(3):
+        await topos.process_frame(None)
+
+    model = topos._forward_model
+    buffer_before = [list(v) for v in model._buffer]
+    weights_before = [p.detach().clone() for p in model._net.parameters()]
+    errors_before = list(topos._pred_errors)
+    changes_before = list(topos._change_history)
+    frames_before = [list(f) for f in topos._habituator._frames]
+
+    await topos.process_frame(None)
+
+    assert [list(v) for v in model._buffer] == buffer_before
+    assert [list(f) for f in topos._habituator._frames] == frames_before
+    for saved, current in zip(weights_before, model._net.parameters()):
+        assert torch.equal(saved, current)
+    assert list(topos._pred_errors) == errors_before
+    assert list(topos._change_history) == changes_before
+
+    for _ in range(2):
+        await topos.process_frame(None)
+
+    entries = await bus.read("topos.out", last_id="0", count=50)
+    events = [e for _, e in entries if e.type == "topos.report"]
+    assert len(events) == 6
+    assert isinstance(events[2].payload["context_gain"], float)
+    assert events[3].payload["context_gain"] is None
+    assert events[3].payload["null_prediction_error"] is None
+    assert events[3].payload["mean_prediction_error"] is None
+    assert events[3].payload["prediction_error"] is None  # undefined after skip
+    assert events[3].payload["normalised_error"] == 0.0
+    assert events[3].payload["change_score"] == 0.0
+    assert events[3].payload["alert"] is False
+    assert events[3].salience == pytest.approx(topos._baseline_salience)
+    assert events[4].payload["context_gain"] is None
+    assert events[4].payload["prediction_error"] is None  # undefined on first finite step after skip
+    assert events[4].payload["normalised_error"] == 0.0
+    assert isinstance(events[5].payload["context_gain"], float)
+    assert events[3].payload["latent"] is None
+    assert events[3].payload["habituation_score"] == events[2].payload["habituation_score"]
+    window = list(topos._pred_errors)
+    assert window == errors_before + [events[5].payload["prediction_error"]]
+    assert events[5].payload["normalised_error"] == pytest.approx(
+        events[5].payload["prediction_error"] / (sum(window) / len(window))
+    )
+    for event in events:
+        assert _non_finite_numbers(event.payload) == []
+
+
+@pytest.mark.asyncio
+async def test_topos_periodic_gaps_keep_zeros_out_of_the_window(bus):
+    pytest.importorskip("torch")
+    nan = float("nan")
+    # 15 frames: 3 initial finite frames plus 4 cycles of NaN/finite/finite.
+    embeddings = []
+    for k in range(3):
+        embeddings.append(
+            [math.sin(k), math.cos(k), math.sin(2 * k), math.cos(3 * k)]
+        )
+    k = 3
+    for _ in range(4):
+        embeddings.append([nan] * 4)
+        embeddings.append(
+            [math.sin(k), math.cos(k), math.sin(2 * k), math.cos(3 * k)]
+        )
+        k += 1
+        embeddings.append(
+            [math.sin(k), math.cos(k), math.sin(2 * k), math.cos(3 * k)]
+        )
+        k += 1
+
+    topos = Topos(
+        bus, encoder=_ScriptedEncoder(embeddings), forward_prediction=True
+    )
+    topos._forward_model = LatentForwardModel(
+        latent_dim=4, units=8, context_dim=24, seed=4
+    )
+
+    snapshot = WorkspaceSnapshot(
+        tick_index=1,
+        selected_events=[
+            (
+                "1-0",
+                Event(
+                    source="soma",
+                    type="soma.report",
+                    payload={"k": 1},
+                    salience=0.6,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+            )
+        ],
+        inhibited=False,
+        salience_scores={"1-0": 0.5},
+        metadata={"access_threshold": 0.35},
+    )
+    await topos.on_workspace(snapshot)
+
+    for _ in range(15):
+        await topos.process_frame(None)
+
+    window = list(topos._pred_errors)
+    assert len(window) == 7  # 3 initial readings + the second finite of each gap
+    assert window[0] == 0.0
+    assert all(e > 0.0 for e in window[1:])
+
+    entries = await bus.read("topos.out", last_id="0", count=50)
+    events = [e for _, e in entries if e.type == "topos.report"]
+    assert len(events) == 15
+    for idx in (3, 4, 6, 7, 9, 10, 12, 13):
+        assert events[idx].payload["prediction_error"] is None
+    for idx in (0, 1, 2, 5, 8, 11, 14):
+        assert isinstance(events[idx].payload["prediction_error"], float)

@@ -87,7 +87,7 @@ Familiarity rises toward 1 as interactions accumulate and categories appear. Aft
 
 1. It computes the deviation against the model before the update, as `(1 − histogram[category]) × confidence`. The first observation of an agent has deviation 0.
 2. It blends the observed category into the histogram with weight 0.2.
-3. It updates `mean_confidence` and `mean_prediction_error` with the same weight.
+3. It updates `mean_confidence` and `mean_prediction_error` with the same weight. An observation without a defined error (a `null` `prediction_error`, which Audition publishes for a reading it skipped as non-finite, and the placeholder fold of a transcription) leaves `mean_prediction_error` unchanged, so the average is never seeded with a made-up 0.
 4. It lowers `reliability` by 0.2 if the deviation exceeds the threshold and raises it by 0.1 otherwise.
 5. It returns the deviation so that the module can decide whether to publish `social_error`.
 
