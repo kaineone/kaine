@@ -201,3 +201,17 @@ def test_to_dict_from_dict_roundtrip():
         assert recovered.emotion_histogram.get(cat, 0.0) == pytest.approx(
             model.emotion_histogram.get(cat, 0.0)
         )
+
+
+def test_none_error_leaves_the_error_average_alone():
+    """A None prediction_error must not seed or update mean_prediction_error."""
+    model = AgentModel(id="kim", label="Kim")
+    model.update_from_emotion("happy", confidence=0.8, prediction_error=None)
+    assert "mean_prediction_error" not in model.behavioral_summary
+    assert model.interaction_count == 1
+
+    model.update_from_emotion("happy", confidence=0.8, prediction_error=0.4)
+    assert model.behavioral_summary["mean_prediction_error"] == pytest.approx(0.4)
+
+    model.update_from_emotion("happy", confidence=0.8, prediction_error=None)
+    assert model.behavioral_summary["mean_prediction_error"] == pytest.approx(0.4)

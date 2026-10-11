@@ -206,6 +206,11 @@ class SubstrateForwardModel:
         self.last_null_error: Optional[float] = None
         self.last_scored_had_context: bool = False
         self.last_reading_skipped: bool = False
+        # False for a skipped reading and for the first reading after one, which
+        # has no prediction to be scored against. The first reading's error of 0
+        # is defined (paper A.5), so it stays True there.
+        self.last_error_defined: bool = True
+        self._after_skip: bool = False
         self._last_input_context: Optional[list[float]] = None
         self._last_null_prediction: Optional[list[float]] = None
 
@@ -300,6 +305,8 @@ class SubstrateForwardModel:
         self.last_null_error = None
         self.last_scored_had_context = False
         self.last_reading_skipped = False
+        self.last_error_defined = True
+        self._after_skip = False
 
     accepts_timespan: bool = True
 
@@ -441,10 +448,14 @@ class SubstrateForwardModel:
             self._last_null_prediction = None
             self._last_input_context = None
             self._last_hidden = None
+            self.last_error_defined = False
+            self._after_skip = True
             self.last_reading_skipped = True
             return 0.0
 
         self.last_reading_skipped = False
+        self.last_error_defined = not self._after_skip
+        self._after_skip = False
 
         # 1. Prediction error from the previous tick's prediction.
         if self._last_prediction is None:

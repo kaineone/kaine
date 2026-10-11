@@ -32,7 +32,7 @@ async def bus():
 def _emotion_event(
     category: str = "happy",
     confidence: float = 0.8,
-    prediction_error: float = 0.0,
+    prediction_error: float | None = 0.0,
     source_label: str | None = "live_mic",
 ) -> Event:
     payload = {
@@ -367,5 +367,31 @@ async def test_emotion_event_without_source_label_defaults_to_speaker_label(
         assert model.interaction_count == 1
         assert model.emotion_histogram.get("happy", 0.0) > 0.0
         assert await emp.store.get("media:playlist") is None
+    finally:
+        await emp.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_emotion_event_with_null_error_does_not_seed_the_average(bus):
+    """A null prediction_error keeps mean_prediction_error unset, while a
+    later defined error seeds it normally."""
+    emp = await _new_empatheia(bus)
+    await emp.initialize()
+    try:
+        await emp._handle_audition_event(
+            _emotion_event("happy", confidence=0.9, prediction_error=None)
+        )
+        await emp._handle_audition_event(_transcription_event())
+        model = await emp.store.get("operator")
+        assert model is not None
+        assert model.interaction_count == 2
+        assert "mean_prediction_error" not in model.behavioral_summary
+
+        await emp._handle_audition_event(
+            _emotion_event("happy", confidence=0.9, prediction_error=0.3)
+        )
+        model2 = await emp.store.get("operator")
+        assert model2 is not None
+        assert model2.behavioral_summary["mean_prediction_error"] == pytest.approx(0.3)
     finally:
         await emp.shutdown()

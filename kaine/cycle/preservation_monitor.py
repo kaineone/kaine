@@ -847,10 +847,14 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             self._cursor = entry_id
             if event.type != "soma.report":
                 continue
-            magnitude = float((event.payload or {}).get("prediction_error", 0.0))
-            self._soma_warmup_active = bool(
-                (event.payload or {}).get("warmup_active", False)
-            )
+            payload = event.payload or {}
+            self._soma_warmup_active = bool(payload.get("warmup_active", False))
+            raw = payload.get("prediction_error", 0.0)
+            if raw is None:
+                # A reading Soma skipped as non-finite has no error: it is no sample,
+                # so it neither feeds nor resets the distress episode.
+                continue
+            magnitude = float(raw)
             u_now = self._unfrozen.now()
             now = self._clock()
             if self._distress.observe(magnitude, u_now, wall_now=now):
