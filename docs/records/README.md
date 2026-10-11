@@ -3,6 +3,7 @@
 Dated records kept as written. They describe the system at the time they were made, so they can disagree with the current book; the chapters describe the software as it is now.
 
 - [Pretend-process audit (2026-06-09)](audits/2026-06-09-pretend-process-audit.md): a read-only sweep for code that faked or stubbed work while claiming success, and what was fixed.
+- [K1-Jev W2a 0.8B smoke run (2026-10-06)](shakedowns/2026-10-06-k1jev-w2a-0.8b-smoke-run.md): the schema v1 pipeline test of the K1-Jev trainer on Qwen3.5-0.8B, its result and the gaps left for after the hiatus.
 - [Project handoff (2026-10-06)](2026-10-06-handoff.md): the state of the project at the pause, every open pull request and its next step, the decisions on record, and how to resume.
 - [Complexity audit (2026-10-03)](audits/2026-10-03-complexity-audit.md): how much of the codebase the research run uses, where complexity causes bugs, and the ranked work list for simplifying it.
 - [Architecture roadmap (historical)](history/architecture-roadmap.md): the original sequencing of the architecture changes, all since implemented and archived.
