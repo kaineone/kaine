@@ -68,6 +68,8 @@ This page shows the engineering work in flight, the operator and on-device steps
 | missing-error-consistency | 7/7 (100%) | The CL1 wetware Soma model marks a skipped reading and the next one as having no defined error, as the built-in model does, and Soma teaches no unexpected error from such a reading; an Empatheia merge treats a missing or null behavioural-summary entry as absent, not 0. |
 | blind-sensor-advisory | 10/10 (100%) | A processor whose readings stay undefined raises a content-free `welfare.blind_sensor` advisory on `welfare.out`, and one that stops publishing raises `welfare.sensor_silent`, each with a clear; the protective monitor does not act on them, the research log records them and the Nexus entity-care panel lists the processors that are blind or silent now. |
 | pilot-calibration | 19/21 (90%) | The tool that derives the planned test's settings from the pilot runs into one versioned record, the positive control on the inputs' first principal component with per-processor SNR and the learning period, and a boot check that refuses live runs without a complete record. |
+| threshold-contrast-inputs | 6/6 (100%) | Topos, Audition and Soma reports name the broadcast that preceded the prediction they score and the age of the context it used, the records the contrast at threshold groups and bins by; the threshold band itself waits on an operator decision, since the authors' rdrobust package is GPL-3.0-only. |
+| tone-analysis-inputs | 13/13 (100%) | The tone variant of the on arm (every tone event graded by the tone error ratio alone), the error ratio and the entry ids the tone analysis reads from the research log, the tone analysis's two sign tests (the difference and its adjusted difference over the tone bins), and the tone bins and both tone minimum effects from the tone-variant pilot runs. |
 | salience-score-keys | 7/8 (88%) | The cycle names each candidate `<stream>:<entry_id>`, so two streams that issue the same bus entry id in one millisecond no longer share one slot in the broadcast's score table. |
 
 ## Open operator and device steps
@@ -89,7 +91,7 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 63 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 65 active changes, 268 archived changes and 104 capability specs.
 
 The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 

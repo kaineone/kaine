@@ -67,7 +67,7 @@ over the last `prediction_error_window` acoustic errors. It is `null` when the s
 baseline_salience + (alert_salience − baseline_salience) × min(1, ratio / 2)
 ```
 
-`audition.emotion` (tone path). A non-neutral tone is an alert and is reported at `alert_salience`. A neutral tone is graded by the tone model's error ratio with the same formula. The payload's `alert` is true exactly when the tone is not neutral.
+`audition.emotion` (tone path). The tone model's error ratio is its error over the running mean of its last `prediction_error_window` defined errors, the current one included, and 0 when the error is not defined or the mean is 0 (paper A.2). `tone_rule` picks the rule. With `"categorical"`, the default, a non-neutral tone is an alert and is reported at `alert_salience`, and a neutral tone is graded by the error ratio with the same formula; the payload's `alert` is true exactly when the tone is not neutral. With `"error_ratio"`, the tone variant of the planned test (paper A.8), every tone event is graded by the error ratio and none is an alert, so a tone event drives the access rate's phasic input by surprise only. The payload carries the ratio as `tone_error_ratio`, the rule as `tone_rule`, and `classified`, false when the classifier failed or reported a degraded result. The ratio is not called `normalised_error` on a tone event, because Thymos reads that key as appraisal novelty. A failed classification keeps `alert_salience` under the default rule and is graded by the ratio, with `alert` false, under `"error_ratio"`.
 
 `audition.transcription` is graded by the tone model's error ratio. A failed classification or transcription is published at `alert_salience` with an `error` field and no `alert` flag. `audition.prosody` is always at `baseline_salience`.
 
@@ -91,9 +91,9 @@ All events are published to the `audition.out` stream.
 
 | Event type | Payload fields | Intensity |
 |---|---|---|
-| `audition.perception` (general audition only) | `source_label`, `change_score`, `prediction_error`, `normalised_error`, `context_gain`, `null_prediction_error`, `mean_prediction_error`, `context_age_s`, `entity_time_s`, `awake`, `alert`, `energy_dbfs`, `encoder_model_id`, `attended_window`, `attended_seconds`; `item` and `item_order` with a playlist feed | `alert_salience` on an alert, otherwise graded by the acoustic error ratio |
-| `audition.emotion` | `category`, `alert`, `confidence`, `scores`, `model`, `source_label`, `latency_ms`, `prediction_error`; `degraded` when the classifier did not run | `alert_salience` for a non-neutral tone, otherwise graded by the tone error ratio |
-| `audition.emotion` (failure) | `category` (`neutral`), `confidence`, `scores`, `model`, `source_label`, `latency_ms`, `error` | `alert_salience` |
+| `audition.perception` (general audition only) | `source_label`, `change_score`, `prediction_error`, `normalised_error`, `context_gain`, `null_prediction_error`, `mean_prediction_error`, `context_age_s`, `prediction_broadcast_tick`, `prediction_context_age_s`, `entity_time_s`, `awake`, `alert`, `energy_dbfs`, `encoder_model_id`, `attended_window`, `attended_seconds`; `item` and `item_order` with a playlist feed | `alert_salience` on an alert, otherwise graded by the acoustic error ratio |
+| `audition.emotion` | `category`, `alert`, `confidence`, `scores`, `model`, `source_label`, `latency_ms`, `prediction_error`, `tone_error_ratio`, `tone_rule`, `classified`; `degraded` when the classifier did not run | With `tone_rule = "categorical"`, `alert_salience` for a non-neutral tone, otherwise graded by the tone error ratio; with `"error_ratio"`, always graded by the ratio |
+| `audition.emotion` (failure) | `category` (`neutral`), `confidence`, `scores`, `model`, `source_label`, `latency_ms`, `error`, `tone_rule`, `classified` (false); `tone_error_ratio` under `"error_ratio"` | `alert_salience`; graded by the ratio under `"error_ratio"` |
 | `audition.transcription` (only with `transcription_enabled = true`) | `text`, `backend`, `source_label`, `model`, `sample_rate`, `audio_bytes_length`, `latency_ms`, `prediction_error`; `error` on failure | Graded by the tone error ratio; `alert_salience` on failure |
 | `audition.prosody` | `source_label`, `f0_mean_hz`, `f0_std_hz`, `f0_voiced_frac`, `rms_mean`, `rms_std`, `tempo_bpm` | `baseline_salience` |
 
@@ -158,6 +158,7 @@ Section `[audition]` in `config/kaine.toml`. For the full reference see [Module 
 | `prediction_error_window` | integer | `32` | Steps in the running means of each path's error, and of the acoustic change score |
 | `auditory_buffer_size` | integer | `16` | Inputs in each forward model's buffer |
 | `prosody_enabled` | boolean | `false` | Publish `audition.prosody` through librosa |
+| `tone_rule` | string | `"categorical"` | `"categorical"`: a non-neutral tone is an alert (paper A.2). `"error_ratio"`: every tone event is graded by the tone error ratio alone, the tone variant of the planned test (paper A.8). The only `[audition]` key a study may set |
 | `general_audition` | boolean | `false` shipped; `true` in `thesis_test` | Encode every window and publish `audition.perception`; speech becomes a gated specialization. Boot also switches the live microphone to fixed-window continuous capture, so non-speech is heard (there is no separate `continuous_capture` key) |
 | `arousal_window_min` | float | `0.15` | Attended fraction of the window at arousal 1.0 |
 | `arousal_window_max` | float | `1.0` | Attended fraction of the window at arousal 0.0 (swap the two to widen under arousal) |

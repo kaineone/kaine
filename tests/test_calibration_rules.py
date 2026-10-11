@@ -27,6 +27,8 @@ from kaine.experiment.calibration_rules import (
     sample_sd,
     sign_test_critical_count,
     sign_test_power,
+    sign_test_pvalue,
+    sign_test_verdict,
     stable_run_count,
 )
 
@@ -220,3 +222,17 @@ def test_quintile_edges() -> None:
 
 def test_snr_ladder_constant() -> None:
     assert SNR_LADDER == (1 / 16, 1 / 4, 1.0, 4.0, 16.0, 64.0, 256.0)
+
+
+def test_sign_test_pvalue_exact() -> None:
+    assert sign_test_pvalue([]) == Fraction(1)
+    assert sign_test_pvalue([1.0] * 5) == Fraction(1, 32)
+    assert sign_test_pvalue([1.0, -1.0]) == Fraction(3, 4)
+    assert sign_test_pvalue([0.0, 1.0]) == Fraction(1, 2)
+    with pytest.raises(CalibrationError):
+        sign_test_pvalue([float("nan")])
+
+
+def test_sign_test_verdict_min_effect_must_be_positive() -> None:
+    with pytest.raises(CalibrationError):
+        sign_test_verdict([0.2], min_effect=0)
