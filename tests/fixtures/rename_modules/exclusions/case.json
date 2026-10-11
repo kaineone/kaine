@@ -1,0 +1,7 @@
+{
+  "args": ["--apply"],
+  "expect_exit": 0,
+  "moves": [],
+  "report_contains": ["## moves (0)", "## changes (2 files, 2 replacements)", "replacements=2"],
+  "report_excludes": ["docs/records/2026-01-01-note.md", "kaine/decision/schema.py"]
+}

@@ -1,0 +1,10 @@
+[project]
+name = "demo"
+
+[project.optional-dependencies]
+dashboard = ["fastapi"]
+perception = ["kaine[audio]", "kaine[vision]"]
+full = ["kaine[dashboard]", "kaine[perception]"]
+
+[perception_feed.womb]
+mode = "seeded"

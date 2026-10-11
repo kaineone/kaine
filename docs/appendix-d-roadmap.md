@@ -16,7 +16,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | stream-wiring-quality | 18/20 (90%) | Clean up bus stream names, remove phantom reads and enforce the stream contract across modules. |
 | adapter-merge-out-of-process | 0/3 (0%) | Run the real adapter merge in a child process, so its non-float32 model load can never change a long-lived process's default dtype. Design only. |
 | chronos-scalar-timing | 1/3 (33%) | Test whether Chronos's interval timing shows the scalar property (timing variability proportional to the interval), as a falsification test. Design only. |
-| functional-module-names | 3/36 (8%) | Replace the Greek and Latin module names with the paper's functional names (Vision, Affect, Episodic memory, Workspace and the rest) and the developmental terms (developmental phase, stimulus source, maturation, entity) through one reviewed codemod, reading old operator names for two releases and preserved state and recorded datasets under old names for good. Design only. |
+| functional-module-names | 8/36 (22%) | Replace the Greek and Latin module names with the paper's functional names (Vision, Affect, Episodic memory, Workspace and the rest) and the developmental terms (developmental phase, stimulus source, maturation, entity) through one reviewed codemod, reading old operator names for two releases and preserved state and recorded datasets under old names for good. Design only. |
 | decision-server | 3/10 (30%) | Serve the K1-Jev decision model on its own loopback llama-server, apart from the language organ, with a fail-closed client (the client is built). |
 | deterministic-grader-fixes | 13/15 (87%) | Replace bare substring matching in the capability, refusal and hedge graders with exact, tested rules; two tasks need organ runs. |
 | hypnos-sleep-like-replay | 1/3 (33%) | Protect what the small online learners learned from later interference with sleep-like replay (Wei, Krishnan and Bazhenov). Design only. |
@@ -95,7 +95,7 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 68 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 69 active changes, 268 archived changes and 104 capability specs.
 
 The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 

@@ -1,0 +1,12 @@
+{
+  "args": ["--apply"],
+  "expect_exit": 0,
+  "moves": [
+    ["kaine/modules/thymos/__init__.py", "kaine/modules/affect/__init__.py"],
+    ["kaine/modules/thymos/module.py", "kaine/modules/affect/module.py"],
+    ["kaine/cycle/spot.py", "kaine/cycle/supervisor.py"],
+    ["kaine/workspace/syneidesis.py", "kaine/workspace/core.py"],
+    ["tests/test_nexus_routers.py", "tests/test_dashboard_routers.py"]
+  ],
+  "report_contains": ["## moves (5)", "## review queue (0)", "## collisions (0)"]
+}

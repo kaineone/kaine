@@ -195,6 +195,8 @@ include = ["kaine*"]
 target-version = "py311"
 line-length = 100
 include = ["kaine/**/*.py", "tests/**/*.py", "plugins/**/*.py"]
+# Before/after copies of tiny repositories for the rename codemod's tests.
+extend-exclude = ["tests/fixtures/rename_modules"]
 
 [tool.ruff.lint]
 select = [
@@ -397,6 +399,9 @@ source_modules = [
     # The K1-Jev decision schema, prompt renderer and local client: the runtime
     # and the evaluation-side graders both consult the decision model.
     "kaine.decision",
+    # The old-to-new module name table (pure data): the rename codemod and the
+    # runtime alias readers on both sides read it.
+    "kaine.legacy_names",
 ]
 forbidden_modules = [
     "kaine.cycle",
