@@ -157,15 +157,15 @@ The context enters each processor's forward model as an extra input alongside th
 
 ### Broadcast information gain per report
 
-Topos, Audition's acoustic path and Soma also form a second prediction with a null context and publish, on every report, `context_gain` and `context_age_s`:
+Topos, Audition's acoustic path and Soma also form a second prediction with a null context and publish, on every report, `context_gain`, the two errors it is computed from (`null_prediction_error` and `mean_prediction_error`), and `context_age_s`:
 
 ```
 context_gain = (null error − error) / running mean error
 ```
 
-The null context keeps the module's own share of the context and replaces the other sources' share with its mean over the contexts the module has adopted so far in the run. Components 0 to 3 are replaced by their running means, the additive components (4 to 19 and 23) by the kept sources' current share plus the mean of the other sources' share, and components 20 to 22 are kept. The kept sources are `topos` for Topos, `audition` for Audition, and `soma` and `lingua` for Soma, because the language organ's load on the host would otherwise let its share predict Soma's input. The null prediction never trains the model. `context_gain` is `None` until a prediction formed with an adopted context has been scored.
+The null context keeps the module's own share of the context and replaces the other sources' share with its mean over the contexts the module has adopted so far in the run. Components 0 to 3 are replaced by their running means, the additive components (4 to 19 and 23) by the kept sources' current share plus the mean of the other sources' share, and components 20 to 22 are kept. The context and its null are built from one reading of the clock, so they carry the same age. The kept sources are `topos` for Topos, `audition` for Audition, and `soma` and `lingua` for Soma, because the language organ's load on the host would otherwise let its share predict Soma's input. The null prediction never trains the model. `context_gain` is `None` until a prediction formed with an adopted context has been scored.
 
-This per-report gain is the measurement the planned workspace-mediation test is built on. The positive control that checks the measure detects injected information is not built yet. See [For researchers](../14-for-researchers.md#the-planned-test).
+This per-report gain is the measurement the planned workspace-mediation test is built on. The positive control that checks the measure detects injected information is built as a study-mode facility (`[positive_control]`, off by default). See [For researchers](../14-for-researchers.md#the-planned-test).
 
 ### The arms of the planned test
 

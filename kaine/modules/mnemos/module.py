@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from typing import Any, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
@@ -66,6 +67,9 @@ class Mnemos(BaseModule):
         replay_affect_weight: float = 0.7,
         replay_recency_weight: float = 0.3,
         replay_redact_content: bool = True,
+        # Newest episodic traces sleep's cross-period selection reads; 128
+        # matches short_term_capacity, the most one consolidation pass hands to replay.
+        cross_period_candidates: int = 128,
         # Peer stream names for affect + Hypnos window tracking
         thymos_stream: str = "thymos.out",
         hypnos_stream: str = "hypnos.out",
@@ -84,11 +88,14 @@ class Mnemos(BaseModule):
             raise ValueError("recall_top_k must be positive")
         if recall_cooldown_s < 0:
             raise ValueError("recall_cooldown_s must be >= 0")
+        if cross_period_candidates <= 0:
+            raise ValueError("cross_period_candidates must be positive")
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
         self._recall_top_k = int(recall_top_k)
         self._recall_on_workspace = bool(recall_on_workspace)
         self._recall_cooldown_s = float(recall_cooldown_s)
+        self._cross_period_candidates = int(cross_period_candidates)
         self._clock = entity_clock or EntityClock()
         # Subjective-time timestamp of the last spontaneous recall; None until
         # the first recall fires so the very first cued tick is not suppressed.
@@ -228,11 +235,11 @@ class Mnemos(BaseModule):
         return self._clock.now() - self._last_recall_monotonic >= self._recall_cooldown_s
 
     # ------------------------------------------------------------------
-    # Affect subscription (thymos.state) + Hypnos window tracking
+    # Affect subscription (thymos.state) + Hypnos sleep-end tracking
     # ------------------------------------------------------------------
 
     async def _peer_consumer_loop(self) -> None:
-        """Background loop: read thymos.out and hypnos.out for affect + window."""
+        """Background loop: read thymos.out for affect and hypnos.out for sleep end."""
         try:
             while not self._stopped.is_set():
                 progressed = False
@@ -274,11 +281,11 @@ class Mnemos(BaseModule):
             except Exception:
                 log.warning("mnemos: failed to parse thymos.state payload", exc_info=True)
         elif stream == self._hypnos_stream:
-            if event.type == "hypnos.sleep.started":
-                self._replay_engine.open_window()
-                log.debug("mnemos: Hypnos maintenance window opened")
-            elif event.type == "hypnos.sleep.completed":
+            # The window is opened by Hypnos through open_replay_window(),
+            # so a late sleep.started on the bus cannot reopen it after the sleep ended.
+            if event.type == "hypnos.sleep.completed":
                 self._replay_engine.close_window()
+                self._core.clear_last_consolidated()
                 log.debug("mnemos: Hypnos maintenance window closed")
 
     @property
@@ -291,34 +298,31 @@ class Mnemos(BaseModule):
         """The replay engine (for tests and Hypnos orchestration)."""
         return self._replay_engine
 
+    def open_replay_window(self) -> None:
+        """Open the replay window. Hypnos calls this inside a sleep, immediately before phase 2's replay."""
+        self._replay_engine.open_window()
+
+    def close_replay_window(self) -> None:
+        """Close the replay window. Hypnos calls this once phase 2's replay is done."""
+        self._replay_engine.close_window()
+
     async def replay_now(self) -> list[ReplayEvent]:
         """Run the replay selection during the active Hypnos maintenance window.
 
-        Selects traces from the short-term buffer and recently persisted
-        episodic memories, publishes them as ``mnemos.replay`` events, and
-        returns the list of published events.
+        Selects traces from the short-term buffer plus the traces the latest
+        consolidation pass moved (phase 1 of the same sleep), publishes them
+        as ``mnemos.replay`` events, and returns the list of published events.
 
-        Raises `ReplayWindowError` if called outside an active Hypnos window.
+        Raises `ReplayWindowError` unless Hypnos has opened the replay window (`open_replay_window()`).
         """
         # Build candidates from the short-term buffer (these have timestamps
-        # and affect tags stored on StoredMemory objects).
+        # and affect tags stored on StoredMemory objects) plus the traces
+        # phase 1 consolidated, so phase 2 replays what phase 1 moved.
         candidates: list[ReplayEntry] = []
         for idx, memory in enumerate(self._core._short_term):
-            affect = memory.affect or {}
-            try:
-                intensity = float(affect.get("intensity", 0.0))
-            except (TypeError, ValueError):
-                intensity = 0.0
-            candidates.append(
-                ReplayEntry(
-                    point_id=f"short_term:{idx}",
-                    text=memory.text,
-                    affect_intensity=intensity,
-                    timestamp=memory.timestamp,
-                    payload=dict(memory.payload),
-                    affect=dict(affect) if affect else None,
-                )
-            )
+            candidates.append(_replay_entry(f"short_term:{idx}", memory))
+        for point_id, memory in self._core.last_consolidated:
+            candidates.append(_replay_entry(point_id, memory))
 
         # Delegate selection + guard to the engine.  ReplayWindowError propagates.
         events = self._replay_engine.replay(candidates)
@@ -428,10 +432,13 @@ class Mnemos(BaseModule):
         """Select traces spanning *periods* contiguous time windows.
 
         "Memory period" is defined as a contiguous time bucket: all available
-        traces (short-term buffer + persisted episodic points) are sorted by
-        timestamp, then divided into *periods* equal-width windows
-        (oldest → newest).  Up to *per_period* traces are sampled from each
-        non-empty bucket.
+        traces (short-term buffer, the traces the latest consolidation pass
+        moved during phase 1 of this sleep, and the newest
+        ``cross_period_candidates`` persisted episodic points, read without
+        vectors) are gathered once each, sorted by timestamp, and divided
+        into *periods* equal-width windows (oldest to newest). Up to
+        *per_period* traces are sampled from each non-empty bucket. This works
+        on every storage backend.
 
         Returns a mapping ``{period_label: [trace_dict, ...]}`` where each
         trace dict carries ``point_id`` (str) and ``text`` (str) — the shape
@@ -467,28 +474,47 @@ class Mnemos(BaseModule):
                 }
             )
 
-        # Episodic storage — use InMemoryStorage._collections directly when
-        # available (same pattern as downscale_activations).  For remote
-        # backends that don't expose _collections we skip (no in-process data
-        # to bucket; phase 3 degrades gracefully).
-        storage = self._core._storage
-        collections = getattr(storage, "_collections", None)
-        if collections is not None:
-            episodic_key = self._core.collection_name("episodic")
-            for point in collections.get(episodic_key, []):
-                payload = dict(point.get("payload", {}))
-                affect_raw = point.get("affect") or {}
-                ts = float(payload.get("timestamp", 0.0))
-                all_traces.append(
-                    {
-                        "point_id": str(point.get("id", "")),
-                        "text": str(point.get("text", "")),
-                        "timestamp": ts,
-                        "affect_intensity": float(affect_raw.get("intensity", 0.0)),
-                        "valence": float(affect_raw.get("valence", 0.0)),
-                        "dominance": float(affect_raw.get("dominance", 0.0)),
-                    }
-                )
+        # Traces phase 1 consolidated into episodic storage this sleep.
+        seen: set[str] = set()
+        for point_id, memory in self._core.last_consolidated:
+            seen.add(_point_key(point_id))
+            affect = dict(memory.affect) if memory.affect else {}
+            all_traces.append(
+                {
+                    "point_id": str(point_id),
+                    "text": memory.text,
+                    "timestamp": memory.timestamp,
+                    "affect_intensity": float(affect.get("intensity", 0.0)),
+                    "valence": float(affect.get("valence", 0.0)),
+                    "dominance": float(affect.get("dominance", 0.0)),
+                }
+            )
+
+        # The newest persisted episodic traces, without vectors, bounded by
+        # cross_period_candidates. Let StorageError propagate so phase 3 records a
+        # failure instead of combining from a partial pool.
+        episodic_key = self._core.collection_name("episodic")
+        recent = await self._core.storage.recent_points(
+            episodic_key, limit=self._cross_period_candidates
+        )
+        for point in recent:
+            key = _point_key(point.get("id", ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            payload = dict(point.get("payload", {}))
+            affect_raw = point.get("affect") or {}
+            ts = float(payload.get("timestamp", 0.0))
+            all_traces.append(
+                {
+                    "point_id": str(point.get("id", "")),
+                    "text": str(point.get("text", "")),
+                    "timestamp": ts,
+                    "affect_intensity": float(affect_raw.get("intensity", 0.0)),
+                    "valence": float(affect_raw.get("valence", 0.0)),
+                    "dominance": float(affect_raw.get("dominance", 0.0)),
+                }
+            )
 
         if not all_traces:
             return {}
@@ -630,6 +656,36 @@ _RAW_PERCEPTUAL_EVENT_TYPES: frozenset[str] = frozenset(
 )
 
 
+def _replay_entry(point_id: str, memory: Any) -> ReplayEntry:
+    """Build a ReplayEntry from a StoredMemory with the given point id."""
+    affect = memory.affect or {}
+    try:
+        intensity = float(affect.get("intensity", 0.0))
+    except (TypeError, ValueError):
+        intensity = 0.0
+    return ReplayEntry(
+        point_id=point_id,
+        text=memory.text,
+        affect_intensity=intensity,
+        timestamp=memory.timestamp,
+        payload=dict(memory.payload),
+        affect=dict(affect) if affect else None,
+    )
+
+
+def _point_key(point_id: Any) -> str:
+    """Comparable form of a storage point id.
+
+    Qdrant stores the hex UUID that upsert returns and gives it back in
+    hyphenated form, so ids that parse as UUIDs compare by their hex.
+    """
+    text = str(point_id)
+    try:
+        return uuid.UUID(text).hex
+    except ValueError:
+        return text
+
+
 def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
     """Serialize the snapshot to the text Mnemos stores and recalls against.
 
@@ -638,6 +694,8 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
     either stored in the payload or meaningless after stream trimming). Every
     payload that is kept passes through ``strip_vectors``, so memory text never
     carries perceptual embeddings; raw-perceptual payloads are not kept at all.
+    Replay events are recorded by id only; storing the replayed text would nest
+    the old trace inside the new one on every sleep.
     """
     pieces: list[str] = []
     pieces.append("inhibited" if snapshot.inhibited else "active")
@@ -646,6 +704,10 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
             # Record that a raw-perceptual event was in the workspace, but never
             # its verbatim payload (raw sense data must not persist into memory).
             pieces.append(f"{event.source}:{event.type}=<raw-perceptual omitted>")
+            continue
+        if event.type == "mnemos.replay":
+            # Storing the text would nest the old trace inside the new one on every sleep.
+            pieces.append(f"{event.source}:{event.type}=<replay of {event.payload.get('memory_id')}>")
             continue
         pieces.append(f"{event.source}:{event.type}={strip_vectors(event.payload)}")
     return " | ".join(pieces) if pieces else ""

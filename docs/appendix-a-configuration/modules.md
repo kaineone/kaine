@@ -294,7 +294,6 @@ Thymos maintains a dimensional VAD (valence, arousal, dominance) state, a catego
 | `publish_interval_s` | float | `1.0` | Seconds between affect-state publications to the bus. |
 | `baseline_salience` | float | `0.1` | Intensity of routine affective state publications. |
 | `alert_salience` | float | `0.7` | Intensity on significant affective change or drive threshold crossing. |
-| `social_drive_time_scale_s` | float | `600.0` | Accepted but unused. The social drive builds at its build rate once an operator interaction has occurred. |
 | `soma_stream` | string | `"soma.out"` | Stream observed for interoceptive prediction errors. |
 | `chronos_stream` | string | `"chronos.out"` | Stream observed for temporal events. |
 | `mnemos_stream` | string | `"mnemos.out"` | Stream observed for memory recall events that trigger affect. |
@@ -306,6 +305,8 @@ Thymos maintains a dimensional VAD (valence, arousal, dominance) state, a catego
 | `intent_rate_weight` | float | `0.05` | Per-broadcast weight of the intent-rate average that holds off restlessness. |
 | `valence_time_constant_s` | float | `30.0` | Time constant of valence's relaxation toward its target. |
 | `valence_progress_gain` | float | `2.0` | Gain on learning progress in the valence target and the pleasantness check. |
+
+The retired key `social_drive_time_scale_s` is ignored with a warning if present. The social drive has no time scale of its own: it builds at its build rate once the entity has heard a voice.
 
 ### Affect coupling
 
@@ -321,7 +322,7 @@ When enabled, perceived speaker emotion is folded into Thymos's own Scherer appr
 | `coupling_ceiling` | float | `0.15` | Hard ceiling on the appraisal-influence weight. |
 | `decay_s` | float | `10.0` | Window over which a perceived-emotion signal decays to zero. |
 
-The legacy key `coupling_max_rate_per_s` is ignored if present.
+The retired key `coupling_max_rate_per_s` is ignored with a warning if present.
 
 ### Drives
 

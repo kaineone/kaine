@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     pass
-from kaine.boot.errors import ConfigurationError, _require_keys
+from kaine.boot.errors import ConfigurationError, _require_keys, _warn_retired_keys
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
@@ -36,7 +36,6 @@ def make_thymos(
         "soma_stream",
         "chronos_stream",
         "mnemos_stream",
-        "social_drive_time_scale_s",
         "volition_stream",
         "fast_time_constant_s",
         "slow_time_constant_s",
@@ -48,7 +47,10 @@ def make_thymos(
         "drives",  # nested per-drive sub-tables, consumed by DriveSet default
         "coupling",  # nested [thymos.coupling] sub-table
     }
-    _require_keys(section, allowed)
+    # Retired keys: accepted so old operator files boot, ignored with a warning.
+    retired = {"social_drive_time_scale_s"}
+    _require_keys(section, allowed | retired)
+    _warn_retired_keys(section, retired, "[thymos]")
     baseline = DimensionalState(
         valence=float(section.get("baseline_valence", 0.0)),
         arousal=float(section.get("baseline_arousal", 0.3)),
@@ -63,7 +65,6 @@ def make_thymos(
         "soma_stream",
         "chronos_stream",
         "mnemos_stream",
-        "social_drive_time_scale_s",
         "volition_stream",
         "fast_time_constant_s",
         "slow_time_constant_s",
@@ -92,11 +93,11 @@ def make_thymos(
         "coupling_ceiling",
         "decay_s",
     }
-    # Tolerate (ignore) the legacy ``coupling_max_rate_per_s`` key: it backed the
-    # removed DriftSafeguard (thymos-emergent-affect-coupling). Existing local
-    # configs that still carry it must not fail to boot.
+    # Retired: coupling_max_rate_per_s backed the removed DriftSafeguard
+    # (thymos-emergent-affect-coupling).
     coupling_ignored = {"coupling_max_rate_per_s"}
     _require_keys(coupling_section, coupling_allowed | coupling_ignored)
+    _warn_retired_keys(coupling_section, coupling_ignored, "[thymos.coupling]")
     coupling_kwargs: dict[str, Any] = {}
     for k in coupling_allowed:
         if k in coupling_section:

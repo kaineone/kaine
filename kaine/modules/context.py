@@ -158,15 +158,26 @@ class BroadcastContext:
         age = max(0.0, self._clock() - self._received_at)
         return featurize_events(self._members, age)
 
-    def null_vector(self, kept_sources: Collection[str]) -> Optional[list[float]]:
-        """Null-context estimate keeping selected source shares."""
-        if not self.has_context:
-            return None
+    def context_and_null(
+        self, kept_sources: Collection[str]
+    ) -> tuple[Optional[list[float]], Optional[list[float]]]:
+        """The context and its null context, formed from one reading of the clock.
 
+        Both carry the same age and flags, so the null differs from the context
+        only in the coalition-level components and the other sources'
+        contributions (Appendix A.8).
+        """
+        if not self.has_context:
+            return None, None
         vec = self.vector()
         if vec is None:
-            return None
+            return None, None
+        return vec, self._null_from(list(vec), kept_sources)
 
+    def _null_from(
+        self, vec: list[float], kept_sources: Collection[str]
+    ) -> list[float]:
+        """Build the null context from an already-read context vector."""
         # [0..3] running means over adopted contexts.
         for i in range(4):
             vec[i] = self._running_sum_components_0_3[i] / self._n
@@ -196,6 +207,17 @@ class BroadcastContext:
         # Components 20, 21, 22 remain from vector().
 
         return vec
+
+    def null_vector(self, kept_sources: Collection[str]) -> Optional[list[float]]:
+        """Null-context estimate keeping selected source shares."""
+        if not self.has_context:
+            return None
+
+        vec = self.vector()
+        if vec is None:
+            return None
+
+        return self._null_from(vec, kept_sources)
 
     def age_s(self) -> Optional[float]:
         """Entity seconds since the adopted broadcast was published

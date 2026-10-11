@@ -284,6 +284,32 @@ def test_serialize_snapshot_omits_raw_perceptual_payload():
     assert "soma:soma.report={'x': 1}" in text
 
 
+def test_serialize_snapshot_records_replay_without_its_text():
+    replay = (
+        "e_rep",
+        Event(
+            source="mnemos",
+            type="mnemos.replay",
+            payload={
+                "memory_id": "abc123",
+                "text": "an old trace with SECRET words",
+                "affect": None,
+                "affect_intensity": 0.4,
+                "source_timestamp": 1.0,
+                "replayed_at": 2.0,
+            },
+            salience=0.15,
+            timestamp=datetime.now(timezone.utc),
+        ),
+    )
+    text = mnemos_module._serialize_snapshot(
+        _snapshot([replay, _event(source="soma", type_="soma.report", eid="e_soma")])
+    )
+    assert "SECRET" not in text
+    assert "mnemos:mnemos.replay=<replay of abc123>" in text
+    assert "soma:soma.report" in text
+
+
 @pytest.mark.asyncio
 async def test_no_cue_no_recall(bus: AsyncBus):
     # Scenario: a broadcast with no meaningful cue -> no recall (and no store).
@@ -535,8 +561,8 @@ async def test_recall_affect_bias_intact(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_hypnos_window_events_toggle_replay_engine(bus: AsyncBus):
-    """hypnos.sleep.started/completed toggle the replay engine window flag."""
+async def test_hypnos_owns_the_replay_window(bus: AsyncBus):
+    """Hypnos opens the replay window through Mnemos; sleep start on the bus does not open it, and sleep completion closes it."""
     mnemos = await _new_mnemos(bus)
     await mnemos.initialize()
     try:
@@ -554,6 +580,9 @@ async def test_hypnos_window_events_toggle_replay_engine(bus: AsyncBus):
             timestamp=datetime.now(timezone.utc),
         )
         mnemos._handle_peer_event(mnemos._hypnos_stream, started)
+        assert not mnemos.replay_engine.window_active
+
+        mnemos.open_replay_window()
         assert mnemos.replay_engine.window_active
 
         completed = BusEvent(
@@ -564,6 +593,11 @@ async def test_hypnos_window_events_toggle_replay_engine(bus: AsyncBus):
             timestamp=datetime.now(timezone.utc),
         )
         mnemos._handle_peer_event(mnemos._hypnos_stream, completed)
+        assert not mnemos.replay_engine.window_active
+
+        mnemos.open_replay_window()
+        assert mnemos.replay_engine.window_active
+        mnemos.close_replay_window()
         assert not mnemos.replay_engine.window_active
     finally:
         await mnemos.shutdown()

@@ -14,6 +14,11 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 from kaine.modules.context import CONTEXT_DIM, BroadcastContext
+from kaine.modules.positive_control import (
+    PositiveControl,
+    PositiveControlSettings,
+    publish_result,
+)
 from kaine.modules.soma.detector import (
     AnomalyDetector,
     ThresholdAnomalyDetector,
@@ -111,6 +116,7 @@ class Soma(BaseModule):
         self_rhythm: Any | None = None,
         self_rhythm_step_hz: float = 20.0,
         maternal_drive: Callable[[], float] | None = None,
+        positive_control: Optional[PositiveControlSettings] = None,
     ) -> None:
         super().__init__(bus)
         if read_interval_s <= 0:
@@ -133,6 +139,12 @@ class Soma(BaseModule):
         self._clock = entity_clock or EntityClock()
         # Accessed broadcast prediction context for Soma (paper Appendix A.1).
         self._context = BroadcastContext(self._clock.now)
+        # Positive control of the information-gain measure; study configuration only.
+        self._positive_control: Optional[PositiveControl] = (
+            PositiveControl("soma", positive_control)
+            if positive_control is not None and positive_control.enabled
+            else None
+        )
         self._feature_layout: int = 2
         self._last_read_time: float | None = None
         self._weights = dict(weights) if weights is not None else dict(DEFAULT_WEIGHTS)
@@ -316,6 +328,7 @@ class Soma(BaseModule):
 
     async def shutdown(self) -> None:
         await super().shutdown()
+        await self.finish_positive_control()
         try:
             await self._reader.shutdown()
         except Exception:
@@ -350,6 +363,67 @@ class Soma(BaseModule):
     def maternal_drive(self):
         """Read-only access to the maternal drive provider."""
         return self._maternal_drive
+
+    async def _run_positive_control(
+        self,
+        x: list[float],
+        ctx: Optional[list[float]],
+        null: Optional[list[float]],
+        live_gain: Optional[float],
+        live_mean_error: Optional[float],
+        timespan: Optional[float],
+    ) -> None:
+        """Step the positive control after the live report and publish its running result."""
+        control = self._positive_control
+        if control is None:
+            return
+        try:
+            control.prepare(self._forward_model)
+            result = await asyncio.to_thread(
+                control.after_report,
+                self._forward_model,
+                x,
+                ctx,
+                null,
+                live_gain,
+                live_mean_error,
+                awake=not self._in_hypnos,
+                timespan=timespan,
+            )
+            if result is not None and self._positive_control is control:
+                await publish_result(self._bus, result)
+        except Exception:
+            # A failing control must not break perception. It stops for this run
+            # and records a failure, so the run cannot pass.
+            log.exception("soma: positive control failed and is switched off for this run")
+            try:
+                await publish_result(self._bus, control.failure_result())
+            except Exception:
+                log.error(
+                    "soma: could not publish the positive control's failure record; "
+                    "the run has no terminal record and cannot pass",
+                    exc_info=True,
+                )
+            self._positive_control = None
+
+    async def finish_positive_control(self) -> None:
+        """Publish the control's terminal record and stop the control for this run.
+
+        The cycle calls it before the research log stops; module shutdown calls it
+        again, which then does nothing.
+        """
+        control = self._positive_control
+        if control is None:
+            return
+        try:
+            await publish_result(self._bus, control.final_result())
+        except Exception:
+            log.error(
+                "soma: could not publish the positive control's terminal record; "
+                "the run cannot pass",
+                exc_info=True,
+            )
+        self._positive_control = None
 
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).
@@ -401,12 +475,9 @@ class Soma(BaseModule):
             ts = min(10.0, max(0.0, (now_read - self._last_read_time) / self._read_interval_s))
         self._last_read_time = now_read
 
+        ctx = null = None
         if getattr(self._forward_model, "context_dim", 0) > 0:
-            ctx = self._context.vector()
-            null = (
-                self._context.null_vector(("soma", "lingua"))
-                if ctx is not None else None
-            )
+            ctx, null = self._context.context_and_null(("soma", "lingua"))
             if getattr(self._forward_model, "accepts_timespan", False):
                 prediction_error = self._forward_model.step(
                     feature_vec, timespan=ts, context=ctx, null_context=null
@@ -421,9 +492,13 @@ class Soma(BaseModule):
             else:
                 prediction_error = self._forward_model.step(feature_vec)
         self._last_prediction_error = prediction_error
-        self._prediction_error_window.append(prediction_error)
+        # A skipped reading carries no real error to average.
+        if not getattr(self._forward_model, "last_reading_skipped", False):
+            self._prediction_error_window.append(prediction_error)
 
         context_gain: Optional[float] = None
+        null_prediction_error: Optional[float] = None
+        mean_prediction_error: Optional[float] = None
         if (
             getattr(self._forward_model, "last_scored_had_context", False)
             and self._forward_model.last_null_error is not None
@@ -434,6 +509,19 @@ class Soma(BaseModule):
                 context_gain = (
                     self._forward_model.last_null_error - prediction_error
                 ) / mean_err
+                null_prediction_error = self._forward_model.last_null_error
+                mean_prediction_error = mean_err
+
+        # Positive control (study mode only): shadows of the forward model, never the live one.
+        if self._positive_control is not None and getattr(self._forward_model, "context_dim", 0) > 0:
+            await self._run_positive_control(
+                feature_vec,
+                ctx,
+                null,
+                context_gain,
+                mean_prediction_error,
+                ts if getattr(self._forward_model, "accepts_timespan", False) else None,
+            )
 
         # --- Subjective clock / warm-up bookkeeping ---
         # Subjective time: the fatigue dt integral and the regulation
@@ -546,7 +634,10 @@ class Soma(BaseModule):
             "alert": bool(alert.is_alert),
             "prediction_error": prediction_error,
             # cross-module broadcast information gain, paper Appendix A.8
+            # paired evaluations behind the information-gain measure
             "context_gain": context_gain,
+            "null_prediction_error": null_prediction_error,
+            "mean_prediction_error": mean_prediction_error,
             "context_age_s": self._context.age_s(),
             "unexpected_error": unexpected_error,
             "fatigue_value": self._fatigue.value,

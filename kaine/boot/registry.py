@@ -267,9 +267,6 @@ def build_registry(
 
     if bool(toggles.get("hypnos", False)):
         # construct_module hands Hypnos its sibling modules from the registry.
-        # Nous is now a pymdp/JAX active-inference engine with no NAR subprocess,
-        # so there is no process for Hypnos's belief-revision phase to step;
-        # that phase skips cleanly when nous_process is None.
         hypnos = construct_module(
             "hypnos",
             bus,
@@ -321,6 +318,7 @@ def construct_module(
     section = dict(kaine_config.get(name) or {})
     if name in ("topos", "audition", "soma"):
         section["perception_feed"] = dict(kaine_config.get("perception_feed") or {})
+        section["positive_control"] = dict(kaine_config.get("positive_control") or {})
 
     if name in ("mnemos", "empatheia"):
         section["_embedder"] = shared_embedder(registry, kaine_config)
@@ -333,7 +331,6 @@ def construct_module(
             bus,
             section,
             mnemos=mnemos,
-            nous_process=None,
             thymos=thymos,
             phantasia=phantasia,
             kaine_config=kaine_config,

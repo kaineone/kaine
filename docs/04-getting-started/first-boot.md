@@ -101,7 +101,7 @@ The entrypoint:
 6. Writes `state/cycle/runtime.json` for Nexus.
 7. Begins ticking at `[cycle].processing_rate_hz` (default `10.0` Hz, 100 ms per tick).
 
-In the operator-supervised path, the cycle refuses to start unless `KAINE_CYCLE_OPERATOR_PRESENT=1` is set. The preflight script `scripts/first-boot.sh` reads its own signal, `KAINE_FIRST_BOOT_OPERATOR_PRESENT`; the running cycle reads `KAINE_CYCLE_OPERATOR_PRESENT`. There are two other boot paths. An unsupervised research run starts only when its research gate verifies, among other conditions, that preservation, the welfare response, full logging and a preserve-and-revive round trip work on this install (see [For researchers](../14-for-researchers.md)). An opt-in unattended start must pass eight conditions at every boot and exits with code `6` when one fails.
+In the operator-supervised path, the cycle refuses to start unless `KAINE_CYCLE_OPERATOR_PRESENT=1` is set. The preflight script `scripts/first-boot.sh` reads its own signal, `KAINE_FIRST_BOOT_OPERATOR_PRESENT`; the running cycle reads `KAINE_CYCLE_OPERATOR_PRESENT`. There are two other boot paths. An unsupervised research run starts only when its research gate verifies, among other conditions, that preservation, the welfare response, full logging and a preserve-and-revive round trip work on this install (see [For researchers](../14-for-researchers.md)). An opt-in unattended start must pass nine conditions at every boot and exits with code `6` when one fails.
 
 If the organ returns no content, the cycle refuses boot and exits with code `9` unless `KAINE_ALLOW_MUTE_ORGAN=1` is set.
 
@@ -128,7 +128,7 @@ See [Day-to-day operation](../06-operation/README.md). Each additional module is
 
 - It calls no cloud service at runtime. All inference and cognitive processing is local, and model weights are downloaded once during setup.
 - It does not record raw audio or video to disk. Live perception streams pass through processing in memory and are released. See [Security and privacy](../13-security-and-privacy.md#raw-perception-never-touches-disk).
-- It does not start itself unless you opt in. Every launch needs the operator-present signal (`KAINE_CYCLE_OPERATOR_PRESENT=1`), a passing research gate in an unsupervised research run, or an opt-in unattended start that passes eight conditions at every boot, and the cycle refuses to boot if none holds. See [For researchers](../14-for-researchers.md).
+- It does not start itself unless you opt in. Every launch needs the operator-present signal (`KAINE_CYCLE_OPERATOR_PRESENT=1`), a passing research gate in an unsupervised research run, or an opt-in unattended start that passes nine conditions at every boot, and the cycle refuses to boot if none holds. See [For researchers](../14-for-researchers.md).
 - It does not act unless Praxis is enabled and the operator has explicitly added shell or file-write whitelist entries.
 
 ## Roadmap and hardware portability

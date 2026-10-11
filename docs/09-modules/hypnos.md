@@ -14,7 +14,7 @@ A sleep runs between a `hypnos.sleep.started` and a `hypnos.sleep.completed` eve
 
 The predictive processors read `hypnos.out` and suspend forward-model adaptation for the whole window: Topos, Audition (both its acoustic and its tone forward models), Soma and Chronos. Each keeps predicting and reporting, but none updates its weights until `hypnos.sleep.completed` arrives. Soma's fatigue decays three times faster while the window is open.
 
-At the end of every sleep, phase 4 calls Thymos's `affective_reset()`, which returns valence, arousal and dominance to baseline, clears the drives and the learning-progress and alert-rate trackers, and publishes `thymos.state` with `reset: true` (see [Thymos](thymos.md#sleep-reset)). When `hypnos.sleep.completed` arrives, Soma resets its fatigue accumulator and its regulation state. Because every sleep ends this way, arousal cannot drift across a whole run.
+Every sleep ends with phase 5, the affective reset. It calls Thymos's `affective_reset()`, which returns valence, arousal and dominance to baseline, clears the drives and the learning-progress and alert-rate trackers, and publishes `thymos.state` with `reset: true` (see [Thymos](thymos.md#sleep-reset)). When `hypnos.sleep.completed` arrives, Soma resets its fatigue accumulator and its regulation state. Because every sleep ends this way, arousal cannot drift across a whole run.
 
 ### In the base-thesis form
 
@@ -23,10 +23,10 @@ With Mnemos, Phantasia and voice alignment off, the consolidation phases do no w
 - Phase 1 calls the oscillator hook, a no-op unless the oscillatory layer is active, and skips consolidation.
 - Phase 2 returns at once. The perceptual feed is paused for the whole sleep in any case (see [Sleep](../10-sleep/README.md)).
 - Phase 3 is skipped by its flag.
-- Phase 4 resets Thymos.
-- Phase 5 computes the consolidation-divergence metric and skips training.
+- Phase 4 computes the consolidation-divergence metric and skips training. Hypnos then rotates the language organ's intent log into the per-sleep corpus and computes the content-free voice measures.
+- Phase 5 resets Thymos.
 
-After the phases Hypnos rotates the language organ's intent log into the per-sleep corpus, computes the content-free voice measures, and runs the sleep-time intent audit. A base-form sleep is therefore short, and what it does is suspend adaptation, reset affect and drives, and reset Soma's fatigue. The consolidation phases begin to work once Mnemos and Phantasia join.
+After the phases Hypnos runs the sleep-time intent audit. A base-form sleep is therefore short, and what it does is suspend adaptation, reset affect and drives, and reset Soma's fatigue. The consolidation phases begin to work once Mnemos and Phantasia join.
 
 ## Triggers
 
@@ -49,18 +49,18 @@ flowchart TD
     ST --> P1
     P1["Phase 1: light consolidation\n• set_frequency(0.5) on active modules\n• mnemos.consolidate_now()"]
     P1 --> P2
-    P2["Phase 2: deep consolidation (needs Mnemos)\n• mnemos.downscale_activations(0.9)\n• mnemos.replay_now()"]
+    P2["Phase 2: deep consolidation (needs Mnemos)\n• open the replay window; mnemos.replay_now(); close it\n• mnemos.downscale_activations(0.9)"]
     P2 --> P3
     P3["Phase 3: associative replay (flag)\n• cross-period traces\n• cue Phantasia\n• publish hypnos.association"]
     P3 --> P4
-    P4["Phase 4: affective reset\n• thymos.affective_reset()"]
+    P4["Phase 4: voice alignment\n• consolidation divergence\n• gates; training skipped\n• intent-log rotation, voice measures"]
     P4 --> P5
-    P5["Phase 5: voice alignment\n• consolidation divergence\n• gates; training skipped"]
-    P5 --> R[Intent-log rotation, voice measures, intent audit]
+    P5["Phase 5: affective reset\n• thymos.affective_reset()"]
+    P5 --> R[Intent audit]
     R --> E([hypnos.sleep.completed])
 ```
 
-Each phase catches its own errors, and the later phases still run after one fails. Phase 3 re-injects Phantasia's scenarios as `hypnos.association` events, which compete in the workspace like any other event. The phase functions are in `kaine/modules/hypnos/phases.py`; phase 5 is driven from `kaine/modules/hypnos/module.py`.
+Each phase catches its own errors, and the later phases still run after one fails. The affective reset runs in a `finally` after phases 1 to 4, shielded from a second cancel, so even a sleep that raises or is cancelled ends with it, and an aborted `hypnos.sleep.completed` is published on any exception, including a cancel. Phase 3 re-injects Phantasia's scenarios as `hypnos.association` events, which compete in the workspace like any other event. The order follows the paper (§3.5): replay, then synaptic downscaling, then associative replay, then the voice, and sleep ends with the affective reset. Phase 2 opens Mnemos's replay window itself, immediately before it replays, and closes it afterwards, so replay never depends on Mnemos having seen `hypnos.sleep.started` on the bus. The phase functions are in `kaine/modules/hypnos/phases.py`; phase 4 is driven from `kaine/modules/hypnos/module.py`.
 
 ## Outputs
 
@@ -89,7 +89,8 @@ The full reference is in [Perception feed and sleep](../appendix-a-configuration
 | `requested_rest_min_interval_s` | float `> 0` | `1800.0` | Minimum time from the end of a sleep before a rest request is accepted |
 | `baseline_salience` | float `[0, 1]` | `0.5` | Intensity of routine sleep events |
 | `alert_salience` | float `[0, 1]` | `0.8` | Intensity of a completed event after a failed phase |
-| `nous_step_burst` | int | `200` | Accepted and stored but unused |
+
+The retired key `nous_step_burst` is accepted and ignored with a warning, so older local configs still boot.
 
 `[hypnos.consolidation]`:
 
@@ -117,7 +118,7 @@ Every sleep, Hypnos publishes `hypnos.ignition_audit` for the window since the p
 
 ## Consolidation divergence
 
-At the start of phase 5, on every sleep, the pair builder scans the intent-expression log and counts the records in which the organ's generated text differs from the faithful rendering of the coalition it was conditioned on. Hypnos publishes the result as `hypnos.consolidation_divergence`:
+At the start of phase 4, on every sleep, the pair builder scans the intent-expression log and counts the records in which the organ's generated text differs from the faithful rendering of the coalition it was conditioned on. Hypnos publishes the result as `hypnos.consolidation_divergence`:
 
 | Field | Meaning |
 |---|---|
@@ -133,7 +134,7 @@ The metric is computed whether or not training runs and is persisted to `state/h
 
 | File | Role |
 |---|---|
-| `kaine/modules/hypnos/module.py` | `Hypnos`: triggers, pipeline, perception suspension, divergence, phase 5 |
+| `kaine/modules/hypnos/module.py` | `Hypnos`: triggers, pipeline, perception suspension, divergence, phase 4 |
 | `kaine/modules/hypnos/phases.py` | Phases 1 to 4 |
 | `kaine/modules/hypnos/scheduler.py` | `RestScheduler`: interval and deferral |
 | `kaine/modules/hypnos/ignition_audit.py` | Sleep-time intent audit |
@@ -170,6 +171,7 @@ The metric is computed whether or not training runs and is persisted to `state/h
 | `tests/test_hypnos_associative_replay.py` | Phase 3 |
 | `tests/test_hypnos_oscillator_hook.py` | Phase-1 oscillator hook |
 | `tests/test_hypnos_nar_removal.py` | Replay reaching the workspace through the normal cycle |
+| `tests/test_hypnos_replay_handoff.py` | Phase 2 replaying the traces phase 1 consolidated, with Mnemos |
 | `tests/test_soma_hypnos_flag.py` | Soma's `crossed` flag |
 | `tests/test_sleep_suspension_cursor.py` | Topos, Audition and Chronos suspending adaptation during sleep |
 | `tests/test_hypnos_voice_alignment.py`, `tests/test_hypnos_voice_alignment_integration.py` | Pair builder, gates and vetoes |

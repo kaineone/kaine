@@ -23,6 +23,12 @@ from kaine.modules.audition.emotion import Emotion2vecClassifier
 from kaine.modules.topos.encoder import DINOv2Encoder, InternVideoNextEncoder
 from kaine.modules.topos.internvideo_next_loader import WEIGHTS_FILENAME
 
+# Upper bound for every wait in this file. The waits guard against a hang (an
+# in-flight count that never returns to zero), not against slowness: unload()
+# ends with a full gc.collect(), which takes seconds in a large test worker
+# under load.
+_HANG_TIMEOUT_S = 60.0
+
 # --------------------------------------------------------------------------
 # Emotion classifier
 # --------------------------------------------------------------------------
@@ -101,12 +107,12 @@ async def test_emotion_unload_waits_for_inflight(monkeypatch):
     classifier = Emotion2vecClassifier()
 
     classify_task = asyncio.create_task(
-        asyncio.wait_for(classifier.classify(b"\x00", sample_rate=16000), timeout=5)
+        asyncio.wait_for(classifier.classify(b"\x00", sample_rate=16000), timeout=_HANG_TIMEOUT_S)
     )
     try:
-        await asyncio.wait_for(aio_event.wait(), timeout=5)
+        await asyncio.wait_for(aio_event.wait(), timeout=_HANG_TIMEOUT_S)
 
-        unload_task = asyncio.create_task(asyncio.wait_for(classifier.unload(), timeout=5))
+        unload_task = asyncio.create_task(asyncio.wait_for(classifier.unload(), timeout=_HANG_TIMEOUT_S))
         await asyncio.sleep(0.05)
         assert not unload_task.done()
         # The model is still held while the inference is in flight.
@@ -170,7 +176,7 @@ async def test_emotion_double_cancel_does_not_leak_inflight(monkeypatch):
     classifier = Emotion2vecClassifier()
     classify_task = asyncio.create_task(classifier.classify(b"\x00", sample_rate=16000))
     try:
-        await asyncio.wait_for(aio_event.wait(), timeout=5)
+        await asyncio.wait_for(aio_event.wait(), timeout=_HANG_TIMEOUT_S)
 
         lock = classifier._lock()
         await lock.acquire()
@@ -187,7 +193,7 @@ async def test_emotion_double_cancel_does_not_leak_inflight(monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         await classify_task
 
-    await asyncio.wait_for(classifier.unload(), timeout=2)
+    await asyncio.wait_for(classifier.unload(), timeout=_HANG_TIMEOUT_S)
     assert classifier._gate.inflight == 0
 
 
@@ -213,13 +219,13 @@ async def test_emotion_cancelled_inference_unload_waits_for_worker(monkeypatch):
     classifier = Emotion2vecClassifier()
     classify_task = asyncio.create_task(classifier.classify(b"\x00", sample_rate=16000))
     try:
-        await asyncio.wait_for(aio_event.wait(), timeout=5)
+        await asyncio.wait_for(aio_event.wait(), timeout=_HANG_TIMEOUT_S)
 
         classify_task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await classify_task
 
-        unload_task = asyncio.create_task(asyncio.wait_for(classifier.unload(), timeout=5))
+        unload_task = asyncio.create_task(asyncio.wait_for(classifier.unload(), timeout=_HANG_TIMEOUT_S))
         await asyncio.sleep(0.1)
         assert not unload_task.done()
         assert classifier.loaded
@@ -228,7 +234,7 @@ async def test_emotion_cancelled_inference_unload_waits_for_worker(monkeypatch):
         entered.set()
 
     assert unload_task is not None
-    await asyncio.wait_for(unload_task, timeout=5)
+    await asyncio.wait_for(unload_task, timeout=_HANG_TIMEOUT_S)
     assert not classifier.loaded
 
 
@@ -384,7 +390,7 @@ async def test_dinov2_double_cancel_does_not_leak_inflight(monkeypatch):
     image = Image.new("RGB", (224, 224), color=(128, 128, 128))
     encode_task = asyncio.create_task(encoder.encode(image))
     try:
-        await asyncio.wait_for(aio_event.wait(), timeout=5)
+        await asyncio.wait_for(aio_event.wait(), timeout=_HANG_TIMEOUT_S)
 
         lock = encoder._get_lock()
         await lock.acquire()
@@ -401,7 +407,7 @@ async def test_dinov2_double_cancel_does_not_leak_inflight(monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         await encode_task
 
-    await asyncio.wait_for(encoder.unload(), timeout=2)
+    await asyncio.wait_for(encoder.unload(), timeout=_HANG_TIMEOUT_S)
     assert encoder._gate.inflight == 0
 
 
@@ -461,13 +467,13 @@ async def test_dinov2_cancelled_inference_unload_waits_for_worker(monkeypatch):
     image = Image.new("RGB", (224, 224), color=(128, 128, 128))
     encode_task = asyncio.create_task(encoder.encode(image))
     try:
-        await asyncio.wait_for(aio_event.wait(), timeout=5)
+        await asyncio.wait_for(aio_event.wait(), timeout=_HANG_TIMEOUT_S)
 
         encode_task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await encode_task
 
-        unload_task = asyncio.create_task(asyncio.wait_for(encoder.unload(), timeout=5))
+        unload_task = asyncio.create_task(asyncio.wait_for(encoder.unload(), timeout=_HANG_TIMEOUT_S))
         await asyncio.sleep(0.1)
         assert not unload_task.done()
         assert encoder.loaded
@@ -476,7 +482,7 @@ async def test_dinov2_cancelled_inference_unload_waits_for_worker(monkeypatch):
         entered.set()
 
     assert unload_task is not None
-    await asyncio.wait_for(unload_task, timeout=5)
+    await asyncio.wait_for(unload_task, timeout=_HANG_TIMEOUT_S)
     assert not encoder.loaded
 
 
@@ -519,7 +525,7 @@ async def test_internvideo_next_double_cancel_does_not_leak_inflight(monkeypatch
     frames = [Image.new("RGB", (224, 224), color=(128, 128, 128)) for _ in range(16)]
     encode_task = asyncio.create_task(encoder.encode_clip(frames))
     try:
-        await asyncio.wait_for(aio_event.wait(), timeout=5)
+        await asyncio.wait_for(aio_event.wait(), timeout=_HANG_TIMEOUT_S)
 
         lock = encoder._get_lock()
         await lock.acquire()
@@ -536,7 +542,7 @@ async def test_internvideo_next_double_cancel_does_not_leak_inflight(monkeypatch
     with pytest.raises(asyncio.CancelledError):
         await encode_task
 
-    await asyncio.wait_for(encoder.unload(), timeout=2)
+    await asyncio.wait_for(encoder.unload(), timeout=_HANG_TIMEOUT_S)
     assert encoder._gate.inflight == 0
 
 

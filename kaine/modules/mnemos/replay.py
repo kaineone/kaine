@@ -12,9 +12,11 @@ Selection policy: `affect_weight × intensity + recency_weight × recency`
 where `recency` is normalised to [0, 1] across the candidate pool.
 
 Guard: `replay()` MUST be called from inside an active Hypnos maintenance
-window (tracked via `is_window_active` flag).  Calling it outside raises
-`ReplayWindowError` and emits nothing — this is a load-bearing safety
-invariant (paper §3.3.5 — external perception suspended during replay).
+window (the `window_active` flag). The window is opened by Hypnos through
+`Mnemos.open_replay_window()` inside a sleep, immediately before phase 2's
+replay, and closed once replay is done. Calling it outside raises
+`ReplayWindowError` and emits nothing. This is a load-bearing safety
+invariant (paper §3.5: perception is suspended for the whole sleep).
 
 Redaction: each `mnemos.replay` event carries a full-content payload
 (`text` present) for re-injection into the cognitive loop.  A separate
@@ -152,9 +154,9 @@ class ReplayEngine:
     when asked to replay, selects traces from the short-term buffer /
     storage and publishes `mnemos.replay` events.
 
-    The window flag is toggled by the Mnemos module's event handler when
-    it observes `hypnos.sleep.started` (window opens) and
-    `hypnos.sleep.completed` (window closes).
+    The window is opened and closed by Hypnos through
+    `Mnemos.open_replay_window()` and `Mnemos.close_replay_window()` around
+    phase 2's replay; `hypnos.sleep.completed` also closes it.
     """
 
     def __init__(
@@ -176,7 +178,7 @@ class ReplayEngine:
         self._window_active: bool = False
 
     # ------------------------------------------------------------------
-    # Window lifecycle (called by Mnemos when it sees hypnos bus events)
+    # Window lifecycle (driven by Hypnos through Mnemos)
     # ------------------------------------------------------------------
 
     def open_window(self) -> None:

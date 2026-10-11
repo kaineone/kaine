@@ -94,6 +94,7 @@ from kaine.lifecycle.maturation_gate import (
     MaturationConfig,
     gestation_started_payload,
 )
+from kaine.modules.positive_control import finish_positive_controls
 from kaine.modules.thymos.modulator import StateModulator
 from kaine.perception_state import (
     read_desired,
@@ -2710,6 +2711,9 @@ async def _shutdown(ctx: BootContext) -> None:
             await ctx.remote_bridge.stop()
         except Exception:
             log.warning("remote bridge stop failed", exc_info=True)
+    # The positive control's terminal records must reach the research log, so
+    # publish them while the evaluation sidecar still runs.
+    await finish_positive_controls(ctx.registry.all_modules())
     if ctx.sidecar is not None:
         try:
             await ctx.sidecar.stop()
@@ -2834,12 +2838,12 @@ def _evaluate_research_safety_net(config: dict[str, Any]) -> "Any":
 
 
 def _evaluate_unattended_gate(config: dict[str, Any]) -> "Any":
-    """Run the eight-condition unattended gate over the resolved config.
+    """Run the nine-condition unattended gate over the resolved config.
 
-    Reuses the research safety net for conditions 1–5.  Condition 6 comes from
-    Spot's selftest.  Condition 8 requires a continuous perception input.
-    Condition 7 runs last and needs the outcome of conditions 1–6 and 8 as
-    prerequisites.
+    Reuses the research safety net for conditions 1–5 and 9.  Condition 6
+    comes from Spot's selftest.  Condition 8 requires a continuous perception
+    input.  Condition 7 runs last and needs the outcome of conditions 1–6,
+    8 and 9 as prerequisites.
     """
     net = _evaluate_research_safety_net(config)
     from kaine.cycle.caretaker import check_caretaker_condition
@@ -3017,7 +3021,7 @@ def main(argv: list[str] | None = None) -> int:
     supervision_mode = "operator"
     gate_checks: dict[str, bool] | None = None
     if mode == "unattended":
-        # Unattended boot: the eight-condition safety net must be satisfied.
+        # Unattended boot: the nine-condition safety net must be satisfied.
         result = _evaluate_unattended_gate(config)
         for c in result.conditions:
             status = "pass" if c.ok else f"FAIL — {c.reason}"

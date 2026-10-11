@@ -68,17 +68,6 @@ class FakeThymos:
         self.resets += 1
 
 
-# Generic steppable stand-in for the belief-revision phase. Nous no longer
-# runs a NAR subprocess; the phase remains a generic "steppable" hook.
-class FakeSteppable:
-    @property
-    def running(self) -> bool:
-        return True
-
-    async def step(self, n: int) -> list[str]:
-        return ["belief_factor_0"]
-
-
 class FakeResetter:
     def __init__(self) -> None:
         self.calls = 0
@@ -109,7 +98,6 @@ def _make_hypnos(
     return Hypnos(
         bus,
         mnemos=mnemos or FakeMnemos(),
-        nous_process=FakeSteppable(),
         thymos=FakeThymos(),
         chronos_resetters=[FakeResetter(), FakeResetter()],
         trainer=trainer or FakeTrainer(),
@@ -130,16 +118,30 @@ async def test_enter_sleep_runs_all_five_phases(bus: AsyncBus, tmp_path: Path):
     hypnos = _make_hypnos(bus, tmp_path)
     summary = await hypnos.enter_sleep()
     phases = [p["phase"] for p in summary["phases"]]
-    # Paper §3.3.5 five-phase order (hypnos-fatigue-phases restructure)
+    # Paper §3.5 order: sleep ends with the affective reset
     assert phases == [
         "light_consolidation",
         "deep_consolidation",
         "associative_replay",
-        "affective_reset",
         "voice_alignment",
+        "affective_reset",
     ]
     assert all(p["success"] for p in summary["phases"])
     assert hypnos._mnemos.consolidated == 1
+    assert hypnos._thymos.resets == 1
+
+
+@pytest.mark.asyncio
+async def test_voice_alignment_abort_still_resets_affect(bus: AsyncBus, tmp_path: Path):
+    """Sleep ends with the affective reset even when voice alignment raises."""
+    hypnos = _make_hypnos(bus, tmp_path)
+
+    async def _boom():
+        raise RuntimeError("voice boom")
+
+    hypnos._run_voice_alignment = _boom
+    with pytest.raises(RuntimeError, match="voice boom"):
+        await hypnos.enter_sleep()
     assert hypnos._thymos.resets == 1
 
 
@@ -351,7 +353,6 @@ async def test_one_phase_failure_does_not_stop_others(bus: AsyncBus, tmp_path: P
     hypnos = Hypnos(
         bus,
         mnemos=BoomMnemos(),
-        nous_process=FakeSteppable(),
         thymos=FakeThymos(),
         chronos_resetters=[FakeResetter()],
         trainer=FakeTrainer(),
