@@ -13,6 +13,7 @@ import kaine.cycle.__main__ as cyc
 from kaine.config import SHIPPED_CONFIG_PATH, load_kaine_config, load_runtime_config
 from kaine.cycle.boot_context import BootContext
 from kaine.evaluation.observers.research_event_observer import _workspace_metadata_record
+from kaine.experiment.planned_test_settings import planned_test_refusal
 from kaine.workspace.syneidesis import Syneidesis
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -56,6 +57,8 @@ class _StubStrategy:
         ),
         ("workspace_mediation_pilot_matched", "pilot", "matched", None, None, None),
         ("workspace_mediation_pilot_pooled", "pilot", "pooled", None, None, None),
+        ("workspace_mediation_tone", "test", "competitive", None, None, None),
+        ("workspace_mediation_pilot_tone", "pilot", "competitive", None, None, None),
         (
             "workspace_mediation_positive_control",
             "positive_control",
@@ -93,6 +96,9 @@ def test_study_configuration(
         # The shipped configuration keeps the control off; only some studies enable it.
         assert cfg["positive_control"]["enabled"] is False
 
+    assert cfg["audition"]["tone_rule"] == (
+        "error_ratio" if study.endswith("_tone") else "categorical"
+    )
 
 @pytest.mark.asyncio
 async def test_boot_refuses_live_arm_without_settings_record(
@@ -141,3 +147,30 @@ def test_workspace_metadata_record_copies_coalition_capacity():
         {"metadata": {"arm": "competitive", "coalition_capacity": 7}}
     )
     assert record["coalition_capacity"] == 7
+
+
+def test_gate_refuses_a_study_with_the_wrong_tone_rule():
+    refusal = planned_test_refusal(
+        "workspace_mediation_pilot_competitive",
+        {"planned_test": {"role": "pilot"}, "audition": {"tone_rule": "error_ratio"}},
+        0,
+    )
+    assert isinstance(refusal, str)
+    assert "tone rule" in refusal
+
+    refusal = planned_test_refusal(
+        "workspace_mediation_pilot_tone",
+        {"planned_test": {"role": "pilot"}},
+        0,
+    )
+    assert isinstance(refusal, str)
+    assert "error_ratio" in refusal
+
+    assert (
+        planned_test_refusal(
+            "workspace_mediation_pilot_tone",
+            {"planned_test": {"role": "pilot"}, "audition": {"tone_rule": "error_ratio"}},
+            0,
+        )
+        is None
+    )

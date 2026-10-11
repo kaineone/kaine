@@ -55,7 +55,13 @@ STUDY_ROLES = {
     "workspace_mediation_pilot_pooled": "pilot",
     "workspace_mediation_preliminary": "preliminary",
     "workspace_mediation_positive_control": "positive_control",
+    "workspace_mediation_tone": "test",
+    "workspace_mediation_pilot_tone": "pilot",
 }
+
+# The studies that run the tone variant of the on arm (paper A.8); every other
+# workspace-mediation study runs the categorical tone rule.
+TONE_STUDIES = frozenset({"workspace_mediation_tone", "workspace_mediation_pilot_tone"})
 
 
 def record_digest(record: Mapping[str, Any]) -> str:
@@ -123,6 +129,9 @@ class PlannedTestSettings:
     min_effect: float
     min_reports: int
     snr: Mapping[str, float]
+    min_effect_tone: float
+    min_effect_tone_adjusted: float
+    tone_bins: tuple[float, ...]
     principal_components: Mapping[str, PcRef]
     excluded_seeds: frozenset[int]
     runs: tuple[RunRef, ...]
@@ -432,6 +441,61 @@ def load_settings_record(path: str | Path) -> PlannedTestSettings:
             )
         snr[proc] = float(v)
 
+    # min_effect_tone
+    raw_min_effect_tone = values.get("min_effect_tone")
+    if (
+        isinstance(raw_min_effect_tone, bool)
+        or not isinstance(raw_min_effect_tone, (int, float))
+        or not math.isfinite(raw_min_effect_tone)
+        or raw_min_effect_tone <= 0
+    ):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} value 'min_effect_tone' must be a "
+            "positive finite number"
+        )
+    min_effect_tone = float(raw_min_effect_tone)
+
+    # min_effect_tone_adjusted
+    raw_min_effect_tone_adjusted = values.get("min_effect_tone_adjusted")
+    if (
+        isinstance(raw_min_effect_tone_adjusted, bool)
+        or not isinstance(raw_min_effect_tone_adjusted, (int, float))
+        or not math.isfinite(raw_min_effect_tone_adjusted)
+        or raw_min_effect_tone_adjusted <= 0
+    ):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} value 'min_effect_tone_adjusted' "
+            "must be a positive finite number"
+        )
+    min_effect_tone_adjusted = float(raw_min_effect_tone_adjusted)
+
+    # tone_bins
+    raw_tone_bins = values.get("tone_bins")
+    if (
+        not isinstance(raw_tone_bins, list)
+        or len(raw_tone_bins) != rules.N_BINS - 1
+    ):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} value 'tone_bins' must be a list of "
+            f"exactly {rules.N_BINS - 1} numbers"
+        )
+    tone_bins: list[float] = []
+    previous: float | None = None
+    for v in raw_tone_bins:
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+            raise PlannedTestSettingsError(
+                f"settings record {str(path)!r} value 'tone_bins' must contain "
+                "only finite numbers"
+            )
+        value = float(v)
+        if previous is not None and value < previous:
+            raise PlannedTestSettingsError(
+                f"settings record {str(path)!r} value 'tone_bins' must be in "
+                "non-decreasing order"
+            )
+        previous = value
+        tone_bins.append(value)
+
     # principal_components
     raw_pcs = values.get("principal_components")
     if not isinstance(raw_pcs, dict):
@@ -526,16 +590,20 @@ def load_settings_record(path: str | Path) -> PlannedTestSettings:
                 )
 
         raw_runs = pilot.get("runs")
-        if (
-            not isinstance(raw_runs, dict)
-            or set(raw_runs.keys()) != {"competitive", "matched", "pooled"}
+        run_keys = set(raw_runs.keys()) if isinstance(raw_runs, dict) else None
+        if run_keys not in (
+            {"competitive", "matched", "pooled"},
+            {"competitive", "matched", "pooled", "tone"},
         ):
             raise PlannedTestSettingsError(
                 f"settings record {str(path)!r} {field}.runs must contain "
-                f"exactly the arms competitive, matched, and pooled"
+                f"exactly the arms competitive, matched and pooled, and "
+                f"optionally the tone variant"
             )
 
-        for arm in ("competitive", "matched", "pooled"):
+        for arm in ("competitive", "matched", "pooled", "tone"):
+            if arm not in raw_runs:
+                continue
             ref = _run_ref_from_raw(path, raw_runs[arm], f"{field}.runs.{arm}")
             if ref.run_id in run_ids:
                 raise PlannedTestSettingsError(
@@ -571,6 +639,13 @@ def load_settings_record(path: str | Path) -> PlannedTestSettings:
             f"{raw_n_not_exercised}; it must equal {expected_not_exercised}"
         )
 
+    for pilot in pilot_inputs:
+        if "tone" not in pilot["runs"]:
+            raise PlannedTestSettingsError(
+                f"settings record {str(path)!r} lacks the tone-variant pilot "
+                f"runs (paper A.8)"
+            )
+
     return PlannedTestSettings(
         path=str(path),
         record_sha256=record_sha256,
@@ -579,6 +654,9 @@ def load_settings_record(path: str | Path) -> PlannedTestSettings:
         min_effect=min_effect,
         min_reports=min_reports,
         snr=snr,
+        min_effect_tone=min_effect_tone,
+        min_effect_tone_adjusted=min_effect_tone_adjusted,
+        tone_bins=tuple(tone_bins),
         principal_components=principal_components,
         excluded_seeds=frozenset(seeds),
         runs=tuple(runs),
@@ -677,6 +755,19 @@ def planned_test_gate(
         if role != expected_role:
             return (
                 f"study {study!r} must set [planned_test].role = {expected_role!r}, got {role!r}",
+                None,
+                None,
+            )
+        audition = config.get("audition")
+        tone_rule = (
+            audition.get("tone_rule", "categorical")
+            if isinstance(audition, dict)
+            else "categorical"
+        )
+        expected_rule = "error_ratio" if study in TONE_STUDIES else "categorical"
+        if tone_rule != expected_rule:
+            return (
+                f"study {study!r} must run the tone rule {expected_rule!r}, got {tone_rule!r}",
                 None,
                 None,
             )
