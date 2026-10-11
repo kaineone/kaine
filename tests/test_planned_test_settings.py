@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import pytest
 
@@ -14,6 +14,7 @@ from kaine.experiment.planned_test_settings import (
     PROCESSORS,
     RECORD_ROLES,
     STUDY_ROLES,
+    TONE_STUDIES,
     PlannedTestSettingsError,
     load_settings_record,
     planned_test_gate,
@@ -59,7 +60,7 @@ def _build_record(
     seed = 2
     for i in range(n_pilots):
         runs: dict[str, Any] = {}
-        for arm in ("competitive", "matched", "pooled"):
+        for arm in ("competitive", "matched", "pooled", "tone"):
             runs[arm] = {
                 "run_id": f"run_{i}_{arm}",
                 "manifest_sha256": "a" * 64,
@@ -111,6 +112,9 @@ def _build_record(
             "n_counted": rules.N_CAL,
             "n_exact": rules.N_EXACT,
             "snr": {processor: 4.0 for processor in PROCESSORS},
+            "min_effect_tone": 0.05,
+            "min_effect_tone_adjusted": 0.04,
+            "tone_bins": [0.5, 0.8, 1.1, 1.6],
             "principal_components": principal_components,
         },
     }
@@ -147,7 +151,7 @@ def _make_record_with_run_data(
     )
 
     for pilot in record["inputs"]["pilots"]:
-        for arm in ("competitive", "matched", "pooled"):
+        for arm in ("competitive", "matched", "pooled", "tone"):
             ref = pilot["runs"][arm]
             manifest_path = _write_manifest_and_record(tmp_path, ref["run_id"], events_file)
             ref["manifest_sha256"] = file_sha256(manifest_path)
@@ -721,6 +725,8 @@ def test_gate_rejects_unknown_workspace_study() -> None:
 @pytest.mark.parametrize("study, expected_role", list(STUDY_ROLES.items()))
 def test_gate_accepts_correct_study_role_pairs(tmp_path: Path, study: str, expected_role: str) -> None:
     config: dict[str, Any] = {"planned_test": {"role": expected_role}}
+    if study in TONE_STUDIES:
+        config["audition"] = {"tone_rule": "error_ratio"}
     path: Path | None = None
     if expected_role in RECORD_ROLES:
         record, path = _build_record(tmp_path)
@@ -810,3 +816,62 @@ def test_load_settings_record_with_relative_pc_paths(monkeypatch, tmp_path):
     loaded = load_settings_record(path)
     for processor in CAL_PROCESSORS:
         assert loaded.principal_components[processor].path == f"pc_{processor}.json"
+
+
+def _write_mutated(tmp_path: Path, mutate: Callable[[dict[str, Any]], None]) -> Path:
+    record, path = _build_record(tmp_path)
+    mutate(record)
+    write_settings_record(record, path)
+    return path
+
+
+def test_record_without_tone_variant_is_refused(tmp_path: Path) -> None:
+    def strip_tone(record: dict[str, Any]) -> None:
+        for pilot in record["inputs"]["pilots"]:
+            del pilot["runs"]["tone"]
+
+    path = _write_mutated(tmp_path, strip_tone)
+    with pytest.raises(PlannedTestSettingsError, match="tone-variant"):
+        load_settings_record(path)
+
+
+def test_min_effect_tone_zero_is_refused(tmp_path: Path) -> None:
+    def zero_tone(record: dict[str, Any]) -> None:
+        record["values"]["min_effect_tone"] = 0
+
+    path = _write_mutated(tmp_path, zero_tone)
+    with pytest.raises(PlannedTestSettingsError, match="min_effect_tone"):
+        load_settings_record(path)
+
+
+def test_min_effect_tone_adjusted_zero_is_refused(tmp_path: Path) -> None:
+    def zero_adjusted(record: dict[str, Any]) -> None:
+        record["values"]["min_effect_tone_adjusted"] = 0
+
+    path = _write_mutated(tmp_path, zero_adjusted)
+    with pytest.raises(PlannedTestSettingsError, match="min_effect_tone_adjusted"):
+        load_settings_record(path)
+
+
+@pytest.mark.parametrize(
+    "tone_bins",
+    [
+        [0.5, 0.8, 1.1],  # wrong length
+        [0.5, 0.8, 1.1, 0.6],  # decreasing pair
+        [0.5, 0.8, 1.1, "1.6"],  # non-number entry
+    ],
+)
+def test_tone_bins_invalid_is_refused(tmp_path: Path, tone_bins: list[Any]) -> None:
+    def set_bins(record: dict[str, Any]) -> None:
+        record["values"]["tone_bins"] = tone_bins
+
+    path = _write_mutated(tmp_path, set_bins)
+    with pytest.raises(PlannedTestSettingsError, match="tone_bins"):
+        load_settings_record(path)
+
+
+def test_loaded_record_exposes_tone_fields(tmp_path: Path) -> None:
+    settings, _ = _make_record_with_run_data(tmp_path)
+    assert settings.min_effect_tone == pytest.approx(0.05)
+    assert settings.min_effect_tone_adjusted == pytest.approx(0.04)
+    assert settings.tone_bins == (0.5, 0.8, 1.1, 1.6)

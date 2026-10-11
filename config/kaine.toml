@@ -880,6 +880,12 @@ auditory_buffer_size = 16
 # audio on the bus, no disk writes.
 prosody_enabled = false
 
+# "categorical" gives a non-neutral tone the alert intensity and a neutral one
+# the graded intensity of the tone error ratio (paper A.2); "error_ratio",
+# the tone variant of the planned test, grades every tone event by the ratio
+# alone (paper A.8); studies set it.
+tone_rule = "categorical"
+
 # Unified deterministic perception feed (reproducible research stimulus). A
 # SINGLE top-level section that drives BOTH the vision surface (Topos) and the
 # hearing surface (Audition) from one source of truth, so picture and sound

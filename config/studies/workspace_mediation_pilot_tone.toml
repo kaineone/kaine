@@ -1,0 +1,20 @@
+# Study configuration: a pilot run of the tone variant of the on arm for the workspace-mediation
+# test (paper §6.3, A.8). Select it for a run with KAINE_STUDY=workspace_mediation_pilot_tone.
+# It is applied after the operator config, so these settings hold for the run.
+# The run's seed comes from [experiment].seed; pilot run r of the tone variant shares its seed
+# with pilot run r of the three arms.
+
+[lingua]
+# Greedy decoding in the planned runs (paper §6.1).
+temperature = 0.0
+
+[syneidesis]
+arm = "competitive"
+
+[audition]
+# The tone variant: every tone event is graded by the tone error ratio alone (paper A.8).
+tone_rule = "error_ratio"
+
+[planned_test]
+# A pilot run of the tone variant (paper A.8).
+role = "pilot"

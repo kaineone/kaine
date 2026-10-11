@@ -26,6 +26,8 @@ from fractions import Fraction
 
 import numpy as np
 
+from kaine.experiment.verdict import Outcome
+
 
 class CalibrationError(ValueError):
     """A calibration rule could not be applied."""
@@ -539,6 +541,109 @@ def interpolate_snr(
     return SnrChoice(snr=math.exp(log_snr), lower_index=lo, upper_index=i)
 
 
+@dataclass(frozen=True)
+class SignTestResult:
+    """Outcome of the exact sign-test verdict for a planned comparison.
+
+    Paper Appendix A.8, decision rule. The p-values are exact one-sided sign-test
+    p-values computed without floating point accumulation; see Dixon and Mood (1946).
+    """
+
+    outcome: Outcome
+    n_runs: int  # statistics given
+    n_entered: int  # defined statistics
+    p_win: Fraction
+    p_negative: Fraction
+
+
+def sign_test_pvalue(values: Sequence[float]) -> Fraction:
+    """Exact one-sided sign-test p-value.
+
+    Exactly zero values are dropped. With n remaining values of which n_pos are
+    positive, the p-value is 2^-n * sum_{i=n_pos}^{n} C(n, i). The empty set gives
+    p = 1.
+
+    Raises:
+        CalibrationError: if any value is not finite.
+
+    Source: Dixon and Mood (1946).
+    """
+    filtered: list[float] = []
+    for v in values:
+        if not isinstance(v, (int, float)) or isinstance(v, bool) or not math.isfinite(v):
+            raise CalibrationError("sign test p-value: values must be finite numbers")
+        if v != 0:
+            filtered.append(float(v))
+    n = len(filtered)
+    if n == 0:
+        return Fraction(1)
+    n_pos = sum(1 for v in filtered if v > 0)
+    total = sum(math.comb(n, i) for i in range(n_pos, n + 1))
+    return Fraction(total, 2 ** n)
+
+
+def sign_test_verdict(
+    statistics: Sequence[float | None],
+    min_effect: float,
+    alpha: Fraction = ALPHA_TEST,
+) -> SignTestResult:
+    """Exact sign-test verdict for a planned comparison.
+
+    ``None`` statistics are runs that do not enter the comparison. A run whose
+    statistic d enters gives u+ = d - min_effect for the WIN test and
+    u- = -min_effect - d for the NEGATIVE test; exactly zero values are dropped.
+    If no run has a defined statistic the outcome is NOT_EXERCISED.
+
+    Raises:
+        CalibrationError: if ``min_effect`` is not a finite number above 0, or
+            a defined statistic is not finite.
+
+    Source: paper Appendix A.8, decision rule.
+    """
+    if (
+        not isinstance(min_effect, (int, float))
+        or isinstance(min_effect, bool)
+        or not math.isfinite(min_effect)
+        or min_effect <= 0
+    ):
+        raise CalibrationError("sign test verdict: min_effect must be a finite number above 0")
+
+    entered: list[float] = []
+    for s in statistics:
+        if s is None:
+            continue
+        if not isinstance(s, (int, float)) or isinstance(s, bool) or not math.isfinite(s):
+            raise CalibrationError("sign test verdict: defined statistics must be finite numbers")
+        entered.append(float(s))
+
+    if not entered:
+        return SignTestResult(
+            outcome=Outcome.NOT_EXERCISED,
+            n_runs=len(statistics),
+            n_entered=0,
+            p_win=Fraction(1),
+            p_negative=Fraction(1),
+        )
+
+    p_win = sign_test_pvalue([d - min_effect for d in entered])
+    p_negative = sign_test_pvalue([-min_effect - d for d in entered])
+
+    if p_win <= alpha:
+        outcome = Outcome.WIN
+    elif p_negative <= alpha:
+        outcome = Outcome.NEGATIVE
+    else:
+        outcome = Outcome.NULL
+
+    return SignTestResult(
+        outcome=outcome,
+        n_runs=len(statistics),
+        n_entered=len(entered),
+        p_win=p_win,
+        p_negative=p_negative,
+    )
+
+
 def quintile_edges(values: Sequence[float], n_bins: int = N_BINS) -> list[float]:
     """Return the n_bins - 1 interior edges at quantiles k / n_bins.
 
@@ -578,6 +683,7 @@ __all__ = [
     "UCL_LEVEL",
     "CalibrationError",
     "MserResult",
+    "SignTestResult",
     "SnrChoice",
     "browne_ucl_factor",
     "control_min_reports",
@@ -592,5 +698,7 @@ __all__ = [
     "sample_sd",
     "sign_test_critical_count",
     "sign_test_power",
+    "sign_test_pvalue",
+    "sign_test_verdict",
     "stable_run_count",
 ]

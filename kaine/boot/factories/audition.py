@@ -89,6 +89,8 @@ def make_audition(
         # existing speech pipeline is unchanged. See the block below.
         "general_audition",
         "transcription_enabled",
+        # The tone rule, categorical by default, error_ratio in the tone variant of the planned test.
+        "tone_rule",
         "arousal_window_min",
         "arousal_window_max",
         "acoustic_change_alert_threshold",
@@ -169,6 +171,8 @@ def make_audition(
             kwargs[k] = int(section[k])
     if "prosody_enabled" in section:
         kwargs["prosody_enabled"] = bool(section["prosody_enabled"])
+    if "tone_rule" in section:
+        kwargs["tone_rule"] = str(section["tone_rule"])
 
     # General auditory perception (auditory-perception). When on, every captured
     # window is perceived as sound and speech-to-text runs only on detected
