@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 """Live integration: the real KAINE `Chronos` module running its forward model on
 the substrate, over a real (fake-backed) bus.
 

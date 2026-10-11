@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """The cognitive cycle invokes Volition after the experiential broadcast and

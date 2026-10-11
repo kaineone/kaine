@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """CLI entry point for the module-ignition study runner."""
@@ -32,6 +32,8 @@ from kaine.storage import install_data_root, resolve
 
 
 def _default_order() -> list[str]:
+    # Praxis, Perception and Mundus need an effector, body or alternative
+    # sensor feed; on the reference host they would be expected nulls (use --order).
     return [
         "mnemos",
         "phantasia",
@@ -39,9 +41,6 @@ def _default_order() -> list[str]:
         "eidolon",
         "empatheia",
         "vox",
-        "praxis",
-        "perception",
-        "mundus",
     ]
 
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Per-line, per-step operator overlay generation."""
@@ -108,6 +108,10 @@ def build_overlay(
         },
         "phantasia": {"training_enabled": True, "persist_weights": True},
         "topos": {"encoder_local_dir": encoder_dir},
+        # Greedy decoding and the competitive arm in every study step (paper §5.4,
+        # §6.1), so an operator override cannot make a step sample or run a control.
+        "lingua": {"temperature": 0.0},
+        "syneidesis": {"arm": "competitive"},
     }
 
     registered_steps = plan.get("voice_alignment_steps", voice_alignment_steps(plan))

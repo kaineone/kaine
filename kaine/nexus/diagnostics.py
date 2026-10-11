@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from __future__ import annotations
@@ -99,6 +99,7 @@ HEALTH_BLOCK_KEYS: tuple[str, ...] = (
     "model_server",
     "voice_alignment_window",
     "gpu_preflight",
+    "mnemos_store",
     "backends",
 )
 

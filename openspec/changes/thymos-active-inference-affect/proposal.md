@@ -4,6 +4,8 @@ Thymos is the precision core of the workspace competition: its arousal sets the 
 
 **Design document only.** Nothing here is built until the workspace-mediation ablation has run on the current Thymos. Changing the precision term changes what every experiment tests.
 
+_Amended 2026-10-08:_ the operator chose to change the selection's precision term before the ablation (`precision-weighted-selection`): per-source precision weights and an arousal contrast replace the uniform arousal gain. No live experiment had run, so no result is invalidated; the planned ablation tests the new selector. The shadow-readout design below is unaffected.
+
 ## What Changes
 
 A design for computing valence and arousal from the entity's own inference, introduced in two steps:

@@ -60,6 +60,8 @@ Until Stage 2 provides a validated preference source, the voice-alignment phase 
 - At each sleep the intent log is rotated to `state/lingua/intent_log/sleep-<n>.jsonl`.
 - The corpus is the set of rotated files, kept by default under the caps-not-culls rule.
 - A disk guard warns, and never deletes, when the corpus approaches its configured ceiling.
+- The divergence scan reads the live log and then the corpus newest first under one record cap, so the cap always keeps recent speech under evaluation.
+- Known gap, for a follow-up change: a hard crash between the rotation's `os.link` and `os.unlink` leaves the same records in the corpus and in the live log, and the next rotation duplicates them. An inode or content idempotence check at rotation closes it. Duplicates inflate the divergence counts; they never hide speech.
 
 ### D6. Trainer (P3)
 
@@ -102,8 +104,98 @@ The external trainer:
 - **`record_id` on the bus.** Lingua's `external_speech` and `internal_speech` events carry the record's `record_id`, so the outcome observer (D4) can key its records without any text.
 - **`seed`** is the sampling seed of the organ request. Ordinary utterances set none, so it is `null` until Stage 2 sets one.
 
+### D11. The outcome observer, fixed at implementation (task 0.4)
+
+- **What it watches.**
+  - `lingua.external` (`external_speech`, carrying `record_id`) opens a record.
+  - `audition.out`: an `audition.transcription` from an operator source (`OPERATOR_SOURCES`) with non-empty text counts as a reply. This is the same rule Chronos uses for an interaction.
+  - `empatheia.out`: `empatheia.social_error` gives `deviation_magnitude`.
+  - `thymos.out`: `thymos.state` gives `drives.social_drive`.
+- **The window.** `reply_window_s` (default 30 s, wall clock, from the utterance's event timestamp). The record closes at the first operator reply, at the end of the window, or at the entity's next external utterance, whichever comes first.
+- **The fields.**
+  - `replied` is whether an operator reply arrived first.
+  - `reply_latency_s` is the reply time minus the utterance time, else null.
+  - `preempted` is true when the entity's own next utterance closed the window before any reply. A published utterance can't be cancelled (Lingua cancels before publishing), so this is what "preempted" can mean for one that was heard.
+  - `empatheia_deviation` is the largest deviation seen in the window, else null.
+  - `social_drive_delta` is the last social-drive value in the window minus the last one at or before the utterance, else null.
+- **No text, and no guesses.**
+  - A record holds exactly `record_id`, `replied`, `reply_latency_s`, `empatheia_deviation`, `social_drive_delta` and `preempted`.
+  - A record still open at shutdown is dropped, not written with a guessed outcome, and the count is logged.
+- **Cursors.** Every cursor is seeded from `last_entry_id` at start, never `"$"`.
+
+### D12. Retiring telemetry-as-chosen (task 0.7)
+
+- **`preference_source`.** `[hypnos.voice_alignment]` gains `preference_source`, default `"none"`, which is the only value Stage 0 implements. With `"none"` the voice-alignment phase never trains, even when `enabled` and the operator-approval variable are both set. Its result and the sleep summary say `skipped: no validated preference source (voice-development Stage 2)`. Any other value is refused at boot as unknown until Stage 2 adds its source together with the validation gate (D9).
+- **What still runs.** The consolidation-divergence metric is still computed and published on every sleep. It reads the same faithful-versus-generated pairs, and the template-divergence arm still votes as a protective floor (D8). Only their use as preferred training data is retired.
+- **The training machinery stays tested.** Training moves into a method, `_train_on_pairs(pairs)`: the organ window, the trainer call, the abliteration veto and promotion. Its tests call it directly. The phase-level tests assert that open gates without a preference source never reach the trainer. Stage 2 will call `_train_on_pairs` with its own candidates.
+
+### D13. The four measures and the distinctiveness arm, fixed at implementation (task 0.8; integrator-approved 2026-10-05)
+
+- **The base-organ profile belongs to the model, not to the being.**
+  - An offline script samples the bare organ with a fixed, checked-in neutral prompt set. It writes a content-free profile to `kaine/modules/hypnos/base_voice_profiles/<sha256 of the organ GGUF>.json`, holding:
+    - the GGUF sha256, the llama.cpp build, the sampling parameters and seed, and a digest of the prompt set;
+    - the style profile: a distribution over a fixed function-word list, plus scalar style features (mean sentence length, mean word length, type-token ratio, punctuation rates).
+  - At sleep, the running organ's GGUF is identified by its sha256, cached against path, size and mtime so it is hashed once.
+  - With no profile for that digest, distinctiveness is null, which is the protective path. A changed GGUF under the same model id (for example, after an operator-approved edit) therefore never reuses an old profile.
+  - This change ships the loader and the format. The first profile comes in a follow-up, after one announced GPU-lock job.
+- **The measures, per sleep.** They are computed from the just-rotated corpus file, using the being's own generated text only. They are appended to `state/lingua/voice_measures.jsonl`, and the latest is mirrored in `voice_measures_latest.json`.
+  - **The profile distance** used by both measures below is `0.5 × √JS₂(p, q) + 0.5 × mean(|x − y| / (|x| + |y|))`. Here JS₂ is the base-2 Jensen–Shannon divergence of the two function-word distributions; the mean runs over the scalar style features (mean sentence length, mean word length, type-token ratio and the four punctuation rates). It lies in [0, 1].
+  - **distinctiveness:** the profile distance between the being's style profile and the base profile, else null;
+  - **self_consistency:** the profile distance between this sleep's profile and the cumulative profile of earlier sleeps, else null; the cumulative profile is stored as numbers in `voice_profile_cumulative.json`;
+  - **grounding:** the fraction of utterances that share at least one content word with their redacted faithful rendering;
+  - **health:** utterance count, mean tokens, distinct-1, distinct-2, and the largest repeated-trigram fraction.
+- **Content-free.** These files hold numbers and the fixed function-word identities only, never a generated sentence. A test plants a sentinel phrase in the corpus and checks that it appears in neither the measures nor the profiles.
+- **The arm.** `[hypnos.voice_alignment].distinctiveness_threshold`, default 0.0.
+  - A being that has spoken (at least one generated utterance in the intent log or the corpus) is diverged by this arm when distinctiveness ≥ the threshold. It is also diverged when the record is missing, unreadable or null: spoken but unmeasured.
+  - A being that has never spoken has no voice to have individuated, so the arm abstains. It casts no vote either way and the other arms decide, so abstention never counts as "not diverged".
+  - Its values appear in `signals`. The template (consolidation) arm votes as before.
+
 ## Risks
 
 - **A changed persona changes everything the entity says.** That is the intent, and it is why the change must precede birth-reference capture.
 - **Sycophancy (Stage 2, external signal).** It is mitigated by Empatheia weighting rather than reply count, and by V3, which limits the external signal to full-entity configurations with real conversation.
 - **Weak evidence.** No study shows these methods yield a human-like individual voice from a 4B organ with tens of utterances per sleep. The stages are measured as research.
+
+### D14. Trainer hygiene, fixed at implementation (task 0.6; integrator-approved 2026-10-05)
+
+- **Precision.**
+  - The voice-alignment base is the 4B organ (`kaineone/Qwen3.5-4B-abliterated`). Its bf16 weights are about 8 GB, so LoRA DPO fits a 12 GB card when the reference is the same model with an adapter swapped in rather than a second copy, and gradient checkpointing is on.
+  - `[hypnos.voice_alignment].train_precision` takes "bf16" (the default, per D6) or "4bit". Any other value is refused at boot.
+  - There is no silent fallback. If bf16 does not fit, the run fails closed with the measured reason.
+  - `result.json` and the sleep summary record the precision used.
+  - "4bit" is set only after a real bf16 step has failed on the host, and only with the measured peak VRAM in hand, because Unsloth flags QLoRA on Qwen3.5 as lossy.
+- **The previous adapter.**
+  - `job.json` names `previous_adapter_dir` explicitly. It is the being's latest accepted adapter, taken from the adapter store, or null when the being has never trained.
+  - When it is named but missing, unreadable or without `adapter_config.json`, the run fails closed. It never starts a fresh adapter in its place, because that would reset the being's voice.
+  - When it is named, it is loaded as a `PeftModel` twice: as adapter `policy` (trainable) and as adapter `reference`. Training passes `model_adapter_name="policy"` and `ref_adapter_name="reference"` to `DPOConfig`. The trained adapter cannot be named `train`: PEFT keeps adapters in a `ModuleDict`, where that name collides with `nn.Module.train`.
+  - When it is null, a fresh LoRA is trained and the reference is the base with the adapter disabled.
+  - The kaine side copies the being's current accepted adapter (the adapter store's `current` link) into the job directory as `previous_adapter/` and writes the relative path. The script resolves a relative path against the job directory. Every backend then sees the same layout, including the job-queue trainer container, which cannot see host paths. A `current` link that exists but cannot be resolved or copied refuses the job.
+  - The capability "before" score is taken with the previous adapter loaded, so it measures the being's current voice, not the base.
+  - **Known limit: cumulative drift from the base.** Because the baseline is the previous adapter, the capability-loss veto bounds the drift of each step, not the total drift from the base model. With the 12 bundled probes, one probe is worth more than the 0.05 threshold, so no step can lose a probe and pass, and drift is impossible today. With 20 or more probes, small per-step losses could add up. A follow-up can add a base-model floor, scoring with `disable_adapter()` as well, before the probe set grows.
+- **The system prompt store.**
+  - Lingua writes each distinct system prompt once, to `state/lingua/system_prompts/<system_digest>.txt`.
+  - The text is the persona only: the template, the name, the Eidolon values and norms, and the situation facts. No heard speech enters it, and a test plants a sentinel heard-speech phrase and checks that it never appears in a stored prompt.
+  - The text is the being's own self-model content. Each file is written as `get_state_encryptor().encrypt(text)` and read with `maybe_decrypt`, so it is never plaintext on disk when state encryption is enabled. The digest is verified over the decrypted text.
+  - It is covered by the same caps-not-culls disk guard as the corpus.
+- **The conversational format.**
+  - Each pair's prompt is `[system, user]` and its chosen and rejected completions are `[assistant]` messages, in TRL's conversational format.
+  - Before the job is built, the kaine side reads each pair's system prompt by digest and verifies sha256(text) == digest. A pair whose prompt is missing or fails verification is dropped and counted. It is never trained with a placeholder.
+- **One training core.**
+  - Three backends train: `in_process` (the shipped default), `subprocess` and `job_queue`. The last two already run `scripts/hypnos_external_train.py`.
+  - The in-process `UnslothDPOTrainer` carried its own copy of the training code. It would have kept 4-bit loading, a fresh LoRA and plain-text prompts.
+  - It now writes the same job spec into a temporary job directory and runs that script's entry point in-process, loaded by path, so the script never imports `kaine`. It then reads `result.json` through the same parser as the subprocess backend.
+  - D6 and D14 therefore hold for every backend.
+- **Both vetoes are unchanged.**
+- **Validation.** Tests exercise the dataset builder and the adapter loader without a GPU. One real bf16 step runs in the trainer environment on the 12 GB card, under the GPU lock and announced first.
+
+### D15. One training core (task 0.6; integrator decision, 2026-10-05)
+
+- Every trainer backend runs `scripts/hypnos_external_train.py`:
+  - `subprocess` runs it in the operator's trainer interpreter;
+  - `job_queue` runs it in the trainer service;
+  - `in_process` loads it by path and calls its entry point in this interpreter, in a worker thread, with the same job spec and the same `result.json` parsing as `subprocess`.
+- `UnslothDPOTrainer`, the in-process copy of the training logic, is retired. Its welfare tests (the abliteration veto and the capability-loss veto) move onto the script's gate functions.
+- `in_process` with voice alignment enabled and operator-approved fails closed at boot when this interpreter cannot import the training dependencies (unsloth, trl, peft, datasets). The error names the reason and the working backends, `subprocess` and `job_queue`. It never trains another way.
+- The backend and hot-swap pairing rules from `voice-alignment-backend-coherence` are unchanged: `organ_adapter` still needs `job_queue`.
+- The retired trainer also reported `mean_intent_expression_similarity_before/after`. The script cannot compute them without importing `kaine`, so they are absent on every backend and the voice-tracking observer reports them as missing.
+- Adapter retention (`adapter_retention > 0`) runs after every accepted promotion, on every backend.

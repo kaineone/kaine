@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Unit tests for the Holm–Bonferroni family-wise correction helper.
@@ -139,3 +139,14 @@ def test_holm_single_item_family_equals_uncorrected():
     comps2 = holm_bonferroni({"only": 0.20}, alpha=0.05)
     assert comps2[0].holm_p == pytest.approx(0.20)
     assert comps2[0].reject is False
+
+
+def test_holm_rejects_at_adjusted_p_equal_to_alpha():
+    """Holm's rule is non-strict: an adjusted p-value equal to alpha rejects.
+
+    With m = 2 the smallest p-value is doubled, and 2 x 0.025 = 0.05.
+    """
+    comps = holm_bonferroni({"a": 0.025, "b": 0.5}, alpha=0.05)
+    assert comps[0].holm_p == pytest.approx(0.05)
+    assert comps[0].reject is True
+    assert comps[1].reject is False

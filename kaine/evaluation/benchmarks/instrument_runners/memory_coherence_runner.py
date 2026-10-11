@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Controlled memory-coherence runner.
@@ -9,7 +9,7 @@ through the real stack and through a bare bypass client, and logs which one got
 it right. This runner promotes it to a CONTROLLED experiment that measures the
 *retrieval advantage* on a fixed battery of planted facts, offline.
 
-A REAL ``MnemosCore`` (``FakeEmbedder`` + ``InMemoryStorage`` — the deterministic
+A REAL ``MnemosCore`` (``HashEmbedder`` + ``InMemoryStorage``; the deterministic
 in-memory backend, no network) is loaded with a fixed battery of unique fabricated
 facts. The full-system arm is a ``RetrievalCognitiveClient`` whose answer is
 DERIVED from what Mnemos returns (it echoes the retrieved text, or emits the
@@ -75,11 +75,13 @@ async def _default_mnemos_builder() -> Any:
     imports ``kaine.modules.*`` — the sidecar boundary convention holds. The CLI
     uses this default; tests inject their own builder.
     """
-    from kaine.modules.mnemos.embeddings import FakeEmbedder
     from kaine.modules.mnemos.memory import MnemosCore
     from kaine.modules.mnemos.storage import InMemoryStorage
+    from kaine.text_embedding import HashEmbedder
 
-    emb = FakeEmbedder(latent_dim=32)
+    # HashEmbedder makes cosine similarity reflect token overlap, so a question
+    # that contains a planted fact retrieves that fact instead of random noise.
+    emb = HashEmbedder(dim=32)
     storage = InMemoryStorage(latent_dim=emb.latent_dim)
     mnemos = MnemosCore(embedder=emb, storage=storage, short_term_capacity=8)
     await mnemos.initialize()
@@ -263,10 +265,9 @@ async def run_memory_coherence(
 
     # Negative control: a fact that was NEVER planted. Run it against the empty
     # store so retrieval genuinely finds nothing → the honest non-recall sentinel
-    # (scored 0), never a confabulated positive. (Against the loaded store,
-    # InMemoryStorage returns its top-k unconditionally, so the client would echo
-    # unrelated planted facts rather than admit non-recall — which is why the
-    # never-stored control uses the empty store, mirroring the proven probe test.)
+    # (scored 0), never a confabulated positive. (Recall now returns only traces
+    # with positive cosine similarity; the empty store keeps the control
+    # unambiguous and mirrors the proven probe test.)
     never_stored_row = await _score_case(
         empty_client, NEVER_STORED[1], bare_answer=config.bare_answer, embedder=embedder
     )

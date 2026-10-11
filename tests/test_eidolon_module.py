@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from datetime import datetime, timezone
@@ -121,8 +121,11 @@ async def test_workspace_above_threshold_publishes_diagnostics_only(bus: AsyncBu
             "score",
             "recent_count",
             "historical_count",
+            "reference_count",
             "top_drifted_sources",
+            "alert",
         }
+        assert ev.payload["alert"] is True
         assert ev.salience == pytest.approx(eidolon._alert_salience)
     finally:
         await eidolon.shutdown()

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """The thesis-test profile resolves to the base-thesis form (config level)."""
@@ -44,3 +44,9 @@ def test_voice_is_self_initiated_no_chatbot():
     cfg = _cfg()
     assert cfg["volition"]["policy"] == "self_initiated_report"
     assert cfg["volition"]["drive_initiative"] is False
+
+
+def test_language_organ_samples_in_general_use():
+    cfg = _cfg()
+    # Greedy decoding is set only by study configurations.
+    assert cfg["lingua"]["temperature"] == 0.7

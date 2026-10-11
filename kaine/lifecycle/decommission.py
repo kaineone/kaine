@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Welfare-gated entity decommission: transferable backup + state deletion.
@@ -46,6 +46,7 @@ from kaine.memory_kinds import (
     MNEMOS_STAMP_COLLECTION,
     stamp_key,
     stamp_point_id,
+    strength_key,
 )
 from kaine.storage import resolve
 
@@ -369,6 +370,17 @@ def capture_backup(
             inventory.append("intent_expression.jsonl")
         except Exception as exc:
             errors.append(f"copy intent_expression.jsonl: {exc}")
+
+    # --- 2b. Rotated intent log corpus ----------------------------------
+    intent_corpus_src = state_root / "lingua" / "intent_log"
+    if intent_corpus_src.is_dir():
+        try:
+            shutil.copytree(
+                intent_corpus_src, bundle_dir / "intent_log", dirs_exist_ok=True
+            )
+            inventory.append("intent_log/")
+        except Exception as exc:
+            errors.append(f"copy intent_log/: {exc}")
 
     # --- 3. Hypnos voice adapters ---------------------------------------
     adapters_src = state_root / "hypnos" / "adapters"
@@ -750,9 +762,12 @@ def delete_entity_state(
     stamp_coll = MNEMOS_STAMP_COLLECTION
     stamp_key_str = stamp_key(prefix)
     stamp_pid = stamp_point_id(stamp_key_str)
+    strength_key_str = strength_key(prefix)
+    strength_pid = stamp_point_id(strength_key_str)
     if dry_run:
         result.dropped_collections = list(collections)  # would-drop
         result.dropped_collections.append(f"{stamp_coll}:{stamp_key_str}")
+        result.dropped_collections.append(f"{stamp_coll}:{strength_key_str}")
     else:
         client = _qdrant_client(qdrant_cfg)
         if client is not None:
@@ -781,6 +796,7 @@ def delete_entity_state(
                         exc_info=True,
                     )
                 if probe_ok:
+                    collection_drop_failed = False
                     for coll in collections:
                         if coll not in existing:
                             continue
@@ -788,20 +804,30 @@ def delete_entity_state(
                             client.delete_collection(collection_name=coll)
                             result.dropped_collections.append(coll)
                         except Exception as exc:
+                            collection_drop_failed = True
                             result.errors.append(f"drop collection {coll}: {exc}")
                     if stamp_coll in existing:
                         try:
                             from qdrant_client import models
 
+                            if collection_drop_failed:
+                                points = [stamp_pid]
+                                result.errors.append(
+                                    "mnemos strength meta kept because a collection drop failed"
+                                )
+                            else:
+                                points = [stamp_pid, strength_pid]
                             client.delete(
                                 collection_name=stamp_coll,
-                                points_selector=models.PointIdsList(
-                                    points=[stamp_pid]
-                                ),
+                                points_selector=models.PointIdsList(points=points),
                             )
                             result.dropped_collections.append(
                                 f"{stamp_coll}:{stamp_key_str}"
                             )
+                            if not collection_drop_failed:
+                                result.dropped_collections.append(
+                                    f"{stamp_coll}:{strength_key_str}"
+                                )
                         except Exception as exc:
                             result.errors.append(f"delete stamp {stamp_key_str}: {exc}")
             finally:

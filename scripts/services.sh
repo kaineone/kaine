@@ -11,7 +11,7 @@
 # stop acts on this checkout's native services. A running container is shared
 # by every checkout on the host, so stopping one needs --container.
 #
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 set -euo pipefail

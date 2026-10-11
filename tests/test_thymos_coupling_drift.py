@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Perceived-emotion decay + boundedness (thymos-emergent-affect-coupling).
@@ -137,7 +137,8 @@ async def test_state_returns_toward_baseline_after_decay(bus: AsyncBus):
     assert valence_under_input > baseline.valence  # it did move up some
 
     # Input stops; signal goes stale (past decay_s) and drift recovers.
-    for tick in range(60):
+    # Advance long enough for the 30 s valence relaxation time constant.
+    for tick in range(120):
         fake_now[0] = 10.0 + float(tick + 1)
         await thymos.on_workspace(_empty_snapshot())
 

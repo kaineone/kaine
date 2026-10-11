@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Construction of a :class:`~kaine.nexus.health.prober.HealthProber` from
@@ -340,11 +340,14 @@ def load_health_prober(
     # assessment (rate, magnitude), read from [hypnos.voice_alignment].
     from kaine.lifecycle.divergence import (
         adapter_dir_for,
-        consolidation_thresholds_from_config,
+        voice_alignment_thresholds_from_config,
+        voice_paths_for,
     )
 
-    consolidation_thresholds = consolidation_thresholds_from_config(cfg)
-    adapter_output_dir = adapter_dir_for(cfg, resolve(Path("state")))
+    consolidation_thresholds = voice_alignment_thresholds_from_config(cfg)
+    state_root = resolve(Path("state"))
+    adapter_output_dir = adapter_dir_for(cfg, state_root)
+    voice_paths = voice_paths_for(cfg, state_root)
 
     # Evaluation JSONL rollup root (for the welfare-counter row) and the
     # autonomous safety-net incident path (for the preservation panel backfill).
@@ -369,6 +372,7 @@ def load_health_prober(
         model_server_cfg=model_server_cfg,
         consolidation_thresholds=consolidation_thresholds,
         adapter_output_dir=adapter_output_dir,
+        voice_paths=voice_paths,
         probe_timeout_s=probe_timeout_s,
         cache_ttl_s=cache_ttl_s,
         evaluation_logs_path=evaluation_logs_path,
@@ -378,4 +382,5 @@ def load_health_prober(
         spot_control_path=resolve(_defaults["spot_control_path"]),
         spot_escalation_path=resolve(_defaults["spot_escalation_path"]),
         gpu_preflight_path=resolve(_defaults["gpu_preflight_path"]),
+        mnemos_store_health_path=resolve(_defaults["mnemos_store_health_path"]),
     )

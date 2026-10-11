@@ -1341,7 +1341,7 @@
       var ubadge = el("div", "supervision-badge supervision-badge--unattended");
       ubadge.setAttribute("role", "status");
       ubadge.appendChild(el("strong", null, "UNATTENDED"));
-      ubadge.appendChild(el("span", "muted", "no person present — gated by the eight-condition safety net"));
+      ubadge.appendChild(el("span", "muted", "no person present — gated by the nine-condition safety net"));
       appendGateChecks(ubadge, metrics.gate_checks);
       frag.appendChild(ubadge);
     } else if (mode === "operator") {

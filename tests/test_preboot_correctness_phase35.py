@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Regression tests for the pre-boot-correctness-batch findings.
@@ -258,6 +258,7 @@ class _M2Stub:
         self.published = []
         self._baseline_salience = 0.5
         self._failed_once = False
+        self._shielded_tasks = set()  # Hypnos holds its shielded publish here
 
     async def _run_pipeline_inner(self):
         await self.publish("hypnos.sleep.completed", {})

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for the browser first-run setup server (slice 2)."""
@@ -53,6 +53,8 @@ def _mk_app(tmp_path: Path, **overrides) -> object:
         "device_consumers_fn": lambda: [],
         "services_up_fn": lambda: {},
         "storage_old_root": tmp_path,
+        # Never the checkout's real config/secrets.toml.
+        "secrets_path": tmp_path / "secrets.toml",
     }
     kwargs.update(overrides)
     return create_setup_app(**kwargs)
@@ -64,7 +66,9 @@ def _isolated_guard(monkeypatch):
     monkeypatch.setattr(
         guard, "cycle_on_bus", lambda *a, **k: (False, "stub: no cycle on the bus")
     )
-    monkeypatch.setattr(guard, "cycle_process_state", lambda: False)
+    monkeypatch.setattr(
+        guard, "cycle_process_details", lambda *a, **k: (False, None, None)
+    )
 
 
 def _session_client(app, base_url="http://127.0.0.1:8000"):
@@ -693,7 +697,7 @@ def _defaults_from_form(html: str, step_id: str) -> dict[str, list[str] | str]:
     return data
 
 
-def _drive_web(app, overrides: dict[str, Any]) -> dict:
+def _drive_web(app, overrides: dict[str, Any], *, save: bool = False) -> dict:
     client = TestClient(app, base_url="http://127.0.0.1:8000")
     token = app.state.setup.store.issue()
     r = client.get(
@@ -743,7 +747,15 @@ def _drive_web(app, overrides: dict[str, Any]) -> dict:
         raise AssertionError("web driver did not reach review/abort")
 
     sid = client.cookies["setup_session"]
-    return app.state.setup.store.sessions[sid]["config"]
+    config = app.state.setup.store.sessions[sid]["config"]
+    if save:
+        r_save = client.post(
+            "/save",
+            headers={"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"},
+            follow_redirects=False,
+        )
+        assert r_save.status_code == 303, r_save.text
+    return config
 
 
 def _run_terminal(host, shipped_path, tmp_path, **overrides) -> dict:
@@ -1358,7 +1370,8 @@ def test_run_web_refuses_when_state_dir_cannot_be_resolved(tmp_path, monkeypatch
 
     started = []
     monkeypatch.setattr(kaine.storage, "resolve", broken_resolve)
-    monkeypatch.setattr(setup_main_mod, "serve", lambda *a, **k: started.append(1))
+    # _run_web imports the server lazily from kaine.setup.web.
+    monkeypatch.setattr("kaine.setup.web.serve", lambda *a, **k: started.append(1))
     args = argparse.Namespace(
         operator_path=tmp_path / "op.toml",
         config_path=Path(__file__).resolve().parent.parent / "config" / "kaine.toml",
@@ -1439,7 +1452,7 @@ def test_cycle_running_process_scan_detects_live_cycle_before_bus(
         called.append("cycle_on_bus")
         raise RuntimeError("should not be consulted")
 
-    monkeypatch.setattr(guard, "cycle_process_state", lambda: True)
+    monkeypatch.setattr(guard, "cycle_process_details", lambda: (True, 4242, ["python", "-m", "kaine.cycle"]))
     monkeypatch.setattr(guard, "cycle_on_bus", crashing_on_bus)
     running, reason = guard.cycle_running_with_reason(tmp_path)
     assert running is True
@@ -1615,7 +1628,7 @@ def test_process_positive_wins_over_refused_bus(monkeypatch, tmp_path):
         bus_calls.append((args, kwargs))
         raise BusConfigError("stub: no bus config")
 
-    monkeypatch.setattr(guard, "cycle_process_state", lambda: True)
+    monkeypatch.setattr(guard, "cycle_process_details", lambda: (True, 4242, ["python", "-m", "kaine.cycle"]))
     monkeypatch.setattr(guard, "load_bus_config", raising_load_bus_config)
     monkeypatch.setattr(
         guard, "load_bus_endpoint", lambda *a, **k: ("127.0.0.1", 6379)
@@ -1629,7 +1642,7 @@ def test_process_positive_wins_over_refused_bus(monkeypatch, tmp_path):
 
 
 def test_unknown_process_state_refuses(monkeypatch, tmp_path):
-    monkeypatch.setattr(guard, "cycle_process_state", lambda: None)
+    monkeypatch.setattr(guard, "cycle_process_details", lambda: (None, None, None))
 
     running, reason = guard.cycle_running_with_reason(tmp_path / "state")
     assert running is True
@@ -1684,3 +1697,95 @@ def test_non_ascii_token_exchange_never_raises(tmp_path):
     # A real token must be outstanding, or compare_digest is never reached.
     app.state.setup.store.issue()
     assert app.state.setup.store.exchange("é" * 43) is None
+
+
+def test_process_reason_names_the_cycle_process(tmp_path, monkeypatch):
+    monkeypatch.setattr(guard, "_runtime_file_reason", lambda p: (False, None))
+    monkeypatch.setattr(guard, "_bus_reason", lambda p: (False, None))
+    monkeypatch.setattr(
+        guard,
+        "cycle_process_details",
+        lambda *a, **k: (True, 123, ["python", "-m", "kaine.cycle"]),
+    )
+    running, reason = guard.cycle_running_with_reason(tmp_path)
+    assert running is True
+    assert "pid 123" in reason
+    assert "kaine.cycle" in reason
+
+
+def test_credentials_reason_names_endpoint_and_env_var(tmp_path, monkeypatch):
+    def raise_no_config(*a, **k):
+        raise BusConfigError("no credentials")
+
+    monkeypatch.setattr(guard, "load_bus_config", raise_no_config)
+    monkeypatch.setattr(
+        guard, "load_bus_endpoint", lambda *a, **k: ("127.0.0.1", 6479)
+    )
+    monkeypatch.setattr(guard, "_probe_endpoint", lambda *a, **k: True)
+    monkeypatch.setenv("KAINE_REDIS_PASSWORD", "hunter2-secret")
+    running, reason = guard._bus_reason(tmp_path / "runtime.json")
+    assert running is True
+    assert "127.0.0.1:6479" in reason
+    assert "KAINE_REDIS_PASSWORD" in reason
+    assert "hunter2-secret" not in reason
+
+
+def test_probe_failure_reason_names_endpoint(tmp_path, monkeypatch):
+    def raise_no_config(*a, **k):
+        raise BusConfigError("no credentials")
+
+    def raise_probe(*a, **k):
+        raise RuntimeError("network down")
+
+    monkeypatch.setattr(guard, "load_bus_config", raise_no_config)
+    monkeypatch.setattr(
+        guard, "load_bus_endpoint", lambda *a, **k: ("some.host", 9999)
+    )
+    monkeypatch.setattr(guard, "_probe_endpoint", raise_probe)
+    running, reason = guard._bus_reason(tmp_path / "runtime.json")
+    assert running is True
+    assert "some.host:9999" in reason
+    assert "RuntimeError" in reason
+
+
+def test_cycle_process_details_finds_pid_and_argv(tmp_path):
+    from kaine.lifecycle.liveness import cycle_process_details
+
+    proc = tmp_path / "proc"
+    proc.mkdir()
+    d = proc / "7"
+    d.mkdir()
+    (d / "cmdline").write_bytes(b"python\0-m\0kaine.cycle\0")
+    state, pid, argv = cycle_process_details(proc_root=str(proc))
+    assert state is True
+    assert pid == 7
+    assert argv == ["python", "-m", "kaine.cycle"]
+
+
+def test_web_cl1_decline_removes_an_earlier_cl1_setup(tmp_path):
+    """Declining CL1 in the browser removes a CL1 setup an earlier run wrote.
+
+    The session is server-side and holds the REMOVE sentinel itself, so the
+    save route's merge deletes the table instead of writing a marker string.
+    """
+    import tomllib
+
+    from kaine.setup import tomlwriter
+
+    operator_path = tmp_path / "kaine.operator.toml"
+    operator_path.write_text(
+        "[modules]\nchronos = true\nsoma = true\n\n"
+        "[plugins]\nenabled = [\"cl1\"]\n\n"
+        "[plugins.cl1.substrate]\ntarget = \"simulator\"\naccelerated_time = true\n\n"
+        "[plugins.cl1.backends]\nchronos = \"cl1\"\nsoma = \"cl1\"\n",
+        encoding="utf-8",
+    )
+    app = _mk_app(tmp_path, operator_path=operator_path)
+
+    config = _drive_web(app, {}, save=True)
+
+    assert config["plugins"]["cl1"] is tomlwriter.REMOVE
+    saved = tomllib.loads(operator_path.read_text(encoding="utf-8"))
+    assert "cl1" not in saved.get("plugins", {})
+    assert saved["plugins"]["enabled"] == []
+    assert "__kaine_remove__" not in operator_path.read_text(encoding="utf-8")

@@ -1,12 +1,16 @@
 # Perception
 
-This page covers the `PerceptionLocus` module, KAINE's perceptual-locus arbiter. It controls whether the entity is using physical sensors, virtual-world feeds, or no perception at all, and it gates entity-initiated locus changes. Read this if you are enabling perception, configuring physical or virtual embodiment, or writing a module that reads the locus state.
+This page covers `PerceptionLocus`, the module registered as `perception`. It arbitrates the perceptual locus, which decides whether the entity perceives through physical sensors, through virtual feeds, or not at all, and it gates locus changes that the entity itself requests. The paper claims no brain function for it. Read this page if you are enabling the module, configuring physical or virtual perception, or writing a module that reads the locus.
 
 ## Status
 
-`PerceptionLocus` is implemented and ships disabled. Both `perception` and `mundus` appear in the shipped `[modules]` block of `config/kaine.toml` as `false`. Both are also off in the base-thesis `thesis_test` profile; set `perception = true` to enable the module. No optional extras are required. Redis is required.
+`PerceptionLocus` is built and tested, and held: `perception` is `false` in the shipped `[modules]` block of `config/kaine.toml` and in the base-thesis `thesis_test` profile. It needs no optional extra. It needs the bus (Redis).
 
-The `[perception]` section already exists in `config/kaine.toml` with these shipped defaults:
+The locus itself does not depend on this module. The locus state in `kaine.perception_state` is always in force: boot selects the virtual locus for the seeded, playlist and gestational feeds, and the operator sets the locus through Nexus. What the module adds is the path by which the entity may switch its own locus. No module produces the `intent.perception.switch` event that path consumes, so the self-switch cannot fire even with `allow_self_switch = true`; the flag is reserved for later virtual-world work, and locus changes are operator-driven.
+
+Perception is not in the default order of the [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code). The reference host attaches no alternative sensor feed, and with only the study's film feed Perception would be an expected null, so it joins the study only once a sensor feed is attached, through an explicit `--order`.
+
+The shipped `[perception]` section:
 
 ```toml
 [perception]
@@ -14,83 +18,71 @@ allow_self_switch = false
 min_dwell_s = 30.0
 ```
 
-No module emits `intent.perception.switch`, so entity self-switching cannot actually be triggered even when `allow_self_switch = true`. The flag is in place for future virtual-world embodiment work; locus changes are operator-driven.
-
-## What the module does
-
-In KAINE's architecture, the **perceptual locus** is the entity's answer to which world it is embedded in right now.
+## The locus
 
 | Locus | Meaning |
 |---|---|
-| `physical` | Real camera and microphone active; virtual feeds dark |
-| `virtual` | In-world visual and chat feeds active; real camera and microphone off |
-| `off` | All perceptual inputs disabled |
+| `physical` | The real camera and microphone may run; virtual feeds are dark |
+| `virtual` | The virtual feeds (seeded, playlist, gestational, or an in-world body) may run; the real camera and microphone are off |
+| `off` | All perceptual input is off |
 
-`PerceptionLocus` enforces physical/virtual mutual exclusion. It does not start or stop the camera or microphone itself. `Topos` and `Audition` poll `kaine.perception_state.effective_video_capture()` and `effective_audio_capture()` respectively, and the locus propagates to them within one sensor poll interval.
+Physical and virtual perception exclude each other. `PerceptionLocus` does not start or stop the camera or microphone. Topos and Audition poll the capture functions of `kaine.perception_state` and follow a change within one sensor poll interval.
 
-Two paths can change the locus:
+Two paths change the locus:
 
-1. **Operator path** — In Nexus, `POST /diagnostics/perception/locus` sets the locus and the lock. `POST /diagnostics/perception/toggle` only toggles the audio/video desired flags. The operator can also write `state/perception/desired.json` directly.
-2. **Entity self-switch path** — `PerceptionLocus` watches the Volition stream for `intent.perception.switch` events and applies the change only if all policy gates pass.
+1. The operator path. In Nexus, `POST /diagnostics/perception/locus` sets the locus and the lock, and `POST /diagnostics/perception/toggle` changes only the audio and video desired flags. The operator can also edit `state/perception/desired.json`.
+2. The entity path. `PerceptionLocus` reads `intent.perception.switch` events from the Volition stream and applies a switch only if every gate below passes.
 
-## Self-switch policy gates
+## Self-switch gates
 
-All six gates must pass for an entity-initiated switch to be applied.
+All six gates must pass for an entity-initiated switch, checked in this order by `evaluate_locus_switch()`.
 
 | Gate | Condition |
 |---|---|
 | Valid locus | `requested` is `physical`, `virtual` or `off` |
-| Different from current | `requested != current` |
-| Not locked | `DesiredState.locus_locked` is `false` |
+| A real change | `requested` differs from the current locus |
+| Not locked | `locus_locked` is `false` |
 | Policy allows | `[perception].allow_self_switch` is `true` (default `false`) |
-| Workspace not inhibited | `WorkspaceSnapshot.inhibited` is `false` |
-| Minimum dwell elapsed | `time_since_last_switch >= min_dwell_s` (default `30.0`) |
+| Not inhibited | the latest broadcast was not inhibited |
+| Dwell elapsed | at least `min_dwell_s` (default 30.0) entity-time seconds since the last switch |
 
-If any gate fails, `PerceptionLocus` publishes a `perception.locus.denied` event with a reason string. A gestation lock produces the distinct reason "locus locked by gestation gate".
+If any gate fails, `PerceptionLocus` publishes `perception.locus.denied` with a reason. A lock held by gestation gives the reason "locus locked by gestation gate".
 
 ## Inputs
 
-| Bus stream | Event type consumed | Purpose |
+| Bus stream | Event or handler | Purpose |
 |---|---|---|
-| Volition stream (`kaine.workspace.volition.VOLITION_STREAM`) | `intent.perception.switch` | Entity-initiated locus switch request: `{"locus": "physical"\|"virtual"\|"off"}` |
-| `workspace.broadcast` | `on_workspace(snapshot)` | Tracks `snapshot.inhibited` for the policy gate |
+| Volition stream (`VOLITION_STREAM` in `kaine.workspace.volition`, `"volition.out"`) | `intent.perception.switch` | Entity request `{"locus": "physical" \| "virtual" \| "off"}` |
+| `workspace.broadcast` | `on_workspace(snapshot)` | Tracks `snapshot.inhibited` for the gate |
 
-The Volition stream name resolves to whatever `VOLITION_STREAM` is set to in `kaine.workspace.volition` (default `"volition.out"`). At construction, `PerceptionLocus` reads the latest event on the intent stream so it does not replay stale intents from before it was enabled.
+At `initialize()` the module moves its cursor to the newest event on the intent stream, so it does not act on intents older than its start.
 
 ## Outputs
 
-All events are published to the `perception.out` stream.
+All events go to `perception.out`.
 
-| Event type | Payload fields | Salience |
+| Event type | Payload fields | Intensity |
 |---|---|---|
-| `perception.locus.changed` | `locus`, `by: "entity"` | `0.5` |
-| `perception.locus.denied` | `requested`, `reason` | `0.3` |
+| `perception.locus.changed` | `locus`, `by: "entity"` | 0.5 |
+| `perception.locus.denied` | `requested`, `reason` | 0.3 |
 
-On a successful switch, `perception_state.write_desired_locus(requested)` performs an atomic write to `state/perception/desired.json`, and the dwell timer is reset.
+On a successful switch, `perception_state.write_desired_locus(requested)` writes `state/perception/desired.json` atomically and the dwell timer restarts.
 
 ## Configuration
 
-`make_perception()` in `kaine/boot/factories/perception.py` reads the `[perception]` section from `config/kaine.toml`.
+`make_perception()` in `kaine/boot/factories/perception.py` reads `[perception]`.
 
-| Constructor parameter | Config key | Default | Meaning |
-|---|---|---|---|
-| `allow_self_switch` | `[perception].allow_self_switch` | `false` | Whether the entity may self-switch the locus at all |
-| `min_dwell_s` | `[perception].min_dwell_s` | `30.0` | Minimum seconds between self-initiated switches |
-| `intent_stream` | — | `VOLITION_STREAM` | Bus stream carrying `intent.perception.switch` events |
-| `desired_path` | — | `None` → `state/perception/desired.json` | Override path for the desired-state file (mostly tests) |
-| `entity_clock` | — | `None` → a fresh `EntityClock()` | Shared subjective clock; the dwell timer runs in subjective time, so it dilates with `time_scale` |
+| Constructor parameter | Config key | Type | Default | Meaning |
+|---|---|---|---|---|
+| `allow_self_switch` | `[perception].allow_self_switch` | bool | `false` | Whether the entity may switch its locus at all |
+| `min_dwell_s` | `[perception].min_dwell_s` | float | `30.0` | Minimum entity-time seconds between self-initiated switches |
+| `intent_stream` | none | string | `VOLITION_STREAM` | Stream carrying `intent.perception.switch` |
+| `desired_path` | none | path | `None`, meaning `state/perception/desired.json` | Override of the desired-state file (mostly for tests) |
+| `entity_clock` | none | clock | `None`, meaning a new `EntityClock()` | Shared entity clock; the dwell timer runs on entity time, so it stretches and shrinks with `time_scale` |
 
-To allow entity self-switching, override in your local `config/kaine.toml`:
+The operator can always set the locus through `POST /diagnostics/perception/locus` or by editing `state/perception/desired.json`, unless gestation holds the lock.
 
-```toml
-[perception]
-allow_self_switch = true
-min_dwell_s = 60.0
-```
-
-The operator can always override the locus via `POST /diagnostics/perception/locus` or by editing `state/perception/desired.json`, unless the locus is locked by gestation.
-
-## How a locus switch is evaluated
+## How a switch is evaluated
 
 ```mermaid
 graph TD
@@ -98,7 +90,7 @@ graph TD
     WS["workspace.broadcast\ninhibited flag"] -->|on_workspace| PerceptionLocus["PerceptionLocus._inhibited"]
     PerceptionLocus --> HandleSwitch
     HandleSwitch --> ReadDesired["read_desired()"]
-    ReadDesired --> EvalGates{"evaluate_locus_switch()\n• valid locus\n• not same\n• not locus_locked\n• allow_self_switch\n• not inhibited\n• dwell elapsed"}
+    ReadDesired --> EvalGates{"evaluate_locus_switch()\nvalid locus\nnot the same\nnot locked\nallow_self_switch\nnot inhibited\ndwell elapsed"}
     EvalGates -->|allowed| WriteDesired["write_desired_locus()\natomic write to desired.json"]
     WriteDesired --> ChangedEvent["perception.locus.changed\n{locus, by: 'entity'}"]
     EvalGates -->|denied| DeniedEvent["perception.locus.denied\n{requested, reason}"]
@@ -106,20 +98,20 @@ graph TD
     WriteDesired -.->|poll| Audition["Audition\neffective_audio_capture()"]
 ```
 
-## How sensor modules use the locus state
+## How sensor modules read the locus
 
-`kaine.perception_state` exposes these gate functions:
+`kaine.perception_state` exposes these functions:
 
-- `effective_audio_capture()` returns `True` only when `locus == "physical"` and the audio desired flag is `True`.
-- `effective_video_capture()` returns `True` only when `locus == "physical"` and the video desired flag is `True`.
-- `effective_virtual_audio_capture()` and `effective_virtual_video_capture()` return `True` when `locus == "virtual"` and the matching virtual capture desired flag is set.
-- `select_virtual_feed()` does not choose between feeds. It sets `locus` to `virtual` and both desired flags to `true`. Boot calls it for seeded, playlist and womb feeds, and it does nothing if the locus is locked.
+- `effective_audio_capture()` is true only when the locus is `physical` and the audio desired flag is set;
+- `effective_video_capture()` is true only when the locus is `physical` and the video desired flag is set;
+- `effective_virtual_audio_capture()` and `effective_virtual_video_capture()` are true when the locus is `virtual` and the matching desired flag is set;
+- `select_virtual_feed()` sets the locus to `virtual` and both desired flags to true. Boot calls it for the seeded, playlist and gestational feeds, and it changes nothing if the locus is locked.
 
-When `locus` is `off`, all capture functions return `False`. The audio/video desired flags are preserved during a locus switch, so returning to `physical` restores the previous desired state.
+With the locus `off`, every capture function returns false. A locus switch keeps the desired flags, so returning to `physical` restores the earlier settings.
 
-## Locus lock and operator override
+## Lock and operator override
 
-`state/perception/desired.json` holds the operational state:
+`state/perception/desired.json` holds the state:
 
 ```json
 {
@@ -131,16 +123,15 @@ When `locus` is `off`, all capture functions return `False`. The audio/video des
 }
 ```
 
-The `locus_locked` boolean is `false` when unlocked and `true` when locked. `locked_by` is always a string, defaulting to `"operator"`, and records who holds the lock (for example `"gestation"`). An invalid locus value is coerced to `"physical"` on read, so the real camera and microphone are never left in an unknown state.
+`locus_locked` is a boolean. `locked_by` is always a string, `"operator"` by default, and records who holds the lock, for example `"gestation"`. An invalid locus value is read as `"physical"`, which keeps the real camera and microphone out of an undefined state.
 
-Writes are atomic (write-then-rename). Operator writes to the `locus` field bypass the policy gates when the locus is not locked by gestation.
+Writes are atomic (write, then rename). An operator write to `locus` bypasses the self-switch gates unless gestation holds the lock. While gestation holds it, `read_desired()` forces the locus to `virtual` and writes from anyone else are ignored, which keeps a gestating being on the gestational feed.
 
-When the lock is held by gestation, `read_desired()` forces `locus = "virtual"` and non-gestation writes are ignored. This is how womb mode keeps the entity on virtual feeds only.
+## Enabling
 
-## Enabling and use
+In the operator file `config/kaine.operator.toml` (the same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected):
 
 ```toml
-# local config/kaine.toml — do not commit
 [modules]
 perception = true
 
@@ -149,40 +140,30 @@ allow_self_switch = false
 min_dwell_s = 30.0
 ```
 
-To allow autonomous switching between physical and virtual embodiment:
+Setting `allow_self_switch = true` has no effect until a module produces `intent.perception.switch`. Use `POST /diagnostics/perception/locus` (`kaine/nexus/perception.py`) to set the locus or the lock from Nexus, and `POST /diagnostics/perception/toggle` to change only the desired flags.
 
-```toml
-[perception]
-allow_self_switch = true
-min_dwell_s = 60.0
-```
+## What is kept
 
-Use `POST /diagnostics/perception/locus` (see `kaine/nexus/perception.py`) to set the locus or the lock flag from Nexus. Use `POST /diagnostics/perception/toggle` only to change the audio/video desired flags.
+`PerceptionLocus` keeps no sensory content. The files involved are:
 
-## What is persisted
+- `state/perception/desired.json`, holding booleans, the locus, `locus_locked` and `locked_by`;
+- `state/perception/runtime.json`, written by `LiveMicrophone` and `LiveCamera` with start and stop timestamps only.
 
-`PerceptionLocus` persists no sensory content. The files it touches are:
-
-- `state/perception/desired.json` — operational booleans, locus string, `locus_locked` and `locked_by`. No transcribed text, audio bytes, or frame data.
-- `state/perception/runtime.json` — written by `LiveMicrophone` and `LiveCamera` with start/stop timestamps only.
-
-The bus events `perception.locus.changed` and `perception.locus.denied` carry only the locus label and a reason string.
+The events `perception.locus.changed` and `perception.locus.denied` carry the locus label and a reason string.
 
 ## Tests
 
-| File | What it verifies |
+| File | What it checks |
 |---|---|
-| `tests/test_perception_locus.py` | Default locus is `physical`; virtual forces real capture off; restoration on returning to physical |
-| `tests/test_perception_state.py` | `read_desired()`, `write_desired_locus()`, atomic write, runtime state tracking, gestation lock |
-| `tests/systems/test_live_perception_subsystem.py` | Redis-backed locus gating with live camera/mic integration |
+| `tests/test_perception_locus.py` | The default locus is `physical`; `virtual` turns real capture off; returning to `physical` restores it |
+| `tests/test_perception_state.py` | `read_desired()`, `write_desired_locus()`, atomic writes, runtime state, the gestation lock |
+| `tests/systems/test_live_perception_subsystem.py` | Locus gating with live camera and microphone on the bus |
 
 ## Spec and related
 
-- OpenSpec: `openspec/specs/perception-locus/spec.md` — the perception-locus contract (physical XOR virtual, operator control/lock, gated self-switch) implemented by `kaine/modules/perception/module.py`
-- Where perception comes from: `08-cognitive-cycle/perception-locus.md`
-- The cognitive cycle: `08-cognitive-cycle/README.md`
-- Visual perception and the locus gate: `topos.md`
-- Audio perception and the locus gate: `audition.md`
-- Virtual-world embodiment: `mundus.md`
-- Embodiment self-model: `eidolon.md`
-- Feed and sleep configuration: `appendix-a-configuration/perception-and-sleep.md`
+- OpenSpec: `openspec/specs/perception-locus/spec.md`, the contract (physical excludes virtual, operator control and lock, gated self-switch) implemented by `kaine/modules/perception/module.py`
+- [Where perception comes from](../08-cognitive-cycle/perception-locus.md)
+- [The cognitive cycle](../08-cognitive-cycle/README.md)
+- [Topos](topos.md) and [Audition](audition.md), which follow the locus
+- [Mundus](mundus.md), which acts in a virtual world only on the virtual locus
+- [Feed and sleep configuration](../appendix-a-configuration/perception-and-sleep.md)

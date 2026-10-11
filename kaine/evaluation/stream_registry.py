@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Canonical module-stream registry — the single source of truth for the
@@ -22,6 +22,10 @@ Documented exclusions:
   ``preservation.out``, ``individuation.out``) and adds the non-module
   ``workspace.broadcast`` stream. It tails ``cycle.out``, which carries the
   cycle's ``cycle.tick``, ``cycle.rates`` and ``cycle.time_scale`` events.
+
+The positive control of the information-gain measure publishes on
+``positive_control.out``, which both logs record and the cycle never reads as
+a candidate stream.
 """
 
 from __future__ import annotations
@@ -72,7 +76,10 @@ _DIAGNOSTICS_EXCLUSIONS: frozenset[str] = frozenset(
 )
 
 #: Additional module-produced streams that are not ``<module>.out``.
-_ADDITIONAL_PRODUCED_STREAMS: tuple[str, ...] = ("volition_feedback.out",)
+_ADDITIONAL_PRODUCED_STREAMS: tuple[str, ...] = (
+    "volition_feedback.out",
+    "positive_control.out",
+)
 
 
 def canonical_module_streams() -> tuple[str, ...]:

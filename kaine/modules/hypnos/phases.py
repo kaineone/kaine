@@ -1,27 +1,29 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The five Hypnos sleep phases (paper §3.3.5).
+"""The five Hypnos sleep phases (paper §3.5).
 
 Phase ordering (non-negotiable; paper-canonical):
-  1. light_consolidation  — short-term to episodic transfer (nothing dropped); oscillator
-                            frequency reduction across all active modules.
-  2. deep_consolidation   — global activation downscaling (Tononi & Cirelli 2014)
-                            + perception-suspended replay window.
-  3. associative_replay   — cross-period trace selection + Phantasia-cued
-                            re-injection (hypnos-consolidation).
-  4. affective_reset      — Thymos reset + Soma fatigue reset.
-  5. voice_alignment      — orchestrated by the Hypnos module directly.
+  1. light_consolidation: short-term to episodic transfer (nothing dropped);
+     oscillator frequency reduction across all active modules.
+  2. deep_consolidation: replay of the consolidated traces inside a replay
+     window that Hypnos opens through Mnemos, then the downscaling of trace
+     strengths that protects the replayed traces (paper A.10).
+  3. associative_replay: cross-period trace selection + Phantasia-cued
+     re-injection (hypnos-consolidation).
+  4. voice_alignment: orchestrated by the Hypnos module directly.
+  5. affective_reset: Thymos reset; sleep ends with it. Soma's fatigue
+     resets on the hypnos.sleep.completed event that follows.
 
 Each phase is async, takes its specific collaborator(s), and returns a
 `PhaseResult`.  Exceptions are caught inside each phase function so one
-failure cannot stop the pipeline — the orchestrator in `module.py` runs
+failure cannot stop the pipeline: the orchestrator in `module.py` runs
 them in order regardless.
 
 Phase 3 (associative_replay) is fully implemented but gated by the
 `[hypnos.consolidation].associative_replay` config flag and ships disabled
 by default; it runs as a safe no-op until an operator opts in. Voice
-alignment (phase 5) is likewise gated by `[hypnos.voice_alignment].enabled`
+alignment (phase 4) is likewise gated by `[hypnos.voice_alignment].enabled`
 plus the operator-approval env var.
 """
 from __future__ import annotations
@@ -29,7 +31,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional, Protocol
+from typing import Any, Optional, Protocol, Sequence
 
 log = logging.getLogger(__name__)
 
@@ -52,24 +54,23 @@ def _now_ms() -> float:
 # ---------------------------------------------------------------------------
 
 class _SupportsMnemos(Protocol):
-    """Mnemos module — memory consolidation, downscaling, and replay."""
+    """Mnemos module: memory consolidation, replay, and downscaling of trace strengths.
+
+    deep_consolidation also calls ``open_replay_window()`` and
+    ``close_replay_window()`` when the collaborator has them. The real Mnemos
+    does; test fakes need not, so they are not part of this protocol.
+    """
 
     async def consolidate_now(self) -> int: ...
 
-    def downscale_activations(self, factor: float) -> int: ...
+    async def downscale(self, protect: Sequence[Any] = ()) -> dict[str, Any]:
+        """Downscale trace strengths, protecting the replayed traces (paper A.10)."""
 
     async def replay_now(self) -> list[Any]: ...
 
 
 class _SupportsAffectiveReset(Protocol):
     async def affective_reset(self) -> None: ...
-
-
-class _SupportsStep(Protocol):
-    @property
-    def running(self) -> bool: ...
-
-    async def step(self, n: int) -> list[str]: ...
 
 
 class _SupportsTimeReset(Protocol):
@@ -92,7 +93,8 @@ async def light_consolidation(
 
     Calls ``consolidate_now()``, which moves every short-term entry into
     episodic memory and drops nothing: no trace is deleted in this phase, and
-    ``entries_consolidated`` counts the entries moved. Strong traces are
+    ``entries_consolidated`` counts the entries moved. Mnemos keeps the moved
+    traces for this sleep, so phase 2's replay draws on them. Strong traces are
     tagged for deep consolidation (no-op at this stage — tagging is implicit
     in the existing salience scoring).
 
@@ -155,27 +157,27 @@ async def light_consolidation(
 async def deep_consolidation(
     mnemos: Optional[_SupportsMnemos],
     *,
-    downscale_factor: float = 0.9,
     suspend_perception: Any = None,
     restore_perception: Any = None,
     replay_window_s: float = 5.0,
 ) -> PhaseResult:
-    """Phase 2: global activation downscaling + perception-suspended replay window.
+    """Phase 2: replay first, then downscaling of trace strengths.
 
-    Implements Tononi & Cirelli (2014) synaptic homeostasis hypothesis:
-    scale all memory activation weights by *downscale_factor* preserving
-    relative ordering (cosine similarity unchanged; L2 norms shrink).
+    Replay of the consolidated traces runs inside a replay window that this
+    function opens through Mnemos itself (so the window never depends on
+    Mnemos having seen ``hypnos.sleep.started`` on the bus). The window is
+    closed once replay is done. Perception is suspended for the duration
+    using the provided callables and is always restored afterwards.
 
-    A replay window is then opened.  External perception is suspended for
-    the duration using the provided callables (reusing the freeze/locus
-    machinery from the Hypnos module layer).  The replay window drives
-    ``mnemos.replay_now()`` (``ReplayEngine`` path, real on this branch
-    since ``mnemos-replay`` has merged).  Perception is always restored after
-    the window regardless of replay outcome.
+    After replay Mnemos scales the strength of every persisted trace
+    except the replayed ones by one factor that deepens with the number of
+    traces the wake stored, and the replayed traces keep theirs (paper
+    A.10); vectors are not touched. If replay fails, downscaling and pruning
+    are skipped for this sleep so the wake's traces keep their strength and
+    can be replayed on the next sleep.
 
     Args:
         mnemos:              Mnemos module, or None (phase is no-op).
-        downscale_factor:    Synaptic scaling factor in (0, 1].
         suspend_perception:  Callable (sync or no-arg async) to suspend external
                              perception; None = skip.
         restore_perception:  Callable (sync or no-arg async) to restore perception;
@@ -198,19 +200,12 @@ async def deep_consolidation(
         )
 
     errors: list[str] = []
+    replay_events: list[Any] = []
+    replay_failed = False
 
-    # --- Step 1: Downscale activations ---
-    try:
-        scaled = mnemos.downscale_activations(downscale_factor)
-        metadata["vectors_downscaled"] = scaled
-        metadata["downscale_factor"] = downscale_factor
-    except Exception as exc:
-        log.exception("deep_consolidation: downscale_activations failed")
-        errors.append(f"downscale: {type(exc).__name__}: {exc}")
-        metadata["downscale_factor"] = downscale_factor
-        metadata["vectors_downscaled"] = 0
-
-    # --- Step 2: Open replay window; suspend perception; replay; restore ---
+    # --- Step 1: Suspend perception; open the window; replay; close; restore ---
+    open_window = getattr(mnemos, "open_replay_window", None)
+    close_window = getattr(mnemos, "close_replay_window", None)
     perception_suspended = False
     try:
         # Suspend external perception (freeze/locus machinery).
@@ -229,14 +224,16 @@ async def deep_consolidation(
                 errors.append(f"suspend_perception: {type(exc).__name__}: {exc}")
 
         # Drive replay within the window.
-        replay_events = []
         try:
+            if open_window is not None:
+                open_window()
             replay_events = await mnemos.replay_now()
             metadata["replay_events"] = len(replay_events)
             log.debug(
                 "deep_consolidation: replay_now returned %d events", len(replay_events)
             )
         except Exception as exc:
+            replay_failed = True
             log.exception("deep_consolidation: replay_now failed")
             errors.append(f"replay_now: {type(exc).__name__}: {exc}")
             metadata["replay_events"] = 0
@@ -244,7 +241,17 @@ async def deep_consolidation(
         metadata["replay_window_s"] = replay_window_s
 
     finally:
-        # Always restore perception (even on error) — safety invariant.
+        # Close the replay window once replay is done, before perception
+        # returns, so the window is never open while perceiving.
+        if close_window is not None:
+            try:
+                close_window()
+            except Exception as exc:
+                log.warning(
+                    "deep_consolidation: closing the replay window failed: %s", exc
+                )
+                errors.append(f"close_replay_window: {type(exc).__name__}: {exc}")
+        # Always restore perception (even on error): safety invariant.
         if restore_perception is not None:
             try:
                 result = restore_perception()
@@ -258,6 +265,21 @@ async def deep_consolidation(
                     "deep_consolidation: perception restore failed: %s", exc
                 )
                 errors.append(f"restore_perception: {type(exc).__name__}: {exc}")
+
+    # --- Step 2: Downscale trace strengths, protecting the replayed traces (paper A.10) ---
+    # Skip if replay failed; the wake's traces keep born_sleep == n so the
+    # next sleep will count and replay them.
+    if replay_failed:
+        metadata["downscale_skipped"] = "replay failed"
+    else:
+        try:
+            summary = dict(await mnemos.downscale(protect=replay_events))
+            metadata["downscale"] = summary
+            if summary.get("blocked"):
+                errors.append(f"downscale blocked: {summary['blocked']}")
+        except Exception as exc:
+            log.exception("deep_consolidation: downscale failed")
+            errors.append(f"downscale: {type(exc).__name__}: {exc}")
 
     success = not errors
     return PhaseResult(
@@ -426,13 +448,13 @@ async def associative_replay(
 
 
 # ---------------------------------------------------------------------------
-# Phase 4 — Affective Reset (+ Soma fatigue reset)
+# Phase 5: Affective Reset (+ Soma fatigue reset); sleep ends with it
 # ---------------------------------------------------------------------------
 
 async def affective_reset(
     thymos: Optional[_SupportsAffectiveReset],
 ) -> PhaseResult:
-    """Phase 4: Thymos affective reset.
+    """Phase 5: Thymos affective reset, the last phase of every sleep.
 
     Resets the entity's dimensional affect state (valence/arousal/dominance)
     toward baseline.  The Soma fatigue reset is handled separately via the
@@ -467,13 +489,13 @@ async def affective_reset(
 
 
 # ---------------------------------------------------------------------------
-# Phase 5 — Voice Alignment (orchestrated by module.py directly)
+# Phase 4: Voice Alignment (orchestrated by module.py directly)
 # ---------------------------------------------------------------------------
 # Voice alignment is complex enough that it is driven by Hypnos.module
 # rather than a standalone phase function.  The PhaseResult for it is
 # constructed in module._run_voice_alignment() and appended to the
 # phase_results list directly.  This module contains only the helper
-# phases 1–4 that phase functions call.
+# phases 1, 2, 3 and 5 that phase functions call.
 
 
 # ---------------------------------------------------------------------------
@@ -508,44 +530,6 @@ async def consolidate_memory(mnemos: Optional[_SupportsMnemos]) -> PhaseResult:
         log.exception("memory_consolidation phase failed")
         return PhaseResult(
             phase="memory_consolidation",
-            success=False,
-            elapsed_ms=_now_ms() - start,
-            error=f"{type(exc).__name__}: {exc}",
-        )
-
-
-async def revise_beliefs(
-    nous_process: Optional[_SupportsStep],
-    *,
-    step_burst: int,
-) -> PhaseResult:
-    """Legacy alias for the belief-revision step.
-
-    Retained for backwards-compat with existing tests (test_hypnos_phases.py).
-    The paper's five-phase ordering no longer includes a separate
-    belief-revision phase; Nous active-inference now runs continuously and
-    is not stepped by Hypnos.
-    """
-    start = _now_ms()
-    if nous_process is None or not getattr(nous_process, "running", False):
-        return PhaseResult(
-            phase="belief_revision",
-            success=True,
-            elapsed_ms=_now_ms() - start,
-            metadata={"skipped": "no Nous available"},
-        )
-    try:
-        lines = await nous_process.step(int(step_burst))
-        return PhaseResult(
-            phase="belief_revision",
-            success=True,
-            elapsed_ms=_now_ms() - start,
-            metadata={"step_burst": int(step_burst), "lines_emitted": len(lines)},
-        )
-    except Exception as exc:
-        log.exception("belief_revision phase failed")
-        return PhaseResult(
-            phase="belief_revision",
             success=False,
             elapsed_ms=_now_ms() - start,
             error=f"{type(exc).__name__}: {exc}",

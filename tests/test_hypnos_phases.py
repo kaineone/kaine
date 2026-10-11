@@ -1,10 +1,12 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from pathlib import Path
 
 import pytest
 
+from kaine.bus.client import AsyncBus
+from kaine.bus.config import BusConfig
 from kaine.modules.hypnos.phases import (
     affective_reset,
     associative_replay,
@@ -13,8 +15,8 @@ from kaine.modules.hypnos.phases import (
     light_consolidation,
     recalibrate_time,
     reset_affect,
-    revise_beliefs,
 )
+from kaine.modules.mnemos import FakeEmbedder, InMemoryStorage, Mnemos, MnemosCore
 
 
 class FakeMnemos:
@@ -34,23 +36,6 @@ class FakeThymos:
     async def affective_reset(self) -> None:
         self.reset_calls += 1
 
-
-# Nous is now a pymdp/JAX active-inference engine with no subprocess, so the
-# belief-revision phase no longer steps a NAR binary. The phase is a generic
-# "steppable" hook; this fake exercises that contract without any NARS coupling.
-class FakeSteppable:
-    def __init__(self, running: bool = True, lines=None) -> None:
-        self._running = running
-        self._lines = list(lines or [])
-        self.step_calls: list[int] = []
-
-    @property
-    def running(self) -> bool:
-        return self._running
-
-    async def step(self, n: int) -> list[str]:
-        self.step_calls.append(n)
-        return list(self._lines)
 
 
 class FakeResetter:
@@ -87,27 +72,6 @@ async def test_consolidate_memory_error():
     assert r.success is False
     assert "RuntimeError" in (r.error or "")
 
-
-@pytest.mark.asyncio
-async def test_revise_beliefs_skipped_when_no_process():
-    r = await revise_beliefs(None, step_burst=100)
-    assert r.success is True
-    assert "skipped" in r.metadata
-
-
-@pytest.mark.asyncio
-async def test_revise_beliefs_skipped_when_not_running():
-    r = await revise_beliefs(FakeSteppable(running=False), step_burst=100)
-    assert r.success is True
-
-
-@pytest.mark.asyncio
-async def test_revise_beliefs_calls_step():
-    proc = FakeSteppable(running=True, lines=["belief_factor_0"])
-    r = await revise_beliefs(proc, step_burst=50)
-    assert r.success is True
-    assert proc.step_calls == [50]
-    assert r.metadata["lines_emitted"] == 1
 
 
 @pytest.mark.asyncio
@@ -175,9 +139,10 @@ class FakeFullMnemos:
         self.consolidate_calls += 1
         return self.moved
 
-    def downscale_activations(self, factor: float) -> int:
-        self.downscale_calls.append(factor)
-        return 5  # pretend 5 vectors scaled
+    async def downscale(self, protect=()):
+        protect = list(protect)
+        self.downscale_calls.append(protect)
+        return {"n_new": 0, "factor": 1.0, "protected": len(protect), "total_before": 0.0, "total_after": 0.0, "silent": 0}
 
     async def replay_now(self) -> list:
         self.replay_calls += 1
@@ -230,13 +195,19 @@ async def test_light_consolidation_empty_module_list():
 @pytest.mark.asyncio
 async def test_deep_consolidation_calls_downscale_and_replay():
     m = FakeFullMnemos()
-    r = await deep_consolidation(m, downscale_factor=0.8, replay_window_s=1.0)
+    r = await deep_consolidation(m, replay_window_s=1.0)
     assert r.phase == "deep_consolidation"
     assert r.success is True
-    assert m.downscale_calls == [0.8]
+    assert len(m.downscale_calls) == 1
     assert m.replay_calls == 1
-    assert r.metadata["vectors_downscaled"] == 5
-    assert r.metadata["downscale_factor"] == 0.8
+    assert r.metadata["downscale"] == {
+        "n_new": 0,
+        "factor": 1.0,
+        "protected": 0,
+        "total_before": 0.0,
+        "total_after": 0.0,
+        "silent": 0,
+    }
 
 
 @pytest.mark.asyncio
@@ -253,7 +224,6 @@ async def test_deep_consolidation_suspends_and_restores_perception():
 
     await deep_consolidation(
         m,
-        downscale_factor=0.9,
         suspend_perception=suspend,
         restore_perception=restore,
     )
@@ -264,10 +234,19 @@ async def test_deep_consolidation_suspends_and_restores_perception():
 
 @pytest.mark.asyncio
 async def test_deep_consolidation_restores_even_on_replay_error():
-    """restore_perception is called even when replay_now raises."""
+    """restore_perception is called even when replay_now raises; no downscale."""
     class ReplayBoom(FakeFullMnemos):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls: list[str] = []
+
         async def replay_now(self) -> list:
+            self.calls.append("replay")
             raise RuntimeError("replay boom")
+
+        async def downscale(self, protect=()):
+            self.calls.append("downscale")
+            return {"n_new": 0, "factor": 1.0, "protected": 0, "total_before": 0.0, "total_after": 0.0, "pruned_floor": 0, "pruned_budget": 0, "store_bytes": 0}
 
     m = ReplayBoom()
     calls: list[str] = []
@@ -280,13 +259,70 @@ async def test_deep_consolidation_restores_even_on_replay_error():
 
     r = await deep_consolidation(
         m,
-        downscale_factor=0.9,
         suspend_perception=suspend,
         restore_perception=restore,
     )
-    # Replay error is captured; restore still ran
+    # Replay error is captured; restore still ran and downscale was skipped.
     assert "restore" in calls
+    assert "replay" in m.calls
+    assert "downscale" not in m.calls
+    assert r.metadata["downscale_skipped"] == "replay failed"
     assert r.success is False  # error reported
+
+
+@pytest.mark.asyncio
+async def test_deep_consolidation_replays_inside_its_window_then_downscales():
+    """The replay window opens, replays, closes, and only then activations downscale."""
+    class OrderedMnemos(FakeFullMnemos):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls: list[str] = []
+
+        def open_replay_window(self) -> None:
+            self.calls.append("open")
+
+        def close_replay_window(self) -> None:
+            self.calls.append("close")
+
+        async def replay_now(self) -> list:
+            self.calls.append("replay")
+            return []
+
+        async def downscale(self, protect=()):
+            self.calls.append("downscale")
+            return {"n_new": 0, "factor": 1.0, "protected": len(protect), "total_before": 0.0, "total_after": 0.0, "silent": 0}
+
+    m = OrderedMnemos()
+    r = await deep_consolidation(m)
+    assert r.success is True
+    assert m.calls == ["open", "replay", "close", "downscale"]
+
+
+@pytest.mark.asyncio
+async def test_deep_consolidation_closes_its_window_when_replay_raises():
+    """A replay error still closes the window before reporting failure."""
+    class ReplayBoomOrdered(FakeFullMnemos):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls: list[str] = []
+
+        def open_replay_window(self) -> None:
+            self.calls.append("open")
+
+        def close_replay_window(self) -> None:
+            self.calls.append("close")
+
+        async def replay_now(self) -> list:
+            self.calls.append("replay")
+            raise RuntimeError("replay boom")
+
+    m = ReplayBoomOrdered()
+    r = await deep_consolidation(m)
+    assert r.success is False
+    assert "close" in m.calls
+    assert m.calls.index("close") > m.calls.index("replay")
+    assert "downscale" not in m.calls
+    assert r.metadata["downscale_skipped"] == "replay failed"
 
 
 @pytest.mark.asyncio
@@ -299,52 +335,36 @@ async def test_deep_consolidation_no_mnemos():
 # --- Phase 2: downscaling preserves relative ordering ---
 
 @pytest.mark.asyncio
-async def test_downscaling_preserves_relative_ordering():
-    """Scaling all vectors by factor < 1 preserves cosine similarity (relative order).
-
-    We test this at the Mnemos.downscale_activations level using InMemoryStorage
-    so the unit test is self-contained.
-    """
-    from kaine.modules.mnemos.storage import InMemoryStorage
-
-    storage = InMemoryStorage(latent_dim=2)
-    await storage.ensure_collection("test")
-
-    # Insert two vectors with known relationship: a ⊥ b (cosine=0), a ∥ c (cosine=1).
-    vec_a = [1.0, 0.0]
-    vec_b = [0.0, 1.0]
-    vec_c = [2.0, 0.0]  # parallel to a, different magnitude
-    await storage.upsert("test", vector=vec_a, text="a", payload={}, affect=None)
-    await storage.upsert("test", vector=vec_b, text="b", payload={}, affect=None)
-    await storage.upsert("test", vector=vec_c, text="c", payload={}, affect=None)
-
-    # Check cosine similarity before downscaling
-    def cosine(u, v):
-        import math
-        nu = math.sqrt(sum(x*x for x in u))
-        nv = math.sqrt(sum(x*x for x in v))
-        return sum(x*y for x, y in zip(u, v)) / (nu * nv) if nu * nv else 0.0
-
-    pts_before = storage._collections["test"]
-    cos_ac_before = cosine(pts_before[0]["vector"], pts_before[2]["vector"])
-
-    # Scale down by 0.5
-    factor = 0.5
-    for point in storage._collections["test"]:
-        point["vector"] = [v * factor for v in point["vector"]]
-
-    pts_after = storage._collections["test"]
-    cos_ac_after = cosine(pts_after[0]["vector"], pts_after[2]["vector"])
-
-    # Cosine similarity is preserved (within floating point)
-    assert abs(cos_ac_before - cos_ac_after) < 1e-9, (
-        f"cosine similarity changed: {cos_ac_before} -> {cos_ac_after}"
+async def test_downscaling_preserves_vectors_and_reports_factor():
+    """Mnemos.downscale() downscales trace strengths, not vectors, and reports the factor."""
+    fakeredis = pytest.importorskip("fakeredis.aioredis")
+    bus = AsyncBus(
+        BusConfig(password="x", audit_required=False),
+        client=fakeredis.FakeRedis(decode_responses=True),
     )
+    core = MnemosCore(
+        embedder=FakeEmbedder(),
+        storage=InMemoryStorage(latent_dim=32),
+        traces_per_day=2.0,
+    )
+    mnemos = Mnemos(bus, core=core)
+    await core.initialize()
+    await core.store("first episodic trace", collection="episodic")
+    await core.store("second episodic trace", collection="episodic")
 
-    # L2 norms are halved
-    import math
-    norm_a_after = math.sqrt(sum(v*v for v in pts_after[0]["vector"]))
-    assert abs(norm_a_after - 0.5) < 1e-9
+    names = core.persisted_collection_names()
+    before = await core.storage.export(names)
+    summary = await mnemos.downscale()
+    after = await core.storage.export(names)
+
+    for collection, before_pts in before.items():
+        for before_pt, after_pt in zip(before_pts, after[collection]):
+            assert before_pt["vector"] == after_pt["vector"]
+
+    assert summary["n_new"] == 2
+    assert summary["factor"] == pytest.approx(0.82, rel=1e-12)
+
+    await bus.close()
 
 
 # --- Phase 3: associative_replay stub ---
@@ -416,15 +436,15 @@ async def test_five_phase_pipeline_order_via_module(tmp_path: Path):
         "light_consolidation",
         "deep_consolidation",
         "associative_replay",
-        "affective_reset",
         "voice_alignment",
+        "affective_reset",
     ]
     # Phase 1: consolidation ran
     assert mnemos.consolidate_calls == 1
     # Phase 2: downscale ran, replay ran
     assert len(mnemos.downscale_calls) == 1
     assert mnemos.replay_calls == 1
-    # Phase 4: thymos reset ran
+    # Phase 5: thymos reset ran, last
     assert thymos.reset_calls == 1
 
     await bus.close()

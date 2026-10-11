@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for the 8 sidecar observers (tasks 5.1-5.4).
@@ -785,7 +785,8 @@ async def test_welfare_observer_noop_when_streams_absent():
     assert obs.unmaintained_fatigue_count == 0
     assert obs.sustained_extreme_vad_count == 0
     assert obs.replay_overload_count == 0
-    assert sink.rows == []
+    # The only sink row is the reset line the observer writes when it starts.
+    assert [row.get("advisory") for row in sink.rows] == ["reset"]
     assert bus.published == []
 
 

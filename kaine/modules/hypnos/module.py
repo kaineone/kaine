@@ -1,9 +1,11 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from __future__ import annotations
 
 import asyncio
+import dataclasses
+import json
 import logging
 import time
 from dataclasses import asdict
@@ -13,6 +15,11 @@ from typing import Any, ClassVar, Optional
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
+from kaine.modules.hypnos.corpus import (
+    check_corpus_ceiling,
+    intent_record_paths,
+    rotate_intent_log,
+)
 from kaine.modules.hypnos.phases import (
     PhaseResult,
     affective_reset,
@@ -22,7 +29,9 @@ from kaine.modules.hypnos.phases import (
 )
 from kaine.modules.hypnos.scheduler import RestScheduler
 from kaine.modules.hypnos.voice_alignment import (
+    TRAINING_SOURCES,
     ConsolidationDivergence,
+    DPOPair,
     DPOPairBuilder,
     FakeTrainer,
     Trainer,
@@ -30,11 +39,30 @@ from kaine.modules.hypnos.voice_alignment import (
     VoiceAlignmentConfig,
     consolidation_magnitude,
     operator_approved,
+    read_consolidation_divergence,
     write_consolidation_divergence,
 )
+from kaine.modules.hypnos.voice_measures import (
+    compute_sleep_measures,
+    load_base_profile,
+    organ_gguf_sha256,
+)
+from kaine.persistence.encrypted_jsonl import has_plaintext_line, rewrite_encrypted
+from kaine.persistence.system_prompts import read_system_prompt, store_dir_for
+from kaine.state_io import write_json_atomic
 from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
+
+# Bound on each wait in Hypnos.shutdown(): the in-flight sleep, then the held tasks.
+_SHUTDOWN_WAIT_S = 5.0
+
+
+def _append_jsonl(path: Path, record: dict[str, Any]) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, sort_keys=True) + "\n")
 
 
 class HypnosBusyError(RuntimeError):
@@ -52,7 +80,6 @@ class Hypnos(BaseModule):
         bus: AsyncBus,
         *,
         mnemos: Optional[Any] = None,
-        nous_process: Optional[Any] = None,
         thymos: Optional[Any] = None,
         chronos_resetters: Optional[list[Any]] = None,
         trainer: Optional[Trainer] = None,
@@ -74,12 +101,10 @@ class Hypnos(BaseModule):
         interval_seconds: float = 3600.0,
         max_deferral_seconds: float = 600.0,
         per_defer_seconds: float = 60.0,
-        nous_step_burst: int = 200,
         baseline_salience: float = 0.5,
         alert_salience: float = 0.8,
         # Consolidation config (hypnos-fatigue-phases)
         fatigue_triggered: bool = True,
-        downscale_factor: float = 0.9,
         replay_window_s: float = 5.0,
         # Phase-3 associative replay (hypnos-consolidation)
         associative_replay_enabled: bool = False,
@@ -106,16 +131,18 @@ class Hypnos(BaseModule):
         # Minimum entity-time seconds between a sleep's end and a Nous-requested
         # rest; bounds rest requests from an exploring Nous.
         requested_rest_min_interval_s: float = 1800.0,
+        # Path to the organ GGUF served by Lingua. Used to identify the correct
+        # base voice profile for distinctiveness measurement; None means the
+        # digest is unknown and distinctiveness will be null.
+        organ_gguf_path: Optional[Path] = None,
     ) -> None:
         super().__init__(bus)
+        self._organ_gguf_path = organ_gguf_path
         if not 0.0 <= baseline_salience <= 1.0:
             raise ValueError("baseline_salience must be in [0, 1]")
         if not 0.0 <= alert_salience <= 1.0:
             raise ValueError("alert_salience must be in [0, 1]")
-        if not 0.0 < downscale_factor <= 1.0:
-            raise ValueError("downscale_factor must be in (0, 1]")
         self._mnemos = mnemos
-        self._nous_process = nous_process
         self._thymos = thymos
         self._chronos_resetters = list(chronos_resetters or [])
         self._trainer: Trainer = trainer or FakeTrainer()
@@ -135,12 +162,10 @@ class Hypnos(BaseModule):
             # the schedule is unchanged.
             clock=self._clock.now,
         )
-        self._nous_step_burst = int(nous_step_burst)
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
         # Consolidation config
         self._fatigue_triggered = bool(fatigue_triggered)
-        self._downscale_factor = float(downscale_factor)
         self._replay_window_s = float(replay_window_s)
         # Phase-3 associative replay
         self._associative_replay_enabled = bool(associative_replay_enabled)
@@ -158,6 +183,8 @@ class Hypnos(BaseModule):
         self._pre_sleep_locus: Optional[str] = None
 
         self._sleep_lock = asyncio.Lock()
+        # Tasks that must outlive a cancel of the sleep (the final affective reset).
+        self._shielded_tasks: set[asyncio.Task[Any]] = set()
         self._builder = DPOPairBuilder()
         self._last_sleep_at: Optional[float] = None
         # Consolidation-divergence magnitude embedder + persisted state path.
@@ -296,6 +323,43 @@ class Hypnos(BaseModule):
             self._tasks.append(
                 asyncio.create_task(self._soma_consumer_loop(), name="hypnos-soma-consumer")
             )
+
+    async def shutdown(self) -> None:
+        """Stop the loops, then end any in-flight sleep, then await held tasks.
+
+        Awaits ``BaseModule.shutdown()`` first so the background loops stop
+        and no new sleep can start. If a sleep is still running it is cancelled
+        and awaited, so it ends the way a cancelled sleep always does: the
+        affective reset runs and an aborted ``hypnos.sleep.completed`` is published.
+        The held tasks are then awaited so none is left pending when the event
+        loop closes. Each wait is bounded by ``_SHUTDOWN_WAIT_S``, and a task still
+        pending after that is logged and left.
+        """
+        await super().shutdown()
+
+        sleep_task = getattr(self, "_sleep_task", None)
+        if isinstance(sleep_task, asyncio.Task) and not sleep_task.done():
+            sleep_task.cancel()
+            done, pending = await asyncio.wait({sleep_task}, timeout=_SHUTDOWN_WAIT_S)
+            if pending:
+                log.warning("hypnos: shutdown wait expired with sleep still pending")
+            for task in done:
+                # Retrieve the exception so it is not reported at garbage collection.
+                if not task.cancelled():
+                    task.exception()
+
+        held = set(self._shielded_tasks)
+        if held:
+            done, pending = await asyncio.wait(held, timeout=_SHUTDOWN_WAIT_S)
+            if pending:
+                log.warning(
+                    "hypnos: shutdown wait expired with %d held task(s) still pending",
+                    len(pending),
+                )
+            for task in done:
+                # Retrieve the exception so it is not reported at garbage collection.
+                if not task.cancelled():
+                    task.exception()
 
     async def _soma_consumer_loop(self) -> None:
         """Background loop: watch soma.out for maintenance triggers.
@@ -509,16 +573,18 @@ class Hypnos(BaseModule):
             self._requested_rest_accepted = False
 
     async def enter_sleep(self, trigger: Optional[str] = None) -> dict[str, Any]:
-        """Run the five-phase sleep pipeline. Returns a summary dict."""
+        """Run the five-phase sleep pipeline. Perception is suspended for the whole sleep."""
         if self._sleep_lock.locked():
             raise HypnosBusyError("Hypnos sleep is already in progress")
 
         async with self._sleep_lock:
+            self._suspend_perception()
             try:
                 if trigger is None:
                     return await self._run_pipeline()
                 return await self._run_pipeline(trigger=trigger)
             finally:
+                self._restore_perception()
                 self._last_sleep_ended_at = (
                     self._entity_clock.now()
                     if self._entity_clock is not None
@@ -526,7 +592,7 @@ class Hypnos(BaseModule):
                 )
 
     def _suspend_perception(self) -> None:
-        """Set locus to 'off' to suspend external perception during replay window.
+        """Set locus to 'off' to suspend external perception for the sleep.
 
         Reuses the perception_state.write_desired_locus machinery (the same
         path used by PerceptionLocus and the Nexus operator toggle).  Zero
@@ -560,7 +626,7 @@ class Hypnos(BaseModule):
             from kaine.perception_state import write_desired_locus
 
             write_desired_locus("off", path=self._perception_desired_path)
-            log.debug("hypnos: perception locus -> off (replay window)")
+            log.debug("hypnos: perception locus -> off (sleep)")
         except Exception:
             log.warning(
                 "hypnos: perception suspension (write_desired_locus) failed",
@@ -575,7 +641,7 @@ class Hypnos(BaseModule):
                 log.warning("hypnos: playlist clock pause failed", exc_info=True)
 
     def _restore_perception(self) -> None:
-        """Restore the remembered pre-sleep locus after the replay window ends
+        """Restore the remembered pre-sleep locus when sleep ends
         (falling back to 'physical' only when nothing was remembered, e.g.
         suspend never ran), and resume the shared playlist clock so playback
         continues from the pause point. Only the locus flag is written — never
@@ -586,7 +652,7 @@ class Hypnos(BaseModule):
             from kaine.perception_state import write_desired_locus
 
             write_desired_locus(locus, path=self._perception_desired_path)
-            log.debug("hypnos: perception locus -> %s (replay window closed)", locus)
+            log.debug("hypnos: perception locus -> %s (sleep ended)", locus)
         except Exception:
             log.warning(
                 "hypnos: perception restore (write_desired_locus) failed",
@@ -616,6 +682,40 @@ class Hypnos(BaseModule):
             salience=self._baseline_salience,
         )
 
+    def _open_phantasia_window(self) -> None:
+        """Open Phantasia's scenario window before phases 2 and 3."""
+        method = getattr(self._phantasia, "open_scenario_window", None)
+        if method is None:
+            return
+        try:
+            method()
+        except Exception:
+            log.warning("hypnos: opening Phantasia's scenario window failed", exc_info=True)
+
+    def _close_phantasia_window(self) -> None:
+        """Close Phantasia's scenario window after phases 2 and 3."""
+        method = getattr(self._phantasia, "close_scenario_window", None)
+        if method is None:
+            return
+        try:
+            method()
+        except Exception:
+            log.warning("hypnos: closing Phantasia's scenario window failed", exc_info=True)
+
+    async def _run_final_affective_reset(self) -> PhaseResult:
+        """Run phase 5, the affective reset, so that a cancel cannot interrupt it.
+
+        The reset runs as its own task awaited through ``asyncio.shield``. A
+        cancel that arrives while it runs cancels only the wait: the reset still
+        finishes, and the CancelledError propagates to the caller.
+        """
+        task = asyncio.ensure_future(affective_reset(self._thymos))
+        # Hold a reference so a reset left running by a second cancel is not
+        # garbage-collected before it finishes.
+        self._shielded_tasks.add(task)
+        task.add_done_callback(self._shielded_tasks.discard)
+        return await asyncio.shield(task)
+
     async def _run_pipeline_inner(self, trigger: Optional[str] = None) -> dict[str, Any]:
         # Pipeline latency + the started_at/last_sleep_at marks measure REAL
         # infrastructure wall-time (how long the sleep work actually took / when
@@ -640,51 +740,185 @@ class Hypnos(BaseModule):
             )
         phase_results: list[PhaseResult] = []
 
-        # --- Phase 1: Light Consolidation ---
-        # Weak-trace decay + strong-trace tagging + oscillator frequency hook
-        phase_results.append(
-            await light_consolidation(
-                self._mnemos,
-                active_modules=self._active_modules,
-                frequency_scale=0.5,
+        try:
+            # --- Phase 1: Light Consolidation ---
+            # Short-term to episodic transfer + oscillator frequency hook
+            phase_results.append(
+                await light_consolidation(
+                    self._mnemos,
+                    active_modules=self._active_modules,
+                    frequency_scale=0.5,
+                )
             )
-        )
 
-        # --- Phase 2: Deep Consolidation + Downscaling ---
-        # Global activation downscaling; perception suspended during replay window.
-        phase_results.append(
-            await deep_consolidation(
-                self._mnemos,
-                downscale_factor=self._downscale_factor,
-                suspend_perception=self._suspend_perception,
-                restore_perception=self._restore_perception,
-                replay_window_s=self._replay_window_s,
-            )
-        )
+            # --- Phases 2 and 3 cue Phantasia ---
+            # Phase 2's replay cues it through mnemos.replay events on the bus
+            # and phase 3 calls it directly. Hypnos opens Phantasia's scenario
+            # window around both, so the window never depends on Phantasia
+            # having seen hypnos.sleep.started, and closes it on any exit.
+            self._open_phantasia_window()
+            try:
+                # --- Phase 2: Deep Consolidation + Downscaling ---
+                # Replay, then downscaling of trace strengths (paper A.10). Perception is already suspended for the whole sleep (enter_sleep).
+                phase_results.append(
+                    await deep_consolidation(
+                        self._mnemos,
+                        replay_window_s=self._replay_window_s,
+                    )
+                )
 
-        # --- Phase 3: Associative Replay (cross-period; behind feature flag) ---
-        # Selects cross-period traces, cues Phantasia, and re-injects the
-        # resulting novel associations into the workspace so Nous (pymdp) and
-        # Thymos process them via the NORMAL cognitive cycle — no NAR burst.
-        phase_results.append(
-            await associative_replay(
-                enabled=self._associative_replay_enabled,
-                mnemos=self._mnemos,
-                phantasia=self._phantasia,
-                reinject=self._reinject_association,
-            )
-        )
+                # --- Phase 3: Associative Replay (cross-period; behind feature flag) ---
+                # Selects cross-period traces, cues Phantasia, and re-injects the
+                # resulting novel associations into the workspace so Nous (pymdp) and
+                # Thymos process them via the NORMAL cognitive cycle: no NAR burst.
+                phase_results.append(
+                    await associative_replay(
+                        enabled=self._associative_replay_enabled,
+                        mnemos=self._mnemos,
+                        phantasia=self._phantasia,
+                        reinject=self._reinject_association,
+                    )
+                )
+            finally:
+                self._close_phantasia_window()
 
-        # --- Phase 4: Affective Reset + (implicit) Soma fatigue reset ---
-        # The Soma fatigue accumulator is reset via the hypnos.sleep.completed
-        # event that Soma subscribes to (soma-forward-model-fatigue wiring).
-        # Publishing that event at the end of this pipeline zeroes Soma's
-        # FatigueAccumulator without requiring a direct module reference.
-        phase_results.append(await affective_reset(self._thymos))
+            # --- Phase 4: Voice Alignment ---
+            voice_result, voice_phase = await self._run_voice_alignment()
+            phase_results.append(voice_phase)
 
-        # --- Phase 5: Voice Alignment ---
-        voice_result, voice_phase = await self._run_voice_alignment()
-        phase_results.append(voice_phase)
+            # Rotate the waking intent log into the per-sleep corpus now that voice
+            # alignment has consumed it.  This must never break sleep, so failures
+            # are caught and logged but do not halt the pipeline.
+            corpus_summary: dict[str, Any] = {
+                "rotated": None,
+                "corpus_bytes": 0,
+                "warned": False,
+                "encrypted_rewrites": 0,
+            }
+            rotated_path: Optional[Path] = None
+            # Only a rotation that raised is a failed measurement; a corpus-ceiling
+            # check failing after a good rotation must not mask a fresh measure.
+            rotation_failed = False
+            rotation_done = False
+            try:
+                rotated_path = await asyncio.to_thread(
+                    rotate_intent_log,
+                    self._voice_config.intent_log_path,
+                    self._voice_config.intent_log_path.parent / "intent_log",
+                    sleep_index=self._sleep_count,
+                )
+                rotation_done = True
+                if rotated_path is not None:
+                    corpus_summary["rotated"] = rotated_path.name
+
+                corpus_dir = self._voice_config.intent_log_path.parent / "intent_log"
+                for f in sorted(corpus_dir.glob("sleep-*.jsonl")):
+                    if await asyncio.to_thread(has_plaintext_line, f):
+                        if await asyncio.to_thread(rewrite_encrypted, f):
+                            corpus_summary["encrypted_rewrites"] += 1
+
+                ceiling_info = await asyncio.to_thread(
+                    check_corpus_ceiling,
+                    self._voice_config.intent_log_path.parent / "intent_log",
+                    ceiling_gb=self._voice_config.corpus_ceiling_gb,
+                )
+                corpus_summary["corpus_bytes"] = ceiling_info["corpus_bytes"]
+                corpus_summary["warned"] = ceiling_info["warned"]
+            except Exception as exc:
+                rotation_failed = not rotation_done
+                # Recorded so the summary never reads a failed rotation as "nothing
+                # to rotate".
+                corpus_summary["error"] = f"{type(exc).__name__}: {exc}"
+                log.warning(
+                    "hypnos: intent log corpus rotation/ceiling check failed",
+                    exc_info=True,
+                )
+
+            # --- Voice measures (content-free) ----------------------------------
+            # Computed from the freshly rotated corpus. Wrapped in try/except so a
+            # measures failure can never break sleep.
+            voice_measures: Optional[dict[str, Any]] = None
+            if rotated_path is not None:
+                try:
+                    base_profiles_dir = (
+                        Path(__file__).resolve().parent / "base_voice_profiles"
+                    )
+                    digest = await asyncio.to_thread(
+                        organ_gguf_sha256,
+                        self._organ_gguf_path,
+                        self._voice_config.intent_log_path.parent / "organ_gguf_digest.json",
+                    )
+                    base_profile = await asyncio.to_thread(
+                        load_base_profile,
+                        digest,
+                        base_profiles_dir,
+                    )
+                    cumulative_path = (
+                        self._voice_config.intent_log_path.parent
+                        / "voice_profile_cumulative.json"
+                    )
+                    cumulative: Optional[dict[str, Any]] = None
+                    if cumulative_path.is_file():
+                        try:
+                            cumulative = json.loads(
+                                cumulative_path.read_text(encoding="utf-8")
+                            )
+                        except Exception:
+                            cumulative = None
+                    measures, new_cumulative = await asyncio.to_thread(
+                        compute_sleep_measures,
+                        rotated_path,
+                        base_profile=base_profile,
+                        cumulative=cumulative,
+                    )
+                    voice_measures = measures
+                    await asyncio.to_thread(
+                        _append_jsonl,
+                        self._voice_config.intent_log_path.parent / "voice_measures.jsonl",
+                        measures,
+                    )
+                    await asyncio.to_thread(
+                        write_json_atomic,
+                        self._voice_config.intent_log_path.parent
+                        / "voice_measures_latest.json",
+                        measures,
+                    )
+                    if new_cumulative is not None:
+                        await asyncio.to_thread(
+                            write_json_atomic,
+                            cumulative_path,
+                            new_cumulative,
+                        )
+                except Exception:
+                    log.warning(
+                        "hypnos: voice measures computation failed",
+                        exc_info=True,
+                    )
+                    rotation_failed = True
+                    voice_measures = None
+
+            if rotation_failed:
+                try:
+                    await asyncio.to_thread(
+                        write_json_atomic,
+                        self._voice_config.intent_log_path.parent
+                        / "voice_measures_latest.json",
+                        {
+                            "measurement_failed": True,
+                            "timestamp": time.strftime(
+                                "%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()
+                            ),
+                        },
+                    )
+                except Exception:
+                    log.warning(
+                        "hypnos: failed to write measurement_failed marker",
+                        exc_info=True,
+                    )
+        finally:
+            # Sleep ends with the affective reset on every path (paper §3.5),
+            # including an exception or a cancel in phases 1 to 4.
+            phase_results.append(await self._run_final_affective_reset())
 
         elapsed_ms = (time.monotonic() - start) * 1000.0
         # Capture the previous sleep mark BEFORE overwriting it; the ignition
@@ -726,8 +960,38 @@ class Hypnos(BaseModule):
             # Whether this cycle was fatigue-triggered
             "fatigue_triggered": self._fatigue_triggered_sleep,
         }
+        # The counts the paper says each sleep records, at top level so the
+        # research log can keep them.
+        # Read defensively: the summary must never break the sleep.
+        downscale_meta = None
+        for r in phase_results:
+            if getattr(r, "phase", None) == "deep_consolidation":
+                found = (getattr(r, "metadata", None) or {}).get("downscale")
+                downscale_meta = found if isinstance(found, dict) else None
+                break
+        summary["memory_pruned_floor"] = (
+            downscale_meta.get("pruned_floor") if downscale_meta else None
+        )
+        summary["memory_pruned_budget"] = (
+            downscale_meta.get("pruned_budget") if downscale_meta else None
+        )
+        summary["memory_store_bytes"] = (
+            downscale_meta.get("store_bytes") if downscale_meta else None
+        )
+        summary["memory_downscale_blocked"] = (
+            downscale_meta.get("blocked") if downscale_meta else None
+        )
+        summary["memory_blocked_sleeps"] = (
+            downscale_meta.get("blocked_sleeps") if downscale_meta else None
+        )
+        summary["memory_persist_refusals"] = (
+            downscale_meta.get("persist_refusals") if downscale_meta else None
+        )
+        summary["corpus"] = corpus_summary
+        summary["voice_measures"] = voice_measures
         all_succeeded = all(r.success for r in phase_results)
         salience = self._baseline_salience if all_succeeded else self._alert_salience
+        summary["alert"] = not all_succeeded
         # Sleep-time ignition audit (change sleep-ignition-audit): runs
         # unconditionally on EVERY sleep, before the completed publish, so the
         # content-free payload is emitted on hypnos.out AND merged into the
@@ -900,14 +1164,22 @@ class Hypnos(BaseModule):
         rejected utterance text.
         """
         self._sleep_count += 1
+        build_failed = False
         try:
-            pairs, scanned, usable = self._builder.build_with_counts(
+            paths = await asyncio.to_thread(
+                intent_record_paths,
                 self._voice_config.intent_log_path,
+                self._voice_config.intent_log_path.parent / "intent_log",
+            )
+            pairs, scanned, usable = await asyncio.to_thread(
+                self._builder.build_with_counts,
+                paths,
                 max_pairs=self._voice_config.max_samples,
             )
         except Exception:
             log.warning("consolidation divergence: pair build failed", exc_info=True)
             pairs, scanned, usable = [], 0, 0
+            build_failed = True
         rate = usable / max(1, scanned)
         magnitude, embedder_kind = await consolidation_magnitude(
             pairs, embedder=self._consolidation_embedder
@@ -926,7 +1198,21 @@ class Hypnos(BaseModule):
         kwargs: dict[str, Any] = {"sleep_index": self._sleep_count}
         if self._consolidation_divergence_path is not None:
             kwargs["path"] = self._consolidation_divergence_path
-        write_consolidation_divergence(metric, **kwargs)
+        # The template arm is a protective floor (voice-development D8): a scan
+        # that failed or found nothing is no evidence, so it never overwrites an
+        # earlier record. Otherwise one bad read would un-diverge a being.
+        prior = None
+        if scanned == 0:  # also the case when the build failed
+            read_kwargs = {"path": kwargs["path"]} if "path" in kwargs else {}
+            prior = read_consolidation_divergence(**read_kwargs)
+        if prior is not None:
+            payload["record_kept"] = True
+            log.warning(
+                "consolidation divergence: %s; keeping the earlier record",
+                "pair build failed" if build_failed else "no records scanned",
+            )
+        else:
+            write_consolidation_divergence(metric, **kwargs)
         # Content-free bus event (rides the existing metric path). An
         # intermediate publish must never propagate: catch, log, continue —
         # the metric is already persisted above, and the sleep pipeline must
@@ -993,6 +1279,30 @@ class Hypnos(BaseModule):
                 elapsed_ms=time.monotonic() * 1000.0 - start_ms,
                 metadata=_meta({"skipped": skip_reason, "training_skipped": True}),
             )
+        # Stage 0 gate: training on self-generated preferences is retired until
+        # Stage 2 provides a validated preference source (D12).
+        if self._voice_config.preference_source not in TRAINING_SOURCES:
+            skip_reason = "skipped: no validated preference source (voice-development Stage 2)"
+            log.info("voice_alignment skipped: %s", skip_reason)
+            voice_result = TrainingResult(
+                accepted=False,
+                adapter_path=None,
+                capability_loss=0.0,
+                reason=skip_reason,
+                samples_used=0,
+            )
+            return voice_result, PhaseResult(
+                phase="voice_alignment",
+                success=True,
+                elapsed_ms=time.monotonic() * 1000.0 - start_ms,
+                metadata=_meta(
+                    {
+                        "skipped": "no validated preference source",
+                        "training_skipped": True,
+                        "preference_source": self._voice_config.preference_source,
+                    }
+                ),
+            )
         if not pairs:
             voice_result = TrainingResult(
                 accepted=False,
@@ -1007,7 +1317,53 @@ class Hypnos(BaseModule):
                 elapsed_ms=time.monotonic() * 1000.0 - start_ms,
                 metadata=_meta({"pairs": 0, "training_skipped": True}),
             )
+        return await self._train_on_pairs(pairs, start_ms, _meta)
+
+    async def _attach_system_prompts(
+        self, pairs: list[DPOPair],
+    ) -> tuple[list[DPOPair], int]:
+        """Attach verified system prompts to DPO pairs.
+
+        Drops pairs whose stored system prompt is missing or fails digest
+        verification.  File I/O is run in a worker thread.
+        """
+
+        def _attach() -> tuple[list[DPOPair], int]:
+            store_dir = store_dir_for(self._voice_config.intent_log_path)
+            kept: list[DPOPair] = []
+            dropped = 0
+            for pair in pairs:
+                digest = pair.metadata.get("system_digest")
+                text = read_system_prompt(store_dir, digest) if digest else None
+                if text is None:
+                    dropped += 1
+                    continue
+                kept.append(dataclasses.replace(pair, system=text))
+            return kept, dropped
+
+        return await asyncio.to_thread(_attach)
+
+    async def _train_on_pairs(
+        self, pairs, start_ms, _meta
+    ) -> tuple[TrainingResult, PhaseResult]:
         window_meta: dict[str, Any] = {}
+        pairs, dropped = await self._attach_system_prompts(pairs)
+        if not pairs:
+            elapsed_ms = time.monotonic() * 1000.0 - start_ms
+            voice_result = TrainingResult(
+                accepted=False,
+                adapter_path=None,
+                capability_loss=0.0,
+                reason=f"no pair has a verified system prompt ({dropped} dropped)",
+                samples_used=0,
+            )
+            return voice_result, PhaseResult(
+                phase="voice_alignment",
+                success=True,
+                elapsed_ms=elapsed_ms,
+                metadata=_meta({"pairs_without_system": dropped}),
+            )
+
         try:
 
             async def _train() -> TrainingResult:
@@ -1085,6 +1441,7 @@ class Hypnos(BaseModule):
             )
         phase_meta = {
             "pairs": len(pairs),
+            "pairs_without_system": dropped,
             "accepted": voice_result.accepted,
             "reason": voice_result.reason,
         }
@@ -1131,28 +1488,40 @@ class Hypnos(BaseModule):
             log.info("hypnos: snapshot has no schedule; starting a fresh interval")
 
     async def _run_pipeline(self, trigger: Optional[str] = None) -> dict[str, Any]:
-        """M2 — guarantee ``hypnos.sleep.completed`` is published.
+        """M2: guarantee ``hypnos.sleep.completed`` is published.
 
         The pipeline body publishes the normal completed event on success.
-        If the body raises — including a transient failure of its own
-        completed publish — this wrapper publishes a completed event
+        If the body raises, including a transient failure of its own
+        completed publish, this wrapper publishes a completed event
         carrying an ``"aborted": True`` flag (content-free: the reason field
         carries only the exception class name). Soma treats it identically
         to a normal completion, so ``_in_hypnos`` can never wedge and
         faster_decay always stops.
+
+        ``BaseException`` is caught so a cancellation also publishes the
+        aborted completed event; the original exception is then re-raised.
         """
         try:
             if trigger is None:
                 return await self._run_pipeline_inner()
             return await self._run_pipeline_inner(trigger=trigger)
-        except Exception as exc:
-            log.exception("hypnos: sleep pipeline aborted")
-            try:
-                await self.publish(
+        except BaseException as exc:
+            if isinstance(exc, Exception):
+                log.exception("hypnos: sleep pipeline aborted")
+            else:
+                log.warning("hypnos: sleep pipeline cancelled (%s)", type(exc).__name__)
+            publish = asyncio.ensure_future(
+                self.publish(
                     "hypnos.sleep.completed",
                     {"aborted": True, "reason": type(exc).__name__},
                     salience=self._baseline_salience,
                 )
+            )
+            # Held like the final reset, so a second cancel cannot drop it.
+            self._shielded_tasks.add(publish)
+            publish.add_done_callback(self._shielded_tasks.discard)
+            try:
+                await asyncio.shield(publish)
             except Exception:
                 log.exception("hypnos: aborted-sleep completed publish also failed")
             raise

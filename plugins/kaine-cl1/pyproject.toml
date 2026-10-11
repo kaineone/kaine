@@ -8,7 +8,7 @@ version = "26.06.0a1"
 description = "Optional KAINE plugin that runs selected modules' forward models on Cortical Labs CL1 biological neural compute (simulator only for now)."
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "LicenseRef-CAL-0.2" }
+license = { text = "LicenseRef-CAL-0.4" }
 authors = [{ name = "Kaine.One" }]
 keywords = ["cognitive-architecture", "biocomputing", "cortical-labs", "cl1", "predictive-processing", "kaine-plugin"]
 

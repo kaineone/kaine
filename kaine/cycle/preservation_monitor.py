@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Autonomous welfare safety-net monitors (cycle-layer, siblings to Spot).
@@ -57,6 +57,7 @@ from kaine.experiment.run_context import get_run_context
 from kaine.lifecycle.divergence import (
     DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
     DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
+    VoicePaths,
     assess_divergence,
 )
 from kaine.lifecycle.manager import ForkManager
@@ -411,6 +412,8 @@ def _active_arms(assessment) -> frozenset[str]:
         arms.add("eidolon_drift")
     if signals.get("hypnos_adapters_present"):
         arms.add("adapters")
+    if signals.get("voice_vote") == "diverged":
+        arms.add("voice")
     if assessment.diverged and not arms:
         return frozenset({"diverged"})
     return frozenset(arms)
@@ -436,7 +439,9 @@ class DivergenceMonitor(_BaseSafetyMonitor):
         # (fail-closed). Threaded from [preservation].require_encryption.
         require_encryption: bool = False,
         consolidation_rate_threshold: float = DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
+        distinctiveness_threshold: float = 0.0,
         consolidation_magnitude_threshold: float = DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
+        voice_paths: VoicePaths | None = None,
         adapter_output_dir: Path | None = None,
     ) -> None:
         super().__init__(
@@ -450,7 +455,9 @@ class DivergenceMonitor(_BaseSafetyMonitor):
         self._config = config
         self._require_encryption = bool(require_encryption)
         self._consolidation_rate_threshold = consolidation_rate_threshold
+        self._distinctiveness_threshold = float(distinctiveness_threshold)
         self._consolidation_magnitude_threshold = consolidation_magnitude_threshold
+        self._voice_paths = voice_paths
         self._adapter_output_dir = adapter_output_dir
         # Boot settle: no assessment until boot_settle_s after construction,
         # so state loading can finish.
@@ -512,7 +519,9 @@ class DivergenceMonitor(_BaseSafetyMonitor):
             state_root=resolve(self._config.state_root),
             consolidation_rate_threshold=self._consolidation_rate_threshold,
             consolidation_magnitude_threshold=self._consolidation_magnitude_threshold,
+            distinctiveness_threshold=self._distinctiveness_threshold,
             adapter_output_dir=self._adapter_output_dir,
+            voice_paths=self._voice_paths,
         )
         arms = _active_arms(assessment)
         new_arms = arms - self._last_arms
@@ -838,10 +847,14 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             self._cursor = entry_id
             if event.type != "soma.report":
                 continue
-            magnitude = float((event.payload or {}).get("prediction_error", 0.0))
-            self._soma_warmup_active = bool(
-                (event.payload or {}).get("warmup_active", False)
-            )
+            payload = event.payload or {}
+            self._soma_warmup_active = bool(payload.get("warmup_active", False))
+            raw = payload.get("prediction_error", 0.0)
+            if raw is None:
+                # A reading Soma skipped as non-finite has no error: it is no sample,
+                # so it neither feeds nor resets the distress episode.
+                continue
+            magnitude = float(raw)
             u_now = self._unfrozen.now()
             now = self._clock()
             if self._distress.observe(magnitude, u_now, wall_now=now):

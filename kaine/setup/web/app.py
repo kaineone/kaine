@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """FastAPI loopback setup server (KAINE)."""
@@ -6,12 +6,17 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hmac
+import json
+import logging
 import os
+import secrets
 import socket
 import time
 import tomllib
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs
@@ -23,13 +28,22 @@ from fastapi.responses import (
     HTMLResponse,
     PlainTextResponse,
     RedirectResponse,
+    StreamingResponse,
 )
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
-from kaine.config import load_kaine_config
+from kaine.config import (
+    OPERATOR_CONFIG_PATH,
+    SHIPPED_CONFIG_PATH,
+    load_kaine_config,
+    load_runtime_config,
+)
 from kaine.hardware import describe_host
+from kaine.net import SERVICE_PORTS, port_listening
+from kaine.nexus.config import load_nexus_config
 from kaine.setup import tomlwriter
+from kaine.setup.nexus_token import DEFAULT_SECRETS_PATH, ensure_nexus_token
 from kaine.setup.steps import (
     OWNED_KEYS,
     Field,
@@ -37,10 +51,12 @@ from kaine.setup.steps import (
     StepContext,
     owned_changes,
 )
-from kaine.setup.web import guard, session
+from kaine.setup.web import guard, job_specs, session, spawn
 from kaine.setup.web.driver import validate_fields
+from kaine.setup.web.jobs import JobRunner
 from kaine.setup.wizard import ACK_PHRASE
 from kaine.setup.wizard_steps import ack_step, orientation_step, setup_steps
+from kaine.storage import configured_data_root, resolve_under
 
 # Steps whose ``apply`` calls ``ctx.extra["input_fn"]`` because they need
 # interactive yes/no decisions that cannot be expressed as declarative fields.
@@ -115,6 +131,28 @@ class SetupState:
     recommend_tier_fn: Callable[[], Any] | None = None
     device_consumers_fn: Callable[[], list[dict]] | None = None
     services_up_fn: Callable[[], dict[str, bool]] | None = None
+    shipped_config_path: Path | None = None
+    secrets_path: Path = field(default=Path("config/secrets.toml"), repr=False)
+
+
+def _resolved_secrets_path(state, repo_root):
+    secrets_path = state.secrets_path
+    if secrets_path is None:
+        return None
+    secrets_path = Path(secrets_path)
+    if secrets_path.is_absolute():
+        return secrets_path
+    return repo_root / secrets_path
+
+
+def _nexus_config_for(request):
+    state = request.app.state.setup
+    repo_root = request.app.state.repo_root
+    return load_nexus_config(
+        state.shipped_config_path,
+        operator_path=state.operator_path,
+        secrets_path=_resolved_secrets_path(state, repo_root),
+    )
 
 
 class _NoCacheMiddleware(BaseHTTPMiddleware):
@@ -123,6 +161,7 @@ class _NoCacheMiddleware(BaseHTTPMiddleware):
     ):
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
         return response
 
 
@@ -299,14 +338,20 @@ async def _idle_watcher(app: FastAPI) -> None:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    app.state.shutting_down = False
     app.state.last_activity = app.state.setup.store.now()
     watcher = asyncio.create_task(_idle_watcher(app))
     yield
+    app.state.shutting_down = True
     watcher.cancel()
     try:
         await watcher
     except asyncio.CancelledError:
         pass
+    try:
+        await app.state.runner.shutdown()
+    except Exception:
+        logging.exception("error during runner shutdown")
 
 
 def _helper_questions(step_id: str) -> tuple[dict[str, Any], ...]:
@@ -397,6 +442,7 @@ def create_setup_app(
     shipped_config_path: Path,
     idle_seconds: float = 1800.0,
     *,
+    secrets_path: Path | None = None,
     host: dict[str, Any] | None = None,
     probe_services: Callable[[], dict[str, Any]] | None = None,
     probe_trainer: Callable[..., tuple[bool, str]] | None = None,
@@ -457,10 +503,20 @@ def create_setup_app(
         recommend_tier_fn=recommend_tier_fn,
         device_consumers_fn=device_consumers_fn,
         services_up_fn=services_up_fn,
+        shipped_config_path=shipped_config_path,
+        secrets_path=secrets_path or DEFAULT_SECRETS_PATH,
     )
+    repo_root = Path(__file__).resolve().parents[3]
+    app.state.repo_root = repo_root
+    app.state.shipped_config_path = shipped_config_path
     app.state.last_activity = store.now()
     app.state.finish_shutdown = False
     app.state.activity_hold = 0
+
+    app.state.runner = JobRunner(repo_root=repo_root, hold=app.state)
+    app.state.spawn_lock = asyncio.Lock()
+    app.state.spawned = None
+    app.state.docker_probe = spawn.default_docker_probe
 
     # Middleware order (innermost first): session, no-cache, host/origin.
     app.add_middleware(_SessionMiddleware)
@@ -646,7 +702,15 @@ def create_setup_app(
         if forbidden is not None:
             return forbidden
 
-        changes = owned_changes(state.existing, sess["config"])
+        # Compare against the merged result, as the terminal does, so a
+        # removal shows as the owned keys it deletes.
+        try:
+            preview = tomlwriter.merge_owned(
+                state.existing, sess["config"], OWNED_KEYS
+            )
+        except ValueError:
+            preview = sess["config"]
+        changes = owned_changes(state.existing, preview)
         return templates.TemplateResponse(
             request,
             "review.html",
@@ -697,8 +761,662 @@ def create_setup_app(
         tmp_path.write_text(tomlwriter.dumps(merged))
         os.replace(tmp_path, state.operator_path)
 
+        token_note: list[str] = []
+        ensure_nexus_token(
+            _resolved_secrets_path(state, request.app.state.repo_root),
+            out=token_note.append,
+        )
+        sess["token_note"] = token_note
+        sess["saved"] = True
+        return RedirectResponse(request.url_for("jobs"), status_code=303)
+
+    @app.get("/jobs", response_class=HTMLResponse, name="jobs")
+    async def jobs(request: Request):
+        state = request.app.state.setup
+        sess = request.state.session
+        if not sess.get("saved"):
+            return PlainTextResponse(
+                "configuration has not been saved",
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        state_dir = _state_dir_for_spawn(sess["config"], request.app.state.repo_root)
+        specs = job_specs.build_job_specs(
+            sess["config"],
+            state.shipped,
+            repo_root=request.app.state.repo_root,
+            shipped_config_path=state.shipped_config_path,
+            operator_path=state.operator_path,
+            state_dir=state_dir,
+        )
+        runner = request.app.state.runner
+        jobs_info = []
+        for spec in specs:
+            job_id = runner.job_id_for_name(spec.name)
+            st = runner.status(job_id) if job_id is not None else None
+            jobs_info.append({"spec": spec, "job_id": job_id, "status": st})
+
+        return templates.TemplateResponse(
+            request,
+            "jobs.html",
+            {"jobs": jobs_info},
+        )
+
+    @app.post("/jobs/{name}/start", name="job_start")
+    async def job_start(request: Request, name: str):
+        state = request.app.state.setup
+        sess = request.state.session
+        if not sess.get("saved"):
+            return PlainTextResponse(
+                "configuration has not been saved",
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        running, reason = await asyncio.to_thread(
+            guard.cycle_running_with_reason, state.state_root
+        )
+        if running:
+            return PlainTextResponse(
+                f"an entity is running; jobs are refused ({reason})",
+                status_code=409,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        state_dir = _state_dir_for_spawn(sess["config"], request.app.state.repo_root)
+        specs = {
+            s.name: s
+            for s in job_specs.build_job_specs(
+                sess["config"],
+                state.shipped,
+                repo_root=request.app.state.repo_root,
+                shipped_config_path=state.shipped_config_path,
+                operator_path=state.operator_path,
+                state_dir=state_dir,
+            )
+        }
+        if name not in specs:
+            raise HTTPException(status_code=404, detail="unknown job")
+
+        try:
+            job_id = await request.app.state.runner.start(name, specs[name])
+        except RuntimeError as exc:
+            return PlainTextResponse(
+                str(exc),
+                status_code=409,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        sess.setdefault("job_ids", []).append(job_id)
+        return RedirectResponse(request.url_for("jobs"), status_code=303)
+
+    @app.get("/jobs/{job_id}/events")
+    async def job_events(request: Request, job_id: str):
+        runner = request.app.state.runner
+        if job_id not in runner:
+            raise HTTPException(status_code=404)
+
+        sess = request.state.session
+        if job_id not in sess.setdefault("job_ids", []):
+            raise HTTPException(status_code=404)
+
+        async def stream():
+            async for item in runner.events(
+                job_id,
+                shutting_down=lambda: bool(
+                    getattr(getattr(request.app.state, "server", None), "should_exit", False)
+                )
+                or request.app.state.shutting_down,
+            ):
+                if isinstance(item, str):
+                    yield f"data: {item}\n\n"
+                else:
+                    payload = json.dumps(item, separators=(",", ":"))
+                    yield f"event: done\ndata: {payload}\n\n"
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/jobs/{job_id}/cancel", name="job_cancel")
+    async def job_cancel(request: Request, job_id: str):
+        runner = request.app.state.runner
+        if job_id not in runner:
+            raise HTTPException(status_code=404)
+
+        sess = request.state.session
+        if job_id not in sess.setdefault("job_ids", []):
+            raise HTTPException(status_code=404)
+
+        if not runner.cancel(job_id):
+            return PlainTextResponse(
+                "job is not running",
+                status_code=409,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        if "application/json" in request.headers.get("accept", ""):
+            return {"status": "cancelled"}
+        return RedirectResponse(request.url_for("jobs"), status_code=303)
+
+    @app.post("/finish", response_class=HTMLResponse, name="finish")
+    async def finish(request: Request):
+        runner = request.app.state.runner
+        sess = request.state.session
+        if not sess.get("saved"):
+            # Ending setup without a saved configuration is Abort, not Finish.
+            return PlainTextResponse(
+                "configuration has not been saved",
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
+            )
+        for job_id in sess.setdefault("job_ids", []):
+            if runner.status(job_id)["status"] == "running":
+                return PlainTextResponse(
+                    "a job is still running; wait for it to finish",
+                    status_code=409,
+                    headers={"Cache-Control": "no-store"},
+                )
+
         request.app.state.finish_shutdown = True
-        return RedirectResponse(request.url_for("done"), status_code=303)
+        return templates.TemplateResponse(
+            request,
+            "done.html",
+            {
+                "abort": False,
+                "message": "Setup finished; you can close this window.",
+            },
+        )
+
+    def _finish_context(request, token=None, show_missing=False):
+        state = request.app.state.setup
+        sess = request.state.session
+
+        services_up: dict[str, bool] = {}
+        if state.services_up_fn is not None:
+            try:
+                services_up = state.services_up_fn() or {}
+            except Exception:
+                services_up = {}
+
+        service_lights = [
+            {
+                "name": name,
+                "port": port,
+                "running": (
+                    services_up[name] if name in services_up else port_listening(port)
+                ),
+            }
+            for name, port in SERVICE_PORTS.items()
+        ]
+
+        nexus_port: int | None = None
+        nexus_running = False
+        nexus_available = False
+        nexus_error = None
+        try:
+            nexus_cfg = _nexus_config_for(request)
+            nexus_port = nexus_cfg.port
+            nexus_running = port_listening(nexus_port)
+            nexus_available = True
+        except Exception as exc:
+            nexus_error = f"Nexus config could not be read ({type(exc).__name__})"
+
+        return {
+            "service_lights": service_lights,
+            "nexus_available": nexus_available,
+            "nexus_port": nexus_port,
+            "nexus_running": nexus_running,
+            "token_note": sess.get("token_note", []),
+            "token": token,
+            "show_missing": show_missing,
+            "secrets_path": state.secrets_path,
+            "nexus_error": nexus_error,
+            "saved": sess.get("saved", False),
+            "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+            "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
+        }
+
+    @app.get("/finish", response_class=HTMLResponse, name="finish_page")
+    async def finish_page(request: Request):
+        sess = request.state.session
+        if not sess.get("saved"):
+            return PlainTextResponse(
+                "configuration has not been saved",
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        return templates.TemplateResponse(
+            request,
+            "finish.html",
+            _finish_context(request),
+        )
+
+    @app.post("/finish/token", response_class=HTMLResponse, name="finish_token")
+    async def finish_token(request: Request):
+        sess = request.state.session
+        if not sess.get("saved"):
+            return PlainTextResponse(
+                "configuration has not been saved",
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        token = None
+        nexus_error = None
+        try:
+            nexus_cfg = _nexus_config_for(request)
+            token = nexus_cfg.operator_token or None
+        except Exception as exc:
+            nexus_error = f"Nexus config could not be read ({type(exc).__name__})"
+
+        context = _finish_context(request, token=token, show_missing=token is None)
+        if nexus_error is not None:
+            context["nexus_error"] = nexus_error
+
+        response = templates.TemplateResponse(
+            request,
+            "finish.html",
+            context,
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    def _parse_keep_info(form: dict[str, Any]) -> bool:
+        value = form.get("keep_info")
+        if isinstance(value, list):
+            return any(v.strip().lower() in {"true", "on", "1"} for v in value)
+        if isinstance(value, str):
+            return value.strip().lower() in {"true", "on", "1"}
+        return False
+
+    def _state_dir_for_spawn(config: dict[str, Any], repo_root: Path) -> Path:
+        data_root = configured_data_root(config)
+        state_value = resolve_under(data_root, "state")
+        state_dir = Path(state_value)
+        if not state_dir.is_absolute():
+            state_dir = repo_root / state_dir
+        return state_dir
+
+    def _spawn_gate_checks(
+        request: Request, sess: dict[str, Any], child_env: dict[str, str]
+    ) -> str | None:
+        state = request.app.state.setup
+        repo_root = request.app.state.repo_root
+        runner = request.app.state.runner
+
+        for job_id in sess.setdefault("job_ids", []):
+            if runner.status(job_id)["status"] == "running":
+                return "a job is still running; wait for it to finish"
+
+        spawned = getattr(request.app.state, "spawned", None)
+        if spawned:
+            try:
+                os.kill(spawned["pid"], 0)
+                return "an entity was already started from this setup session"
+            except PermissionError:
+                # The process exists but cannot be signalled: treat it as
+                # still running rather than allow a second spawn.
+                return "an entity process from this setup session may still be running"
+            except ProcessLookupError:
+                request.app.state.spawned = None
+
+        if state.operator_path.resolve() != (repo_root / OPERATOR_CONFIG_PATH).resolve():
+            return (
+                f"setup was started with a non-default configuration path; "
+                f"the cycle reads {repo_root / OPERATOR_CONFIG_PATH}"
+            )
+        if state.shipped_config_path.resolve() != (repo_root / SHIPPED_CONFIG_PATH).resolve():
+            return (
+                f"setup was started with a non-default configuration path; "
+                f"the cycle reads {repo_root / SHIPPED_CONFIG_PATH}"
+            )
+
+        try:
+            config = load_runtime_config(state.shipped_config_path, state.operator_path)
+        except Exception as exc:
+            return f"configuration could not be loaded ({type(exc).__name__})"
+
+        state_dir = _state_dir_for_spawn(config, repo_root)
+
+        running, reason = guard.cycle_running_with_reason(state_dir)
+        if running:
+            return f"an entity is already running ({reason})" if reason else "an entity is already running"
+
+        markers = spawn.compose_markers(
+            config,
+            repo_root=repo_root,
+            env=os.environ,
+            docker_probe=request.app.state.docker_probe,
+        )
+        if markers:
+            return "; ".join(markers)
+
+        refusal = spawn.supervision_refusal(config, child_env)
+        if refusal:
+            return refusal
+
+        return None
+
+    @app.post("/spawn", response_class=HTMLResponse, name="spawn_request")
+    async def spawn_request(request: Request):
+        state = request.app.state.setup
+        sess = request.state.session
+
+        if not sess.get("saved"):
+            return PlainTextResponse(
+                "configuration has not been saved",
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        form = await _read_form(request)
+        affirmation = (form.get("affirmation") or "").strip()
+        if affirmation != spawn.SPAWN_ACK_PHRASE:
+            return state.templates.TemplateResponse(
+                request,
+                "spawn.html",
+                {
+                    "reason": "The acknowledgement must match the exact sentence.",
+                    "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+                    "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
+                    "preboot_rows": [],
+                },
+                status_code=400,
+            )
+
+        repo_root = request.app.state.repo_root
+        child_env = os.environ.copy()
+        child_env["KAINE_CYCLE_OPERATOR_PRESENT"] = "1"
+
+        refusal = _spawn_gate_checks(request, sess, child_env)
+        if refusal:
+            return state.templates.TemplateResponse(
+                request,
+                "spawn.html",
+                {
+                    "reason": refusal,
+                    "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+                    "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
+                    "preboot_rows": [],
+                },
+                status_code=409,
+            )
+
+        try:
+            config = load_runtime_config(state.shipped_config_path, state.operator_path)
+            state_dir = _state_dir_for_spawn(config, repo_root)
+            spawn.record_acknowledgement(
+                state_dir, affirmation, now=lambda: datetime.now(timezone.utc)
+            )
+        except Exception as exc:
+            return state.templates.TemplateResponse(
+                request,
+                "spawn.html",
+                {
+                    "reason": f"could not record acknowledgement ({type(exc).__name__})",
+                    "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+                    "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
+                    "preboot_rows": [],
+                },
+                status_code=409,
+            )
+
+        keep_info = _parse_keep_info(form)
+        nonce = secrets.token_urlsafe(32)
+        sess["spawn_nonce"] = (nonce, time.time(), keep_info)
+
+        log_dir = state_dir / "logs"
+        return state.templates.TemplateResponse(
+            request,
+            "spawn_confirm.html",
+            {
+                "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+                "log_dir": log_dir,
+                "keep_info": keep_info,
+                "nonce": nonce,
+            },
+        )
+
+    @app.post("/spawn/confirm", response_class=HTMLResponse, name="spawn_confirm")
+    async def spawn_confirm(request: Request):
+        state = request.app.state.setup
+        sess = request.state.session
+
+        if not sess.get("saved"):
+            return PlainTextResponse(
+                "configuration has not been saved",
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        if request.app.state.spawn_lock.locked():
+            return state.templates.TemplateResponse(
+                request,
+                "spawn.html",
+                {
+                    "reason": "a spawn is already in progress",
+                    "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+                    "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
+                    "preboot_rows": [],
+                },
+                status_code=409,
+            )
+
+        lock = request.app.state.spawn_lock
+        await lock.acquire()
+        try:
+            form = await _read_form(request)
+            submitted = form.get("nonce") or ""
+            if isinstance(submitted, list):
+                submitted = submitted[-1] if submitted else ""
+
+            stored = sess.pop("spawn_nonce", None)
+            ok = (
+                stored is not None
+                and isinstance(stored, tuple)
+                and isinstance(submitted, str)
+                and submitted.isascii()
+                and len(stored) >= 2
+                and hmac.compare_digest(stored[0], submitted)
+                and (time.time() - stored[1]) < spawn.NONCE_TTL_S
+            )
+            if not ok:
+                return state.templates.TemplateResponse(
+                    request,
+                    "spawn.html",
+                    {
+                        "reason": "this confirmation has expired or was already used; start again from the finish page",
+                        "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+                        "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
+                        "preboot_rows": [],
+                    },
+                    status_code=403,
+                )
+
+            keep_info = stored[2] if len(stored) >= 3 else False
+
+            repo_root = request.app.state.repo_root
+            child_env = os.environ.copy()
+            child_env["KAINE_CYCLE_OPERATOR_PRESENT"] = "1"
+
+            refusal = _spawn_gate_checks(request, sess, child_env)
+            if refusal:
+                return state.templates.TemplateResponse(
+                    request,
+                    "spawn.html",
+                    {
+                        "reason": refusal,
+                        "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+                        "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
+                        "preboot_rows": [],
+                    },
+                    status_code=409,
+                )
+
+            try:
+                config = load_runtime_config(
+                    state.shipped_config_path, state.operator_path
+                )
+            except Exception as exc:
+                return state.templates.TemplateResponse(
+                    request,
+                    "spawn.html",
+                    {
+                        "reason": f"configuration could not be loaded ({type(exc).__name__})",
+                        "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+                        "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
+                        "preboot_rows": [],
+                    },
+                    status_code=409,
+                )
+
+            ok, results, verdict = await spawn.run_preboot(repo_root)
+
+            # Re-check the safety gates after the long preboot to close the
+            # time-of-check/time-of-use window (at minimum: is an entity now
+            # running in the saved config's state directory?).
+            if ok:
+                refusal = _spawn_gate_checks(request, sess, child_env)
+                if refusal:
+                    return state.templates.TemplateResponse(
+                        request,
+                        "spawn.html",
+                        {
+                            "reason": refusal,
+                            "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+                            "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
+                            "preboot_rows": [],
+                        },
+                        status_code=409,
+                    )
+
+                # The preboot may have taken a long time; reload the config the
+                # cycle will actually read, and refuse if it changed under us.
+                try:
+                    reloaded = load_runtime_config(
+                        state.shipped_config_path, state.operator_path
+                    )
+                except Exception as exc:
+                    return state.templates.TemplateResponse(
+                        request,
+                        "spawn.html",
+                        {
+                            "reason": f"configuration could not be loaded ({type(exc).__name__})",
+                            "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+                            "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
+                            "preboot_rows": [],
+                        },
+                        status_code=409,
+                    )
+                if reloaded != config:
+                    return state.templates.TemplateResponse(
+                        request,
+                        "spawn.html",
+                        {
+                            "reason": "the configuration changed while the pre-boot check ran; start again from the finish page",
+                            "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+                            "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
+                            "preboot_rows": [],
+                        },
+                        status_code=409,
+                    )
+
+            if not ok:
+                rows = [
+                    (
+                        r.get("group", ""),
+                        r.get("name", ""),
+                        ((r.get("detail") or "").splitlines() or [""])[0],
+                    )
+                    for r in results
+                    if r.get("status") in {"FAIL", "WARN"}
+                ]
+                return state.templates.TemplateResponse(
+                    request,
+                    "spawn.html",
+                    {
+                        "reason": verdict,
+                        "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+                        "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
+                        "preboot_rows": rows,
+                    },
+                    status_code=409,
+                )
+
+            state_dir = _state_dir_for_spawn(config, repo_root)
+            spawn_started_at = time.time()
+            try:
+                proc, log_path, stderr_path = spawn.start_cycle(
+                    repo_root,
+                    state_dir / "logs",
+                    keep_info=keep_info,
+                    now=lambda: datetime.now(timezone.utc),
+                )
+            except Exception as exc:
+                return state.templates.TemplateResponse(
+                    request,
+                    "spawn.html",
+                    {
+                        "reason": f"the cycle could not be started ({type(exc).__name__})",
+                        "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
+                        "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
+                        "preboot_rows": [],
+                    },
+                    status_code=409,
+                )
+            request.app.state.spawned = {
+                "pid": proc.pid,
+                "log_path": log_path,
+                "stderr_path": stderr_path,
+            }
+
+            runtime_path = state_dir / "cycle" / "runtime.json"
+            outcome, code = await spawn.wait_ready(
+                proc, runtime_path, not_before=spawn_started_at
+            )
+
+            if outcome in ("ready", "starting"):
+                request.app.state.finish_shutdown = True
+            if outcome == "exited":
+                request.app.state.spawned = None
+
+            nexus_url = None
+            try:
+                nexus_cfg = _nexus_config_for(request)
+                nexus_url = f"http://127.0.0.1:{nexus_cfg.port}/"
+            except Exception:
+                # No readable Nexus config: the page shows no Nexus link.
+                pass
+
+            explanation = ""
+            if outcome == "exited" and code is not None:
+                explanation = spawn.exit_explanation(code) or f"exit code {code}"
+
+            errors = []
+            if outcome == "exited":
+                errors = spawn.error_summary(log_path)
+
+            return state.templates.TemplateResponse(
+                request,
+                "spawn_done.html",
+                {
+                    "outcome": outcome,
+                    "pid": proc.pid,
+                    "code": code,
+                    "explanation": explanation,
+                    "error_summary": errors,
+                    "log_path": log_path,
+                    "stderr_path": stderr_path,
+                    "nexus_url": nexus_url,
+                },
+            )
+        finally:
+            lock.release()
 
     @app.get("/done", response_class=HTMLResponse, name="done")
     async def done(request: Request):
@@ -713,6 +1431,16 @@ def create_setup_app(
 
     @app.post("/abort", response_class=HTMLResponse, name="abort")
     async def abort_(request: Request):
+        runner = request.app.state.runner
+        sess = request.state.session
+        for job_id in sess.setdefault("job_ids", []):
+            if runner.status(job_id)["status"] == "running":
+                return PlainTextResponse(
+                    "a job is still running; wait for it or cancel it",
+                    status_code=409,
+                    headers={"Cache-Control": "no-store"},
+                )
+
         request.app.state.finish_shutdown = True
         return templates.TemplateResponse(
             request,
@@ -800,6 +1528,7 @@ def serve(
         port=actual_port,
         loop="asyncio",
         log_level="warning",
+        timeout_graceful_shutdown=5,
     )
     server = uvicorn.Server(config)
     app.state.server = server
@@ -816,6 +1545,11 @@ def serve(
     try:
         server.run(sockets=[sock])
     finally:
+        try:
+            if hasattr(app.state, "runner"):
+                app.state.runner.kill_all_sync()
+        except Exception:
+            logging.exception("error during kill_all_sync")
         try:
             sock.close()
         except OSError:

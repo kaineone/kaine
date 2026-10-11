@@ -1,7 +1,7 @@
 # Third-Party Licenses
 
 The KAINE project itself is licensed under the **Cognitive Architecture License
-(CAL) v0.2** (SPDX `LicenseRef-CAL-0.2`); see [`LICENSE.md`](LICENSE.md) and
+(CAL) v0.4** (SPDX `LicenseRef-CAL-0.4`); see [`LICENSE.md`](LICENSE.md) and
 [`NOTICE`](NOTICE).
 
 The components listed below are **bundled (vendored) third-party assets**. They

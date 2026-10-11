@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from __future__ import annotations
@@ -146,6 +146,7 @@ def test_state_files_round_trip_under_data_root(tmp_path, monkeypatch):
     assert read_desired() == written_desired
 
 
+@pytest.mark.no_data_root
 def test_no_data_root_writes_under_cwd(tmp_path):
     # The autouse fixture has already chdir'd to tmp_path/cwd and reset root.
     control = CycleControl()

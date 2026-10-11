@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Boundary-neutral text embedder + cosine similarity.
@@ -253,8 +253,10 @@ class SentenceTransformerTextEmbedder:
 class HashEmbedder:
     """Deterministic, dep-free embedder for tests and offline use.
 
-    Hashes tokens into a fixed-dim vector. Not semantically meaningful,
-    but cosine similarity stays in [0, 1] and is repeatable.
+    Satisfies the richer :class:`Embedder` protocol, so Mnemos can use it in
+    tests and offline instruments. Hashes tokens into a fixed-dim vector. Not
+    semantically meaningful, but cosine similarity stays in [0, 1] and is
+    repeatable.
     """
 
     #: Embedder kind tag written into evaluation records for disclosure.
@@ -262,6 +264,21 @@ class HashEmbedder:
 
     def __init__(self, dim: int = 64) -> None:
         self._dim = int(dim)
+
+    @property
+    def latent_dim(self) -> int:
+        """The loaded model's embedding dimension."""
+        return self._dim
+
+    @property
+    def model_id(self) -> str:
+        """The embedding model id."""
+        return "hash/token-count"
+
+    @property
+    def space(self) -> dict[str, Any]:
+        """Embedding-space stamp (model, dimension, pooling, normalized)."""
+        return {"model_id": "hash", "dim": self._dim, "pooling": "token-count", "normalized": True}
 
     async def load(self) -> None:
         return
@@ -278,6 +295,18 @@ class HashEmbedder:
             vec[h] += 1.0
         norm = math.sqrt(sum(v * v for v in vec)) or 1.0
         return [v / norm for v in vec]
+
+    async def encode(self, text: str) -> list[float]:
+        """Embed a single string to a vector."""
+        return await self.embed(text)
+
+    async def encode_batch(self, texts: Iterable[str]) -> list[list[float]]:
+        """Embed a batch of strings."""
+        return [await self.encode(t) for t in texts]
+
+    async def shutdown(self) -> None:
+        """Release the model."""
+        return
 
 
 class FakeEmbedder:

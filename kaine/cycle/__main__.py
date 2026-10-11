@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """KAINE cognitive cycle operator entrypoint.
@@ -34,7 +34,7 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Iterable
 
 from kaine.boot import (
     build_registry,
@@ -45,6 +45,7 @@ from kaine.boot import (
     make_salience_factors,
     plugin_injections,
 )
+from kaine.boot.perception_feed import bind_womb_unawake_source
 from kaine.bus.client import CYCLE_CLIENT_NAME, AsyncBus
 from kaine.bus.config import load_bus_config, load_secrets_doc
 from kaine.bus.schema import Event
@@ -61,6 +62,7 @@ from kaine.cycle.ignition_log import (
 )
 from kaine.cycle.preflight import GpuPreflightConfig, run_preflight
 from kaine.cycle.spot import Spot, SpotConfig
+from kaine.cycle.utterance_outcome import start_utterance_outcome_observer
 from kaine.cycle.womb_watch import GESTATION_FREEZE_SOURCE
 from kaine.defaults import (
     lingua_section_api_key,
@@ -92,6 +94,8 @@ from kaine.lifecycle.maturation_gate import (
     MaturationConfig,
     gestation_started_payload,
 )
+from kaine.modules.positive_control import finish_positive_controls
+from kaine.modules.registry import shutdown_order
 from kaine.modules.thymos.modulator import StateModulator
 from kaine.perception_state import (
     read_desired,
@@ -166,6 +170,10 @@ INDIVIDUATION_REFUSED_EXIT = 10
 
 # Exit code when entity identity cannot be resolved or a revive conflicts with the existing tree.
 IDENTITY_REFUSED_EXIT = 11
+
+
+# Exit code when a live planned-test study lacks a valid settings record (paper Appendix A.8).
+PLANNED_TEST_REFUSED_EXIT = 12
 
 
 def _individuation_refusal(kaine_config: dict[str, Any]) -> tuple[Any | None, str | None]:
@@ -286,7 +294,7 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
         per_request_adapter=per_request_adapter,
         state_root=resolve(DEFAULT_ROOT),
         clock_now=entity_clock.now if entity_clock is not None else None,
-        paused_seconds=cycle.paused_subjective_seconds,
+        paused_seconds=cycle.unawake_subjective_seconds,
         tick_index=lambda: cycle.tick_index,
         is_paused=lambda: cycle.is_paused,
         organ_unloaded=organ_unloaded,
@@ -825,7 +833,7 @@ async def _write_runtime_state(
         "tick_index": cycle.tick_index,
         "processing_rate_hz": cycle.processing_rate_hz,
         "experiential_rate_hz": cycle.experiential_rate_hz,
-        # Adaptive conscious access: the rate used on the latest tick and the
+        # Adaptive access: the rate used on the latest tick and the
         # drive behind it (the resting rate is experiential_rate_hz above).
         "experiential_rate_effective_hz": _numeric_or(
             getattr(cycle, "effective_experiential_rate_hz", None),
@@ -954,9 +962,19 @@ def _resolve_seed(config: dict[str, Any]) -> int:
     return secrets.randbits(32)
 
 
+def _syneidesis_arm_kwargs(syn_cfg: dict[str, Any], run_ctx: Any) -> dict[str, Any]:
+    """The workspace arm from ``[syneidesis].arm`` (paper §6.3) and the run seed
+    the matched arm's draw is seeded from (``None`` before a run context exists)."""
+    arm = str(syn_cfg.get("arm", "competitive")).strip().lower()
+    seed = int(run_ctx.seed) if run_ctx is not None else None
+    return {"arm": arm, "arm_seed": seed}
+
+
 def _resolve_boot_stage(
     config: dict[str, Any],
     stage_override: lifecycle_stage.StageState | None = None,
+    identity: Any = None,
+    revived: bool = False,
 ) -> tuple[lifecycle_stage.StageState, bool, bool]:
     """Resolve the developmental stage at boot.
 
@@ -971,6 +989,10 @@ def _resolve_boot_stage(
 
     If ``stage_override`` is provided it is returned directly and the stage file
     is not read.
+
+    If ``revived`` is true, the being is treated as already-lived even if the
+    lineage scan would not otherwise find evidence, because a preserved being
+    has lived by definition.
     """
     ds_config = MaturationConfig.from_dict(config.get("developmental_stage"))
     if stage_override is not None:
@@ -986,7 +1008,14 @@ def _resolve_boot_stage(
     existing = lifecycle_stage.read_stage()
     if existing is not None:
         return existing, True, False
-    prior = lifecycle_stage.has_prior_lived_history()
+    if revived:
+        prior = True
+    else:
+        prior = lifecycle_stage.has_prior_lived_history(
+            identity,
+            resolve(Path("state")),
+            bundle_roots=_preservation_bundle_roots(config),
+        )
     resolved = lifecycle_stage.resolve_boot_stage(has_prior_lived_history=prior)
     # The gate runner persists the resolved stage on its first tick so the
     # gestation clock is anchored and evidence is owned by one writer.
@@ -995,12 +1024,61 @@ def _resolve_boot_stage(
 
 
 def _resolve_start_stage(
-    config: dict[str, Any], revive: "ReviveSession | None"
+    config: dict[str, Any],
+    revive: "ReviveSession | None",
+    identity: Any = None,
 ) -> tuple[lifecycle_stage.StageState, bool, bool]:
     """Resolve the stage for this start: the bundle's preserved stage when
-    reviving one that carries a stage, otherwise the stage file as usual."""
+    reviving one that carries a stage, otherwise the stage file as usual.
+
+    A revived bundle counts as a lived being even when it carries no stage
+    state, so a preserved being is never regressed into gestation.
+    """
     override = revive.stage_state if revive is not None else None
-    return _resolve_boot_stage(config, stage_override=override)
+    return _resolve_boot_stage(
+        config, stage_override=override, identity=identity, revived=revive is not None
+    )
+
+
+def _resolve_boot_identity(state_root: Path, revive: Any) -> EntityIdentity:
+    """Resolve the entity identity for this boot before any module starts.
+
+    When reviving, the bundle's identity is returned but not yet persisted: it is
+    written to disk only after the revive lands. A target tree that already holds
+    a different identity is refused before any state is modified.
+    """
+    path = resolve(state_root) / "identity" / "entity.json"
+    if revive is not None:
+        existing = load_identity(path)
+        if existing is not None and existing.entity_id != revive.plan.identity.entity_id:
+            raise IdentityError(
+                f"refusing revive into tree with identity {existing.entity_id!r}; "
+                f"bundle identity is {revive.plan.identity.entity_id!r}"
+            )
+        return revive.plan.identity
+    return resolve_spawn_identity(state_root)
+
+
+def _persist_revived_identity(state_root: Path, identity: EntityIdentity) -> None:
+    """Persist a revived identity once the revive has successfully landed."""
+    save_identity(identity, resolve(state_root) / "identity" / "entity.json")
+
+
+def _preservation_bundle_roots(config: dict[str, Any]) -> list[str]:
+    """Return the distinct preservation bundle root directories in ``config``.
+
+    Reads ``[preservation.divergence_monitor]`` and
+    ``[preservation.welfare_response]``. Missing sections default their
+    ``out_root`` to ``backups``.
+    """
+    preservation = config.get("preservation", {})
+    roots: list[str] = []
+    for section_name in ("divergence_monitor", "welfare_response"):
+        section = preservation.get(section_name, {})
+        out_root = str(section.get("out_root", "backups"))
+        if out_root not in roots:
+            roots.append(out_root)
+    return roots
 
 
 def _resolve_boot_identity(state_root: Path, revive: Any) -> EntityIdentity:
@@ -1363,9 +1441,10 @@ async def _phase_stage(ctx: BootContext) -> int | None:
     )
 
     # Developmental stage resolution. Done early so gestation can gate locus and
-    # embodiment before any module opens. Ship-inert by default: a normal boot
-    # is completely unaffected.
-    ctx.stage_state, ctx.staging_enabled, ctx.fresh_gestation = _resolve_start_stage(ctx.kaine_config, ctx.revive)
+    # embodiment before any module opens. With staging off (the shipped
+    # default) a boot is unaffected; with it on, a fresh spawn gestates even
+    # beside other beings' records, and anything that has lived does not.
+    ctx.stage_state, ctx.staging_enabled, ctx.fresh_gestation = _resolve_start_stage(ctx.kaine_config, ctx.revive, ctx.identity)
     if ctx.revive is not None and ctx.revive.stage_state is not None:
         log.info(
             "revive: using bundle's preserved developmental stage: %s",
@@ -1437,6 +1516,19 @@ async def _phase_run_identity(ctx: BootContext) -> int | None:
 
     ctx.experiment_cfg = ctx.kaine_config.get("experiment") or {}
     seed = _resolve_seed(ctx.kaine_config)
+
+    # A live run of the planned test needs the settings derived from the pilot
+    # runs (paper Appendix A.8); ordinary boots and other studies are untouched.
+    from kaine.config import resolve_study_name
+    from kaine.experiment.planned_test_settings import planned_test_gate
+
+    planned_test_reason, settings_record_sha256, settings_record_run_data = planned_test_gate(
+        resolve_study_name(), ctx.kaine_config, seed
+    )
+    if planned_test_reason is not None:
+        sys.stderr.write(f"Refusing to boot KAINE cycle: {planned_test_reason}\n")
+        return PLANNED_TEST_REFUSED_EXIT
+
     set_global_seed(seed)
     from kaine.boot import gather_perception_feed_descriptor
     from kaine.plugins import load_plugins
@@ -1459,6 +1551,8 @@ async def _phase_run_identity(ctx: BootContext) -> int | None:
         timing["dwell_s"] = float(_timing_cfg.get("auto_time_scale_dwell_s", 10.0))
         timing["window_s"] = float(_timing_cfg.get("auto_time_scale_window_s", 30.0))
 
+    # The same resolution load_runtime_config used for this run's config.
+
     ctx.run_ctx = mint_run_context(
         seed=seed,
         started_at=datetime.now(timezone.utc).isoformat(),
@@ -1472,6 +1566,9 @@ async def _phase_run_identity(ctx: BootContext) -> int | None:
         ),
         plugins=ctx.plugins.manifest_entry(),
         revived_from=ctx.revive.revived_from if ctx.revive is not None else None,
+        study=resolve_study_name(),
+        settings_record_sha256=settings_record_sha256,
+        settings_record_run_data=settings_record_run_data,
         timing=timing,
     )
     set_run_context(ctx.run_ctx)
@@ -1745,7 +1842,7 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
     # salience factors are the static negative control AND foveation / general
     # auditory perception are off, the engine stays byte-identical to the
     # pre-change behavior (no affect observation at all).
-    # Adaptive conscious access (adaptive-access-rate): the broadcast rate rises
+    # Adaptive access (adaptive-access-rate): the broadcast rate rises
     # from the resting [cycle].experiential_rate_hz toward the processing rate
     # with Thymos arousal (tonic) and salient module reports (phasic). The
     # arousal baseline defaults to Thymos's own so the two cannot disagree.
@@ -1776,7 +1873,12 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
         top_k=int(syn_cfg.get("top_k", 5)),
         publication_threshold=float(syn_cfg.get("publication_threshold", 0.35)),
         coherence=ctx.coherence_scorer,
+        **_syneidesis_arm_kwargs(syn_cfg, ctx.run_ctx),
     )
+    if ctx.syneidesis.arm != "competitive":
+        log.warning(
+            "workspace runs the %s control arm of the planned ablation", ctx.syneidesis.arm
+        )
 
 
 async def _phase_volition(ctx: BootContext) -> int | None:
@@ -1892,6 +1994,13 @@ async def _phase_volition(ctx: BootContext) -> int | None:
         )
 
 
+def _hypnos_is_sleeping(registry: Any) -> bool:
+    """Whether Hypnos is asleep now (False without Hypnos)."""
+    if "hypnos" not in registry:
+        return False
+    return bool(registry.get("hypnos").is_sleeping)
+
+
 async def _phase_cycle(ctx: BootContext) -> int | None:
     """Build the cognitive cycle and its metrics collector."""
     ctx.cycle = CognitiveCycle(
@@ -1899,10 +2008,10 @@ async def _phase_cycle(ctx: BootContext) -> int | None:
         syneidesis=ctx.syneidesis,
         registry=ctx.registry,
         processing_rate_hz=float(ctx.cycle_cfg.get("processing_rate_hz", 10.0)),
-        # Resting conscious-access (P3b) rate; held below processing so the
-        # senses outrun awareness. With [cycle.access_rate] enabled the rate used
-        # each tick rises from here toward the processing rate with arousal and
-        # salient reports; this value stays the resting rate.
+        # Resting access rate; held below processing so the senses outrun access.
+        # With [cycle.access_rate] enabled the rate used each tick rises from
+        # here toward the processing rate with arousal and salient reports; this
+        # value stays the resting rate.
         experiential_rate_hz=float(ctx.cycle_cfg.get("experiential_rate_hz", 3.333)),
         volition=ctx.volition,
         collect_phases=ctx.coherence_scorer is not None,
@@ -1944,6 +2053,9 @@ async def _phase_cycle(ctx: BootContext) -> int | None:
             else None
         ),
     )
+    # Hypnos sleep stops awake time; read through the registry so a rebuilt Hypnos is still read.
+    ctx.cycle.set_sleep_source(lambda: _hypnos_is_sleeping(ctx.registry))
+    bind_womb_unawake_source(ctx.kaine_config, ctx.cycle.unawake_subjective_seconds)
 
 
 async def _phase_supervision(ctx: BootContext) -> int | None:
@@ -2171,13 +2283,14 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
     )
     from kaine.lifecycle.divergence import (
         adapter_dir_for,
-        consolidation_thresholds_from_config,
+        voice_alignment_thresholds_from_config,
+        voice_paths_for,
     )
 
-    cons_rate, cons_mag = consolidation_thresholds_from_config(ctx.kaine_config)
-    adapter_dir = adapter_dir_for(
-        ctx.kaine_config, resolve(ctx.preservation_cfg.divergence_monitor.state_root)
-    )
+    cons_rate, cons_mag, distinct = voice_alignment_thresholds_from_config(ctx.kaine_config)
+    monitor_state_root = resolve(ctx.preservation_cfg.divergence_monitor.state_root)
+    adapter_dir = adapter_dir_for(ctx.kaine_config, monitor_state_root)
+    voice_paths = voice_paths_for(ctx.kaine_config, monitor_state_root)
     ctx.divergence_monitor = None
     ctx.welfare_monitor = None
     if ctx.preservation_cfg.divergence_monitor.enabled:
@@ -2194,7 +2307,9 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
             require_encryption=ctx.preservation_cfg.require_encryption,
             consolidation_rate_threshold=cons_rate,
             consolidation_magnitude_threshold=cons_mag,
+            distinctiveness_threshold=distinct,
             adapter_output_dir=adapter_dir,
+            voice_paths=voice_paths,
         )
     if ctx.supervision_mode == "unattended":
         from kaine.cycle.caretaker import CaretakerConfig
@@ -2274,11 +2389,11 @@ async def _phase_launch(ctx: BootContext) -> int | None:
 
 async def _phase_birth(ctx: BootContext) -> int | None:
     """Wire the maturation gate's pause sources and birth hooks, and start the gate and individuation tasks."""
-    # Frozen time is not lived time: the runner subtracts the subjective time
-    # the cycle spends paused (maturation-gate-liveness 2.5).
+    # Time not awake is not lived time: the runner subtracts the subjective time
+    # the cycle spends frozen or asleep (paper A.7).
     # A frozen entity is never born, whoever froze it.
     ctx.gate_runner.set_pause_sources(
-        paused_seconds=ctx.cycle.paused_subjective_seconds,
+        paused_seconds=ctx.cycle.unawake_subjective_seconds,
         is_paused=lambda: ctx.cycle.is_paused,
     )
     # Birth transition (local-womb-feed 3.6): at birth the local womb blooms
@@ -2392,6 +2507,7 @@ async def _phase_gestation(ctx: BootContext) -> int | None:
     # maturation gate reads to detect womb loss. gestation.out is not a module
     # stream, so presence never enters the workspace.
     ctx.womb_presence_task = _start_womb_presence(ctx.kaine_config, ctx.bus, ctx.stop_event)
+    # Sleep stops the readout's awake time and aborts a running probe, like a freeze.
     # The readiness readout (local-womb-feed phase 3): measures, never imposes.
     ctx.gestation_task = None
     if ctx.staging_enabled and ctx.stage_state.is_gestating:
@@ -2400,7 +2516,21 @@ async def _phase_gestation(ctx: BootContext) -> int | None:
             ctx.bus,
             ctx.registry,
             ctx.stop_event,
-            is_paused=lambda: ctx.cycle.is_paused,
+            is_paused=lambda: ctx.cycle.is_paused or ctx.cycle.is_asleep,
+        )
+
+
+async def _start_utterance_outcome(ctx: BootContext) -> None:
+    """Start the content-free utterance-outcome observer if Lingua is enabled.
+
+    Kept separate from `_phase_watchers` so a malformed reply-window value is
+    handled inside the observer's guarded starter and never aborts boot.
+    """
+    if (ctx.kaine_config.get("modules") or {}).get("lingua"):
+        ctx.utterance_outcome = await start_utterance_outcome_observer(
+            ctx.bus,
+            path=resolve(Path("state/lingua/utterance_outcomes.jsonl")),
+            lingua_section=ctx.kaine_config.get("lingua"),
         )
 
 
@@ -2420,6 +2550,7 @@ async def _phase_watchers(ctx: BootContext) -> int | None:
         notify=ctx.caretaker.send_event if ctx.caretaker is not None else None,
         stop_event=ctx.stop_event,
     )
+    await _start_utterance_outcome(ctx)
 
 
 _BOOT_PHASES = (
@@ -2494,6 +2625,15 @@ async def _run_until_stopped(ctx: BootContext) -> None:
             await asyncio.wait_for(ctx.stop_event.wait(), timeout=1.0)
         except asyncio.TimeoutError:
             continue
+
+
+async def _shutdown_modules(modules: Iterable[Any]) -> None:
+    """Shut every module down, Hypnos first (see shutdown_order)."""
+    for module in shutdown_order(modules):
+        try:
+            await module.shutdown()
+        except Exception:
+            log.warning("module %s shutdown failed", module.name, exc_info=True)
 
 
 async def _shutdown(ctx: BootContext) -> None:
@@ -2578,6 +2718,11 @@ async def _shutdown(ctx: BootContext) -> None:
             pass  # expected: we just cancelled it
         except Exception:
             log.warning("%s raised during shutdown", monitor_task.get_name(), exc_info=True)
+    if ctx.utterance_outcome is not None:
+        try:
+            await ctx.utterance_outcome.stop()
+        except Exception:
+            log.warning("utterance outcome observer stop failed", exc_info=True)
     if ctx.preview_server is not None:
         try:
             await ctx.preview_server.stop()
@@ -2594,6 +2739,9 @@ async def _shutdown(ctx: BootContext) -> None:
             await ctx.remote_bridge.stop()
         except Exception:
             log.warning("remote bridge stop failed", exc_info=True)
+    # The positive control's terminal records must reach the research log, so
+    # publish them while the evaluation sidecar still runs.
+    await finish_positive_controls(ctx.registry.all_modules())
     if ctx.sidecar is not None:
         try:
             await ctx.sidecar.stop()
@@ -2616,11 +2764,7 @@ async def _shutdown(ctx: BootContext) -> None:
         await ctx.cycle_task
     except (asyncio.CancelledError, Exception):
         log.debug("cycle task ended", exc_info=True)
-    for module in list(ctx.registry.all_modules()):
-        try:
-            await module.shutdown()
-        except Exception:
-            log.warning("module %s shutdown failed", module.name, exc_info=True)
+    await _shutdown_modules(ctx.registry.all_modules())
     await ctx.bus.close()
     _clear_runtime_state()
 
@@ -2718,12 +2862,12 @@ def _evaluate_research_safety_net(config: dict[str, Any]) -> "Any":
 
 
 def _evaluate_unattended_gate(config: dict[str, Any]) -> "Any":
-    """Run the eight-condition unattended gate over the resolved config.
+    """Run the nine-condition unattended gate over the resolved config.
 
-    Reuses the research safety net for conditions 1–5.  Condition 6 comes from
-    Spot's selftest.  Condition 8 requires a continuous perception input.
-    Condition 7 runs last and needs the outcome of conditions 1–6 and 8 as
-    prerequisites.
+    Reuses the research safety net for conditions 1–5 and 9.  Condition 6
+    comes from Spot's selftest.  Condition 8 requires a continuous perception
+    input.  Condition 7 runs last and needs the outcome of conditions 1–6,
+    8 and 9 as prerequisites.
     """
     net = _evaluate_research_safety_net(config)
     from kaine.cycle.caretaker import check_caretaker_condition
@@ -2828,7 +2972,27 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--profile", default=None)
     parser.add_argument("--revive", default=None)
+    parser.add_argument("--log-file", default=None)
+    parser.add_argument(
+        "--log-level",
+        choices=_LOG_LEVELS,
+        default=None,
+    )
     known, _ = parser.parse_known_args(argv)
+
+    from pathlib import Path
+
+    from kaine.cycle.private_log import install_private_log_file
+
+    if known.log_file is not None:
+        level = logging.NOTSET
+        if known.log_level is not None:
+            level = getattr(logging, known.log_level)
+        install_private_log_file(Path(known.log_file), level=level)
+        # Apply the requested level at once, so nothing below it (config
+        # loading included) reaches the file before the config level is set.
+        if known.log_level is not None:
+            logging.getLogger().setLevel(level)
 
     # Load config early enough to decide the boot mode. A run is EITHER
     # operator-present OR research-safety-net-verified, never neither. The
@@ -2852,6 +3016,9 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         sys.stderr.write(f"kaine.cycle: configuration error: {exc}\n")
         return 1
+
+    if known.log_level is not None:
+        logging.getLogger().setLevel(getattr(logging, known.log_level))
 
     root = install_data_root(config)
     if root is not None:
@@ -2878,7 +3045,7 @@ def main(argv: list[str] | None = None) -> int:
     supervision_mode = "operator"
     gate_checks: dict[str, bool] | None = None
     if mode == "unattended":
-        # Unattended boot: the eight-condition safety net must be satisfied.
+        # Unattended boot: the nine-condition safety net must be satisfied.
         result = _evaluate_unattended_gate(config)
         for c in result.conditions:
             status = "pass" if c.ok else f"FAIL — {c.reason}"

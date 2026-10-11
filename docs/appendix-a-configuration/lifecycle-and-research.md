@@ -9,11 +9,11 @@ The evaluation sidecar watches the bus read-only and adds no dependencies to the
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `true` | Runs the evaluation sidecar, the read-only observers that record the research instruments. |
-| `workspace_trajectory` | boolean | `false` | Record every workspace broadcast to `trajectory_dir` as a graph-only row. Each row contains the tick index, `is_experiential`, inhibition, salience scores, broadcast metadata, and, for each selected coalition member, its entry id, source, type, salience, original timestamp and causal parent. No payloads or module state are included. Off by default; enable only after reviewing the privacy implications. A study never enables it. |
-| `ab_divergence` | boolean | `true` | Run the A/B divergence test (conditioned vs. unconditioned generation) to measure the architecture's contribution. |
+| `workspace_trajectory` | boolean | `false` | Record every workspace broadcast to `trajectory_dir` as a graph-only row. Each row contains the tick index, `is_experiential` (the broadcast-tick flag), inhibition, the candidate scores, broadcast metadata, and, for each selected coalition member, its entry id, source, type, salience, original timestamp and causal parent. No payloads or module state are included. Off by default; enable only after reviewing the privacy implications. A study never enables it. |
+| `ab_divergence` | boolean | `true` | Run the A/B divergence observer, which compares the organ's conditioned output with a bare call to the same model. The organ's output is recorded for observation; the planned test does not use it as a measure. |
 | `ab_sample_rate` | float | `1.0` | Fraction of workspace broadcasts sampled for A/B comparison. `1.0` = every broadcast. |
 | `voice_tracking` | boolean | `true` | Track voice-alignment preference-pair evolution. |
-| `module_attribution` | boolean | `true` | Record which modules win conscious access. |
+| `module_attribution` | boolean | `true` | Record which modules' reports reach access. |
 | `affect_correlation` | boolean | `true` | Pair affect-state snapshots with properties of produced speech. |
 | `memory_probes` | boolean | `true` | Run memory-coherence probe queries. |
 | `memory_probe_interval_minutes` | integer | `60` | How often memory probes are run. |
@@ -28,7 +28,7 @@ The evaluation sidecar watches the bus read-only and adds no dependencies to the
 | `chat_think` | boolean | `false` | Whether the baseline chat request may use chain-of-thought reasoning. |
 | `chat_api_key` | string | *(unset)* | API key for the baseline chat endpoint. If unset, it derives from `[lingua].api_key` at cycle startup. |
 | `require_semantic_embedder` | boolean | `false` | Fail closed if the semantic-embedder dependency is missing. |
-| `oscillatory_ablation` | boolean | `false` | Record the live oscillatory ablation: each experiential tick is scored a second time with the coherence layer forced off, and the content-free difference is written to `data/evaluation/ablation/`. The entity's own selection is unchanged. |
+| `oscillatory_ablation` | boolean | `false` | Record the live oscillatory ablation: each broadcast tick is scored a second time with the coherence layer forced off, and the content-free difference is written to `data/evaluation/ablation/`. The entity's own selection is unchanged. |
 
 ### `[evaluation.paths]`
 
@@ -56,12 +56,13 @@ Each toggle below is gated by `[evaluation].enabled`, except that the welfare ob
 
 ### `[evaluation.welfare]`
 
-Tune the sidecar welfare observer's interoceptive-distress rule. These defaults match [`[preservation.welfare_response]`](#preservationwelfare_response). See `kaine/evaluation/config.py` for the full reader.
+Tune the sidecar welfare observer's interoceptive-distress rule and its sensor advisories. The silent-sensor advisory has no key of its own: it uses `interoceptive_distress_duration_s`. These defaults match [`[preservation.welfare_response]`](#preservationwelfare_response). See `kaine/evaluation/config.py` for the full reader.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `interoceptive_distress_threshold` | float | `0.8` | `prediction_error` magnitude at/above which distress is counted. |
-| `interoceptive_distress_duration_s` | float | `30.0` | Seconds of unfrozen time the distress must be sustained continuously. |
+| `interoceptive_distress_duration_s` | float | `30.0` | Seconds the distress must be sustained: wall time while distress samples arrive, unfrozen time after the last sample. |
+| `blind_sensor_samples` | integer | `0` | Consecutive null `prediction_error` samples from one processor after which the observer publishes a `welfare.blind_sensor` advisory. `0` means the run must span `interoceptive_distress_duration_s`, on the observer's unfrozen read clock and between the reports' timestamps, which is the number of samples that duration holds at the processor's own rate. The advisory is not a gray-zone event and the protective response does not act on it. |
 
 ### `[individuation]`
 
@@ -73,6 +74,7 @@ Cycle-layer individuation producer. Ships disabled. Requires the `lingua` module
 | `disclosure` | string | *(operator-approved text)* | Disclosure text inserted as a situation fact in the being's Eidolon self-model. Probes fail closed until the fact is present. |
 | `battery_path` | string | `""` | Path to an operator-supplied JSONL preference battery. Empty uses the bundled default. |
 | `lingua_quiet_s` | float | `10.0` | Seconds Lingua must be silent before a probe runs, so the being's own speech goes first. |
+| `probe_temperature` | float | `0.0` | Decoding temperature of the probe, at least 0. It is fixed apart from the voice's `[lingua].temperature`, so a study or a change to the voice never changes the probe's conditions. `0.0` is greedy. |
 | `n_reference` | integer | `16` | Answers captured per prompt in a birth reference. |
 | `n_current` | integer | `8` | Answers sampled per prompt in a look. |
 | `max_tokens` | integer | `160` | Maximum tokens per probe answer. |
@@ -147,7 +149,7 @@ The maturation (birth) gate that decides when a gestating entity is born. The re
 |---|---|---|---|
 | `endogenous_self_sustain` | boolean | `true` | Require the endogenous self-sustain readiness marker. |
 | `entrain_then_autonomy` | boolean | `true` | Require the entrain-then-autonomy readiness marker. |
-| `hrv_variability_floor` | float | `0.2` | Minimum heart-rhythm variability marker. |
+| `hrv_variability_floor` | float | `0.2` | Minimum variability of the self-rhythm's period (marker 3). |
 | `womb_prediction_error_ceiling` | float | `0.3` | Maximum womb prediction-error marker. |
 | `return_to_baseline_seconds_ceiling` | float | `30.0` | Maximum seconds to return to baseline. |
 
@@ -157,7 +159,7 @@ Content-free notices for unattended runs (`kaine/cycle/caretaker.py`). The caret
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `install_label` | string | `"kaine"` | Label for this install. Must be 1–64 characters. |
+| `install_label` | string | `"kaine"` | Label for this install. Must be 1 to 64 characters. |
 | `reminder_interval_s` | float | `14400.0` | Seconds between caretaker reminders (must be ≥ 900). |
 | `input_loss_after_s` | float | `60.0` | Seconds of unfrozen time with no events on `topos.out` or `audition.out` (for whichever of those modules is enabled) before the caretaker sends an `input_lost` notice. Time while the cycle is frozen does not count. Must be greater than 0. |
 | `nexus_url` | string | `"http://127.0.0.1:8088/"` | Nexus URL the caretaker links to in reminders. |
@@ -174,7 +176,7 @@ Tokens live in `[caretaker.tokens]` as plain key-value pairs. They are not logge
 
 ## `[preservation]`
 
-The autonomous welfare safety net for unsupervised research. Two cycle-layer monitors (siblings to Spot) act, not merely log, when the research phase runs unsupervised. Default is disabled. See [Preservation and the safety net](../11-preservation.md) and [Run identity](../16-run-identity.md).
+The autonomous welfare safety net for unsupervised research. Two cycle-layer monitors, siblings to Spot, take action when the research phase runs unsupervised. Default is disabled. See [Preservation and the safety net](../11-preservation.md) and [Run identity](../16-run-identity.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -207,11 +209,11 @@ Autonomous welfare-protective response. Watches the Soma interoceptive-distress 
 | `poll_interval_s` | float | `1.0` | Poll cadence for draining `soma.out`. |
 | `action` | string | `"pause"` | `"pause"` (preserve then freeze the cycle, resumable), `"end"` (preserve then signal the run to stop), or `"notify"` (preserve, record a flagged event, and continue). |
 | `distress_threshold` | float | `0.8` | `prediction_error` magnitude at/above which distress is counted. |
-| `distress_duration_s` | float | `30.0` | Continuous sustain required before the action fires, counted in unfrozen time. |
+| `distress_duration_s` | float | `30.0` | Continuous sustain required before the action fires, counted in wall time while distress samples arrive and unfrozen time after the last sample. |
 | `repeat_window_s` | float | `300.0` | Window for the repeated-episodes arm. |
 | `repeat_threshold` | integer | `3` | Sustained episodes within `repeat_window_s` that also cross the threshold. Counts both sustained interoceptive-distress crossings and `welfare.gray_zone` events published by the welfare observer, which runs whenever the welfare response is enabled. |
 | `warmup_s` | float | `120.0` | Cold-start warm-up: during the first `warmup_s` of unfrozen time after run start, gray-zone/distress events are logged but do not count toward the repeat threshold or trigger the response. |
-| `warmup_ceiling_s` | float | `1800.0` | Maximum extension, in seconds, that Soma's `warmup_active` flag can add to the warm-up beyond `warmup_s`. It does not cap the `warmup_s` window itself. |
+| `warmup_ceiling_s` | float | `1800.0` | Whole warm-up is capped at max(`warmup_s`, `warmup_ceiling_s`) of wall time since run start. The Soma `warmup_active` flag extends warm-up only while wall time is below `warmup_ceiling_s`, and 0 means no extension. |
 | `min_interval_s` | float | `1800.0` | Rate limit for the `notify` action only: at most one `notify` event per this interval. |
 | `out_root` | string | `"backups"` | Directory where preservation bundles are written. |
 | `entity_name` | string | `"kaine"` | Entity name stamped into the bundle. |
@@ -222,7 +224,7 @@ Preservation-bundle retention. Like fork snapshots, a preserved individual must 
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `auto_evict` | boolean | `false` | Default is `false`. Setting it to `true` is refused at boot — preservation bundles are retained indefinitely. |
+| `auto_evict` | boolean | `false` | Setting it to `true` is refused at boot, because preservation bundles are kept indefinitely. |
 
 ## `[research]`
 
@@ -232,13 +234,35 @@ Unsupervised-research boot mode. When enabled (or `KAINE_RESEARCH_MODE=1`), the 
 |---|---|---|---|
 | `enabled` | boolean | `false` | When true, the boot refuses to start with exit code `5` unless preservation is enabled, the welfare-protective response is wired, `[individuation].enabled` is true with the `lingua` module loaded, full logging and admissibility are active, and a dry `preserve→revive` self-check passes on this install. A run is either operator-present or research-safety-net-verified, never neither. |
 
+## `[positive_control]`
+
+The positive control of the broadcast information-gain measure (paper §6.3 and Appendix A.8). Off by default; the workspace-mediation study configurations enable it. Topos, Audition and Soma then run in the selected mode and publish `positive_control.result` and, in the pilots, `positive_control.ladder` records (see [Research event streams](../17-research-data/event-streams.md#positive-control-records)). The live model, its reports and the competition are unchanged. `snr`, `min_effect` and `min_reports` are not keys: they come from the planned test's settings record, and setting one fails the boot.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Runs the control in `mode`. |
+| `mode` | string | none | Required when enabled. `estimate_pc`: the preliminary run, which writes each processor's first principal component and input mean at shutdown. `ladder`: the pilot runs of the on arm, which carry the informative and uninformative components at every SNR from 4^-2 to 4^4. `control`: the control itself, with every setting read from the settings record. |
+| `principal_components_run` | string | none | Mode `ladder` only, and required there: the id of the preliminary run whose principal-component files the pilots use. The boot fails while it is empty or the files are missing. |
+| `settings_record` | string | none | Mode `control` only, and required there: the path of the settings record written by `python -m kaine.experiment.calibrate`. The boot fails unless the record is complete and verifies. |
+| `seed` | integer | `0` | Seed of the components' noise, combined with the run's seed so different runs draw independent noise. |
+| `shutdown_drain_s` | number | `5.0` | Time budget, in seconds, for the control's queued steps at shutdown. Above 0. When the steps do not finish within it, the control is stopped and publishes one failure record, so the run fails closed and shutdown continues. |
+
+## `[planned_test]`
+
+Set only by the workspace-mediation study configurations (`config/studies/workspace_mediation_*.toml`). The boot checks it in the run-identity phase before any module starts. A study whose name starts with `workspace_mediation_` must be one of the shipped ones and must set the role that matches its name: `test` for the three live arms, `pilot` for the three pilot studies, `preliminary` and `positive_control` for those two. A role of `test` or `positive_control` needs the settings record whatever the study is called, including no study.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `role` | string | none | `preliminary` (the one run that estimates the positive control's principal components), `pilot` (a pilot run of one arm), `test` (a live run of one arm) or `positive_control` (a run of the positive control). |
+| `settings_record` | string | none | Roles `test` and `positive_control`: the settings record derived from the pilot runs. The boot refuses to start, with exit code 12, unless the record's schema and digest verify, it is complete with nothing blocked, its values are in range and its principal-component files match their hashes; it also refuses a seed that the preliminary or a pilot run used. The record's constants must be the paper's, with thirty counted pilots and n_exact 102. For role `positive_control`, `[positive_control]` must be enabled in mode `control` with the same record; for role `test`, an enabled `[positive_control]` must be in mode `control`. Whenever `[positive_control]` is enabled under a role, its `settings_record` must equal this one (both absent for the preliminary and pilot runs). The record must list exactly thirty counted pilots with distinct seeds and every attempted pilot that was NOT EXERCISED. When the preliminary and pilot runs' manifests and research logs are present, their hashes must match the record's, or the boot is refused. The record's digest goes into the run manifest as `settings_record_sha256`, and whether the run data was `verified`, `absent` or `partial` as `settings_record_run_data`. |
+
 ## `[transfer]`
 
 SMTP coordination for the welfare-gated decommission workflow (`python -m kaine.lifecycle`). When an individuated entity is decommissioned, the operator may ask the project to safekeep the encrypted backup. This section controls how that request email is sent.
 
 With `enabled = false` or any required field blank, the decommission CLI writes a `transfer_request.eml` file plus a `mailto:` link for the operator to send manually. SMTP is never used without `enabled = true` and a complete configuration.
 
-**Privacy invariant (CAL Article 4.3):** the request email carries only the situation and the local filesystem path of the encrypted backup — never any entity content.
+**Privacy invariant (CAL Article 4.3):** the request email carries only the situation and the local filesystem path of the encrypted backup. It carries no entity content.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -250,7 +274,7 @@ With `enabled = false` or any required field blank, the decommission CLI writes 
 | `recipient` | string | `""` | Address the request is sent to. Suggested default: `kaine.one@tuta.com` (project guardians). If left empty the CLI prompts and requires explicit confirmation. |
 | `use_starttls` | boolean | `true` | Use STARTTLS for SMTP. |
 
-The SMTP password is read exclusively from the environment variable `KAINE_SMTP_PASSWORD` — never from this file, never logged.
+The SMTP password is read only from the environment variable `KAINE_SMTP_PASSWORD`. It is never read from this file and never logged.
 
 ## `[research_submission]`
 
@@ -263,8 +287,8 @@ See [Research participation](../17-research-data/participation.md) for the full 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `false` | Master gate. When false, `--send` is blocked; `--preview` always works. |
-| `recipient` | string | `""` | Recipient for the bundle notification email. If empty the CLI suggests `kaine.one@tuta.com` and requires explicit operator confirmation before sending. |
-| `tier` | string | `"metrics"` | Bundle tier. Only `"metrics"` is supported without additional opt-in attestation. |
+| `recipient` | string | `""` | Recipient for the bundle notification email. Empty falls back to `[transfer].recipient`; if both are empty, the CLI suggests `kaine.one@tuta.com` and requires explicit operator confirmation before sending. |
+| `tier` | string | `"metrics"` | Bundle tier shown on the Nexus research status. The CLI takes the tier from `--tier`, which offers only `"metrics"`; the full tier needs a separate attestation. |
 
 Admissibility enforcement (paper §6.3) is implemented in the research-submission code; there is no configuration key for it. Every bundle build auto-discovers the run(s) in the eval logs and runs both a completeness gate (contiguous ticks/seq, all expected streams present, no parse errors, no restart/multi-process signature) and a log-range sweep (every logged number within its declared range). If either check fails, the export is blocked by default. The only way to export an inadmissible run is the explicit `admissibility_override=True` plus a reason string at the call site (`--admissibility-override-reason "<why>"`), which is stamped into the bundle manifest.
 
@@ -280,7 +304,7 @@ Operator path: `python -m kaine.research --claude-science`.
 
 ## `[research_event_log]`
 
-Curated, privacy-filtered research event log for longitudinal analysis. Subscribes to a curated allowlist of bus streams and writes one privacy-filtered record per relevant event to an encrypted, daily-rotated JSONL sink under `data/evaluation/research_events/`. Every record passes `PrivacyFilter` plus per-type redaction before write — it never captures raw audio/video, transcripts, conversation content, memory text, the Eidolon self-model, or operator host/IP. Avatar coordinates are logged only as an opaque hash.
+Curated, privacy-filtered research event log for longitudinal analysis. Subscribes to a curated allowlist of bus streams and writes one privacy-filtered record per relevant event to an encrypted, daily-rotated JSONL sink under `data/evaluation/research_events/`. Every record passes `PrivacyFilter` plus per-type redaction before it is written, so the log never captures raw audio or video, transcripts, conversation content, memory text, the Eidolon self-model, or operator host/IP. Avatar coordinates are logged only as an opaque hash.
 
 `research_events` is in the metrics-bundle allowlist, so an operator-initiated metrics research bundle may include it. This section is the only mechanism that makes it export-eligible.
 
@@ -294,7 +318,7 @@ Default is disabled. It runs independently of `[evaluation].enabled`.
 
 ### `[research_event_log.raw_archive]`
 
-Optional local-only raw bus archive. Never export-eligible. Tees verbatim bus events (including conversation content and transcripts) to `state/research/raw_bus_archive/` — a path outside `data/evaluation/`, so the metrics bundle builder can never reach it. Encrypted at rest like every other sink.
+Optional local-only raw bus archive. Never export-eligible. Tees verbatim bus events (including conversation content and transcripts) to `state/research/raw_bus_archive/`, a path outside `data/evaluation/` that the metrics bundle builder never reaches. Encrypted at rest like every other sink.
 
 This is doubly gated: it requires `enabled = true` and both attestation flags set to `true`. With `enabled = true` but either attestation false, the consumer refuses to start with a `RawArchiveAttestationError`, mirroring the full-tier attestation gate in `kaine/research/submission.py`.
 
@@ -328,7 +352,7 @@ Optional local-only Nexus diagnostics recorder. Never export-eligible. Subscribe
 
 ## `[ignition_log]`
 
-In-process ignition log for studies that align workspace broadcasts to a playlist programme (the [module-ignition study](../15-experiments/ignition-study.md)). It records every successful workspace broadcast with programme position, audio-delivered position, coalition member ids and timestamps, salience scores, and inhibition. No event payloads are recorded, so no conversation content, transcripts, video frames, or audio samples are persisted. The log is never on the bus, never reaches any module, and is encrypted at rest when state encryption is on. Files are never auto-purged.
+In-process log for studies that align workspace broadcasts to a playlist programme, chiefly the module-addition study (the code calls it the ignition study; see [the module-addition study](../15-experiments/ignition-study.md)). It records every successful workspace broadcast with programme position, audio-delivered position, coalition member ids and timestamps, candidate scores, and inhibition. No event payloads are recorded, so no conversation content, transcripts, video frames, or audio samples are persisted. The log is never on the bus, never reaches any module, and is encrypted at rest when state encryption is on. Files are never auto-purged.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

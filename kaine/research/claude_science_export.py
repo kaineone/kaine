@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Export an allowlisted research metrics bundle as a Claude Science project.
@@ -7,7 +7,7 @@ WHY THIS IS SAFE BY CONSTRUCTION
 --------------------------------
 Claude Science is a CLOUD analysis workbench: data that enters an analysis step
 is transmitted to a cloud service. KAINE's evaluation sidecar records the
-entity's access-conscious content, and the workspace trajectory is comprehensive
+entity's accessed content, and the workspace trajectory is comprehensive
 cognitive observation (paper §4.4, §6.1). The Cognitive Architecture License
 mental-privacy covenant (paper §7 neurorights) forbids routing that inner life to
 a cloud product. So a Claude Science export MUST carry ONLY de-identified numeric
@@ -500,7 +500,7 @@ def _render_readme(
     lines += [
         "## Excluded by construction (never present or reachable)",
         "",
-        "- intent log / internal monologue (Lingua intent_expression)",
+        "- intent log / internal monologue (Lingua intent_expression and the rotated intent_log corpus)",
         "- Mnemos/Qdrant memories (verbatim transcripts, episodic records)",
         "- Eidolon self-model",
         "- conversation content (any turn text)",

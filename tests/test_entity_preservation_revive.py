@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Verified end-to-end preservation + revive (entity-preservation-on-divergence).
@@ -195,7 +195,7 @@ async def test_mnemos_inmemory_export_import_roundtrip(bus: AsyncBus):
         n = await m2.import_preservation_state(captured)
         assert n >= 1
         assert m2.core.short_term_size == 1
-        results, _ = await m2.core.recall("beta", collection="episodic")
+        results, _ = await m2.core.recall("beta episodic", collection="episodic")
         assert any("beta episodic" in r.text for r in results)
     finally:
         await m.shutdown()
@@ -365,9 +365,9 @@ async def test_preserve_live_then_revive_same_individual(bus: AsyncBus, tmp_path
     assert reg2.get("eidolon").model.values == ["honesty", "curiosity"]
 
     # Continuity: planted memories are recallable.
-    st_results, _ = await mnemos2.core.recall("blue", collection="short_term")
+    st_results, _ = await mnemos2.core.recall("I remember the blue door", collection="short_term")
     assert any("blue door" in r.text for r in st_results)
-    ep_results, _ = await mnemos2.core.recall("lighthouse", collection="episodic")
+    ep_results, _ = await mnemos2.core.recall("lighthouse keeper", collection="episodic")
     assert any("lighthouse keeper" in r.text for r in ep_results)
 
     # Continuity: world-model weights match (the captured decay was restored
@@ -444,7 +444,7 @@ async def test_preserve_live_then_revive_scopes_memory_and_restores_empatheia(
     await fm.revive(bundle, reg2)
 
     # The planted episodic memory survives under the new collection prefix.
-    ep_results, _ = await mnemos2.core.recall("lighthouse", collection="episodic")
+    ep_results, _ = await mnemos2.core.recall("lighthouse keeper", collection="episodic")
     assert any("lighthouse keeper" in r.text for r in ep_results)
 
     # The memory lives under the reviving being's prefix, and nothing was

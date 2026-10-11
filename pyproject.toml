@@ -8,7 +8,7 @@ version = "26.06.0a1"
 description = "Kaine Autonomous Intelligent Networked Entity — composite cognitive architecture"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { file = "LICENSE.md" }  # SPDX identifier: LicenseRef-CAL-0.2 (custom entity-welfare copyleft, draft)
+license = { file = "LICENSE.md" }  # SPDX identifier: LicenseRef-CAL-0.4 (custom entity-welfare copyleft, draft)
 authors = [{ name = "KAINE contributors" }]
 dependencies = [
     "redis>=8.1.0,<9",
@@ -32,7 +32,7 @@ memory = [
     "qdrant-client>=1.19.1,<2",
 ]
 memory-edge = [
-    "sqlite-vec>=0.1,<1",
+    "sqlite-vec>=0.1.9,<1",
 ]
 speech-edge = [
     "sherpa-onnx>=1.13.8,<2",
@@ -225,6 +225,8 @@ markers = [
     "integration: hits a live authenticated Redis; skipped unless KAINE_REDIS_PASSWORD is set",
     "systems: per-subsystem I/O contract test under tests/systems/",
     "slow: a statistical test over a minute long; runs nightly, on main, and on pull requests that touch the paths in .github/slow-test-paths.txt",
+    "real_mounts: allow the test to read the host's real /proc/mounts instead of the empty default",
+    "no_data_root: run without the per-test data root, to test the defaults that apply when none is installed",
 ]
 testpaths = ["tests"]
 

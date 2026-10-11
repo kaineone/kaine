@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Welfare timers discount frozen time (KAINE)."""
@@ -1081,3 +1081,191 @@ async def test_monitor_retries_an_unreadable_incident_whose_write_failed(bus, tm
     u.value = 1.0
     await mon._poll_once(stop)  # retried
     assert [r["kind"] for r in log_.records] == ["freeze_state_unreadable"]
+
+
+@pytest.mark.asyncio
+async def test_observer_null_error_is_no_distress_sample():
+    """A soma.report with prediction_error None is not a distress sample:
+    it neither extends nor resets an active sustained-distress episode."""
+    u = _Mono(0.0)
+    sink = FakeSink()
+    obs = WelfareObserver(
+        FakeBus(),
+        sink,
+        maintenance_window_s=9999.0,
+        extreme_vad_threshold=0.9,
+        extreme_vad_duration_s=9999.0,
+        consolidation_window_s=9999.0,
+        replay_rate_threshold=9999,
+        poll_interval_s=0.5,
+        unfrozen_clock=_unfrozen_clock(u),
+        interoceptive_distress_threshold=0.5,
+        interoceptive_distress_duration_s=30.0,
+    )
+
+    u.value = 0.0
+    await obs._handle_soma(
+        "0-0", _event("soma", "soma.report", {"prediction_error": 0.9})
+    )
+    assert obs._interoceptive_distress.active_since is not None
+
+    for t_s in range(1, 11):
+        u.value = float(t_s)
+        await obs._handle_soma(
+            f"{t_s}-0",
+            _event("soma", "soma.report", {"prediction_error": None}),
+        )
+
+    assert obs._interoceptive_distress.active_since is not None
+    assert not any(
+        r.get("gray_zone_event") == "sustained_interoceptive_distress"
+        for r in sink.rows
+    )
+
+    await obs._handle_soma(
+        "11-0", _event("soma", "soma.report", {"prediction_error": 0.0})
+    )
+    assert obs._interoceptive_distress.active_since is None
+
+
+@pytest.mark.asyncio
+async def test_monitor_null_samples_leave_the_timer_to_fire(bus):
+    """Skipped soma readings must not reset an active distress episode."""
+    cfg = WelfareResponseConfig(
+        enabled=True,
+        action="pause",
+        distress_threshold=0.5,
+        distress_duration_s=30.0,
+        warmup_s=0.0,
+        warmup_ceiling_s=0.0,
+    )
+    u = _Mono(0.0)
+    mon = _make_monitor(bus, cfg, u)
+
+    calls: list[float] = []
+    original = mon._distress.check_timeout
+
+    def counting(now: float):
+        calls.append(now)
+        return original(now)
+
+    mon._distress.check_timeout = counting
+
+    await _push_soma(bus, 0.9)
+    stop = asyncio.Event()
+    await mon._poll_once(stop)
+
+    for t_s in range(1, 11):
+        u.value = float(t_s)
+        await _push_soma(bus, None)  # type: ignore[arg-type]
+        await mon._poll_once(stop)
+        assert mon._fork_manager.calls == []
+        assert mon._distress.active_since is not None
+
+    u.value = 30.5
+    await mon._poll_once(stop)
+    assert len(mon._fork_manager.calls) == 1
+    assert calls
+
+
+@pytest.mark.asyncio
+async def test_monitor_null_mid_batch_keeps_the_loop_and_cursor(bus):
+    """A null reading in the middle of the batch still advances the cursor."""
+    cfg = WelfareResponseConfig(
+        enabled=True,
+        action="pause",
+        distress_threshold=0.5,
+        distress_duration_s=30.0,
+        warmup_s=0.0,
+        warmup_ceiling_s=0.0,
+    )
+    u = _Mono(0.0)
+    mon = _make_monitor(bus, cfg, u)
+    stop = asyncio.Event()
+
+    await _push_soma(bus, 0.9)
+    await _push_soma(bus, None)  # type: ignore[arg-type]
+    await _push_soma(bus, 0.9)
+    await mon._poll_once(stop)
+
+    entries = await bus.read("soma.out", last_id="0")
+    assert mon._cursor == entries[-1][0]
+    assert mon._distress.active_since is not None
+
+    u.value = 30.5
+    await mon._poll_once(stop)
+    assert len(mon._fork_manager.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_monitor_missing_error_key_counts_as_zero(bus):
+    """A report with no prediction_error key defaults to 0.0 and ends distress."""
+    cfg = WelfareResponseConfig(
+        enabled=True,
+        action="pause",
+        distress_threshold=0.5,
+        distress_duration_s=30.0,
+        warmup_s=0.0,
+        warmup_ceiling_s=0.0,
+    )
+    u = _Mono(0.0)
+    mon = _make_monitor(bus, cfg, u)
+    stop = asyncio.Event()
+
+    await _push_soma(bus, 0.9)
+    await mon._poll_once(stop)
+    u.value = 1.0
+    await bus.publish(
+        validate_event(
+            source="soma",
+            type="soma.report",
+            payload={"warmup_active": False},
+            salience=0.5,
+            timestamp=datetime.now(timezone.utc),
+        )
+    )
+    await mon._poll_once(stop)
+    assert mon._distress.active_since is None
+
+    u.value = 40.0
+    await mon._poll_once(stop)
+    assert mon._fork_manager.calls == []
+
+
+@pytest.mark.asyncio
+async def test_observer_null_run_then_silence_still_fires():
+    """Null readings keep an observer episode alive until silence crosses it."""
+    u = _Mono(0.0)
+    sink = FakeSink()
+    obs = WelfareObserver(
+        FakeBus(),
+        sink,
+        maintenance_window_s=9999.0,
+        extreme_vad_threshold=0.9,
+        extreme_vad_duration_s=9999.0,
+        consolidation_window_s=9999.0,
+        replay_rate_threshold=9999,
+        poll_interval_s=0.5,
+        unfrozen_clock=_unfrozen_clock(u),
+        interoceptive_distress_threshold=0.5,
+        interoceptive_distress_duration_s=30.0,
+    )
+
+    u.value = 0.0
+    await obs._handle_soma(
+        "0-0", _event("soma", "soma.report", {"prediction_error": 0.9})
+    )
+
+    for t_s in range(1, 11):
+        u.value = float(t_s)
+        await obs._handle_soma(
+            f"{t_s}-0",
+            _event("soma", "soma.report", {"prediction_error": None}),
+        )
+
+    u.value = 31.0
+    await obs._tick()
+    assert any(
+        r.get("gray_zone_event") == "sustained_interoceptive_distress"
+        for r in sink.rows
+    )

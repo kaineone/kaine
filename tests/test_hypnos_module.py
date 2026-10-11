@@ -1,8 +1,9 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import asyncio
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,8 @@ from kaine.modules.hypnos import (
     TrainingResult,
     VoiceAlignmentConfig,
 )
-from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV
+from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV, DPOPairBuilder
+from tests.voice_prompt_support import with_verified_system
 
 
 @pytest.fixture(autouse=True)
@@ -49,9 +51,10 @@ class FakeMnemos:
         self.consolidated += 1
         return 5
 
-    def downscale_activations(self, factor: float) -> int:
-        self.downscale_calls.append(factor)
-        return 0
+    async def downscale(self, protect=()):
+        protect = list(protect)
+        self.downscale_calls.append(protect)
+        return {"n_new": 0, "factor": 1.0, "protected": len(protect), "total_before": 0.0, "total_after": 0.0, "pruned_floor": 0, "pruned_budget": 0, "store_bytes": 0}
 
     async def replay_now(self) -> list:
         self.replay_calls += 1
@@ -64,17 +67,6 @@ class FakeThymos:
 
     async def affective_reset(self) -> None:
         self.resets += 1
-
-
-# Generic steppable stand-in for the belief-revision phase. Nous no longer
-# runs a NAR subprocess; the phase remains a generic "steppable" hook.
-class FakeSteppable:
-    @property
-    def running(self) -> bool:
-        return True
-
-    async def step(self, n: int) -> list[str]:
-        return ["belief_factor_0"]
 
 
 class FakeResetter:
@@ -91,12 +83,13 @@ def _make_hypnos(
     *,
     intent_records: list[dict] | None = None,
     trainer: Trainer | None = None,
+    mnemos=None,
 ) -> Hypnos:
     log_path = tmp_path / "intent.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     if intent_records is not None:
         with log_path.open("w", encoding="utf-8") as fh:
-            for r in intent_records:
+            for r in with_verified_system(log_path, intent_records):
                 fh.write(json.dumps(r) + "\n")
     config = VoiceAlignmentConfig(
         intent_log_path=log_path,
@@ -105,8 +98,7 @@ def _make_hypnos(
     )
     return Hypnos(
         bus,
-        mnemos=FakeMnemos(),
-        nous_process=FakeSteppable(),
+        mnemos=mnemos or FakeMnemos(),
         thymos=FakeThymos(),
         chronos_resetters=[FakeResetter(), FakeResetter()],
         trainer=trainer or FakeTrainer(),
@@ -127,17 +119,189 @@ async def test_enter_sleep_runs_all_five_phases(bus: AsyncBus, tmp_path: Path):
     hypnos = _make_hypnos(bus, tmp_path)
     summary = await hypnos.enter_sleep()
     phases = [p["phase"] for p in summary["phases"]]
-    # Paper §3.3.5 five-phase order (hypnos-fatigue-phases restructure)
+    # Paper §3.5 order: sleep ends with the affective reset
     assert phases == [
         "light_consolidation",
         "deep_consolidation",
         "associative_replay",
-        "affective_reset",
         "voice_alignment",
+        "affective_reset",
     ]
     assert all(p["success"] for p in summary["phases"])
     assert hypnos._mnemos.consolidated == 1
     assert hypnos._thymos.resets == 1
+    assert summary["memory_pruned_floor"] == 0
+    assert summary["memory_pruned_budget"] == 0
+    assert summary["memory_store_bytes"] == 0
+
+
+@pytest.mark.asyncio
+async def test_voice_alignment_abort_still_resets_affect(bus: AsyncBus, tmp_path: Path):
+    """Sleep ends with the affective reset even when voice alignment raises."""
+    hypnos = _make_hypnos(bus, tmp_path)
+
+    async def _boom():
+        raise RuntimeError("voice boom")
+
+    hypnos._run_voice_alignment = _boom
+    with pytest.raises(RuntimeError, match="voice boom"):
+        await hypnos.enter_sleep()
+    assert hypnos._thymos.resets == 1
+
+
+@pytest.mark.asyncio
+async def test_sleep_writes_voice_measures_latest(bus: AsyncBus, tmp_path: Path):
+    intent_records = [
+        {"generated_text": "hello world this is a test.", "faithful_rendering": "x"}
+        for _ in range(3)
+    ]
+    hypnos = _make_hypnos(bus, tmp_path, intent_records=intent_records)
+    summary = await hypnos.enter_sleep()
+
+    latest = tmp_path / "voice_measures_latest.json"
+    assert latest.is_file()
+    vm = summary["voice_measures"]
+    assert vm is not None
+    assert vm["utterance_count"] == 3
+    assert vm["distinctiveness"] is None  # no shipped base profile yet
+
+
+@pytest.mark.asyncio
+async def test_voice_measures_failure_does_not_break_sleep(
+    bus: AsyncBus, tmp_path: Path, monkeypatch
+):
+    def _boom(*args, **kwargs):
+        raise RuntimeError("measures boom")
+
+    monkeypatch.setattr(
+        "kaine.modules.hypnos.module.compute_sleep_measures", _boom
+    )
+    intent_records = [
+        {"generated_text": "a b c d e f g", "faithful_rendering": "x"}
+    ]
+    hypnos = _make_hypnos(bus, tmp_path, intent_records=intent_records)
+    stale_path = tmp_path / "voice_measures_latest.json"
+    stale_path.write_text(json.dumps({"distinctiveness": 0.01}), encoding="utf-8")
+    summary = await hypnos.enter_sleep()
+    assert all(p["success"] for p in summary["phases"])
+    assert summary.get("voice_measures") is None
+    assert hypnos._mnemos.consolidated == 1
+    assert hypnos._thymos.resets == 1
+    latest_path = tmp_path / "voice_measures_latest.json"
+    assert latest_path.exists()
+    data = json.loads(latest_path.read_text(encoding="utf-8"))
+    assert data.get("measurement_failed") is True
+    assert "timestamp" in data
+    assert "distinctiveness" not in data
+
+
+@pytest.mark.asyncio
+async def test_sleep_rotates_intent_log(bus: AsyncBus, tmp_path: Path):
+    records = [{"intent": "alpha"}, {"intent": "beta"}]
+    hypnos = _make_hypnos(bus, tmp_path, intent_records=records)
+
+    summary = await hypnos.enter_sleep()
+
+    rotated = summary["corpus"]["rotated"]
+    assert "error" not in summary["corpus"]
+    assert rotated is not None
+    corpus_dir = tmp_path / "intent_log"
+    assert (corpus_dir / rotated).exists()
+    assert not (tmp_path / "intent.jsonl").exists()
+    assert summary["corpus"]["corpus_bytes"] > 0
+
+    # A second sleep with no new intent log writes has nothing to rotate.
+    summary2 = await hypnos.enter_sleep()
+    assert summary2["corpus"]["rotated"] is None
+
+
+@pytest.mark.asyncio
+async def test_rotation_failure_does_not_break_sleep(
+    bus: AsyncBus, tmp_path: Path, monkeypatch
+):
+    records = [{"intent": "alpha"}]
+    hypnos = _make_hypnos(bus, tmp_path, intent_records=records)
+
+    captured: list[str] = []
+
+    async def capture_publish(self, stream, data, **kwargs):
+        captured.append(stream)
+
+    monkeypatch.setattr(
+        "kaine.modules.hypnos.module.Hypnos.publish", capture_publish
+    )
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("rotation intentionally broken")
+
+    monkeypatch.setattr(
+        "kaine.modules.hypnos.module.rotate_intent_log", broken
+    )
+
+    summary = await hypnos.enter_sleep()
+
+    assert summary is not None
+    assert summary["corpus"]["rotated"] is None
+    assert summary["corpus"]["warned"] is False
+    assert summary["corpus"]["error"] == "RuntimeError: rotation intentionally broken"
+    assert "hypnos.sleep.completed" in captured
+
+
+@pytest.mark.asyncio
+async def test_rotation_failure_marks_measurement_failed(
+    bus: AsyncBus, tmp_path: Path, monkeypatch
+):
+    records = [{"intent": "alpha"}]
+    hypnos = _make_hypnos(bus, tmp_path, intent_records=records)
+
+    stale_path = tmp_path / "voice_measures_latest.json"
+    stale_path.write_text(json.dumps({"distinctiveness": 0.01}), encoding="utf-8")
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("rotation intentionally broken")
+
+    monkeypatch.setattr(
+        "kaine.modules.hypnos.module.rotate_intent_log", broken
+    )
+
+    summary = await hypnos.enter_sleep()
+
+    assert summary is not None
+    assert summary["corpus"]["rotated"] is None
+    assert summary["corpus"]["error"] == "RuntimeError: rotation intentionally broken"
+    assert summary.get("voice_measures") is None
+    latest_path = tmp_path / "voice_measures_latest.json"
+    assert latest_path.exists()
+    data = json.loads(latest_path.read_text(encoding="utf-8"))
+    assert data.get("measurement_failed") is True
+    assert "timestamp" in data
+    assert "distinctiveness" not in data
+
+
+@pytest.mark.asyncio
+async def test_ceiling_failure_after_rotation_keeps_the_fresh_measurement(
+    bus: AsyncBus, tmp_path: Path, monkeypatch
+):
+    """Only a rotation that raised is a failed measurement: a corpus-ceiling
+    check failing after a good rotation must not overwrite the fresh measure."""
+    intent_records = [
+        {"generated_text": "hello world this is a test.", "faithful_rendering": "x"}
+        for _ in range(3)
+    ]
+    hypnos = _make_hypnos(bus, tmp_path, intent_records=intent_records)
+
+    def broken_ceiling(*args, **kwargs):
+        raise RuntimeError("ceiling check intentionally broken")
+
+    monkeypatch.setattr(
+        "kaine.modules.hypnos.module.check_corpus_ceiling", broken_ceiling
+    )
+    summary = await hypnos.enter_sleep()
+
+    assert summary["corpus"]["rotated"] is not None
+    data = json.loads((tmp_path / "voice_measures_latest.json").read_text(encoding="utf-8"))
+    assert "measurement_failed" not in data
+    assert data["utterance_count"] == 3
 
 
 @pytest.mark.asyncio
@@ -152,27 +316,28 @@ async def test_started_and_completed_events(bus: AsyncBus, tmp_path: Path):
     assert "phases" in completed.payload
     assert len(completed.payload["phases"]) == 5
     assert "voice_alignment" in completed.payload
+    assert completed.payload["alert"] is (completed.salience != hypnos._baseline_salience)
 
 
 @pytest.mark.asyncio
 async def test_concurrent_sleep_rejected(bus: AsyncBus, tmp_path: Path):
-    class SlowTrainer:
-        async def train(self, pairs, config):
-            await asyncio.sleep(0.1)
-            return TrainingResult(
-                accepted=False, adapter_path=None,
-                capability_loss=0.0, reason="slow",
-            )
+    """A sleep already in progress rejects a second enter_sleep() call.
+    Determinism is provided by holding the first consolidation phase on an
+    asyncio.Event, not by relying on training to keep the sleep alive."""
+    hold = asyncio.Event()
 
-    hypnos = _make_hypnos(
-        bus, tmp_path,
-        intent_records=[{"prompt": "p", "faithful_rendering": "t", "generated_text": "g"}],
-        trainer=SlowTrainer(),
-    )
+    class SlowMnemos(FakeMnemos):
+        async def consolidate_now(self) -> int:
+            await hold.wait()
+            self.consolidated += 1
+            return 5
+
+    hypnos = _make_hypnos(bus, tmp_path, mnemos=SlowMnemos())
     first = asyncio.create_task(hypnos.enter_sleep())
     await asyncio.sleep(0.01)
     with pytest.raises(HypnosBusyError):
         await hypnos.enter_sleep()
+    hold.set()
     await first
 
 
@@ -183,8 +348,9 @@ async def test_one_phase_failure_does_not_stop_others(bus: AsyncBus, tmp_path: P
         async def consolidate_now(self) -> int:
             raise RuntimeError("boom")
 
-        def downscale_activations(self, factor: float) -> int:
-            return 0
+        async def downscale(self, protect=()):
+            protect = list(protect)
+            return {"n_new": 0, "factor": 1.0, "protected": len(protect), "total_before": 0.0, "total_after": 0.0, "silent": 0}
 
         async def replay_now(self) -> list:
             return []
@@ -192,7 +358,6 @@ async def test_one_phase_failure_does_not_stop_others(bus: AsyncBus, tmp_path: P
     hypnos = Hypnos(
         bus,
         mnemos=BoomMnemos(),
-        nous_process=FakeSteppable(),
         thymos=FakeThymos(),
         chronos_resetters=[FakeResetter()],
         trainer=FakeTrainer(),
@@ -211,12 +376,15 @@ async def test_one_phase_failure_does_not_stop_others(bus: AsyncBus, tmp_path: P
 
 
 @pytest.mark.asyncio
-async def test_voice_alignment_skips_when_no_pairs(bus: AsyncBus, tmp_path: Path):
+async def test_voice_alignment_skips_without_preference_source_even_with_empty_log(bus: AsyncBus, tmp_path: Path):
+    """With the fail-closed Stage 0 gate, an empty intent log still reaches the
+    'no validated preference source' skip before the no-pairs branch."""
     hypnos = _make_hypnos(bus, tmp_path, intent_records=[])
     summary = await hypnos.enter_sleep()
     voice = summary["voice_alignment"]
     assert voice["accepted"] is False
-    assert "no usable DPO pairs" in voice["reason"]
+    assert "no validated preference source" in voice["reason"]
+    assert len(hypnos._trainer.calls) == 0
 
 
 @pytest.mark.asyncio
@@ -230,10 +398,19 @@ async def test_voice_alignment_passes_pairs_to_trainer(bus: AsyncBus, tmp_path: 
         ],
         trainer=trainer,
     )
-    await hypnos.enter_sleep()
+    pairs = DPOPairBuilder().build(
+        hypnos._voice_config.intent_log_path,
+        max_pairs=hypnos._voice_config.max_samples,
+    )
+    start_ms = time.monotonic() * 1000.0
+    def _meta(extra):
+        return dict(extra)
+    voice_result, phase_result = await hypnos._train_on_pairs(pairs, start_ms, _meta)
+
     assert len(trainer.calls) == 1
     pair_count, _cfg = trainer.calls[0]
     assert pair_count == 2
+    assert phase_result.success is True
 
 
 @pytest.mark.asyncio
@@ -257,10 +434,18 @@ async def test_capability_loss_veto(bus: AsyncBus, tmp_path: Path):
         intent_records=[{"prompt": "p", "faithful_rendering": "t", "generated_text": "g"}],
         trainer=BigLossTrainer(),
     )
-    summary = await hypnos.enter_sleep()
-    voice = summary["voice_alignment"]
-    assert voice["accepted"] is False
-    assert "capability loss" in voice["reason"].lower()
+    pairs = DPOPairBuilder().build(
+        hypnos._voice_config.intent_log_path,
+        max_pairs=hypnos._voice_config.max_samples,
+    )
+    start_ms = time.monotonic() * 1000.0
+    def _meta(extra):
+        return dict(extra)
+    voice_result, phase_result = await hypnos._train_on_pairs(pairs, start_ms, _meta)
+
+    assert voice_result.accepted is False
+    assert "capability loss" in voice_result.reason.lower()
+    assert phase_result.success is True
 
 
 @pytest.mark.asyncio

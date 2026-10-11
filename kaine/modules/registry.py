@@ -1,9 +1,9 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from __future__ import annotations
 
-from typing import Any, Iterator, Optional
+from typing import Any, Iterable, Iterator, Optional
 
 from kaine.bus.schema import module_stream
 from kaine.entity_clock import EntityClock
@@ -72,3 +72,16 @@ class ModuleRegistry:
 
     def __contains__(self, name: object) -> bool:
         return isinstance(name, str) and name in self._modules
+
+
+def shutdown_order(modules: Iterable[BaseModule]) -> list[BaseModule]:
+    """Return *modules* in shutdown order: Hypnos first, the rest as given.
+
+    Hypnos's shutdown ends a sleep still in flight with the affective reset and
+    an aborted hypnos.sleep.completed. Shutting it down first keeps the modules
+    that sleep calls (Mnemos, Thymos, Phantasia) up while it does.
+    """
+    modules = list(modules)
+    return [m for m in modules if m.name == "hypnos"] + [
+        m for m in modules if m.name != "hypnos"
+    ]

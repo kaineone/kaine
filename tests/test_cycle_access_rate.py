@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import math
@@ -77,7 +77,7 @@ async def test_salient_report_raises_access_then_decays(adaptive_cycle):
         Event(
             source="topos",
             type="report",
-            payload={},
+            payload={"alert": True},
             salience=1.0,
             timestamp=datetime.now(timezone.utc),
         )

@@ -1,15 +1,26 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
+import math
 from typing import Any, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
+from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
+from kaine.modules.context import CONTEXT_DIM, BroadcastContext
+from kaine.modules.intensity import graded_intensity
+from kaine.modules.positive_control import (
+    ControlQueue,
+    PositiveControl,
+    PositiveControlSettings,
+    publish_result,
+)
 from kaine.modules.topos.change import ChangeDetector, CosineChangeDetector
 from kaine.modules.topos.encoder import (
     DEFAULT_CLIP_LEN,
@@ -38,6 +49,18 @@ from kaine.modules.topos.live import (
 )
 
 log = logging.getLogger(__name__)
+
+
+def _finite_or_none(vector: Any) -> Optional[list[float]]:
+    """Return *vector*, or None when it is None or holds a non-finite value.
+
+    A skipped reading publishes None in place of its vector, so no NaN or
+    infinity reaches the bus.
+    """
+    if vector is None or any(not math.isfinite(v) for v in vector):
+        return None
+    return vector
+
 
 _HYPNOS_STREAM: str = "hypnos.out"
 
@@ -119,6 +142,7 @@ class Topos(BaseModule):
         foveation_size_range: tuple[float, float] = (0.12, 0.5),
         peripheral_size: tuple[int, int] = (320, 180),
         foveal_size: tuple[int, int] = (224, 224),
+        positive_control: Optional[PositiveControlSettings] = None,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -148,6 +172,9 @@ class Topos(BaseModule):
         )
         self._change_detector: ChangeDetector = change_detector or CosineChangeDetector()
         self._habituator: SceneHabituator = habituator or RollingMeanHabituator()
+        # Habituation score of the last finite embedding; a skipped embedding
+        # republishes it (None before the first finite one).
+        self._last_habituation: Optional[float] = None
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
         self._change_alert_threshold = float(change_alert_threshold)
@@ -155,6 +182,17 @@ class Topos(BaseModule):
         self._capture_enabled = bool(capture_enabled)
         self._source_factory = source_factory
         self._clock = entity_clock or EntityClock()
+        # Adopted accessed broadcasts provide Topos's prediction context (Appendix A.1).
+        self._context = BroadcastContext(self._clock.now)
+        # Latest broadcast tick and context age when the pending prediction was formed (paper A.8).
+        self._prediction_stamp: tuple[Optional[int], Optional[float]] = (None, None)
+        # Positive control of the information-gain measure; study configuration only.
+        self._positive_control: Optional[PositiveControl] = (
+            PositiveControl("topos", positive_control)
+            if positive_control is not None and positive_control.enabled
+            else None
+        )
+        self._pc_queue = ControlQueue()  # Run control steps off the report path.
         self._live_camera: Optional[LiveCamera] = None
         if self._capture_enabled or live_camera is not None:
             self._live_camera = live_camera or self._build_default_live_camera(live_camera_config)
@@ -261,6 +299,7 @@ class Topos(BaseModule):
                 latent_dim=self._encoder.latent_dim,
                 units=self._forward_model_units,
                 visual_buffer_size=self._visual_buffer_size,
+                context_dim=CONTEXT_DIM,
             )
 
         # Seed the hypnos cursor from the stream tail before starting the loop,
@@ -288,6 +327,7 @@ class Topos(BaseModule):
             except Exception:
                 log.warning("live camera shutdown failed", exc_info=True)
         await super().shutdown()
+        await self.finish_positive_control()
         try:
             await self._encoder.shutdown()
         except Exception:
@@ -475,25 +515,42 @@ class Topos(BaseModule):
             # recent trajectory. Content-free; published alongside the fovea.
             if self._fovea_predictor is not None:
                 predicted_fovea = self._fovea_predictor.predict_next(fovea)
-            peripheral_view, foveal_view = foveate(
-                frame_np,
-                fovea,
-                peripheral_size=self._peripheral_size,
-                foveal_size=self._foveal_size,
-            )
-            # Two encodes: peripheral gist drives change/habituation/salience
-            # (whole-field continuity); foveal carries the attended detail. Both go
-            # through the clip seam so foveation composes with the clip encoder —
-            # a per-frame encoder (clip_len == 1) encodes the single view; the
-            # InternVideo-Next clip encoder (clip_len == 16) encodes the view as a
-            # static clip (perception-drives-salience task 3).
-            peripheral_latent = await self._encode_clip([peripheral_view] * self._clip_len)
-            foveal_latent = await self._encode_clip([foveal_view] * self._clip_len)
+            # Both views are derived from every buffered frame at the fovea chosen
+            # on the latest frame, so the clip encoder sees motion; a per-frame
+            # encoder (clip_len 1) gets the single latest view as before.
+            peripheral_views = []
+            foveal_views = []
+            for idx, f in enumerate(list(self._frame_buffer)):
+                if idx == len(self._frame_buffer) - 1:
+                    f_np = frame_np
+                else:
+                    f_np = self._foveation_frame(f)
+                p, fv = foveate(
+                    f_np,
+                    fovea,
+                    peripheral_size=self._peripheral_size,
+                    foveal_size=self._foveal_size,
+                )
+                peripheral_views.append(p)
+                foveal_views.append(fv)
+            peripheral_latent = await self._encode_clip(peripheral_views)
+            foveal_latent = await self._encode_clip(foveal_views)
             embedding = peripheral_latent
         else:
             embedding = await self._encode_clip(list(self._frame_buffer))
-        change = float(self._change_detector.observe(embedding))
-        habituation = float(self._habituator.observe(embedding))
+        # A non-finite embedding is skipped: it scores no change and leaves the
+        # change detector and the change history as they were, so the next
+        # embedding is compared with the last finite one.
+        skipped = not all(math.isfinite(v) for v in embedding)
+        change = 0.0 if skipped else float(self._change_detector.observe(embedding))
+        habituation: Optional[float]
+        if skipped:
+            # The habituator does not observe a skipped embedding; the report
+            # carries the last score it gave.
+            habituation = self._last_habituation
+        else:
+            habituation = float(self._habituator.observe(embedding))
+            self._last_habituation = habituation
 
         # Self-calibrating change alert (perception-drives-salience). The alert
         # criterion is RELATIVE to the module's own rolling baseline of change
@@ -503,7 +560,8 @@ class Topos(BaseModule):
         # stream near its own baseline stays quiet. change_alert_threshold survives
         # only as a small absolute FLOOR guard so a large ratio over a near-static
         # stream (tiny mean) cannot fire on noise.
-        self._change_history.append(change)
+        if not skipped:
+            self._change_history.append(change)
         mean_change = (
             sum(self._change_history) / len(self._change_history) if self._change_history else 0.0
         )
@@ -513,15 +571,45 @@ class Topos(BaseModule):
             and change >= self._change_alert_threshold
         )
 
+        # One entity-clock reading per report, for the report and the positive control.
+        entity_time_s = self._clock.now()
+        pc_args: Optional[tuple] = None
+        pc_suspended = False
         # Forward-prediction salience path.
         prediction_error: float = 0.0
+        context_gain: Optional[float] = None
+        null_prediction_error: Optional[float] = None
+        mean_prediction_error: Optional[float] = None
         normalised_error: float = 0.0  # exposed on the report for the affect coupling
+        scored_stamp: tuple[Optional[int], Optional[float]] = (None, None)
         if self._forward_prediction and self._forward_model is not None:
             self._forward_model.suspended = self._in_hypnos
+            ctx = null = None
+            scored_stamp = self._prediction_stamp
             # Offload the MLP forward/backward step to a thread so the event loop
             # stays responsive during vision processing (performance-test-coverage).
-            prediction_error = await asyncio.to_thread(self._forward_model.step, embedding)
-            self._pred_errors.append(prediction_error)
+            formed_stamp: tuple[Optional[int], Optional[float]] = (None, None)
+            if getattr(self._forward_model, "context_dim", 0) > 0:
+                ctx, null = self._context.context_and_null(("topos",))
+                # Read before the step yields to the event loop, so a broadcast
+                # received during the step cannot change the stamp.
+                formed_stamp = self._context.last_reading
+                prediction_error = await asyncio.to_thread(
+                    self._forward_model.step, embedding, ctx, null
+                )
+            else:
+                prediction_error = await asyncio.to_thread(self._forward_model.step, embedding)
+            # Only a defined error enters the running mean: a skipped reading has
+            # none, nor has the first reading after a skip (paper A.2).
+            if getattr(self._forward_model, "last_error_defined", True):
+                self._pred_errors.append(prediction_error)
+
+            # The prediction formed now is scored at the next report; a skipped
+            # reading forms none.
+            if getattr(self._forward_model, "last_reading_skipped", False):
+                self._prediction_stamp = (None, None)
+            else:
+                self._prediction_stamp = formed_stamp
 
             # Normalise error against the rolling window mean so a steady,
             # predictable motion yields low salience even at non-zero error.
@@ -529,8 +617,33 @@ class Topos(BaseModule):
                 mean_err = sum(self._pred_errors) / len(self._pred_errors)
                 normalised = prediction_error / mean_err if mean_err > 0 else 0.0
             else:
+                mean_err = 0.0
                 normalised = 0.0
             normalised_error = normalised
+
+            # Cross-module broadcast information gain (Appendix A.8).
+            if (
+                getattr(self._forward_model, "last_scored_had_context", False)
+                and getattr(self._forward_model, "last_null_error", None) is not None
+                and mean_err > 0
+            ):
+                context_gain = (self._forward_model.last_null_error - prediction_error) / mean_err
+                null_prediction_error = self._forward_model.last_null_error
+                mean_prediction_error = mean_err
+
+            # Positive control (study mode only): shadows of the forward model, never the live one.
+            # It is queued after the report is published, off the report path.
+            if self._positive_control is not None and getattr(self._forward_model, "context_dim", 0) > 0:
+                pc_args = (
+                    embedding,
+                    ctx,
+                    null,
+                    context_gain,
+                    mean_prediction_error,
+                    entity_time_s,
+                )
+                pc_suspended = bool(getattr(self._forward_model, "suspended", False))
+
             # Alert on EITHER a surprising forward-model prediction error OR a
             # self-calibrating perceptual discontinuity — both relative to their
             # own rolling baselines (the Chronos `normalised >= 2.0` convention),
@@ -538,7 +651,8 @@ class Topos(BaseModule):
             # prediction-error threshold stays fixed at the proven 2.0; the tunable
             # change_alert_factor governs the change-detector path.
             alert = normalised >= 2.0 or change_alert
-            salience = self._alert_salience if alert else self._baseline_salience
+            graded = graded_intensity(self._baseline_salience, self._alert_salience, normalised)
+            salience = self._alert_salience if alert else graded
         else:
             alert = change_alert
             salience = self._alert_salience if alert else self._baseline_salience
@@ -564,16 +678,38 @@ class Topos(BaseModule):
         except Exception:
             log.debug("topos preview tap failed (non-fatal)", exc_info=True)
 
+        # A report without a defined error publishes none, so consumers such as
+        # Thymos do not pool a made-up 0.
+        published_error: Optional[float] = (
+            None
+            if skipped or not getattr(self._forward_model, "last_error_defined", True)
+            else prediction_error
+        )
         report: dict[str, Any] = {
-            "latent": embedding,
+            "latent": _finite_or_none(embedding),
             "change_score": change,
             "habituation_score": habituation,
             "encoder_model_id": self._encoder.model_id,
-            "prediction_error": prediction_error,
+            "prediction_error": published_error,
             # Prediction error normalised against the rolling-window mean (the same
             # quantity the alert criterion uses). Exposed so the affect layer can
             # scale arousal by perceptual surprise (perception→arousal coupling).
             "normalised_error": normalised_error,
+            # Cross-module broadcast information gain and context age (Appendix A.8).
+            # Paired evaluations behind the information-gain measure.
+            "context_gain": context_gain,
+            "null_prediction_error": null_prediction_error,
+            "mean_prediction_error": mean_prediction_error,
+            "context_age_s": self._context.age_s(),
+            # The broadcast whose receipt preceded the scored prediction and the age
+            # of the context it used (paper A.8).
+            "prediction_broadcast_tick": scored_stamp[0],
+            "prediction_context_age_s": scored_stamp[1],
+            # The planned test counts a report only when the entity was awake and the
+            # report falls after T_learn, measured in entity time from the start of
+            # the run (paper Appendix A.8).
+            "entity_time_s": entity_time_s,
+            "awake": not self._in_hypnos,
             # Whether this report crossed alert level (perception-drives-salience):
             # lets the Nexus perception panel and off-bus analysis count stimulus-
             # driven perceptual events without re-deriving the salience decision.
@@ -583,8 +719,8 @@ class Topos(BaseModule):
             # Foveation on: `latent` is the peripheral gist (kept for backward-
             # compatible consumers); the attended detail and the content-free
             # fovea location ride alongside it.
-            report["peripheral"] = peripheral_latent
-            report["foveal"] = foveal_latent
+            report["peripheral"] = _finite_or_none(peripheral_latent)
+            report["foveal"] = _finite_or_none(foveal_latent)
             report["fovea"] = fovea.to_dict()
             # Attention schema: the content-free predicted next fovea location.
             if predicted_fovea is not None:
@@ -599,11 +735,129 @@ class Topos(BaseModule):
             if position is not None:
                 report["item"] = position.title
                 report["item_order"] = position.order
-        return await self.publish(
+        event_id = await self.publish(
             "topos.report",
             report,
             salience=salience,
         )
+        if pc_args is not None:
+            await self._queue_positive_control(pc_args, pc_suspended)
+        return event_id
+
+    async def _fail_positive_control(self, control: PositiveControl, reason: str) -> None:
+        """Publish a failure record and stop the control for this run."""
+        if self._positive_control is not control:
+            # The control already has a terminal record; do not publish another.
+            return
+        log.error(
+            "topos: positive control %s; it is switched off for this run",
+            reason,
+        )
+        try:
+            await publish_result(self._bus, control.failure_result())
+        except Exception:
+            log.error(
+                "topos: could not publish the positive control's failure record; "
+                "the run has no terminal record and cannot pass",
+                exc_info=True,
+            )
+        self._positive_control = None
+
+    async def _queue_positive_control(self, args: tuple, suspended: bool) -> None:
+        """Copy the live model and enqueue a control step after the report."""
+        control = self._positive_control
+        if control is None:
+            return
+        try:
+            control.prepare(self._forward_model)
+        except Exception:
+            log.exception("topos: positive control failed")
+            await self._fail_positive_control(control, "raised")
+            return
+        if not self._pc_queue.submit(
+            functools.partial(self._run_positive_control, *args, suspended=suspended)
+        ):
+            await self._fail_positive_control(
+                control, "fell behind the reports; the queue is full"
+            )
+
+    async def _run_positive_control(
+        self,
+        x: list[float],
+        ctx: Optional[list[float]],
+        null: Optional[list[float]],
+        live_gain: Optional[float],
+        live_mean_error: Optional[float],
+        entity_time_s: float,
+        *,
+        suspended: bool,
+    ) -> None:
+        """Step the positive control after the live report and publish its running result."""
+        control = self._positive_control
+        if control is None:
+            return
+        try:
+            control.prepare(self._forward_model)
+            result = await asyncio.to_thread(
+                control.after_report,
+                self._forward_model,
+                x,
+                ctx,
+                null,
+                live_gain,
+                live_mean_error,
+                entity_time_s=entity_time_s,
+                # Wakefulness as it was at the report: the forward model is suspended
+                # exactly while Hypnos holds the processor asleep.
+                awake=not suspended,
+                suspended=suspended,
+            )
+            if result is not None and self._positive_control is control:
+                await publish_result(self._bus, result)
+        except Exception:
+            log.exception("topos: positive control failed")
+            await self._fail_positive_control(control, "raised")
+
+    async def finish_positive_control(self) -> None:
+        """Publish the control's terminal record and stop the control for this run.
+
+        The cycle calls it before the research log stops; module shutdown calls it
+        again, which then does nothing.
+        """
+        control = self._positive_control
+        if control is None:
+            # Never wait here: a step may still be stuck after the control failed.
+            await self._pc_queue.abort()
+            return
+        budget = control.settings.shutdown_drain_s
+        try:
+            await asyncio.wait_for(self._pc_queue.drain(), timeout=budget)
+        except asyncio.TimeoutError:
+            await self._pc_queue.abort()
+            await self._fail_positive_control(
+                control,
+                f"did not finish its queued steps within {budget} s at shutdown",
+            )
+            await self._pc_queue.abort()
+            return
+        if self._positive_control is not control:
+            # A queued step failed while draining; its failure record is the terminal one.
+            await self._pc_queue.abort()
+            return
+        try:
+            await publish_result(self._bus, control.final_result())
+        except Exception:
+            log.error(
+                "topos: could not publish the positive control's terminal record; "
+                "the run cannot pass",
+                exc_info=True,
+            )
+        self._positive_control = None
+        await self._pc_queue.abort()
+
+    async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
+        # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).
+        self._context.observe(snapshot)
 
     async def _hypnos_loop(self) -> None:
         """Subscribe to hypnos.out to gate adaptation during sleep."""

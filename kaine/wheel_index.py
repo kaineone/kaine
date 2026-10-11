@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """Host-aware wheel-index resolution -- the single source of truth for
 which pip ``--index-url`` provides the PyTorch wheels on this host.

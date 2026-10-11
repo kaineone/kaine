@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """Apply SPDX + copyright headers to all first-party Python source files.
 
@@ -13,7 +13,7 @@ import pathlib
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-HEADER_LINE_1 = "# SPDX-License-Identifier: LicenseRef-CAL-0.2"
+HEADER_LINE_1 = "# SPDX-License-Identifier: LicenseRef-CAL-0.4"
 HEADER_LINE_2 = "# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>"
 HEADER = f"{HEADER_LINE_1}\n{HEADER_LINE_2}\n"
 

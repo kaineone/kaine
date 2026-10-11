@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Spot — KAINE's module supervisor (the watchdog).
@@ -63,7 +63,7 @@ from kaine.cycle.escalation_state import EscalationRecord
 from kaine.cycle.incident_log import IncidentLog, scrub_paths
 from kaine.lifecycle.manager import ForkManager
 from kaine.modules.base import BaseModule
-from kaine.modules.registry import ModuleRegistry
+from kaine.modules.registry import ModuleRegistry, shutdown_order
 from kaine.security.crypto import get_state_encryptor
 
 log = logging.getLogger(__name__)
@@ -529,7 +529,7 @@ class Spot:
                 log.warning("spot on_halt callback failed", exc_info=True)
 
     async def _shutdown_all(self) -> None:
-        for module in list(self._registry.all_modules()):
+        for module in shutdown_order(self._registry.all_modules()):
             try:
                 await module.shutdown()
             except Exception:

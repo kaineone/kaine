@@ -54,9 +54,12 @@ described in [docs/15-experiments/README.md](docs/15-experiments/README.md); sta
 
 1. Branch from `main` (`main` is protected; direct pushes are blocked).
 2. Keep the change focused; add tests for new/changed behavior.
-3. Ensure CI is green — `import-boundary`, `redteam`, and CodeQL (`analyze`) run
-   on every PR.
-4. Fill in the PR template checklist. PRs squash-merge into `main`.
+3. Ensure CI is green — ruff, `import-boundary`, `redteam`, CodeQL (`analyze`)
+   and the pytest suite run on every PR and on merge-queue batches. The
+   required checks are `analyze (python)`, `lint-imports`, `redteam` and the
+   three `pytest (offline suite, …)` jobs.
+4. Fill in the PR template checklist and resolve every review thread. PRs
+   merge through the merge queue as squash commits into `main`.
 5. A maintainer reviews (see [CODEOWNERS](.github/CODEOWNERS)).
 
 ## Reporting bugs and vulnerabilities

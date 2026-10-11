@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Conditioning the language organ on the conscious workspace.
@@ -350,6 +350,51 @@ async def test_rolling_latest_snapshot_conditions_speech(bus, tmp_path):
         req = lingua.chat_client.requests[-1]
         # Conditioned on the heard utterance from the conscious workspace.
         assert 'Speech heard: "are you awake"' in req.prompt
+    finally:
+        await lingua.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_empty_pooled_broadcast_keeps_the_cached_snapshot(bus, tmp_path):
+    lingua = _make_lingua(bus, tmp_path, responses=["ok"])
+    await lingua.initialize()
+    try:
+        await asyncio.sleep(0.1)
+        await bus.publish_workspace(
+            {
+                "tick_index": 5,
+                "is_experiential": True,
+                "inhibited": False,
+                "salience_scores": {"u1": 0.9},
+                "selected": [
+                    {
+                        "entry_id": "u1",
+                        "source": "audition",
+                        "type": "audition.transcription",
+                        "salience": 0.9,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "payload": {"text": "are you awake"},
+                    }
+                ],
+                "metadata": {},
+            },
+            source="syneidesis",
+        )
+        await wait_for(lambda: lingua._latest_snapshot is not None)
+        await bus.publish_workspace(
+            {
+                "tick_index": 6,
+                "is_experiential": True,
+                "inhibited": False,
+                "salience_scores": {},
+                "selected": [],
+                "metadata": {"arm": "pooled"},
+            },
+            source="syneidesis",
+        )
+        await asyncio.sleep(0.15)
+        assert lingua._latest_snapshot.tick_index == 5
+        assert len(lingua._latest_snapshot.selected_events) == 1
     finally:
         await lingua.shutdown()
 

@@ -1,33 +1,18 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Deterministic stimulus for the workspace-mediation ablation.
+"""Seeded, deterministic stimulus for the workspace-mediation development harness.
 
-Two things drive a run, both scripted (no randomness — reproducible from the
-seed alone):
-
-* **Substrate metrics per tick** for the real Soma module, via
-  ``ScriptedMetricsReader``. A battery that perturbs the substrate on some ticks
-  makes Soma's prediction error spike, so Soma periodically wins selection — the
-  coverage the primary coupling measure needs (a run where Soma never enters the
-  coalition is underpowered, not a clean NULL).
-
-* **Extra candidate events per tick** (user-utterance-shaped) so the per-tick
-  candidate count can exceed the workspace ``top_k`` and competitive selection
-  actually *excludes* — otherwise the minimal set never competes and the ablation
-  would test broadcast mediation + gating, not competition.
-
-Batteries are pure functions of the tick index. ``NEUTRAL`` keeps the substrate
-flat and rarely injects, tending toward NULL/underpowered; ``SOMA_SALIENT``
-spikes the substrate and injects regularly, exercising both coupling and
-competition; ``DECOUPLED`` spikes the substrate on a schedule uncorrelated with
-the injected events (a control where competitive coupling should be weak).
+The stimulus drives Soma with scripted metrics and Topos with scripted frame
+vectors. It also emits background candidate events each tick so the candidate
+count exceeds the workspace capacity and selection must exclude.
 """
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Any
 
 from kaine.bus.schema import Event
 
@@ -71,110 +56,171 @@ class ScriptedMetricsReader:
         return dict(self._per_tick[idx]) if self._per_tick else dict(_BASE_METRICS)
 
 
-def _utterance(seq: int, text: str, salience: float) -> Event:
-    """A user-utterance-shaped candidate event (matches Volition's speak match)."""
-    return Event(
-        source="audition",
-        type="audition.transcription",
-        payload={"text": text, "seq": seq},
-        salience=salience,
-        timestamp=_BASE_EPOCH,
-    )
+LATENT_DIM: int = 8
+
+
+class VectorEncoder:
+    """A per-frame vector encoder for the harness.
+
+    The frame is its own latent, so encode is the identity cast to float.
+    Implements the Topos Encoder protocol with ``clip_len == 1``.
+    """
+
+    model_id = "harness/vector-encoder"
+    clip_len = 1
+
+    def __init__(self, latent_dim: int = LATENT_DIM) -> None:
+        self._latent_dim = latent_dim
+
+    @property
+    def latent_dim(self) -> int:
+        return self._latent_dim
+
+    async def load(self) -> None:
+        return None
+
+    async def shutdown(self) -> None:
+        return None
+
+    async def encode(self, image: Any) -> list[float]:
+        return [float(v) for v in image]
+
+    async def encode_clip(self, frames: Any) -> list[float]:
+        return await self.encode(frames[-1])
+
+
+# A report at tick t-1 enters the context adopted at the end of tick t-1, which
+# conditions the prediction of input t+1. This lag-2 relation is the cross-module
+# signal the information-gain measure is meant to capture.
+LAG: int = 2
+
+
+@dataclass(frozen=True)
+class StimulusScript:
+    """Deterministic per-tick inputs for the two measured processors.
+
+    ``soma_metrics`` is one metric dict per tick. ``topos_frames`` is one frame
+    vector per tick. ``background`` is one list of stand-in candidate events
+    per tick.
+    """
+
+    soma_metrics: list[dict[str, float]]
+    topos_frames: list[list[float]]
+    background: list[list[Event]]
 
 
 @dataclass(frozen=True)
 class MediationStimulus:
-    """A named battery: per-tick substrate metrics + per-tick extra candidates.
+    """A named stimulus battery with optional cross-module coupling.
 
-    ``metrics_at(i)`` feeds Soma; ``extra_candidates_at(i)`` returns additional
-    (non-Soma, non-Chronos) candidate events for tick ``i`` (utterances), used to
-    push the candidate count past ``top_k`` so selection competes.
+    ``script`` is a pure function of its arguments: the same seed, ticks, and
+    background count always produce the same ``StimulusScript``.
     """
 
     name: str
-    _metrics: Callable[[int], dict[str, float]]
-    _extras: Callable[[int], list[Event]]
+    coupled: bool
+    event_rate: float = 0.15
+    n_scenes: int = 3
+    frame_noise: float = 0.02
 
-    def metrics_series(self, n_ticks: int) -> list[dict[str, float]]:
-        return [self._metrics(i) for i in range(n_ticks)]
+    def script(
+        self, seed: int, ticks: int, *, n_background: int = 2
+    ) -> StimulusScript:
+        """Generate the deterministic stimulus script."""
+        if ticks <= 0:
+            raise ValueError(f"ticks must be positive, got {ticks}")
+        if n_background < 0:
+            raise ValueError(f"n_background must be >= 0, got {n_background}")
 
-    def extra_candidates_at(self, i: int) -> list[Event]:
-        return list(self._extras(i))
+        soma_rng = random.Random(f"{seed}:{self.name}:soma")
+        topos_rng = random.Random(f"{seed}:{self.name}:topos")
+        scenes_rng = random.Random(f"{seed}:{self.name}:scenes")
+        background_rng = random.Random(f"{seed}:{self.name}:background")
+
+        soma_led = [soma_rng.random() < self.event_rate for _ in range(ticks)]
+        topos_led = [topos_rng.random() < self.event_rate for _ in range(ticks)]
+
+        scenes = [
+            [scenes_rng.gauss(0.0, 1.0) for _ in range(LATENT_DIM)]
+            for _ in range(self.n_scenes)
+        ]
+
+        soma_metrics: list[dict[str, float]] = []
+        topos_frames: list[list[float]] = []
+        background: list[list[Event]] = []
+
+        scene_idx = 0
+        for t in range(ticks):
+            # Jitter the base substrate, then add a spike on spike ticks.
+            m = dict(_BASE_METRICS)
+            m["cpu_percent"] += soma_rng.uniform(-1.0, 1.0)
+            spike = False
+            if self.coupled:
+                if soma_led[t] or (t >= LAG and topos_led[t - LAG]):
+                    spike = True
+            elif soma_led[t]:
+                spike = True
+            if spike:
+                m["cpu_percent"] += 40.0
+                m["cycle_latency_avg_ms"] += 40.0 * 8.0
+                m["gpu_0_temp_c"] += 40.0 * 0.4
+            soma_metrics.append(m)
+
+            # Advance the scene on cut ticks; add per-component sensor noise.
+            cut = False
+            if self.coupled:
+                if topos_led[t] or (t >= LAG and soma_led[t - LAG]):
+                    cut = True
+            elif topos_led[t]:
+                cut = True
+            if cut:
+                scene_idx = (scene_idx + 1) % self.n_scenes
+            frame = [v + topos_rng.gauss(0.0, self.frame_noise) for v in scenes[scene_idx]]
+            topos_frames.append(frame)
+
+            # Background candidates stand in for the other base-thesis candidates.
+            # They carry no information about either processor's input.
+            tick_bg = [
+                Event(
+                    source="chronos",
+                    type="chronos.report",
+                    payload={"harness": "background"},
+                    salience=background_rng.uniform(0.05, 0.5),
+                    timestamp=_BASE_EPOCH,
+                )
+                for _ in range(n_background)
+            ]
+            background.append(tick_bg)
+
+        return StimulusScript(
+            soma_metrics=soma_metrics,
+            topos_frames=topos_frames,
+            background=background,
+        )
 
 
-def _flat_metrics(_i: int) -> dict[str, float]:
-    return dict(_BASE_METRICS)
-
-
-def _spiked_metrics(period: int, magnitude: float) -> Callable[[int], dict[str, float]]:
-    def f(i: int) -> dict[str, float]:
-        m = dict(_BASE_METRICS)
-        if period > 0 and i % period == 0 and i > 0:
-            # A substrate perturbation: drives Soma's prediction error up so Soma
-            # becomes salient and can win selection on this tick.
-            m["cpu_percent"] = _BASE_METRICS["cpu_percent"] + magnitude
-            m["cycle_latency_avg_ms"] = _BASE_METRICS["cycle_latency_avg_ms"] + magnitude * 8.0
-            m["gpu_0_temp_c"] = _BASE_METRICS["gpu_0_temp_c"] + magnitude * 0.4
-        return m
-    return f
-
-
-def _regular_utterances(period: int) -> Callable[[int], list[Event]]:
-    def f(i: int) -> list[Event]:
-        if period > 0 and i % period == 0:
-            # A short repeating utterance; salience mid-range so it competes with,
-            # but does not always dominate, the predictive modules.
-            return [_utterance(i, f"tick {i}: status?", 0.5)]
-        return []
-    return f
-
-
-def _no_utterances(_i: int) -> list[Event]:
-    return []
-
-
-# The neutral battery: flat substrate, sparse injection. Soma stays quiet and
-# competition is light — a run that should tend toward NULL / underpowered, so a
-# WIN here would be meaningful.
-NEUTRAL_STIMULUS = MediationStimulus(
-    name="neutral",
-    _metrics=_flat_metrics,
-    _extras=_regular_utterances(6),
+COUPLED_STIMULUS = MediationStimulus(
+    name="coupled",
+    coupled=True,
 )
 
-# The main coverage battery: substrate spikes make Soma salient on a schedule,
-# and regular utterances push the candidate count past a low top_k so selection
-# competes. Exercises both the coupling measure and genuine competition.
-SOMA_SALIENT_STIMULUS = MediationStimulus(
-    name="soma_salient",
-    _metrics=_spiked_metrics(period=4, magnitude=40.0),
-    _extras=_regular_utterances(2),
+INDEPENDENT_STIMULUS = MediationStimulus(
+    name="independent",
+    coupled=False,
 )
 
-# A control where the substrate perturbation schedule is uncorrelated with the
-# injected events (spikes on primes), so competitive coupling should be weak — a
-# battery on which a NEGATIVE or NULL is plausible.
-DECOUPLED_STIMULUS = MediationStimulus(
-    name="decoupled",
-    _metrics=lambda i: (
-        {**_BASE_METRICS, "cpu_percent": _BASE_METRICS["cpu_percent"] + 40.0}
-        if i in (2, 3, 5, 7, 11, 13)
-        else dict(_BASE_METRICS)
-    ),
-    _extras=_regular_utterances(3),
-)
-
-STIMULUS_BY_NAME: dict[str, MediationStimulus] = {
-    "neutral": NEUTRAL_STIMULUS,
-    "soma_salient": SOMA_SALIENT_STIMULUS,
-    "decoupled": DECOUPLED_STIMULUS,
+STIMULUS_BY_NAME = {
+    s.name: s for s in (COUPLED_STIMULUS, INDEPENDENT_STIMULUS)
 }
 
 __all__ = [
     "ScriptedMetricsReader",
+    "LATENT_DIM",
+    "VectorEncoder",
+    "LAG",
+    "StimulusScript",
     "MediationStimulus",
-    "NEUTRAL_STIMULUS",
-    "SOMA_SALIENT_STIMULUS",
-    "DECOUPLED_STIMULUS",
+    "COUPLED_STIMULUS",
+    "INDEPENDENT_STIMULUS",
     "STIMULUS_BY_NAME",
 ]

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Base observer pattern for sidecar components.
@@ -19,6 +19,9 @@ from typing import Any, AsyncIterator, Protocol, runtime_checkable
 from kaine.bus.schema import Event
 
 log = logging.getLogger(__name__)
+
+#: Bounds the drain so a stop cannot hang on a stream that keeps growing.
+_DRAIN_MAX_BATCHES = 1000
 
 
 @runtime_checkable
@@ -80,7 +83,8 @@ class StreamSubscriberObserver(BaseObserver):
     Subclasses declare the stream(s) to follow via :attr:`streams` (a tuple).
     Each stream keeps its own cursor in ``self._cursors`` so a read failure on
     one stream does not advance the others. The default cursor is ``"0"`` so
-    observers see the backlog on first read.
+    observers see the backlog on first read. When stop is requested the observer
+    drains the streams once more so late events are not lost.
     """
 
     streams: tuple[str, ...] = ()
@@ -105,43 +109,65 @@ class StreamSubscriberObserver(BaseObserver):
         try:
             while not self._stopped.is_set():
                 for stream in self.streams:
-                    last_scanned: str | None = None
-                    try:
-                        entries, last_scanned = await self._bus.read_entries(
-                            stream,
-                            last_id=self._cursors.get(stream, "0"),
-                            count=64,
-                            block_ms=0,
-                        )
-                    except Exception:
-                        entries = []
-                        log.warning(
-                            "observer %s read failed for %s", self.name, stream, exc_info=True
-                        )
-                    for entry_id, event in entries:
-                        self._cursors[stream] = entry_id
-                        try:
-                            await self.handle(stream, entry_id, event)
-                        except Exception:
-                            log.warning(
-                                "observer %s handler raised on %s / %s",
-                                self.name,
-                                stream,
-                                entry_id,
-                                exc_info=True,
-                            )
-                    # Advance past entries that were scanned but skipped as
-                    # undecodable, so a batch of all-malformed legacy entries can't
-                    # wedge the cursor.
-                    if last_scanned is not None:
-                        self._cursors[stream] = last_scanned
+                    await self._poll_stream(stream)
                 await self._tick()
                 try:
                     await asyncio.wait_for(self._stopped.wait(), timeout=self._poll_interval_s)
                 except asyncio.TimeoutError:
                     continue
+            await self._drain()
         finally:
             await self._cleanup()
+
+    async def _poll_stream(self, stream: str) -> bool:
+        """Read one stream and dispatch its events.
+
+        Return True when entries were read or the cursor moved past scanned
+        entries, False otherwise, including on a read error.
+        """
+        previous_cursor = self._cursors.get(stream, "0")
+        last_scanned: str | None = None
+        advanced = False
+        try:
+            entries, last_scanned = await self._bus.read_entries(
+                stream,
+                last_id=previous_cursor,
+                count=64,
+                block_ms=0,
+            )
+        except Exception:
+            entries = []
+            log.warning(
+                "observer %s read failed for %s", self.name, stream, exc_info=True
+            )
+        for entry_id, event in entries:
+            advanced = True
+            self._cursors[stream] = entry_id
+            try:
+                await self.handle(stream, entry_id, event)
+            except Exception:
+                log.warning(
+                    "observer %s handler raised on %s / %s",
+                    self.name,
+                    stream,
+                    entry_id,
+                    exc_info=True,
+                )
+        # Advance past entries that were scanned but skipped as undecodable, so a
+        # batch of all-malformed legacy entries cannot wedge the cursor.
+        if last_scanned is not None:
+            self._cursors[stream] = last_scanned
+            if last_scanned != previous_cursor:
+                advanced = True
+        return advanced
+
+    async def _drain(self) -> None:
+        """Read every stream to its end once more after stop, so events published
+        just before the stop are not lost."""
+        for stream in self.streams:
+            for _ in range(_DRAIN_MAX_BATCHES):
+                if not await self._poll_stream(stream):
+                    break
 
     async def _initial_cursors(self) -> dict[str, str]:
         # Default: start every stream from "0" so observers see the backlog.

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from __future__ import annotations
@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import time
 import uuid
 from datetime import datetime, timezone
@@ -28,6 +29,7 @@ from kaine.modules.lingua.client import (
 )
 from kaine.modules.lingua.context import PERSONA_TEMPLATE_VERSION, ContextAssembler
 from kaine.modules.lingua.intent_log import IntentExpressionLog
+from kaine.persistence.system_prompts import digest_of, store_dir_for, write_system_prompt
 from kaine.storage import resolve
 from kaine.workspace.volition import SPEAK, THINK, VOLITION_STREAM
 
@@ -45,13 +47,13 @@ EIDOLON_SELF_MODEL_TYPE: str = "eidolon.self_model"
 
 
 class Lingua(BaseModule):
-    """Language organ — the LLM speaks *from* the conscious workspace, not from
+    """Language organ - the LLM speaks *from* workspace access, not from
     the bare triggering text.
 
     Every generation is conditioned by a `ContextAssembler` that builds the
     `(system, prompt)` pair from a first-person persona (seeded from the Eidolon
-    self-model) + a rendering of the current conscious coalition + the triggering
-    input — the `persona ∪ working-memory ∪ input` shape from CoALA / Generative
+    self-model) + a rendering of the current accessed coalition + the triggering
+    input - the `persona ∪ working-memory ∪ input` shape from CoALA / Generative
     Agents / GWA. Lingua caches the latest broadcast it observed via a passive
     `_snapshot_cache_loop` (it stays intent-driven and never reflexively speaks;
     `on_workspace` remains the BaseModule no-op). External-speech events also
@@ -124,13 +126,17 @@ class Lingua(BaseModule):
             base_url=chat_url, timeout_s=request_timeout_s, api_key=api_key
         )
         self._intent_log = intent_log or IntentExpressionLog(resolve(intent_log_path))
+        self._stored_system_digests: set[str] = set()
         self._model_id = model_id
         self._think = think
         self._temperature = float(temperature)
+        # The individuation probe's own decoding temperature, set by its runtime;
+        # the voice's temperature never reaches the probe.
+        self._probe_temperature = 0.0
         self._max_tokens = int(max_tokens)
-        # The conscious workspace conditions every generation. Lingua caches the
+        # Workspace access conditions every generation. Lingua caches the
         # latest broadcast it observed (via _snapshot_cache_loop) and renders it
-        # into the prompt at speak/think time — the rolling-latest pattern
+        # into the prompt at speak/think time - the rolling-latest pattern
         # vox uses for thymos.state. The assembler builds (system, prompt)
         # from the persona + that working memory + the triggering input.
         self._assembler = assembler or ContextAssembler(
@@ -301,12 +307,12 @@ class Lingua(BaseModule):
                     pass
 
     async def _snapshot_cache_loop(self) -> None:
-        """Passively cache the latest conscious coalition for prompt assembly.
+        """Passively cache the latest accessed coalition for prompt assembly.
 
-        This NEVER acts — Lingua stays intent-driven, speaking only via volition
+        This NEVER acts - Lingua stays intent-driven, speaking only via volition
         intents. It is deliberately separate from ``on_workspace`` (which stays
         the BaseModule no-op) so Lingua introduces no reflexive workspace
-        trigger; this loop just remembers what was conscious so a later ``speak``
+        trigger; this loop just remembers what was accessed so a later ``speak``
         / ``think`` intent can be conditioned on it.
         """
         while not self._stopped.is_set():
@@ -320,8 +326,9 @@ class Lingua(BaseModule):
                         log.debug("lingua snapshot cache decode failed", exc_info=True)
                         continue
                     # Only cache non-inhibited coalitions: the entity speaks from
-                    # what it was consciously, non-inhibitedly aware of.
-                    if not snap.inhibited:
+                    # what was accessed and not inhibited.
+                    # An empty pooled broadcast is not inhibited but has nothing to speak from.
+                    if not snap.inhibited and snap.selected_events:
                         self._latest_snapshot = snap
             except asyncio.CancelledError:
                 raise
@@ -425,11 +432,22 @@ class Lingua(BaseModule):
             return False
         return True
 
+    def set_probe_temperature(self, value: float) -> None:
+        """Set the probe's fixed decoding temperature."""
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value < 0
+        ):
+            raise ValueError("probe temperature must be a finite number >= 0")
+        self._probe_temperature = float(value)
+
     def probe_conditions(self) -> dict[str, Any]:
         """The fixed generation conditions of the individuation probe (no content)."""
         return {
             "model_id": self._model_id,
-            "temperature": self._temperature,
+            "temperature": self._probe_temperature,
             "think": self._think,
             "persona_digest": self._persona_digest,
             "persona_template_version": PERSONA_TEMPLATE_VERSION,
@@ -449,7 +467,7 @@ class Lingua(BaseModule):
             prompt=ctx.prompt,
             model=self._model_id,
             system=ctx.system,
-            temperature=self._temperature,
+            temperature=self._probe_temperature,
             max_tokens=int(max_tokens),
             think=self._think,
             seed=int(seed),
@@ -466,7 +484,7 @@ class Lingua(BaseModule):
         about_kind: Optional[str] = None,
     ) -> str:
         # `about` is the triggering input (a user utterance for external speech);
-        # the LLM prompt is assembled from it plus the conscious workspace.
+        # the LLM prompt is assembled from it plus workspace access.
         return await self._produce(
             about=about,
             snapshot=snapshot,
@@ -719,7 +737,7 @@ class Lingua(BaseModule):
         about_kind: Optional[str] = None,
     ) -> str:
         # Use the explicitly-passed snapshot (tests/direct callers) if given,
-        # else the rolling-latest conscious coalition.
+        # else the rolling-latest accessed coalition.
         snap = snapshot if snapshot is not None else self._latest_snapshot
 
         def _iter_field_values(value, fields):
@@ -803,7 +821,15 @@ class Lingua(BaseModule):
             log.warning("heard speech placeholder applied to residual text in log")
 
         record_id = uuid.uuid4().hex
-        system_digest = hashlib.sha256(ctx.system.encode("utf-8")).hexdigest()
+        system_digest = digest_of(ctx.system)
+        try:
+            store_dir = store_dir_for(self._intent_log.path)
+            if system_digest not in self._stored_system_digests:
+                write_system_prompt(store_dir, ctx.system)
+                self._stored_system_digests.add(system_digest)
+        except Exception:
+            log.exception("system prompt store failed")
+
         try:
             self._intent_log.append(
                 mode=mode,

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """The Audition factory."""
@@ -14,8 +14,10 @@ from kaine.boot.common import _check_injections
 from kaine.boot.errors import ConfigurationError, _require_keys
 from kaine.boot.perception_feed import _build_perception_feed_audio_factory
 from kaine.bus.client import AsyncBus
+from kaine.entity_clock import EntityClock
 from kaine.hardware import resolve_device
 from kaine.modules.base import BaseModule
+from kaine.modules.positive_control import PositiveControlSettings
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +47,7 @@ def make_audition(
     section: dict[str, Any],
     *,
     injections: Optional[Mapping[str, Any]] = None,
+    entity_clock: Optional[EntityClock] = None,
 ) -> BaseModule:
     from kaine.modules.audition.acoustic import ACOUSTIC_ENCODERS, build_acoustic_encoder
     from kaine.modules.audition.live import LiveMicConfig
@@ -86,6 +89,8 @@ def make_audition(
         # existing speech pipeline is unchanged. See the block below.
         "general_audition",
         "transcription_enabled",
+        # The tone rule, categorical by default, error_ratio in the tone variant of the planned test.
+        "tone_rule",
         "arousal_window_min",
         "arousal_window_max",
         "acoustic_change_alert_threshold",
@@ -99,6 +104,7 @@ def make_audition(
         "perception_feed",
     }
     feed_section = dict(section.pop("perception_feed", {}) or {})
+    pc_section = section.pop("positive_control", None)
     _require_keys(section, allowed - {"perception_feed"})
     base_keys = {
         "speaches_url",
@@ -110,6 +116,9 @@ def make_audition(
         "alert_salience",
     }
     kwargs: dict[str, Any] = {k: section[k] for k in base_keys if k in section}
+    kwargs["positive_control"] = PositiveControlSettings.from_config(pc_section)
+    if entity_clock is not None:
+        kwargs["entity_clock"] = entity_clock
     kwargs["capture_enabled"] = bool(section.get("capture_enabled", False))
 
     # Unified deterministic perception-feed selection (unified-perception-feed).
@@ -162,6 +171,8 @@ def make_audition(
             kwargs[k] = int(section[k])
     if "prosody_enabled" in section:
         kwargs["prosody_enabled"] = bool(section["prosody_enabled"])
+    if "tone_rule" in section:
+        kwargs["tone_rule"] = str(section["tone_rule"])
 
     # General auditory perception (auditory-perception). When on, every captured
     # window is perceived as sound and speech-to-text runs only on detected

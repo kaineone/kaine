@@ -1,10 +1,10 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Shared-seed suite orchestrator — the eight experiments under ONE seed.
+"""Shared-seed suite orchestrator: the eight experiments under ONE seed.
 
-The paper frames "one shared seed" across the experiments; this is the single entry
-point that delivers it. From one master seed it derives an independent-but-
+The paper frames "one shared seed" across the experiments; this is the single
+entry point that delivers it. From one master seed it derives an independent-but-
 reproducible child seed per experiment via ``numpy.random.SeedSequence.spawn``
 (cleaner than a single global for independent streams that must each stay
 reproducible), threads that child seed into every experiment — INCLUDING the
@@ -21,19 +21,25 @@ The seven experiments (docs/18-verification.md):
   5. self-model accuracy (fixed-threshold scorer battery);
   6. multi-seed stability (the longitudinal control's machinery, run offline);
   7. enforcement red-team (the real enforcement layer vs a case battery);
-  8. workspace-mediation ablation (competitive workspace vs flat fan-in — the
-     paper's primary experiment; the second p-value producer via a sign test over
-     per-seed coupling deltas).
+  8. workspace-mediation development harness (a reduced pair, Soma and Topos,
+     with the workspace on against a pooled arm, measured by information gain;
+     development tooling that does not test the thesis; the second p-value
+     producer via the WIN sign test over per-seed dIG).
 
 Family-wise correction
 ----------------------
 Across the p-value-producing experiments the orchestrator applies the
-Holm-Bonferroni correction (FWER control — see ``kaine.experiment.
+Holm-Bonferroni correction (FWER control: see ``kaine.experiment.
 multiple_comparisons``) at the suite level and reports raw p, Holm-corrected p,
 and the reject/no-reject decision under a stated alpha. The active-inference
 benchmark contributes one p-value per task; an optional individuation run (folded
 in by the caller) contributes its permutation p-value. The correction is a
 family-wise VIEW; each experiment's own raw verdict is preserved unchanged.
+
+The family is fixed before the run. An experiment whose verdict is NOT_EXERCISED
+ran no test; it stays in the family with a p-value of 1, so the family does not
+shrink once outcomes are known, and the report lists it under ``not_exercised``.
+Its own verdict stays NOT_EXERCISED.
 
 GPU/cuDNN determinism (opt-in) is requested once at the top of the run via
 ``set_global_seed(master_seed, deterministic=True)`` — the offline/deterministic
@@ -87,7 +93,7 @@ from kaine.evaluation.benchmarks.workspace_mediation_ablation.runner import (
     run_ablation as run_workspace_mediation,
 )
 from kaine.evaluation.benchmarks.workspace_mediation_ablation.stimulus import (
-    SOMA_SALIENT_STIMULUS,
+    COUPLED_STIMULUS,
 )
 from kaine.evaluation.redteam.harness import run_suite as run_redteam
 from kaine.experiment.multiple_comparisons import holm_report
@@ -130,12 +136,12 @@ class SuiteConfig:
     oscillatory_ticks: int = 16
     stability_seeds: tuple[int, ...] = (0, 1, 2)
     stability_tolerance: float = 0.05
-    # Workspace-mediation sizing. The per-seed coupling deltas form the
-    # distribution the sign-test p-value (the family contribution) is computed on,
-    # so several seeds are needed for a meaningful test.
-    mediation_ticks: int = 24
+    # Workspace-mediation development harness sizing. The per-seed dIG values
+    # enter the two sign tests, so several seeds are needed for a meaningful test.
+    mediation_ticks: int = 160
+    mediation_warmup_ticks: int = 40
     mediation_seeds: tuple[int, ...] = (0, 1, 2, 3, 4)
-    mediation_min_effect: float = 0.15
+    mediation_min_effect: float = 0.05
 
     @classmethod
     def fast(cls, seed: int = 1234, **kw: Any) -> "SuiteConfig":
@@ -148,7 +154,8 @@ class SuiteConfig:
             ai_tasks=("exploitation",),
             oscillatory_ticks=12,
             stability_seeds=(0, 1),
-            mediation_ticks=16,
+            mediation_ticks=60,
+            mediation_warmup_ticks=20,
             mediation_seeds=(0, 1, 2),
             **kw,
         )
@@ -203,59 +210,84 @@ def _stability_verdict(report: Any) -> dict[str, Any]:
     ).to_dict()
 
 
-def _mediation_aggregate_verdict(
-    deltas: list[Any], pvalue: float, config: SuiteConfig
-) -> Verdict:
-    """Aggregate the multi-seed coupling deltas into a WIN / NULL / NEGATIVE verdict.
+def _mediation_aggregate_verdict(digs: list[Any], config: SuiteConfig) -> Verdict:
+    """Aggregate the multi-seed dIG values into a WIN / NULL / NEGATIVE / NOT_EXERCISED verdict.
 
-    WIN requires BOTH a mean delta above ``mediation_min_effect`` AND a
-    sign-test p-value significant at the family alpha — competitive mediation
-    increases coupling, and does so consistently across seeds, not by luck on one.
-    A mean delta at or below ``-min_effect`` is NEGATIVE (adverse). Otherwise NULL
-    (the fan-in prompt-assembler outcome). Undefined everywhere -> underpowered.
+    The two one-sided exact sign tests of paper Appendix A.8 are applied to the
+    per-seed dIG, with the non-strict rule p <= alpha of Appendix A.8, the same
+    rule the Holm step applies. A None or non-finite entry marks a seed that was
+    not exercised; such seeds are left out of the tests.
     """
-    defined = [float(d) for d in deltas if d is not None]
+    harness = (
+        "Development harness: a reduced pair against a pooled arm only; "
+        "it does not test the thesis."
+    )
+
+    defined: list[float] = []
+    for d in digs:
+        if d is None:
+            continue
+        try:
+            f = float(d)
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(f):
+            defined.append(f)
+
     if not defined:
         return Verdict(
-            outcome=Outcome.NULL,
-            detail="UNDERPOWERED — coupling undefined across all seeds",
-            metrics={"underpowered": True, "n_seeds": len(deltas), "pvalue": pvalue},
+            outcome=Outcome.NOT_EXERCISED,
+            detail=f"no seed was exercised. {harness}",
+            metrics={
+                "n_seeds": len(digs),
+                "n_exercised": 0,
+                "n_not_exercised": len(digs),
+                "pvalue": None,
+                "pvalue_negative": None,
+            },
         )
-    mean_delta = sum(defined) / len(defined)
+
+    theta = config.mediation_min_effect
+    pvalue = sign_test_pvalue([d - theta for d in defined])
+    pvalue_negative = sign_test_pvalue([-theta - d for d in defined])
+    mean_dig = sum(defined) / len(defined)
     metrics = {
-        "mean_coupling_delta": mean_delta,
+        "mean_dig": mean_dig,
         "pvalue": pvalue,
-        "n_seeds": len(deltas),
-        "n_defined": len(defined),
-        "min_effect": config.mediation_min_effect,
+        "pvalue_negative": pvalue_negative,
+        "n_seeds": len(digs),
+        "n_exercised": len(defined),
+        "n_not_exercised": len(digs) - len(defined),
+        "min_effect": theta,
         "alpha": config.alpha,
     }
-    if mean_delta >= config.mediation_min_effect and pvalue <= config.alpha:
+
+    if pvalue <= config.alpha:
         return Verdict(
             outcome=Outcome.WIN,
             detail=(
-                f"competitive mediation increases cross-module coupling "
-                f"(mean delta {mean_delta:.3f} >= {config.mediation_min_effect}, "
-                f"sign-test p={pvalue:.4f} <= {config.alpha}) — does work flat "
-                "fan-in does not"
+                f"competitive selection gives a higher information gain than pooling "
+                f"across seeds (WIN sign test p={pvalue:.4f} <= {config.alpha}). "
+                f"{harness}"
             ),
             metrics=metrics,
         )
-    if mean_delta <= -config.mediation_min_effect:
+    if pvalue_negative <= config.alpha:
         return Verdict(
             outcome=Outcome.NEGATIVE,
             detail=(
-                f"competitive mediation REDUCES coupling (mean delta {mean_delta:.3f} "
-                f"<= -{config.mediation_min_effect}) — adverse to the thesis"
+                f"pooling gives a higher information gain than competitive selection "
+                f"across seeds (NEGATIVE sign test p={pvalue_negative:.4f} <= "
+                f"{config.alpha}). {harness}"
             ),
             metrics=metrics,
         )
     return Verdict(
         outcome=Outcome.NULL,
         detail=(
-            f"competitive mediation makes no consistent, significant change to "
-            f"coupling (mean delta {mean_delta:.3f}, sign-test p={pvalue:.4f}) — "
-            "the fan-in prompt-assembler outcome"
+            f"no consistent difference in information gain across seeds "
+            f"(WIN p={pvalue:.4f}, NEGATIVE p={pvalue_negative:.4f}, "
+            f"mean dIG {mean_dig:.4f}). {harness}"
         ),
         metrics=metrics,
     )
@@ -266,27 +298,31 @@ def _run_workspace_mediation(
 ) -> dict[str, Any]:
     """Run the mediation ablation across seeds; return verdict + family p-value.
 
-    The primary measure (``coupling_delta``) is collected per seed; the family
-    contribution is the sign-test p-value that its median is > 0 (a significant,
-    consistent increase in coupling). The displayed verdict is the multi-seed
-    aggregate.
+    Per seed, the dIG is kept only when the comparison was exercised. Seeds that
+    were not exercised contribute None, even if their dIG happened to be defined.
+    The family contribution is the WIN sign-test p-value when at least one seed
+    was exercised, otherwise None, which the family view enters as p = 1.
     """
-    deltas: list[Any] = []
+    digs: list[Any] = []
     for s in config.mediation_seeds:
         res = asyncio.run(
             run_workspace_mediation(
                 MediationConfig(
                     seed=base_seed + int(s),
                     ticks=config.mediation_ticks,
+                    warmup_ticks=config.mediation_warmup_ticks,
                     min_effect=config.mediation_min_effect,
                 ),
-                stimulus=SOMA_SALIENT_STIMULUS,
+                stimulus=COUPLED_STIMULUS,
             )
         )
-        deltas.append(res["effect"]["coupling_delta"])
-    pvalue = sign_test_pvalue(deltas)
-    verdict = _mediation_aggregate_verdict(deltas, pvalue, config)
-    return {"verdict": verdict.to_dict(), "pvalue": pvalue, "deltas": deltas}
+        if res["effect"]["not_exercised"]:
+            digs.append(None)
+        else:
+            digs.append(res["effect"]["dig"])
+    verdict = _mediation_aggregate_verdict(digs, config)
+    pvalue = None if verdict.outcome is Outcome.NOT_EXERCISED else float(verdict.metrics["pvalue"])
+    return {"verdict": verdict.to_dict(), "pvalue": pvalue, "digs": digs}
 
 
 def _redteam_verdict(results: list[Any]) -> dict[str, Any]:
@@ -303,6 +339,32 @@ def _redteam_verdict(results: list[Any]) -> dict[str, Any]:
         ),
         metrics={"cases": total, "passed": passed, "failures": failures},
     ).to_dict()
+
+
+def _family_wise(family_pvalues: dict[str, Optional[float]], alpha: float) -> dict[str, Any]:
+    """Apply Holm-Bonferroni across the fixed family of experiments.
+
+    A None p-value marks a NOT_EXERCISED experiment, which ran no test; it
+    stays in the family with p = 1 because the family is fixed before the runs
+    and must not shrink once outcomes are known (Holm 1979; paper section 6.6);
+    its own verdict stays NOT_EXERCISED. The returned report is ``holm_report``
+    over the full family, plus the key ``not_exercised``: the list of names with
+    a None p-value, in input order.
+    """
+    not_exercised_names: list[str] = []
+    full_family: dict[str, float] = {}
+    for name, p in family_pvalues.items():
+        if p is None:
+            not_exercised_names.append(name)
+            full_family[name] = 1.0
+        else:
+            full_family[name] = p
+    report = holm_report(full_family, alpha=alpha)
+    not_exercised_set = set(not_exercised_names)
+    for c in report["comparisons"]:
+        c["not_exercised"] = c["name"] in not_exercised_set
+    report["not_exercised"] = not_exercised_names
+    return report
 
 
 def run_suite(
@@ -330,7 +392,7 @@ def run_suite(
     }
 
     experiments: dict[str, dict[str, Any]] = {}
-    family_pvalues: dict[str, float] = {}
+    family_pvalues: dict[str, Optional[float]] = {}
 
     # 1. Active-inference (the p-value producer).
     ai = _run_active_inference(config, derived["active_inference"])
@@ -372,20 +434,28 @@ def run_suite(
         rt_results = asyncio.run(run_redteam(work_dir))
     experiments["enforcement_red_team"] = {"verdict": _redteam_verdict(rt_results)}
 
-    # 8. Workspace-mediation ablation — the paper's primary experiment and the
-    # second family-wise p-value producer (sign-test over per-seed coupling deltas).
+    # 8. Workspace-mediation development harness, the second family-wise p-value
+    # contributor (the WIN sign test over per-seed dIG). When it is not exercised
+    # it enters the family with p = 1 and is listed as not_exercised. It does not
+    # test the thesis.
     wm = _run_workspace_mediation(config, derived["workspace_mediation"])
     experiments["workspace_mediation"] = {"verdict": wm["verdict"]}
     family_pvalues["workspace_mediation"] = wm["pvalue"]
 
-    # Optional individuation p-value into the family.
+    # Optional individuation p-value into the family; a NOT_EXERCISED result enters it with p = 1.
     if individuation is not None:
-        family_pvalues["individuation"] = float(individuation["report"]["p_value"])
+        ind_verdict = individuation["verdict"]
+        ind_p = (
+            None
+            if ind_verdict.outcome is Outcome.NOT_EXERCISED
+            else float(individuation["report"]["p_value"])
+        )
+        family_pvalues["individuation"] = ind_p
         experiments["individuation"] = {
-            "verdict": _verdict_dict(individuation["verdict"])
+            "verdict": _verdict_dict(ind_verdict)
         }
 
-    family_wise = holm_report(family_pvalues, alpha=config.alpha)
+    family_wise = _family_wise(family_pvalues, alpha=config.alpha)
 
     report = {
         "ts": datetime.now(timezone.utc).isoformat(),
@@ -412,13 +482,13 @@ def format_suite_report(report: dict[str, Any]) -> str:
         f"deterministic={report['deterministic']}"
     )
     lines.append("")
-    lines.append(f"{'experiment':<24} {'verdict':<10} detail")
+    lines.append(f"{'experiment':<24} {'verdict':<14} detail")
     lines.append("-" * 66)
     for name, v in report["experiments"].items():
         detail = v.get("detail", "")
         if len(detail) > 60:
             detail = detail[:57] + "..."
-        lines.append(f"{name:<24} {v['outcome']:<10} {detail}")
+        lines.append(f"{name:<24} {v['outcome']:<14} {detail}")
     lines.append("-" * 66)
     fw = report["family_wise"]
     lines.append(
@@ -428,10 +498,15 @@ def format_suite_report(report: dict[str, Any]) -> str:
     if fw["n"] == 0:
         lines.append("  (no p-value-producing experiments in this run)")
     for c in fw["comparisons"]:
+        suffix = (
+            " (NOT EXERCISED: no test ran; in the family at p = 1)"
+            if c.get("not_exercised")
+            else ""
+        )
         decision = "REJECT H0 (significant)" if c["reject"] else "fail to reject"
         lines.append(
             f"  {c['name']:<28} raw_p={c['raw_p']:.4f} holm_p={c['holm_p']:.4f} "
-            f"-> {decision}"
+            f"-> {decision}{suffix}"
         )
     lines.append(
         f"  any significant after correction: {fw['any_significant']}"

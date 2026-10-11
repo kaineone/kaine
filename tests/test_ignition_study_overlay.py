@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from __future__ import annotations
@@ -257,6 +257,30 @@ def test_overlay_self_rhythm_overrides_operator_false(repo, plan):
         # Study settings win over the operator's own file on every step.
         assert overlay["soma"]["self_rhythm_enabled"] is True
         assert overlay["developmental_stage"]["require_operator_ack_for_birth"] is False
+
+
+def test_overlay_pins_greedy_decoding_and_competitive_arm(repo, plan):
+    op = repo / "config" / "kaine.operator.toml"
+    op.write_text(
+        "[lingua]\n"
+        "temperature = 0.7\n"
+        'model_id = "organ"\n'
+        "[syneidesis]\n"
+        'arm = "pooled"\n'
+    )
+    for line, kind, k in [
+        ("gestation", "gestation", 0),
+        ("branch", "viewing", 1),
+        ("repeat", "viewing", 0),
+        ("accumulate", "viewing", 2),
+    ]:
+        overlay, _, _ = build_overlay(
+            plan, line, kind, k, repo, repo / "config" / "kaine.toml", op,
+        )
+        # Study overlay keeps greedy decoding and the competitive arm on every step.
+        assert overlay["lingua"]["temperature"] == 0.0
+        assert overlay["lingua"]["model_id"] == "organ"
+        assert overlay["syneidesis"]["arm"] == "competitive"
 
 
 _RECORDING_STEPS = [

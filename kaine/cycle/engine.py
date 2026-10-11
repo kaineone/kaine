@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from kaine.bus.client import AsyncBus
-from kaine.bus.schema import Event
+from kaine.bus.schema import Event, entry_id_sort_key, stream_entry_key
 from kaine.cycle.protocols import (
     CycleHook,
     ModuleRegistryProtocol,
@@ -122,7 +122,7 @@ class CognitiveCycle:
         # logical period can never diverge.
         self._target_tick_period = 1.0 / self._processing_rate
         self._experiential_rate = float(experiential_rate_hz or processing_rate_hz)
-        # Adaptive conscious access (adaptive-access-rate). The configured
+        # Adaptive access (adaptive-access-rate). The configured
         # experiential rate is the RESTING rate; when a controller is wired the
         # rate used for promotion is recomputed every tick from arousal and the
         # salience of module reports, between the resting rate and the
@@ -212,6 +212,10 @@ class CognitiveCycle:
         # finished pauses and the start of the current one, if any.
         self._paused_total = 0.0
         self._paused_at: float | None = None
+        # Time not awake: the union of frozen and Hypnos-sleep spans (awake time excludes both).
+        self._sleep_source: Optional[Callable[[], bool]] = None
+        self._unawake_total = 0.0
+        self._unawake_since: float | None = None
         self._stopped = False
         self.hooks = CycleHooks()
 
@@ -437,6 +441,7 @@ class CognitiveCycle:
         await self.hooks.fire("pause")
         self._paused.clear()
         self._paused_at = self._entity_clock.now()
+        self._refresh_unawake()
 
     async def resume(self) -> None:
         if self._paused.is_set():
@@ -448,6 +453,7 @@ class CognitiveCycle:
             self._paused_at = None
         self._paused.set()
         await self.hooks.fire("resume")
+        self._refresh_unawake()
 
     def paused_subjective_seconds(self) -> float:
         """Return subjective seconds spent paused, including a pause in progress.
@@ -460,12 +466,47 @@ class CognitiveCycle:
             total += max(0.0, self._entity_clock.now() - self._paused_at)
         return total
 
+    def set_sleep_source(self, source: Optional[Callable[[], bool]]) -> None:
+        """Set the callable that reports whether Hypnos is asleep (None: never asleep)."""
+        self._sleep_source = source
+
+    @property
+    def is_asleep(self) -> bool:
+        if self._sleep_source is None:
+            return False
+        try:
+            return bool(self._sleep_source())
+        except Exception:  # pragma: no cover - defensive
+            log.debug("sleep_source raised; treating as awake", exc_info=True)
+            return False
+
+    def _refresh_unawake(self) -> None:
+        now = self._entity_clock.now()
+        excluded = self.is_paused or self.is_asleep
+        if excluded and self._unawake_since is None:
+            self._unawake_since = now
+        elif not excluded and self._unawake_since is not None:
+            self._unawake_total += max(0.0, now - self._unawake_since)
+            self._unawake_since = None
+
+    def unawake_subjective_seconds(self) -> float:
+        """Subjective seconds not awake (frozen or asleep, counted once), including a span in progress.
+
+        Awake-time readers subtract this.
+        """
+        self._refresh_unawake()
+        total = self._unawake_total
+        if self._unawake_since is not None:
+            total += max(0.0, self._entity_clock.now() - self._unawake_since)
+        return total
+
     async def shutdown(self) -> None:
         self._stopped = True
         self._paused.set()
         await self.hooks.fire("shutdown")
 
     async def tick(self) -> TickResult:
+        self._refresh_unawake()
         # REAL target budget for this tick. The processing rate is subjective-Hz;
         # the real seconds the tick may take before it overruns is the
         # EntityClock period = 1 / (rate * time_scale). At time_scale == 1.0 this
@@ -482,6 +523,7 @@ class CognitiveCycle:
         start = self._entity_clock.wall()
 
         events: list[tuple[str, Event]] = []
+        gathered: list[tuple[str, str, Event]] = []
         modules_seen = 0
         error = False
         error_message: Optional[str] = None
@@ -516,20 +558,38 @@ class CognitiveCycle:
                 if not entries:
                     continue
                 modules_seen += 1
-                events.extend(entries)
+                for entry_id, event in entries:
+                    gathered.append((stream, entry_id, event))
 
-        # Canonical within-tick event ordering. Sort the gathered events by a
-        # total deterministic key (source, type, entry_id) before selection so
-        # tie-breaks resolve identically regardless of async gather / stream
-        # declaration order. Applied unconditionally (not gated to deterministic
-        # mode): production and deterministic runs share one ordering rule, so
-        # the oscillatory ablation's "only the layer differs" claim is airtight.
-        # The selection score sort is stable, so this only pins the equal-score
-        # tie-break input; for the already-ordered common case it is a no-op.
-        # entry_id is the unique bus stream id (the first tuple element). A 0- or
-        # 1-event tick is already ordered, so skip the sort call entirely.
-        if len(events) > 1:
-            events.sort(key=lambda item: (item[1].source, item[1].type, item[0]))
+        # Canonical within-tick event ordering. Sort the gathered candidates by a total
+        # deterministic key (source, type, bus entry id, stream) before selection so
+        # tie-breaks resolve identically regardless of async gather / stream declaration
+        # order. The bus entry id is compared as the number pair (ms, seq), which is
+        # arrival order within a stream (paper A.1); compared as text, x-10 would sort
+        # before x-2. The stream is a final tie-break only. After sorting, each candidate
+        # is named "<stream>:<entry_id>" because a bus entry id is unique only within its
+        # stream (two streams can issue the same id in the same millisecond); that makes
+        # the id unique across the tick's batch and the score table keeps one score per
+        # candidate (paper A.1). Applied unconditionally (not gated to deterministic
+        # mode): production and deterministic runs share one ordering rule, so the
+        # oscillatory ablation's "only the layer differs" claim is airtight. The selection
+        # score sort is stable, so this only pins the equal-score tie-break input; for the
+        # already-ordered common case it is a no-op. A 0- or 1-event tick is already
+        # ordered, so skip the sort call entirely.
+        if len(gathered) > 1:
+            gathered.sort(
+                key=lambda item: (
+                    item[2].source,
+                    item[2].type,
+                    entry_id_sort_key(item[1]),
+                    item[0],
+                )
+            )
+
+        events = [
+            (stream_entry_key(stream, entry_id), event)
+            for stream, entry_id, event in gathered
+        ]
 
         # Refresh the affect/drive snapshot the live salience factors read, from
         # the canonically-ordered batch above (so which thymos.state "wins" a
@@ -1119,6 +1179,7 @@ class CognitiveCycle:
             "inhibited": snapshot.inhibited,
             "is_experiential": is_experiential,
             "time_scale": self._entity_clock.scale,
+            "published_at": self._entity_clock.now(),
             "salience_scores": dict(snapshot.salience_scores),
             "metadata": dict(snapshot.metadata),
             "selected": [

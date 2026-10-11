@@ -1,9 +1,10 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from __future__ import annotations
 
 import logging
+import random
 from typing import Any
 
 from kaine.bus.schema import Event
@@ -13,15 +14,35 @@ from kaine.workspace.strategies import SalienceStrategy
 
 log = logging.getLogger(__name__)
 
+# Arms of the planned workspace-mediation test (paper §6.3 and A.8).
+ARMS: tuple[str, ...] = ("competitive", "matched", "pooled")
+
+
+def _require_unique_ids(events: list[tuple[str, Event]]) -> None:
+    """Refuse a repeated candidate id.
+
+    The score table holds one score per candidate (paper A.1), so a repeated
+    id would overwrite a score.
+    """
+    seen: set[str] = set()
+    for entry_id, _ in events:
+        if entry_id in seen:
+            raise ValueError(f"duplicate candidate id {entry_id!r}")
+        seen.add(entry_id)
+
 
 class Syneidesis:
     """Global workspace selection per `docs/kaine-paper.md` §2.3.
 
-    Each tick the cycle hands `select` a list of `(entry_id, Event)` and a
-    context dict. `select` scores every event via the configured
-    `SalienceStrategy`, picks the top-k by score, composes a
+    Each tick the cycle hands `select` a list of `(entry_id, Event)`, whose
+    ids are the cycle's stream-qualified keys `<stream>:<entry_id>`, unique
+    within the tick, and a context dict. `select` scores every event via the
+    configured `SalienceStrategy`, picks the top-k by score, composes a
     `WorkspaceSnapshot`, and flags executive inhibition when the top
     score is below `publication_threshold`.
+
+    The constructor selects an experimental arm: "competitive" (default),
+    "matched", or "pooled". They are described in paper A.8.
     """
 
     def __init__(
@@ -31,11 +52,19 @@ class Syneidesis:
         top_k: int = 5,
         publication_threshold: float = 0.35,
         coherence: CoherenceScorer | None = None,
+        arm: str = "competitive",
+        arm_seed: int | None = None,
     ) -> None:
         if top_k <= 0:
             raise ValueError("top_k must be positive")
         if not 0.0 <= publication_threshold <= 1.0:
             raise ValueError("publication_threshold must be in [0, 1]")
+        if arm not in ARMS:
+            raise ValueError(f"unknown workspace arm {arm!r}; expected one of {', '.join(ARMS)}")
+        if arm != "competitive" and coherence is not None:
+            raise ValueError("the matched and pooled arms run with the coherence layer off")
+        if arm == "matched" and arm_seed is None:
+            raise ValueError("the matched arm needs a seed")
         self._strategy = strategy
         self._top_k = top_k
         self._threshold = publication_threshold
@@ -43,6 +72,10 @@ class Syneidesis:
         # disabled and selection is bit-for-bit the pre-change behavior; the
         # coherence branch below is never entered.
         self._coherence = coherence
+        self._arm = arm
+        # A string seed keeps the matched-arm draw independent of the global
+        # random stream that the run seed also pins.
+        self._rng = random.Random(f"matched-coalition:{int(arm_seed)}") if arm == "matched" else None
 
     @property
     def top_k(self) -> int:
@@ -51,6 +84,10 @@ class Syneidesis:
     @property
     def publication_threshold(self) -> float:
         return self._threshold
+
+    @property
+    def arm(self) -> str:
+        return self._arm
 
     def set_top_k(self, k: int) -> None:
         if k <= 0:
@@ -67,7 +104,15 @@ class Syneidesis:
         events: list[tuple[str, Event]],
         context: dict[str, Any],
     ) -> WorkspaceSnapshot:
+        _require_unique_ids(events)
         tick_index = int(context.get("tick_index", 0))
+        if self._arm == "pooled":
+            return self._pooled(tick_index, events)
+        if self._arm == "matched" and "is_experiential" not in context:
+            raise ValueError(
+                "the matched arm draws only on broadcast ticks, so the context "
+                "must say whether this is one (is_experiential)"
+            )
         if not events:
             # Observe phases even with no events so windows stay aligned, then
             # return the empty inhibited snapshot (no coherence to report).
@@ -80,6 +125,7 @@ class Syneidesis:
                 selected_events=[],
                 inhibited=True,
                 salience_scores={},
+                metadata={"arm": self._arm, "coalition_capacity": self._top_k},
             )
 
         scored: list[tuple[float, str, Event]] = []
@@ -119,7 +165,13 @@ class Syneidesis:
             # snapshot metadata so the sidecar coherence_observer can read it.
             metadata["coherence"] = self._coherence.plv(cohort)
 
-        return self._compose(tick_index, scored, scores, metadata)
+        return self._compose(
+            tick_index,
+            scored,
+            scores,
+            metadata,
+            draw=bool(context.get("is_experiential", False)),
+        )
 
     def _compose(
         self,
@@ -127,19 +179,40 @@ class Syneidesis:
         scored: list[tuple[float, str, Event]],
         scores: dict[str, float],
         metadata: dict[str, Any],
+        *,
+        draw: bool = False,
     ) -> WorkspaceSnapshot:
         """Sort the scored candidates, take the top-k, flag inhibition, compose.
 
         The single canonical tail shared by :meth:`select` and :meth:`select_dual`
-        so the two never drift.
+        so the two never drift. The `draw` flag requests the matched arm's
+        uniform random draw on broadcast ticks.
         """
-        ranked = sorted(scored, key=lambda item: item[0], reverse=True)
-        top = ranked[: self._top_k]
-        top_score = top[0][0] if top else 0.0
+        if self._arm == "matched" and draw:
+            # Uniform random draw of the coalition for the matched arm (paper A.8).
+            picks = self._rng.sample(range(len(scored)), min(self._top_k, len(scored)))
+            top = sorted(
+                (scored[i] for i in sorted(picks)),
+                key=lambda item: item[0],
+                reverse=True,
+            )
+            inhibited = not any(value >= self._threshold for value, _, _ in top)
+        else:
+            ranked = sorted(scored, key=lambda item: item[0], reverse=True)
+            top = ranked[: self._top_k]
+            top_score = top[0][0] if top else 0.0
+            inhibited = top_score < self._threshold
+        # Modules need the threshold to decide which coalition members were accessed.
+        metadata = {
+            **metadata,
+            "access_threshold": self._threshold,
+            "arm": self._arm,
+            "coalition_capacity": self._top_k,
+        }
         return WorkspaceSnapshot(
             tick_index=tick_index,
             selected_events=[(entry_id, event) for (_, entry_id, event) in top],
-            inhibited=top_score < self._threshold,
+            inhibited=inhibited,
             salience_scores=scores,
             metadata=metadata,
         )
@@ -165,6 +238,7 @@ class Syneidesis:
         if self._coherence is None:
             return await self.select(events, context), None
 
+        _require_unique_ids(events)
         tick_index = int(context.get("tick_index", 0))
         if not events:
             # Mirror select()'s empty path: observe once to keep windows aligned,
@@ -178,12 +252,14 @@ class Syneidesis:
                     selected_events=[],
                     inhibited=True,
                     salience_scores={},
+                    metadata={"arm": self._arm, "coalition_capacity": self._top_k},
                 ),
                 WorkspaceSnapshot(
                     tick_index=tick_index,
                     selected_events=[],
                     inhibited=True,
                     salience_scores={},
+                    metadata={"arm": self._arm, "coalition_capacity": self._top_k},
                 ),
             )
 
@@ -222,6 +298,26 @@ class Syneidesis:
         )
         counterfactual = self._compose(tick_index, scored_raw, scores_off, {})
         return primary, counterfactual
+
+    def _pooled(
+        self,
+        tick_index: int,
+        events: list[tuple[str, Event]],
+    ) -> WorkspaceSnapshot:
+        """Compose a pooled-arm snapshot (paper A.8).
+
+        No candidate is scored, selected or gated: every candidate is a member,
+        the snapshot is never inhibited, and the score table carries intensities,
+        which Volition reads in place of scores. The metadata has no access
+        threshold, so every member enters the processors' context.
+        """
+        return WorkspaceSnapshot(
+            tick_index=tick_index,
+            selected_events=list(events),
+            inhibited=False,
+            salience_scores={entry_id: float(event.salience) for entry_id, event in events},
+            metadata={"arm": self._arm},
+        )
 
 
 def selection_delta(on: WorkspaceSnapshot, off: WorkspaceSnapshot) -> dict[str, Any]:

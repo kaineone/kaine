@@ -1,14 +1,16 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.2
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Adaptive conscious-access rate for the cognitive cycle.
+"""Adaptive access rate for the cognitive cycle.
 
-The experiential (conscious-access) rate is not fixed. It rests at the P3b
-rate (~3.33 Hz) and rises toward the 10 Hz processing rate when predictions
-fail or modules report something salient. This mirrors the locus
-coeruleus–noradrenaline (LC-NE) account of the P3b: LC-NE has a tonic mode
-that tracks arousal and a phasic mode triggered by salient or unexpected
-events, and phasic LC-NE bursts reset and re-engage cortical networks.
+The experiential (access) rate is not fixed. It rests at a provisional
+design value of about 3.33 Hz, below the 10 Hz processing rate, and rises
+toward the processing rate when modules report categorical alerts (payload
+``alert`` true). It is grounded in the locus coeruleus-noradrenaline (LC-NE)
+adaptive-gain account of arousal and salience (Aston-Jones & Cohen 2005):
+LC-NE has a tonic mode that tracks arousal and a phasic mode triggered by
+salient or unexpected events, and phasic LC-NE bursts reset and re-engage
+cortical networks.
 
 References
 ----------
@@ -20,10 +22,10 @@ References
   28(11), 574–582.
 - Nieuwenhuis, S., Aston-Jones, G., & Cohen, J. D. (2005). Decision making,
   the P3, and the locus coeruleus–norepinephrine system. Psychological
-  Bulletin, 131(4), 510–532.
+  Bulletin, 131(4), 510-532.
 
 The linear map from access drive to effective experiential rate is a
-deliberate modelling assumption, bounded below by the resting P3b rate and
+deliberate modelling assumption, bounded below by the resting access rate and
 above by the processing rate. The literature supports the direction and the
 bounds, not a measured dose-response curve.
 """
@@ -132,15 +134,20 @@ def phasic_input(max_salience: float | None, floor: float) -> float:
 
 
 def max_report_salience(events: Iterable[tuple[str, Event]]) -> float | None:
-    """Highest salience among module reports in ``events``.
+    """Highest intensity among module reports in ``events``.
 
-    Events whose source is ``cycle`` or ``syneidesis`` are ignored (the
-    cycle's own telemetry and the workspace's own broadcasts are not module
-    reports). Returns ``None`` when there are no qualifying reports.
+    Only events whose payload marks a categorical alert (``payload["alert"]``
+    is ``True``) are considered. Events whose source is ``cycle`` or
+    ``syneidesis`` are ignored (the cycle's own telemetry and the workspace's
+    own broadcasts are not module reports). Returns ``None`` when there are no
+    qualifying reports.
     """
     max_s: float | None = None
     for _entry_id, event in events:
         if event.source in EXCLUDED_SOURCES:
+            continue
+        payload = getattr(event, "payload", None) or {}
+        if not (isinstance(payload, dict) and payload.get("alert") is True):
             continue
         salience = getattr(event, "salience", None)
         if salience is None or not math.isfinite(salience):
