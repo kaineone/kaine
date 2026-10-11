@@ -41,7 +41,6 @@ def _event(source: str, type_: str, payload: dict[str, Any]) -> Event:
 def test_no_bus_read_calls_in_cursor_advancing_code() -> None:
     kaine_dir = Path(__file__).resolve().parent.parent / "kaine"
     exempt = {
-        kaine_dir / "evaluation" / "benchmarks" / "workspace_mediation_ablation" / "inject.py",
         kaine_dir / "nexus" / "__main__.py",
     }
     pattern = re.compile(r"\b_?bus\.read\(")
