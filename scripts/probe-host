@@ -6,12 +6,12 @@
 
 Reports total RAM, CPU architecture, accelerator presence, and whether the
 PyTorch runtime imports, then prints the RECOMMENDED tier and that tier's
-capability-matrix row. It recommends only — it never applies a profile or starts
+capability-matrix row. It recommends only: it never applies a tier or starts
 the entity (openspec host-probe). To act on the recommendation the operator
-selects the profile deliberately, e.g.::
+applies the tier deliberately, for one run or for every boot::
 
-    KAINE_PROFILE=tier1 python -m kaine.cycle
-    python -m kaine.cycle --profile tier1
+    KAINE_TIER=tier1 python -m kaine.cycle
+    # or set [deployment].tier = "tier1" in config/kaine.operator.toml
 
 Run: .venv/bin/python scripts/probe-host          # human-readable
      .venv/bin/python scripts/probe-host --json    # machine-readable
@@ -47,8 +47,9 @@ def _render_text(rec) -> str:  # noqa: ANN001
     lines.append(f"  degraded: {', '.join(caps['degraded']) or '—'}")
     lines.append(f"  absent  : {', '.join(caps['absent']) or '—'}")
     lines.append("")
-    lines.append("This is a recommendation only. To use it, select the profile")
-    lines.append(f"deliberately: KAINE_PROFILE={rec.profile} python -m kaine.cycle")
+    lines.append("This is a recommendation only. To use it, apply the tier")
+    lines.append(f"deliberately: KAINE_TIER={rec.profile} python -m kaine.cycle")
+    lines.append(f'or set [deployment].tier = "{rec.profile}" in config/kaine.operator.toml')
     return "\n".join(lines)
 
 
