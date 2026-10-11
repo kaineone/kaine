@@ -56,8 +56,9 @@ def _now_ms() -> float:
 class _SupportsMnemos(Protocol):
     """Mnemos module: memory consolidation, downscaling, and replay.
 
-    The window methods are optional on test fakes, and deep_consolidation
-    calls them only when present.
+    deep_consolidation also calls ``open_replay_window()`` and
+    ``close_replay_window()`` when the collaborator has them. The real Mnemos
+    does; test fakes need not, so they are not part of this protocol.
     """
 
     async def consolidate_now(self) -> int: ...
@@ -65,10 +66,6 @@ class _SupportsMnemos(Protocol):
     def downscale_activations(self, factor: float) -> int: ...
 
     async def replay_now(self) -> list[Any]: ...
-
-    def open_replay_window(self) -> None: ...
-
-    def close_replay_window(self) -> None: ...
 
 
 class _SupportsAffectiveReset(Protocol):
