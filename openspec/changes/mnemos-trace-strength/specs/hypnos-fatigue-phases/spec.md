@@ -3,10 +3,11 @@
 ### Requirement: Deep consolidation with global activation downscaling
 Hypnos phase 2 SHALL first replay traces of the wake just ended inside a replay
 window during which external perception is suspended, and SHALL then call
-Mnemos's `downscale` with the replayed traces as the protected set (paper
-A.10). The phase metadata SHALL record the downscaling summary: the traces
+Mnemos's `downscale` with the replayed traces as the protected set, which
+downscales and then prunes (paper A.10). The phase metadata SHALL record the downscaling summary: the traces
 stored since the previous sleep, the factor, the number protected, the number
-silent, and the total strength before and after. `downscale` SHALL run even
+pruned at the floor and for the budget, the total strength before and after
+the scaling, and the store size after pruning. `downscale` SHALL run even
 when replay fails, with nothing protected. `[hypnos.consolidation].downscale_factor`
 SHALL NOT be accepted.
 

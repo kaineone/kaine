@@ -21,7 +21,7 @@ from kaine.embedding_defaults import LEGACY_EMBEDDING_SPACE
 from kaine.entity_clock import EntityClock
 from kaine.memory_kinds import MNEMOS_COLLECTION_KINDS, stamp_key, strength_key
 from kaine.modules.mnemos.embeddings import Embedder
-from kaine.modules.mnemos.storage import MemoryStorage, RecalledMemory, StorageError
+from kaine.modules.mnemos.storage import MemoryStorage, RecalledMemory, StorageError, record_size
 from kaine.text_embedding import same_space
 
 log = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 DEFAULT_COLLECTIONS: tuple[str, str, str, str] = MNEMOS_COLLECTION_KINDS
 
 # Mnemos owns these payload keys (paper A.10); a caller's payload cannot set them.
-_RESERVED_PAYLOAD_KEYS: frozenset[str] = frozenset({"log_base", "born_sleep", "entity_time"})
+_RESERVED_PAYLOAD_KEYS: frozenset[str] = frozenset({"log_base", "born_sleep", "entity_time", "size_bytes"})
 
 
 @dataclass(frozen=True)
@@ -71,7 +71,8 @@ class MnemosCore:
         retrigger_hook: EmotionalRetriggerHook | None = None,
         clock: Callable[[], float] = time.time,
         retention_per_day: float = 0.82,
-        silence_floor: float = 0.01,
+        prune_floor: float = 0.01,
+        budget_bytes: int = 10 * 1024**3,
         traces_per_day: float = 288000.0,
         entity_clock: Callable[[], float] | None = None,
     ) -> None:
@@ -79,8 +80,10 @@ class MnemosCore:
             raise ValueError("short_term_capacity must be positive")
         if not (0.0 < retention_per_day < 1.0):
             raise ValueError("retention_per_day must be in (0, 1)")
-        if not (0.0 < silence_floor < 1.0):
-            raise ValueError("silence_floor must be in (0, 1)")
+        if not (0.0 < prune_floor < 1.0):
+            raise ValueError("prune_floor must be in (0, 1)")
+        if isinstance(budget_bytes, bool) or not isinstance(budget_bytes, int) or budget_bytes <= 0:
+            raise ValueError("budget_bytes must be a positive integer")
         if not (math.isfinite(traces_per_day) and traces_per_day > 0.0):
             raise ValueError("traces_per_day must be a positive finite number")
         self._embedder = embedder
@@ -94,14 +97,18 @@ class MnemosCore:
         self._hook = retrigger_hook or _noop_hook
         self._clock = clock
         self._retention_per_day = float(retention_per_day)
-        self._silence_floor = float(silence_floor)
+        self._prune_floor = float(prune_floor)
+        self._budget_bytes = int(budget_bytes)
         self._traces_per_day = float(traces_per_day)
         self._entity_clock = entity_clock or EntityClock().now
         # Trace-strength state (paper A.10). Values loaded from storage meta.
         self._log_gain = 0.0
         self._sleeps = 0
         self._total = 0.0
+        self._bytes = 0
         self._last_sleep_entity_time = 0.0
+        # Bytes persisted since the last sleep; added to the meta's bytes for S while awake.
+        self._wake_bytes = 0
         # entity_time stamps are offset + entity_clock(), so they continue across restarts.
         self._entity_offset = 0.0
         # Held by persist, downscale, export and import so a downscaling never interleaves with a write.
@@ -152,9 +159,14 @@ class MnemosCore:
         return self._total
 
     @property
-    def silence_threshold(self) -> float:
-        # A trace whose log_base is below this value is silent.
-        return math.log(self._silence_floor) - self._log_gain
+    def store_bytes(self) -> int:
+        """Current persisted-store byte count S (meta bytes + writes since last sleep)."""
+        return self._bytes + self._wake_bytes
+
+    @property
+    def _prune_threshold(self) -> float:
+        # A trace whose log_base is below this value is below the floor.
+        return math.log(self._prune_floor) - self._log_gain
 
     def entity_now(self) -> float:
         return self._entity_offset + float(self._entity_clock())
@@ -165,12 +177,6 @@ class MnemosCore:
             return 1.0
         return min(1.0, math.exp(lb + self._log_gain))
 
-    def is_silent(self, payload: Any) -> bool:
-        lb = _log_base(payload)
-        if lb is None:
-            return False
-        return lb < self.silence_threshold
-
     async def initialize(self) -> None:
         await self._embedder.load()
         await self._storage.initialize()
@@ -178,8 +184,14 @@ class MnemosCore:
         for kind in ("episodic", "semantic", "procedural"):
             await self._storage.ensure_collection(self.collection_name(kind))
         await self._check_embedding_space_stamp()
-        await self._init_strength()
+        needs_bytes_rewrite = await self._init_strength()
         await self._resume_entity_time()
+        if needs_bytes_rewrite:
+            # Old traces were backfilled after the stored S was written; recompute
+            # S now that _wake_bytes reflects the current wake.
+            names = self.persisted_collection_names()
+            self._bytes = await self._storage.total_size(names) - self._wake_bytes
+            await self._storage.write_meta(self.strength_key, self._strength_meta())
 
     async def _check_embedding_space_stamp(self) -> None:
         space = self._embedder.space
@@ -244,10 +256,12 @@ class MnemosCore:
                 f"before this embedder can use them"
             )
 
-    async def _init_strength(self) -> None:
+    async def _init_strength(self) -> bool:
+        """Load strength meta and backfill old traces. Returns True if S needs a rewrite after _resume_entity_time."""
         names = self.persisted_collection_names()
         meta = await self._storage.read_meta(self.strength_key)
         fresh = False
+        needs_bytes_rewrite = False
         if meta is None:
             carried = 0
             for name in names:
@@ -265,6 +279,7 @@ class MnemosCore:
                 "sleeps": 0,
                 "total": float(total),
                 "entity_time": 0.0,
+                "bytes": await self._storage.total_size(names),
             }
             await self._storage.write_meta(self.strength_key, meta)
             fresh = True
@@ -276,18 +291,20 @@ class MnemosCore:
             )
         if changed and not fresh:
             self._total += changed
-            await self._storage.write_meta(self.strength_key, self._strength_meta())
+            needs_bytes_rewrite = True
         if changed:
             log.info(
                 "mnemos: gave %d traces from before trace strengths a strength of 1",
                 changed,
             )
+        return needs_bytes_rewrite
 
     def _load_strength(self, meta: dict[str, Any]) -> None:
         meta = _validate_strength(meta)
         self._log_gain = meta["log_gain"]
         self._sleeps = meta["sleeps"]
         self._total = meta["total"]
+        self._bytes = meta["bytes"]
         self._last_sleep_entity_time = meta["entity_time"]
 
     def _strength_meta(self) -> dict[str, Any]:
@@ -295,20 +312,33 @@ class MnemosCore:
             "log_gain": self._log_gain,
             "sleeps": self._sleeps,
             "total": self._total,
+            "bytes": self._bytes,
             "entity_time": self._last_sleep_entity_time,
         }
 
     async def _resume_entity_time(self) -> None:
         newest = self._last_sleep_entity_time
+        wake_bytes = 0
         for point in await self._storage.wake_points(
             self.persisted_collection_names(), self._sleeps
         ):
-            et = _entity_time(point.get("payload") or {})
+            payload = point.get("payload") or {}
+            et = _entity_time(payload)
             if et > newest:
                 newest = et
+            size = payload.get("size_bytes")
+            if isinstance(size, bool) or not isinstance(size, int):
+                size = record_size(
+                    self._storage.latent_dim,
+                    point.get("text") or "",
+                    payload,
+                    point.get("affect"),
+                )
+            wake_bytes += int(size)
         for memory in self._short_term:
             if memory.entity_time > newest:
                 newest = memory.entity_time
+        self._wake_bytes = wake_bytes
         # The entity clock restarts at 0 on each boot, so stamps are shifted
         # forward only when the clock reads behind the newest stamp of the
         # current wake.
@@ -316,16 +346,19 @@ class MnemosCore:
 
     async def wake_pool(self) -> list[dict[str, Any]]:
         """Persisted traces stored since the last downscaling."""
-        results = await self._storage.wake_points(
+        return await self._storage.wake_points(
             self.persisted_collection_names(), self._sleeps
         )
-        # All traces of the current wake have strength 1, so none should be silent.
-        return [p for p in results if not self.is_silent(p.get("payload") or {})]
 
     async def downscale(
         self, protect: Iterable[tuple[str, str, float]] = ()
     ) -> dict[str, Any]:
-        """Downscale strengths for one sleep (paper A.10)."""
+        """Downscale trace strengths for one sleep, then prune (paper A.10).
+
+        Replay happens before this method is called. After downscaling,
+        every trace below the floor is deleted, then the weakest traces are
+        removed until the store fits the budget. Nothing else deletes traces.
+        """
         async with self._strength_lock:
             names = self.persisted_collection_names()
             n_new = 0
@@ -360,12 +393,15 @@ class MnemosCore:
                 "sleeps": self._sleeps + 1,
                 "total": total_after,
                 "entity_time": self.entity_now(),
+                "bytes": self._bytes + self._wake_bytes,
             }
             await self._storage.write_meta(self.strength_key, meta)
             self._log_gain = meta["log_gain"]
             self._sleeps = meta["sleeps"]
             self._total = meta["total"]
             self._last_sleep_entity_time = meta["entity_time"]
+            self._bytes = meta["bytes"]
+            self._wake_bytes = 0
 
             by_coll: dict[str, list[tuple[str, float]]] = {}
             for coll, point_id, lb in protected:
@@ -373,19 +409,58 @@ class MnemosCore:
             for coll, updates in by_coll.items():
                 await self._storage.set_log_base(coll, updates)
 
-            silent = 0
-            for name in names:
-                silent += await self._storage.count_filtered(
-                    name, log_base_below=self.silence_threshold
-                )
+            # A crash during deletion leaves the meta above overstating S and
+            # the total; the next sleep only prunes more.
+            protected_keys = {(coll, str(pid)) for coll, pid, _ in protected}
+            deleted: set[tuple[str, str]] = set()
+            thr = self._prune_threshold
+            pruned_floor = pruned_budget = 0
+            done = False
+            while not done:
+                batch = await self._storage.weakest(names, limit=1024)
+                doomed: dict[str, list[str]] = {}
+                for p in batch:
+                    key = (str(p["collection"]), str(p["id"]))
+                    if key in protected_keys:
+                        continue
+                    if key in deleted:
+                        raise StorageError(
+                            f"mnemos: pruning found point {p['id']!r} of {p['collection']!r} again after deleting it"
+                        )
+                    if p["log_base"] < thr:
+                        pruned_floor += 1
+                    elif self._bytes > self._budget_bytes:
+                        pruned_budget += 1
+                    else:
+                        done = True
+                        break
+                    deleted.add(key)
+                    doomed.setdefault(p["collection"], []).append(str(p["id"]))
+                    self._bytes -= int(p["size_bytes"])
+                    self._total -= min(1.0, math.exp(p["log_base"] + self._log_gain))
+                if not doomed:
+                    break
+                for coll, ids in doomed.items():
+                    await self._storage.delete_points(coll, ids)
+            self._bytes = max(0, self._bytes)
+            self._total = max(0.0, self._total)
+            await self._storage.write_meta(self.strength_key, self._strength_meta())
 
+        log.info(
+            "mnemos: sleep pruned %d traces at the floor and %d for the budget; store is %d bytes",
+            pruned_floor,
+            pruned_budget,
+            self._bytes,
+        )
         return {
             "n_new": n_new,
             "factor": factor,
             "protected": len(protected),
             "total_before": total_before,
             "total_after": total_after,
-            "silent": silent,
+            "pruned_floor": pruned_floor,
+            "pruned_budget": pruned_budget,
+            "store_bytes": self._bytes,
         }
 
     async def shutdown(self) -> None:
@@ -442,13 +517,21 @@ class MnemosCore:
             payload["log_base"] = -self._log_gain
             payload["born_sleep"] = self._sleeps
             payload["entity_time"] = float(memory.entity_time)
-            return await self._storage.upsert(
+            payload["size_bytes"] = record_size(
+                self._storage.latent_dim,
+                memory.text,
+                payload,
+                memory.affect,
+            )
+            point_id = await self._storage.upsert(
                 coll_name,
                 vector=vec,
                 text=memory.text,
                 payload=payload,
                 affect=memory.affect,
             )
+            self._wake_bytes += int(payload["size_bytes"])
+            return point_id
 
     async def recall(
         self,
@@ -468,19 +551,17 @@ class MnemosCore:
         if k == 0:
             results = []
         else:
-            thr = self.silence_threshold
             m = 4 * k
             while True:
                 hits = await self._storage.search(
-                    coll_name, query_vector=vec, limit=m, min_log_base=thr
+                    coll_name, query_vector=vec, limit=m
                 )
                 exhausted = len(hits) < m
                 scored = []
                 for hit in hits:
-                    lb = _log_base(hit.payload)
-                    if hit.score <= 0.0 or lb is None or lb < thr:
+                    if hit.score <= 0.0:
                         continue
-                    strength = min(1.0, math.exp(lb + self._log_gain))
+                    strength = self.strength_of(hit.payload)
                     scored.append(
                         (strength * hit.score, hit.score, _entity_time(hit.payload), hit, strength)
                     )
@@ -719,6 +800,7 @@ class MnemosCore:
                     "sleeps": 0,
                     "total": float(total),
                     "entity_time": 0.0,
+                    "bytes": await self._storage.total_size(list(mapping.values())),
                 }
                 await self._storage.write_meta(self.strength_key, meta)
                 self._load_strength(meta)
@@ -846,11 +928,15 @@ def _validate_strength(meta: dict[str, Any]) -> dict[str, Any]:
     log_gain = _num("log_gain")
     total = _num("total")
     entity_time = _num("entity_time")
+    bytes_value = meta.get("bytes")
+    if isinstance(bytes_value, bool) or not isinstance(bytes_value, int) or bytes_value < 0:
+        raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
     if total < 0:
         raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
     return {
         "log_gain": log_gain,
         "sleeps": int(sleeps),
         "total": total,
+        "bytes": int(bytes_value),
         "entity_time": entity_time,
     }

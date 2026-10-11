@@ -5,7 +5,8 @@ Table A1, and a new limitation). Each persisted Mnemos trace carries a
 strength $h_i\in(0,1]$, stored at 1. Each sleep replays a few traces of the
 wake just ended, then scales the strength of every other trace by
 $\varrho^{N_{\rm new}/N_{\rm day}}$. Replayed traces keep their strength, a
-trace below $h_{\min}$ is silent, and recall ranks by $h_i\,\mathrm{sim}_i$.
+trace below $h_{\min}$ is pruned in that sleep, and recall ranks by $h_i\,\mathrm{sim}_i$. Paper
+PR #29 adds the pruning rule and an operator storage budget $B$ in bytes.
 
 The code does not follow it.
 
@@ -34,23 +35,28 @@ The code does not follow it.
   every trace. These keys are reserved: a caller's payload cannot set them.
 - `MemoryStorage` gains `read_meta`/`write_meta` (beside the embedding-space
   stamp, which validates a different shape), `wake_points`, `count_filtered`,
-  `set_log_base` and `backfill_strength`, and `search` takes an optional
-  `min_log_base` filter. All three backends implement them.
+  `set_log_base`, `backfill_strength`, `total_size`, `weakest` (ascending
+  strength, then storage time, tie-complete) and `delete_points`. All three
+  backends implement them.
 - Phase 2 replays from the whole wake just ended: every persisted trace with
   `born_sleep == n`, plus any short-term entry. Recency runs on `entity_time`.
   `MnemosCore.downscale(protect)` then counts $N_{\rm new}$, writes the new
-  meta first, gives each replayed trace back its strength, counts the silent
-  traces, and returns `n_new`, `factor`, `protected`, `total_before`,
-  `total_after` and `silent`, which phase 2 puts in its metadata and so in the
-  sleep summary. `downscale_activations` is removed.
-- Recall on a persisted collection returns the `k` non-silent traces with
+  meta first, gives each replayed trace back its strength, and then prunes:
+  every trace below $h_{\min}$, then, while the stores' size $S$ exceeds $B$,
+  the weakest trace outside the replayed set, the oldest first among equal
+  strengths. $S$ is the sum of each record's `size_bytes` (embedding plus
+  serialized payload), kept incrementally in the meta. It returns `n_new`,
+  `factor`, `protected`, `total_before`, `total_after`, `pruned_floor`,
+  `pruned_budget` and `store_bytes`, which phase 2 puts in its metadata; the
+  sleep summary carries the last three at top level for the research log.
+  Nothing is deleted while awake. `downscale_activations` is removed.
+- Recall on a persisted collection returns the `k` traces with
   cosine above 0 in decreasing order of $h_i\,\mathrm{sim}_i$. It widens its
   fetch until the k-th product is at least the smallest fetched cosine, which
   bounds every unfetched trace since $h\le 1$, so the top k is exact relative
   to the backend's cosine order. `RecalledMemory` gains `similarity` and
   `strength`, and `score` is the product. Short-term recall ranks by cosine
   alone and also drops traces with cosine at or below 0.
-- Phase 3's cross-period selection skips silent traces.
 - sqlite-vec: the vector table gains `collection` as a partition key, so the
   KNN filters by collection inside the extension, and search pages past 4096
   rows with the `distance` constraint, taking every row tied at a page
@@ -71,7 +77,8 @@ The code does not follow it.
   but with `log_base` is refused, since the offsets mean nothing without $L$.
 - Decommission deletes the strength meta with the embedding-space stamp.
 - Config: `[mnemos.strength]` with `retention_per_day = 0.82` and
-  `silence_floor = 0.01`, both in (0, 1). $N_{\rm day}$ is
+  `prune_floor = 0.01`, both in (0, 1), and `[mnemos].storage_budget_bytes`
+  (default 10 GiB; the paper leaves $B$ to the operator). $N_{\rm day}$ is
   `86400 * [cycle].experiential_rate_hz`, passed in by boot.
   `[hypnos.consolidation].downscale_factor` is removed and its presence fails
   the boot, since it never changed a recall.

@@ -44,6 +44,14 @@ class _FakeQdrantPoint:
         self.payload = payload
 
 
+def _uuid_hex(pid):
+    """The hex form of a UUID point id, or None when the id is not a UUID."""
+    try:
+        return uuid.UUID(str(pid)).hex
+    except ValueError:
+        return None
+
+
 class _FakeAsyncQdrant:
     """Minimal in-process double of AsyncQdrantClient."""
 
@@ -227,12 +235,8 @@ class _FakeAsyncQdrant:
     ):
         pts = self.store.get(collection_name, [])
         by_id = {str(p.id): p for p in pts}
-        by_hex = {}
-        for p in pts:
-            try:
-                by_hex[str(uuid.UUID(str(p.id)).hex)] = p
-            except Exception:
-                pass
+        # Qdrant ids may come back hyphenated or as plain hex; match either.
+        by_hex = {_uuid_hex(p.id): p for p in pts if _uuid_hex(p.id) is not None}
 
         for op in update_operations:
             sp = getattr(op, "set_payload", None)
@@ -246,10 +250,7 @@ class _FakeAsyncQdrant:
                 s = str(pid)
                 target = by_id.get(s)
                 if target is None:
-                    try:
-                        target = by_hex.get(str(uuid.UUID(s).hex))
-                    except Exception:
-                        pass
+                    target = by_hex.get(_uuid_hex(s))
                 if target is None:
                     continue
                 if target.payload is None:

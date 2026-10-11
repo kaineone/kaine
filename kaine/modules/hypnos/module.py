@@ -960,6 +960,24 @@ class Hypnos(BaseModule):
             # Whether this cycle was fatigue-triggered
             "fatigue_triggered": self._fatigue_triggered_sleep,
         }
+        # The counts the paper says each sleep records, at top level so the
+        # research log can keep them.
+        # Read defensively: the summary must never break the sleep.
+        downscale_meta = None
+        for r in phase_results:
+            if getattr(r, "phase", None) == "deep_consolidation":
+                found = (getattr(r, "metadata", None) or {}).get("downscale")
+                downscale_meta = found if isinstance(found, dict) else None
+                break
+        summary["memory_pruned_floor"] = (
+            downscale_meta.get("pruned_floor") if downscale_meta else None
+        )
+        summary["memory_pruned_budget"] = (
+            downscale_meta.get("pruned_budget") if downscale_meta else None
+        )
+        summary["memory_store_bytes"] = (
+            downscale_meta.get("store_bytes") if downscale_meta else None
+        )
         summary["corpus"] = corpus_summary
         summary["voice_measures"] = voice_measures
         all_succeeded = all(r.success for r in phase_results)

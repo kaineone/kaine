@@ -124,15 +124,22 @@ class _OutOfProcessStorage:
         collection: str,
         *,
         born_sleep: int | None = None,
-        log_base_below: float | None = None,
         has_log_base: bool | None = None,
     ) -> int:
         return await self._inner.count_filtered(
             collection,
             born_sleep=born_sleep,
-            log_base_below=log_base_below,
             has_log_base=has_log_base,
         )
+
+    async def total_size(self, collections: Sequence[str]) -> int:
+        return await self._inner.total_size(collections)
+
+    async def weakest(self, collections: Sequence[str], *, limit: int) -> list[dict[str, Any]]:
+        return await self._inner.weakest(collections, limit=limit)
+
+    async def delete_points(self, collection: str, point_ids: Sequence[str]) -> None:
+        return await self._inner.delete_points(collection, point_ids)
 
     async def set_log_base(
         self, collection: str, updates: Sequence[tuple[str, float]]
@@ -178,10 +185,18 @@ class _FailingStorage(_OutOfProcessStorage):
         collection: str,
         *,
         born_sleep: int | None = None,
-        log_base_below: float | None = None,
         has_log_base: bool | None = None,
     ) -> int:
         return 0
+
+    async def total_size(self, collections: Sequence[str]) -> int:
+        return 0
+
+    async def weakest(self, collections: Sequence[str], *, limit: int) -> list[dict[str, Any]]:
+        return []
+
+    async def delete_points(self, collection: str, point_ids: Sequence[str]) -> None:
+        return None
 
     async def set_log_base(
         self, collection: str, updates: Sequence[tuple[str, float]]

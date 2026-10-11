@@ -54,7 +54,7 @@ class FakeMnemos:
     async def downscale(self, protect=()):
         protect = list(protect)
         self.downscale_calls.append(protect)
-        return {"n_new": 0, "factor": 1.0, "protected": len(protect), "total_before": 0.0, "total_after": 0.0, "silent": 0}
+        return {"n_new": 0, "factor": 1.0, "protected": len(protect), "total_before": 0.0, "total_after": 0.0, "pruned_floor": 0, "pruned_budget": 0, "store_bytes": 0}
 
     async def replay_now(self) -> list:
         self.replay_calls += 1
@@ -130,6 +130,9 @@ async def test_enter_sleep_runs_all_five_phases(bus: AsyncBus, tmp_path: Path):
     assert all(p["success"] for p in summary["phases"])
     assert hypnos._mnemos.consolidated == 1
     assert hypnos._thymos.resets == 1
+    assert summary["memory_pruned_floor"] == 0
+    assert summary["memory_pruned_budget"] == 0
+    assert summary["memory_store_bytes"] == 0
 
 
 @pytest.mark.asyncio

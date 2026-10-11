@@ -36,9 +36,10 @@ def make_mnemos(
         "alert_salience",
         "recall_on_workspace",
         "recall_cooldown_s",
+        "storage_budget_bytes",  # operator's persisted memory budget in bytes
         "qdrant",
         "replay",  # nested sub-table: selection_top_k, affect_weight, recency_weight, redact_content, cross_period_candidates
-        "strength",  # nested sub-table: retention_per_day, silence_floor
+        "strength",  # nested sub-table: retention_per_day, prune_floor
     }
     if "embedder_model_id" in section:
         raise ConfigurationError(
@@ -55,6 +56,13 @@ def make_mnemos(
         for k in allowed - {"qdrant", "replay", "strength"}
         if k in section
     }
+    if "storage_budget_bytes" in kwargs:
+        value = kwargs["storage_budget_bytes"]
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ConfigurationError(
+                "[mnemos].storage_budget_bytes must be a positive integer number of bytes"
+            )
+        kwargs["storage_budget_bytes"] = int(value)
     if "host" in qdrant:
         kwargs["qdrant_host"] = qdrant["host"]
     if "port" in qdrant:
@@ -73,11 +81,11 @@ def make_mnemos(
     if "cross_period_candidates" in replay:
         kwargs["cross_period_candidates"] = int(replay["cross_period_candidates"])
     # Strength sub-table (paper A.10)
-    _require_keys(strength, {"retention_per_day", "silence_floor"})
+    _require_keys(strength, {"retention_per_day", "prune_floor"})
     if "retention_per_day" in strength:
         kwargs["strength_retention_per_day"] = float(strength["retention_per_day"])
-    if "silence_floor" in strength:
-        kwargs["strength_silence_floor"] = float(strength["silence_floor"])
+    if "prune_floor" in strength:
+        kwargs["strength_prune_floor"] = float(strength["prune_floor"])
     if traces_per_day is not None:
         kwargs["traces_per_day"] = float(traces_per_day)
     kwargs["embedder"] = embedder

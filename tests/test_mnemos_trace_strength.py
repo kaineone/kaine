@@ -330,7 +330,7 @@ async def test_topk_matches_brute_force(storage):
         noise = [rng.gauss(0.0, 1e-4) for _ in range(DIM)]
         table[f"s{i}"] = _unit([q + n for q, n in zip(query, noise)])
     embedder = _TableEmbedder(table)
-    core = await _core(storage, embedder=embedder, traces_per_day=10.0, silence_floor=0.3)
+    core = await _core(storage, embedder=embedder, traces_per_day=10.0, prune_floor=0.3)
 
     for wake in range(6):
         batch = episodic_texts[wake * 10 : (wake + 1) * 10]
@@ -351,8 +351,6 @@ async def test_topk_matches_brute_force(storage):
         qvec = await embedder.encode("q")
         brute = []
         for p in episodic_points:
-            if core.is_silent(p["payload"]):
-                continue
             cos = _cos(qvec, p["vector"])
             if cos <= 0.0:
                 continue
@@ -374,21 +372,27 @@ async def test_topk_matches_brute_force(storage):
                 assert _key(r.point_id) == brute[i][1]
 
 
-async def test_silent_traces(storage):
-    """Silent traces remain stored but are excluded from recall."""
+async def test_floor_prunes_weak_traces(storage):
+    """Traces that fall below the prune floor are deleted during sleep."""
     e0 = [1.0] + [0.0] * (DIM - 1)
-    table = {"q": e0, "a": e0, "z": [0.0] * (DIM - 1) + [1.0]}
-    core = await _core(storage, embedder=_TableEmbedder(table), traces_per_day=1.0, silence_floor=0.7)
+    e_last = [0.0] * (DIM - 1) + [1.0]
+    table = {"q": e0, "a": e0, "z": e_last}
+    core = await _core(storage, embedder=_TableEmbedder(table), traces_per_day=1.0, prune_floor=0.7)
     await core.store("a", collection="episodic")
-    for _ in range(3):
-        await core.store("z", collection="episodic")
-        await core.downscale()
+    summary1 = await core.downscale()
+    assert summary1["pruned_floor"] == 0
+    a_id = next(iter(await _key_ids_from_texts(core, ["a"])))
+    assert (await _strengths(core))[a_id] == pytest.approx(0.82, rel=1e-12)
+
+    await core.store("z", collection="episodic")
+    summary2 = await core.downscale()
+    assert summary2["pruned_floor"] >= 1
+    exported = _flat(await core.storage.export(core.persisted_collection_names()))
+    assert not any(p["text"] == "a" for p in exported)
     results, _ = await core.recall("q", k=5)
     assert "a" not in [r.text for r in results]
-    exported = _flat(await core.storage.export(core.persisted_collection_names()))
-    assert any(p["text"] == "a" for p in exported)
-    summary = await core.downscale()
-    assert summary["silent"] >= 1
+    for p in exported:
+        assert core.strength_of(p["payload"]) >= 0.7
 
 
 async def test_migration_backfills_once(storage):
@@ -415,7 +419,9 @@ async def test_migration_backfills_once(storage):
         "sleeps": 0,
         "total": 3.0,
         "entity_time": 0.0,
+        "bytes": await storage.total_size(core.persisted_collection_names()),
     }
+    assert meta["bytes"] > 0
 
     core2 = await _core(storage)
     changed = await storage.backfill_strength(core2.persisted_collection_names(), log_base=0.0)
@@ -555,7 +561,7 @@ async def test_numerics_far_from_zero_log_gain(storage, request):
     await storage.write_stamp("mnemos_embedding_space", _TableEmbedder().space)
     await storage.write_meta(
         "mnemos_strength",
-        {"log_gain": -5000.0, "sleeps": 7, "total": 0.0, "entity_time": 0.0},
+        {"log_gain": -5000.0, "sleeps": 7, "total": 0.0, "entity_time": 0.0, "bytes": 0},
     )
     e0 = [1.0] + [0.0] * (DIM - 1)
     table = {
@@ -587,7 +593,8 @@ async def test_drift_over_many_sleeps():
     storage = InMemoryStorage(latent_dim=DIM)
     await storage.initialize()
     try:
-        core = await _core(storage, traces_per_day=24.0)
+        # A floor far below the fading strength, so drift is measured, not pruning.
+        core = await _core(storage, traces_per_day=24.0, prune_floor=1e-9)
         await core.store("keep", collection="episodic")
         await core.store("fade", collection="episodic")
         factors: list[float] = []
@@ -729,43 +736,6 @@ async def test_sqlite_search_with_many_ties(tmp_path):
         await s.shutdown()
 
 
-async def test_sqlite_min_log_base_filter_pages(tmp_path):
-    """sqlite-vec search pages correctly with min_log_base filtering."""
-    pytest.importorskip("sqlite_vec")
-    s = SqliteVecStorage(latent_dim=DIM, db_path=str(tmp_path / "m.db"))
-    await s.initialize()
-    try:
-        rng = random.Random(13)
-        q = _unit([rng.gauss(0.0, 1.0) for _ in range(DIM)])
-        near = []
-        for i in range(5000):
-            near.append(
-                {
-                    "id": f"n{i}",
-                    "text": "x",
-                    "payload": {"log_base": -10.0},
-                    "vector": _unit([q[j] + rng.gauss(0.0, 0.01) for j in range(DIM)]),
-                    "affect": None,
-                }
-            )
-        far = []
-        for i in range(5):
-            far.append(
-                {
-                    "id": f"f{i}",
-                    "text": "x",
-                    "payload": {"log_base": 0.0},
-                    "vector": _unit([rng.gauss(0.0, 1.0) for _ in range(DIM)]),
-                    "affect": None,
-                }
-            )
-        await s.replace_collection("c", near + far)
-        hits = await s.search("c", query_vector=q, limit=5, min_log_base=-1.0)
-        assert len(hits) == 5
-        for h in hits:
-            assert h.point_id.startswith("f")
-    finally:
-        await s.shutdown()
 
 
 async def test_sqlite_old_vector_table_is_rebuilt(tmp_path):
@@ -906,13 +876,13 @@ def _all_bucket_texts(buckets):
     return [str(trace.get("text", "")) for traces in buckets.values() for trace in traces]
 
 
-async def test_cross_period_selection_skips_silent(bus):
-    """Cross-period selection does not include silent traces."""
+async def test_cross_period_selection_sees_no_pruned_trace(bus):
+    """Cross-period selection does not include traces pruned below the floor."""
     core = MnemosCore(
         FakeEmbedder(latent_dim=DIM),
         InMemoryStorage(latent_dim=DIM),
         traces_per_day=1.0,
-        silence_floor=0.7,
+        prune_floor=0.7,
         entity_clock=_Clock(),
     )
     await core.initialize()
@@ -924,7 +894,7 @@ async def test_cross_period_selection_skips_silent(bus):
     buckets = await m.select_cross_period_traces(periods=1, per_period=50)
     texts = _all_bucket_texts(buckets)
     assert "old" not in texts
-    # The newest filler is not silent and is selected, so the check is not vacuous.
+    # The newest filler survived pruning and is selected, so the check is not vacuous.
     assert "filler-2" in texts
 
 
@@ -949,13 +919,13 @@ async def test_deep_consolidation_protects_replayed_traces():
 
         async def downscale(self, protect=()):
             self.protect = list(protect)
-            return {"n_new": 3, "factor": 0.9, "protected": 2, "total_before": 5.0, "total_after": 4.6, "silent": 0}
+            return {"n_new": 3, "factor": 0.9, "protected": 2, "total_before": 5.0, "total_after": 4.6, "pruned_floor": 0, "pruned_budget": 0, "store_bytes": 0}
 
     fake = FakeOk()
     result = await deep_consolidation(fake)
     assert result.success
     assert fake.protect == [sentinel_a, sentinel_b]
-    expected_meta = {"n_new": 3, "factor": 0.9, "protected": 2, "total_before": 5.0, "total_after": 4.6, "silent": 0}
+    expected_meta = {"n_new": 3, "factor": 0.9, "protected": 2, "total_before": 5.0, "total_after": 4.6, "pruned_floor": 0, "pruned_budget": 0, "store_bytes": 0}
     assert result.metadata["downscale"] == expected_meta
 
     class FakeReplayFail:
@@ -965,7 +935,7 @@ async def test_deep_consolidation_protects_replayed_traces():
             raise RuntimeError("replay failed")
         async def downscale(self, protect=()):
             self.protect = list(protect)
-            return {"n_new": 0, "factor": 1.0, "protected": 0, "total_before": 1.0, "total_after": 1.0, "silent": 0}
+            return {"n_new": 0, "factor": 1.0, "protected": 0, "total_before": 1.0, "total_after": 1.0, "pruned_floor": 0, "pruned_budget": 0, "store_bytes": 0}
 
     fake2 = FakeReplayFail()
     result2 = await deep_consolidation(fake2)
@@ -1005,10 +975,210 @@ async def test_config(bus):
         make_mnemos(bus, {"backend": "inmemory", "strength": {"retention_per_day": 1.5}})
 
     with pytest.raises(ValueError):
-        make_mnemos(bus, {"backend": "inmemory", "strength": {"silence_floor": 0.0}})
+        make_mnemos(bus, {"backend": "inmemory", "strength": {"prune_floor": 0.0}})
+
+    with pytest.raises(ConfigurationError):
+        make_mnemos(bus, {"backend": "inmemory", "storage_budget_bytes": 0})
+
+    with pytest.raises(ConfigurationError):
+        make_mnemos(bus, {"backend": "inmemory", "storage_budget_bytes": True})
 
     with pytest.raises(Exception):
         make_mnemos(bus, {"backend": "inmemory", "strength": {"bogus": 1}})
 
-    m = make_mnemos(bus, {"backend": "inmemory", "_traces_per_day": 1000.0})
-    assert m.core._traces_per_day == 1000.0
+
+# ------------------------------------------------------------------
+# Pruning
+# ------------------------------------------------------------------
+
+
+async def test_replayed_traces_exempt_from_budget(storage):
+    """Replayed traces are exempt from the byte budget."""
+    core = await _core(storage, traces_per_day=4.0, budget_bytes=1)
+    for i in range(4):
+        await core.store(f"o{i}", collection="episodic")
+    summary1 = await core.downscale()
+    assert summary1["pruned_floor"] == 0
+    assert summary1["pruned_budget"] == 4
+    assert _flat(await core.storage.export(core.persisted_collection_names())) == []
+
+    for i in range(4):
+        await core.store(f"n{i}", collection="episodic")
+    protect = await _protect(core, ["n0", "n1"])
+    summary2 = await core.downscale(protect=protect)
+    assert summary2["pruned_floor"] == 0
+    assert summary2["pruned_budget"] == 2
+    exported = _flat(await core.storage.export(core.persisted_collection_names()))
+    texts = {p["text"] for p in exported}
+    assert texts == {"n0", "n1"}
+    for p in exported:
+        assert core.strength_of(p["payload"]) == pytest.approx(1.0, abs=1e-12)
+    total_size = sum(int(p["payload"]["size_bytes"]) for p in exported)
+    assert summary2["store_bytes"] == total_size
+
+
+async def test_budget_prunes_weakest_then_oldest(storage):
+    """Budget pruning removes the weakest trace, breaking ties by entity time."""
+    clock = _Clock()
+    core = await _core(storage, clock=clock, traces_per_day=4.0)
+    for text in ("o0", "o1", "o2"):
+        clock.t += 1.0
+        await core.store(text, collection="episodic")
+    await core.downscale()
+    for text in ("n0", "n1"):
+        clock.t += 1.0
+        await core.store(text, collection="episodic")
+    await core.downscale()
+
+    exported = _flat(await core.storage.export(core.persisted_collection_names()))
+    size_o0 = int(next(p["payload"]["size_bytes"] for p in exported if p["text"] == "o0"))
+    B = core.store_bytes - size_o0 - 1
+
+    core2 = await _core(storage, clock=clock, traces_per_day=4.0, budget_bytes=B)
+    summary = await core2.downscale()
+    assert summary["n_new"] == 0
+    assert summary["factor"] == pytest.approx(1.0, rel=1e-12)
+    assert summary["pruned_floor"] == 0
+    assert summary["pruned_budget"] == 2
+
+    exported2 = _flat(await core2.storage.export(core2.persisted_collection_names()))
+    texts = {p["text"] for p in exported2}
+    assert texts == {"o2", "n0", "n1"}
+    assert core2.store_bytes <= B
+
+
+async def test_no_pruning_while_awake(storage):
+    """Traces are deleted only during sleep, never while the entity is awake."""
+    core = await _core(storage, budget_bytes=1, short_term_capacity=2)
+    for i in range(6):
+        await core.store(f"s{i}", collection="short_term")
+    for i in range(3):
+        await core.store(f"e{i}", collection="episodic")
+    exported = _flat(await core.storage.export(core.persisted_collection_names()))
+    assert len(exported) == 7
+    assert core.short_term_size == 2
+    assert core.store_bytes > 1
+    summary = await core.downscale()
+    assert summary["pruned_budget"] == 7
+    assert _flat(await core.storage.export(core.persisted_collection_names())) == []
+
+
+async def test_store_bytes_matches_a_scan(storage):
+    """store_bytes tracks the persisted store size exactly."""
+    core = await _core(storage, traces_per_day=4.0)
+    for i in range(3):
+        await core.store(f"a{i}", collection="episodic")
+    await core.downscale()
+    for i in range(2):
+        await core.store(f"b{i}", collection="episodic")
+    protect = await _protect(core, ["b0"])
+    await core.downscale(protect=protect)
+    scan = await storage.total_size(core.persisted_collection_names())
+    assert core.store_bytes == scan
+
+    core2 = await _core(storage, traces_per_day=4.0)
+    assert core2.store_bytes == scan
+
+
+async def test_preserved_bundle_unaffected_by_later_pruning(storage, request, tmp_path):
+    """An exported bundle keeps every point even if the live store is pruned."""
+    core = await _core(storage, traces_per_day=4.0)
+    for i in range(5):
+        await core.store(f"x{i}", collection="episodic")
+    await core.downscale()
+    state = await core.export_state()
+    expected = copy.deepcopy(state["persisted"])
+
+    core._budget_bytes = 1
+    summary = await core.downscale()
+    # The live store was pruned; the captured bundle was not.
+    assert summary["pruned_budget"] == 5
+    assert _flat(await core.storage.export(core.persisted_collection_names())) == []
+    assert state["persisted"] == expected
+
+    kind = request.node.callspec.params["storage"]
+    (tmp_path / "c").mkdir(exist_ok=True)
+    storage2 = await _open_storage(kind, tmp_path / "c")
+    try:
+        core2 = await _core(storage2)
+        await core2.import_state(state)
+        exported = _flat(await core2.storage.export(core2.persisted_collection_names()))
+        assert len(exported) == 5
+        assert {p["text"] for p in exported} == {f"x{i}" for i in range(5)}
+    finally:
+        await storage2.shutdown()
+
+
+async def test_weakest_orders_across_collections(storage):
+    """weakest returns points in ascending order across collections and is tie-complete."""
+    await storage.ensure_collection("ca")
+    await storage.ensure_collection("cb")
+
+    rng = random.Random(17)
+    for i in range(12):
+        lb = -3.0 + (i % 3)
+        vector = _unit([rng.gauss(0.0, 1.0) for _ in range(DIM)])
+        await storage.upsert(
+            "ca",
+            vector=vector,
+            text=f"ca-{i}",
+            payload={"log_base": lb, "entity_time": float(i), "size_bytes": 100},
+            affect=None,
+        )
+
+    cycle_cb = [-2.5, -2.0, -0.5]
+    for i in range(12):
+        lb = cycle_cb[i % 3]
+        vector = _unit([rng.gauss(0.0, 1.0) for _ in range(DIM)])
+        await storage.upsert(
+            "cb",
+            vector=vector,
+            text=f"cb-{i}",
+            payload={"log_base": lb, "entity_time": float(i), "size_bytes": 100},
+            affect=None,
+        )
+
+    text_by = {
+        (p["collection"], _key(p["id"])): p["text"]
+        for p in _flat(await storage.export(["ca", "cb"]))
+    }
+
+    brute = sorted(
+        [
+            (-3.0 + (i % 3), float(i), f"ca-{i}")
+            for i in range(12)
+        ]
+        + [
+            (cycle_cb[i % 3], float(i), f"cb-{i}")
+            for i in range(12)
+        ],
+        key=lambda t: (t[0], t[1], t[2]),
+    )
+
+    for limit in (1, 3, 5, 9, 30):
+        got = await storage.weakest(["ca", "cb"], limit=limit)
+        assert len(got) >= min(limit, 24)
+
+        pairs = []
+        for p in got:
+            assert p["size_bytes"] == 100
+            text = text_by[(p["collection"], _key(p["id"]))]
+            lb = float(p["log_base"])
+            et = float(p["entity_time"])
+            pairs.append((lb, et, text))
+
+        for a, b in zip(pairs, pairs[1:]):
+            assert (a[0], a[1]) <= (b[0], b[1])
+
+        expected = brute[: len(got)]
+        assert sorted((lb, et) for lb, et, _ in pairs) == sorted(
+            (lb, et) for lb, et, _ in expected
+        )
+
+        # Tie-complete: every point at or below the last returned strength is returned.
+        if pairs:
+            last_lb = pairs[-1][0]
+            returned = {text for _, _, text in pairs}
+            for lb, _, text in brute:
+                if lb <= last_lb:
+                    assert text in returned

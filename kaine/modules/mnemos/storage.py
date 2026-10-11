@@ -93,11 +93,18 @@ def _numeric_log_base(payload: Any) -> float | None:
     return float(value)
 
 
-def _check_one_filter(born_sleep, log_base_below, has_log_base) -> None:
+def _check_one_filter(born_sleep, has_log_base) -> None:
     """Raise unless exactly one count_filtered filter is given."""
-    filters = [x is not None for x in (born_sleep, log_base_below, has_log_base)]
+    filters = [x is not None for x in (born_sleep, has_log_base)]
     if sum(filters) != 1:
         raise ValueError("count_filtered takes exactly one filter")
+
+
+def record_size(latent_dim: int, text: str, payload: dict, affect: dict | None) -> int:
+    """Bytes of one stored trace: its float32 embedding plus its serialized payload, text and affect."""
+    body = {k: v for k, v in (payload or {}).items() if k != "size_bytes"}
+    blob = json.dumps({"text": text, "payload": body, "affect": affect}, sort_keys=True, separators=(",", ":"), default=str)
+    return 4 * int(latent_dim) + len(blob.encode("utf-8"))
 
 
 class StorageError(Exception):
@@ -153,7 +160,6 @@ class MemoryStorage(Protocol):
         *,
         query_vector: list[float],
         limit: int,
-        min_log_base: float | None = None,
     ) -> list[RecalledMemory]:
         """Protocol member: search."""
 
@@ -203,10 +209,18 @@ class MemoryStorage(Protocol):
         collection: str,
         *,
         born_sleep: int | None = None,
-        log_base_below: float | None = None,
         has_log_base: bool | None = None,
     ) -> int:
         """Protocol member: count filtered."""
+
+    async def total_size(self, collections: Sequence[str]) -> int:
+        """Protocol member: total persisted bytes."""
+
+    async def weakest(self, collections: Sequence[str], *, limit: int) -> list[dict[str, Any]]:
+        """Protocol member: weakest points."""
+
+    async def delete_points(self, collection: str, point_ids: Sequence[str]) -> None:
+        """Protocol member: delete many points."""
 
     async def set_log_base(self, collection: str, updates: Sequence[tuple[str, float]]) -> None:
         """Protocol member: set log base."""
@@ -301,16 +315,11 @@ class InMemoryStorage:
         *,
         query_vector: list[float],
         limit: int,
-        min_log_base: float | None = None,
     ) -> list[RecalledMemory]:
         if collection not in self._collections:
             return []
         scored: list[tuple[float, dict[str, Any]]] = []
         for point in self._collections[collection]:
-            if min_log_base is not None:
-                lb = _numeric_log_base(point.get("payload"))
-                if lb is None or lb < min_log_base:
-                    continue
             scored.append((_cosine(query_vector, point["vector"]), point))
         scored.sort(key=lambda t: t[0], reverse=True)
         out: list[RecalledMemory] = []
@@ -453,10 +462,9 @@ class InMemoryStorage:
         collection: str,
         *,
         born_sleep: int | None = None,
-        log_base_below: float | None = None,
         has_log_base: bool | None = None,
     ) -> int:
-        _check_one_filter(born_sleep, log_base_below, has_log_base)
+        _check_one_filter(born_sleep, has_log_base)
         points = self._collections.get(collection, [])
         if born_sleep is not None:
             return sum(
@@ -466,15 +474,88 @@ class InMemoryStorage:
                 and not isinstance(p["payload"].get("born_sleep"), bool)
                 and p["payload"]["born_sleep"] == born_sleep
             )
-        if log_base_below is not None:
-            count = 0
-            for p in points:
-                lb = _numeric_log_base(p["payload"])
-                if lb is not None and lb < log_base_below:
-                    count += 1
-            return count
         has = has_log_base is True
         return sum(1 for p in points if ("log_base" in p["payload"]) == has)
+
+    async def total_size(self, collections: Sequence[str]) -> int:
+        total = 0
+        for name in collections:
+            for p in self._collections.get(name, []):
+                sb = p["payload"].get("size_bytes")
+                if isinstance(sb, int) and not isinstance(sb, bool):
+                    total += int(sb)
+                else:
+                    total += record_size(
+                        self._latent_dim, p["text"], p["payload"], p["affect"]
+                    )
+        return total
+
+    async def weakest(self, collections: Sequence[str], *, limit: int) -> list[dict[str, Any]]:
+        if limit <= 0 or not collections:
+            return []
+
+        def _entity_time(payload: Any) -> float:
+            v = payload.get("entity_time", 0.0)
+            try:
+                v = float(v)
+                return v if math.isfinite(v) else 0.0
+            except (TypeError, ValueError):
+                return 0.0
+
+        def _key(p: dict[str, Any]) -> tuple[float, float, str]:
+            payload = p["payload"]
+            return (
+                float(payload.get("log_base", 0.0)),
+                _entity_time(payload),
+                str(p["id"]),
+            )
+
+        items: list[tuple[tuple[float, float, str], str, dict[str, Any]]] = []
+        for name in collections:
+            for p in self._collections.get(name, []):
+                if _numeric_log_base(p["payload"]) is None:
+                    continue
+                items.append((_key(p), name, p))
+        items.sort(key=lambda t: t[0])
+        if not items:
+            return []
+        n = min(limit, len(items))
+        result = items[:n]
+        last_lb = result[-1][0][0]
+        idx = n
+        while idx < len(items) and items[idx][0][0] == last_lb:
+            result.append(items[idx])
+            idx += 1
+        result.sort(key=lambda t: t[0])
+        out: list[dict[str, Any]] = []
+        for _, name, p in result:
+            payload = p["payload"]
+            sb = payload.get("size_bytes")
+            size = (
+                int(sb)
+                if isinstance(sb, int) and not isinstance(sb, bool)
+                else record_size(
+                    self._latent_dim, p["text"], payload, p["affect"]
+                )
+            )
+            out.append(
+                {
+                    "id": str(p["id"]),
+                    "collection": name,
+                    "log_base": float(payload.get("log_base", 0.0)),
+                    "entity_time": _entity_time(payload),
+                    "size_bytes": size,
+                }
+            )
+        return out
+
+    async def delete_points(self, collection: str, point_ids: Sequence[str]) -> None:
+        if collection not in self._collections:
+            return
+        ids = set(point_ids)
+        self._collections[collection] = [
+            p for p in self._collections[collection] if p["id"] not in ids
+        ]
 
     async def set_log_base(self, collection: str, updates: Sequence[tuple[str, float]]) -> None:
         points = self._collections.get(collection, [])
@@ -489,6 +570,9 @@ class InMemoryStorage:
         for name in collections:
             for p in self._collections.get(name, []):
                 if "log_base" not in p["payload"]:
+                    p["payload"]["size_bytes"] = record_size(
+                        self._latent_dim, p["text"], p["payload"], p["affect"]
+                    )
                     p["payload"]["log_base"] = float(log_base)
                     p["payload"]["born_sleep"] = -1
                     changed += 1
@@ -633,9 +717,10 @@ class SqliteVecStorage:
                 "ON memories(collection, json_extract(payload, '$.born_sleep'))"
             )
             db.execute(
-                "CREATE INDEX IF NOT EXISTS memories_log_base "
-                "ON memories(collection, json_extract(payload, '$.log_base'))"
+                "CREATE INDEX IF NOT EXISTS memories_weakest "
+                "ON memories(json_extract(payload, '$.log_base'), json_extract(payload, '$.entity_time'))"
             )
+            db.execute("DROP INDEX IF EXISTS memories_log_base")
             db.commit()
             return db
 
@@ -758,7 +843,6 @@ class SqliteVecStorage:
         *,
         query_vector: list[float],
         limit: int,
-        min_log_base: float | None = None,
     ) -> list[RecalledMemory]:
         import struct
 
@@ -817,11 +901,6 @@ class SqliteVecStorage:
                             rows.append(row)
                     for row in rows:
                         point_id, distance, text, payload_json, affect_json = row
-                        lb = _numeric_log_base(
-                            json.loads(payload_json) if payload_json else {}
-                        )
-                        if min_log_base is not None and (lb is None or lb < min_log_base):
-                            continue
                         # vec0 cosine distance → similarity score on the same [-1, 1]
                         # scale Qdrant/InMemory report.
                         score = 1.0 - float(distance)
@@ -1180,10 +1259,9 @@ class SqliteVecStorage:
         collection: str,
         *,
         born_sleep: int | None = None,
-        log_base_below: float | None = None,
         has_log_base: bool | None = None,
     ) -> int:
-        _check_one_filter(born_sleep, log_base_below, has_log_base)
+        _check_one_filter(born_sleep, has_log_base)
 
         def _count(db: Any) -> int:
             if db is None:
@@ -1192,9 +1270,6 @@ class SqliteVecStorage:
                 if born_sleep is not None:
                     cond = "json_extract(payload, '$.born_sleep') = ?"
                     args = (collection, int(born_sleep))
-                elif log_base_below is not None:
-                    cond = "json_extract(payload, '$.log_base') < ?"
-                    args = (collection, float(log_base_below))
                 elif has_log_base is True:
                     cond = "json_type(payload, '$.log_base') IS NOT NULL"
                     args = (collection,)
@@ -1253,18 +1328,205 @@ class SqliteVecStorage:
             try:
                 placeholders = ",".join("?" for _ in collections)
                 cur = db.execute(
-                    "UPDATE memories SET payload = json_set("
-                    "COALESCE(payload, '{}'), '$.log_base', ?, '$.born_sleep', -1) "
+                    "SELECT rowid, text, payload, affect FROM memories "
                     f"WHERE collection IN ({placeholders}) "
                     "AND json_type(COALESCE(payload, '{}'), '$.log_base') IS NULL",
-                    (float(log_base), *collections),
+                    tuple(collections),
                 )
+                rows = cur.fetchall()
+                if not rows:
+                    db.commit()
+                    return 0
+                for rowid, text, payload_json, affect_json in rows:
+                    payload = json.loads(payload_json) if payload_json else {}
+                    affect = json.loads(affect_json) if affect_json else None
+                    payload["size_bytes"] = record_size(
+                        self._latent_dim, str(text or ""), payload, affect
+                    )
+                    payload["log_base"] = float(log_base)
+                    payload["born_sleep"] = -1
+                    db.execute(
+                        "UPDATE memories SET payload = ? WHERE rowid = ?",
+                        (json.dumps(payload), int(rowid)),
+                    )
                 db.commit()
-                return int(cur.rowcount)
+                return len(rows)
             except Exception as exc:
+                db.rollback()
                 raise StorageError(f"sqlite-vec backfill_strength failed: {exc}") from exc
 
         return await self._run(_backfill)
+
+    async def total_size(self, collections: Sequence[str]) -> int:
+        if not collections:
+            return 0
+
+        def _size(db: Any) -> int:
+            if db is None:
+                raise StorageError("sqlite-vec total_size before initialize()")
+            try:
+                placeholders = ",".join("?" for _ in collections)
+                cur = db.execute(
+                    f"SELECT SUM(json_extract(payload, '$.size_bytes')) FROM memories "
+                    f"WHERE collection IN ({placeholders}) "
+                    "AND json_type(payload, '$.size_bytes') = 'integer'",
+                    tuple(collections),
+                )
+                row = cur.fetchone()
+                total = int(row[0]) if row and row[0] is not None else 0
+                cur = db.execute(
+                    f"SELECT text, payload, affect FROM memories "
+                    f"WHERE collection IN ({placeholders}) "
+                    "AND (json_type(payload, '$.size_bytes') IS NULL "
+                    "OR json_type(payload, '$.size_bytes') != 'integer')",
+                    tuple(collections),
+                )
+                for text, payload_json, affect_json in cur.fetchall():
+                    payload = json.loads(payload_json) if payload_json else {}
+                    affect = json.loads(affect_json) if affect_json else None
+                    total += record_size(
+                        self._latent_dim, str(text or ""), payload, affect
+                    )
+                return total
+            except Exception as exc:
+                raise StorageError(f"sqlite-vec total_size failed: {exc}") from exc
+
+        return await self._run(_size)
+
+    async def weakest(self, collections: Sequence[str], *, limit: int) -> list[dict[str, Any]]:
+        if limit <= 0 or not collections:
+            return []
+
+        def _entity_time(payload: Any) -> float:
+            v = payload.get("entity_time", 0.0)
+            try:
+                v = float(v)
+                return v if math.isfinite(v) else 0.0
+            except (TypeError, ValueError):
+                return 0.0
+
+        def _size(text: str, payload: dict[str, Any], affect: Any) -> int:
+            sb = payload.get("size_bytes")
+            if isinstance(sb, int) and not isinstance(sb, bool):
+                return int(sb)
+            affect_dict = json.loads(affect) if affect else None
+            return record_size(
+                self._latent_dim, str(text or ""), payload, affect_dict
+            )
+
+        placeholders = ",".join("?" for _ in collections)
+
+        def _weakest(db: Any) -> list[dict[str, Any]]:
+            if db is None:
+                raise StorageError("sqlite-vec weakest before initialize()")
+            try:
+                cur = db.execute(
+                    f"SELECT collection, point_id, text, payload, affect FROM memories "
+                    f"WHERE collection IN ({placeholders}) "
+                    "AND json_type(payload, '$.log_base') IN ('real', 'integer') "
+                    "ORDER BY json_extract(payload, '$.log_base') ASC, "
+                    "json_extract(payload, '$.entity_time') ASC, point_id ASC "
+                    "LIMIT ?",
+                    (*collections, int(limit)),
+                )
+                rows = list(cur.fetchall())
+                if not rows:
+                    return []
+                seen: set[tuple[str, str]] = set()
+                out: list[tuple[tuple[float, float, str], dict[str, Any]]] = []
+                for row in rows:
+                    coll, pid, text, payload_json, affect_json = row
+                    seen.add((str(coll), str(pid)))
+                    payload = json.loads(payload_json) if payload_json else {}
+                    lb = float(payload.get("log_base", 0.0))
+                    et = _entity_time(payload)
+                    out.append(
+                        (
+                            (lb, et, str(pid)),
+                            {
+                                "id": str(pid),
+                                "collection": str(coll),
+                                "log_base": lb,
+                                "entity_time": et,
+                                "size_bytes": _size(str(text or ""), payload, affect_json),
+                            },
+                        )
+                    )
+                if len(rows) == limit:
+                    last_payload = json.loads(rows[-1][3]) if rows[-1][3] else {}
+                    last_lb = float(last_payload.get("log_base", 0.0))
+                    cur2 = db.execute(
+                        f"SELECT collection, point_id, text, payload, affect FROM memories "
+                        f"WHERE collection IN ({placeholders}) "
+                        "AND json_type(payload, '$.log_base') IN ('real', 'integer') "
+                        "AND json_extract(payload, '$.log_base') = ?",
+                        (*collections, last_lb),
+                    )
+                    for row in cur2.fetchall():
+                        coll, pid, text, payload_json, affect_json = row
+                        key = (str(coll), str(pid))
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        payload = json.loads(payload_json) if payload_json else {}
+                        lb = float(payload.get("log_base", 0.0))
+                        et = _entity_time(payload)
+                        out.append(
+                            (
+                                (lb, et, str(pid)),
+                                {
+                                    "id": str(pid),
+                                    "collection": str(coll),
+                                    "log_base": lb,
+                                    "entity_time": et,
+                                    "size_bytes": _size(str(text or ""), payload, affect_json),
+                                },
+                            )
+                        )
+                out.sort(key=lambda t: t[0])
+                return [d for _, d in out]
+            except Exception as exc:
+                raise StorageError(f"sqlite-vec weakest failed: {exc}") from exc
+
+        return await self._run(_weakest)
+
+    async def delete_points(self, collection: str, point_ids: Sequence[str]) -> None:
+        if not point_ids:
+            return
+
+        def _delete(db: Any) -> None:
+            if db is None:
+                raise StorageError("sqlite-vec delete_points before initialize()")
+            try:
+                db.execute("BEGIN")
+                ids = list(point_ids)
+                chunk = 500
+                for i in range(0, len(ids), chunk):
+                    batch = ids[i : i + chunk]
+                    ph = ",".join("?" for _ in batch)
+                    cur = db.execute(
+                        f"SELECT rowid FROM memories WHERE collection = ? AND point_id IN ({ph})",
+                        (collection, *batch),
+                    )
+                    rowids = tuple(int(r[0]) for r in cur.fetchall())
+                    if not rowids:
+                        continue
+                    db.execute(
+                        f"DELETE FROM vec_memories WHERE rowid IN ({','.join('?' for _ in rowids)})",
+                        rowids,
+                    )
+                    db.execute(
+                        f"DELETE FROM memories WHERE rowid IN ({','.join('?' for _ in rowids)})",
+                        rowids,
+                    )
+                db.commit()
+            except Exception as exc:
+                db.rollback()
+                raise StorageError(
+                    f"sqlite-vec delete_points failed for {collection!r}: {exc}"
+                ) from exc
+
+        await self._run(_delete)
 
 
 class QdrantStorage:
@@ -1391,21 +1653,8 @@ class QdrantStorage:
         *,
         query_vector: list[float],
         limit: int,
-        min_log_base: float | None = None,
     ) -> list[RecalledMemory]:
-        from qdrant_client import models  # type: ignore[import-untyped]
-
         assert self._client is not None
-        query_filter = None
-        if min_log_base is not None:
-            query_filter = models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="log_base",
-                        range=models.Range(gte=float(min_log_base)),
-                    )
-                ]
-            )
         try:
             # qdrant-client >=1.12 removed AsyncQdrantClient.search; query_points
             # is the replacement. The bare vector is passed as `query` and the
@@ -1415,7 +1664,6 @@ class QdrantStorage:
                 query=list(query_vector),
                 limit=int(limit),
                 with_payload=True,
-                query_filter=query_filter,
             )
             hits = response.points
         except Exception as exc:
@@ -1871,10 +2119,9 @@ class QdrantStorage:
         collection: str,
         *,
         born_sleep: int | None = None,
-        log_base_below: float | None = None,
         has_log_base: bool | None = None,
     ) -> int:
-        _check_one_filter(born_sleep, log_base_below, has_log_base)
+        _check_one_filter(born_sleep, has_log_base)
         if self._client is None:
             raise StorageError("qdrant count_filtered before initialize()")
         from qdrant_client import models  # type: ignore[import-untyped]
@@ -1894,15 +2141,6 @@ class QdrantStorage:
                     models.FieldCondition(
                         key="born_sleep",
                         match=models.MatchValue(value=int(born_sleep)),
-                    )
-                ]
-            )
-        elif log_base_below is not None:
-            count_filter = models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="log_base",
-                        range=models.Range(lt=float(log_base_below)),
                     )
                 ]
             )
@@ -1985,7 +2223,7 @@ class QdrantStorage:
         for name in collections:
             if name not in existing_names:
                 continue
-            ids: list[str] = []
+            operations: list[Any] = []
             try:
                 offset = None
                 while True:
@@ -1993,35 +2231,242 @@ class QdrantStorage:
                         collection_name=name,
                         limit=chunk_size,
                         offset=offset,
-                        with_payload=False,
+                        with_payload=True,
                         with_vectors=False,
                         scroll_filter=empty_filter,
                     )
                     for p in batch:
-                        ids.append(str(p.id))
+                        payload = dict(getattr(p, "payload", None) or {})
+                        text = str(payload.pop("text", ""))
+                        affect = payload.pop("affect", None)
+                        size = record_size(
+                            self._latent_dim, text, payload, affect
+                        )
+                        operations.append(
+                            models.SetPayloadOperation(
+                                set_payload=models.SetPayload(
+                                    payload={
+                                        "log_base": float(log_base),
+                                        "born_sleep": -1,
+                                        "size_bytes": size,
+                                    },
+                                    points=[str(p.id)],
+                                )
+                            )
+                        )
                     if offset is None:
                         break
             except Exception as exc:
                 raise StorageError(
                     f"qdrant backfill_strength failed scrolling collection {name!r}: {exc}"
                 ) from exc
-            total += len(ids)
-            for i in range(0, len(ids), chunk_size):
-                chunk = ids[i : i + chunk_size]
+            total += len(operations)
+            for i in range(0, len(operations), chunk_size):
                 try:
                     await self._client.batch_update_points(
                         collection_name=name,
-                        update_operations=[
-                            models.SetPayloadOperation(
-                                set_payload=models.SetPayload(
-                                    payload={"log_base": float(log_base), "born_sleep": -1},
-                                    points=chunk,
-                                )
-                            )
-                        ],
+                        update_operations=operations[i : i + chunk_size],
                     )
                 except Exception as exc:
                     raise StorageError(
                         f"qdrant backfill_strength failed updating collection {name!r}: {exc}"
                     ) from exc
         return total
+
+    async def total_size(self, collections: Sequence[str]) -> int:
+        if not collections:
+            return 0
+        if self._client is None:
+            raise StorageError("qdrant total_size before initialize()")
+        try:
+            existing = await self._client.get_collections()
+            existing_names = {c.name for c in existing.collections}
+        except Exception as exc:
+            raise StorageError(
+                f"qdrant total_size failed listing collections: {exc}"
+            ) from exc
+        total = 0
+        for name in collections:
+            if name not in existing_names:
+                continue
+            offset = None
+            try:
+                while True:
+                    batch, offset = await self._client.scroll(
+                        collection_name=name,
+                        limit=1024,
+                        offset=offset,
+                        with_payload=True,
+                        with_vectors=False,
+                    )
+                    for p in batch:
+                        payload = dict(getattr(p, "payload", None) or {})
+                        text = str(payload.pop("text", ""))
+                        affect = payload.pop("affect", None)
+                        sb = payload.get("size_bytes")
+                        if isinstance(sb, int) and not isinstance(sb, bool):
+                            total += int(sb)
+                        else:
+                            total += record_size(
+                                self._latent_dim, text, payload, affect
+                            )
+                    if offset is None:
+                        break
+            except Exception as exc:
+                raise StorageError(
+                    f"qdrant total_size failed scrolling collection {name!r}: {exc}"
+                ) from exc
+        return total
+
+    async def weakest(self, collections: Sequence[str], *, limit: int) -> list[dict[str, Any]]:
+        if limit <= 0 or not collections:
+            return []
+        if self._client is None:
+            raise StorageError("qdrant weakest before initialize()")
+        from qdrant_client import models  # type: ignore[import-untyped]
+
+        def _entity_time(payload: dict[str, Any]) -> float:
+            v = payload.get("entity_time", 0.0)
+            try:
+                v = float(v)
+                return v if math.isfinite(v) else 0.0
+            except (TypeError, ValueError):
+                return 0.0
+
+        try:
+            existing = await self._client.get_collections()
+            existing_names = {c.name for c in existing.collections}
+        except Exception as exc:
+            raise StorageError(
+                f"qdrant weakest failed listing collections: {exc}"
+            ) from exc
+
+        per_collection: list[tuple[str, list[tuple[str, float, dict[str, Any], str, Any]], bool, float | None]] = []
+        for name in collections:
+            if name not in existing_names:
+                continue
+            try:
+                batch, _ = await self._client.scroll(
+                    collection_name=name,
+                    limit=limit,
+                    order_by=models.OrderBy(
+                        key="log_base", direction=models.Direction.ASC
+                    ),
+                    with_payload=True,
+                    with_vectors=False,
+                )
+            except Exception as exc:
+                raise StorageError(
+                    f"qdrant weakest failed scrolling collection {name!r}: {exc}"
+                ) from exc
+            if not batch:
+                continue
+            points: list[tuple[str, float, dict[str, Any], str, Any]] = []
+            last_lb: float | None = None
+            seen: set[str] = set()
+            for p in batch:
+                payload = dict(getattr(p, "payload", None) or {})
+                text = str(payload.pop("text", ""))
+                affect = payload.pop("affect", None)
+                lb = _numeric_log_base(payload)
+                if lb is None:
+                    continue
+                last_lb = lb
+                points.append((str(p.id), lb, payload, text, affect))
+                seen.add(str(p.id))
+            if len(batch) == limit and last_lb is not None:
+                tie_filter = models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="log_base",
+                            range=models.Range(gte=last_lb, lte=last_lb),
+                        )
+                    ]
+                )
+                offset = None
+                while True:
+                    try:
+                        tie_batch, offset = await self._client.scroll(
+                            collection_name=name,
+                            limit=1024,
+                            offset=offset,
+                            with_payload=True,
+                            with_vectors=False,
+                            scroll_filter=tie_filter,
+                        )
+                    except Exception as exc:
+                        raise StorageError(
+                            f"qdrant weakest failed scrolling tie in collection {name!r}: {exc}"
+                        ) from exc
+                    for p in tie_batch:
+                        pid = str(p.id)
+                        if pid in seen:
+                            continue
+                        payload = dict(getattr(p, "payload", None) or {})
+                        text = str(payload.pop("text", ""))
+                        affect = payload.pop("affect", None)
+                        lb = _numeric_log_base(payload)
+                        if lb is None:
+                            continue
+                        points.append((pid, lb, payload, text, affect))
+                        seen.add(pid)
+                    if offset is None:
+                        break
+            per_collection.append((name, points, len(batch) == limit, last_lb))
+
+        any_frontier = any(has_frontier for _, _, has_frontier, _ in per_collection)
+        frontier: float | None = None
+        if any_frontier:
+            frontier = min(
+                last_lb
+                for _, _, has_frontier, last_lb in per_collection
+                if has_frontier and last_lb is not None
+            )
+
+        all_points: list[tuple[float, float, str, str, dict[str, Any], str, Any]] = []
+        for name, points, _, _ in per_collection:
+            for pid, lb, payload, text, affect in points:
+                if frontier is not None and lb > frontier:
+                    continue
+                all_points.append(
+                    (lb, _entity_time(payload), pid, name, payload, text, affect)
+                )
+        all_points.sort(key=lambda t: (t[0], t[1], t[2]))
+        return [
+            {
+                "id": pid,
+                "collection": name,
+                "log_base": lb,
+                "entity_time": et,
+                "size_bytes": (
+                    int(payload["size_bytes"])
+                    if isinstance(payload.get("size_bytes"), int)
+                    and not isinstance(payload.get("size_bytes"), bool)
+                    else record_size(
+                        self._latent_dim, text, payload, affect
+                    )
+                ),
+            }
+            for lb, et, pid, name, payload, text, affect in all_points
+        ]
+
+    async def delete_points(self, collection: str, point_ids: Sequence[str]) -> None:
+        if not point_ids:
+            return
+        if self._client is None:
+            raise StorageError("qdrant delete_points before initialize()")
+        from qdrant_client import models  # type: ignore[import-untyped]
+
+        chunk_size = 1000
+        ids = list(point_ids)
+        for i in range(0, len(ids), chunk_size):
+            chunk = ids[i : i + chunk_size]
+            try:
+                await self._client.delete(
+                    collection_name=collection,
+                    points_selector=models.PointIdsList(points=chunk),
+                )
+            except Exception as exc:
+                raise StorageError(
+                    f"qdrant delete_points failed for {collection!r}: {exc}"
+                ) from exc

@@ -603,6 +603,11 @@ short_term_capacity = 128
 recall_top_k = 5
 baseline_salience = 0.15
 alert_salience = 0.6
+# Storage budget of the persisted memory stores, in bytes (paper A.10, Table A1
+# row B). Set it from the disk this installation can give Mnemos. When a sleep
+# leaves the stores above it, the weakest traces are deleted first until they
+# fit. The paper gives no value; 10 GiB is a safe default, not a recommendation.
+storage_budget_bytes = 10737418240
 
 [mnemos.qdrant]
 host = "127.0.0.1"
@@ -627,9 +632,9 @@ cross_period_candidates = 128
 # at the resting broadcast rate (paper A.10 and Table A1, after the mean
 # decrease of synaptic size in sleep that de Vivo et al. 2017 measured).
 retention_per_day = 0.82
-# A trace whose strength falls below this floor is silent: recall and replay
-# pass over it, and it stays in the store.
-silence_floor = 0.01
+# A trace whose strength falls below this floor is deleted in the sleep that
+# weakened it (paper A.10).
+prune_floor = 0.01
 
 [eidolon]
 persistence_path = "state/eidolon/self_model.json"

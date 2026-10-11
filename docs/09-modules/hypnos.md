@@ -49,7 +49,7 @@ flowchart TD
     ST --> P1
     P1["Phase 1: light consolidation\n• set_frequency(0.5) on active modules\n• mnemos.consolidate_now()"]
     P1 --> P2
-    P2["Phase 2: deep consolidation (needs Mnemos)\n• open the replay window; mnemos.replay_now(); close it\n• mnemos.downscale(protect=replayed traces)"]
+    P2["Phase 2: deep consolidation (needs Mnemos)\n• open the replay window; mnemos.replay_now(); close it\n• mnemos.downscale(protect=replayed traces): downscale, then prune"]
     P2 --> P3
     P3["Phase 3: associative replay (flag)\n• cross-period traces\n• cue Phantasia\n• publish hypnos.association"]
     P3 --> P4

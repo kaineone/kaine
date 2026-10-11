@@ -63,7 +63,8 @@ class _SupportsMnemos(Protocol):
 
     async def consolidate_now(self) -> int: ...
 
-    async def downscale(self, protect: Sequence[Any] = ()) -> dict[str, Any]: ...
+    async def downscale(self, protect: Sequence[Any] = ()) -> dict[str, Any]:
+        """Downscale trace strengths, protecting the replayed traces (paper A.10)."""
 
     async def replay_now(self) -> list[Any]: ...
 

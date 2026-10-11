@@ -73,8 +73,10 @@ class Mnemos(BaseModule):
         cross_period_candidates: int = 128,
         # Strength-downscaling parameters for sleep phase 2 (paper A.10).
         strength_retention_per_day: float = 0.82,
-        strength_silence_floor: float = 0.01,
+        strength_prune_floor: float = 0.01,
         traces_per_day: float = 288000.0,
+        # Persisted-store budget in bytes (paper A.10, Table A1 row B).
+        storage_budget_bytes: int = 10 * 1024**3,
         # Peer stream names for affect + Hypnos window tracking
         thymos_stream: str = "thymos.out",
         hypnos_stream: str = "hypnos.out",
@@ -168,7 +170,8 @@ class Mnemos(BaseModule):
                 short_term_capacity=short_term_capacity,
                 retrigger_hook=retrigger_hook,
                 retention_per_day=strength_retention_per_day,
-                silence_floor=strength_silence_floor,
+                prune_floor=strength_prune_floor,
+                budget_bytes=storage_budget_bytes,
                 traces_per_day=traces_per_day,
                 entity_clock=self._clock.now,
             )
@@ -415,11 +418,12 @@ class Mnemos(BaseModule):
         return await self._core.consolidate_now()
 
     async def downscale(self, protect: Sequence[Any] = ()) -> dict[str, Any]:
-        """Sleep phase 2 calls this after replay; downscale trace strengths.
+        """Sleep phase 2 calls this after replay; downscale then prune.
 
         Every persisted trace except the replayed ones is scaled by
         retention_per_day ** (N_new / N_day), and the replayed ones keep
-        their strength (paper A.10, Tononi and Cirelli 2006; 2014). Vectors
+        their strength. Traces below the floor and then the weakest traces
+        are deleted until the store fits the budget (paper A.10). Vectors
         are never touched.
 
         Args:
@@ -458,7 +462,7 @@ class Mnemos(BaseModule):
         vectors) are gathered once each, sorted by timestamp, and divided
         into *periods* equal-width windows (oldest to newest). Up to
         *per_period* traces are sampled from each non-empty bucket. This works
-        on every storage backend. Silent traces are skipped (paper A.10).
+        on every storage backend.
 
         Returns a mapping ``{period_label: [trace_dict, ...]}`` where each
         trace dict carries ``point_id`` (str) and ``text`` (str) — the shape
@@ -523,8 +527,6 @@ class Mnemos(BaseModule):
                 continue
             seen.add(key)
             payload = dict(point.get("payload", {}))
-            if self._core.is_silent(payload):
-                continue
             affect_raw = point.get("affect") or {}
             ts = float(payload.get("timestamp", 0.0))
             all_traces.append(

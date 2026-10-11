@@ -10,7 +10,7 @@ strength 1 with `born_sleep` set to the current sleep count and `entity_time`
 set to its storage time on the entity clock. `entity_time` SHALL continue
 across restarts. A caller's payload SHALL NOT set `log_base`, `born_sleep` or
 `entity_time`. `payload["timestamp"]` SHALL stay wall-clock time. A trace is
-silent when $h_i<h_{\min}$; no trace SHALL be deleted for being silent.
+below the floor when $h_i<h_{\min}$; no such trace SHALL exist while the entity is awake.
 
 #### Scenario: A persisted trace starts at full strength
 - **WHEN** a trace is persisted
@@ -26,14 +26,15 @@ silent when $h_i<h_{\min}$; no trace SHALL be deleted for being silent.
 ### Requirement: Sleep downscales strengths and protects replayed traces
 `MnemosCore.downscale(protect)` SHALL count $N_{\rm new}$, the persisted traces
 with `born_sleep` equal to the sleep count, and SHALL multiply the strength of
-every persisted trace outside `protect`, silent traces included, by
+every persisted trace outside `protect` by
 $\varrho^{N_{\rm new}/N_{\rm day}}$, where $\varrho$ is
 `[mnemos.strength].retention_per_day` and $N_{\rm day}$ is
 `86400 * [cycle].experiential_rate_hz`. The traces in `protect` SHALL keep
 their strength. It SHALL NOT change any vector. It SHALL write the new meta
 before it writes the protected traces, so a crash between the two can only
 remove strength. It SHALL return `n_new`, `factor`, `protected`,
-`total_before`, `total_after` and `silent`.
+`total_before`, `total_after`, `pruned_floor`, `pruned_budget` and
+`store_bytes`.
 
 #### Scenario: One day of storage keeps the retention fraction
 - **WHEN** $N_{\rm day}$ traces were stored since the last sleep and nothing is
@@ -51,7 +52,7 @@ remove strength. It SHALL return `n_new`, `factor`, `protected`,
 
 ### Requirement: Recall ranks by strength times similarity
 Recall from a persisted collection SHALL return the requested number of
-non-silent traces with cosine similarity above 0, in decreasing order of
+traces with cosine similarity above 0, in decreasing order of
 strength times similarity, exactly relative to the backend's cosine order, and
 SHALL change no strength. Each result SHALL report `similarity`, `strength`
 and `score`, the product. Short-term traces SHALL rank by similarity alone.
@@ -72,9 +73,39 @@ and SHALL page past the extension's limit of 4096 rows.
 - **THEN** recall still returns the requested number of traces from the target
   collection, in the right order
 
-#### Scenario: Silent traces are not recalled
-- **WHEN** a trace's strength is below the silence floor
-- **THEN** recall does not return it and it stays in the store
+### Requirement: Sleep prunes at the floor and to the storage budget
+After the downscaling, in the same call, Mnemos SHALL delete every persisted
+trace with $h_i<h_{\min}$ (`[mnemos.strength].prune_floor`), and then, while
+the stores' size $S$ exceeds `[mnemos].storage_budget_bytes`, the trace outside
+the protected set with the lowest strength, the oldest by `entity_time` first
+among equal strengths, stopping when $S$ fits or only protected traces remain.
+$S$ SHALL be the sum over persisted traces of `size_bytes`, the record's
+float32 embedding plus its serialized text, payload and affect, kept in the
+meta record. No trace SHALL be deleted at any other time. The sleep summary
+SHALL carry `memory_pruned_floor`, `memory_pruned_budget` and
+`memory_store_bytes`, and the research log SHALL keep them.
+
+#### Scenario: A trace below the floor is pruned in the sleep that weakened it
+- **WHEN** a downscaling takes a trace below the floor
+- **THEN** that trace is deleted in the same sleep and no remaining trace is
+  below the floor
+
+#### Scenario: The budget prunes the weakest, oldest first
+- **WHEN** the stores exceed the budget after a sleep's downscaling
+- **THEN** the weakest traces are deleted, the oldest first among equal
+  strengths, until the stores fit
+
+#### Scenario: Replayed traces are exempt
+- **WHEN** the budget is smaller than the replayed traces alone
+- **THEN** every other trace is deleted and the replayed ones remain
+
+#### Scenario: Nothing is deleted while awake
+- **WHEN** the stores exceed the budget between two sleeps
+- **THEN** no trace is deleted until the next sleep
+
+#### Scenario: A preserved bundle is unaffected by later pruning
+- **WHEN** a store is captured and then pruned
+- **THEN** the captured bundle still holds every trace and restores them
 
 ### Requirement: Strength survives migration and preservation
 At initialize Mnemos SHALL backfill, idempotently, every persisted point
