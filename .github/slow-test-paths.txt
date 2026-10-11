@@ -8,3 +8,6 @@
 ^pyproject\.toml$
 ^\.github/slow-test-paths\.txt$
 ^\.github/workflows/tests\.yml$
+^tests/test_rename_modules_repo\.py$
+^tools/maintainer/rename_modules\.py$
+^kaine/legacy_names\.py$

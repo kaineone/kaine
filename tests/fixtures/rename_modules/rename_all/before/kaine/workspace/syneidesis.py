@@ -1,0 +1,1 @@
+SYNEIDESIS_SOURCE = "syneidesis"

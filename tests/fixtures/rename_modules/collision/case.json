@@ -1,0 +1,6 @@
+{
+  "args": ["--apply", "--scope", "identifiers"],
+  "expect_exit": 2,
+  "moves": [],
+  "report_contains": ["## collisions (1)"]
+}

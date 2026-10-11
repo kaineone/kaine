@@ -1,0 +1,21 @@
+[affect]
+enabled = true
+
+[modules]
+affect = true
+recorder = false
+perceptual_locus = false
+
+[supervisor]
+task = "supervisor"
+
+[perceptual_locus]
+active = true
+
+[perception_feed]
+mode = "stimulus_source"
+
+[individuation]
+disclosure = "...since your birth..."
+
+# Affect settings

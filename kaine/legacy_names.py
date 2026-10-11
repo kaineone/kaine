@@ -1,0 +1,722 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
+"""
+Single mapping table from old module names to functional names.
+
+The codemod ``tools/maintainer/rename_modules.py`` and every runtime alias table
+read this module. It imports nothing and uses only builtins. It is the only live
+source file that spells the old module names. ``SCOPE_STATUS`` tracks which
+codemod scopes are complete; the guard ``tests/test_module_names_guard.py`` reads it.
+"""
+
+SCOPES = ("prose", "identifiers", "keys", "operator", "persisted")
+
+SCOPE_STATUS = {
+    "prose": "pending",
+    "identifiers": "pending",
+    "keys": "pending",
+    "operator": "pending",
+    "persisted": "pending",
+}
+
+MODULES = {
+    "topos": {
+        "old_class": "Topos",
+        "new_class": "Vision",
+        "new_key": "vision",
+        "new_prose": "Vision",
+        "layer": "5a",
+    },
+    "soma": {
+        "old_class": "Soma",
+        "new_class": "Interoception",
+        "new_key": "interoception",
+        "new_prose": "Interoception",
+        "layer": "5a",
+    },
+    "chronos": {
+        "old_class": "Chronos",
+        "new_class": "Sequence",
+        "new_key": "sequence",
+        "new_prose": "Sequence",
+        "layer": "5a",
+    },
+    "thymos": {
+        "old_class": "Thymos",
+        "new_class": "Affect",
+        "new_key": "affect",
+        "new_prose": "Affect",
+        "layer": "5b",
+    },
+    "hypnos": {
+        "old_class": "Hypnos",
+        "new_class": "Sleep",
+        "new_key": "sleep",
+        "new_prose": "Sleep",
+        "layer": "5b",
+    },
+    "mnemos": {
+        "old_class": "Mnemos",
+        "new_class": "EpisodicMemory",
+        "new_key": "episodic_memory",
+        "new_prose": "Episodic memory",
+        "layer": "5b",
+    },
+    "phantasia": {
+        "old_class": "Phantasia",
+        "new_class": "WorldModel",
+        "new_key": "world_model",
+        "new_prose": "World model",
+        "layer": "5b",
+    },
+    "lingua": {
+        "old_class": "Lingua",
+        "new_class": "Language",
+        "new_key": "language",
+        "new_prose": "Language",
+        "layer": "5c",
+    },
+    "vox": {
+        "old_class": "Vox",
+        "new_class": "Vocal",
+        "new_key": "vocal",
+        "new_prose": "Vocal",
+        "layer": "5c",
+    },
+    "nous": {
+        "old_class": "Nous",
+        "new_class": "Planning",
+        "new_key": "planning",
+        "new_prose": "Planning",
+        "layer": "5c",
+    },
+    "volition": {
+        "old_class": "Volition",
+        "new_class": "ActionSelection",
+        "new_key": "action_selection",
+        "new_prose": "Action selection",
+        "layer": "5c",
+    },
+    "eidolon": {
+        "old_class": "Eidolon",
+        "new_class": "SelfModel",
+        "new_key": "self_model",
+        "new_prose": "Self-model",
+        "layer": "5c",
+    },
+    "empatheia": {
+        "old_class": "Empatheia",
+        "new_class": "SocialCognition",
+        "new_key": "social_cognition",
+        "new_prose": "Social cognition",
+        "layer": "5c",
+    },
+    "syneidesis": {
+        "old_class": "Syneidesis",
+        "new_class": "Workspace",
+        "new_key": "workspace",
+        "new_prose": "Workspace",
+        "layer": "5c",
+    },
+    "praxis": {
+        "old_class": "Praxis",
+        "new_class": "Effectors",
+        "new_key": "effectors",
+        "new_prose": "Effectors",
+        "layer": "5c",
+    },
+    "mundus": {
+        "old_class": "Mundus",
+        "new_class": "Embodiment",
+        "new_key": "embodiment",
+        "new_prose": "Embodiment",
+        "layer": "5d",
+    },
+    "perception": {
+        "old_class": "Perception",
+        "new_class": "PerceptualLocus",
+        "new_key": "perceptual_locus",
+        "new_prose": "Perceptual locus",
+        "layer": "5d",
+    },
+    "spot": {
+        "old_class": "Spot",
+        "new_class": "Supervisor",
+        "new_key": "supervisor",
+        "new_prose": "Supervisor",
+        "layer": "5d",
+    },
+    "nexus": {
+        "old_class": "Nexus",
+        "new_class": "Dashboard",
+        "new_key": "dashboard",
+        "new_prose": "Dashboard",
+        "layer": "5d",
+    },
+    "echo": {
+        "old_class": "Echo",
+        "new_class": "Recorder",
+        "new_key": "recorder",
+        "new_prose": "Recorder",
+        "layer": "5d",
+    },
+}
+
+DEVELOPMENTAL = {
+    "gestation": {
+        "old_class": "Gestation",
+        "new_class": "Development",
+        "new_key": "development",
+        "new_prose": "development",
+        "layer": "5d",
+    },
+    "gestational": {
+        "old_class": "Gestational",
+        "new_class": "Developmental",
+        "new_key": "developmental",
+        "new_prose": "developmental",
+        "layer": "5d",
+    },
+    "womb": {
+        "old_class": "Womb",
+        "new_class": "StimulusSource",
+        "new_key": "stimulus_source",
+        "new_prose": "stimulus source",
+        "layer": "5d",
+        "old_plural": "wombs",
+        "new_plural": "stimulus_sources",
+    },
+    "birth": {
+        "old_class": "Birth",
+        "new_class": "Maturation",
+        "new_key": "maturation",
+        "new_prose": "maturation",
+        "layer": "5d",
+        "old_plural": "births",
+        "new_plural": "maturations",
+    },
+    "being": {
+        "old_class": "Being",
+        "new_class": "Entity",
+        "new_key": "entity",
+        "new_prose": "entity",
+        "layer": "5d",
+        "old_plural": "beings",
+        "new_plural": "entities",
+    },
+}
+
+UI_GLOBS = (
+    "kaine/nexus/static/*",
+    "kaine/nexus/templates/*",
+    "kaine/dashboard/static/*",
+    "kaine/dashboard/templates/*",
+)
+
+MODULE_LIST_FILES = (
+    "kaine/modules/perception/*",
+    "kaine/modules/perceptual_locus/*",
+    "kaine/boot/factories/perception.py",
+    "kaine/boot/factories/perceptual_locus.py",
+    "kaine/modules/echo.py",
+    "kaine/modules/recorder.py",
+    "kaine/boot/factories/echo.py",
+    "kaine/boot/factories/recorder.py",
+    "kaine/boot/registry.py",
+    "kaine/bus/streams.py",
+    "kaine/setup/steps.py",
+    "kaine/setup/wizard_core.py",
+    "kaine/setup/wizard_steps.py",
+)
+
+GUARDED = {
+    "spot": {
+        "rules": [
+            {
+                "action": "keep",
+                "pattern": r"(?i)\bspot[- ]checks?\b",
+                "why": "English: spot check",
+            },
+            {
+                "action": "keep",
+                "pattern": r"[Ss]pot[Ll]ight",
+                "why": "three.js spot light",
+            },
+            {
+                "action": "keep",
+                "shapes": ["camel_lower"],
+                "why": "camelCase such as spotLight",
+            },
+            {
+                "action": "rename",
+                "pattern": r"(?<![A-Za-z])Spot(?![a-z])",
+                "why": "proper name or class component",
+            },
+            {
+                "action": "rename",
+                "contexts": ["py_name", "toml_header", "toml_key", "path"],
+                "why": "identifier or key position",
+            },
+            {
+                "action": "rename",
+                "shapes": ["component", "segment"],
+                "why": "spot_, _spot, spot. or a path segment",
+            },
+            {
+                "action": "rename",
+                "pattern": r"[\"']spot[\"']",
+                "why": "module key string",
+            },
+            {
+                "action": "rename",
+                "pattern": r"\[spot[\].]",
+                "why": "config table in any text",
+            },
+            {
+                "action": "rename",
+                "contexts": ["md_code"],
+                "pattern": r"`spot`",
+                "why": "module key in a code span",
+            },
+        ],
+        "default": "queue",
+    },
+    "echo": {
+        "rules": [
+            {
+                "action": "keep",
+                "contexts": ["shell"],
+                "why": "shell builtin",
+            },
+            {
+                "action": "keep",
+                "files": [
+                    "*.sh",
+                    "*.bash",
+                    "*.yml",
+                    "*.yaml",
+                    "Dockerfile*",
+                    "docker/*",
+                    "quadlet/*",
+                    ".github/*",
+                    "scripts/*",
+                ],
+                "why": "shell, CI and container files",
+            },
+            {
+                "action": "rename",
+                "pattern": r"(?<![A-Za-z])EchoModule\b",
+                "why": "module class",
+            },
+            {
+                "action": "rename",
+                "pattern": r"(?<![A-Za-z0-9])ECHO_[A-Z0-9_]+",
+                "why": "module constant",
+            },
+            {
+                "action": "rename",
+                "pattern": r"kaine[./](?:modules|boot[./]factories)[./]echo(?![A-Za-z_])",
+                "why": "module path",
+            },
+            {
+                "action": "rename",
+                "pattern": r"(?<![A-Za-z0-9_.])echo\.out\b",
+                "why": "module stream",
+            },
+            {
+                "action": "rename",
+                "contexts": ["toml_header"],
+                "pattern": r"^\s*\[\[?echo[\].]",
+                "why": "config table",
+            },
+            {
+                "action": "rename",
+                "contexts": ["toml_key"],
+                "toml_table": "modules",
+                "why": "module flag",
+            },
+            {
+                "action": "rename",
+                "contexts": ["py_string"],
+                "files": list(MODULE_LIST_FILES),
+                "pattern": r"[\"']echo[\"']",
+                "why": "module key in a module list",
+            },
+        ],
+        "default": "queue",
+    },
+    "perception": {
+        "rules": [
+            {
+                "action": "keep",
+                "pattern": r"perception_(?:feed|preview|state|transition|prng)",
+                "why": "perception feed and friends",
+            },
+            {
+                "action": "keep",
+                "pattern": r"PERCEPTION_(?:FEED|PREVIEW|STATE|TRANSITION|PRNG)",
+                "why": "feed and preview constants",
+            },
+            {
+                "action": "keep",
+                "pattern": r"perception\.transition",
+                "why": "stimulus-source-to-world crossfade",
+            },
+            {
+                "action": "keep",
+                "pattern": r"kaine\[[^\]]*perception",
+                "why": "pip extra",
+            },
+            {
+                "action": "keep",
+                "files": ["pyproject.toml"],
+                "toml_table": "project.optional-dependencies",
+                "why": "pip extra",
+            },
+            {
+                "action": "keep",
+                "contexts": [
+                    "md_prose",
+                    "comment",
+                    "docstring",
+                    "toml_comment",
+                    "py_text",
+                    "toml_text",
+                ],
+                "pattern": r"(?<![A-Za-z])perception(?![A-Za-z_.])",
+                "why": "plain word",
+            },
+            {
+                "action": "rename",
+                "pattern": r"(?<![A-Za-z])PerceptionLocus",
+                "why": "locus class",
+            },
+            {
+                "action": "rename",
+                "pattern": r"kaine[./](?:modules|boot[./]factories)[./]perception(?![A-Za-z_])",
+                "why": "locus module path",
+            },
+            {
+                "action": "rename",
+                "contexts": ["toml_header"],
+                "pattern": r"^\s*\[\[?perception[\].]",
+                "why": "config table",
+            },
+            {
+                "action": "rename",
+                "contexts": ["toml_key"],
+                "toml_table": "modules",
+                "why": "module flag",
+            },
+            {
+                "action": "rename",
+                "contexts": ["py_string"],
+                "files": list(MODULE_LIST_FILES),
+                "pattern": r"[\"']perception[\"']",
+                "why": "module key in a module list",
+            },
+            {
+                "action": "rename",
+                "pattern": r"(?<![A-Za-z0-9_.])perception\.(?:out|locus)\b",
+                "why": "locus streams",
+            },
+            {
+                "action": "rename",
+                "pattern": r"intent\.perception\.switch",
+                "why": "locus intent",
+            },
+            {
+                "action": "rename",
+                "pattern": r"state/perception/",
+                "why": "locus state directory",
+            },
+        ],
+        "default": "queue",
+    },
+    "being": {
+        "rules": [
+            {
+                "action": "keep",
+                "pattern": r"(?i)\bhuman beings?\b",
+                "why": "English: human being",
+            },
+            {
+                "action": "rename",
+                "pattern": r"(?<![A-Za-z])beings\b",
+                "why": "plural noun",
+            },
+            {
+                "action": "rename",
+                "pattern": r"(?<![A-Za-z])being's",
+                "why": "possessive noun",
+            },
+            {
+                "action": "rename",
+                "shapes": ["component", "segment"],
+                "why": "identifier component such as fork_being",
+            },
+            {
+                "action": "rename",
+                "contexts": ["py_name"],
+                "why": "identifier",
+            },
+        ],
+        "default": "keep",
+    },
+}
+
+# Explicit overrides for review-queue items are added by later pull requests.
+RESOLUTIONS = []
+
+KEY_OVERRIDES = (
+    ("eidolon.self_model", "self_model.document"),
+    ("phantasia.world_model", "world_model.backend"),
+    ("fork_being", "fork_entity"),
+    ("PerceptionLocus", "PerceptualLocus"),
+    ("perception.locus.", "perceptual_locus."),
+    ("perception_locus", "perceptual_locus"),
+    # The capability folder and name "spot-supervisor" would otherwise become a stutter.
+    ("spot-supervisor", "supervisor"),
+)
+
+PHRASES = (
+    ("gestation entrainment marker", "heartbeat entrainment marker"),
+    ("gestational stimulus", "developmental stimulus"),
+    ("Perception locus", "Perceptual locus"),
+    ("perception locus", "perceptual locus"),
+    ("a being", "an entity"),
+    ("the being", "the entity"),
+    ("each being", "each entity"),
+    ("this being", "this entity"),
+    ("every being", "every entity"),
+    ("preserved being", "preserved entity"),
+    ("a womb", "a stimulus source"),
+)
+
+PATH_OVERRIDES = {
+    "kaine/workspace/syneidesis.py": "kaine/workspace/core.py",
+    # Keys ending in "/" are directory prefixes.
+    "openspec/specs/spot-supervisor/": "openspec/specs/supervisor/",
+}
+
+PERSISTED_EXACT = {
+    "gestation": "development",
+    "gestation_started_at": "development_started_at",
+    "womb_t_at_birth": "stimulus_source_t_at_maturation",
+    "womb_seed": "stimulus_source_seed",
+    "womb_params_digest": "stimulus_source_params_digest",
+    "birth_bloom_ends_at": "maturation_bloom_ends_at",
+    "empatheia_agents": "social_cognition_agents",
+    "mnemos_": "episodic_memory_",
+}
+
+REPO_TOP_DIRS = (
+    "kaine",
+    "tests",
+    "plugins",
+    "tools",
+    "scripts",
+    "docs",
+    "openspec",
+    "config",
+    "quadlet",
+    "compose",
+    "docker",
+    "eval_probes",
+    ".github",
+)
+
+EXCLUDED_GLOBS = (
+    "openspec/changes/archive/",
+    "docs/records/",
+    "kaine/nexus/static/vendor/",
+    "kaine/nexus/static/fonts/",
+    "external/",
+    "THIRD_PARTY_LICENSES.md",
+    "unsloth_compiled_cache/",
+    "kaine.egg-info/",
+    "data/",
+    "state/",
+    "backups/",
+    "secrets/",
+    ".git/",
+    "kaine/decision/schema.py",
+    "kaine/decision/systemone.jinja",
+    "eval_probes/",
+    "kaine/modules/*/eval_probes/*.jsonl",
+    "kaine/legacy_names.py",
+    "tests/fixtures/rename_modules/",
+)
+
+EXCLUDED_TOML_KEYS = (
+    ("individuation", "disclosure"),
+)
+
+ACCEPTED_COLLISIONS = []
+
+SURVEY_EXTRA = (
+    ("audition", "audition (unchanged)"),
+    ("workspace", "workspace (target)"),
+)
+
+# The survey measures the tree as it was before the rename, so these keep the old paths.
+SURVEY_UI_PREFIXES = ("kaine/nexus/static/", "kaine/nexus/templates/")
+SURVEY_THIRD_PARTY_PREFIXES = (
+    "kaine/nexus/static/vendor/",
+    "kaine/nexus/static/fonts/",
+    "external/",
+    "unsloth_compiled_cache/",
+    "THIRD_PARTY_LICENSES.md",
+)
+
+GUARD_NAMES = tuple(
+    sorted(e["old_class"] for k, e in MODULES.items() if k not in GUARDED)
+)
+
+CONFIG_TABLES = tuple(
+    {"old": k, "new": e["new_key"], "scope": "keys"} for k, e in MODULES.items()
+) + (
+    {"old": "phantasia.world_model", "new": "world_model.backend", "scope": "keys"},
+    {"old": "perception_feed.womb", "new": "perception_feed.stimulus_source", "scope": "keys"},
+)
+
+CONFIG_KEYS = (
+    {"old": "womb_ready_retry_seconds", "new": "stimulus_source_ready_retry_seconds", "scope": "keys"},
+    {"old": "womb_check_seconds", "new": "stimulus_source_check_seconds", "scope": "keys"},
+    {"old": "womb_loss_after_seconds", "new": "stimulus_source_loss_after_seconds", "scope": "keys"},
+    {"old": "womb_arm_timeout_seconds", "new": "stimulus_source_arm_timeout_seconds", "scope": "keys"},
+    {"old": "womb_presence_window_seconds", "new": "stimulus_source_presence_window_seconds", "scope": "keys"},
+    {"old": "womb_prediction_error_ceiling", "new": "stimulus_source_prediction_error_ceiling", "scope": "keys"},
+    {"old": "birth_transition_seconds", "new": "maturation_transition_seconds", "scope": "keys"},
+)
+
+CONFIG_VALUES = (
+    {"old": "perception_feed.mode=womb", "new": "perception_feed.mode=stimulus_source", "scope": "keys"},
+    {"old": "mnemos.collection_prefix=mnemos_", "new": "episodic_memory.collection_prefix=episodic_memory_", "scope": "persisted"},
+    {"old": "empatheia.collection=empatheia_agents", "new": "social_cognition.collection=social_cognition_agents", "scope": "persisted"},
+)
+
+ENV_VARS = (
+    {"old": "KAINE_NEXUS_TOKEN", "new": "KAINE_DASHBOARD_TOKEN", "scope": "operator"},
+    {"old": "KAINE_NEXUS_ACCESS", "new": "KAINE_DASHBOARD_ACCESS", "scope": "operator"},
+    {"old": "KAINE_NEXUS_ALLOWED_ORIGINS", "new": "KAINE_DASHBOARD_ALLOWED_ORIGINS", "scope": "operator"},
+    {"old": "KAINE_NEXUS_CONVERSATION_ENABLED", "new": "KAINE_DASHBOARD_CONVERSATION_ENABLED", "scope": "operator"},
+    {"old": "KAINE_NEXUS_EXTRA_HOSTS", "new": "KAINE_DASHBOARD_EXTRA_HOSTS", "scope": "operator"},
+    {"old": "KAINE_NEXUS_HOST", "new": "KAINE_DASHBOARD_HOST", "scope": "operator"},
+    {"old": "KAINE_NEXUS_HOST_PORT", "new": "KAINE_DASHBOARD_HOST_PORT", "scope": "operator"},
+    {"old": "KAINE_NEXUS_NON_LOOPBACK_ALLOWED", "new": "KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED", "scope": "operator"},
+    {"old": "KAINE_NEXUS_PORT", "new": "KAINE_DASHBOARD_PORT", "scope": "operator"},
+    {"old": "KAINE_NEXUS_PUBLISHED_PORT", "new": "KAINE_DASHBOARD_PUBLISHED_PORT", "scope": "operator"},
+    {"old": "KAINE_NEXUS_READ_ONLY", "new": "KAINE_DASHBOARD_READ_ONLY", "scope": "operator"},
+    {"old": "KAINE_MUNDUS_OPERATOR_APPROVED", "new": "KAINE_EMBODIMENT_OPERATOR_APPROVED", "scope": "operator"},
+)
+
+COMPOSE_VARS = (
+    {"old": "NEXUS_HOST_PORT", "new": "DASHBOARD_HOST_PORT", "scope": "operator"},
+    {"old": "NEXUS_EXTRA_HOSTS", "new": "DASHBOARD_EXTRA_HOSTS", "scope": "operator"},
+    {"old": "NEXUS_TOKEN", "new": "DASHBOARD_TOKEN", "scope": "operator"},
+    {"old": "NEXUS_ACCESS", "new": "DASHBOARD_ACCESS", "scope": "operator"},
+)
+
+TEST_ENV_VARS = (
+    {"old": "KAINE_TOPOS_RUN_REAL_ENCODER", "new": "KAINE_VISION_RUN_REAL_ENCODER", "scope": "operator"},
+    {"old": "KAINE_NOUS_RUN_REAL_PYMDP", "new": "KAINE_PLANNING_RUN_REAL_PYMDP", "scope": "operator"},
+    {"old": "KAINE_NOUS_RUN_REAL_NAR", "new": "KAINE_PLANNING_RUN_REAL_NAR", "scope": "operator"},
+    {"old": "KAINE_VOX_RUN_REAL", "new": "KAINE_VOCAL_RUN_REAL", "scope": "operator"},
+    {"old": "KAINE_LINGUA_RUN_REAL_CHAT", "new": "KAINE_LANGUAGE_RUN_REAL_CHAT", "scope": "operator"},
+)
+
+CLI_FLAGS = (
+    {"old": "--serve-nexus", "new": "--serve-dashboard", "scope": "operator"},
+    {"old": "--db-gestation", "new": "--db-development", "scope": "operator"},
+    {"old": "--gestation-budget-seconds", "new": "--development-budget-seconds", "scope": "operator"},
+)
+
+PLUGIN_SEAMS = tuple(
+    {"old": f"oscillator.{k}", "new": f"oscillator.{e['new_key']}", "scope": "keys"}
+    for k, e in MODULES.items()
+) + (
+    {"old": "soma.forward_model", "new": "interoception.forward_model", "scope": "keys"},
+    {"old": "chronos.network", "new": "sequence.network", "scope": "keys"},
+    {"old": "nous.engine", "new": "planning.engine", "scope": "keys"},
+    {"old": "nous.engine_wrapper", "new": "planning.engine_wrapper", "scope": "keys"},
+)
+
+STREAM_NAMES = tuple(
+    {"old": f"{k}.out", "new": f"{e['new_key']}.out", "scope": "keys"}
+    for k, e in MODULES.items()
+) + (
+    {"old": "eidolon.self_model", "new": "self_model.document", "scope": "keys"},
+    {"old": "volition_feedback.out", "new": "action_selection_feedback.out", "scope": "keys"},
+    {"old": "intent.perception.switch", "new": "intent.perceptual_locus.switch", "scope": "keys"},
+    {"old": "stage.gestation.womb_lost", "new": "stage.development.stimulus_source_lost", "scope": "keys"},
+    {"old": "stage.birth.ready", "new": "stage.maturation.ready", "scope": "keys"},
+    {"old": "nexus.snapshot", "new": "dashboard.snapshot", "scope": "keys"},
+)
+
+RECORD_FIELDS = (
+    {"old": "thymos_state", "new": "affect_state", "scope": "keys"},
+) + tuple(
+    {"old": k, "new": e["new_key"], "scope": "keys"} for k, e in MODULES.items()
+)
+
+SIDECAR_DIRS = (
+    {"old": "eidolon_accuracy", "new": "self_model_accuracy", "scope": "keys"},
+    {"old": "empatheia", "new": "social_cognition", "scope": "keys"},
+    {"old": "nous_policy", "new": "planning_policy", "scope": "keys"},
+)
+
+STATE_PATHS = (
+    {"old": "mnemos/mnemos.db", "new": "episodic_memory/episodic_memory.db", "scope": "persisted"},
+    {"old": "mnemos/store_health.json", "new": "episodic_memory/store_health.json", "scope": "persisted"},
+    {"old": "lingua/intent_expression.jsonl", "new": "language/intent_expression.jsonl", "scope": "persisted"},
+    {"old": "lingua/utterance_outcomes.jsonl", "new": "language/utterance_outcomes.jsonl", "scope": "persisted"},
+    {"old": "eidolon/self_model.json", "new": "self_model/self_model.json", "scope": "persisted"},
+    {"old": "hypnos/consolidation_divergence.json", "new": "sleep/consolidation_divergence.json", "scope": "persisted"},
+    {"old": "hypnos/organ_window.json", "new": "sleep/organ_window.json", "scope": "persisted"},
+    {"old": "perception/desired.json", "new": "perceptual_locus/desired.json", "scope": "persisted"},
+    {"old": "perception/runtime.json", "new": "perceptual_locus/runtime.json", "scope": "persisted"},
+    {"old": "praxis/audit.log", "new": "effectors/audit.log", "scope": "persisted"},
+    {"old": "praxis/notifications.log", "new": "effectors/notifications.log", "scope": "persisted"},
+    {"old": "lifecycle/gestation_readout.json", "new": "lifecycle/development_readout.json", "scope": "persisted"},
+    {"old": "lifecycle/birth_request.json", "new": "lifecycle/maturation_request.json", "scope": "persisted"},
+    {"old": "lifecycle/birth_ack.json", "new": "lifecycle/maturation_ack.json", "scope": "persisted"},
+    {"old": "gestation_progress.json", "new": "development_progress.json", "scope": "persisted"},
+    {"old": "gestation_viability.json", "new": "development_viability.json", "scope": "persisted"},
+    {"old": "birth_adapter.gguf", "new": "maturation_adapter.gguf", "scope": "persisted"},
+)
+
+COLLECTIONS = (
+    {"old": "mnemos_", "new": "episodic_memory_", "scope": "persisted"},
+    {"old": "empatheia_agents", "new": "social_cognition_agents", "scope": "persisted"},
+)
+
+STAGE_VALUES = (
+    {"old": "gestation", "new": "development", "scope": "persisted"},
+)
+
+STAGE_FIELDS = (
+    {"old": "gestation_started_at", "new": "development_started_at", "scope": "persisted"},
+    {"old": "womb_t_at_birth", "new": "stimulus_source_t_at_maturation", "scope": "persisted"},
+    {"old": "womb_seed", "new": "stimulus_source_seed", "scope": "persisted"},
+    {"old": "womb_params_digest", "new": "stimulus_source_params_digest", "scope": "persisted"},
+    {"old": "birth_bloom_ends_at", "new": "maturation_bloom_ends_at", "scope": "persisted"},
+)
+
+BUNDLE_MEMBERS = (
+    {"old": "gestation/", "new": "development/", "scope": "keys"},
+)
+
+LIVED_ARTIFACTS = (
+    {"old": "phantasia/world_model.ckpt", "new": "world_model/world_model.ckpt", "scope": "persisted"},
+    {"old": "hypnos/consolidation_divergence.json", "new": "sleep/consolidation_divergence.json", "scope": "persisted"},
+    {"old": "perception/desired.json", "new": "perceptual_locus/desired.json", "scope": "persisted"},
+)
+
+PACKAGING = (
+    {"kind": "pip_extra", "old": "nexus", "new": "dashboard", "scope": "operator"},
+    {"kind": "entry_point", "old": "kaine.nexus", "new": "kaine.dashboard", "scope": "operator"},
+    {"kind": "quadlet_unit", "old": "kaine-nexus.container", "new": "kaine-dashboard.container", "scope": "operator"},
+    {"kind": "compose_service", "old": "nexus", "new": "dashboard", "scope": "operator"},
+)

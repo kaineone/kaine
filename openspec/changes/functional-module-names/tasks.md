@@ -5,11 +5,11 @@
 
 ## 2. Codemod and mapping table (PR 1)
 
-- [ ] 2.1 `kaine/legacy_names.py`: the mapping, the developmental phrases, the compound overrides, the alias tables and the per-entry scope status, as pure data with no imports.
-- [ ] 2.2 `tools/maintainer/rename_modules.py`: scopes, `--only`, `--apply`, `--check`, `git mv` moves, the exclusion list, the context rules, the collision check, the review queue and the sorted dry-run report.
-- [ ] 2.3 Fixture tests: each rule and scope, each known false positive unchanged, exclusions untouched, the `SequenceModule` alias, idempotence, a byte-identical report on two runs, injectivity of the table.
-- [ ] 2.4 `tests/test_module_names_guard.py` with every scope pending.
-- [ ] 2.5 Commit the survey script as `rename_modules.py --survey`, which prints the table in design.md.
+- [x] 2.1 `kaine/legacy_names.py`: the mapping, the developmental phrases, the compound overrides, the alias tables and the per-entry scope status, as pure data with no imports.
+- [x] 2.2 `tools/maintainer/rename_modules.py`: scopes, `--only`, `--apply`, `--check`, `git mv` moves, the exclusion list, the context rules, the collision check, the review queue and the sorted dry-run report.
+- [x] 2.3 Fixture tests: each rule and scope, each known false positive unchanged, exclusions untouched, the `SequenceModule` alias, idempotence, a byte-identical report on two runs, injectivity of the table.
+- [x] 2.4 `tests/test_module_names_guard.py` with every scope pending.
+- [x] 2.5 Commit the survey script as `rename_modules.py --survey`, which prints the table in design.md.
 
 ## 3. Collision pre-renames (PR 2)
 

@@ -1,0 +1,6 @@
+{
+  "args": ["--apply", "--scope", "identifiers"],
+  "expect_exit": 0,
+  "moves": [],
+  "report_contains": ["## moves (0)", "sequence-alias", "files=1", "replacements=3"]
+}

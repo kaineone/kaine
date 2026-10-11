@@ -1,0 +1,21 @@
+[thymos]
+enabled = true
+
+[modules]
+thymos = true
+echo = false
+perception = false
+
+[spot]
+task = "spot"
+
+[perception]
+active = true
+
+[perception_feed]
+mode = "womb"
+
+[individuation]
+disclosure = "...since your birth..."
+
+# Thymos settings

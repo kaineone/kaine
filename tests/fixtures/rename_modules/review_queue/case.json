@@ -1,0 +1,6 @@
+{
+  "args": [],
+  "expect_exit": 0,
+  "moves": [],
+  "report_contains": ["docs/notes.md:3 spot", "## review queue (1)"]
+}

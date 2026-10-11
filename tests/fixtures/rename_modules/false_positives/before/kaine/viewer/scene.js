@@ -1,0 +1,1 @@
+let spotLight = 1;
