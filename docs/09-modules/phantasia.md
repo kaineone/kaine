@@ -28,10 +28,10 @@ The waking trajectory buffer lives only in memory and is never serialized.
 |---|---|---|---|
 | Syneidesis | `workspace.broadcast` | snapshot | The snapshot, encoded as an observation vector (waking path) |
 | [Mnemos](mnemos.md) | `mnemos.out` | `mnemos.replay` | `memory_id`, recorded as the scenario's seed id |
-| [Hypnos](hypnos.md) | `hypnos.out` | `hypnos.sleep.started` | Opens the sleep window and starts a training pass |
-| [Hypnos](hypnos.md) | `hypnos.out` | `hypnos.sleep.completed` | Closes the sleep window |
+| [Hypnos](hypnos.md) | `hypnos.out` | `hypnos.sleep.started` | Pauses the waking path and starts a training pass |
+| [Hypnos](hypnos.md) | `hypnos.out` | `hypnos.sleep.completed` | Resumes the waking path and closes the scenario window if it is still open |
 
-A background task, `_peer_consumer_loop`, reads the Mnemos and Hypnos events. The waking path is paused while the sleep window is open.
+A background task, `_peer_consumer_loop`, polls the Mnemos and Hypnos streams every 50 ms. The waking path is paused from `hypnos.sleep.started` to `hypnos.sleep.completed`. The scenario window is separate: Hypnos opens it with `open_scenario_window()` before phase 2 and closes it with `close_scenario_window()` after phase 3, so it never depends on when the poll sees the sleep start.
 
 ## Outputs
 
@@ -124,9 +124,9 @@ On each broadcast outside a sleep, Phantasia:
 
 ### Sleep path
 
-On `hypnos.sleep.started`, the sleep window opens, the waking path stops, and `_maybe_train()` runs one in-memory training pass over the buffer if `training_enabled` is true.
+On `hypnos.sleep.started`, the waking path stops and `_maybe_train()` runs one in-memory training pass over the buffer if `training_enabled` is true. The waking path resumes on `hypnos.sleep.completed`.
 
-On a `mnemos.replay` cue while the window is open, `generate_scenario()` runs. It resets the world model, replays the last `rollout_horizon` waking observations to seed it, and calls `world_model.imagine(rollout_horizon)`. The rollout is summarized as per-step mean magnitudes and an overall drift, and published as `phantasia.scenario` with the replay's `memory_id` as `seed_memory_id`. A cue that arrives while the entity is awake is ignored. Hypnos's associative replay phase, off by default, can also cue scenarios directly.
+Hypnos opens the scenario window before phase 2, whose replay publishes the `mnemos.replay` cues, and closes it in a `finally` after phase 3. The poll can handle a cue after the window has closed, so Phantasia keeps the open window and the last four closed ones and answers a cue whose timestamp falls inside one of them. A cue from an earlier sleep is ignored even while a later window is open. `initialize()` clears the sleep state and closes the window, so a light restart that misses `hypnos.sleep.completed` cannot leave the waking path paused. On such a cue, `generate_scenario()` runs. It resets the world model, replays the last `rollout_horizon` waking observations to seed it, and calls `world_model.imagine(rollout_horizon)`. The rollout is summarized as per-step mean magnitudes and an overall drift, and published as `phantasia.scenario` with the replay's `memory_id` as `seed_memory_id`. A cue published outside the window is ignored. Hypnos's associative replay phase, off by default, can also cue scenarios directly.
 
 ### Training
 
@@ -156,7 +156,7 @@ On a `mnemos.replay` cue while the window is open, `generate_scenario()` runs. I
 Phantasia needs no external service. To force a scenario in a test without a full sleep:
 
 ```python
-phantasia._window_active = True  # normally set by hypnos.sleep.started
+phantasia.open_scenario_window()  # normally opened by Hypnos before phase 2
 await phantasia.generate_scenario(seed_memory_id="test")
 ```
 
@@ -195,7 +195,7 @@ Fork snapshots store module artifacts in `<snapshot root>/<id>/artifacts/<module
 |---|---|
 | `tests/test_phantasia_world_model.py` | `FakeWorldModel` observe, imagine, train and the NaN guard; no actor or critic in `DreamerV3WorldModel` |
 | `tests/test_phantasia_encoder.py` | Vector shape, source slots, affect, the inhibition flag |
-| `tests/test_phantasia_module.py` | Waking tick to `phantasia.world_error`; sleep cue to `phantasia.scenario`; the window guard |
+| `tests/test_phantasia_module.py` | Waking tick to `phantasia.world_error`; sleep cue to `phantasia.scenario`; the window guard, including a cue handled after the window closed |
 | `tests/test_phantasia_zero_persistence.py` | The buffer is not serialized; training writes nothing |
 | `tests/test_phantasia_persistence.py` | Checkpoint round trip; fail-closed mismatch and stub guards; encryption at rest; decommission inclusion |
 | `tests/test_world_model_identity.py` | World-model artifact identity and source tracking across forks and merges |
