@@ -791,3 +791,74 @@ async def test_acoustic_report_carries_the_paired_evaluations(bus: AsyncBus) -> 
         )
     finally:
         await audition.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_acoustic_path_skips_a_non_finite_embedding(bus, monkeypatch) -> None:
+    torch = pytest.importorskip("torch")
+    audition = _general_audition(bus)
+    await audition.initialize()
+    try:
+        soma_entry = (
+            "1-0",
+            Event(
+                source="soma",
+                type="soma.report",
+                payload={"k": 1},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            ),
+        )
+        await audition.on_workspace(
+            WorkspaceSnapshot(
+                tick_index=1,
+                selected_events=[soma_entry],
+                inhibited=False,
+                salience_scores={soma_entry[0]: 0.5},
+                metadata={"access_threshold": 0.35},
+            )
+        )
+        await audition.process_audio(_tone(7000), sample_rate=16000)
+        await audition.process_audio(_tone(5000), sample_rate=16000)
+        await audition.process_audio(_tone(6000), sample_rate=16000)
+
+        model = audition._acoustic_forward_model
+        buffer_before = [list(v) for v in model._buffer]
+        weights_before = [p.detach().clone() for p in model._net.parameters()]
+        errors_before = list(audition._acoustic_errors)
+        changes_before = list(audition._acoustic_change_history)
+        prev_before = audition._prev_acoustic_embedding
+
+        monkeypatch.setattr(
+            audition._acoustic_encoder,
+            "embed",
+            lambda audio_bytes, sample_rate: [float("nan")] * 8,
+        )
+        await audition.process_audio(_tone(4000), sample_rate=16000)
+        monkeypatch.undo()
+
+        assert [list(v) for v in model._buffer] == buffer_before
+        for saved, current in zip(weights_before, model._net.parameters()):
+            assert torch.equal(saved, current)
+        assert list(audition._acoustic_errors) == errors_before
+        assert list(audition._acoustic_change_history) == changes_before
+        assert audition._prev_acoustic_embedding is prev_before
+
+        await audition.process_audio(_tone(7000), sample_rate=16000)
+        await audition.process_audio(_tone(5000), sample_rate=16000)
+
+        entries = await bus.read("audition.out", last_id="0", count=50)
+        events = [e for _, e in entries if e.type == "audition.perception"]
+        assert len(events) == 6
+        assert isinstance(events[2].payload["context_gain"], float)
+        assert events[3].payload["context_gain"] is None
+        assert events[3].payload["null_prediction_error"] is None
+        assert events[3].payload["mean_prediction_error"] is None
+        assert events[3].payload["prediction_error"] == 0.0
+        assert events[3].payload["change_score"] == 0.0
+        assert events[3].payload["alert"] is False
+        assert events[3].salience == pytest.approx(audition._baseline_salience)
+        assert events[4].payload["context_gain"] is None
+        assert isinstance(events[5].payload["context_gain"], float)
+    finally:
+        await audition.shutdown()

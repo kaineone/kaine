@@ -18,7 +18,8 @@ Design constraints (matching the Chronos ForwardPredictionHead pattern)
   serialise only weight and bias tensors, never raw latent buffers.  The
   visual buffer is summarised as per-feature mean and variance only.
 - Non-finite guard: adaptation is skipped when the loss or any gradient is
-  non-finite, protecting against degenerate inputs.
+  non-finite, protecting against degenerate inputs. A non-finite input is
+  skipped entirely (no buffer append, no weight update, no prediction kept).
 - Adaptation can be suspended externally (e.g. during Hypnos sleep) by
   setting ``suspended = True``.
 - The visual encoder is NEVER touched by this module — it is frozen by its
@@ -112,6 +113,8 @@ class LatentForwardModel:
         # Diagnostics exposed for the cross-module information-gain report.
         self.last_null_error: Optional[float] = None
         self.last_scored_had_context: bool = False
+        # True when the last step skipped a non-finite input.
+        self.last_reading_skipped: bool = False
 
         self.suspended: bool = False
         self._hindsight_resume: bool = False
@@ -207,8 +210,24 @@ class LatentForwardModel:
            suspended and all values are finite).
 
         Returns the L2 prediction error ``||latent − last_prediction||``
-        (0.0 on the very first frame when there is no prior prediction).
+        (0.0 on the very first frame when there is no prior prediction, and
+        0.0 with the step skipped entirely when *latent* contains a
+        non-finite value).
         """
+        if any(not math.isfinite(v) for v in latent):
+            # A skipped reading touches neither the buffer nor the weights and
+            # leaves no prediction behind, so the next reading scores nothing,
+            # reports no gain and makes no update, as in Soma's forward model.
+            log.warning("LatentForwardModel: non-finite latent; skipping step")
+            self.last_null_error = None
+            self.last_scored_had_context = False
+            self._last_prediction = None
+            self._last_null_prediction = None
+            self._last_input_context = None
+            self.last_reading_skipped = True
+            return 0.0
+        self.last_reading_skipped = False
+
         # 1. Compute prediction error from the previous step's prediction.
         if self._last_prediction is None:
             prediction_error = 0.0
@@ -331,7 +350,11 @@ class LatentForwardModel:
         twin._last_input_context = None
         twin.last_null_error = None
         twin.last_scored_had_context = False
-        twin._hindsight_resume = False
+        # A live model that holds no prediction (its first reading, or just
+        # after a skipped one) neither scores nor learns on its next reading,
+        # so the copy re-seeds its hindsight pairing on that reading too.
+        twin._hindsight_resume = self._last_prediction is None
+        twin.last_reading_skipped = False
 
         return twin
 

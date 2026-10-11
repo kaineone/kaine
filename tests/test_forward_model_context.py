@@ -236,3 +236,88 @@ async def test_topos_report_carries_the_paired_evaluations(bus):
         (payload["null_prediction_error"] - payload["prediction_error"])
         / payload["mean_prediction_error"]
     )
+
+
+class _ScriptedEncoder(FakeSmall):
+    """Returns the queued embeddings in order."""
+
+    def __init__(self, embeddings):
+        self._embeddings = list(embeddings)
+
+    async def encode(self, image):  # noqa: ARG002
+        return self._embeddings.pop(0)
+
+
+@pytest.mark.asyncio
+async def test_topos_skips_a_non_finite_latent(bus):
+    torch = pytest.importorskip("torch")
+    nan = float("nan")
+    embeddings = [
+        [0.1, 0.2, 0.3, 0.4],
+        [0.2, 0.1, 0.4, 0.3],
+        [0.3, 0.3, 0.1, 0.2],
+        [nan, 0.2, 0.3, 0.4],
+        [0.4, 0.1, 0.2, 0.3],
+        [0.1, 0.4, 0.3, 0.2],
+    ]
+
+    topos = Topos(
+        bus, encoder=_ScriptedEncoder(embeddings), forward_prediction=True
+    )
+    topos._forward_model = LatentForwardModel(
+        latent_dim=4, units=8, context_dim=24, seed=4
+    )
+
+    snapshot = WorkspaceSnapshot(
+        tick_index=1,
+        selected_events=[
+            (
+                "1-0",
+                Event(
+                    source="soma",
+                    type="soma.report",
+                    payload={"k": 1},
+                    salience=0.6,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+            )
+        ],
+        inhibited=False,
+        salience_scores={"1-0": 0.5},
+        metadata={"access_threshold": 0.35},
+    )
+    await topos.on_workspace(snapshot)
+
+    for _ in range(3):
+        await topos.process_frame(None)
+
+    model = topos._forward_model
+    buffer_before = [list(v) for v in model._buffer]
+    weights_before = [p.detach().clone() for p in model._net.parameters()]
+    errors_before = list(topos._pred_errors)
+    changes_before = list(topos._change_history)
+
+    await topos.process_frame(None)
+
+    assert [list(v) for v in model._buffer] == buffer_before
+    for saved, current in zip(weights_before, model._net.parameters()):
+        assert torch.equal(saved, current)
+    assert list(topos._pred_errors) == errors_before
+    assert list(topos._change_history) == changes_before
+
+    for _ in range(2):
+        await topos.process_frame(None)
+
+    entries = await bus.read("topos.out", last_id="0", count=50)
+    events = [e for _, e in entries if e.type == "topos.report"]
+    assert len(events) == 6
+    assert isinstance(events[2].payload["context_gain"], float)
+    assert events[3].payload["context_gain"] is None
+    assert events[3].payload["null_prediction_error"] is None
+    assert events[3].payload["mean_prediction_error"] is None
+    assert events[3].payload["prediction_error"] == 0.0
+    assert events[3].payload["change_score"] == 0.0
+    assert events[3].payload["alert"] is False
+    assert events[3].salience == pytest.approx(topos._baseline_salience)
+    assert events[4].payload["context_gain"] is None
+    assert isinstance(events[5].payload["context_gain"], float)

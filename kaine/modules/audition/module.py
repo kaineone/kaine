@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from collections import deque
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional
 
@@ -290,8 +291,14 @@ class Audition(BaseModule):
         # Offload the spectral encoder to a thread so the audio loop does not
         # block the event loop (performance-test-coverage).
         embedding = await asyncio.to_thread(self._acoustic_encoder.embed, attended_bytes, sample_rate)
-        change = cosine_change(embedding, self._prev_acoustic_embedding)
-        self._prev_acoustic_embedding = embedding
+        # A non-finite embedding is skipped: it scores no change and leaves the
+        # previous embedding and the change history as they were.
+        skipped = not all(math.isfinite(v) for v in embedding)
+        if skipped:
+            change = 0.0
+        else:
+            change = cosine_change(embedding, self._prev_acoustic_embedding)
+            self._prev_acoustic_embedding = embedding
         context_gain: Optional[float] = None
         null_prediction_error: Optional[float] = None
         mean_prediction_error: Optional[float] = None
@@ -303,7 +310,9 @@ class Audition(BaseModule):
             prediction_error = self._acoustic_forward_model.step(embedding, ctx, null)
         else:
             prediction_error = self._acoustic_forward_model.step(embedding)
-        self._acoustic_errors.append(prediction_error)
+        # A skipped reading carries no real error to average.
+        if not getattr(self._acoustic_forward_model, "last_reading_skipped", False):
+            self._acoustic_errors.append(prediction_error)
         # Normalise the error against its rolling mean (Chronos/Topos convention):
         # steady, predictable sound stays low-salience even at non-zero error.
         mean_err = (
@@ -331,7 +340,8 @@ class Audition(BaseModule):
         # judged RELATIVE to its own rolling baseline, not against an absolute
         # constant mis-scaled for one encoder, with the threshold surviving as a
         # small FLOOR guard. An acoustic onset alerts; steady sound stays baseline.
-        self._acoustic_change_history.append(change)
+        if not skipped:
+            self._acoustic_change_history.append(change)
         mean_change = (
             sum(self._acoustic_change_history) / len(self._acoustic_change_history)
             if self._acoustic_change_history
@@ -661,7 +671,9 @@ class Audition(BaseModule):
             prediction_error = self._forward_model.step(feature_vec, ctx)
         else:
             prediction_error = self._forward_model.step(feature_vec)
-        self._prediction_errors.append(prediction_error)
+        # A skipped reading carries no real error to average.
+        if not getattr(self._forward_model, "last_reading_skipped", False):
+            self._prediction_errors.append(prediction_error)
         error_window = list(self._prediction_errors)
 
         # ------------------------------------------------------------------

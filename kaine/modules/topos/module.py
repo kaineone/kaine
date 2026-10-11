@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from typing import Any, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
@@ -517,7 +518,11 @@ class Topos(BaseModule):
             embedding = peripheral_latent
         else:
             embedding = await self._encode_clip(list(self._frame_buffer))
-        change = float(self._change_detector.observe(embedding))
+        # A non-finite embedding is skipped: it scores no change and leaves the
+        # change detector and the change history as they were, so the next
+        # embedding is compared with the last finite one.
+        skipped = not all(math.isfinite(v) for v in embedding)
+        change = 0.0 if skipped else float(self._change_detector.observe(embedding))
         habituation = float(self._habituator.observe(embedding))
 
         # Self-calibrating change alert (perception-drives-salience). The alert
@@ -528,7 +533,8 @@ class Topos(BaseModule):
         # stream near its own baseline stays quiet. change_alert_threshold survives
         # only as a small absolute FLOOR guard so a large ratio over a near-static
         # stream (tiny mean) cannot fire on noise.
-        self._change_history.append(change)
+        if not skipped:
+            self._change_history.append(change)
         mean_change = (
             sum(self._change_history) / len(self._change_history) if self._change_history else 0.0
         )
@@ -556,7 +562,9 @@ class Topos(BaseModule):
                 )
             else:
                 prediction_error = await asyncio.to_thread(self._forward_model.step, embedding)
-            self._pred_errors.append(prediction_error)
+            # A skipped reading carries no real error to average.
+            if not getattr(self._forward_model, "last_reading_skipped", False):
+                self._pred_errors.append(prediction_error)
 
             # Normalise error against the rolling window mean so a steady,
             # predictable motion yields low salience even at non-zero error.
