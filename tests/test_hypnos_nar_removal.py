@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests that Hypnos no longer fires a standalone NARS belief-revision burst.
+"""Hypnos fires no belief-revision burst and takes no Nous collaborator.
 
-NARS is retired; Nous is pymdp now. A full maintenance cycle must NOT call
-``nous_process.step(...)`` — replayed traces reach Nous via the NORMAL
+NARS is retired; Nous is pymdp now. Replayed traces reach Nous via the NORMAL
 cognitive-cycle path (re-injection -> syneidesis broadcast -> Nous pymdp
-update), not a special step-burst.
+update), so Hypnos has no Nous argument and no step-burst setting.
 """
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 
 import pytest
@@ -54,25 +54,14 @@ class FakeThymos:
         return None
 
 
-class StepSpyNous:
-    """Records every call to step(); a non-zero count means a NARS-style
-    belief-revision burst was fired during maintenance (regression)."""
-
-    def __init__(self) -> None:
-        self.step_calls: list[int] = []
-
-    @property
-    def running(self) -> bool:
-        return True
-
-    async def step(self, n: int) -> list[str]:
-        self.step_calls.append(n)
-        return ["belief"]
+def test_hypnos_takes_no_nous_collaborator():
+    params = inspect.signature(Hypnos.__init__).parameters
+    assert "nous_process" not in params
+    assert "nous_step_burst" not in params
 
 
 @pytest.mark.asyncio
 async def test_no_nar_burst_during_full_maintenance_cycle(bus: AsyncBus, tmp_path: Path):
-    nous = StepSpyNous()
     config = VoiceAlignmentConfig(
         intent_log_path=tmp_path / "intent.jsonl",
         adapter_output_dir=tmp_path / "adapters",
@@ -81,7 +70,6 @@ async def test_no_nar_burst_during_full_maintenance_cycle(bus: AsyncBus, tmp_pat
     hypnos = Hypnos(
         bus,
         mnemos=FakeMnemos(),
-        nous_process=nous,
         thymos=FakeThymos(),
         trainer=FakeTrainer(),
         voice_alignment_config=config,
@@ -91,10 +79,6 @@ async def test_no_nar_burst_during_full_maintenance_cycle(bus: AsyncBus, tmp_pat
 
     # All five phases ran.
     assert len(summary["phases"]) == 5
-    # The load-bearing assertion: no NARS step-burst was invoked.
-    assert nous.step_calls == [], (
-        f"NARS step-burst fired during maintenance: {nous.step_calls}"
-    )
     # No phase is named for belief revision in the active pipeline.
     phase_names = {p["phase"] for p in summary["phases"]}
     assert "belief_revision" not in phase_names
@@ -102,10 +86,8 @@ async def test_no_nar_burst_during_full_maintenance_cycle(bus: AsyncBus, tmp_pat
 
 @pytest.mark.asyncio
 async def test_replay_reaches_workspace_not_via_burst(bus: AsyncBus, tmp_path: Path):
-    """Replay drives the normal path (mnemos.replay_now invoked during the
-    window); belief revision happens via the cognitive cycle, never a burst."""
+    """Replay drives the normal path (mnemos.replay_now invoked during the window)."""
     mnemos = FakeMnemos()
-    nous = StepSpyNous()
     config = VoiceAlignmentConfig(
         intent_log_path=tmp_path / "intent.jsonl",
         adapter_output_dir=tmp_path / "adapters",
@@ -114,7 +96,6 @@ async def test_replay_reaches_workspace_not_via_burst(bus: AsyncBus, tmp_path: P
     hypnos = Hypnos(
         bus,
         mnemos=mnemos,
-        nous_process=nous,
         thymos=FakeThymos(),
         trainer=FakeTrainer(),
         voice_alignment_config=config,
@@ -122,5 +103,3 @@ async def test_replay_reaches_workspace_not_via_burst(bus: AsyncBus, tmp_path: P
     await hypnos.enter_sleep()
     # Replay ran through the normal deep-consolidation window path.
     assert mnemos.replay_calls == 1
-    # And still no special burst.
-    assert nous.step_calls == []

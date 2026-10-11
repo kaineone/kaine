@@ -153,9 +153,10 @@ Only read when `[perception_feed].mode = "screen"`. Video goes to Topos (`kaine/
 | `max_deferral_seconds` | float | `600.0` | Maximum total deferral allowed when the system asks to delay consolidation. |
 | `per_defer_seconds` | float | `60.0` | Deferral granted per request. |
 | `requested_rest_min_interval_s` | float | `1800.0` | Minimum entity-time seconds between a sleep's end and a Nous-requested rest. Both the cycle's Nous proposal source and Hypnos's own `too_soon` check use it. Must be greater than 0. |
-| `nous_step_burst` | integer | `200` | Stored on `Hypnos` at construction but never read; there is no offline Nous phase. |
 | `baseline_salience` | float | `0.5` | Intensity of ordinary consolidation lifecycle events. |
 | `alert_salience` | float | `0.8` | Intensity on consolidation errors or welfare-relevant conditions. |
+
+The retired key `nous_step_burst` is ignored with a warning if present, so older local configs still boot.
 
 ### Consolidation phases
 

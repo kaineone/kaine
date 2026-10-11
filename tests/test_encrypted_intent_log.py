@@ -90,15 +90,6 @@ class FakeThymos:
         self.resets += 1
 
 
-class FakeSteppable:
-    @property
-    def running(self) -> bool:
-        return True
-
-    async def step(self, n: int) -> list[str]:
-        return ["belief_factor_0"]
-
-
 class FakeResetter:
     def __init__(self) -> None:
         self.calls = 0
@@ -129,7 +120,6 @@ def _make_hypnos(
     return Hypnos(
         bus,
         mnemos=mnemos or FakeMnemos(),
-        nous_process=FakeSteppable(),
         thymos=FakeThymos(),
         chronos_resetters=[FakeResetter(), FakeResetter()],
         trainer=trainer or FakeTrainer(),
