@@ -56,6 +56,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | mediation-harness-information-gain | 12/12 (100%) | Rebuild the offline development harness of the workspace-mediation test around the information-gain measure, with a pooled arm, and retire the coupling and utterance measures. |
 | flaky-group-kill-test | 3/3 (100%) | The group-kill tests wait for the job to finish before reading its status. |
 | hypnos-replay-buffer-order | 4/4 (100%) | Sleep's replay draws on the traces that sleep's consolidation moved, so it no longer finds an empty buffer. |
+| unattended-gate-individuation | 3/3 (100%) | The unattended gate covers every research-net condition, adding condition 9: the individuation producer wired. |
 
 ## Open operator and device steps
 
@@ -76,7 +77,7 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 50 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 51 active changes, 268 archived changes and 104 capability specs.
 
 The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 
