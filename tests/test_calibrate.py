@@ -326,6 +326,7 @@ def test_calibrate_completes_except_always_blocked(tmp_path: Path) -> None:
             assert "mean_on" in check
             assert "mean_ctl" in check
             assert "sd_ctl" in check
+            assert check["exceeds_control_sd"] is False
 
     assert "report_rate" not in record["blocked"]
 
@@ -491,19 +492,25 @@ def test_ladder_failed_true_blocks_snr(tmp_path: Path) -> None:
     assert record["blocked"]["min_reports"] == "depends on snr"
 
 
-def test_report_rate_mismatch_blocks_chain(tmp_path: Path) -> None:
+def test_report_rate_mismatch_is_recorded_not_blocked(tmp_path: Path) -> None:
     plan, root = _build_evaluation_tree(
         tmp_path, n_pilots=5, competitive_time_step=2.0
     )
     record = calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
 
-    assert "report_rate" in record["blocked"]
-    assert "on arm" in record["blocked"]["report_rate"]
-    assert record["values"]["t_learn_s"] is None
-    assert record["blocked"]["t_learn_s"] == "depends on report_rate"
-    assert record["values"]["s_cal"] is None
-    assert record["blocked"]["snr"] == "depends on report_rate"
-    assert record["values"]["min_reports"] is None
+    assert "report_rate" not in record["blocked"]
+    assert not any(
+        "report_rate" in reason for reason in record["blocked"].values()
+    )
+    assert record["values"]["t_learn_s"] is not None
+    for processor in PROCESSORS:
+        for ctl in CONTROLS:
+            assert (
+                record["values"]["report_rate_check"][processor][ctl][
+                    "exceeds_control_sd"
+                ]
+                is True
+            )
 
 
 def test_not_exercised_reason_never_operated() -> None:

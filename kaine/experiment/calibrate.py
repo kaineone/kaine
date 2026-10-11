@@ -730,12 +730,15 @@ def calibrate(
         blocked_n_run_planned = None
 
     # ------------------------------------------------------------------
-    # Report-rate check (not a paper rule; it guards paper §6.3, which
-    # requires that the arms differ only in the workspace manipulation).
+    # Report-rate check (recorded for inspection only; the paper has no
+    # rule on report rates and nothing is blocked on them).  It lets a
+    # reader see whether the on arm's pilots, which also carry the
+    # positive control's ladder, reported at another cadence
+    # (paper §6.3: "Three arms run on the same film program with the
+    # same seeds and calibration").
     # ------------------------------------------------------------------
-    report_rate_error: str | None = None
     report_rates: dict[str, dict[str, list[float]]] | None = None
-    report_rate_check: dict[str, dict[str, dict[str, float]]] | None = None
+    report_rate_check: dict[str, dict[str, dict[str, Any]]] | None = None
 
     if n_counted >= n_cal:
         report_rates = {
@@ -776,7 +779,6 @@ def calibrate(
                     report_rates[arm][processor].append((len(times) - 1) / span)
 
         report_rate_check = {processor: {} for processor in PROCESSORS}
-        report_rate_failures: list[str] = []
 
         for processor in PROCESSORS:
             on_rates = report_rates["competitive"][processor]
@@ -789,20 +791,8 @@ def calibrate(
                     "mean_on": mean_on,
                     "mean_ctl": mean_ctl,
                     "sd_ctl": sd_ctl,
+                    "exceeds_control_sd": abs(mean_on - mean_ctl) > sd_ctl,
                 }
-                if abs(mean_on - mean_ctl) > sd_ctl:
-                    report_rate_failures.append(
-                        f"{processor}/{ctl} (on arm={mean_on:.4g}, "
-                        f"{ctl}={mean_ctl:.4g}, sd={sd_ctl:.4g})"
-                    )
-
-        if report_rate_failures:
-            report_rate_error = (
-                "the on arm's report rate differs from the control's by more "
-                "than the control's run-to-run spread, so the arms differ in "
-                "more than the manipulation: "
-                + "; ".join(report_rate_failures)
-            )
 
     # ------------------------------------------------------------------
     # d. Learning period over the counted pilots
@@ -810,7 +800,7 @@ def calibrate(
     t_learn_s: int | None = None
     mser_details: dict[str, Any] | None = None
 
-    if n_counted >= n_cal and report_rate_error is None:
+    if n_counted >= n_cal:
         per_arm_reports = {
             arm: [pilot_arm_reports[i][arm] for i in counted_indices]
             for arm in ARMS
@@ -990,7 +980,6 @@ def calibrate(
     def _chain_after(first_key: str) -> None:
         order = [
             "pilots",
-            "report_rate",
             "t_learn_s",
             "s_cal",
             "theta_eff",
@@ -1006,9 +995,6 @@ def calibrate(
     if n_counted < n_cal:
         blocked["pilots"] = f"{n_counted} of {n_cal} pilot runs count"
         _chain_after("pilots")
-    elif report_rate_error is not None:
-        blocked["report_rate"] = report_rate_error
-        _chain_after("report_rate")
     elif learn_reason is not None:
         blocked["t_learn_s"] = learn_reason
         _chain_after("t_learn_s")
