@@ -29,7 +29,8 @@
 - [ ] 5.4 Read-maps for bundles, snapshots and fork sidecars (module keys, manifest `modules`, the `gestation/` member, stage values and fields) and for recorded datasets (stream names, `source`, per-module fields, sidecar directories).
 - [ ] 5.5 `kaine.lifecycle.rename_state`: state paths, file names, the stage file, the sqlite-vec file and `collection` column, Qdrant aliases, a move manifest with `--revert`, refusal of an old-and-new pair.
 - [ ] 5.6 Never-regress: `_coerce_stage` reads `gestation` as `development`; `OWN_LIVED_ARTIFACTS` lists old and new paths.
-- [ ] 5.7 Tests for 5.1 to 5.6 with synthetic table entries, plus import of the four local bundles and the nine local fork trees.
+- [ ] 5.7 Fail closed on an unrecognized stage value: `_coerce_stage` no longer reads an unknown or non-string value as `embodied`; the stage reader raises, and the cycle refuses to boot with a message naming the stage file and the value's `repr` (truncated to 64 characters). Independent of the `gestation` alias. Tests: a garbled value, a forward-versioned value, a non-string value, and the file left unchanged.
+- [ ] 5.8 Tests for 5.1 to 5.6 with synthetic table entries, plus import of the four local bundles and the nine local fork trees.
 
 ## 6. Identifiers by layer (PRs 5a to 5d)
 

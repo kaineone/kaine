@@ -93,7 +93,8 @@ entrainment marker. "Maternal heartbeat" and "maternal drive" stay.
 - `entity-preservation`: bundles and snapshots written under old module names
   import unchanged.
 - `developmental-stage`: a stage file written before the rename keeps its
-  phase and its lived status.
+  phase and its lived status, and an unrecognized stored stage value stops the
+  boot instead of reading as embodied.
 
 ## Impact
 

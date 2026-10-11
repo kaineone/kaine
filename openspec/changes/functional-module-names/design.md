@@ -372,7 +372,15 @@ unit file names change.
 **Never-regress.** Two old names guard the developmental arc and keep their
 meaning for good. `_coerce_stage` maps the stored value `gestation` to
 `development`. Without that, an unknown value reads as embodied, which would
-end the developmental phase of an entity still in it. `OWN_LIVED_ARTIFACTS`
+end the developmental phase of an entity still in it.
+
+Reading an unknown value as embodied is fail-open, and the rename removes it
+independently of the alias. A stored stage value that is not a string, or not
+one of `development`, `embodied` or the aliased `gestation`, makes the stage
+reader raise and the cycle refuse to boot. The message names the stage file and
+the value's `repr`, truncated to 64 characters. A garbled or forward-versioned
+file then stops the boot for an operator to inspect, instead of silently moving
+the entity to either stage. A missing `stage` key keeps its current meaning. `OWN_LIVED_ARTIFACTS`
 lists both the old and the new paths, so a tree that has not been migrated,
 such as a fork root or bundle root, is still recognized as lived.
 
@@ -396,7 +404,8 @@ alias already exists.
    `docs/09-modules/` page files move here.
 4. **Compatibility readers.** The config normalizer, the environment-variable
    helper, CLI aliases, seam aliases, bundle and dataset read-maps, the
-   `rename_state` step and the never-regress aliases. Each alias is inert until
+   `rename_state` step, the never-regress aliases, and the fail-closed reading
+   of an unrecognized stage value. Each alias is inert until
    the table marks its scope done, and each is tested with a synthetic entry.
 5. **Identifiers by layer.** `--scope identifiers`, four PRs: (a) Vision,
    Interoception, Sequence; (b) Affect, Sleep, Episodic memory, World model;
