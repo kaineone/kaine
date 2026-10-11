@@ -427,7 +427,12 @@ def test_verdict_to_dict_stable():
 
 
 def test_outcome_covers_both_vocabularies():
-    assert {o.value for o in Outcome} == {"WIN", "NULL", "NEGATIVE", "PASS", "FAIL"}
+    assert {o.value for o in Outcome} == {"WIN", "NULL", "NEGATIVE", "NOT_EXERCISED", "PASS", "FAIL"}
+
+
+def test_not_exercised_serialises_apart_from_null():
+    assert Verdict(outcome=Outcome.NOT_EXERCISED).to_dict()["outcome"] == "NOT_EXERCISED"
+    assert Outcome.NOT_EXERCISED is not Outcome.NULL
 
 
 def test_aif_report_contains_shared_verdict():

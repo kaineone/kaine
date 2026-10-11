@@ -156,9 +156,10 @@ def test_classify_outcomes():
     unexercised = _classify(
         _effect(None, not_exercised=True, reason="test reason"), cfg
     )
-    assert unexercised.outcome is Outcome.NULL
-    assert unexercised.detail.startswith("NOT EXERCISED")
-    assert unexercised.metrics["not_exercised"] is True
+    assert unexercised.outcome is Outcome.NOT_EXERCISED
+    assert "test reason" in unexercised.detail
+    assert unexercised.metrics["not_exercised_reason"] == "test reason"
+    assert "not_exercised" not in unexercised.metrics
 
     for verdict in (win, null, negative, unexercised):
         assert "does not test the thesis" in verdict.detail

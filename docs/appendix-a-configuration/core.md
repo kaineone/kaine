@@ -185,7 +185,7 @@ Each tick the controller computes `drive = max(tonic, phasic)`. `tonic` is Thymo
 
 ### Syneidesis
 
-Workspace scoring and access. A candidate's priority is the product of its reported intensity, a novelty factor and a goal factor, clipped to `[0, 1]`; its score applies the arousal level gain and contrast to that priority. There is no per-source precision weight: each processor scales its own error before it reports. The `minimal_experiment` profile sets `top_k = 2`; `thesis_test` keeps the shipped values.
+Workspace scoring and access. A candidate's priority is the product of its reported intensity, a novelty factor and a goal factor, clipped to `[0, 1]`; its score applies the arousal level gain and contrast to that priority. There is no per-source precision weight: each processor scales its own error before it reports. The `thesis_test` profile keeps the shipped values.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -211,7 +211,7 @@ Executive action selection (`kaine/workspace/volition.py`). When the section is 
 | `interrupt_threshold` | float | unset | Opt-in interruption of an utterance in progress. Must satisfy `report_threshold < interrupt_threshold <= 1.0`. |
 | `sig_expiry_s` | float | unset | Entity seconds after which the novelty signature (the top member's source and type) stops blocking a repeat report. Unset means it never expires. |
 
-None of these keys is in the shipped file, so the defaults above apply. The `thesis_test` profile sets `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`; `minimal_experiment` sets `drive_initiative = false`.
+None of these keys is in the shipped file, so the defaults above apply. The `thesis_test` profile sets `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`.
 
 Regardless of policy, inhibition gates first: if `snapshot.inhibited` is true, `Volition.select()` returns no intents.
 
