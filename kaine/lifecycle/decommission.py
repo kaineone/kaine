@@ -46,6 +46,7 @@ from kaine.memory_kinds import (
     MNEMOS_STAMP_COLLECTION,
     stamp_key,
     stamp_point_id,
+    strength_key,
 )
 from kaine.storage import resolve
 
@@ -761,9 +762,12 @@ def delete_entity_state(
     stamp_coll = MNEMOS_STAMP_COLLECTION
     stamp_key_str = stamp_key(prefix)
     stamp_pid = stamp_point_id(stamp_key_str)
+    strength_key_str = strength_key(prefix)
+    strength_pid = stamp_point_id(strength_key_str)
     if dry_run:
         result.dropped_collections = list(collections)  # would-drop
         result.dropped_collections.append(f"{stamp_coll}:{stamp_key_str}")
+        result.dropped_collections.append(f"{stamp_coll}:{strength_key_str}")
     else:
         client = _qdrant_client(qdrant_cfg)
         if client is not None:
@@ -807,11 +811,14 @@ def delete_entity_state(
                             client.delete(
                                 collection_name=stamp_coll,
                                 points_selector=models.PointIdsList(
-                                    points=[stamp_pid]
+                                    points=[stamp_pid, strength_pid]
                                 ),
                             )
                             result.dropped_collections.append(
                                 f"{stamp_coll}:{stamp_key_str}"
+                            )
+                            result.dropped_collections.append(
+                                f"{stamp_coll}:{strength_key_str}"
                             )
                         except Exception as exc:
                             result.errors.append(f"delete stamp {stamp_key_str}: {exc}")

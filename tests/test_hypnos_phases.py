@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from kaine.bus.client import AsyncBus
+from kaine.bus.config import BusConfig
 from kaine.modules.hypnos.phases import (
     affective_reset,
     associative_replay,
@@ -14,6 +16,7 @@ from kaine.modules.hypnos.phases import (
     recalibrate_time,
     reset_affect,
 )
+from kaine.modules.mnemos import FakeEmbedder, InMemoryStorage, Mnemos, MnemosCore
 
 
 class FakeMnemos:
@@ -136,9 +139,10 @@ class FakeFullMnemos:
         self.consolidate_calls += 1
         return self.moved
 
-    def downscale_activations(self, factor: float) -> int:
-        self.downscale_calls.append(factor)
-        return 5  # pretend 5 vectors scaled
+    async def downscale(self, protect=()):
+        protect = list(protect)
+        self.downscale_calls.append(protect)
+        return {"n_new": 0, "factor": 1.0, "protected": len(protect), "total_before": 0.0, "total_after": 0.0, "silent": 0}
 
     async def replay_now(self) -> list:
         self.replay_calls += 1
@@ -191,13 +195,19 @@ async def test_light_consolidation_empty_module_list():
 @pytest.mark.asyncio
 async def test_deep_consolidation_calls_downscale_and_replay():
     m = FakeFullMnemos()
-    r = await deep_consolidation(m, downscale_factor=0.8, replay_window_s=1.0)
+    r = await deep_consolidation(m, replay_window_s=1.0)
     assert r.phase == "deep_consolidation"
     assert r.success is True
-    assert m.downscale_calls == [0.8]
+    assert len(m.downscale_calls) == 1
     assert m.replay_calls == 1
-    assert r.metadata["vectors_downscaled"] == 5
-    assert r.metadata["downscale_factor"] == 0.8
+    assert r.metadata["downscale"] == {
+        "n_new": 0,
+        "factor": 1.0,
+        "protected": 0,
+        "total_before": 0.0,
+        "total_after": 0.0,
+        "silent": 0,
+    }
 
 
 @pytest.mark.asyncio
@@ -214,7 +224,6 @@ async def test_deep_consolidation_suspends_and_restores_perception():
 
     await deep_consolidation(
         m,
-        downscale_factor=0.9,
         suspend_perception=suspend,
         restore_perception=restore,
     )
@@ -241,7 +250,6 @@ async def test_deep_consolidation_restores_even_on_replay_error():
 
     r = await deep_consolidation(
         m,
-        downscale_factor=0.9,
         suspend_perception=suspend,
         restore_perception=restore,
     )
@@ -268,12 +276,12 @@ async def test_deep_consolidation_replays_inside_its_window_then_downscales():
             self.calls.append("replay")
             return []
 
-        def downscale_activations(self, factor: float) -> int:
+        async def downscale(self, protect=()):
             self.calls.append("downscale")
-            return 0
+            return {"n_new": 0, "factor": 1.0, "protected": len(protect), "total_before": 0.0, "total_after": 0.0, "silent": 0}
 
     m = OrderedMnemos()
-    r = await deep_consolidation(m, downscale_factor=0.9)
+    r = await deep_consolidation(m)
     assert r.success is True
     assert m.calls == ["open", "replay", "close", "downscale"]
 
@@ -297,7 +305,7 @@ async def test_deep_consolidation_closes_its_window_when_replay_raises():
             raise RuntimeError("replay boom")
 
     m = ReplayBoomOrdered()
-    r = await deep_consolidation(m, downscale_factor=0.9)
+    r = await deep_consolidation(m)
     assert r.success is False
     assert "close" in m.calls
     assert m.calls.index("close") > m.calls.index("replay")
@@ -313,52 +321,36 @@ async def test_deep_consolidation_no_mnemos():
 # --- Phase 2: downscaling preserves relative ordering ---
 
 @pytest.mark.asyncio
-async def test_downscaling_preserves_relative_ordering():
-    """Scaling all vectors by factor < 1 preserves cosine similarity (relative order).
-
-    We test this at the Mnemos.downscale_activations level using InMemoryStorage
-    so the unit test is self-contained.
-    """
-    from kaine.modules.mnemos.storage import InMemoryStorage
-
-    storage = InMemoryStorage(latent_dim=2)
-    await storage.ensure_collection("test")
-
-    # Insert two vectors with known relationship: a ⊥ b (cosine=0), a ∥ c (cosine=1).
-    vec_a = [1.0, 0.0]
-    vec_b = [0.0, 1.0]
-    vec_c = [2.0, 0.0]  # parallel to a, different magnitude
-    await storage.upsert("test", vector=vec_a, text="a", payload={}, affect=None)
-    await storage.upsert("test", vector=vec_b, text="b", payload={}, affect=None)
-    await storage.upsert("test", vector=vec_c, text="c", payload={}, affect=None)
-
-    # Check cosine similarity before downscaling
-    def cosine(u, v):
-        import math
-        nu = math.sqrt(sum(x*x for x in u))
-        nv = math.sqrt(sum(x*x for x in v))
-        return sum(x*y for x, y in zip(u, v)) / (nu * nv) if nu * nv else 0.0
-
-    pts_before = storage._collections["test"]
-    cos_ac_before = cosine(pts_before[0]["vector"], pts_before[2]["vector"])
-
-    # Scale down by 0.5
-    factor = 0.5
-    for point in storage._collections["test"]:
-        point["vector"] = [v * factor for v in point["vector"]]
-
-    pts_after = storage._collections["test"]
-    cos_ac_after = cosine(pts_after[0]["vector"], pts_after[2]["vector"])
-
-    # Cosine similarity is preserved (within floating point)
-    assert abs(cos_ac_before - cos_ac_after) < 1e-9, (
-        f"cosine similarity changed: {cos_ac_before} -> {cos_ac_after}"
+async def test_downscaling_preserves_vectors_and_reports_factor():
+    """Mnemos.downscale() downscales trace strengths, not vectors, and reports the factor."""
+    fakeredis = pytest.importorskip("fakeredis.aioredis")
+    bus = AsyncBus(
+        BusConfig(password="x", audit_required=False),
+        client=fakeredis.FakeRedis(decode_responses=True),
     )
+    core = MnemosCore(
+        embedder=FakeEmbedder(),
+        storage=InMemoryStorage(latent_dim=32),
+        traces_per_day=2.0,
+    )
+    mnemos = Mnemos(bus, core=core)
+    await core.initialize()
+    await core.store("first episodic trace", collection="episodic")
+    await core.store("second episodic trace", collection="episodic")
 
-    # L2 norms are halved
-    import math
-    norm_a_after = math.sqrt(sum(v*v for v in pts_after[0]["vector"]))
-    assert abs(norm_a_after - 0.5) < 1e-9
+    names = core.persisted_collection_names()
+    before = await core.storage.export(names)
+    summary = await mnemos.downscale()
+    after = await core.storage.export(names)
+
+    for collection, before_pts in before.items():
+        for before_pt, after_pt in zip(before_pts, after[collection]):
+            assert before_pt["vector"] == after_pt["vector"]
+
+    assert summary["n_new"] == 2
+    assert summary["factor"] == pytest.approx(0.82, rel=1e-12)
+
+    await bus.close()
 
 
 # --- Phase 3: associative_replay stub ---

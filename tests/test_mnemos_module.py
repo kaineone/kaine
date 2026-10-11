@@ -551,7 +551,7 @@ async def test_recall_affect_bias_intact(bus: AsyncBus):
             affect={"intensity": 0.9, "valence": 0.8, "dominance": 0.0},
             collection="episodic",
         )
-        await mnemos.recall("intense", collection="episodic")
+        await mnemos.recall("intense event", collection="episodic")
         entries = await bus.read("mnemos.out", last_id="0")
         _, ev = entries[0]
         assert ev.type == "mnemos.recall"

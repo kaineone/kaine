@@ -13,7 +13,12 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
 from kaine.boot.common import _effective_hot_swap_mode
-from kaine.boot.errors import VoiceAlignmentConfigError, _require_keys, _warn_retired_keys
+from kaine.boot.errors import (
+    ConfigurationError,
+    VoiceAlignmentConfigError,
+    _require_keys,
+    _warn_retired_keys,
+)
 from kaine.bus.client import AsyncBus
 from kaine.defaults import lingua_section_api_key, lingua_section_chat_url
 from kaine.entity_clock import EntityClock
@@ -183,7 +188,7 @@ def make_hypnos(
         "alert_salience",
         "requested_rest_min_interval_s",
         "voice_alignment",  # nested sub-table
-        "consolidation",  # nested sub-table: fatigue_triggered, downscale_factor, replay_window_s
+        "consolidation",  # nested sub-table: fatigue_triggered, replay_window_s
     }
     # Retired keys: accepted so old operator files boot, ignored with a warning.
     retired = {"nous_step_burst"}
@@ -224,20 +229,21 @@ def make_hypnos(
                 "[hypnos].requested_rest_min_interval_s must be a number greater than 0"
             )
         kwargs["requested_rest_min_interval_s"] = float(raw_interval)
-    # [hypnos.consolidation] sub-table: fatigue_triggered, downscale_factor,
-    # replay_window_s.  interval_seconds remains the max-interval safety net.
+    # [hypnos.consolidation] sub-table: fatigue_triggered, replay_window_s.
+    # interval_seconds remains the max-interval safety net.
     consolidation = section.get("consolidation") or {}
+    if "downscale_factor" in consolidation:
+        raise ConfigurationError(
+            "[hypnos.consolidation].downscale_factor is removed: sleep downscales trace strengths by [mnemos.strength].retention_per_day (paper A.10)"
+        )
     consolidation_allowed = {
         "fatigue_triggered",
-        "downscale_factor",
         "replay_window_s",
         "associative_replay",
     }
     _require_keys(consolidation, consolidation_allowed)
     if "fatigue_triggered" in consolidation:
         kwargs["fatigue_triggered"] = bool(consolidation["fatigue_triggered"])
-    if "downscale_factor" in consolidation:
-        kwargs["downscale_factor"] = float(consolidation["downscale_factor"])
     if "replay_window_s" in consolidation:
         kwargs["replay_window_s"] = float(consolidation["replay_window_s"])
 

@@ -60,6 +60,8 @@ All keys are under `[mnemos]` and its sub-tables. Shared keys such as `[embeddin
 | `[mnemos.replay].recency_weight` | float | `0.3` | Weight of recency in the replay score |
 | `[mnemos.replay].redact_content` | bool | `true` | Strip `text` from the observer copy of each replay |
 | `[mnemos.replay].cross_period_candidates` | int | `128` | Newest episodic traces that sleep's cross-period selection reads, without vectors; matches `short_term_capacity` |
+| `[mnemos.strength].retention_per_day` | float `(0, 1)` | `0.82` | Strength an unreplayed trace keeps over one entity day of storage at the resting rate |
+| `[mnemos.strength].silence_floor` | float `(0, 1)` | `0.01` | Strength below which a trace is silent |
 
 `recall_on_workspace` and `recall_cooldown_s` are not written in the shipped file; the values above are the constructor defaults. `[mnemos]` rejects `embedder_model_id` and `device` at boot and points to `[embedding].model_id` and `[embedding].device`. The cycle fills `[mnemos.qdrant].api_key`, when it is not set, from `KAINE_QDRANT_API_KEY` or from `[qdrant].api_key` in `config/secrets.toml`, and the Qdrant backend refuses to start without a key.
 
@@ -111,17 +113,27 @@ Tests use `FakeEmbedder`, which maps text to a deterministic 32-dimensional vect
 
 Every store on the broadcast path attaches this cache to the `StoredMemory`.
 
-### Sleep: consolidation, downscaling and replay
+### Trace strength
+
+Each persisted trace carries a strength in (0, 1], the analog of a synaptic strength (paper §4 and Appendix A.10). A trace is stored at strength 1 and changes only when a sleep downscales it. Its payload holds three keys that Mnemos owns and a caller cannot set: `log_base`, `born_sleep` and `entity_time`. The strength is `exp(log_base + L)`, where `L` is a log gain the store keeps in a meta record beside the embedding-space stamp, together with the sleep count, the total strength and the entity time of the last sleep. A trace is persisted with `log_base = -L` and `born_sleep` equal to the sleep count, so a sleep that scales every trace changes only `L` and the few replayed traces, never the whole store. `entity_time` is the storage time on the entity clock and continues across restarts; the wall-clock `timestamp` stays as it was, because the live memory prober reads it.
+
+A trace whose strength falls below `[mnemos.strength].silence_floor` is silent. Recall and replay pass over it, and it stays in the store: Mnemos deletes nothing, so at the resting rate the store grows by about 288,000 traces per entity day.
+
+Recall from a persisted collection returns the requested number of non-silent traces with cosine similarity above 0, ranked by strength times similarity. It widens its search until the k-th product is at least the smallest cosine it has fetched, which bounds every trace it has not fetched, since no strength exceeds 1. Each result reports `similarity`, `strength` and `score`, the product. Short-term traces have strength 1 and rank by similarity alone. On sqlite-vec the vector table has `collection` as a partition key, so the index filters by collection itself, and search pages past the extension's limit of 4096 rows with its distance constraint. An older vector table is rebuilt once when the store opens.
+
+At initialize Mnemos gives every trace from before trace strengths a strength of 1 and `born_sleep = -1`, and a store whose meta record is missing while its traces carry `log_base` is refused. A preservation capture carries the meta record under `strength`; a bundle without it is backfilled the same way, unless its traces already carry `log_base`, which is refused. Decommission deletes the meta record with the stamp.
+
+### Sleep: consolidation, replay and downscaling
 
 Hypnos calls Mnemos in its consolidation phases.
 
-1. Phase 1 calls `consolidate_now()`, which moves every short-term entry to `episodic` and drops nothing. Mnemos keeps the moved entries, each with the episodic point id it was stored under, for the rest of the sleep.
-2. Phase 2 opens the replay window, calls `replay_now()` with perception already suspended for the whole sleep, and closes the window. It then calls `downscale_activations(factor)` (synaptic homeostasis, Tononi and Cirelli 2014). That multiplies every in-memory vector by `factor` in (0, 1), which keeps cosine similarity and shrinks the L2 norms. It is a no-op on the Qdrant and sqlite-vec backends, which keep no vectors in memory. Replay never reads vectors, so the order does not change which traces replay.
-3. Phase 3 (associative replay, off by default with `[hypnos.consolidation].associative_replay = false`) calls `select_cross_period_traces()`.
+1. Phase 1 calls `consolidate_now()`, which moves every short-term entry to `episodic` and drops nothing. Mnemos keeps the moved entries, each with the episodic point id it was stored under, for phase 3.
+2. Phase 2 opens the replay window, calls `replay_now()` with perception already suspended for the whole sleep, and closes the window. It then calls `downscale(protect=...)` with the replay events. Every persisted trace outside the replayed set, silent ones included, is scaled by `retention_per_day ** (N_new / N_day)`, where `N_new` counts the traces stored since the previous sleep and `N_day = 86400 * [cycle].experiential_rate_hz` counts the traces of one entity day at the resting rate. The replayed traces keep their strength, which is how the synaptic homeostasis hypothesis reads reactivation in sleep (Tononi and Cirelli 2006; 2014). A wake that stored nothing changes no strength. The meta record is written before the replayed traces, so a crash between the two can only remove strength. The returned summary (`n_new`, `factor`, `protected`, `silent`, `total_before`, `total_after`) goes into the phase metadata and the sleep summary.
+3. Phase 3 (associative replay, off by default with `[hypnos.consolidation].associative_replay = false`) calls `select_cross_period_traces()`, which skips silent traces.
 
-`replay_now()` builds its candidates from the entries phase 1 moved, identified by their episodic point ids, and from anything stored short-term since. A preservation import also drops the kept entries. The `ReplayEngine` raises `ReplayWindowError` if the window is not open, scores each candidate as `affect_weight × intensity + recency_weight × recency`, where recency runs from 0 for the oldest candidate to 1 for the newest, keeps the `selection_top_k` best, and publishes each as `mnemos.replay`. It also returns an observer copy of each payload, with `text` removed when `redact_content = true`. The selection follows the replay of selectively strengthened traces during sleep (Wilson and McNaughton 1994; Wei et al. 2016).
+`replay_now()` builds its candidates from the whole wake just ended: every persisted trace whose `born_sleep` is the current sleep count, which includes the entries phase 1 moved and the ones the wake persisted when the buffer overflowed, plus anything still short-term. The `ReplayEngine` raises `ReplayWindowError` if the window is not open, scores each candidate as `affect_weight × intensity + recency_weight × recency`, where recency runs on `entity_time` from 0 for the oldest candidate to 1 for the newest, keeps the `selection_top_k` best, and publishes each as `mnemos.replay` with its point id and collection. It also returns an observer copy of each payload, with `text` removed when `redact_content = true`. The selection follows the replay of selectively strengthened traces during sleep (Wilson and McNaughton 1994; Wei et al. 2016) and sleep's selection among newly encoded memories (Stickgold and Walker 2013).
 
-Each consolidation pass replaces the kept entries, and Mnemos drops them when it sees `hypnos.sleep.completed`, so a sleep never replays an earlier sleep's traces.
+The downscaling ends the wake, so a sleep never replays an earlier sleep's traces. Mnemos drops the entries phase 1 moved when it sees `hypnos.sleep.completed`.
 
 `select_cross_period_traces(periods, per_period)` sorts the available traces by timestamp, splits the time span into `periods` equal windows and takes up to `per_period` traces from each. The available traces are the short-term buffer, the entries phase 1 moved, and the newest `cross_period_candidates` traces of the episodic collection, which it reads through the storage backend's `recent_points()` without their vectors, so it works on the in-memory, Qdrant and sqlite-vec backends alike. Each trace counts once, and a storage error propagates so phase 3 records it.
 
@@ -130,7 +142,7 @@ Each consolidation pass replaces the kept entries, and Mnemos drops them when it
 | Path | Purpose |
 |---|---|
 | `kaine/modules/mnemos/module.py` | `Mnemos(BaseModule)`: broadcast handling, affect consumer, replay, preservation |
-| `kaine/modules/mnemos/memory.py` | `MnemosCore` (store, recall, consolidate), `StoredMemory`, `RecallSummary`, `EmotionalRetriggerHook` |
+| `kaine/modules/mnemos/memory.py` | `MnemosCore` (store, recall, consolidate, downscale), `StoredMemory`, `RecallSummary`, `EmotionalRetriggerHook` |
 | `kaine/modules/mnemos/storage.py` | `MemoryStorage` protocol, `QdrantStorage`, `InMemoryStorage`, `SqliteVecStorage`, `RecalledMemory` |
 | `kaine/text_embedding.py` | `Embedder` protocol, `SharedEmbedder`, `make_text_embedder`, `SentenceTransformerTextEmbedder`, `FakeEmbedder` |
 | `kaine/text_embedding_numpy.py` | `NumpyMiniLMEmbedder` |
@@ -172,6 +184,7 @@ The stored `text` is a content view of the snapshot. It starts with `active` or 
 | `tests/test_mnemos_replay.py` | Replay scoring, the window guard, `ReplayWindowError` |
 | `tests/test_mnemos_replay_redact.py` | `redact_content` in observer payloads |
 | `tests/test_mnemos_module.py` | Module tick, affect caching, recall cooldown, recall before store |
+| `tests/test_mnemos_trace_strength.py` | Trace strength on all three backends: persist keys, downscaling factor and protection, recall by strength times similarity against brute force, sqlite-vec paging past 4096 rows, migration, preservation, numerics over many sleeps |
 | `tests/systems/test_mnemos_subsystem.py` | End-to-end subsystem test |
 
 The offline suite's memory-coherence battery (`kaine/evaluation/benchmarks/instrument_runners/memory_coherence_runner.py`) exercises Mnemos offline.

@@ -32,7 +32,7 @@ memory = [
     "qdrant-client>=1.19.1,<2",
 ]
 memory-edge = [
-    "sqlite-vec>=0.1,<1",
+    "sqlite-vec>=0.1.9,<1",
 ]
 speech-edge = [
     "sherpa-onnx>=1.13.8,<2",

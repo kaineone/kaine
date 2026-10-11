@@ -70,6 +70,50 @@ class _FakeAsyncQdrant:
         norm_b = (sum(y * y for y in b) ** 0.5) or 1.0
         return dot / (norm_a * norm_b)
 
+    def _matches_filter(self, p, filter_obj):
+        """Apply a Qdrant-style filter to one fake point."""
+        if filter_obj is None:
+            return True
+        must = getattr(filter_obj, "must", None) or []
+        for cond in must:
+            if not self._condition_holds(cond, p):
+                return False
+        must_not = getattr(filter_obj, "must_not", None) or []
+        for cond in must_not:
+            if self._condition_holds(cond, p):
+                return False
+        return True
+
+    def _condition_holds(self, cond, p):
+        payload = p.payload if p.payload is not None else {}
+        key = getattr(cond, "key", None)
+        if key is not None:
+            match = getattr(cond, "match", None)
+            if match is not None:
+                value = getattr(match, "value", None)
+                return payload.get(key) == value
+            range_ = getattr(cond, "range", None)
+            if range_ is not None:
+                val = payload.get(key)
+                if val is None or isinstance(val, bool) or not isinstance(val, (int, float)):
+                    return False
+                if getattr(range_, "gte", None) is not None and val < getattr(range_, "gte"):
+                    return False
+                if getattr(range_, "gt", None) is not None and val <= getattr(range_, "gt"):
+                    return False
+                if getattr(range_, "lte", None) is not None and val > getattr(range_, "lte"):
+                    return False
+                if getattr(range_, "lt", None) is not None and val >= getattr(range_, "lt"):
+                    return False
+                return True
+        is_empty = getattr(cond, "is_empty", None)
+        if is_empty is not None:
+            # models.IsEmptyCondition(is_empty=models.PayloadField(key=...))
+            field = getattr(is_empty, "key", None)
+            if field is not None:
+                return payload.get(field) is None
+        return False
+
     async def scroll(
         self,
         collection_name,
@@ -91,24 +135,7 @@ class _FakeAsyncQdrant:
                 for p in pts
             ]
 
-        def _matches_filter(p):
-            if scroll_filter is None:
-                return True
-            must = getattr(scroll_filter, "must", None)
-            if not must:
-                return True
-            payload = p.payload if p.payload is not None else {}
-            for cond in must:
-                key = getattr(cond, "key", None)
-                match = getattr(cond, "match", None)
-                if key is None or match is None:
-                    continue
-                value = getattr(match, "value", None)
-                if payload.get(key) != value:
-                    return False
-            return True
-
-        filtered = [p for p in out_pts if _matches_filter(p)]
+        filtered = [p for p in out_pts if self._matches_filter(p, scroll_filter)]
         start = int(offset) if offset is not None else 0
         end = start + limit
         page = filtered[start:end]
@@ -122,12 +149,15 @@ class _FakeAsyncQdrant:
         limit=10,
         with_payload=True,
         with_vectors=False,
+        query_filter=None,
         **kwargs,
     ):
         pts = self.store.get(collection_name, [])
         q = list(query)
         scored = []
         for p in pts:
+            if not self._matches_filter(p, query_filter):
+                continue
             hit = type(
                 "ScoredPoint",
                 (),
@@ -146,8 +176,10 @@ class _FakeAsyncQdrant:
         def __init__(self, n: int) -> None:
             self.count = n
 
-    async def count(self, collection_name, **kwargs):
-        return self._Count(len(self.store.get(collection_name, [])))
+    async def count(self, collection_name, count_filter=None, **kwargs):
+        pts = self.store.get(collection_name, [])
+        n = sum(1 for p in pts if self._matches_filter(p, count_filter))
+        return self._Count(n)
 
     @staticmethod
     def _validate_point_id(pid):
@@ -184,6 +216,45 @@ class _FakeAsyncQdrant:
             ids = set(points_selector)
         pts = self.store.get(collection_name, [])
         self.store[collection_name] = [p for p in pts if p.id not in ids]
+
+    async def create_payload_index(
+        self, collection_name, field_name, field_schema=None, **kwargs
+    ):
+        pass
+
+    async def batch_update_points(
+        self, collection_name, update_operations, **kwargs
+    ):
+        pts = self.store.get(collection_name, [])
+        by_id = {str(p.id): p for p in pts}
+        by_hex = {}
+        for p in pts:
+            try:
+                by_hex[str(uuid.UUID(str(p.id)).hex)] = p
+            except Exception:
+                pass
+
+        for op in update_operations:
+            sp = getattr(op, "set_payload", None)
+            if sp is None:
+                continue
+            payload_update = getattr(sp, "payload", None)
+            points = getattr(sp, "points", None)
+            if payload_update is None or points is None:
+                continue
+            for pid in points:
+                s = str(pid)
+                target = by_id.get(s)
+                if target is None:
+                    try:
+                        target = by_hex.get(str(uuid.UUID(s).hex))
+                    except Exception:
+                        pass
+                if target is None:
+                    continue
+                if target.payload is None:
+                    target.payload = {}
+                target.payload.update(payload_update)
 
     async def retrieve(self, collection_name, ids, with_payload=True, with_vectors=False, **kwargs):
         if collection_name not in self.store:
@@ -275,10 +346,10 @@ async def test_sqlite_vec_two_prefixes_scoped_export_import(tmp_path: Path):
     n = await core_c.import_state(state_a)
     assert n == 1
 
-    results, _ = await core_c.recall("alpha", collection="semantic")
+    results, _ = await core_c.recall("alpha semantic", collection="semantic")
     assert any("alpha semantic" in r.text for r in results)
 
-    results_b, _ = await core_b.recall("beta", collection="semantic")
+    results_b, _ = await core_b.recall("beta semantic", collection="semantic")
     assert any("beta semantic" in r.text for r in results_b)
 
 
@@ -292,7 +363,7 @@ async def test_import_skips_foreign_collections_and_logs(caplog):
     core = MnemosCore(embedder, store, collection_prefix="c_")
     await core.initialize()
 
-    good_vec = list(await embedder.encode("good"))
+    good_vec = list(await embedder.encode("alpha"))
     point = {
         "id": "11111111-1111-1111-1111-111111111111",
         "vector": good_vec,
@@ -662,7 +733,7 @@ async def test_import_empty_collection_prefix_maps_kind_directly():
     core = MnemosCore(embedder, storage, collection_prefix="")
     await core.initialize()
 
-    vec = list(await embedder.encode("good"))
+    vec = list(await embedder.encode("alpha"))
     state = {
         "collection_prefix": "",
         "embedding_space": embedder.space,
@@ -711,9 +782,9 @@ async def test_import_validation_failure_leaves_short_term_and_persisted_unchang
     with pytest.raises(StorageError):
         await core.import_state(bad_state)
 
-    results_e, _ = await core.recall("old episodic", collection="episodic")
+    results_e, _ = await core.recall("old episodic point", collection="episodic")
     assert any("old episodic point" in r.text for r in results_e)
-    results_s, _ = await core.recall("old semantic", collection="semantic")
+    results_s, _ = await core.recall("old semantic point", collection="semantic")
     assert any("old semantic point" in r.text for r in results_s)
 
     assert len(core._short_term) == 1

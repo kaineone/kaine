@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import uuid
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar, Optional, Sequence
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.schema import Event
@@ -70,6 +71,10 @@ class Mnemos(BaseModule):
         # Newest episodic traces sleep's cross-period selection reads; 128
         # matches short_term_capacity, the most one consolidation pass hands to replay.
         cross_period_candidates: int = 128,
+        # Strength-downscaling parameters for sleep phase 2 (paper A.10).
+        strength_retention_per_day: float = 0.82,
+        strength_silence_floor: float = 0.01,
+        traces_per_day: float = 288000.0,
         # Peer stream names for affect + Hypnos window tracking
         thymos_stream: str = "thymos.out",
         hypnos_stream: str = "hypnos.out",
@@ -162,6 +167,10 @@ class Mnemos(BaseModule):
                 collection_prefix=collection_prefix,
                 short_term_capacity=short_term_capacity,
                 retrigger_hook=retrigger_hook,
+                retention_per_day=strength_retention_per_day,
+                silence_floor=strength_silence_floor,
+                traces_per_day=traces_per_day,
+                entity_clock=self._clock.now,
             )
 
     @property
@@ -309,20 +318,42 @@ class Mnemos(BaseModule):
     async def replay_now(self) -> list[ReplayEvent]:
         """Run the replay selection during the active Hypnos maintenance window.
 
-        Selects traces from the short-term buffer plus the traces the latest
-        consolidation pass moved (phase 1 of the same sleep), publishes them
-        as ``mnemos.replay`` events, and returns the list of published events.
+        Selects traces from the whole wake just ended (paper A.10): the
+        short-term buffer plus every trace persisted since the last
+        downscaling (``await self._core.wake_pool()``), publishes them as
+        ``mnemos.replay`` events, and returns the list of published events.
 
         Raises `ReplayWindowError` unless Hypnos has opened the replay window (`open_replay_window()`).
         """
-        # Build candidates from the short-term buffer (these have timestamps
-        # and affect tags stored on StoredMemory objects) plus the traces
-        # phase 1 consolidated, so phase 2 replays what phase 1 moved.
+        # Candidates: the short-term buffer and every persisted trace stored since
+        # the last downscaling, which includes the traces phase 1 just moved and the
+        # ones the wake persisted by eviction (paper A.10).
         candidates: list[ReplayEntry] = []
         for idx, memory in enumerate(self._core._short_term):
             candidates.append(_replay_entry(f"short_term:{idx}", memory))
-        for point_id, memory in self._core.last_consolidated:
-            candidates.append(_replay_entry(point_id, memory))
+        for p in await self._core.wake_pool():
+            payload = dict(p.get("payload", {}))
+            affect_raw = p.get("affect") or {}
+            affect = dict(affect_raw) if affect_raw else None
+            raw_ts = payload.get("entity_time", 0.0)
+            ts = (
+                float(raw_ts)
+                if isinstance(raw_ts, (int, float))
+                and not isinstance(raw_ts, bool)
+                and math.isfinite(raw_ts)
+                else 0.0
+            )
+            candidates.append(
+                ReplayEntry(
+                    point_id=str(p["id"]),
+                    text=str(p["text"]),
+                    affect_intensity=_affect_intensity(affect),
+                    timestamp=ts,
+                    payload=payload,
+                    affect=affect,
+                    collection=str(p["collection"]),
+                )
+            )
 
         # Delegate selection + guard to the engine.  ReplayWindowError propagates.
         events = self._replay_engine.replay(candidates)
@@ -383,45 +414,34 @@ class Mnemos(BaseModule):
     async def consolidate_now(self) -> int:
         return await self._core.consolidate_now()
 
-    def downscale_activations(self, factor: float) -> int:
-        """Scale all in-memory activation vectors by *factor* (Tononi & Cirelli 2014).
+    async def downscale(self, protect: Sequence[Any] = ()) -> dict[str, Any]:
+        """Sleep phase 2 calls this after replay; downscale trace strengths.
 
-        Applies synaptic homeostasis: reduces absolute activation magnitudes
-        while preserving relative ordering (cosine similarity is unchanged;
-        only L2 norms shrink).  Called by Hypnos phase 2 (deep-consolidation)
-        during the offline maintenance window.
-
-        Works on the InMemoryStorage backend; gracefully skips collections
-        on any backend that does not expose a mutable ``_collections`` dict.
+        Every persisted trace except the replayed ones is scaled by
+        retention_per_day ** (N_new / N_day), and the replayed ones keep
+        their strength (paper A.10, Tononi and Cirelli 2006; 2014). Vectors
+        are never touched.
 
         Args:
-            factor: Multiplicative scaling factor in (0, 1].  Values >= 1.0
-                    are a no-op; values <= 0 raise ValueError.
+            protect: ReplayEvent objects produced by replay_now. Each event
+                     whose collection is a non-empty str and whose log_base
+                     is numeric contributes a protected (collection, id,
+                     log_base) triple; short-term entries have no collection
+                     and nothing to protect.
 
         Returns:
-            Total number of vectors rescaled across all collections.
+            Downscale metadata from MnemosCore.
         """
-        if factor <= 0.0:
-            raise ValueError("downscale_activations factor must be > 0")
-        factor = float(factor)
-        if factor >= 1.0:
-            return 0
-        storage = self._core._storage
-        collections = getattr(storage, "_collections", None)
-        if collections is None:
-            # QdrantStorage or other remote backend — no in-memory vectors
-            # to scale; downscaling is a no-op for remote backends.
-            log.debug("downscale_activations: storage has no in-memory _collections; skipped")
-            return 0
-        total = 0
-        for _name, points in collections.items():
-            for point in points:
-                vec = point.get("vector")
-                if isinstance(vec, list) and vec:
-                    point["vector"] = [v * factor for v in vec]
-                    total += 1
-        log.info("downscale_activations: scaled %d vectors by factor %.4f", total, factor)
-        return total
+        triples: list[tuple[str, str, float]] = []
+        for event in protect:
+            collection = getattr(event, "collection", None)
+            log_base = getattr(event, "log_base", None)
+            if not isinstance(collection, str) or not collection:
+                continue
+            if isinstance(log_base, bool) or not isinstance(log_base, (int, float)):
+                continue
+            triples.append((collection, str(event.point_id), float(log_base)))
+        return await self._core.downscale(triples)
 
     async def select_cross_period_traces(
         self,
@@ -438,7 +458,7 @@ class Mnemos(BaseModule):
         vectors) are gathered once each, sorted by timestamp, and divided
         into *periods* equal-width windows (oldest to newest). Up to
         *per_period* traces are sampled from each non-empty bucket. This works
-        on every storage backend.
+        on every storage backend. Silent traces are skipped (paper A.10).
 
         Returns a mapping ``{period_label: [trace_dict, ...]}`` where each
         trace dict carries ``point_id`` (str) and ``text`` (str) — the shape
@@ -503,6 +523,8 @@ class Mnemos(BaseModule):
                 continue
             seen.add(key)
             payload = dict(point.get("payload", {}))
+            if self._core.is_silent(payload):
+                continue
             affect_raw = point.get("affect") or {}
             ts = float(payload.get("timestamp", 0.0))
             all_traces.append(
@@ -656,20 +678,27 @@ _RAW_PERCEPTUAL_EVENT_TYPES: frozenset[str] = frozenset(
 )
 
 
+def _affect_intensity(affect: dict[str, Any] | None) -> float:
+    """Cached affect intensity, parsed as a float in [0, 1] when possible."""
+    if not affect:
+        return 0.0
+    try:
+        return float(affect.get("intensity", 0.0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _replay_entry(point_id: str, memory: Any) -> ReplayEntry:
     """Build a ReplayEntry from a StoredMemory with the given point id."""
     affect = memory.affect or {}
-    try:
-        intensity = float(affect.get("intensity", 0.0))
-    except (TypeError, ValueError):
-        intensity = 0.0
     return ReplayEntry(
         point_id=point_id,
         text=memory.text,
-        affect_intensity=intensity,
-        timestamp=memory.timestamp,
+        affect_intensity=_affect_intensity(affect),
+        timestamp=memory.entity_time,
         payload=dict(memory.payload),
         affect=dict(affect) if affect else None,
+        collection=None,
     )
 
 

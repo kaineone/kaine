@@ -376,7 +376,7 @@ async def test_empatheia_folds_real_emotion_event(bus: AsyncBus):
 async def test_mnemos_recall_publishes_error_on_storage_failure(bus: AsyncBus):
     """mnemos.recall event must carry error=True on StorageError, not fake count=0."""
     class FailingStorage(InMemoryStorage):
-        async def search(self, collection, *, query_vector, limit):
+        async def search(self, collection, *, query_vector, limit, min_log_base=None):
             raise StorageError("simulated qdrant failure")
 
     emb = FakeEmbedder(latent_dim=8)

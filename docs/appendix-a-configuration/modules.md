@@ -245,6 +245,15 @@ Section: `[mnemos.replay]`.
 | `recency_weight` | float | `0.3` | Weight on recency in the replay selection score. |
 | `redact_content` | boolean | `true` | When `true`, sidecar/observer payloads carry only memory IDs, not trace text. |
 
+### Trace strength
+
+Section: `[mnemos.strength]`. Paper Appendix A.10 and Table A1.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `retention_per_day` | float `(0, 1)` | `0.82` | Strength a trace that is never replayed keeps over one entity day of storage at the resting broadcast rate. Each sleep scales every unreplayed trace by `retention_per_day ** (N_new / N_day)`, where `N_new` is the number of traces stored since the previous sleep and `N_day` is `86400 * [cycle].experiential_rate_hz`. |
+| `silence_floor` | float `(0, 1)` | `0.01` | A trace whose strength is below this floor is silent: recall and replay pass over it, and it stays in the store. |
+
 ## Eidolon
 
 Section: `[eidolon]`.

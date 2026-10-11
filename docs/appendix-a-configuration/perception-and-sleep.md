@@ -163,9 +163,10 @@ The retired key `nous_step_burst` is ignored with a warning if present, so older
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `fatigue_triggered` | boolean | `true` | When `true`, Hypnos subscribes to `soma.fatigue` and triggers on threshold crossing. `interval_seconds` remains the upper bound on the interval either way. |
-| `downscale_factor` | float | `0.9` | Factor by which the deep-consolidation phase scales Mnemos memory activation weights. Needs Mnemos. |
 | `replay_window_s` | float | `5.0` | Replay window recorded with each sleep's metadata. It is informational, since replay completes synchronously. |
 | `associative_replay` | boolean | `false` | Phase-3 associative cross-period replay. When `true`, Hypnos selects traces spanning at least two memory periods, cues Phantasia for scenario extensions, and re-injects the associations into the workspace. Degrades to a no-op if Phantasia is disabled or absent. |
+
+The former `downscale_factor` key is refused at boot. Sleep now downscales the strength of each Mnemos trace, set by `[mnemos.strength]`.
 
 ### Voice alignment
 

@@ -9,15 +9,17 @@ can drive memory operations without spinning up a bus.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Awaitable, Callable, Iterable, Optional
 
 from kaine.embedding_defaults import LEGACY_EMBEDDING_SPACE
-from kaine.memory_kinds import MNEMOS_COLLECTION_KINDS, stamp_key
+from kaine.entity_clock import EntityClock
+from kaine.memory_kinds import MNEMOS_COLLECTION_KINDS, stamp_key, strength_key
 from kaine.modules.mnemos.embeddings import Embedder
 from kaine.modules.mnemos.storage import MemoryStorage, RecalledMemory, StorageError
 from kaine.text_embedding import same_space
@@ -30,6 +32,9 @@ log = logging.getLogger(__name__)
 # kaine.modules) can share the single source of truth.
 DEFAULT_COLLECTIONS: tuple[str, str, str, str] = MNEMOS_COLLECTION_KINDS
 
+# Mnemos owns these payload keys (paper A.10); a caller's payload cannot set them.
+_RESERVED_PAYLOAD_KEYS: frozenset[str] = frozenset({"log_base", "born_sleep", "entity_time"})
+
 
 @dataclass(frozen=True)
 class StoredMemory:
@@ -37,6 +42,7 @@ class StoredMemory:
     payload: dict[str, Any]
     affect: dict[str, Any] | None
     timestamp: float
+    entity_time: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -64,9 +70,19 @@ class MnemosCore:
         short_term_capacity: int = 128,
         retrigger_hook: EmotionalRetriggerHook | None = None,
         clock: Callable[[], float] = time.time,
+        retention_per_day: float = 0.82,
+        silence_floor: float = 0.01,
+        traces_per_day: float = 288000.0,
+        entity_clock: Callable[[], float] | None = None,
     ) -> None:
         if short_term_capacity <= 0:
             raise ValueError("short_term_capacity must be positive")
+        if not (0.0 < retention_per_day < 1.0):
+            raise ValueError("retention_per_day must be in (0, 1)")
+        if not (0.0 < silence_floor < 1.0):
+            raise ValueError("silence_floor must be in (0, 1)")
+        if not (math.isfinite(traces_per_day) and traces_per_day > 0.0):
+            raise ValueError("traces_per_day must be a positive finite number")
         self._embedder = embedder
         self._storage = storage
         self._prefix = collection_prefix
@@ -77,6 +93,19 @@ class MnemosCore:
         self._last_consolidated: list[tuple[str, StoredMemory]] = []
         self._hook = retrigger_hook or _noop_hook
         self._clock = clock
+        self._retention_per_day = float(retention_per_day)
+        self._silence_floor = float(silence_floor)
+        self._traces_per_day = float(traces_per_day)
+        self._entity_clock = entity_clock or EntityClock().now
+        # Trace-strength state (paper A.10). Values loaded from storage meta.
+        self._log_gain = 0.0
+        self._sleeps = 0
+        self._total = 0.0
+        self._last_sleep_entity_time = 0.0
+        # entity_time stamps are offset + entity_clock(), so they continue across restarts.
+        self._entity_offset = 0.0
+        # Held by persist, downscale, export and import so a downscaling never interleaves with a write.
+        self._strength_lock = asyncio.Lock()
 
     def collection_name(self, kind: str) -> str:
         if kind not in DEFAULT_COLLECTIONS:
@@ -106,6 +135,42 @@ class MnemosCore:
     def stamp_key(self) -> str:
         return stamp_key(self._prefix)
 
+    @property
+    def strength_key(self) -> str:
+        return strength_key(self._prefix)
+
+    @property
+    def log_gain(self) -> float:
+        return self._log_gain
+
+    @property
+    def sleeps(self) -> int:
+        return self._sleeps
+
+    @property
+    def total_strength(self) -> float:
+        return self._total
+
+    @property
+    def silence_threshold(self) -> float:
+        # A trace whose log_base is below this value is silent.
+        return math.log(self._silence_floor) - self._log_gain
+
+    def entity_now(self) -> float:
+        return self._entity_offset + float(self._entity_clock())
+
+    def strength_of(self, payload: Any) -> float:
+        lb = _log_base(payload)
+        if lb is None:
+            return 1.0
+        return min(1.0, math.exp(lb + self._log_gain))
+
+    def is_silent(self, payload: Any) -> bool:
+        lb = _log_base(payload)
+        if lb is None:
+            return False
+        return lb < self.silence_threshold
+
     async def initialize(self) -> None:
         await self._embedder.load()
         await self._storage.initialize()
@@ -113,6 +178,8 @@ class MnemosCore:
         for kind in ("episodic", "semantic", "procedural"):
             await self._storage.ensure_collection(self.collection_name(kind))
         await self._check_embedding_space_stamp()
+        await self._init_strength()
+        await self._resume_entity_time()
 
     async def _check_embedding_space_stamp(self) -> None:
         space = self._embedder.space
@@ -177,6 +244,150 @@ class MnemosCore:
                 f"before this embedder can use them"
             )
 
+    async def _init_strength(self) -> None:
+        names = self.persisted_collection_names()
+        meta = await self._storage.read_meta(self.strength_key)
+        fresh = False
+        if meta is None:
+            carried = 0
+            for name in names:
+                carried += await self._storage.count_filtered(name, has_log_base=True)
+            if carried > 0:
+                raise StorageError(
+                    f"mnemos: the memory store has no trace-strength record but {carried} "
+                    "traces carry log_base; their strengths cannot be recovered"
+                )
+            total = 0
+            for name in names:
+                total += await self._storage.count(name, strict=True)
+            meta = {
+                "log_gain": 0.0,
+                "sleeps": 0,
+                "total": float(total),
+                "entity_time": 0.0,
+            }
+            await self._storage.write_meta(self.strength_key, meta)
+            fresh = True
+        self._load_strength(meta)
+        changed = 0
+        for name in names:
+            changed += await self._storage.backfill_strength(
+                [name], log_base=-self._log_gain
+            )
+        if changed and not fresh:
+            self._total += changed
+            await self._storage.write_meta(self.strength_key, self._strength_meta())
+        if changed:
+            log.info(
+                "mnemos: gave %d traces from before trace strengths a strength of 1",
+                changed,
+            )
+
+    def _load_strength(self, meta: dict[str, Any]) -> None:
+        meta = _validate_strength(meta)
+        self._log_gain = meta["log_gain"]
+        self._sleeps = meta["sleeps"]
+        self._total = meta["total"]
+        self._last_sleep_entity_time = meta["entity_time"]
+
+    def _strength_meta(self) -> dict[str, Any]:
+        return {
+            "log_gain": self._log_gain,
+            "sleeps": self._sleeps,
+            "total": self._total,
+            "entity_time": self._last_sleep_entity_time,
+        }
+
+    async def _resume_entity_time(self) -> None:
+        newest = self._last_sleep_entity_time
+        for point in await self._storage.wake_points(
+            self.persisted_collection_names(), self._sleeps
+        ):
+            et = _entity_time(point.get("payload") or {})
+            if et > newest:
+                newest = et
+        for memory in self._short_term:
+            if memory.entity_time > newest:
+                newest = memory.entity_time
+        # The entity clock restarts at 0 on each boot, so stamps are shifted
+        # forward only when the clock reads behind the newest stamp of the
+        # current wake.
+        self._entity_offset = max(0.0, newest - float(self._entity_clock()))
+
+    async def wake_pool(self) -> list[dict[str, Any]]:
+        """Persisted traces stored since the last downscaling."""
+        results = await self._storage.wake_points(
+            self.persisted_collection_names(), self._sleeps
+        )
+        # All traces of the current wake have strength 1, so none should be silent.
+        return [p for p in results if not self.is_silent(p.get("payload") or {})]
+
+    async def downscale(
+        self, protect: Iterable[tuple[str, str, float]] = ()
+    ) -> dict[str, Any]:
+        """Downscale strengths for one sleep (paper A.10)."""
+        async with self._strength_lock:
+            names = self.persisted_collection_names()
+            n_new = 0
+            for name in names:
+                n_new += await self._storage.count_filtered(
+                    name, born_sleep=self._sleeps
+                )
+            log_f = (n_new / self._traces_per_day) * math.log(self._retention_per_day)
+            factor = math.exp(log_f)
+
+            seen: set[tuple[str, str]] = set()
+            protected: list[tuple[str, str, float]] = []
+            h_q = 0.0
+            for coll, point_id, lb in protect:
+                key = (str(coll), str(point_id))
+                if key in seen or coll not in names:
+                    continue
+                nlb = _log_base({"log_base": lb})
+                if nlb is None:
+                    continue
+                seen.add(key)
+                protected.append((coll, str(point_id), nlb))
+                h_q += min(1.0, math.exp(nlb + self._log_gain))
+
+            total_before = self._total + n_new
+            total_after = factor * (total_before - h_q) + h_q
+
+            # Write meta before touching points. A crash after this leaves the
+            # protected traces downscaled with the rest; strength is lost, never created.
+            meta = {
+                "log_gain": self._log_gain + log_f,
+                "sleeps": self._sleeps + 1,
+                "total": total_after,
+                "entity_time": self.entity_now(),
+            }
+            await self._storage.write_meta(self.strength_key, meta)
+            self._log_gain = meta["log_gain"]
+            self._sleeps = meta["sleeps"]
+            self._total = meta["total"]
+            self._last_sleep_entity_time = meta["entity_time"]
+
+            by_coll: dict[str, list[tuple[str, float]]] = {}
+            for coll, point_id, lb in protected:
+                by_coll.setdefault(coll, []).append((point_id, lb - log_f))
+            for coll, updates in by_coll.items():
+                await self._storage.set_log_base(coll, updates)
+
+            silent = 0
+            for name in names:
+                silent += await self._storage.count_filtered(
+                    name, log_base_below=self.silence_threshold
+                )
+
+        return {
+            "n_new": n_new,
+            "factor": factor,
+            "protected": len(protected),
+            "total_before": total_before,
+            "total_after": total_after,
+            "silent": silent,
+        }
+
     async def shutdown(self) -> None:
         try:
             await self._storage.shutdown()
@@ -200,8 +411,16 @@ class MnemosCore:
             raise ValueError(f"unknown collection {collection!r}")
         ts = float(self._clock())
         payload = dict(payload or {})
+        for key in _RESERVED_PAYLOAD_KEYS:
+            payload.pop(key, None)
         payload.setdefault("timestamp", ts)
-        memory = StoredMemory(text=text, payload=payload, affect=affect, timestamp=ts)
+        memory = StoredMemory(
+            text=text,
+            payload=payload,
+            affect=affect,
+            timestamp=ts,
+            entity_time=self.entity_now(),
+        )
         if collection == "short_term":
             self._rebuild_embeddings_if_desynced()
             if len(self._short_term) >= self._short_term_capacity:
@@ -216,13 +435,20 @@ class MnemosCore:
     async def _persist(self, memory: StoredMemory, collection: str) -> str:
         vec = await self._embedder.encode(memory.text)
         coll_name = self.collection_name(collection)
-        return await self._storage.upsert(
-            coll_name,
-            vector=vec,
-            text=memory.text,
-            payload=memory.payload,
-            affect=memory.affect,
-        )
+        async with self._strength_lock:
+            payload = {
+                k: v for k, v in memory.payload.items() if k not in _RESERVED_PAYLOAD_KEYS
+            }
+            payload["log_base"] = -self._log_gain
+            payload["born_sleep"] = self._sleeps
+            payload["entity_time"] = float(memory.entity_time)
+            return await self._storage.upsert(
+                coll_name,
+                vector=vec,
+                text=memory.text,
+                payload=payload,
+                affect=memory.affect,
+            )
 
     async def recall(
         self,
@@ -237,7 +463,44 @@ class MnemosCore:
             return await self._recall_short_term(query_text, k)
         vec = await self._embedder.encode(query_text)
         coll_name = self.collection_name(collection)
-        results = await self._storage.search(coll_name, query_vector=vec, limit=k)
+
+        k = max(0, int(k))
+        if k == 0:
+            results = []
+        else:
+            thr = self.silence_threshold
+            m = 4 * k
+            while True:
+                hits = await self._storage.search(
+                    coll_name, query_vector=vec, limit=m, min_log_base=thr
+                )
+                exhausted = len(hits) < m
+                scored = []
+                for hit in hits:
+                    lb = _log_base(hit.payload)
+                    if hit.score <= 0.0 or lb is None or lb < thr:
+                        continue
+                    strength = min(1.0, math.exp(lb + self._log_gain))
+                    scored.append(
+                        (strength * hit.score, hit.score, _entity_time(hit.payload), hit, strength)
+                    )
+                scored.sort(key=lambda t: (t[0], t[1], t[2]), reverse=True)
+                floor = min((h.score for h in hits), default=0.0)
+                # strength is at most 1, so an unfetched trace scores at most its
+                # cosine, which is at most the smallest fetched cosine; the result is
+                # therefore exact relative to the backend's cosine order.
+                if (
+                    exhausted
+                    or floor <= 0.0
+                    or (len(scored) >= k and scored[k - 1][0] >= floor)
+                ):
+                    break
+                m *= 4
+            results = [
+                replace(hit, score=product, similarity=sim, strength=strength)
+                for product, sim, _, hit, strength in scored[:k]
+            ]
+
         summary = _summarize(results, collection)
         await self._invoke_hook(summary)
         return results, summary
@@ -278,6 +541,8 @@ class MnemosCore:
 
         results: list[RecalledMemory] = []
         for score, idx, memory in scored[: max(0, int(k))]:
+            if score <= 0.0:
+                continue
             results.append(
                 RecalledMemory(
                     point_id=f"short_term:{idx}",
@@ -285,6 +550,8 @@ class MnemosCore:
                     text=memory.text,
                     payload=dict(memory.payload),
                     affect=dict(memory.affect) if memory.affect else None,
+                    similarity=float(score),
+                    strength=1.0,
                 )
             )
         summary = _summarize(results, "short_term")
@@ -344,115 +611,157 @@ class MnemosCore:
         captured here as ``StoredMemory`` fields so a revived entity resumes
         with the same working set.
         """
-        short_term = [
-            {
-                "text": m.text,
-                "payload": dict(m.payload),
-                "affect": dict(m.affect) if m.affect else None,
-                "timestamp": m.timestamp,
+        async with self._strength_lock:
+            short_term = [
+                {
+                    "text": m.text,
+                    "payload": dict(m.payload),
+                    "affect": dict(m.affect) if m.affect else None,
+                    "timestamp": m.timestamp,
+                    "entity_time": m.entity_time,
+                }
+                for m in self._short_term
+            ]
+            persisted = await self._storage.export(self.persisted_collection_names())
+            return {
+                "collection_prefix": self._prefix,
+                "short_term": short_term,
+                "persisted": persisted,
+                "embedding_space": self._embedder.space,
+                "strength": self._strength_meta(),
             }
-            for m in self._short_term
-        ]
-        persisted = await self._storage.export(self.persisted_collection_names())
-        return {
-            "collection_prefix": self._prefix,
-            "short_term": short_term,
-            "persisted": persisted,
-            "embedding_space": self._embedder.space,
-        }
 
     async def import_state(self, state: dict[str, Any]) -> int:
         """Restore a store captured by :meth:`export_state`. Returns total points.
 
         Re-imports persisted collections under this core's own prefix, then
         rebuilds the short-term deque. FAILS LOUDLY (propagates StorageError)
-        when the backend cannot re-import — revive must not yield a
+        when the backend cannot re-import; revive must not yield a
         memory-poor lesser individual.
         """
-        bundle_space = state.get("embedding_space") or LEGACY_EMBEDDING_SPACE
-        if not same_space(bundle_space, self._embedder.space):
-            raise StorageError(
-                f"mnemos: bundle embedding space {bundle_space} does not match "
-                f"running embedder space {self._embedder.space}; cannot revive"
+        async with self._strength_lock:
+            bundle_space = state.get("embedding_space") or LEGACY_EMBEDDING_SPACE
+            if not same_space(bundle_space, self._embedder.space):
+                raise StorageError(
+                    f"mnemos: bundle embedding space {bundle_space} does not match "
+                    f"running embedder space {self._embedder.space}; cannot revive"
+                )
+
+            src_prefix = (
+                state["collection_prefix"] if "collection_prefix" in state else "mnemos_"
             )
+            persisted = state.get("persisted") or {}
+            persisted_kinds = [k for k in DEFAULT_COLLECTIONS if k != "short_term"]
+            mapping: dict[str, str] = {}
+            for kind in persisted_kinds:
+                src_name = f"{src_prefix}{kind}"
+                mapping[src_name] = self.collection_name(kind)
 
-        src_prefix = (
-            state["collection_prefix"] if "collection_prefix" in state else "mnemos_"
-        )
-        persisted = state.get("persisted") or {}
-        persisted_kinds = [k for k in DEFAULT_COLLECTIONS if k != "short_term"]
-        mapping: dict[str, str] = {}
-        for kind in persisted_kinds:
-            src_name = f"{src_prefix}{kind}"
-            mapping[src_name] = self.collection_name(kind)
+            strength = state.get("strength")
+            if strength is not None:
+                strength = _validate_strength(strength)
+            else:
+                for src_name, target_name in mapping.items():
+                    for p in persisted.get(src_name, []):
+                        if _log_base(p.get("payload") or {}) is not None:
+                            raise StorageError(
+                                "mnemos: bundle carries trace strengths (log_base) "
+                                "but no strength record; refusing to revive with meaningless strengths"
+                            )
 
-        # Validate every point for every mapped kind before writing anything.
-        for src_name, target_name in mapping.items():
-            for p in persisted.get(src_name, []):
-                vec = list(p.get("vector") or [])
-                if len(vec) != self._storage.latent_dim:
-                    raise StorageError(
-                        f"imported point in {src_name!r} -> {target_name!r} "
-                        f"has vector dim {len(vec)} != storage latent_dim {self._storage.latent_dim}"
-                    )
-                if not all(math.isfinite(v) for v in vec):
-                    raise StorageError(
-                        f"imported point in {src_name!r} -> {target_name!r} has non-finite vector"
-                    )
-
-        # Refuse a revive whose persisted collections are all foreign to this bundle.
-        own_src_names = set(mapping.keys())
-        non_empty_names = {n for n, pts in persisted.items() if pts}
-        if non_empty_names and not (non_empty_names & own_src_names):
-            raise StorageError(
-                f"revive found memory collections but none belongs to this bundle's prefix "
-                f"{src_prefix!r}: {sorted(non_empty_names)}"
-            )
-
-        total = 0
-        replaced_kinds: list[str] = []
-        try:
+            # Validate every point for every mapped kind before writing anything.
             for src_name, target_name in mapping.items():
-                n = await self._storage.replace_collection(
-                    target_name, persisted.get(src_name, [])
-                )
-                total += n
-                replaced_kinds.append(target_name)
-        except Exception:
-            if replaced_kinds:
-                log.error(
-                    "mnemos: replace_collection failed after replacing kinds: %s",
-                    replaced_kinds,
-                )
-            raise
+                for p in persisted.get(src_name, []):
+                    vec = list(p.get("vector") or [])
+                    if len(vec) != self._storage.latent_dim:
+                        raise StorageError(
+                            f"imported point in {src_name!r} -> {target_name!r} "
+                            f"has vector dim {len(vec)} != storage latent_dim {self._storage.latent_dim}"
+                        )
+                    if not all(math.isfinite(v) for v in vec):
+                        raise StorageError(
+                            f"imported point in {src_name!r} -> {target_name!r} has non-finite vector"
+                        )
 
-        # Rebuild short-term only after persisted replaces succeed.
-        self._short_term.clear()
-        self._short_term_embeddings.clear()
-        # A restored store must not keep a batch whose ids point at replaced points.
-        self._last_consolidated = []
-        for entry in state.get("short_term") or []:
-            affect = entry.get("affect")
-            self._short_term.append(
-                StoredMemory(
-                    text=str(entry.get("text", "")),
-                    payload=dict(entry.get("payload") or {}),
-                    affect=dict(affect) if affect else None,
-                    timestamp=float(entry.get("timestamp", 0.0)),
-                )
-            )
-            self._short_term_embeddings.append(None)
-
-        for name, points in persisted.items():
-            if name not in mapping:
-                log.info(
-                    "mnemos: revive skips collection %s (%d points): not this bundle's own memory",
-                    name,
-                    len(points),
+            # Refuse a revive whose persisted collections are all foreign to this bundle.
+            own_src_names = set(mapping.keys())
+            non_empty_names = {n for n, pts in persisted.items() if pts}
+            if non_empty_names and not (non_empty_names & own_src_names):
+                raise StorageError(
+                    f"revive found memory collections but none belongs to this bundle's prefix "
+                    f"{src_prefix!r}: {sorted(non_empty_names)}"
                 )
 
-        await self._storage.write_stamp(self.stamp_key, self._embedder.space)
-        return total
+            total = 0
+            replaced_kinds: list[str] = []
+            try:
+                for src_name, target_name in mapping.items():
+                    n = await self._storage.replace_collection(
+                        target_name, persisted.get(src_name, [])
+                    )
+                    total += n
+                    replaced_kinds.append(target_name)
+            except Exception:
+                if replaced_kinds:
+                    log.error(
+                        "mnemos: replace_collection failed after replacing kinds: %s",
+                        replaced_kinds,
+                    )
+                raise
+
+            # Restore trace-strength state after persisted collections are replaced.
+            if strength is not None:
+                await self._storage.write_meta(self.strength_key, strength)
+                self._load_strength(strength)
+            else:
+                meta = {
+                    "log_gain": 0.0,
+                    "sleeps": 0,
+                    "total": float(total),
+                    "entity_time": 0.0,
+                }
+                await self._storage.write_meta(self.strength_key, meta)
+                self._load_strength(meta)
+                changed = 0
+                for name in mapping.values():
+                    changed += await self._storage.backfill_strength(
+                        [name], log_base=0.0
+                    )
+                if changed:
+                    log.info(
+                        "mnemos: gave %d traces from before trace strengths a strength of 1",
+                        changed,
+                    )
+
+            # Rebuild short-term only after persisted replaces succeed.
+            self._short_term.clear()
+            self._short_term_embeddings.clear()
+            # A restored store must not keep a batch whose ids point at replaced points.
+            self._last_consolidated = []
+            for entry in state.get("short_term") or []:
+                affect = entry.get("affect")
+                self._short_term.append(
+                    StoredMemory(
+                        text=str(entry.get("text", "")),
+                        payload=dict(entry.get("payload") or {}),
+                        affect=dict(affect) if affect else None,
+                        timestamp=float(entry.get("timestamp", 0.0)),
+                        entity_time=float(entry.get("entity_time", 0.0)),
+                    )
+                )
+                self._short_term_embeddings.append(None)
+
+            for name, points in persisted.items():
+                if name not in mapping:
+                    log.info(
+                        "mnemos: revive skips collection %s (%d points): not this bundle's own memory",
+                        name,
+                        len(points),
+                    )
+
+            await self._storage.write_stamp(self.stamp_key, self._embedder.space)
+            await self._resume_entity_time()
+            return total
 
     async def _invoke_hook(self, summary: RecallSummary) -> None:
         try:
@@ -494,3 +803,54 @@ def _summarize(results: Iterable[RecalledMemory], collection: str) -> RecallSumm
         max_affect_intensity=max_intensity,
         affects=tuple(affects),
     )
+
+
+def _log_base(payload: Any) -> float | None:
+    """Return a finite numeric log_base, or None if absent or invalid."""
+    if isinstance(payload, dict):
+        value = payload.get("log_base")
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)) and math.isfinite(value):
+            return float(value)
+    return None
+
+
+def _entity_time(payload: Any) -> float:
+    """Return a numeric finite entity_time, or 0.0 if absent or invalid."""
+    if isinstance(payload, dict):
+        value = payload.get("entity_time")
+        if isinstance(value, bool):
+            return 0.0
+        if isinstance(value, (int, float)) and math.isfinite(value):
+            return float(value)
+    return 0.0
+
+
+def _validate_strength(meta: dict[str, Any]) -> dict[str, Any]:
+    """Validate and normalize the trace-strength meta record."""
+    if not isinstance(meta, dict):
+        raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
+
+    def _num(key: str) -> float:
+        value = meta.get(key)
+        if isinstance(value, bool):
+            raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
+        if not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
+        return float(value)
+
+    sleeps = meta.get("sleeps")
+    if isinstance(sleeps, bool) or not isinstance(sleeps, int) or sleeps < 0:
+        raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
+    log_gain = _num("log_gain")
+    total = _num("total")
+    entity_time = _num("entity_time")
+    if total < 0:
+        raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
+    return {
+        "log_gain": log_gain,
+        "sleeps": int(sleeps),
+        "total": total,
+        "entity_time": entity_time,
+    }

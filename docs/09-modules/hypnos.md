@@ -49,7 +49,7 @@ flowchart TD
     ST --> P1
     P1["Phase 1: light consolidation\n• set_frequency(0.5) on active modules\n• mnemos.consolidate_now()"]
     P1 --> P2
-    P2["Phase 2: deep consolidation (needs Mnemos)\n• open the replay window; mnemos.replay_now(); close it\n• mnemos.downscale_activations(0.9)"]
+    P2["Phase 2: deep consolidation (needs Mnemos)\n• open the replay window; mnemos.replay_now(); close it\n• mnemos.downscale(protect=replayed traces)"]
     P2 --> P3
     P3["Phase 3: associative replay (flag)\n• cross-period traces\n• cue Phantasia\n• publish hypnos.association"]
     P3 --> P4
@@ -97,9 +97,10 @@ The retired key `nous_step_burst` is accepted and ignored with a warning, so old
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `fatigue_triggered` | bool | `true` | Run the `soma.out` consumer; `false` disables both the fatigue and the maintenance-request triggers |
-| `downscale_factor` | float `(0, 1]` | `0.9` | Activation scaling in phase 2 (synaptic homeostasis, Tononi and Cirelli 2014) |
 | `replay_window_s` | float | `5.0` | Recorded in phase-2 metadata; replay runs to completion regardless |
 | `associative_replay` | bool | `false` | Enable phase 3 |
+
+`downscale_factor` is refused at boot: phase 2 downscales trace strengths by `[mnemos.strength].retention_per_day` instead (paper A.10).
 
 `[hypnos.voice_alignment]` is documented in full on the [Voice alignment](../10-sleep/voice-alignment.md#configuration) page.
 

@@ -20,6 +20,7 @@ __all__ = [
     "MNEMOS_STAMP_COLLECTION",
     "stamp_key",
     "stamp_point_id",
+    "strength_key",
 ]
 
 # Canonical Mnemos memory-collection kinds.
@@ -48,3 +49,8 @@ def stamp_key(prefix: str) -> str:
 def stamp_point_id(key: str) -> str:
     """Deterministic Qdrant point id for an embedding-space stamp key."""
     return str(uuid.uuid5(_STAMP_NAMESPACE, key))
+
+
+def strength_key(prefix: str) -> str:
+    """Key of the trace-strength record (Mnemos meta) for a collection prefix."""
+    return f"{prefix}strength"

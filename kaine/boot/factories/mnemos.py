@@ -22,8 +22,10 @@ def make_mnemos(
 ) -> BaseModule:
     from kaine.modules.mnemos.module import Mnemos
 
-    # Spot-injected shared embedder; never a TOML key, so pop before validation.
+    # Spot-injected shared embedder and N_day (traces per entity day); never
+    # TOML keys, so pop before validation.
     embedder = section.pop("_embedder", None)
+    traces_per_day = section.pop("_traces_per_day", None)
 
     allowed = {
         "backend",
@@ -36,6 +38,7 @@ def make_mnemos(
         "recall_cooldown_s",
         "qdrant",
         "replay",  # nested sub-table: selection_top_k, affect_weight, recency_weight, redact_content, cross_period_candidates
+        "strength",  # nested sub-table: retention_per_day, silence_floor
     }
     if "embedder_model_id" in section:
         raise ConfigurationError(
@@ -46,8 +49,11 @@ def make_mnemos(
     _require_keys(section, allowed)
     qdrant = section.get("qdrant") or {}
     replay = section.get("replay") or {}
+    strength = section.get("strength") or {}
     kwargs: dict[str, Any] = {
-        k: section[k] for k in allowed - {"qdrant", "replay"} if k in section
+        k: section[k]
+        for k in allowed - {"qdrant", "replay", "strength"}
+        if k in section
     }
     if "host" in qdrant:
         kwargs["qdrant_host"] = qdrant["host"]
@@ -66,5 +72,13 @@ def make_mnemos(
         kwargs["replay_redact_content"] = bool(replay["redact_content"])
     if "cross_period_candidates" in replay:
         kwargs["cross_period_candidates"] = int(replay["cross_period_candidates"])
+    # Strength sub-table (paper A.10)
+    _require_keys(strength, {"retention_per_day", "silence_floor"})
+    if "retention_per_day" in strength:
+        kwargs["strength_retention_per_day"] = float(strength["retention_per_day"])
+    if "silence_floor" in strength:
+        kwargs["strength_silence_floor"] = float(strength["silence_floor"])
+    if traces_per_day is not None:
+        kwargs["traces_per_day"] = float(traces_per_day)
     kwargs["embedder"] = embedder
     return Mnemos(bus, entity_clock=entity_clock, **kwargs)

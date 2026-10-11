@@ -59,7 +59,7 @@ async def test_export_state_short_term_entries_lack_embeddings(core: MnemosCore)
     await core.recall("some", k=1, collection="short_term")
     state = await core.export_state()
     for entry in state["short_term"]:
-        assert set(entry.keys()) == {"text", "payload", "affect", "timestamp"}
+        assert set(entry.keys()) == {"text", "payload", "affect", "timestamp", "entity_time"}
 
 
 @pytest.mark.asyncio

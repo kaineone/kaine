@@ -51,9 +51,10 @@ class FakeMnemos:
         self.consolidated += 1
         return 5
 
-    def downscale_activations(self, factor: float) -> int:
-        self.downscale_calls.append(factor)
-        return 0
+    async def downscale(self, protect=()):
+        protect = list(protect)
+        self.downscale_calls.append(protect)
+        return {"n_new": 0, "factor": 1.0, "protected": len(protect), "total_before": 0.0, "total_after": 0.0, "silent": 0}
 
     async def replay_now(self) -> list:
         self.replay_calls += 1
@@ -344,8 +345,9 @@ async def test_one_phase_failure_does_not_stop_others(bus: AsyncBus, tmp_path: P
         async def consolidate_now(self) -> int:
             raise RuntimeError("boom")
 
-        def downscale_activations(self, factor: float) -> int:
-            return 0
+        async def downscale(self, protect=()):
+            protect = list(protect)
+            return {"n_new": 0, "factor": 1.0, "protected": len(protect), "total_before": 0.0, "total_after": 0.0, "silent": 0}
 
         async def replay_now(self) -> list:
             return []
