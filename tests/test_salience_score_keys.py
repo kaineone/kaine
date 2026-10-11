@@ -27,6 +27,7 @@ from kaine.workspace import (
     StaticThymosModulator,
     Syneidesis,
 )
+from kaine.workspace.coherence import CoherenceScorer
 from tests._fakes import FakeClock, FakeRegistry, FakeSyneidesis
 
 fakeredis = pytest.importorskip("fakeredis.aioredis")
@@ -282,3 +283,48 @@ def test_stream_entry_key_round_trip():
     assert key == "soma.out:1760000000000-0"
     assert split_stream_entry_key(key) == ("soma.out", "1760000000000-0")
     assert split_stream_entry_key("1760000000000-0") == (None, "1760000000000-0")
+
+
+@pytest.mark.asyncio
+async def test_select_dual_refuses_duplicate_candidate_ids():
+    ctx = {
+        "tick_index": 0,
+        "is_experiential": True,
+        "phases": {"soma": 0.0, "topos": 1.0},
+    }
+    syne = Syneidesis(
+        strategy=_strategy(),
+        top_k=5,
+        publication_threshold=0.35,
+        coherence=CoherenceScorer(
+            plv_window=12, coherence_floor=0.5, coherence_ceiling=1.5
+        ),
+    )
+    with pytest.raises(ValueError):
+        await syne.select_dual([("a", _soma_event()), ("a", _topos_event())], ctx)
+
+
+@pytest.mark.asyncio
+async def test_select_dual_keeps_one_score_per_candidate():
+    ctx = {
+        "tick_index": 0,
+        "is_experiential": True,
+        "phases": {"soma": 0.0, "topos": 1.0},
+    }
+    syne = Syneidesis(
+        strategy=_strategy(),
+        top_k=5,
+        publication_threshold=0.35,
+        coherence=CoherenceScorer(
+            plv_window=12, coherence_floor=0.5, coherence_ceiling=1.5
+        ),
+    )
+    ids = ["soma.out:1760000000000-0", "topos.out:1760000000000-0"]
+    primary, counterfactual = await syne.select_dual(
+        [(ids[0], _soma_event()), (ids[1], _topos_event())], ctx
+    )
+    assert counterfactual is not None
+    for snapshot in (primary, counterfactual):
+        assert set(snapshot.salience_scores.keys()) == set(ids)
+        for event_id, _event in snapshot.selected_events:
+            assert event_id in snapshot.salience_scores
