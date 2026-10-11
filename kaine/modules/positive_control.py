@@ -164,9 +164,8 @@ class PositiveControlSettings:
         if (
             isinstance(shutdown_drain_s, bool)
             or not isinstance(shutdown_drain_s, (int, float))
+            or not math.isfinite(shutdown_drain_s)
             or shutdown_drain_s <= 0
-            or shutdown_drain_s == float("inf")
-            or shutdown_drain_s != shutdown_drain_s
         ):
             raise ValueError(
                 f"[positive_control].shutdown_drain_s must be a finite number above 0, got {shutdown_drain_s!r}"

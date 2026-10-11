@@ -66,7 +66,7 @@ The payload's `alert` is true exactly on an alert, and `alerts` lists the metric
 
 ## Unexpected error, fatigue, and regulation
 
-Soma learns, per channel, the expected absolute prediction error and its spread as exponential averages with time constant `expected_error_tau_s` entity seconds. The unexpected error is the L2 norm of each channel's absolute error beyond `expected + expected_error_band × spread`, with the band taken before this reading's update. The unexpected error drives fatigue and regulation; it does not enter the intensity.
+Soma learns, per channel, the expected absolute prediction error and its spread as exponential averages with time constant `expected_error_tau_s` entity seconds. The unexpected error is the L2 norm of each channel's absolute error beyond `expected + expected_error_band × spread`, with the band taken before this reading's update. A forward model without per-channel residuals counts as one channel whose residual is its scalar error. A reading without a defined error (skipped as non-finite, or the first after a skip) has an unexpected error of 0 and leaves the estimates unchanged, whichever forward model is in use. The unexpected error drives fatigue and regulation; it does not enter the intensity.
 
 `FatigueAccumulator` integrates the unexpected error over entity time with continuous decay:
 

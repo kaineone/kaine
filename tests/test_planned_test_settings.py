@@ -473,7 +473,7 @@ def test_gate_returns_absent_run_data_when_no_run_data(
     record, path = _build_record(tmp_path)
     write_settings_record(record, path)
 
-    import kaine.experiment.planned_test_settings as pts
+    from kaine.experiment import planned_test_settings as pts
 
     original = pts.verify_run_data
 
