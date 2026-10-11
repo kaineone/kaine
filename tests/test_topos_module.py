@@ -3,6 +3,7 @@
 
 
 import asyncio
+import math
 
 import numpy as np
 import pytest
@@ -836,3 +837,64 @@ async def test_forward_model_step_runs_in_thread(bus: AsyncBus):
     await topos.process_frame(None)
     _ = await marker
     assert loop_progressed
+
+
+def _non_finite_numbers(value):
+    """Every non-finite number anywhere inside *value*."""
+    if isinstance(value, bool):
+        return []
+    if isinstance(value, (int, float)):
+        return [] if math.isfinite(value) else [value]
+    if isinstance(value, dict):
+        return [n for v in value.values() for n in _non_finite_numbers(v)]
+    if isinstance(value, (list, tuple)):
+        return [n for v in value for n in _non_finite_numbers(v)]
+    return []
+
+
+@pytest.mark.asyncio
+async def test_skipped_first_report_publishes_no_vector_and_no_habituation(bus):
+    topos = Topos(bus, encoder=FakeEncoder([[float("nan"), 0.0, 0.0, 0.0]]))
+    await topos.process_frame(None)
+
+    entries = await bus.read("topos.out", last_id="0")
+    _, ev = entries[0]
+
+    assert ev.payload["latent"] is None
+    assert ev.payload["habituation_score"] is None
+    assert ev.payload["change_score"] == 0.0
+    assert ev.payload["alert"] is False
+    assert _non_finite_numbers(ev.payload) == []
+
+
+@pytest.mark.asyncio
+async def test_foveation_skip_publishes_no_non_finite_vector(bus):
+    nan = float("nan")
+    enc = FakeEncoder(
+        [
+            [0.1, 0.2, 0.3, 0.4],
+            [0.9, 0.8, 0.7, 0.6],
+            [nan, 0.2, 0.3, 0.4],
+            [0.9, 0.8, 0.7, 0.6],
+            [0.2, 0.1, 0.4, 0.3],
+            [nan, 0.8, 0.7, 0.6],
+        ]
+    )
+    topos = Topos(bus, encoder=enc, foveation_enabled=True)
+    for _ in range(3):
+        await topos.process_frame(_rgb_frame())
+
+    entries = await bus.read("topos.out", last_id="0")
+    payloads = [ev.payload for _, ev in entries]
+    assert len(payloads) == 3
+
+    assert payloads[1]["latent"] is None
+    assert payloads[1]["peripheral"] is None
+    assert payloads[1]["foveal"] == [0.9, 0.8, 0.7, 0.6]
+    assert payloads[1]["habituation_score"] == payloads[0]["habituation_score"]
+
+    assert payloads[2]["latent"] == [0.2, 0.1, 0.4, 0.3]
+    assert payloads[2]["foveal"] is None
+
+    for p in payloads:
+        assert _non_finite_numbers(p) == []

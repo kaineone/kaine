@@ -48,6 +48,18 @@ from kaine.modules.topos.live import (
 
 log = logging.getLogger(__name__)
 
+
+def _finite_or_none(vector: Any) -> Optional[list[float]]:
+    """Return *vector*, or None when it is None or holds a non-finite value.
+
+    A skipped reading publishes None in place of its vector, so no NaN or
+    infinity reaches the bus.
+    """
+    if vector is None or any(not math.isfinite(v) for v in vector):
+        return None
+    return vector
+
+
 _HYPNOS_STREAM: str = "hypnos.out"
 
 
@@ -158,6 +170,9 @@ class Topos(BaseModule):
         )
         self._change_detector: ChangeDetector = change_detector or CosineChangeDetector()
         self._habituator: SceneHabituator = habituator or RollingMeanHabituator()
+        # Habituation score of the last finite embedding; a skipped embedding
+        # republishes it (None before the first finite one).
+        self._last_habituation: Optional[float] = None
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
         self._change_alert_threshold = float(change_alert_threshold)
@@ -523,7 +538,14 @@ class Topos(BaseModule):
         # embedding is compared with the last finite one.
         skipped = not all(math.isfinite(v) for v in embedding)
         change = 0.0 if skipped else float(self._change_detector.observe(embedding))
-        habituation = float(self._habituator.observe(embedding))
+        habituation: Optional[float]
+        if skipped:
+            # The habituator does not observe a skipped embedding; the report
+            # carries the last score it gave.
+            habituation = self._last_habituation
+        else:
+            habituation = float(self._habituator.observe(embedding))
+            self._last_habituation = habituation
 
         # Self-calibrating change alert (perception-drives-salience). The alert
         # criterion is RELATIVE to the module's own rolling baseline of change
@@ -625,7 +647,7 @@ class Topos(BaseModule):
             log.debug("topos preview tap failed (non-fatal)", exc_info=True)
 
         report: dict[str, Any] = {
-            "latent": embedding,
+            "latent": _finite_or_none(embedding),
             "change_score": change,
             "habituation_score": habituation,
             "encoder_model_id": self._encoder.model_id,
@@ -649,8 +671,8 @@ class Topos(BaseModule):
             # Foveation on: `latent` is the peripheral gist (kept for backward-
             # compatible consumers); the attended detail and the content-free
             # fovea location ride alongside it.
-            report["peripheral"] = peripheral_latent
-            report["foveal"] = foveal_latent
+            report["peripheral"] = _finite_or_none(peripheral_latent)
+            report["foveal"] = _finite_or_none(foveal_latent)
             report["fovea"] = fovea.to_dict()
             # Attention schema: the content-free predicted next fovea location.
             if predicted_fovea is not None:

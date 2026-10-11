@@ -3,6 +3,7 @@
 
 import asyncio
 import io
+import math
 import os
 import wave
 from datetime import datetime, timezone
@@ -793,6 +794,19 @@ async def test_acoustic_report_carries_the_paired_evaluations(bus: AsyncBus) -> 
         await audition.shutdown()
 
 
+def _non_finite_numbers(value):
+    """Every non-finite number anywhere inside *value*."""
+    if isinstance(value, bool):
+        return []
+    if isinstance(value, (int, float)):
+        return [] if math.isfinite(value) else [value]
+    if isinstance(value, dict):
+        return [n for v in value.values() for n in _non_finite_numbers(v)]
+    if isinstance(value, (list, tuple)):
+        return [n for v in value for n in _non_finite_numbers(v)]
+    return []
+
+
 @pytest.mark.asyncio
 async def test_acoustic_path_skips_a_non_finite_embedding(bus, monkeypatch) -> None:
     torch = pytest.importorskip("torch")
@@ -860,5 +874,53 @@ async def test_acoustic_path_skips_a_non_finite_embedding(bus, monkeypatch) -> N
         assert events[3].salience == pytest.approx(audition._baseline_salience)
         assert events[4].payload["context_gain"] is None
         assert isinstance(events[5].payload["context_gain"], float)
+        for event in events:
+            assert _non_finite_numbers(event.payload) == []
+    finally:
+        await audition.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_tone_path_skips_a_non_finite_feature_vector(bus, monkeypatch):
+    torch = pytest.importorskip("torch")
+    audition = _make_audition(bus)
+    await audition.initialize()
+    try:
+        await audition.process_audio(_tone(300), sample_rate=16000)
+        await audition.process_audio(_tone(300), sample_rate=16000)
+        await audition.process_audio(_tone(300), sample_rate=16000)
+
+        model = audition._forward_model
+        buffer_before = [list(v) for v in model._buffer]
+        weights_before = [p.detach().clone() for p in model._net.parameters()]
+        errors_before = list(audition._prediction_errors)
+
+        monkeypatch.setattr(
+            "kaine.modules.audition.module.build_feature_vector",
+            lambda *a, **k: [float("nan")] * model.feature_dim,
+        )
+        await audition.process_audio(_tone(300), sample_rate=16000)
+        monkeypatch.undo()
+
+        assert [list(v) for v in model._buffer] == buffer_before
+        for saved, current in zip(weights_before, model._net.parameters()):
+            assert torch.equal(saved, current)
+        assert model.last_reading_skipped is True
+        assert list(audition._prediction_errors) == errors_before
+
+        entries = await bus.read("audition.out", last_id="0", count=50)
+        emotions = [e for _, e in entries if e.type == "audition.emotion"]
+        assert len(emotions) == 4
+        assert emotions[3].payload["prediction_error"] == 0.0
+        assert emotions[3].payload["alert"] is False
+        assert emotions[3].salience == pytest.approx(audition._baseline_salience)
+        for _, e in entries:
+            assert _non_finite_numbers(e.payload) == []
+
+        await audition.process_audio(_tone(300), sample_rate=16000)
+        assert model.last_reading_skipped is False
+        assert len(audition._prediction_errors) == min(
+            len(errors_before) + 1, audition._prediction_errors.maxlen
+        )
     finally:
         await audition.shutdown()

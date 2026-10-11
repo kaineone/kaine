@@ -7,6 +7,10 @@ When an acoustic embedding or a tone feature vector contains a non-finite value,
 - **WHEN** Audition, after acoustic reports that carry a gain, receives an acoustic embedding containing NaN
 - **THEN** the acoustic forward model's buffer and weights are unchanged, the running error window and the change history are unchanged, the report carries a prediction error of 0, a change score of 0, no gain and no alert
 
+#### Scenario: A NaN tone feature vector is skipped
+- **WHEN** the tone path's feature vector contains NaN
+- **THEN** the tone forward model's buffer and weights and the tone error window are unchanged, and the emotion event carries a prediction error of 0 and no non-finite number
+
 #### Scenario: The gain resumes one reading after the skip
 - **WHEN** two finite acoustic embeddings follow the skipped one
 - **THEN** the first of them reports no gain and the second reports a gain

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 
 import pytest
@@ -238,6 +239,19 @@ async def test_topos_report_carries_the_paired_evaluations(bus):
     )
 
 
+def _non_finite_numbers(value):
+    """Every non-finite number anywhere inside *value*."""
+    if isinstance(value, bool):
+        return []
+    if isinstance(value, (int, float)):
+        return [] if math.isfinite(value) else [value]
+    if isinstance(value, dict):
+        return [n for v in value.values() for n in _non_finite_numbers(v)]
+    if isinstance(value, (list, tuple)):
+        return [n for v in value for n in _non_finite_numbers(v)]
+    return []
+
+
 class _ScriptedEncoder(FakeSmall):
     """Returns the queued embeddings in order."""
 
@@ -296,10 +310,12 @@ async def test_topos_skips_a_non_finite_latent(bus):
     weights_before = [p.detach().clone() for p in model._net.parameters()]
     errors_before = list(topos._pred_errors)
     changes_before = list(topos._change_history)
+    frames_before = [list(f) for f in topos._habituator._frames]
 
     await topos.process_frame(None)
 
     assert [list(v) for v in model._buffer] == buffer_before
+    assert [list(f) for f in topos._habituator._frames] == frames_before
     for saved, current in zip(weights_before, model._net.parameters()):
         assert torch.equal(saved, current)
     assert list(topos._pred_errors) == errors_before
@@ -321,3 +337,7 @@ async def test_topos_skips_a_non_finite_latent(bus):
     assert events[3].salience == pytest.approx(topos._baseline_salience)
     assert events[4].payload["context_gain"] is None
     assert isinstance(events[5].payload["context_gain"], float)
+    assert events[3].payload["latent"] is None
+    assert events[3].payload["habituation_score"] == events[2].payload["habituation_score"]
+    for event in events:
+        assert _non_finite_numbers(event.payload) == []
