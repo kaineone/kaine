@@ -978,6 +978,15 @@ class Hypnos(BaseModule):
         summary["memory_store_bytes"] = (
             downscale_meta.get("store_bytes") if downscale_meta else None
         )
+        summary["memory_downscale_blocked"] = (
+            downscale_meta.get("blocked") if downscale_meta else None
+        )
+        summary["memory_blocked_sleeps"] = (
+            downscale_meta.get("blocked_sleeps") if downscale_meta else None
+        )
+        summary["memory_persist_refusals"] = (
+            downscale_meta.get("persist_refusals") if downscale_meta else None
+        )
         summary["corpus"] = corpus_summary
         summary["voice_measures"] = voice_measures
         all_succeeded = all(r.success for r in phase_results)

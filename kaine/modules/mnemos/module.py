@@ -13,6 +13,7 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
+from kaine.memory_kinds import MNEMOS_STORE_HEALTH_PATH
 from kaine.modules.base import BaseModule
 from kaine.modules.mnemos.memory import (
     EmotionalRetriggerHook,
@@ -28,6 +29,7 @@ from kaine.modules.mnemos.storage import (
     StorageError,
 )
 from kaine.privacy_filter import strip_vectors
+from kaine.storage import resolve
 from kaine.text_embedding import (
     DEFAULT_LATENT_DIM,
     Embedder,
@@ -173,6 +175,7 @@ class Mnemos(BaseModule):
                 prune_floor=strength_prune_floor,
                 budget_bytes=storage_budget_bytes,
                 traces_per_day=traces_per_day,
+                health_path=resolve(MNEMOS_STORE_HEALTH_PATH),
                 entity_clock=self._clock.now,
             )
 

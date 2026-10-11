@@ -10,11 +10,15 @@ can drive memory operations without spinning up a bus.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import math
+import os
 import time
 from collections import deque
 from dataclasses import dataclass, field, replace
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Iterable, Optional
 
 from kaine.embedding_defaults import LEGACY_EMBEDDING_SPACE
@@ -31,6 +35,24 @@ log = logging.getLogger(__name__)
 # kaine.memory_kinds so kaine.lifecycle.decommission (which must not import
 # kaine.modules) can share the single source of truth.
 DEFAULT_COLLECTIONS: tuple[str, str, str, str] = MNEMOS_COLLECTION_KINDS
+
+# Search cap for exact recall ranking (paper A.10).
+_RECALL_SEARCH_CAP: int = 4096
+
+
+def _write_health_file(path: Path, data: dict[str, Any]) -> None:
+    """Write Mnemos health JSON atomically; failures are logged, not raised."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, sort_keys=True, separators=(",", ":"))
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except OSError:
+        log.warning("mnemos: failed to write health file %s", path, exc_info=True)
+
 
 # Mnemos owns these payload keys (paper A.10); a caller's payload cannot set them.
 _RESERVED_PAYLOAD_KEYS: frozenset[str] = frozenset({"log_base", "born_sleep", "entity_time", "size_bytes"})
@@ -82,6 +104,7 @@ class MnemosCore:
         prune_floor: float = 0.01,
         budget_bytes: int = 10 * 1024**3,
         traces_per_day: float = 288000.0,
+        health_path: Path | None = None,
         entity_clock: Callable[[], float] | None = None,
     ) -> None:
         if short_term_capacity <= 0:
@@ -108,6 +131,7 @@ class MnemosCore:
         self._prune_floor = float(prune_floor)
         self._budget_bytes = int(budget_bytes)
         self._traces_per_day = float(traces_per_day)
+        self._health_path = health_path
         self._entity_clock = entity_clock or EntityClock().now
         # Trace-strength state (paper A.10). Values loaded from storage meta.
         self._log_gain = 0.0
@@ -116,8 +140,12 @@ class MnemosCore:
         self._bytes = 0
         self._last_sleep_entity_time = 0.0
         self._import_pending = False
+        self._blocked_sleeps = 0
+        self._persist_refusals = 0
         # Bytes persisted since the last sleep; added to the meta's bytes for S while awake.
         self._wake_bytes = 0
+        # Number of persisted traces written in the current wake.
+        self._wake_count = 0
         # entity_time stamps are offset + entity_clock(), so they continue across restarts.
         self._entity_offset = 0.0
         # Held by persist, downscale, export and import so a downscaling never interleaves with a write.
@@ -172,6 +200,29 @@ class MnemosCore:
         """Current persisted-store byte count S (meta bytes + writes since last sleep)."""
         return self._bytes + self._wake_bytes
 
+    def _write_health(self) -> None:
+        if self._health_path is None:
+            return
+        _write_health_file(
+            self._health_path,
+            {
+                "import_pending": self._import_pending,
+                "blocked_sleeps": self._blocked_sleeps,
+                "persist_refusals": self._persist_refusals,
+                "store_bytes": self.store_bytes,
+                "budget_bytes": self._budget_bytes,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
+    def _total_from_scan(self, scan: dict[str, Any]) -> float:
+        """Sum of trace strengths from a scan_store result."""
+        total = 0.0
+        for lb, count in scan.get("log_base_counts", {}).items():
+            total += count * _strength(float(lb), self._log_gain)
+        total += scan.get("unstrengthed", 0)
+        return total
+
     @property
     def _prune_threshold(self) -> float:
         # A trace whose log_base is below this value is below the floor.
@@ -201,10 +252,14 @@ class MnemosCore:
             )
         await self._resume_entity_time()
         names = self.persisted_collection_names()
-        scanned = await self._storage.total_size(names) - self._wake_bytes
-        if scanned != self._bytes:
-            self._bytes = scanned
+        scan = await self._storage.scan_store(names)
+        new_bytes = scan["bytes"] - self._wake_bytes
+        new_total = self._total_from_scan(scan) - self._wake_count
+        if new_bytes != self._bytes or not math.isclose(new_total, self._total, rel_tol=1e-12):
+            self._bytes = new_bytes
+            self._total = new_total
             await self._storage.write_meta(self.strength_key, self._strength_meta())
+        self._write_health()
 
     async def _check_embedding_space_stamp(self) -> None:
         space = self._embedder.space
@@ -318,6 +373,8 @@ class MnemosCore:
         self._bytes = meta["bytes"]
         self._last_sleep_entity_time = meta["entity_time"]
         self._import_pending = meta["import_pending"]
+        self._blocked_sleeps = meta.get("blocked_sleeps", 0)
+        self._persist_refusals = meta.get("persist_refusals", 0)
 
     def _strength_meta(self) -> dict[str, Any]:
         meta: dict[str, Any] = {
@@ -329,14 +386,20 @@ class MnemosCore:
         }
         if self._import_pending:
             meta["import_pending"] = True
+        if self._blocked_sleeps:
+            meta["blocked_sleeps"] = self._blocked_sleeps
+        if self._persist_refusals:
+            meta["persist_refusals"] = self._persist_refusals
         return meta
 
     async def _resume_entity_time(self) -> None:
         newest = self._last_sleep_entity_time
         wake_bytes = 0
+        wake_count = 0
         for point in await self._storage.wake_points(
             self.persisted_collection_names(), self._sleeps
         ):
+            wake_count += 1
             payload = point.get("payload") or {}
             et = _entity_time(payload)
             if et > newest:
@@ -354,6 +417,7 @@ class MnemosCore:
             if memory.entity_time > newest:
                 newest = memory.entity_time
         self._wake_bytes = wake_bytes
+        self._wake_count = wake_count
         # The entity clock restarts at 0 on each boot, so stamps are shifted
         # forward only when the clock reads behind the newest stamp of the
         # current wake.
@@ -377,13 +441,25 @@ class MnemosCore:
         """
         async with self._strength_lock:
             if self._import_pending:
-                raise StorageError(
+                self._blocked_sleeps += 1
+                await self._storage.write_meta(self.strength_key, self._strength_meta())
+                self._write_health()
+                log.error(
                     "mnemos: a preservation import was interrupted; "
-                    "re-run the revive from its bundle before the next sleep"
+                    "re-run the revive from its bundle before the next sleep "
+                    "(blocked sleeps: %d)",
+                    self._blocked_sleeps,
                 )
+                return {
+                    "blocked": "import_pending",
+                    "blocked_sleeps": self._blocked_sleeps,
+                    "persist_refusals": self._persist_refusals,
+                    "store_bytes": self.store_bytes,
+                }
 
             names = self.persisted_collection_names()
-            s_now = await self._storage.total_size(names)
+            scan = await self._storage.scan_store(names)
+            s_now = scan["bytes"]
             n_new = 0
             for name in names:
                 n_new += await self._storage.count_filtered(
@@ -406,7 +482,7 @@ class MnemosCore:
                 protected.append((coll, str(point_id), nlb))
                 h_q += _strength(nlb, self._log_gain)
 
-            total_before = self._total + n_new
+            total_before = self._total_from_scan(scan)
             total_after = factor * (total_before - h_q) + h_q
 
             # Write meta before touching points. A crash after this leaves the
@@ -419,6 +495,7 @@ class MnemosCore:
                 "bytes": s_now,
             }
             await self._storage.write_meta(self.strength_key, meta)
+            self._write_health()
             self._log_gain = meta["log_gain"]
             self._sleeps = meta["sleeps"]
             self._total = meta["total"]
@@ -477,9 +554,11 @@ class MnemosCore:
                         else:
                             pruned_budget += 1
                     await self._storage.write_meta(self.strength_key, self._strength_meta())
+                    self._write_health()
             self._bytes = max(0, self._bytes)
             self._total = max(0.0, self._total)
             await self._storage.write_meta(self.strength_key, self._strength_meta())
+            self._write_health()
 
         log.info(
             "mnemos: sleep pruned %d traces at the floor and %d for the budget; store is %d bytes",
@@ -496,6 +575,9 @@ class MnemosCore:
             "pruned_floor": pruned_floor,
             "pruned_budget": pruned_budget,
             "store_bytes": self._bytes,
+            "blocked": None,
+            "blocked_sleeps": 0,
+            "persist_refusals": self._persist_refusals,
         }
 
     async def shutdown(self) -> None:
@@ -542,10 +624,21 @@ class MnemosCore:
             return None
         return await self._persist(memory, collection)
 
-    async def _persist(self, memory: StoredMemory, collection: str) -> str:
+    async def _persist(self, memory: StoredMemory, collection: str) -> Optional[str]:
         vec = await self._embedder.encode(memory.text)
         coll_name = self.collection_name(collection)
         async with self._strength_lock:
+            if self._import_pending and self.store_bytes > 2 * self._budget_bytes:
+                self._persist_refusals += 1
+                await self._storage.write_meta(self.strength_key, self._strength_meta())
+                self._write_health()
+                log.error(
+                    "mnemos: refused to store a trace: an interrupted import has blocked sleep for %d sleeps and the store is %d bytes, over twice its budget of %d; run python -m kaine.lifecycle.mnemos_recover or re-run the revive",
+                    self._blocked_sleeps,
+                    self.store_bytes,
+                    self._budget_bytes,
+                )
+                return None
             payload = {
                 k: v for k, v in memory.payload.items() if k not in _RESERVED_PAYLOAD_KEYS
             }
@@ -587,7 +680,8 @@ class MnemosCore:
             results = []
         else:
             n_all = await self._storage.count(coll_name, strict=True)
-            m = min(4 * k, max(n_all, 1))
+            m = min(4 * k, max(n_all, 1), _RECALL_SEARCH_CAP)
+            cap_logged = False
             while True:
                 hits = await self._storage.search(
                     coll_name, query_vector=vec, limit=m
@@ -613,7 +707,16 @@ class MnemosCore:
                     or m >= n_all
                 ):
                     break
-                m = min(m * 8, n_all)
+                if not exhausted and m >= _RECALL_SEARCH_CAP:
+                    if not cap_logged:
+                        log.info(
+                            "mnemos: recall ranked the %d nearest of %d traces; beyond that the order is approximate",
+                            m,
+                            n_all,
+                        )
+                        cap_logged = True
+                    break
+                m = min(m * 8, n_all, _RECALL_SEARCH_CAP)
             results = [
                 replace(hit, score=product, similarity=sim, strength=strength)
                 for product, sim, _, hit, strength in scored[:k]
@@ -701,8 +804,10 @@ class MnemosCore:
                 entry = self._short_term.popleft()
                 self._short_term_embeddings.popleft()
                 point_id = await self._persist(entry, "episodic")
-                batch.append((point_id, entry))
                 moved += 1
+                if point_id is None:
+                    continue
+                batch.append((point_id, entry))
         finally:
             self._last_consolidated = batch
         return moved
@@ -820,6 +925,7 @@ class MnemosCore:
                 {**self._strength_meta(), "import_pending": True},
             )
             self._import_pending = True
+            self._write_health()
 
             total = 0
             replaced_kinds: list[str] = []
@@ -844,6 +950,7 @@ class MnemosCore:
                 # without the flag ends the import.
                 self._load_strength({**strength, "import_pending": False})
                 await self._storage.write_meta(self.strength_key, self._strength_meta())
+                self._write_health()
             else:
                 meta = {
                     "log_gain": 0.0,
@@ -865,8 +972,11 @@ class MnemosCore:
                         "mnemos: gave %d traces from before trace strengths a strength of 1",
                         changed,
                     )
+                self._blocked_sleeps = 0
+                self._persist_refusals = 0
                 self._import_pending = False
                 await self._storage.write_meta(self.strength_key, self._strength_meta())
+                self._write_health()
 
             # Rebuild short-term only after persisted replaces succeed.
             self._short_term.clear()
@@ -975,6 +1085,12 @@ def _validate_strength(meta: dict[str, Any]) -> dict[str, Any]:
             raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
         return float(value)
 
+    def _nonneg_int(key: str) -> int:
+        value = meta.get(key, 0)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
+        return value
+
     sleeps = meta.get("sleeps")
     if isinstance(sleeps, bool) or not isinstance(sleeps, int) or sleeps < 0:
         raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
@@ -989,6 +1105,8 @@ def _validate_strength(meta: dict[str, Any]) -> dict[str, Any]:
     import_pending = meta.get("import_pending", False)
     if not isinstance(import_pending, bool):
         raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
+    blocked_sleeps = _nonneg_int("blocked_sleeps")
+    persist_refusals = _nonneg_int("persist_refusals")
     return {
         "log_gain": log_gain,
         "sleeps": int(sleeps),
@@ -996,4 +1114,63 @@ def _validate_strength(meta: dict[str, Any]) -> dict[str, Any]:
         "bytes": int(bytes_value),
         "entity_time": entity_time,
         "import_pending": import_pending,
+        "blocked_sleeps": blocked_sleeps,
+        "persist_refusals": persist_refusals,
     }
+
+
+async def recover_interrupted_import(
+    storage: MemoryStorage,
+    *,
+    collection_prefix: str = "mnemos_",
+    budget_bytes: int | None = None,
+    health_path: Path | None = None,
+) -> dict[str, Any]:
+    """Operator recovery for an interrupted Mnemos preservation import.
+
+    Re-scans the persisted store and clears the import_pending flag so
+    ordinary sleeps can resume. The store is kept as it stands; imported
+    trace strengths remain relative to the pre-import log gain.
+    """
+    await storage.initialize()
+    key = strength_key(collection_prefix)
+    meta = await storage.read_meta(key)
+    if meta is None or not _validate_strength(meta).get("import_pending"):
+        return {"cleared": False}
+
+    names = [f"{collection_prefix}{kind}" for kind in ("episodic", "semantic", "procedural")]
+    scan = await storage.scan_store(names)
+    log_gain = float(meta.get("log_gain", 0.0))
+    total = 0.0
+    for lb, count in scan.get("log_base_counts", {}).items():
+        total += count * _strength(float(lb), log_gain)
+    total += scan.get("unstrengthed", 0)
+
+    new_meta = {
+        **meta,
+        "bytes": scan["bytes"],
+        "total": total,
+        "import_pending": False,
+    }
+    new_meta.pop("blocked_sleeps", None)
+    new_meta.pop("persist_refusals", None)
+    await storage.write_meta(key, new_meta)
+
+    if health_path is not None:
+        _write_health_file(
+            health_path,
+            {
+                "import_pending": False,
+                "blocked_sleeps": 0,
+                "persist_refusals": 0,
+                "store_bytes": scan["bytes"],
+                "budget_bytes": budget_bytes or 0,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
+    log.warning(
+        "mnemos: operator cleared an interrupted import; the store is kept as it stands. "
+        "Imported traces' strengths are relative to the pre-import log gain."
+    )
+    return {"cleared": True, "store_bytes": scan["bytes"], "total": total}

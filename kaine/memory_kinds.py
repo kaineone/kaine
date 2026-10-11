@@ -18,6 +18,7 @@ import uuid
 __all__ = [
     "MNEMOS_COLLECTION_KINDS",
     "MNEMOS_STAMP_COLLECTION",
+    "MNEMOS_STORE_HEALTH_PATH",
     "stamp_key",
     "stamp_point_id",
     "strength_key",
@@ -33,6 +34,9 @@ MNEMOS_COLLECTION_KINDS: tuple[str, str, str, str] = (
 
 #: Shared Qdrant collection used for embedding-space stamps.
 MNEMOS_STAMP_COLLECTION: str = "kaine_meta"
+
+#: Shared path to the Mnemos store health state file written by Mnemos and read by Nexus.
+MNEMOS_STORE_HEALTH_PATH: str = "state/mnemos/store_health.json"
 
 #: Fixed namespace for deriving deterministic Qdrant point ids for
 #: ``kaine_meta`` embedding-space stamps.

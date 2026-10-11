@@ -258,6 +258,9 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "memory_pruned_floor",
             "memory_pruned_budget",
             "memory_store_bytes",
+            "memory_downscale_blocked",
+            "memory_blocked_sleeps",
+            "memory_persist_refusals",
         }
     ),
     # Organ-level consolidation divergence (content-free aggregates only):

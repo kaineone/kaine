@@ -216,6 +216,14 @@ class MemoryStorage(Protocol):
     async def total_size(self, collections: Sequence[str]) -> int:
         """Protocol member: total persisted bytes."""
 
+    async def scan_store(self, collections: Sequence[str]) -> dict[str, Any]:
+        """Protocol member: scan persisted store.
+
+        Returns ``bytes`` (total persisted record size), ``log_base_counts``
+        (map from numeric log_base to count), and ``unstrengthed`` (points
+        without a numeric log_base).
+        """
+
     async def weakest(self, collections: Sequence[str], *, limit: int) -> list[dict[str, Any]]:
         """Protocol member: weakest points."""
 
@@ -477,8 +485,10 @@ class InMemoryStorage:
         has = has_log_base is True
         return sum(1 for p in points if ("log_base" in p["payload"]) == has)
 
-    async def total_size(self, collections: Sequence[str]) -> int:
+    async def scan_store(self, collections: Sequence[str]) -> dict[str, Any]:
         total = 0
+        log_base_counts: dict[float, int] = {}
+        unstrengthed = 0
         for name in collections:
             for p in self._collections.get(name, []):
                 sb = p["payload"].get("size_bytes")
@@ -488,7 +498,15 @@ class InMemoryStorage:
                     total += record_size(
                         self._latent_dim, p["text"], p["payload"], p["affect"]
                     )
-        return total
+                lb = _numeric_log_base(p["payload"])
+                if lb is None:
+                    unstrengthed += 1
+                else:
+                    log_base_counts[lb] = log_base_counts.get(lb, 0) + 1
+        return {"bytes": total, "log_base_counts": log_base_counts, "unstrengthed": unstrengthed}
+
+    async def total_size(self, collections: Sequence[str]) -> int:
+        return (await self.scan_store(collections))["bytes"]
 
     async def weakest(self, collections: Sequence[str], *, limit: int) -> list[dict[str, Any]]:
         if limit <= 0 or not collections:
@@ -570,9 +588,12 @@ class InMemoryStorage:
         for name in collections:
             for p in self._collections.get(name, []):
                 if "log_base" not in p["payload"]:
-                    p["payload"]["size_bytes"] = record_size(
-                        self._latent_dim, p["text"], p["payload"], p["affect"]
-                    )
+                    # Keep an existing integer size if it was already counted.
+                    existing_size = p["payload"].get("size_bytes")
+                    if not isinstance(existing_size, int) or isinstance(existing_size, bool):
+                        p["payload"]["size_bytes"] = record_size(
+                            self._latent_dim, p["text"], p["payload"], p["affect"]
+                        )
                     p["payload"]["log_base"] = float(log_base)
                     p["payload"]["born_sleep"] = -1
                     changed += 1
@@ -901,6 +922,15 @@ class SqliteVecStorage:
                             (blob, collection, blob, d_last),
                         )
                         tie_rows = list(tie_cur.fetchall())
+                        if not tie_rows:
+                            tie_cur = db.execute(
+                                "SELECT m.point_id, vec_distance_cosine(v.embedding, ?) AS d, "
+                                "m.text, m.payload, m.affect "
+                                "FROM vec_memories v JOIN memories m ON m.rowid = v.rowid "
+                                "WHERE v.collection = ? AND ABS(vec_distance_cosine(v.embedding, ?) - ?) < 1e-7",
+                                (blob, collection, blob, d_last),
+                            )
+                            tie_rows = list(tie_cur.fetchall())
                         if tie_rows:
                             new_rows = [r for r in tie_rows if str(r[0]) not in seen]
                         else:
@@ -1353,9 +1383,12 @@ class SqliteVecStorage:
                 for rowid, text, payload_json, affect_json in rows:
                     payload = json.loads(payload_json) if payload_json else {}
                     affect = json.loads(affect_json) if affect_json else None
-                    payload["size_bytes"] = record_size(
-                        self._latent_dim, str(text or ""), payload, affect
-                    )
+                    # Keep an existing integer size if it was already counted.
+                    existing_size = payload.get("size_bytes")
+                    if not isinstance(existing_size, int) or isinstance(existing_size, bool):
+                        payload["size_bytes"] = record_size(
+                            self._latent_dim, str(text or ""), payload, affect
+                        )
                     payload["log_base"] = float(log_base)
                     payload["born_sleep"] = -1
                     db.execute(
@@ -1370,41 +1403,76 @@ class SqliteVecStorage:
 
         return await self._run(_backfill)
 
-    async def total_size(self, collections: Sequence[str]) -> int:
+    def _total_size_sync(self, db: Any, collections: Sequence[str]) -> int:
+        if db is None:
+            raise StorageError("sqlite-vec total_size before initialize()")
         if not collections:
             return 0
+        try:
+            placeholders = ",".join("?" for _ in collections)
+            cur = db.execute(
+                f"SELECT SUM(json_extract(payload, '$.size_bytes')) FROM memories "
+                f"WHERE collection IN ({placeholders}) "
+                "AND json_type(payload, '$.size_bytes') = 'integer'",
+                tuple(collections),
+            )
+            row = cur.fetchone()
+            total = int(row[0]) if row and row[0] is not None else 0
+            cur = db.execute(
+                f"SELECT text, payload, affect FROM memories "
+                f"WHERE collection IN ({placeholders}) "
+                "AND (json_type(payload, '$.size_bytes') IS NULL "
+                "OR json_type(payload, '$.size_bytes') != 'integer')",
+                tuple(collections),
+            )
+            for text, payload_json, affect_json in cur.fetchall():
+                payload = json.loads(payload_json) if payload_json else {}
+                affect = json.loads(affect_json) if affect_json else None
+                total += record_size(
+                    self._latent_dim, str(text or ""), payload, affect
+                )
+            return total
+        except Exception as exc:
+            raise StorageError(f"sqlite-vec total_size failed: {exc}") from exc
 
-        def _size(db: Any) -> int:
+    async def total_size(self, collections: Sequence[str]) -> int:
+        return await self._run(lambda db: self._total_size_sync(db, collections))
+
+    async def scan_store(self, collections: Sequence[str]) -> dict[str, Any]:
+        if not collections:
+            return {"bytes": 0, "log_base_counts": {}, "unstrengthed": 0}
+
+        def _scan(db: Any) -> dict[str, Any]:
             if db is None:
-                raise StorageError("sqlite-vec total_size before initialize()")
-            try:
-                placeholders = ",".join("?" for _ in collections)
-                cur = db.execute(
-                    f"SELECT SUM(json_extract(payload, '$.size_bytes')) FROM memories "
-                    f"WHERE collection IN ({placeholders}) "
-                    "AND json_type(payload, '$.size_bytes') = 'integer'",
-                    tuple(collections),
-                )
-                row = cur.fetchone()
-                total = int(row[0]) if row and row[0] is not None else 0
-                cur = db.execute(
-                    f"SELECT text, payload, affect FROM memories "
-                    f"WHERE collection IN ({placeholders}) "
-                    "AND (json_type(payload, '$.size_bytes') IS NULL "
-                    "OR json_type(payload, '$.size_bytes') != 'integer')",
-                    tuple(collections),
-                )
-                for text, payload_json, affect_json in cur.fetchall():
-                    payload = json.loads(payload_json) if payload_json else {}
-                    affect = json.loads(affect_json) if affect_json else None
-                    total += record_size(
-                        self._latent_dim, str(text or ""), payload, affect
-                    )
-                return total
-            except Exception as exc:
-                raise StorageError(f"sqlite-vec total_size failed: {exc}") from exc
+                raise StorageError("sqlite-vec scan_store before initialize()")
+            total = self._total_size_sync(db, collections)
+            placeholders = ",".join("?" for _ in collections)
+            cur = db.execute(
+                f"SELECT json_extract(payload, '$.log_base') AS lb, COUNT(*) "
+                f"FROM memories WHERE collection IN ({placeholders}) "
+                "AND json_type(payload, '$.log_base') IN ('real', 'integer') "
+                "GROUP BY lb",
+                tuple(collections),
+            )
+            log_base_counts: dict[float, int] = {}
+            unstrengthed = 0
+            for lb, cnt in cur.fetchall():
+                val = _numeric_log_base({"log_base": lb})
+                if val is None:
+                    unstrengthed += int(cnt)
+                else:
+                    log_base_counts[val] = log_base_counts.get(val, 0) + int(cnt)
+            cur2 = db.execute(
+                f"SELECT COUNT(*) FROM memories WHERE collection IN ({placeholders}) "
+                "AND (json_type(payload, '$.log_base') IS NULL "
+                "OR json_type(payload, '$.log_base') NOT IN ('real', 'integer'))",
+                tuple(collections),
+            )
+            row = cur2.fetchone()
+            unstrengthed += int(row[0]) if row else 0
+            return {"bytes": total, "log_base_counts": log_base_counts, "unstrengthed": unstrengthed}
 
-        return await self._run(_size)
+        return await self._run(_scan)
 
     async def weakest(self, collections: Sequence[str], *, limit: int) -> list[dict[str, Any]]:
         if limit <= 0 or not collections:
@@ -2252,9 +2320,14 @@ class QdrantStorage:
                         payload = dict(getattr(p, "payload", None) or {})
                         text = str(payload.pop("text", ""))
                         affect = payload.pop("affect", None)
-                        size = record_size(
-                            self._latent_dim, text, payload, affect
-                        )
+                        # Keep an existing integer size if it was already counted.
+                        existing_size = payload.get("size_bytes")
+                        if isinstance(existing_size, int) and not isinstance(existing_size, bool):
+                            size = existing_size
+                        else:
+                            size = record_size(
+                                self._latent_dim, text, payload, affect
+                            )
                         operations.append(
                             models.SetPayloadOperation(
                                 set_payload=models.SetPayload(
@@ -2286,20 +2359,22 @@ class QdrantStorage:
                     ) from exc
         return total
 
-    async def total_size(self, collections: Sequence[str]) -> int:
+    async def scan_store(self, collections: Sequence[str]) -> dict[str, Any]:
         if not collections:
-            return 0
+            return {"bytes": 0, "log_base_counts": {}, "unstrengthed": 0}
         if self._client is None:
-            raise StorageError("qdrant total_size before initialize()")
+            raise StorageError("qdrant scan_store before initialize()")
         from qdrant_client import models
         try:
             existing = await self._client.get_collections()
             existing_names = {c.name for c in existing.collections}
         except Exception as exc:
             raise StorageError(
-                f"qdrant total_size failed listing collections: {exc}"
+                f"qdrant scan_store failed listing collections: {exc}"
             ) from exc
         total = 0
+        log_base_counts: dict[float, int] = {}
+        unstrengthed = 0
         for name in collections:
             if name not in existing_names:
                 continue
@@ -2311,7 +2386,7 @@ class QdrantStorage:
                         collection_name=name,
                         limit=1024,
                         offset=offset,
-                        with_payload=models.PayloadSelectorInclude(include=["size_bytes"]),
+                        with_payload=models.PayloadSelectorInclude(include=["size_bytes", "log_base"]),
                         with_vectors=False,
                     )
                     for p in batch:
@@ -2321,6 +2396,11 @@ class QdrantStorage:
                             total += int(sb)
                         else:
                             missing_ids.append(str(p.id))
+                        lb = _numeric_log_base(payload)
+                        if lb is None:
+                            unstrengthed += 1
+                        else:
+                            log_base_counts[lb] = log_base_counts.get(lb, 0) + 1
                     if offset is None:
                         break
                 for i in range(0, len(missing_ids), 256):
@@ -2340,9 +2420,16 @@ class QdrantStorage:
                         )
             except Exception as exc:
                 raise StorageError(
-                    f"qdrant total_size failed scrolling collection {name!r}: {exc}"
+                    f"qdrant scan_store failed scrolling collection {name!r}: {exc}"
                 ) from exc
-        return total
+        return {"bytes": total, "log_base_counts": log_base_counts, "unstrengthed": unstrengthed}
+
+    async def total_size(self, collections: Sequence[str]) -> int:
+        if not collections:
+            return 0
+        if self._client is None:
+            raise StorageError("qdrant total_size before initialize()")
+        return (await self.scan_store(collections))["bytes"]
 
     async def weakest(self, collections: Sequence[str], *, limit: int) -> list[dict[str, Any]]:
         if limit <= 0 or not collections:

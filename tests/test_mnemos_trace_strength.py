@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
+import json
 import logging
 import math
 import random
@@ -28,6 +30,7 @@ from kaine.modules.mnemos import (
     Mnemos,
     MnemosCore,
 )
+from kaine.modules.mnemos.memory import recover_interrupted_import
 from kaine.modules.mnemos.replay import ReplayEvent
 from kaine.modules.mnemos.storage import (
     QdrantStorage,
@@ -702,6 +705,361 @@ async def test_sqlite_search_pages_past_4096(tmp_path):
         await s.shutdown()
 
 
+# ------------------------------------------------------------------
+# Interrupted import, blocked sleep, and recovery
+# ------------------------------------------------------------------
+
+
+async def test_crash_after_replace_before_meta(storage, request, tmp_path):
+    """A crash after replace but before the imported meta leaves the pending flag set."""
+    core = await _core(storage, traces_per_day=4.0)
+    for i in range(3):
+        await core.store(f"x{i}", collection="episodic")
+    await core.downscale()
+    state = await core.export_state()
+    expected = await _strengths(core)
+
+    kind = request.node.callspec.params["storage"]
+    (tmp_path / "crash").mkdir(parents=True, exist_ok=True)
+    storage2 = await _open_storage(kind, tmp_path / "crash")
+    try:
+        original_replace = storage2.replace_collection
+        original_write_meta = storage2.write_meta
+        post_replace = False
+        crashed = False
+
+        async def wrapped_replace(name, points):
+            nonlocal post_replace
+            result = await original_replace(name, points)
+            post_replace = True
+            return result
+
+        async def wrapped_write_meta(key, value):
+            nonlocal crashed
+            if post_replace and not crashed:
+                crashed = True
+                raise RuntimeError("meta failed")
+            return await original_write_meta(key, value)
+
+        storage2.replace_collection = wrapped_replace
+        storage2.write_meta = wrapped_write_meta
+
+        core2 = await _core(storage2)
+        with pytest.raises(RuntimeError, match="meta failed"):
+            await core2.import_state(state)
+
+        meta = await storage2.read_meta(core2.strength_key)
+        assert meta.get("import_pending") is True
+
+        core3 = await _core(storage2)
+        summary = await core3.downscale()
+        assert summary["blocked"] == "import_pending"
+
+        storage2.replace_collection = original_replace
+        storage2.write_meta = original_write_meta
+        await core3.import_state(state)
+
+        meta2 = await storage2.read_meta(core3.strength_key)
+        assert meta2.get("import_pending") in (None, False)
+        assert meta2.get("blocked_sleeps") in (None, 0)
+
+        actual = await _strengths(core3)
+        assert set(expected.keys()) == set(actual.keys())
+        for k in expected:
+            assert expected[k] == pytest.approx(actual[k], abs=1e-12)
+
+        summary2 = await core3.downscale()
+        assert summary2["blocked"] is None
+    finally:
+        await storage2.shutdown()
+
+
+async def test_legacy_bundle_import_clears_pending(storage, request, tmp_path):
+    """A legacy bundle without strength record clears the pending flag and gets strength 1."""
+    core = await _core(storage, traces_per_day=4.0)
+    for i in range(3):
+        await core.store(f"x{i}", collection="episodic")
+    await core.downscale()
+    state = await core.export_state()
+
+    state.pop("strength", None)
+    for pts in state["persisted"].values():
+        for p in pts:
+            for k in ("log_base", "born_sleep", "entity_time"):
+                p["payload"].pop(k, None)
+
+    kind = request.node.callspec.params["storage"]
+    (tmp_path / "legacy").mkdir(parents=True, exist_ok=True)
+    storage2 = await _open_storage(kind, tmp_path / "legacy")
+    try:
+        core2 = await _core(storage2)
+        await core2.import_state(state)
+
+        meta = await storage2.read_meta(core2.strength_key)
+        assert meta.get("import_pending") in (None, False)
+        assert meta.get("blocked_sleeps") in (None, 0)
+
+        points = _flat(await core2.storage.export(core2.persisted_collection_names()))
+        assert len(points) == 3
+        for p in points:
+            assert p["payload"]["log_base"] == 0.0
+            assert p["payload"]["born_sleep"] == -1
+            assert core2.strength_of(p["payload"]) == pytest.approx(1.0, abs=1e-12)
+
+        assert core2.store_bytes == await storage2.total_size(
+            core2.persisted_collection_names()
+        )
+
+        summary = await core2.downscale()
+        assert summary["blocked"] is None
+    finally:
+        await storage2.shutdown()
+
+
+async def test_meta_bytes_after_mid_prune_crash(storage):
+    """A mid-prune crash leaves the strength meta byte and total counters exact."""
+    core = await _core(storage, traces_per_day=4.0)
+    for i in range(3):
+        await core.store(f"e{i}", collection="episodic")
+    for i in range(3):
+        await core.store(f"s{i}", collection="semantic")
+    await core.downscale()
+
+    core2 = await _core(storage, traces_per_day=4.0, budget_bytes=1)
+
+    original_delete = storage.delete_points
+    call_count = 0
+
+    async def wrapped_delete_points(collection, ids):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return await original_delete(collection, ids)
+        raise RuntimeError("disk gone")
+
+    storage.delete_points = wrapped_delete_points
+    try:
+        with pytest.raises(RuntimeError, match="disk gone"):
+            await core2.downscale()
+    finally:
+        storage.delete_points = original_delete
+
+    names = core2.persisted_collection_names()
+    scan_bytes = await storage.total_size(names)
+    meta = await storage.read_meta(core2.strength_key)
+    assert meta["bytes"] == scan_bytes
+
+    points = _flat(await core2.storage.export(names))
+    expected_total = sum(core2.strength_of(p["payload"]) for p in points)
+    assert meta["total"] == pytest.approx(expected_total, rel=1e-9)
+
+
+async def test_total_strength_self_heals(storage):
+    """A corrupted total strength is repaired when a fresh core initializes."""
+    core = await _core(storage, traces_per_day=4.0)
+    await core.store("x", collection="episodic")
+    await core.downscale()
+
+    key = core.strength_key
+    meta = await storage.read_meta(key)
+    await storage.write_meta(key, {**meta, "total": 12345.0})
+
+    core2 = await _core(storage, traces_per_day=4.0)
+    points = _flat(await core2.storage.export(core2.persisted_collection_names()))
+    expected = sum(core2.strength_of(p["payload"]) for p in points)
+    assert core2.total_strength == pytest.approx(expected, rel=1e-9)
+
+
+async def test_summary_and_health_surface_a_blocked_sleep(bus, tmp_path):
+    """A blocked sleep is visible in the downscale summary, health file, and consolidation phase."""
+    storage = InMemoryStorage(latent_dim=DIM)
+    await storage.initialize()
+    try:
+        embedder = FakeEmbedder(latent_dim=DIM)
+        await storage.write_stamp("mnemos_embedding_space", embedder.space)
+        await storage.write_meta(
+            "mnemos_strength",
+            {
+                "log_gain": 0.0,
+                "sleeps": 0,
+                "total": 0.0,
+                "entity_time": 0.0,
+                "bytes": 0,
+                "import_pending": True,
+            },
+        )
+
+        core = MnemosCore(
+            embedder,
+            storage,
+            health_path=tmp_path / "h.json",
+            budget_bytes=1,
+        )
+        await core.initialize()
+
+        summary = await core.downscale()
+        assert summary["blocked"] == "import_pending"
+        assert summary["blocked_sleeps"] == 1
+        assert summary["persist_refusals"] == 0
+
+        health = json.loads((tmp_path / "h.json").read_text(encoding="utf-8"))
+        assert health["import_pending"] is True
+        assert health["blocked_sleeps"] == 1
+
+        class FakeMnemos:
+            opened = False
+            closed = False
+
+            def open_replay_window(self):
+                self.opened = True
+
+            def close_replay_window(self):
+                self.closed = True
+
+            async def replay_now(self):
+                return []
+
+            async def downscale(self, protect=()):
+                return await core.downscale(protect=protect)
+
+        result = await deep_consolidation(FakeMnemos())
+        assert not result.success
+        assert "downscale blocked: import_pending" in result.error
+        assert result.metadata["downscale"]["blocked"] == "import_pending"
+    finally:
+        await storage.shutdown()
+
+
+async def test_persist_refused_when_pending_and_over_twice_budget(storage, caplog, tmp_path):
+    """Persist is refused while import is pending and the store is over twice its budget."""
+    await storage.write_stamp(
+        "mnemos_embedding_space", FakeEmbedder(latent_dim=DIM).space
+    )
+    await storage.write_meta(
+        "mnemos_strength",
+        {
+            "log_gain": 0.0,
+            "sleeps": 0,
+            "total": 0.0,
+            "entity_time": 0.0,
+            "bytes": 0,
+            "import_pending": True,
+        },
+    )
+
+    core = MnemosCore(
+        FakeEmbedder(latent_dim=DIM),
+        storage,
+        budget_bytes=1,
+    )
+    await core.initialize()
+
+    first = await core.store("first", collection="episodic")
+    assert first is not None
+
+    with caplog.at_level(logging.ERROR, logger="kaine.modules.mnemos.memory"):
+        for i in range(3):
+            assert await core.store(f"refused-{i}", collection="episodic") is None
+
+    error_records = [
+        r
+        for r in caplog.records
+        if r.levelno == logging.ERROR and "refused to store a trace" in r.message
+    ]
+    assert error_records
+
+    exported = _flat(await core.storage.export(core.persisted_collection_names()))
+    assert len(exported) == 1
+    assert core._persist_refusals == 3
+
+    meta = await storage.read_meta(core.strength_key)
+    assert meta.get("persist_refusals") == 3
+
+    cleared = await recover_interrupted_import(storage)
+    assert cleared["cleared"] is True
+
+    core2 = MnemosCore(
+        FakeEmbedder(latent_dim=DIM),
+        storage,
+        budget_bytes=1,
+    )
+    await core2.initialize()
+    after = await core2.store("after", collection="episodic")
+    assert after is not None
+    assert len(_flat(await core2.storage.export(core2.persisted_collection_names()))) == 2
+
+
+async def test_persist_racing_downscale(storage):
+    """A store that races downscale is persisted in the next wake."""
+    core = await _core(storage, traces_per_day=4.0)
+    await core.store("before", collection="episodic")
+
+    gate = asyncio.Event()
+    original_scan = storage.scan_store
+
+    async def gated_scan(collections):
+        await gate.wait()
+        return await original_scan(collections)
+
+    storage.scan_store = gated_scan
+    try:
+        down_task = asyncio.create_task(core.downscale())
+        await asyncio.sleep(0.01)
+        store_task = asyncio.create_task(core.store("late", collection="episodic"))
+        gate.set()
+        summary, pid = await asyncio.gather(down_task, store_task)
+    finally:
+        storage.scan_store = original_scan
+
+    assert pid is not None
+    points = _flat(await core.storage.export(core.persisted_collection_names()))
+    late = next(p for p in points if p["text"] == "late")
+    assert late["payload"]["born_sleep"] == core.sleeps
+    assert core.strength_of(late["payload"]) == pytest.approx(1.0, abs=1e-12)
+    assert core.store_bytes == await storage.total_size(
+        core.persisted_collection_names()
+    )
+    assert summary["n_new"] == 1
+
+
+async def test_recall_cap_logs_once(caplog, monkeypatch):
+    """When the search cap is reached recall logs once and still returns a result."""
+    storage = InMemoryStorage(latent_dim=DIM)
+    await storage.initialize()
+    try:
+        e0 = [1.0] + [0.0] * (DIM - 1)
+        table = {"q": e0}
+        for i in range(8):
+            eps = 0.001 * (i + 1)
+            table[f"weak-{i}"] = _unit([1.0, eps] + [0.0] * (DIM - 2))
+        # Cosine 0.95 with the cue: less similar than the weak traces, but stronger.
+        table["strong"] = _unit([0.95, (1 - 0.95**2) ** 0.5] + [0.0] * (DIM - 2))
+        embedder = _TableEmbedder(table)
+        core = await _core(storage, embedder=embedder, traces_per_day=1.0)
+
+        for i in range(8):
+            await core.store(f"weak-{i}", collection="episodic")
+        await core.downscale()
+        await core.store("filler", collection="episodic")
+        await core.downscale()
+        await core.store("strong", collection="episodic")
+
+        monkeypatch.setattr("kaine.modules.mnemos.memory._RECALL_SEARCH_CAP", 8)
+
+        with caplog.at_level(logging.INFO, logger="kaine.modules.mnemos.memory"):
+            results, _ = await core.recall("q", k=1)
+
+        assert results
+        approx_records = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.INFO and "approximate" in r.message
+        ]
+        assert len(approx_records) == 1
+    finally:
+        await storage.shutdown()
+
+
 async def test_sqlite_search_with_many_ties(tmp_path):
     """sqlite-vec search handles large ties without duplicates or truncation bugs."""
     pytest.importorskip("sqlite_vec")
@@ -1319,23 +1677,41 @@ async def test_import_pending_blocks_sleep_until_reimport(storage, request, tmp_
         meta = await storage2.read_meta(core2.strength_key)
         assert meta.get("import_pending") is True
 
-        with pytest.raises(StorageError, match="interrupted"):
-            await core2.downscale()
+        summary1 = await core2.downscale()
+        assert summary1["blocked"] == "import_pending"
+        assert summary1["blocked_sleeps"] == 1
 
-        core3 = await _core(storage2)
+        summary2 = await core2.downscale()
+        assert summary2["blocked"] == "import_pending"
+        assert summary2["blocked_sleeps"] == 2
+
+        meta2 = await storage2.read_meta(core2.strength_key)
+        assert meta2.get("import_pending") is True
+        assert meta2.get("blocked_sleeps") == 2
+
         with caplog.at_level(logging.ERROR, logger="kaine.modules.mnemos.memory"):
-            assert any("interrupted" in record.message for record in caplog.records)
+            core3 = await _core(storage2)
 
-        with pytest.raises(StorageError, match="interrupted"):
-            await core3.downscale()
+        error_records = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.ERROR and "interrupted" in r.message
+        ]
+        assert error_records
+
+        summary3 = await core3.downscale()
+        assert summary3["blocked"] == "import_pending"
+        assert summary3["blocked_sleeps"] == 3
 
         storage2.replace_collection = original_replace
         await core3.import_state(state)
-        meta = await storage2.read_meta(core3.strength_key)
-        assert meta.get("import_pending") in (None, False)
+        meta3 = await storage2.read_meta(core3.strength_key)
+        assert meta3.get("import_pending") in (None, False)
+        assert meta3.get("blocked_sleeps") in (None, 0)
 
-        summary = await core3.downscale()
-        assert summary["n_new"] == 0
+        summary4 = await core3.downscale()
+        assert summary4["blocked"] is None
+        assert summary4["blocked_sleeps"] == 0
     finally:
         await storage2.shutdown()
 

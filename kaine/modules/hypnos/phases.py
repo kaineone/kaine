@@ -273,7 +273,10 @@ async def deep_consolidation(
         metadata["downscale_skipped"] = "replay failed"
     else:
         try:
-            metadata["downscale"] = dict(await mnemos.downscale(protect=replay_events))
+            summary = dict(await mnemos.downscale(protect=replay_events))
+            metadata["downscale"] = summary
+            if summary.get("blocked"):
+                errors.append(f"downscale blocked: {summary['blocked']}")
         except Exception as exc:
             log.exception("deep_consolidation: downscale failed")
             errors.append(f"downscale: {type(exc).__name__}: {exc}")

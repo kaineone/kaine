@@ -129,6 +129,9 @@ class _OutOfProcessStorage:
     async def total_size(self, collections: Sequence[str]) -> int:
         return await self._inner.total_size(collections)
 
+    async def scan_store(self, collections: Sequence[str]) -> dict[str, Any]:
+        return await self._inner.scan_store(collections)
+
     async def weakest(self, collections: Sequence[str], *, limit: int) -> list[dict[str, Any]]:
         return await self._inner.weakest(collections, limit=limit)
 
@@ -185,6 +188,9 @@ class _FailingStorage(_OutOfProcessStorage):
 
     async def total_size(self, collections: Sequence[str]) -> int:
         return 0
+
+    async def scan_store(self, collections: Sequence[str]) -> dict[str, Any]:
+        return {"bytes": 0, "log_base_counts": {}, "unstrengthed": 0}
 
     async def weakest(self, collections: Sequence[str], *, limit: int) -> list[dict[str, Any]]:
         return []

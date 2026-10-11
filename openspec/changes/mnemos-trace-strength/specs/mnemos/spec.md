@@ -126,7 +126,14 @@ and a non-finite sum SHALL be a storage error.
 
 #### Scenario: An interrupted import blocks sleep
 - **WHEN** an import fails after it began replacing collections
-- **THEN** downscaling refuses until a later import succeeds
+- **THEN** every later sleep is blocked and counted in the sleep summary and
+  on the Nexus health board until a later import succeeds or the operator
+  runs `python -m kaine.lifecycle.mnemos_recover --confirm-keep-current-store`
+
+#### Scenario: Disk growth stays bounded while blocked
+- **WHEN** an import is pending and the stores exceed twice the budget
+- **THEN** new traces are refused, each refusal is logged and counted, and no
+  welfare event is raised
 
 ### Requirement: Strength survives migration and preservation
 At initialize Mnemos SHALL backfill, idempotently, every persisted point
