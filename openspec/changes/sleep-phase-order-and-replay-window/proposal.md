@@ -35,6 +35,8 @@ differs in three ways that #460 left for this change.
   `voice_alignment`, `affective_reset`. With voice training on, Thymos now
   resets after the training pass, so affect that moves during a long pass is
   not carried into waking.
+  If voice alignment raises, Hypnos runs the affective reset before the
+  aborted sleep is reported, as it did when the reset came first.
 - Hypnos owns the replay window. Mnemos gains `open_replay_window()` and
   `close_replay_window()`. Phase 2 opens the window immediately before it calls
   `replay_now()` and closes it in a `finally` once replay is done, inside the

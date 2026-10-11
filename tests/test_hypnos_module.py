@@ -132,6 +132,20 @@ async def test_enter_sleep_runs_all_five_phases(bus: AsyncBus, tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_voice_alignment_abort_still_resets_affect(bus: AsyncBus, tmp_path: Path):
+    """Sleep ends with the affective reset even when voice alignment raises."""
+    hypnos = _make_hypnos(bus, tmp_path)
+
+    async def _boom():
+        raise RuntimeError("voice boom")
+
+    hypnos._run_voice_alignment = _boom
+    with pytest.raises(RuntimeError, match="voice boom"):
+        await hypnos.enter_sleep()
+    assert hypnos._thymos.resets == 1
+
+
+@pytest.mark.asyncio
 async def test_sleep_writes_voice_measures_latest(bus: AsyncBus, tmp_path: Path):
     intent_records = [
         {"generated_text": "hello world this is a test.", "faithful_rendering": "x"}

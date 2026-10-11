@@ -702,7 +702,12 @@ class Hypnos(BaseModule):
         )
 
         # --- Phase 4: Voice Alignment ---
-        voice_result, voice_phase = await self._run_voice_alignment()
+        try:
+            voice_result, voice_phase = await self._run_voice_alignment()
+        except Exception:
+            # Sleep ends with the affective reset even when this phase aborts it.
+            await affective_reset(self._thymos)
+            raise
         phase_results.append(voice_phase)
 
         # Rotate the waking intent log into the per-sleep corpus now that voice
