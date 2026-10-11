@@ -323,14 +323,6 @@ def construct_module(
     if name in ("mnemos", "empatheia"):
         section["_embedder"] = shared_embedder(registry, kaine_config)
 
-    if name == "mnemos":
-        # N_day of paper A.10 is the number of traces one entity day at the
-        # resting broadcast rate stores, and Mnemos stores one trace per
-        # broadcast; the default matches the cycle's.
-        section["_traces_per_day"] = 86400.0 * float(
-            (kaine_config.get("cycle") or {}).get("experiential_rate_hz", 3.333)
-        )
-
     if name == "hypnos":
         mnemos = registry.get("mnemos") if "mnemos" in registry else None
         thymos = registry.get("thymos") if "thymos" in registry else None

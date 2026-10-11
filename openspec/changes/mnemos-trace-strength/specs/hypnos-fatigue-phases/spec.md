@@ -7,8 +7,9 @@ Mnemos's `downscale` with the replayed traces as the protected set, which
 downscales and then prunes (paper A.10). The phase metadata SHALL record the downscaling summary: the traces
 stored since the previous sleep, the factor, the number protected, the number
 pruned at the floor and for the budget, the total strength before and after
-the scaling, and the store size after pruning. `downscale` SHALL run even
-when replay fails, with nothing protected. `[hypnos.consolidation].downscale_factor`
+the scaling, and the store size after pruning. When replay fails,
+phase 2 SHALL skip the downscaling and pruning for that sleep and record
+`downscale_skipped`; the wake's traces stay in the next sleep's pool. `[hypnos.consolidation].downscale_factor`
 SHALL NOT be accepted.
 
 #### Scenario: Downscaling preserves ordering
@@ -24,3 +25,8 @@ SHALL NOT be accepted.
 #### Scenario: The old factor key fails the boot
 - **WHEN** `[hypnos.consolidation]` sets `downscale_factor`
 - **THEN** the Hypnos factory raises a configuration error
+
+#### Scenario: A failed replay skips downscaling
+- **WHEN** `replay_now()` raises in phase 2
+- **THEN** `downscale` is not called, the phase reports the error, and its
+  metadata records `downscale_skipped`

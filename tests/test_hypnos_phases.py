@@ -234,10 +234,19 @@ async def test_deep_consolidation_suspends_and_restores_perception():
 
 @pytest.mark.asyncio
 async def test_deep_consolidation_restores_even_on_replay_error():
-    """restore_perception is called even when replay_now raises."""
+    """restore_perception is called even when replay_now raises; no downscale."""
     class ReplayBoom(FakeFullMnemos):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls: list[str] = []
+
         async def replay_now(self) -> list:
+            self.calls.append("replay")
             raise RuntimeError("replay boom")
+
+        async def downscale(self, protect=()):
+            self.calls.append("downscale")
+            return {"n_new": 0, "factor": 1.0, "protected": 0, "total_before": 0.0, "total_after": 0.0, "pruned_floor": 0, "pruned_budget": 0, "store_bytes": 0}
 
     m = ReplayBoom()
     calls: list[str] = []
@@ -253,8 +262,11 @@ async def test_deep_consolidation_restores_even_on_replay_error():
         suspend_perception=suspend,
         restore_perception=restore,
     )
-    # Replay error is captured; restore still ran
+    # Replay error is captured; restore still ran and downscale was skipped.
     assert "restore" in calls
+    assert "replay" in m.calls
+    assert "downscale" not in m.calls
+    assert r.metadata["downscale_skipped"] == "replay failed"
     assert r.success is False  # error reported
 
 
@@ -309,6 +321,8 @@ async def test_deep_consolidation_closes_its_window_when_replay_raises():
     assert r.success is False
     assert "close" in m.calls
     assert m.calls.index("close") > m.calls.index("replay")
+    assert "downscale" not in m.calls
+    assert r.metadata["downscale_skipped"] == "replay failed"
 
 
 @pytest.mark.asyncio

@@ -60,6 +60,14 @@ async def _noop_hook(_: RecallSummary) -> None:
     return
 
 
+def _strength(log_base: float, log_gain: float) -> float:
+    """h = exp(log_base + L), clamped to at most 1; a non-finite value is a corrupt store."""
+    x = log_base + log_gain
+    if not math.isfinite(x):
+        raise StorageError(f"mnemos: non-finite trace strength (log_base {log_base!r}, log gain {log_gain!r})")
+    return math.exp(min(0.0, x))
+
+
 class MnemosCore:
     def __init__(
         self,
@@ -107,6 +115,7 @@ class MnemosCore:
         self._total = 0.0
         self._bytes = 0
         self._last_sleep_entity_time = 0.0
+        self._import_pending = False
         # Bytes persisted since the last sleep; added to the meta's bytes for S while awake.
         self._wake_bytes = 0
         # entity_time stamps are offset + entity_clock(), so they continue across restarts.
@@ -175,7 +184,7 @@ class MnemosCore:
         lb = _log_base(payload)
         if lb is None:
             return 1.0
-        return min(1.0, math.exp(lb + self._log_gain))
+        return _strength(lb, self._log_gain)
 
     async def initialize(self) -> None:
         await self._embedder.load()
@@ -184,13 +193,17 @@ class MnemosCore:
         for kind in ("episodic", "semantic", "procedural"):
             await self._storage.ensure_collection(self.collection_name(kind))
         await self._check_embedding_space_stamp()
-        needs_bytes_rewrite = await self._init_strength()
+        await self._init_strength()
+        if self._import_pending:
+            log.error(
+                "mnemos: a preservation import was interrupted; "
+                "re-run the revive from its bundle before the next sleep"
+            )
         await self._resume_entity_time()
-        if needs_bytes_rewrite:
-            # Old traces were backfilled after the stored S was written; recompute
-            # S now that _wake_bytes reflects the current wake.
-            names = self.persisted_collection_names()
-            self._bytes = await self._storage.total_size(names) - self._wake_bytes
+        names = self.persisted_collection_names()
+        scanned = await self._storage.total_size(names) - self._wake_bytes
+        if scanned != self._bytes:
+            self._bytes = scanned
             await self._storage.write_meta(self.strength_key, self._strength_meta())
 
     async def _check_embedding_space_stamp(self) -> None:
@@ -256,12 +269,11 @@ class MnemosCore:
                 f"before this embedder can use them"
             )
 
-    async def _init_strength(self) -> bool:
-        """Load strength meta and backfill old traces. Returns True if S needs a rewrite after _resume_entity_time."""
+    async def _init_strength(self) -> None:
+        """Load strength meta and backfill old traces."""
         names = self.persisted_collection_names()
         meta = await self._storage.read_meta(self.strength_key)
         fresh = False
-        needs_bytes_rewrite = False
         if meta is None:
             carried = 0
             for name in names:
@@ -291,13 +303,12 @@ class MnemosCore:
             )
         if changed and not fresh:
             self._total += changed
-            needs_bytes_rewrite = True
+            await self._storage.write_meta(self.strength_key, self._strength_meta())
         if changed:
             log.info(
                 "mnemos: gave %d traces from before trace strengths a strength of 1",
                 changed,
             )
-        return needs_bytes_rewrite
 
     def _load_strength(self, meta: dict[str, Any]) -> None:
         meta = _validate_strength(meta)
@@ -306,15 +317,19 @@ class MnemosCore:
         self._total = meta["total"]
         self._bytes = meta["bytes"]
         self._last_sleep_entity_time = meta["entity_time"]
+        self._import_pending = meta["import_pending"]
 
     def _strength_meta(self) -> dict[str, Any]:
-        return {
+        meta: dict[str, Any] = {
             "log_gain": self._log_gain,
             "sleeps": self._sleeps,
             "total": self._total,
             "bytes": self._bytes,
             "entity_time": self._last_sleep_entity_time,
         }
+        if self._import_pending:
+            meta["import_pending"] = True
+        return meta
 
     async def _resume_entity_time(self) -> None:
         newest = self._last_sleep_entity_time
@@ -361,7 +376,14 @@ class MnemosCore:
         replayed in this sleep is never pruned in it (paper A.10).
         """
         async with self._strength_lock:
+            if self._import_pending:
+                raise StorageError(
+                    "mnemos: a preservation import was interrupted; "
+                    "re-run the revive from its bundle before the next sleep"
+                )
+
             names = self.persisted_collection_names()
+            s_now = await self._storage.total_size(names)
             n_new = 0
             for name in names:
                 n_new += await self._storage.count_filtered(
@@ -382,7 +404,7 @@ class MnemosCore:
                     continue
                 seen.add(key)
                 protected.append((coll, str(point_id), nlb))
-                h_q += min(1.0, math.exp(nlb + self._log_gain))
+                h_q += _strength(nlb, self._log_gain)
 
             total_before = self._total + n_new
             total_after = factor * (total_before - h_q) + h_q
@@ -394,7 +416,7 @@ class MnemosCore:
                 "sleeps": self._sleeps + 1,
                 "total": total_after,
                 "entity_time": self.entity_now(),
-                "bytes": self._bytes + self._wake_bytes,
+                "bytes": s_now,
             }
             await self._storage.write_meta(self.strength_key, meta)
             self._log_gain = meta["log_gain"]
@@ -410,8 +432,6 @@ class MnemosCore:
             for coll, updates in by_coll.items():
                 await self._storage.set_log_base(coll, updates)
 
-            # A crash during deletion leaves the meta above overstating S and
-            # the total; the next sleep only prunes more.
             protected_keys = {(coll, str(pid)) for coll, pid, _ in protected}
             deleted: set[tuple[str, str]] = set()
             thr = self._prune_threshold
@@ -419,7 +439,10 @@ class MnemosCore:
             done = False
             while not done:
                 batch = await self._storage.weakest(names, limit=1024)
-                doomed: dict[str, list[str]] = {}
+                if not batch:
+                    break
+                projected = self._bytes
+                by_coll_doomed: dict[str, list[tuple[str, float, int, str]]] = {}
                 for p in batch:
                     key = (str(p["collection"]), str(p["id"]))
                     if key in protected_keys:
@@ -429,20 +452,31 @@ class MnemosCore:
                             f"mnemos: pruning found point {p['id']!r} of {p['collection']!r} again after deleting it"
                         )
                     if p["log_base"] < thr:
-                        pruned_floor += 1
-                    elif self._bytes > self._budget_bytes:
-                        pruned_budget += 1
+                        reason = "floor"
+                    elif projected > self._budget_bytes:
+                        reason = "budget"
                     else:
                         done = True
                         break
                     deleted.add(key)
-                    doomed.setdefault(p["collection"], []).append(str(p["id"]))
-                    self._bytes -= int(p["size_bytes"])
-                    self._total -= min(1.0, math.exp(p["log_base"] + self._log_gain))
-                if not doomed:
+                    size = int(p["size_bytes"])
+                    projected -= size
+                    by_coll_doomed.setdefault(p["collection"], []).append(
+                        (str(p["id"]), float(p["log_base"]), size, reason)
+                    )
+                if not by_coll_doomed:
                     break
-                for coll, ids in doomed.items():
+                for coll, items in by_coll_doomed.items():
+                    ids = [i[0] for i in items]
                     await self._storage.delete_points(coll, ids)
+                    for _, lb, size, reason in items:
+                        self._bytes -= size
+                        self._total -= _strength(lb, self._log_gain)
+                        if reason == "floor":
+                            pruned_floor += 1
+                        else:
+                            pruned_budget += 1
+                    await self._storage.write_meta(self.strength_key, self._strength_meta())
             self._bytes = max(0, self._bytes)
             self._total = max(0.0, self._total)
             await self._storage.write_meta(self.strength_key, self._strength_meta())
@@ -552,7 +586,8 @@ class MnemosCore:
         if k == 0:
             results = []
         else:
-            m = 4 * k
+            n_all = await self._storage.count(coll_name, strict=True)
+            m = min(4 * k, max(n_all, 1))
             while True:
                 hits = await self._storage.search(
                     coll_name, query_vector=vec, limit=m
@@ -575,9 +610,10 @@ class MnemosCore:
                     exhausted
                     or floor <= 0.0
                     or (len(scored) >= k and scored[k - 1][0] >= floor)
+                    or m >= n_all
                 ):
                     break
-                m *= 4
+                m = min(m * 8, n_all)
             results = [
                 replace(hit, score=product, similarity=sim, strength=strength)
                 for product, sim, _, hit, strength in scored[:k]
@@ -720,6 +756,10 @@ class MnemosCore:
         rebuilds the short-term deque. FAILS LOUDLY (propagates StorageError)
         when the backend cannot re-import; revive must not yield a
         memory-poor lesser individual.
+
+        A pending flag is set in the meta before any collection is replaced so
+        an interrupted revive cannot be followed by a sleep that downscales a
+        store whose strengths and meta disagree.
         """
         async with self._strength_lock:
             bundle_space = state.get("embedding_space") or LEGACY_EMBEDDING_SPACE
@@ -774,6 +814,13 @@ class MnemosCore:
                     f"{src_prefix!r}: {sorted(non_empty_names)}"
                 )
 
+            # Mark the current meta as interrupted before touching collections.
+            await self._storage.write_meta(
+                self.strength_key,
+                {**self._strength_meta(), "import_pending": True},
+            )
+            self._import_pending = True
+
             total = 0
             replaced_kinds: list[str] = []
             try:
@@ -793,8 +840,10 @@ class MnemosCore:
 
             # Restore trace-strength state after persisted collections are replaced.
             if strength is not None:
-                await self._storage.write_meta(self.strength_key, strength)
-                self._load_strength(strength)
+                # The bundle's meta describes the replaced collections; writing it
+                # without the flag ends the import.
+                self._load_strength({**strength, "import_pending": False})
+                await self._storage.write_meta(self.strength_key, self._strength_meta())
             else:
                 meta = {
                     "log_gain": 0.0,
@@ -802,6 +851,7 @@ class MnemosCore:
                     "total": float(total),
                     "entity_time": 0.0,
                     "bytes": await self._storage.total_size(list(mapping.values())),
+                    "import_pending": True,
                 }
                 await self._storage.write_meta(self.strength_key, meta)
                 self._load_strength(meta)
@@ -815,6 +865,8 @@ class MnemosCore:
                         "mnemos: gave %d traces from before trace strengths a strength of 1",
                         changed,
                     )
+                self._import_pending = False
+                await self._storage.write_meta(self.strength_key, self._strength_meta())
 
             # Rebuild short-term only after persisted replaces succeed.
             self._short_term.clear()
@@ -934,10 +986,14 @@ def _validate_strength(meta: dict[str, Any]) -> dict[str, Any]:
         raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
     if total < 0:
         raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
+    import_pending = meta.get("import_pending", False)
+    if not isinstance(import_pending, bool):
+        raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
     return {
         "log_gain": log_gain,
         "sleeps": int(sleeps),
         "total": total,
         "bytes": int(bytes_value),
         "entity_time": entity_time,
+        "import_pending": import_pending,
     }

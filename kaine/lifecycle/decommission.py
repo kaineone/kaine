@@ -796,6 +796,7 @@ def delete_entity_state(
                         exc_info=True,
                     )
                 if probe_ok:
+                    collection_drop_failed = False
                     for coll in collections:
                         if coll not in existing:
                             continue
@@ -803,23 +804,30 @@ def delete_entity_state(
                             client.delete_collection(collection_name=coll)
                             result.dropped_collections.append(coll)
                         except Exception as exc:
+                            collection_drop_failed = True
                             result.errors.append(f"drop collection {coll}: {exc}")
                     if stamp_coll in existing:
                         try:
                             from qdrant_client import models
 
+                            if collection_drop_failed:
+                                points = [stamp_pid]
+                                result.errors.append(
+                                    "mnemos strength meta kept because a collection drop failed"
+                                )
+                            else:
+                                points = [stamp_pid, strength_pid]
                             client.delete(
                                 collection_name=stamp_coll,
-                                points_selector=models.PointIdsList(
-                                    points=[stamp_pid, strength_pid]
-                                ),
+                                points_selector=models.PointIdsList(points=points),
                             )
                             result.dropped_collections.append(
                                 f"{stamp_coll}:{stamp_key_str}"
                             )
-                            result.dropped_collections.append(
-                                f"{stamp_coll}:{strength_key_str}"
-                            )
+                            if not collection_drop_failed:
+                                result.dropped_collections.append(
+                                    f"{stamp_coll}:{strength_key_str}"
+                                )
                         except Exception as exc:
                             result.errors.append(f"delete stamp {stamp_key_str}: {exc}")
             finally:

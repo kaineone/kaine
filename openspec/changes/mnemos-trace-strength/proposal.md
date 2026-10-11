@@ -79,7 +79,8 @@ The code does not follow it.
 - Config: `[mnemos.strength]` with `retention_per_day = 0.82` and
   `prune_floor = 0.01`, both in (0, 1), and `[mnemos].storage_budget_bytes`
   (default 10 GiB; the paper leaves $B$ to the operator). $N_{\rm day}$ is
-  `86400 * [cycle].experiential_rate_hz`, passed in by boot.
+  `[mnemos.strength].traces_per_day`, default 288,000, the paper's
+  86400 x f0 with f0 = 10/3, independent of the tunable cycle rate.
   `[hypnos.consolidation].downscale_factor` is removed and its presence fails
   the boot, since it never changed a recall.
 
@@ -89,11 +90,9 @@ The code does not follow it.
   phase 2 is skipped as before.
 - Affected code: `kaine/modules/mnemos/{storage,memory,module,replay}.py`,
   `kaine/modules/hypnos/{phases,module}.py`, `kaine/boot/factories/{mnemos,hypnos}.py`,
-  `kaine/boot/registry.py`, `kaine/memory_kinds.py`, `kaine/lifecycle/decommission.py`,
+  `kaine/memory_kinds.py`, `kaine/lifecycle/decommission.py`,
   `config/kaine.toml`, `pyproject.toml`, docs.
 - Known gaps. Phase 3's period buckets and `recent_points` keep the
-  wall-clock `timestamp`, since the paper does not specify them. The cycle's
-  `experiential_rate_hz = 3.333` gives $N_{\rm day}=287{,}971$ against the
-  paper's 288,000 at $f_0=10/3$; changing the base rate is a separate change.
+  wall-clock `timestamp`, since the paper does not specify them.
   Qdrant search is HNSW, so its top k is exact relative to Qdrant's
   approximate cosine list, as recall is today.

@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     pass
+import math
+
 from kaine.boot.errors import ConfigurationError, _require_keys
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
@@ -22,10 +24,8 @@ def make_mnemos(
 ) -> BaseModule:
     from kaine.modules.mnemos.module import Mnemos
 
-    # Spot-injected shared embedder and N_day (traces per entity day); never
-    # TOML keys, so pop before validation.
+    # Spot-injected shared embedder; never a TOML key, so pop before validation.
     embedder = section.pop("_embedder", None)
-    traces_per_day = section.pop("_traces_per_day", None)
 
     allowed = {
         "backend",
@@ -81,12 +81,22 @@ def make_mnemos(
     if "cross_period_candidates" in replay:
         kwargs["cross_period_candidates"] = int(replay["cross_period_candidates"])
     # Strength sub-table (paper A.10)
-    _require_keys(strength, {"retention_per_day", "prune_floor"})
+    _require_keys(strength, {"retention_per_day", "prune_floor", "traces_per_day"})
     if "retention_per_day" in strength:
         kwargs["strength_retention_per_day"] = float(strength["retention_per_day"])
     if "prune_floor" in strength:
         kwargs["strength_prune_floor"] = float(strength["prune_floor"])
-    if traces_per_day is not None:
-        kwargs["traces_per_day"] = float(traces_per_day)
+    if "traces_per_day" in strength:
+        value = strength["traces_per_day"]
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value <= 0
+        ):
+            raise ConfigurationError(
+                "[mnemos.strength].traces_per_day must be a positive number"
+            )
+        kwargs["traces_per_day"] = float(value)
     kwargs["embedder"] = embedder
     return Mnemos(bus, entity_clock=entity_clock, **kwargs)

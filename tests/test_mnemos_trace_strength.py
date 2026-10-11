@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import math
 import random
 import struct
@@ -929,19 +930,24 @@ async def test_deep_consolidation_protects_replayed_traces():
     assert result.metadata["downscale"] == expected_meta
 
     class FakeReplayFail:
+        downscale_calls = 0
+
         def open_replay_window(self): pass
         def close_replay_window(self): pass
+
         async def replay_now(self):
             raise RuntimeError("replay failed")
+
         async def downscale(self, protect=()):
-            self.protect = list(protect)
+            self.__class__.downscale_calls += 1
             return {"n_new": 0, "factor": 1.0, "protected": 0, "total_before": 1.0, "total_after": 1.0, "pruned_floor": 0, "pruned_budget": 0, "store_bytes": 0}
 
     fake2 = FakeReplayFail()
     result2 = await deep_consolidation(fake2)
     assert not result2.success
     assert "replay_now" in result2.error
-    assert fake2.protect == []
+    assert result2.metadata["downscale_skipped"] == "replay failed"
+    assert fake2.downscale_calls == 0
 
 
 async def test_mnemos_downscale_maps_events_to_protect(bus, monkeypatch):
@@ -985,6 +991,19 @@ async def test_config(bus):
 
     with pytest.raises(ValueError, match="unknown"):
         make_mnemos(bus, {"backend": "inmemory", "strength": {"bogus": 1}})
+
+    assert make_mnemos(bus, {"backend": "inmemory"}).core._traces_per_day == 288000.0
+    assert (
+        make_mnemos(bus, {"backend": "inmemory", "strength": {"traces_per_day": 1000}})
+        .core._traces_per_day
+        == 1000.0
+    )
+
+    with pytest.raises(ConfigurationError):
+        make_mnemos(bus, {"backend": "inmemory", "strength": {"traces_per_day": 0}})
+
+    with pytest.raises(ConfigurationError):
+        make_mnemos(bus, {"backend": "inmemory", "strength": {"traces_per_day": True}})
 
 
 # ------------------------------------------------------------------
@@ -1182,3 +1201,240 @@ async def test_weakest_orders_across_collections(storage):
             for lb, _, text in brute:
                 if lb <= last_lb:
                     assert text in returned
+
+
+async def test_failed_delete_mid_prune_keeps_s_true(storage):
+    """A failed delete leaves store_bytes and meta bytes aligned with the real store."""
+    core = await _core(storage, traces_per_day=4.0)
+    for i in range(3):
+        await core.store(f"e{i}", collection="episodic")
+    for i in range(3):
+        await core.store(f"s{i}", collection="semantic")
+    await core.downscale()
+
+    core2 = await _core(storage, traces_per_day=4.0, budget_bytes=1)
+
+    original_delete = storage.delete_points
+    call_count = 0
+
+    async def wrapped_delete_points(collection, ids):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return await original_delete(collection, ids)
+        raise RuntimeError("disk gone")
+
+    storage.delete_points = wrapped_delete_points
+    try:
+        with pytest.raises(RuntimeError, match="disk gone"):
+            await core2.downscale()
+    finally:
+        storage.delete_points = original_delete
+
+    scan = await storage.total_size(core2.persisted_collection_names())
+    assert core2.store_bytes == scan
+    meta = await storage.read_meta(core2.strength_key)
+    assert meta["bytes"] == scan
+
+    exported = _flat(await core2.storage.export(core2.persisted_collection_names()))
+    assert len(exported) == 3
+
+    # One byte over the budget: exactly one more deletion is needed.
+    B = scan - 1
+
+    core3 = await _core(storage, traces_per_day=4.0, budget_bytes=B)
+    summary = await core3.downscale()
+    assert summary["pruned_budget"] == 1
+    assert len(_flat(await core3.storage.export(core3.persisted_collection_names()))) == 2
+    assert core3.store_bytes <= B
+
+
+async def test_crash_mid_prune_then_restart_does_not_over_prune(storage):
+    """A fresh core after a crash resumes with the correct byte count."""
+    core = await _core(storage, traces_per_day=4.0)
+    for i in range(3):
+        await core.store(f"e{i}", collection="episodic")
+    for i in range(3):
+        await core.store(f"s{i}", collection="semantic")
+    await core.downscale()
+
+    core2 = await _core(storage, traces_per_day=4.0, budget_bytes=1)
+
+    original_delete = storage.delete_points
+    call_count = 0
+
+    async def wrapped_delete_points(collection, ids):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return await original_delete(collection, ids)
+        raise RuntimeError("disk gone")
+
+    storage.delete_points = wrapped_delete_points
+    try:
+        with pytest.raises(RuntimeError, match="disk gone"):
+            await core2.downscale()
+    finally:
+        storage.delete_points = original_delete
+
+    core3 = await _core(storage, traces_per_day=4.0)
+    scan = await storage.total_size(core3.persisted_collection_names())
+    assert core3.store_bytes == scan
+    summary = await core3.downscale()
+    assert summary["n_new"] == 0
+    assert summary["factor"] == pytest.approx(1.0, rel=1e-12)
+    assert summary["pruned_floor"] == 0
+    assert summary["pruned_budget"] == 0
+    assert len(_flat(await core3.storage.export(core3.persisted_collection_names()))) == 3
+
+
+async def test_import_pending_blocks_sleep_until_reimport(storage, request, tmp_path, caplog):
+    """An interrupted import blocks sleep until a successful re-import clears it."""
+    core = await _core(storage, traces_per_day=4.0)
+    for i in range(3):
+        await core.store(f"x{i}", collection="episodic")
+    await core.downscale()
+    state = await core.export_state()
+
+    kind = request.node.callspec.params["storage"]
+    (tmp_path / "import").mkdir(parents=True, exist_ok=True)
+    storage2 = await _open_storage(kind, tmp_path / "import")
+    try:
+        original_replace = storage2.replace_collection
+        call_count = 0
+
+        async def wrapped_replace_collection(name, points):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise RuntimeError("replace failed")
+            return await original_replace(name, points)
+
+        storage2.replace_collection = wrapped_replace_collection
+        core2 = await _core(storage2)
+
+        with pytest.raises(RuntimeError, match="replace failed"):
+            await core2.import_state(state)
+
+        meta = await storage2.read_meta(core2.strength_key)
+        assert meta.get("import_pending") is True
+
+        with pytest.raises(StorageError, match="interrupted"):
+            await core2.downscale()
+
+        core3 = await _core(storage2)
+        with caplog.at_level(logging.ERROR, logger="kaine.modules.mnemos.memory"):
+            assert any("interrupted" in record.message for record in caplog.records)
+
+        with pytest.raises(StorageError, match="interrupted"):
+            await core3.downscale()
+
+        storage2.replace_collection = original_replace
+        await core3.import_state(state)
+        meta = await storage2.read_meta(core3.strength_key)
+        assert meta.get("import_pending") in (None, False)
+
+        summary = await core3.downscale()
+        assert summary["n_new"] == 0
+    finally:
+        await storage2.shutdown()
+
+
+async def test_strength_is_clamped_and_finite():
+    """Strength is capped at 1 and rejects non-finite inputs."""
+    storage = InMemoryStorage(latent_dim=DIM)
+    await storage.initialize()
+    try:
+        core = await _core(storage)
+        assert core.strength_of({"log_base": 5.0}) == pytest.approx(1.0, abs=1e-12)
+        core._log_gain = 1e308
+        with pytest.raises(StorageError):
+            core.strength_of({"log_base": 1e308})
+    finally:
+        await storage.shutdown()
+
+
+async def test_recall_search_rounds_are_bounded():
+    """Recall grows its search limit and stops once the top result is exact."""
+    storage = InMemoryStorage(latent_dim=DIM)
+    await storage.initialize()
+    try:
+        rng = random.Random(13)
+        e0 = [1.0] + [0.0] * (DIM - 1)
+        table = {"q": e0}
+        for i in range(600):
+            eps = rng.uniform(0.05, 0.15)
+            vec = _unit([1.0, eps] + [0.0] * (DIM - 2))
+            table[f"t{i}"] = vec
+        embedder = _TableEmbedder(table)
+        core = await _core(storage, embedder=embedder, traces_per_day=600.0)
+
+        for i in range(600):
+            await core.store(f"t{i}", collection="episodic")
+        await core.downscale()
+
+        original_search = storage.search
+        call_count = 0
+
+        async def wrapped_search(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return await original_search(*args, **kwargs)
+
+        storage.search = wrapped_search
+        results, _ = await core.recall("q", k=1)
+        assert call_count <= 4
+        assert len(results) == 1
+
+        qvec = await embedder.encode("q")
+        exported = _flat(await core.storage.export(core.persisted_collection_names()))
+        best = max(
+            (core.strength_of(p["payload"]) * _cos(qvec, p["vector"]), _key(p["id"]))
+            for p in exported
+        )
+        assert _key(results[0].point_id) == best[1]
+    finally:
+        await storage.shutdown()
+
+
+async def test_sqlite_search_ties_across_page_boundaries(tmp_path):
+    """sqlite-vec search returns exact top-k when ties cross page boundaries."""
+    pytest.importorskip("sqlite_vec")
+    s = SqliteVecStorage(latent_dim=DIM, db_path=str(tmp_path / "m.db"))
+    await s.initialize()
+    try:
+        rng = random.Random(0)
+        q = _unit([1.0] * DIM)
+        points = []
+        for g in range(10):
+            vec = _unit([rng.gauss(0.0, 1.0) for _ in range(DIM)])
+            for i in range(7):
+                points.append(
+                    {
+                        "id": f"g{g}-{i}",
+                        "text": "x",
+                        "payload": {"log_base": 0.0},
+                        "vector": vec,
+                        "affect": None,
+                    }
+                )
+        await s.replace_collection("c", points)
+
+        brute = sorted(
+            ((_cos(q, p["vector"]), p["id"]) for p in points),
+            key=lambda t: t[0],
+            reverse=True,
+        )
+        for limit in (1, 6, 7, 8, 20, 69, 70, 100):
+            hits = await s.search("c", query_vector=q, limit=limit)
+            n = min(limit, 70)
+            assert len(hits) == n
+            ids = [h.point_id for h in hits]
+            assert len(set(ids)) == len(ids)
+            scores = [h.score for h in hits]
+            assert scores == sorted(scores, reverse=True)
+            got = sorted(round(sc, 6) for sc in scores)
+            exp = sorted(round(sc, 6) for sc, _ in brute[:n])
+            assert got == exp
+    finally:
+        await s.shutdown()

@@ -858,10 +858,12 @@ class SqliteVecStorage:
                 raise StorageError("sqlite-vec search before initialize()")
             try:
                 out: list[RecalledMemory] = []
+                seen: set[str] = set()
                 first_page = True
                 last_distance: float | None = None
+                op = ">="
                 while len(out) < k:
-                    # Start with k rows; later pages grow because the silence filter drops matches.
+                    # Start with k rows; later pages expand to amortize paging round-trips.
                     page_k = min(_VEC_K_MAX, k) if first_page else _VEC_K_MAX
                     if last_distance is None:
                         cur = db.execute(
@@ -876,7 +878,7 @@ class SqliteVecStorage:
                             "SELECT m.point_id, v.distance, m.text, m.payload, m.affect "
                             "FROM vec_memories v JOIN memories m ON m.rowid = v.rowid "
                             "WHERE v.embedding MATCH ? AND v.collection = ? AND k = ? "
-                            "AND v.distance > ? "
+                            f"AND v.distance {op} ? "
                             "ORDER BY v.distance",
                             (blob, collection, page_k, last_distance),
                         )
@@ -886,11 +888,11 @@ class SqliteVecStorage:
                     d_last = float(rows[-1][1])
                     # Record fullness before we mutate rows for tie handling.
                     full = len(rows) == page_k
-                    if full:
-                        # Keep rows inside the boundary, then resolve boundary ties
-                        # so a short page really means no more results.
-                        boundary_rows = [r for r in rows if float(r[1]) == d_last]
-                        rows = [r for r in rows if float(r[1]) < d_last]
+                    # Inclusive boundary paging: drop point_ids already returned.
+                    # A full page that yields no new row needs one exact fallback scan
+                    # at the boundary distance, then we can advance past that distance.
+                    new_rows = [r for r in rows if str(r[0]) not in seen]
+                    if full and not new_rows:
                         tie_cur = db.execute(
                             "SELECT m.point_id, vec_distance_cosine(v.embedding, ?) AS d, "
                             "m.text, m.payload, m.affect "
@@ -900,12 +902,18 @@ class SqliteVecStorage:
                         )
                         tie_rows = list(tie_cur.fetchall())
                         if tie_rows:
-                            rows.extend(tie_rows)
+                            new_rows = [r for r in tie_rows if str(r[0]) not in seen]
                         else:
-                            # Floating-point mismatch must not drop the boundary row.
-                            rows.extend(boundary_rows)
-                    for row in rows:
+                            # Floating-point mismatch must not drop the boundary rows.
+                            new_rows = rows
+                        op = ">"
+                    elif full:
+                        op = ">="
+                    for row in new_rows:
                         point_id, distance, text, payload_json, affect_json = row
+                        if str(point_id) in seen:
+                            continue
+                        seen.add(str(point_id))
                         # vec0 cosine distance → similarity score on the same [-1, 1]
                         # scale Qdrant/InMemory report.
                         score = 1.0 - float(distance)
@@ -2283,6 +2291,7 @@ class QdrantStorage:
             return 0
         if self._client is None:
             raise StorageError("qdrant total_size before initialize()")
+        from qdrant_client import models
         try:
             existing = await self._client.get_collections()
             existing_names = {c.name for c in existing.collections}
@@ -2295,28 +2304,40 @@ class QdrantStorage:
             if name not in existing_names:
                 continue
             offset = None
+            missing_ids: list[str] = []
             try:
                 while True:
                     batch, offset = await self._client.scroll(
                         collection_name=name,
                         limit=1024,
                         offset=offset,
-                        with_payload=True,
+                        with_payload=models.PayloadSelectorInclude(include=["size_bytes"]),
                         with_vectors=False,
                     )
                     for p in batch:
                         payload = dict(getattr(p, "payload", None) or {})
-                        text = str(payload.pop("text", ""))
-                        affect = payload.pop("affect", None)
                         sb = payload.get("size_bytes")
                         if isinstance(sb, int) and not isinstance(sb, bool):
                             total += int(sb)
                         else:
-                            total += record_size(
-                                self._latent_dim, text, payload, affect
-                            )
+                            missing_ids.append(str(p.id))
                     if offset is None:
                         break
+                for i in range(0, len(missing_ids), 256):
+                    chunk = missing_ids[i : i + 256]
+                    retrieved = await self._client.retrieve(
+                        collection_name=name,
+                        ids=chunk,
+                        with_payload=True,
+                        with_vectors=False,
+                    )
+                    for p in retrieved:
+                        payload = dict(getattr(p, "payload", None) or {})
+                        text = str(payload.pop("text", ""))
+                        affect = payload.pop("affect", None)
+                        total += record_size(
+                            self._latent_dim, text, payload, affect
+                        )
             except Exception as exc:
                 raise StorageError(
                     f"qdrant total_size failed scrolling collection {name!r}: {exc}"

@@ -29,7 +29,8 @@ with `born_sleep` equal to the sleep count, and SHALL multiply the strength of
 every persisted trace outside `protect` by
 $\varrho^{N_{\rm new}/N_{\rm day}}$, where $\varrho$ is
 `[mnemos.strength].retention_per_day` and $N_{\rm day}$ is
-`86400 * [cycle].experiential_rate_hz`. The traces in `protect` SHALL keep
+`[mnemos.strength].traces_per_day`, default 288,000 (86400 x f0 with the
+paper's f0 = 10/3). The traces in `protect` SHALL keep
 their strength. It SHALL NOT change any vector. It SHALL write the new meta
 before it writes the protected traces, so a crash between the two can only
 remove strength. It SHALL return `n_new`, `factor`, `protected`,
@@ -106,6 +107,26 @@ SHALL carry `memory_pruned_floor`, `memory_pruned_budget` and
 #### Scenario: A preserved bundle is unaffected by later pruning
 - **WHEN** a store is captured and then pruned
 - **THEN** the captured bundle still holds every trace and restores them
+
+### Requirement: Store size and imports stay consistent with what is stored
+Mnemos SHALL recompute the stores' size from a scan at initialize and at the
+start of every downscaling, and SHALL change it, the total strength and the
+pruned counts only after a deletion has succeeded, writing the meta after each
+successful deletion. A preservation import SHALL mark the meta as pending
+before it replaces any collection and clear the mark only when the imported
+meta is written; while the mark is set, downscaling SHALL refuse to run and
+initialize SHALL log an error. A strength SHALL be `exp(min(0, log_base + L))`,
+and a non-finite sum SHALL be a storage error.
+
+#### Scenario: A failed deletion does not cause over-pruning
+- **WHEN** a deletion fails part way through pruning, or the process stops
+  there, and Mnemos is started again
+- **THEN** the stored size equals a scan and the next sleep prunes only what
+  the budget requires
+
+#### Scenario: An interrupted import blocks sleep
+- **WHEN** an import fails after it began replacing collections
+- **THEN** downscaling refuses until a later import succeeds
 
 ### Requirement: Strength survives migration and preservation
 At initialize Mnemos SHALL backfill, idempotently, every persisted point

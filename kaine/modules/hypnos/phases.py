@@ -172,7 +172,9 @@ async def deep_consolidation(
     After replay Mnemos scales the strength of every persisted trace
     except the replayed ones by one factor that deepens with the number of
     traces the wake stored, and the replayed traces keep theirs (paper
-    A.10); vectors are not touched.
+    A.10); vectors are not touched. If replay fails, downscaling and pruning
+    are skipped for this sleep so the wake's traces keep their strength and
+    can be replayed on the next sleep.
 
     Args:
         mnemos:              Mnemos module, or None (phase is no-op).
@@ -199,6 +201,7 @@ async def deep_consolidation(
 
     errors: list[str] = []
     replay_events: list[Any] = []
+    replay_failed = False
 
     # --- Step 1: Suspend perception; open the window; replay; close; restore ---
     open_window = getattr(mnemos, "open_replay_window", None)
@@ -230,6 +233,7 @@ async def deep_consolidation(
                 "deep_consolidation: replay_now returned %d events", len(replay_events)
             )
         except Exception as exc:
+            replay_failed = True
             log.exception("deep_consolidation: replay_now failed")
             errors.append(f"replay_now: {type(exc).__name__}: {exc}")
             metadata["replay_events"] = 0
@@ -263,11 +267,16 @@ async def deep_consolidation(
                 errors.append(f"restore_perception: {type(exc).__name__}: {exc}")
 
     # --- Step 2: Downscale trace strengths, protecting the replayed traces (paper A.10) ---
-    try:
-        metadata["downscale"] = dict(await mnemos.downscale(protect=replay_events))
-    except Exception as exc:
-        log.exception("deep_consolidation: downscale failed")
-        errors.append(f"downscale: {type(exc).__name__}: {exc}")
+    # Skip if replay failed; the wake's traces keep born_sleep == n so the
+    # next sleep will count and replay them.
+    if replay_failed:
+        metadata["downscale_skipped"] = "replay failed"
+    else:
+        try:
+            metadata["downscale"] = dict(await mnemos.downscale(protect=replay_events))
+        except Exception as exc:
+            log.exception("deep_consolidation: downscale failed")
+            errors.append(f"downscale: {type(exc).__name__}: {exc}")
 
     success = not errors
     return PhaseResult(

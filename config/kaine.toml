@@ -632,6 +632,10 @@ cross_period_candidates = 128
 # at the resting broadcast rate (paper A.10 and Table A1, after the mean
 # decrease of synaptic size in sleep that de Vivo et al. 2017 measured).
 retention_per_day = 0.82
+# Traces stored by one entity day at the resting broadcast rate, N_day =
+# 86400 x f0 with f0 = 10/3 Hz (paper A.10, Table A1). The paper's design value;
+# it does not follow [cycle].experiential_rate_hz.
+traces_per_day = 288000
 # A trace whose strength falls below this floor is deleted in the sleep that
 # weakened it (paper A.10).
 prune_floor = 0.01

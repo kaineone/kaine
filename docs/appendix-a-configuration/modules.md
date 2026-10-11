@@ -252,7 +252,8 @@ Section: `[mnemos.strength]`. Paper Appendix A.10 and Table A1.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `retention_per_day` | float `(0, 1)` | `0.82` | Strength a trace that is never replayed keeps over one entity day of storage at the resting broadcast rate. Each sleep scales every unreplayed trace by `retention_per_day ** (N_new / N_day)`, where `N_new` is the number of traces stored since the previous sleep and `N_day` is `86400 * [cycle].experiential_rate_hz`. |
+| `retention_per_day` | float `(0, 1)` | `0.82` | Strength a trace that is never replayed keeps over one entity day of storage at the resting broadcast rate. Each sleep scales every unreplayed trace by `retention_per_day ** (N_new / N_day)`, where `N_new` is the number of traces stored since the previous sleep and `N_day` is `traces_per_day`. |
+| `traces_per_day` | float | `288000` | `N_day`, the traces one entity day at the resting broadcast rate stores: 86400 x f0 with the paper's design value f0 = 10/3 (A.10, Table A1). It does not follow `[cycle].experiential_rate_hz`. |
 | `prune_floor` | float `(0, 1)` | `0.01` | A trace whose strength falls below this floor is deleted in the sleep that weakened it. |
 
 ## Eidolon
