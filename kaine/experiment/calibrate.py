@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any
 
 import kaine
-import kaine.experiment.calibration_rules as rules
+from kaine.experiment import calibration_rules as rules
 from kaine.experiment.calibration_rules import (
     ALPHA_PC,
     ALPHA_TEST,

@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-import kaine.experiment.calibration_rules as calibration_rules
+from kaine.experiment import calibration_rules
 from kaine.experiment.calibrate import (
     ARMS,
     CONTROLS,

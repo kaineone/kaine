@@ -858,6 +858,7 @@ class ControlQueue:
             try:
                 await self._worker
             except asyncio.CancelledError:
+                # The worker was idle after the drain; its cancellation is the expected end.
                 pass
             finally:
                 self._worker = None
