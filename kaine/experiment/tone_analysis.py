@@ -47,9 +47,10 @@ class ToneEvent:
 def accessed_members(records: Iterable[Mapping[str, Any]]) -> set[tuple[str, str, str]]:
     """Return the (source, type, entry_id) tuples of all accessed broadcast members.
 
-    A non-inhibited broadcast contributes its members whose computed score reaches
-    the access threshold. The score is ``salience_scores.get(entry_id, member salience)``,
-    matching ``kaine.modules.context`` (paper A.1). An inhibited broadcast contributes
+    A non-inhibited broadcast contributes its members whose score reaches the
+    access threshold, which such a broadcast must carry when it has members. The
+    score is ``salience_scores.get(entry_id, member salience)``, as in
+    ``kaine.modules.context`` (paper A.1). An inhibited broadcast contributes
     nothing.
 
     Raises:
@@ -82,7 +83,12 @@ def accessed_members(records: Iterable[Mapping[str, Any]]) -> set[tuple[str, str
                 raise ToneAnalysisError("broadcast access_threshold must be a finite number or absent")
 
         salience_scores = record.get("salience_scores") or {}
-        for member in record.get("entries", []) or []:
+        members = record.get("entries", []) or []
+        # The tone variant runs the competitive arm, whose broadcasts with
+        # members always carry the threshold; without it access is unknown.
+        if members and threshold is None:
+            raise ToneAnalysisError("an accessed broadcast with members has no access_threshold")
+        for member in members:
             if not isinstance(member, dict):
                 raise ToneAnalysisError("broadcast member must be a dict")
             entry_id = member.get("entry_id")
@@ -103,7 +109,7 @@ def accessed_members(records: Iterable[Mapping[str, Any]]) -> set[tuple[str, str
             ):
                 raise ToneAnalysisError("broadcast member score must be a finite number")
 
-            if threshold is None or score >= threshold:
+            if score >= threshold:
                 accessed.add((source, type_, entry_id))
 
     return accessed

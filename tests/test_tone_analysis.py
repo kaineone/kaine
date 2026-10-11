@@ -147,3 +147,10 @@ def test_tone_verdicts():
     result = tone_verdict([0.1] * 5, 0.1)
     assert result.outcome == Outcome.NULL
     assert result.p_win == Fraction(1)
+
+
+def test_broadcast_without_threshold_raises():
+    records = _run(1, 1, 0, 0)
+    del records[1]["access_threshold"]
+    with pytest.raises(ToneAnalysisError):
+        tone_events(records)
