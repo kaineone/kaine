@@ -684,7 +684,6 @@ class Hypnos(BaseModule):
             )
         phase_results: list[PhaseResult] = []
 
-        reset_done = False
         try:
             # --- Phase 1: Light Consolidation ---
             # Weak-trace decay + strong-trace tagging + oscillator frequency hook
@@ -855,9 +854,7 @@ class Hypnos(BaseModule):
         finally:
             # Sleep ends with the affective reset on every path (paper §3.5),
             # including an exception or a cancel in phases 1 to 4.
-            if not reset_done:
-                reset_done = True
-                phase_results.append(await self._run_final_affective_reset())
+            phase_results.append(await self._run_final_affective_reset())
 
         elapsed_ms = (time.monotonic() - start) * 1000.0
         # Capture the previous sleep mark BEFORE overwriting it; the ignition
