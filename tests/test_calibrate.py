@@ -76,6 +76,7 @@ def _build_evaluation_tree(
     scale: float = 1.0,
     competitive_time_step: float = 1.0,
     with_tone: bool = False,
+    with_threshold: bool = False,
     tone_rule: str = "error_ratio",
     wrong_entity_time_run: str | None = None,
     wrong_pc_sha_run_processor: tuple[str, str] | None = None,
@@ -169,6 +170,14 @@ def _build_evaluation_tree(
                     }
                     if wrong_entity_time_run == run_id and k == 1 and processor == "topos":
                         del record["entity_time_s"]
+                    if with_threshold and arm == "competitive":
+                        if processor == "topos":
+                            record["prediction_broadcast_tick"] = 1000 + k
+                        elif processor == "audition":
+                            record["prediction_broadcast_tick"] = 1200 + k
+                        elif processor == "soma":
+                            record["prediction_broadcast_tick"] = 1400 + k
+                        record["prediction_context_age_s"] = 0.5 + (k % 7) * 0.4
                     _append_record(path, record)
 
                 # One null-gain report and one awake=False report, both ignored.
@@ -196,21 +205,42 @@ def _build_evaluation_tree(
                 )
 
             # Broadcasts.
-            for tick in range(10):
-                n_scores = 3 if not_exercised else 7
-                inhibited = True if not_exercised else tick % 2 == 1
-                scores = {str(i): 1.0 for i in range(n_scores)}
-                _append_record(
-                    path,
-                    {
-                        "run_id": run_id,
-                        "event_type": "workspace.broadcast",
-                        "arm": arm,
-                        "coalition_capacity": 5,
-                        "salience_scores": scores,
-                        "inhibited": inhibited,
-                    },
-                )
+            if with_threshold and arm == "competitive" and not not_exercised:
+                for k in range(1, 601):
+                    tick = 1000 + k
+                    d_k = 0.6 * (((tick - 1000) * 0.6180339887 + 0.13 * pilot_index) % 1.0) - 0.3
+                    max_score = 0.4 + d_k
+                    scores = {str(i): max_score - 0.05 for i in range(7)}
+                    scores["0"] = max_score
+                    _append_record(
+                        path,
+                        {
+                            "run_id": run_id,
+                            "event_type": "workspace.broadcast",
+                            "arm": "competitive",
+                            "tick_index": tick,
+                            "coalition_capacity": 5,
+                            "access_threshold": 0.4,
+                            "salience_scores": scores,
+                            "inhibited": d_k < 0,
+                        },
+                    )
+            else:
+                for tick in range(10):
+                    n_scores = 3 if not_exercised else 7
+                    inhibited = True if not_exercised else tick % 2 == 1
+                    scores = {str(i): 1.0 for i in range(n_scores)}
+                    _append_record(
+                        path,
+                        {
+                            "run_id": run_id,
+                            "event_type": "workspace.broadcast",
+                            "arm": arm,
+                            "coalition_capacity": 5,
+                            "salience_scores": scores,
+                            "inhibited": inhibited,
+                        },
+                    )
 
             # Ladder records only in competitive runs.
             if arm == "competitive":
@@ -274,7 +304,7 @@ def _build_evaluation_tree(
             emotional_accessed = 10 + c_index
             neutral_accessed = 6
             for k in range(40):
-                entry_id = f"{k}-0"
+                entry_id = f"audition.out:{k}-0"
                 if k < 20:
                     category = "happy"
                     accessed = k < emotional_accessed
@@ -333,7 +363,15 @@ def test_calibrate_completes_except_always_blocked(tmp_path: Path) -> None:
     plan, root = _build_evaluation_tree(tmp_path, n_pilots=5)
     record = calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
 
-    always_blocked = {
+    blocked = set(record["blocked"].keys())
+    assert "theta_band" in blocked
+    assert "b_band" in blocked
+    assert "age_bins" in blocked
+    assert "min_effect_threshold_contrast" in blocked
+    assert "tone_bins" in blocked
+    assert "min_effect_tone" in blocked
+    assert "min_effect_tone_adjusted" in blocked
+    assert blocked == {
         "theta_band",
         "b_band",
         "age_bins",
@@ -342,7 +380,6 @@ def test_calibrate_completes_except_always_blocked(tmp_path: Path) -> None:
         "min_effect_tone",
         "min_effect_tone_adjusted",
     }
-    assert set(record["blocked"].keys()) == always_blocked
 
     for entry in record["inputs"]["pilots"]:
         assert isinstance(entry["counted"], bool)
@@ -741,7 +778,7 @@ def test_arm_pilot_with_the_variant_tone_rule_raises(tmp_path: Path) -> None:
             "run_id": "competitive_0",
             "event_type": "audition.emotion",
             "source": "audition",
-            "entry_id": "99-0",
+            "entry_id": "audition.out:99-0",
             "category": "happy",
             "classified": True,
             "tone_rule": "error_ratio",
@@ -750,3 +787,49 @@ def test_arm_pilot_with_the_variant_tone_rule_raises(tmp_path: Path) -> None:
     )
     with pytest.raises(CalibrationError, match="error_ratio"):
         calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
+
+
+
+
+def test_calibrate_survives_a_report_without_preceding_broadcast(tmp_path: Path) -> None:
+    plan, root = _build_evaluation_tree(
+        tmp_path, n_pilots=5, with_tone=True, with_threshold=True
+    )
+    run_id = plan["pilots"][0]["competitive"]
+    path = _record_path(root, run_id)
+    _append_record(
+        path,
+        {
+            "run_id": run_id,
+            "event_type": "topos.report",
+            "processor": "topos",
+            "awake": True,
+            "context_gain": 0.1,
+            "entity_time_s": 10000.0,
+        },
+    )
+    record = calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
+    assert record is not None
+    assert "theta_band" in record["blocked"]
+    assert "prediction_broadcast_tick" in record["blocked"]["theta_band"]
+
+
+def test_calibrate_completes_with_threshold_and_tone(tmp_path: Path) -> None:
+    plan, root = _build_evaluation_tree(
+        tmp_path, n_pilots=5, with_tone=True, with_threshold=True
+    )
+    record = calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
+
+    assert record["blocked"] == {}
+    assert record["complete"] is True
+    values = record["values"]
+    assert math.isfinite(values["theta_band"]) and values["theta_band"] > 0
+    assert math.isfinite(values["b_band"]) and values["b_band"] > 0
+    assert len(values["age_bins"]) == 4
+    contrasts = values["threshold_contrasts"]
+    assert len(contrasts) == 4
+    defined = [c for c in contrasts if c is not None]
+    assert len(defined) >= 2
+    assert values["min_effect_threshold_contrast"] == pytest.approx(
+        0.5 * statistics.stdev(defined)
+    )

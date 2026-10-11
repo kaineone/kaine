@@ -36,7 +36,8 @@ Plus per-type redactions:
 
 Every record carries ``ts`` (ISO-8601 UTC), ``event_type``, ``source``, and
 ``tick_index`` / ``incident_id`` when present. ``audition.emotion`` records also
-carry the bus ``entry_id`` so the tone analysis can join them to broadcast
+carry the stream-qualified id ``<stream>:<entry_id>``, the same id as the
+broadcast member's ``entry_id``, so the tone analysis can join them to broadcast
 members (paper A.8).
 
 READ-ONLY: never publishes to the bus.
@@ -49,7 +50,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from kaine.bus.schema import Event
+from kaine.bus.schema import Event, stream_entry_key
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver, WorkspaceSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.evaluation.stream_registry import curated_module_streams
@@ -562,7 +563,7 @@ class ResearchEventObserver(StreamSubscriberObserver):
     # --- Record construction --------------------------------------------
 
     async def handle(self, stream: str, entry_id: str, event: Event) -> None:
-        record = self._build_record(event, entry_id)
+        record = self._build_record(event, stream_entry_key(stream, entry_id))
         if record is None:
             return
         await self._sink.write(record)
@@ -595,7 +596,8 @@ class ResearchEventObserver(StreamSubscriberObserver):
         if "incident_id" in payload:
             record["incident_id"] = payload.get("incident_id")
 
-        # Tone events are joined to broadcast members by their bus entry id (paper A.8).
+        # Tone events are joined to broadcast members by the stream-qualified id
+        # ``<stream>:<entry_id>``, the id the cycle gives each candidate (paper A.8).
         if event.type == "audition.emotion" and entry_id is not None:
             record["entry_id"] = entry_id
 

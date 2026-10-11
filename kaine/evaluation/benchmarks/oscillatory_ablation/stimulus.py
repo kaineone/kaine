@@ -224,9 +224,10 @@ def _build_streams(
 
     Each source emits ONE event PER TICK (so selection runs every tick and the
     coherence layer's phase windows accumulate enough samples). Entry ids must be
-    unique ACROSS streams within a tick (Syneidesis keys salience_scores by
-    entry_id) AND monotone within a stream. Ids are ``"<tick+1>-<source_index>"``
-    — caller-fixed, so the run is reproducible (unlike a time-based Redis id).
+    monotone within a stream; the cycle names each candidate by its stream and
+    entry id, so ids need not differ across streams. Ids are
+    ``"<tick+1>-<source_index>"``, fixed by the caller, so the run is
+    reproducible (unlike a time-based Redis id).
     """
     streams: dict[str, list[tuple[str, Event]]] = {}
     for i, spec in enumerate(specs):

@@ -85,7 +85,7 @@ flowchart TD
     A[Start tick] --> B[Drain cycle.control events]
     B --> C[Drain soma.out regulation]
     C --> D[Read active module streams]
-    D --> E[Sort events by source, type, entry_id]
+    D --> E["Sort events by source, type, entry_id, then name each stream:entry_id"]
     E --> F[Refresh affect observer and access rate]
     F --> G[Syneidesis.select]
     G --> H{Broadcast tick?}
@@ -123,7 +123,7 @@ On a production boot the entrypoint constructs the cycle with `seed_cursors_to_t
 
 ### Selection
 
-`syneidesis.select(events, context)` receives the event list plus a context dict containing `tick_index`, `is_experiential`, and (when the oscillatory layer is enabled) `phases`, a dict mapping module names to their current oscillator phase. Before selection, the events are sorted by `(source, type, entry_id)`, the affect observer refreshes, and the access rate updates. The function returns a `WorkspaceSnapshot`. Selection runs on every processing tick; on a tick that is not a broadcast tick the result is discarded. See [The global workspace](./global-workspace.md) for the scoring and the access rule.
+`syneidesis.select(events, context)` receives the event list plus a context dict containing `tick_index`, `is_experiential`, and (when the oscillatory layer is enabled) `phases`, a dict mapping module names to their current oscillator phase. Before selection, the events are sorted by source, type and bus entry id (compared as the number pair milliseconds, sequence, so `x-2` comes before `x-10`), with the stream as a final tie-break, and each is named `<stream>:<entry_id>`, because a bus entry id is unique only within its stream. Then the affect observer refreshes, and the access rate updates. The function returns a `WorkspaceSnapshot`. Selection runs on every processing tick; on a tick that is not a broadcast tick the result is discarded. See [The global workspace](./global-workspace.md) for the scoring and the access rule.
 
 ### Broadcast
 
