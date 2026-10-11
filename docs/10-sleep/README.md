@@ -50,7 +50,7 @@ sequenceDiagram
     Hypnos->>Bus: hypnos.sleep.started
     Note over Hypnos: Phase 1: set_frequency(0.5); mnemos.consolidate_now()
     Note over Hypnos: Locus off and playlist paused for the whole sleep
-    Note over Hypnos: Phase 2: replay in Mnemos's replay window; downscale
+    Note over Hypnos: Phase 2: replay in Mnemos's replay window; downscale; prune
     Note over Hypnos: Phase 3: cross-period traces, Phantasia, hypnos.association
     Note over Hypnos: Phase 4: consolidation divergence; voice-alignment gates; intent-log rotation, voice measures
     Note over Hypnos: Phase 5: thymos.affective_reset()
@@ -67,7 +67,7 @@ Phase 1 calls `set_frequency(0.5)` on every active module, a no-op unless the os
 
 ### Phase 2: deep consolidation
 
-Phase 2 needs Mnemos and otherwise returns at once with `skipped`. It opens Mnemos's replay window with `open_replay_window()`, runs `mnemos.replay_now()` while perception is already suspended for the sleep, and closes the window again with `close_replay_window()`. The replay draws on the traces phase 1 moved into episodic memory. Because Hypnos opens the window itself, the replay does not depend on Mnemos's bus poll having seen `hypnos.sleep.started`, and nothing outside phase 2 can replay. It then scales every memory activation vector by `downscale_factor` (0.9), following the synaptic homeostasis hypothesis (Tononi and Cirelli 2014). Replay ranks traces by affect and recency and never reads vectors, so downscaling after it leaves the replayed traces unchanged. Metadata: `vectors_downscaled`, `downscale_factor`, `replay_events` and `replay_window_s`.
+Phase 2 needs Mnemos and otherwise returns at once with `skipped`. It opens Mnemos's replay window with `open_replay_window()`, runs `mnemos.replay_now()` while perception is already suspended for the sleep, and closes the window again with `close_replay_window()`. The replay draws on the whole wake just ended: every trace stored since the previous sleep, including the ones the wake persisted when the short-term buffer overflowed. Because Hypnos opens the window itself, the replay does not depend on Mnemos's bus poll having seen `hypnos.sleep.started`, and nothing outside phase 2 can replay. It then calls `mnemos.downscale(protect=...)` with the replayed traces (paper A.10). Every other trace's strength is multiplied by `retention_per_day ** (N_new / N_day)`, so a day of storage at the resting rate leaves an unreplayed trace 82 percent of its strength, and the replayed traces keep theirs, as the synaptic homeostasis hypothesis reads reactivation in sleep (Tononi and Cirelli 2006; 2014). No vector changes. The same call then prunes: it deletes every trace below `[mnemos.strength].prune_floor`, then, while the stores exceed `[mnemos].storage_budget_bytes`, the weakest traces, the oldest first among equal strengths, never one replayed in this sleep. Nothing is deleted while awake. If replay fails, the downscaling and pruning are skipped for that sleep and the metadata records `downscale_skipped`. Metadata: `replay_events`, `replay_window_s` and `downscale`, which holds `n_new`, `factor`, `protected`, `total_before`, `total_after`, `pruned_floor`, `pruned_budget` and `store_bytes`; the sleep summary also carries the last three at top level as `memory_pruned_floor`, `memory_pruned_budget` and `memory_store_bytes`.
 
 ### Phase 3: associative replay
 

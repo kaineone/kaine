@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=84.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -13,7 +13,7 @@ authors = [{ name = "KAINE contributors" }]
 dependencies = [
     "redis>=8.1.0,<9",
     "pydantic>=2.6,<3",
-    "psutil>=5.9,<7",
+    "psutil>=7.2.2,<8",
     "numpy>=2.4.6,<3",
     "httpx>=0.28.1,<1",
     # AES-256-GCM encryption-at-rest for persisted cognitive state
@@ -32,13 +32,13 @@ memory = [
     "qdrant-client>=1.19.1,<2",
 ]
 memory-edge = [
-    "sqlite-vec>=0.1,<1",
+    "sqlite-vec>=0.1.9,<1",
 ]
 speech-edge = [
     "sherpa-onnx>=1.13.8,<2",
 ]
 nexus = [
-    "fastapi>=0.142.2,<1",
+    "fastapi>=0.143.0,<1",
     "uvicorn[standard]>=0.54.0,<1",
     "jinja2>=3.1.6,<4",
 ]
@@ -49,7 +49,7 @@ nvidia = [
 # video reader (OpenCV). Lazy-imported.
 vision = [
     "opencv-python-headless>=5.0.0.93,<6",
-    "transformers>=5.17.0,<6",
+    "transformers>=5.19.0,<6",
     "Pillow>=12.3.0,<13",
 ]
 full = [

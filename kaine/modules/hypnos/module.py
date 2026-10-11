@@ -105,7 +105,6 @@ class Hypnos(BaseModule):
         alert_salience: float = 0.8,
         # Consolidation config (hypnos-fatigue-phases)
         fatigue_triggered: bool = True,
-        downscale_factor: float = 0.9,
         replay_window_s: float = 5.0,
         # Phase-3 associative replay (hypnos-consolidation)
         associative_replay_enabled: bool = False,
@@ -143,8 +142,6 @@ class Hypnos(BaseModule):
             raise ValueError("baseline_salience must be in [0, 1]")
         if not 0.0 <= alert_salience <= 1.0:
             raise ValueError("alert_salience must be in [0, 1]")
-        if not 0.0 < downscale_factor <= 1.0:
-            raise ValueError("downscale_factor must be in (0, 1]")
         self._mnemos = mnemos
         self._thymos = thymos
         self._chronos_resetters = list(chronos_resetters or [])
@@ -169,7 +166,6 @@ class Hypnos(BaseModule):
         self._alert_salience = float(alert_salience)
         # Consolidation config
         self._fatigue_triggered = bool(fatigue_triggered)
-        self._downscale_factor = float(downscale_factor)
         self._replay_window_s = float(replay_window_s)
         # Phase-3 associative replay
         self._associative_replay_enabled = bool(associative_replay_enabled)
@@ -746,7 +742,7 @@ class Hypnos(BaseModule):
 
         try:
             # --- Phase 1: Light Consolidation ---
-            # Weak-trace decay + strong-trace tagging + oscillator frequency hook
+            # Short-term to episodic transfer + oscillator frequency hook
             phase_results.append(
                 await light_consolidation(
                     self._mnemos,
@@ -763,11 +759,10 @@ class Hypnos(BaseModule):
             self._open_phantasia_window()
             try:
                 # --- Phase 2: Deep Consolidation + Downscaling ---
-                # Global activation downscaling. Perception is already suspended for the whole sleep (enter_sleep).
+                # Replay, then downscaling of trace strengths (paper A.10). Perception is already suspended for the whole sleep (enter_sleep).
                 phase_results.append(
                     await deep_consolidation(
                         self._mnemos,
-                        downscale_factor=self._downscale_factor,
                         replay_window_s=self._replay_window_s,
                     )
                 )
@@ -965,6 +960,33 @@ class Hypnos(BaseModule):
             # Whether this cycle was fatigue-triggered
             "fatigue_triggered": self._fatigue_triggered_sleep,
         }
+        # The counts the paper says each sleep records, at top level so the
+        # research log can keep them.
+        # Read defensively: the summary must never break the sleep.
+        downscale_meta = None
+        for r in phase_results:
+            if getattr(r, "phase", None) == "deep_consolidation":
+                found = (getattr(r, "metadata", None) or {}).get("downscale")
+                downscale_meta = found if isinstance(found, dict) else None
+                break
+        summary["memory_pruned_floor"] = (
+            downscale_meta.get("pruned_floor") if downscale_meta else None
+        )
+        summary["memory_pruned_budget"] = (
+            downscale_meta.get("pruned_budget") if downscale_meta else None
+        )
+        summary["memory_store_bytes"] = (
+            downscale_meta.get("store_bytes") if downscale_meta else None
+        )
+        summary["memory_downscale_blocked"] = (
+            downscale_meta.get("blocked") if downscale_meta else None
+        )
+        summary["memory_blocked_sleeps"] = (
+            downscale_meta.get("blocked_sleeps") if downscale_meta else None
+        )
+        summary["memory_persist_refusals"] = (
+            downscale_meta.get("persist_refusals") if downscale_meta else None
+        )
         summary["corpus"] = corpus_summary
         summary["voice_measures"] = voice_measures
         all_succeeded = all(r.success for r in phase_results)

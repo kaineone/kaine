@@ -222,6 +222,7 @@ Mnemos is the vector-store memory module. It backs episodic, semantic, and proce
 | `recall_cooldown_s` | float | `5.0` | Minimum seconds between recall attempts. |
 | `baseline_salience` | float | `0.15` | Intensity of routine recall events. |
 | `alert_salience` | float | `0.6` | Intensity of a recall whose strongest memory has affect intensity of at least 0.5. |
+| `storage_budget_bytes` | integer | `10737418240` | Budget of the persisted memory stores in bytes (paper A.10). When a sleep leaves the stores above it, the weakest traces are deleted first, the oldest first among equal strengths, until they fit; traces replayed in that sleep are kept. Set it from the disk the installation can give Mnemos. The paper gives no value, and 10 GiB is only a safe default. |
 
 ### Qdrant connection
 
@@ -244,6 +245,16 @@ Section: `[mnemos.replay]`.
 | `affect_weight` | float | `0.7` | Weight on affect intensity in the replay selection score. |
 | `recency_weight` | float | `0.3` | Weight on recency in the replay selection score. |
 | `redact_content` | boolean | `true` | When `true`, sidecar/observer payloads carry only memory IDs, not trace text. |
+
+### Trace strength
+
+Section: `[mnemos.strength]`. Paper Appendix A.10 and Table A1.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `retention_per_day` | float `(0, 1)` | `0.82` | Strength a trace that is never replayed keeps over one entity day of storage at the resting broadcast rate. Each sleep scales every unreplayed trace by `retention_per_day ** (N_new / N_day)`, where `N_new` is the number of traces stored since the previous sleep and `N_day` is `traces_per_day`. |
+| `traces_per_day` | float | `288000` | `N_day`, the traces one entity day at the resting broadcast rate stores: 86400 x f0 with the paper's design value f0 = 10/3 (A.10, Table A1). It does not follow `[cycle].experiential_rate_hz`. |
+| `prune_floor` | float `(0, 1)` | `0.01` | A trace whose strength falls below this floor is deleted in the sleep that weakened it. |
 
 ## Eidolon
 

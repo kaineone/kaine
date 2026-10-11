@@ -7,8 +7,8 @@ Phase ordering (non-negotiable; paper-canonical):
   1. light_consolidation: short-term to episodic transfer (nothing dropped);
      oscillator frequency reduction across all active modules.
   2. deep_consolidation: replay of the consolidated traces inside a replay
-     window that Hypnos opens through Mnemos, then global activation
-     downscaling (Tononi & Cirelli 2014).
+     window that Hypnos opens through Mnemos, then the downscaling of trace
+     strengths that protects the replayed traces (paper A.10).
   3. associative_replay: cross-period trace selection + Phantasia-cued
      re-injection (hypnos-consolidation).
   4. voice_alignment: orchestrated by the Hypnos module directly.
@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional, Protocol
+from typing import Any, Optional, Protocol, Sequence
 
 log = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ def _now_ms() -> float:
 # ---------------------------------------------------------------------------
 
 class _SupportsMnemos(Protocol):
-    """Mnemos module: memory consolidation, downscaling, and replay.
+    """Mnemos module: memory consolidation, replay, and downscaling of trace strengths.
 
     deep_consolidation also calls ``open_replay_window()`` and
     ``close_replay_window()`` when the collaborator has them. The real Mnemos
@@ -63,7 +63,8 @@ class _SupportsMnemos(Protocol):
 
     async def consolidate_now(self) -> int: ...
 
-    def downscale_activations(self, factor: float) -> int: ...
+    async def downscale(self, protect: Sequence[Any] = ()) -> dict[str, Any]:
+        """Downscale trace strengths, protecting the replayed traces (paper A.10)."""
 
     async def replay_now(self) -> list[Any]: ...
 
@@ -156,28 +157,27 @@ async def light_consolidation(
 async def deep_consolidation(
     mnemos: Optional[_SupportsMnemos],
     *,
-    downscale_factor: float = 0.9,
     suspend_perception: Any = None,
     restore_perception: Any = None,
     replay_window_s: float = 5.0,
 ) -> PhaseResult:
-    """Phase 2: replay first, then global activation downscaling.
+    """Phase 2: replay first, then downscaling of trace strengths.
 
     Replay of the consolidated traces runs inside a replay window that this
     function opens through Mnemos itself (so the window never depends on
-    Mnemos having seen ``hypnos.sleep.started`` on the bus).  The window is
-    closed once replay is done.  Perception is suspended for the duration
+    Mnemos having seen ``hypnos.sleep.started`` on the bus). The window is
+    closed once replay is done. Perception is suspended for the duration
     using the provided callables and is always restored afterwards.
 
-    Downscaling (Tononi & Cirelli 2014) follows replay and scales all memory
-    activation weights by *downscale_factor*, preserving relative ordering
-    (cosine similarity unchanged; L2 norms shrink).  Replay ranks by affect
-    and recency and never reads vectors, so the order does not change which
-    traces replay.
+    After replay Mnemos scales the strength of every persisted trace
+    except the replayed ones by one factor that deepens with the number of
+    traces the wake stored, and the replayed traces keep theirs (paper
+    A.10); vectors are not touched. If replay fails, downscaling and pruning
+    are skipped for this sleep so the wake's traces keep their strength and
+    can be replayed on the next sleep.
 
     Args:
         mnemos:              Mnemos module, or None (phase is no-op).
-        downscale_factor:    Synaptic scaling factor in (0, 1].
         suspend_perception:  Callable (sync or no-arg async) to suspend external
                              perception; None = skip.
         restore_perception:  Callable (sync or no-arg async) to restore perception;
@@ -200,6 +200,8 @@ async def deep_consolidation(
         )
 
     errors: list[str] = []
+    replay_events: list[Any] = []
+    replay_failed = False
 
     # --- Step 1: Suspend perception; open the window; replay; close; restore ---
     open_window = getattr(mnemos, "open_replay_window", None)
@@ -222,7 +224,6 @@ async def deep_consolidation(
                 errors.append(f"suspend_perception: {type(exc).__name__}: {exc}")
 
         # Drive replay within the window.
-        replay_events = []
         try:
             if open_window is not None:
                 open_window()
@@ -232,6 +233,7 @@ async def deep_consolidation(
                 "deep_consolidation: replay_now returned %d events", len(replay_events)
             )
         except Exception as exc:
+            replay_failed = True
             log.exception("deep_consolidation: replay_now failed")
             errors.append(f"replay_now: {type(exc).__name__}: {exc}")
             metadata["replay_events"] = 0
@@ -264,16 +266,20 @@ async def deep_consolidation(
                 )
                 errors.append(f"restore_perception: {type(exc).__name__}: {exc}")
 
-    # --- Step 2: Downscale activations (after replay, paper §3.5) ---
-    try:
-        scaled = mnemos.downscale_activations(downscale_factor)
-        metadata["vectors_downscaled"] = scaled
-        metadata["downscale_factor"] = downscale_factor
-    except Exception as exc:
-        log.exception("deep_consolidation: downscale_activations failed")
-        errors.append(f"downscale: {type(exc).__name__}: {exc}")
-        metadata["downscale_factor"] = downscale_factor
-        metadata["vectors_downscaled"] = 0
+    # --- Step 2: Downscale trace strengths, protecting the replayed traces (paper A.10) ---
+    # Skip if replay failed; the wake's traces keep born_sleep == n so the
+    # next sleep will count and replay them.
+    if replay_failed:
+        metadata["downscale_skipped"] = "replay failed"
+    else:
+        try:
+            summary = dict(await mnemos.downscale(protect=replay_events))
+            metadata["downscale"] = summary
+            if summary.get("blocked"):
+                errors.append(f"downscale blocked: {summary['blocked']}")
+        except Exception as exc:
+            log.exception("deep_consolidation: downscale failed")
+            errors.append(f"downscale: {type(exc).__name__}: {exc}")
 
     success = not errors
     return PhaseResult(

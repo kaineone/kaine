@@ -99,6 +99,7 @@ HEALTH_BLOCK_KEYS: tuple[str, ...] = (
     "model_server",
     "voice_alignment_window",
     "gpu_preflight",
+    "mnemos_store",
     "backends",
 )
 

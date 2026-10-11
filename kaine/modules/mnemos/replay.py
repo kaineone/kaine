@@ -27,6 +27,7 @@ loop-facing event and hand the redacted view to any sidecar observer.
 """
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -43,24 +44,32 @@ class ReplayEntry:
     point_id: str
     text: str
     affect_intensity: float      # [0, 1]  cached from stored affect
-    timestamp: float             # wall-clock seconds (float); used for recency
+    timestamp: float             # storage time on the entity clock (seconds); used for recency
     payload: dict[str, Any] = field(default_factory=dict)
     affect: dict[str, Any] | None = None
+    collection: str | None = None
 
 
 @dataclass
 class ReplayEvent:
     """Pair of payloads produced for one replayed trace.
 
-    loop_payload   — carries full text; published as mnemos.replay on the
-                     workspace bus for cognitive re-processing.
-    observer_payload — text may be stripped if redact_content is True;
-                       delivered to the sidecar replay observer.
+    loop_payload carries full text; published as mnemos.replay on the
+    workspace bus for cognitive re-processing.
+    observer_payload has text stripped when redact_content is True;
+    delivered to the sidecar replay observer.
+
+    collection is the storage collection of a persisted trace, or None
+    for a short-term entry.
+    log_base is the trace's log_base when it was replayed, which the
+    downscaling needs to protect it.
     """
 
     point_id: str
     loop_payload: dict[str, Any]
     observer_payload: dict[str, Any]
+    collection: str | None = None
+    log_base: float | None = None
 
 
 def select_traces(
@@ -123,6 +132,7 @@ def build_replay_events(
     for entry in selected:
         loop_payload: dict[str, Any] = {
             "memory_id": entry.point_id,
+            "collection": entry.collection,
             "text": entry.text,
             "affect": entry.affect,
             "affect_intensity": entry.affect_intensity,
@@ -142,9 +152,21 @@ def build_replay_events(
                 point_id=entry.point_id,
                 loop_payload=loop_payload,
                 observer_payload=observer_payload,
+                collection=entry.collection,
+                log_base=_payload_log_base(entry.payload),
             )
         )
     return events
+
+
+def _payload_log_base(payload: dict[str, Any]) -> float | None:
+    """Return payload['log_base'] if it is a finite numeric value, else None."""
+    value = payload.get("log_base")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if not math.isfinite(value):
+        return None
+    return float(value)
 
 
 class ReplayEngine:

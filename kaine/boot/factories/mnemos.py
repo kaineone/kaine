@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     pass
+import math
+
 from kaine.boot.errors import ConfigurationError, _require_keys
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
@@ -34,8 +36,10 @@ def make_mnemos(
         "alert_salience",
         "recall_on_workspace",
         "recall_cooldown_s",
+        "storage_budget_bytes",  # operator's persisted memory budget in bytes
         "qdrant",
         "replay",  # nested sub-table: selection_top_k, affect_weight, recency_weight, redact_content, cross_period_candidates
+        "strength",  # nested sub-table: retention_per_day, prune_floor
     }
     if "embedder_model_id" in section:
         raise ConfigurationError(
@@ -46,9 +50,19 @@ def make_mnemos(
     _require_keys(section, allowed)
     qdrant = section.get("qdrant") or {}
     replay = section.get("replay") or {}
+    strength = section.get("strength") or {}
     kwargs: dict[str, Any] = {
-        k: section[k] for k in allowed - {"qdrant", "replay"} if k in section
+        k: section[k]
+        for k in allowed - {"qdrant", "replay", "strength"}
+        if k in section
     }
+    if "storage_budget_bytes" in kwargs:
+        value = kwargs["storage_budget_bytes"]
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ConfigurationError(
+                "[mnemos].storage_budget_bytes must be a positive integer number of bytes"
+            )
+        kwargs["storage_budget_bytes"] = int(value)
     if "host" in qdrant:
         kwargs["qdrant_host"] = qdrant["host"]
     if "port" in qdrant:
@@ -66,5 +80,23 @@ def make_mnemos(
         kwargs["replay_redact_content"] = bool(replay["redact_content"])
     if "cross_period_candidates" in replay:
         kwargs["cross_period_candidates"] = int(replay["cross_period_candidates"])
+    # Strength sub-table (paper A.10)
+    _require_keys(strength, {"retention_per_day", "prune_floor", "traces_per_day"})
+    if "retention_per_day" in strength:
+        kwargs["strength_retention_per_day"] = float(strength["retention_per_day"])
+    if "prune_floor" in strength:
+        kwargs["strength_prune_floor"] = float(strength["prune_floor"])
+    if "traces_per_day" in strength:
+        value = strength["traces_per_day"]
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value <= 0
+        ):
+            raise ConfigurationError(
+                "[mnemos.strength].traces_per_day must be a positive number"
+            )
+        kwargs["traces_per_day"] = float(value)
     kwargs["embedder"] = embedder
     return Mnemos(bus, entity_clock=entity_clock, **kwargs)

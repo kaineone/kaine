@@ -91,7 +91,7 @@ async def test_phase_two_replays_what_phase_one_consolidated(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_later_consolidation_does_not_replay_an_earlier_batch(bus: AsyncBus):
-    """Replaying after a second empty consolidation must not emit old traces."""
+    """After the wake ends, the earlier batch is no longer in the replay pool."""
     mnemos = await _new_mnemos(
         bus,
         capacity=8,
@@ -114,8 +114,11 @@ async def test_later_consolidation_does_not_replay_an_earlier_batch(bus: AsyncBu
 
         mnemos.replay_engine.open_window()
 
-        # First consolidation moves the batch; second sees an empty buffer.
+        # First consolidation moves the batch and ends that wake.
         assert await mnemos.consolidate_now() == 2
+        await mnemos.downscale()
+
+        # Second consolidation sees an empty buffer.
         assert await mnemos.consolidate_now() == 0
 
         events = await mnemos.replay_now()
@@ -129,7 +132,7 @@ async def test_later_consolidation_does_not_replay_an_earlier_batch(bus: AsyncBu
 
 @pytest.mark.asyncio
 async def test_sleep_completed_drops_the_consolidated_batch(bus: AsyncBus):
-    """hypnos.sleep.completed closes the window and drops the consolidated batch."""
+    """hypnos.sleep.completed closes the window; the wake ends at downscale."""
     mnemos = await _new_mnemos(
         bus,
         capacity=8,
@@ -166,7 +169,8 @@ async def test_sleep_completed_drops_the_consolidated_batch(bus: AsyncBus):
 
         assert not mnemos.replay_engine.window_active
 
-        # Reopening the window must not resurrect the already-completed batch.
+        # Downscale ends the wake; the consolidated batch is no longer in the replay pool.
+        await mnemos.downscale()
         mnemos.replay_engine.open_window()
         assert await mnemos.replay_now() == []
     finally:

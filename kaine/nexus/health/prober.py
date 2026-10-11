@@ -37,6 +37,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from kaine.memory_kinds import MNEMOS_STORE_HEALTH_PATH
+
 from . import blocks
 from .probes import (
     DEFAULT_CACHE_TTL_S,
@@ -106,6 +108,7 @@ class HealthProber:
     spot_control_path: Path = Path("state/cycle/control.json")
     spot_escalation_path: Path = Path("state/cycle/escalation.json")
     gpu_preflight_path: Path = Path("state/cycle/gpu_preflight.json")
+    mnemos_store_health_path: Path = Path(MNEMOS_STORE_HEALTH_PATH)
     probe_timeout_s: float = DEFAULT_PROBE_TIMEOUT_S
     cache_ttl_s: float = DEFAULT_CACHE_TTL_S
     _cache: dict[str, Any] | None = field(default=None, repr=False)
@@ -194,6 +197,7 @@ class HealthProber:
             "model_server": await self._model_server_block(),
             "voice_alignment_window": self._voice_alignment_window_block(),
             "gpu_preflight": self._gpu_preflight_block(),
+            "mnemos_store": self._mnemos_store_block(),
             "preservation": self._preservation_block(),
             "welfare": self._welfare_block(),
             "admissibility": self._admissibility_block(),
@@ -267,6 +271,11 @@ class HealthProber:
 
     def _gpu_preflight_block(self) -> dict[str, Any]:
         return blocks.gpu_preflight_block(self.gpu_preflight_path)
+
+    def _mnemos_store_block(self) -> dict[str, Any]:
+        return blocks.mnemos_store_block(
+            self.mnemos_store_health_path, self._module_enabled("mnemos")
+        )
 
     def _spot_block(self) -> dict[str, Any]:
         return blocks.spot_block(self.spot_control_path, self.spot_escalation_path)
