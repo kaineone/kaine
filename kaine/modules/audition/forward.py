@@ -23,6 +23,7 @@ ForwardPredictionHead pattern)
 """
 from __future__ import annotations
 
+import copy
 import logging
 import math
 from collections import deque
@@ -122,6 +123,7 @@ class AuditoryForwardModel:
         self.last_scored_had_context: bool = False
 
         self.suspended: bool = False
+        self._hindsight_resume: bool = False
 
     # ------------------------------------------------------------------
     # Public properties
@@ -336,6 +338,88 @@ class AuditoryForwardModel:
             ratio = min(raw_error / 3.0, 1.0)
 
         return baseline_salience + ratio * (alert_salience - baseline_salience)
+
+    def widened_copy(self, extra: int = 1) -> "AuditoryForwardModel":
+        """A copy whose context input is ``extra`` components wider.
+
+        The new inputs start with zero weights, so the copy predicts exactly
+        as this model does whatever they hold.  It copies the weights, the
+        buffer, the learning rate and the suspended flag, gets its own
+        optimiser, and draws no random numbers.
+        """
+        if extra < 1:
+            raise ValueError("extra must be >= 1")
+
+        # Deep-copy the model but share the torch module itself; nothing here
+        # draws from the global RNG.
+        twin = copy.deepcopy(self, {id(self._torch): self._torch})
+
+        old_in = 2 * self._feature_dim + self._context_dim
+        with self._torch.no_grad():
+            first = self._torch.nn.utils.skip_init(
+                self._torch.nn.Linear, old_in + extra, self._units
+            )
+            first.weight.zero_()
+            first.weight[:, :old_in].copy_(self._net[0].weight)
+            first.bias.copy_(self._net[0].bias)
+            twin._net[0] = first
+
+        twin._context_dim = self._context_dim + extra
+        twin._optim = self._torch.optim.SGD(twin._net.parameters(), lr=self._lr)
+        twin._last_prediction = None
+        twin._last_null_prediction = None
+        twin._last_input_context = None
+        twin.last_null_error = None
+        twin.last_scored_had_context = False
+        twin._hindsight_resume = False
+
+        return twin
+
+    def hindsight_step(
+        self,
+        feature: list[float],
+        context: Optional[list[float]] = None,
+        null_context: Optional[list[float]] = None,
+    ) -> tuple[Optional[float], Optional[float]]:
+        """Score, in hindsight, the prediction of *feature* that the previous
+        call's state forms with *context*.
+
+        The buffer still ends with the previous input and the weights are
+        unchanged since then, so the prediction formed now is the one that
+        would have been formed at the previous call.  Returns the L2 error
+        and, when *null_context* is given, the L2 error of the prediction
+        formed with it; both None on the first call.  Then adapts toward
+        *feature* from the same input with *context* (unless suspended) and
+        appends *feature* to the buffer.
+
+        A non-finite input is skipped without touching the buffer or the
+        weights, and the next input only re-seeds the state, so no prediction
+        is scored or learned across the gap.
+        """
+        if any(not math.isfinite(v) for v in feature):
+            self._hindsight_resume = True  # next finite input re-seeds pairing
+            return None, None
+        if self._hindsight_resume:
+            # Re-seed the pairing afresh after a skipped non-finite input.
+            self._buffer.append(list(feature))
+            self._hindsight_resume = False
+            return None, None
+        if not self._buffer:
+            self._buffer.append(list(feature))
+            return None, None
+        prev = list(self._buffer[-1])
+        pred = self.predict(prev, context)
+        error = math.sqrt(sum((a - b) ** 2 for a, b in zip(feature, pred)))
+        null_error = None
+        if null_context is not None:
+            null_pred = self.predict(prev, null_context)
+            null_error = math.sqrt(
+                sum((a - b) ** 2 for a, b in zip(feature, null_pred))
+            )
+        if not self.suspended:
+            self._adapt_toward(feature, context)
+        self._buffer.append(list(feature))
+        return error, null_error
 
     # ------------------------------------------------------------------
     # Serialisation — weights only; buffer as statistical summary.

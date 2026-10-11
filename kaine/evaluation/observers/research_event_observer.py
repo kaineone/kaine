@@ -125,6 +125,8 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "alerts",
             "alert",
             "context_gain",
+            "null_prediction_error",
+            "mean_prediction_error",
             "context_age_s",
         }
     ),
@@ -136,6 +138,8 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "habituation_score",
             "alert",
             "context_gain",
+            "null_prediction_error",
+            "mean_prediction_error",
             "context_age_s",
         }
     ),
@@ -186,7 +190,29 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "attended_seconds",
             "alert",
             "context_gain",
+            "null_prediction_error",
+            "mean_prediction_error",
             "context_age_s",
+        }
+    ),
+    # Positive control of the information-gain measure: numbers and flags only.
+    "positive_control.result": frozenset(
+        {
+            "processor",
+            "n_reports",
+            "min_reports",
+            "ig_with",
+            "ig_without",
+            "ig_noise",
+            "effect",
+            "noise_effect",
+            "min_effect",
+            "snr",
+            "detected",
+            "noise_detected",
+            "passed",
+            "failed",
+            "final",
         }
     ),
     # NOTE: `audition.transcription` is intentionally ABSENT — never logged.

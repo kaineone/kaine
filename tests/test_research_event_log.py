@@ -1127,12 +1127,16 @@ def test_audition_perception_numeric_fields_logged_item_dropped():
             "normalised_error": 1.2,
             "alert": False,
             "context_gain": 0.12,
+            "null_prediction_error": 0.5,
+            "mean_prediction_error": 0.8,
             "context_age_s": 0.3,
             "item": "film.mp4",
             "source_label": "playlist",
         },
     )
     assert record["context_gain"] == 0.12
+    assert record["null_prediction_error"] == 0.5
+    assert record["mean_prediction_error"] == 0.8
     assert record["alert"] is False
     assert record["context_age_s"] == 0.3
     assert "item" not in record
@@ -1146,13 +1150,44 @@ def test_processor_reports_carry_alert_and_context_gain():
                 "prediction_error": 0.5,
                 "alert": True,
                 "context_gain": -0.05,
+                "null_prediction_error": 0.5,
+                "mean_prediction_error": 0.8,
                 "context_age_s": 1.0,
             },
         )
         assert record["alert"] is True
         assert record["context_gain"] == -0.05
+        assert record["null_prediction_error"] == 0.5
+        assert record["mean_prediction_error"] == 0.8
 
     assert _taxonomy_record("chronos.report", {"alert": True})["alert"] is True
+
+
+def test_positive_control_result_is_logged():
+    from kaine.modules.positive_control import RESULT_FIELDS
+
+    payload = {
+        "processor": "topos",
+        "n_reports": 5,
+        "min_reports": 100,
+        "ig_with": 0.1,
+        "ig_without": 0.05,
+        "ig_noise": 0.04,
+        "effect": 0.05,
+        "noise_effect": 0.01,
+        "min_effect": 0.01,
+        "snr": 10.0,
+        "detected": True,
+        "noise_detected": False,
+        "passed": True,
+        "failed": False,
+        "final": True,
+        "extra": "x",
+    }
+    record = _taxonomy_record("positive_control.result", payload)
+    for field in RESULT_FIELDS:
+        assert record[field] == payload[field]
+    assert "extra" not in record
 
 
 def test_workspace_record_carries_access_threshold_and_publication_time():
@@ -1279,3 +1314,28 @@ def test_raw_bus_archive_lingua_aggregate():
     assert "lingua.out" in _MODULE_OUT_STREAMS
     assert "lingua.external" not in _MODULE_OUT_STREAMS
     assert "lingua.internal" not in _MODULE_OUT_STREAMS
+
+
+@pytest.mark.asyncio
+async def test_observer_drains_streams_on_stop():
+    from datetime import datetime, timezone
+
+    from kaine.bus.schema import Event
+
+    bus = FakeBus()
+    sink = FakeSink()
+    obs = ResearchEventObserver(bus, sink, poll_interval_s=10.0)
+    await obs.start()
+    await asyncio.sleep(0.05)
+    event = Event(
+        source="positive_control",
+        type="positive_control.result",
+        payload={"processor": "topos", "n_reports": 5, "final": True},
+        salience=0.0,
+        timestamp=datetime.now(timezone.utc),
+    )
+    bus.push("positive_control.out", event)
+    await obs.stop()
+    assert len(sink.rows) == 1
+    assert sink.rows[0]["event_type"] == "positive_control.result"
+    assert sink.rows[0]["final"] is True

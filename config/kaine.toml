@@ -1641,6 +1641,28 @@ auto_evict = false
 # human involvement returns AFTER research to socialize any emerged individuals.
 enabled = false
 
+[positive_control]
+# Positive control of the broadcast information-gain measure (paper §6.3,
+# Appendix A.8). When enabled, Topos, Audition and Soma each run shadow
+# forward models whose context carries one extra synthetic component: a
+# seeded projection of the processor's own next input plus noise at the
+# signal-to-noise ratio `snr`, and, as the non-informative check, a seeded
+# series with the same mean and variance that is independent of the input.
+# The live model, its reports, intensities and the competition are untouched.
+# Results go to the research log as positive_control.result records; the
+# measure passes for a processor when the informative component raises its
+# information gain by at least `min_effect` and the non-informative one
+# does not, over at least `min_reports` counted reports. Check a finished
+# run with `python -m kaine.experiment.positive_control <run_id>`.
+# Off by default; set it only in the study configuration. `min_effect`,
+# `min_reports` and `snr` have no defaults and are fixed with the
+# preregistration; enabling the control without all three fails the boot.
+enabled = false
+seed = 0
+# min_effect = <fixed before the live runs>
+# snr = <fixed before the live runs>
+# min_reports = <fixed before the live runs>
+
 [nexus]
 host = "127.0.0.1"
 port = 8088

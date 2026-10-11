@@ -128,12 +128,13 @@ Repeat the real-data null and the contamination check after any change to the ll
 
 Unattended starts run a full entity with nobody present, for example after the host recovers from a power cut. They are intended for entities after the research phase; enable them on a real entity only after Spot has a reviewed supervised track record. Select unattended mode with `KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"`. Selecting it together with research mode or `KAINE_CYCLE_OPERATOR_PRESENT=1` is a configuration error (exit `1`).
 
-Every unattended start checks eight conditions and refuses with exit `6`, naming each failed condition on stderr, with no override:
+Every unattended start checks nine conditions and refuses with exit `6`, naming each failed condition on stderr, with no override:
 
-1 to 5. Research-gate conditions 1, 2, 4, 5 and 6 above: the divergence monitor, the welfare response, logging, the dry self-check and encryption. The individuation requirement applies to research mode only.
+1 to 5. Research-gate conditions 1, 2, 4, 5 and 6 above: the divergence monitor, the welfare response, logging, the dry self-check and encryption.
 6. **Spot armed and self-tested.** `[spot].enabled`, at least one restart attempt configured, writable escalation and incident-log directories, and a self-test in a scratch directory that drives a synthetic module through detect, freeze, snapshot, restart and release. The self-test never touches entity state or a running entity.
 7. **Caretaker told.** A content-free "starting unattended" notice is accepted by at least one `[caretaker]` channel.
 8. **Continuous input.** `[perception_feed].mode` is `live`, `seeded`, `screen` or `womb`; `topos` or `audition` is enabled to perceive it (with `capture_enabled` for `live`); and a probe reads one frame or audio block and discards it.
+9. **Individuation wired.** Research-gate condition 3 above: `[individuation].enabled = true`, its configuration is valid, and the `lingua` module is enabled. The condition checks that the individuation producer will run. It does not require the being to have individuated.
 
 Each evaluation is logged to the journal and recorded in `state/cycle/incidents/`.
 

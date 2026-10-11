@@ -111,3 +111,176 @@ async def test_soma_reports_context_gain(bus: AsyncBus) -> None:
     assert "context_age_s" in payload
     assert isinstance(payload["context_age_s"], float)
     assert payload["context_age_s"] >= 0.0
+
+
+@pytest.mark.asyncio
+async def test_soma_gain_is_zero_when_the_context_carries_nothing(bus: AsyncBus) -> None:
+    soma = Soma(
+        bus,
+        reader=FakeMetricsReader({"cpu_percent": 10.0, "ram_percent": 20.0}),
+        detector=NeverAlertDetector(),
+    )
+
+    for i in range(4):
+        snapshot = WorkspaceSnapshot(
+            tick_index=i,
+            selected_events=[
+                (
+                    f"{i}-0",
+                    Event(
+                        source="topos",
+                        type="topos.report",
+                        payload={"k": 1},
+                        salience=0.5,
+                        timestamp=datetime.now(timezone.utc),
+                    ),
+                )
+            ],
+            inhibited=False,
+            salience_scores={f"{i}-0": 0.5},
+            metadata={"access_threshold": 0.35},
+        )
+        await soma.on_workspace(snapshot)
+        payload = await soma.tick_once()
+
+    assert payload is not None
+    assert payload["context_gain"] == 0.0
+    assert payload["null_prediction_error"] == payload["prediction_error"]
+    assert payload["mean_prediction_error"] > 0.0
+
+
+def test_skipped_reading_reports_no_gain() -> None:
+    m = SubstrateForwardModel(feature_dim=8, units=16, seed=5, context_dim=24)
+    ctx = [0.5] * 24
+    m.step([0.1] * 8, context=ctx, null_context=ctx)
+    m.step([0.2] * 8, context=ctx, null_context=ctx)
+    assert m.last_null_error is not None
+    err = m.step([float("nan")] * 8, context=ctx, null_context=ctx)
+    assert err == 0.0
+    assert m.last_null_error is None
+    assert m.last_scored_had_context is False
+    assert m.last_reading_skipped is True
+    err2 = m.step([0.3] * 8, context=ctx, null_context=ctx)
+    assert err2 == 0.0
+    assert m.last_null_error is None
+    assert m.last_scored_had_context is False
+    assert m.last_reading_skipped is False
+
+
+@pytest.mark.asyncio
+async def test_soma_skip_publishes_no_gain_and_leaves_the_window(
+    bus: AsyncBus, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    soma = Soma(
+        bus,
+        reader=FakeMetricsReader({"cpu_percent": 10.0, "ram_percent": 20.0}),
+        detector=NeverAlertDetector(),
+    )
+
+    snapshot = WorkspaceSnapshot(
+        tick_index=1,
+        selected_events=[
+            (
+                "1-0",
+                Event(
+                    source="topos",
+                    type="topos.report",
+                    payload={"k": 1},
+                    salience=0.7,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+            )
+        ],
+        inhibited=False,
+        salience_scores={"1-0": 0.5},
+        metadata={"access_threshold": 0.35},
+    )
+    await soma.on_workspace(snapshot)
+
+    await soma.tick_once()
+    await soma.tick_once()
+    p3 = await soma.tick_once()
+    assert isinstance(p3["context_gain"], float)
+
+    window_before = list(soma._prediction_error_window)
+
+    monkeypatch.setattr(
+        "kaine.modules.soma.module.metrics_to_feature_vector",
+        lambda *a, **k: [float("nan")] * 8,
+    )
+    p4 = await soma.tick_once()
+    monkeypatch.undo()
+
+    assert p4["context_gain"] is None
+    assert p4["null_prediction_error"] is None
+    assert p4["mean_prediction_error"] is None
+    assert list(soma._prediction_error_window) == window_before
+
+    p5 = await soma.tick_once()
+    assert p5["context_gain"] is None
+    assert p5["null_prediction_error"] is None
+
+    p6 = await soma.tick_once()
+    assert isinstance(p6["context_gain"], float)
+
+
+@pytest.mark.asyncio
+async def test_soma_report_carries_the_paired_evaluations(bus: AsyncBus) -> None:
+    soma = Soma(
+        bus,
+        reader=FakeMetricsReader({"cpu_percent": 10.0, "ram_percent": 20.0}),
+        detector=NeverAlertDetector(),
+    )
+
+    topos_entry = (
+        "1-0",
+        Event(
+            source="topos",
+            type="topos.report",
+            payload={"k": 1},
+            salience=0.5,
+            timestamp=datetime.now(timezone.utc),
+        ),
+    )
+    await soma.on_workspace(
+        WorkspaceSnapshot(
+            tick_index=1,
+            selected_events=[topos_entry],
+            inhibited=False,
+            salience_scores={topos_entry[0]: 0.5},
+            metadata={"access_threshold": 0.35},
+        )
+    )
+    await soma.tick_once()
+
+    thymos_entry = (
+        "2-0",
+        Event(
+            source="thymos",
+            type="thymos.report",
+            payload={"k": 1},
+            salience=0.75,
+            timestamp=datetime.now(timezone.utc),
+        ),
+    )
+    await soma.on_workspace(
+        WorkspaceSnapshot(
+            tick_index=2,
+            selected_events=[thymos_entry],
+            inhibited=False,
+            salience_scores={thymos_entry[0]: 0.75},
+            metadata={"access_threshold": 0.35},
+        )
+    )
+
+    payload = None
+    for _ in range(3):
+        payload = await soma.tick_once()
+
+    assert payload is not None
+    assert isinstance(payload["null_prediction_error"], float)
+    assert isinstance(payload["mean_prediction_error"], float)
+    assert payload["context_gain"] == pytest.approx(
+        (payload["null_prediction_error"] - payload["prediction_error"])
+        / payload["mean_prediction_error"]
+    )
