@@ -118,7 +118,8 @@ class BroadcastContext:
             if threshold is None or score >= threshold:
                 accessed.append((event.source, event.type, float(event.salience)))
 
-        if not accessed:
+        # A pooled broadcast replaces the context on every broadcast tick, even when empty (paper A.8).
+        if not accessed and snapshot.metadata.get("arm") != "pooled":
             return False
 
         # Adopt the new context (age is publication time; receipt time when the broadcast carries none).

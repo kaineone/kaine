@@ -956,6 +956,14 @@ def _resolve_seed(config: dict[str, Any]) -> int:
     return secrets.randbits(32)
 
 
+def _syneidesis_arm_kwargs(syn_cfg: dict[str, Any], run_ctx: Any) -> dict[str, Any]:
+    """The workspace arm from ``[syneidesis].arm`` (paper §6.3) and the run seed
+    the matched arm's draw is seeded from (``None`` before a run context exists)."""
+    arm = str(syn_cfg.get("arm", "competitive")).strip().lower()
+    seed = int(run_ctx.seed) if run_ctx is not None else None
+    return {"arm": arm, "arm_seed": seed}
+
+
 def _resolve_boot_stage(
     config: dict[str, Any],
     stage_override: lifecycle_stage.StageState | None = None,
@@ -1841,7 +1849,12 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
         top_k=int(syn_cfg.get("top_k", 5)),
         publication_threshold=float(syn_cfg.get("publication_threshold", 0.35)),
         coherence=ctx.coherence_scorer,
+        **_syneidesis_arm_kwargs(syn_cfg, ctx.run_ctx),
     )
+    if ctx.syneidesis.arm != "competitive":
+        log.warning(
+            "workspace runs the %s control arm of the planned ablation", ctx.syneidesis.arm
+        )
 
 
 async def _phase_volition(ctx: BootContext) -> int | None:

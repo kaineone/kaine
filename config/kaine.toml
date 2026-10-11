@@ -116,6 +116,14 @@ salience_goal_factor = "static"
 # arousal, amplifying high priorities and suppressing low ones. 0 disables it.
 arousal_contrast_gain = 8.0
 
+# Arm of the planned workspace-mediation test (paper §6.3, A.8). "competitive"
+# is selection and access as built. "matched" draws each broadcast's coalition
+# at random, of the size competitive selection keeps, seeded from the run seed,
+# with access by the same threshold. "pooled" broadcasts every candidate with no
+# scoring, selection or access gate. The two controls need the coherence layer
+# off. Every broadcast records its arm in the research log.
+arm = "competitive"
+
 [experiment]
 # Per-run identity, seeding, and manifest (research reproducibility).
 # At boot the cycle pins the global RNGs from `seed`, mints a unique run id, and

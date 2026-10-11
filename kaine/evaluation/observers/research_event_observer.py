@@ -591,7 +591,7 @@ def _workspace_metadata_record(snapshot: dict[str, Any]) -> dict[str, Any]:
     metadata ONLY ({source, type, salience, causal_parent}), never the entry
     `payload`/content field.
 
-    Also copies `access_threshold` from `metadata` and `published_at`
+    Also copies `access_threshold` and `arm` from `metadata` and `published_at`
     from the snapshot when present.
     """
     record: dict[str, Any] = {
@@ -609,6 +609,8 @@ def _workspace_metadata_record(snapshot: dict[str, Any]) -> dict[str, Any]:
     metadata = snapshot.get("metadata")
     if isinstance(metadata, dict) and "access_threshold" in metadata:
         record["access_threshold"] = metadata["access_threshold"]
+    if isinstance(metadata, dict) and "arm" in metadata:
+        record["arm"] = metadata["arm"]
     if "published_at" in snapshot:
         record["published_at"] = snapshot.get("published_at")
 
