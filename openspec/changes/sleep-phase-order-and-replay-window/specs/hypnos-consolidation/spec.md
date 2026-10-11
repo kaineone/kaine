@@ -6,8 +6,9 @@ combinations, cue Phantasia for scenario extensions by publishing to
 `phantasia.scenario`, and re-inject the resulting associations into the workspace.
 Before `phantasia-dreamerv3` is present, the Phantasia cue SHALL be a no-op stub.
 Cross-period selection SHALL draw on the short-term buffer, the traces phase 1
-of the same sleep consolidated, and the persisted episodic collection read
-through the storage backend's export, on every backend, with each trace counted
+of the same sleep consolidated, and the newest `cross_period_candidates`
+points of the persisted episodic collection, read without vectors through the
+storage backend's `recent_points()`, on every backend, with each trace counted
 once.
 
 #### Scenario: Associative phase cues Phantasia
@@ -26,3 +27,9 @@ once.
   the short-term buffer is empty
 - **THEN** cross-period selection returns the consolidated and the older
   traces, each once, across at least two periods
+
+#### Scenario: The episodic read is bounded and vector-free
+- **WHEN** `cross_period_candidates` is 1 and the episodic collection holds
+  older traces and the newly consolidated ones
+- **THEN** only the newest episodic point is read, no vector is read, and the
+  older traces are left out

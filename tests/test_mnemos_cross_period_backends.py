@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Cross-period selection of sleep phase 3 reads persisted episodic memory
-through the storage export, so it works on backends that keep their points out
-of process.
+"""Cross-period selection of sleep phase 3 reads the newest persisted episodic
+traces through a bounded, vector-free storage call, so it works on backends that
+keep their points out of process.
 """
 
 import uuid
@@ -27,13 +27,14 @@ async def bus():
     await bus.close()
 
 
-class _ExportOnlyStorage:
+class _OutOfProcessStorage:
     """A backend that keeps its points out of process, like Qdrant, including
     its hyphenated ids.
     """
 
     def __init__(self, inner: InMemoryStorage) -> None:
         self._inner = inner
+        self.recent_calls: list[tuple[str, int]] = []
 
     @property
     def latent_dim(self) -> int:
@@ -94,25 +95,26 @@ class _ExportOnlyStorage:
     async def write_stamp(self, key: str, stamp: dict) -> None:
         return await self._inner.write_stamp(key, stamp)
 
-    async def export(self, collections: list[str]) -> dict[str, list[dict]]:
-        result = await self._inner.export(collections)
-        # Rewrite ids to hyphenated form, mimicking Qdrant.
-        out: dict[str, list[dict]] = {}
-        for name, points in result.items():
-            out[name] = []
-            for point in points:
-                new_point = dict(point)
-                new_point["id"] = str(uuid.UUID(point["id"]))
-                out[name].append(new_point)
+    async def recent_points(self, collection: str, *, limit: int) -> list[dict]:
+        self.recent_calls.append((collection, limit))
+        result = await self._inner.recent_points(collection, limit=limit)
+        out: list[dict] = []
+        for point in result:
+            new_point = dict(point)
+            new_point["id"] = str(uuid.UUID(point["id"]))
+            out.append(new_point)
         return out
 
-
-class _FailingExportStorage(_ExportOnlyStorage):
     async def export(self, collections: list[str]) -> dict[str, list[dict]]:
-        raise StorageError("export down")
+        raise AssertionError("selection must not export every vector")
 
 
-async def _seeded(bus: AsyncBus, storage) -> tuple[Mnemos, MnemosCore]:
+class _FailingStorage(_OutOfProcessStorage):
+    async def recent_points(self, collection: str, *, limit: int) -> list[dict]:
+        raise StorageError("store down")
+
+
+async def _seeded(bus: AsyncBus, storage, **mnemos_kwargs) -> tuple[Mnemos, MnemosCore]:
     emb = FakeEmbedder(latent_dim=8)
     await emb.load()
 
@@ -139,12 +141,12 @@ async def _seeded(bus: AsyncBus, storage) -> tuple[Mnemos, MnemosCore]:
     # Phase 1 consolidation moves short-term traces into episodic memory.
     assert await core.consolidate_now() == 2
 
-    return Mnemos(bus, core=core), core
+    return Mnemos(bus, core=core, **mnemos_kwargs), core
 
 
 @pytest.mark.asyncio
 async def test_cross_period_reads_episodic_memory_without_in_process_collections(bus):
-    storage = _ExportOnlyStorage(InMemoryStorage(latent_dim=8))
+    storage = _OutOfProcessStorage(InMemoryStorage(latent_dim=8))
     assert not hasattr(storage, "_collections")
 
     mnemos, core = await _seeded(bus, storage)
@@ -156,6 +158,7 @@ async def test_cross_period_reads_episodic_memory_without_in_process_collections
 
     assert texts == ["new one", "new two", "old one", "old two"]
     assert len(by_period) >= 2
+    assert storage.recent_calls == [(core.collection_name("episodic"), 128)]
 
     returned_ids = {t["point_id"] for t in traces}
     consolidated_ids = {str(pid) for pid, _ in core.last_consolidated}
@@ -164,7 +167,7 @@ async def test_cross_period_reads_episodic_memory_without_in_process_collections
 
 @pytest.mark.asyncio
 async def test_phase_three_spans_periods_on_a_remote_style_backend(bus):
-    storage = _ExportOnlyStorage(InMemoryStorage(latent_dim=8))
+    storage = _OutOfProcessStorage(InMemoryStorage(latent_dim=8))
     mnemos, _ = await _seeded(bus, storage)
 
     r = await associative_replay(enabled=True, mnemos=mnemos)
@@ -176,7 +179,7 @@ async def test_phase_three_spans_periods_on_a_remote_style_backend(bus):
 
 @pytest.mark.asyncio
 async def test_cross_period_storage_error_propagates(bus):
-    storage = _FailingExportStorage(InMemoryStorage(latent_dim=8))
+    storage = _FailingStorage(InMemoryStorage(latent_dim=8))
     mnemos, _ = await _seeded(bus, storage)
 
     with pytest.raises(StorageError):
@@ -201,3 +204,16 @@ async def test_cross_period_on_sqlite_vec(tmp_path: Path, bus):
         assert len(by_period) >= 2
     finally:
         await storage.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_cross_period_reads_only_the_newest_candidates(bus):
+    storage = _OutOfProcessStorage(InMemoryStorage(latent_dim=8))
+    mnemos, core = await _seeded(bus, storage, cross_period_candidates=1)
+
+    by_period = await mnemos.select_cross_period_traces(periods=2, per_period=5)
+
+    traces = [t for bucket in by_period.values() for t in bucket]
+    texts = sorted(t["text"] for t in traces)
+
+    assert texts == ["new one", "new two"]

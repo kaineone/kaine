@@ -59,7 +59,7 @@ sequenceDiagram
     Bus->>Soma: reset fatigue and regulation
 ```
 
-Each phase returns a `PhaseResult` with `phase`, `success`, `elapsed_ms`, `error` and `metadata`, and catches its own errors, so the phases always run in order and a failure in one does not stop the next.
+Each phase returns a `PhaseResult` with `phase`, `success`, `elapsed_ms`, `error` and `metadata`, and catches its own errors, so the phases always run in order and a failure in one does not stop the next. Phases 1 to 4 run inside a `try` whose `finally` runs the affective reset, so a sleep that raises or is cancelled still ends with it. The reset runs as its own task behind `asyncio.shield`, so a second cancel cannot interrupt it. On any exception, including a cancel, Hypnos publishes an aborted `hypnos.sleep.completed` and re-raises, so Soma and Mnemos always see the sleep end.
 
 ### Phase 1: light consolidation
 

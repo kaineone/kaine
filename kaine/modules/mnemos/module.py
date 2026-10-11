@@ -67,6 +67,9 @@ class Mnemos(BaseModule):
         replay_affect_weight: float = 0.7,
         replay_recency_weight: float = 0.3,
         replay_redact_content: bool = True,
+        # Newest episodic traces sleep's cross-period selection reads; 128
+        # matches short_term_capacity, the most one consolidation pass hands to replay.
+        cross_period_candidates: int = 128,
         # Peer stream names for affect + Hypnos window tracking
         thymos_stream: str = "thymos.out",
         hypnos_stream: str = "hypnos.out",
@@ -85,11 +88,14 @@ class Mnemos(BaseModule):
             raise ValueError("recall_top_k must be positive")
         if recall_cooldown_s < 0:
             raise ValueError("recall_cooldown_s must be >= 0")
+        if cross_period_candidates <= 0:
+            raise ValueError("cross_period_candidates must be positive")
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
         self._recall_top_k = int(recall_top_k)
         self._recall_on_workspace = bool(recall_on_workspace)
         self._recall_cooldown_s = float(recall_cooldown_s)
+        self._cross_period_candidates = int(cross_period_candidates)
         self._clock = entity_clock or EntityClock()
         # Subjective-time timestamp of the last spontaneous recall; None until
         # the first recall fires so the very first cued tick is not suppressed.
@@ -427,8 +433,9 @@ class Mnemos(BaseModule):
 
         "Memory period" is defined as a contiguous time bucket: all available
         traces (short-term buffer, the traces the latest consolidation pass
-        moved during phase 1 of this sleep, and persisted episodic points from
-        storage export) are gathered once each, sorted by timestamp, and divided
+        moved during phase 1 of this sleep, and the newest
+        ``cross_period_candidates`` persisted episodic points, read without
+        vectors) are gathered once each, sorted by timestamp, and divided
         into *periods* equal-width windows (oldest to newest). Up to
         *per_period* traces are sampled from each non-empty bucket. This works
         on every storage backend.
@@ -483,12 +490,14 @@ class Mnemos(BaseModule):
                 }
             )
 
-        # Persisted episodic memory through the storage export every backend
-        # implements. Let StorageError propagate so phase 3 records a failure
-        # instead of combining from a partial pool.
+        # The newest persisted episodic traces, without vectors, bounded by
+        # cross_period_candidates. Let StorageError propagate so phase 3 records a
+        # failure instead of combining from a partial pool.
         episodic_key = self._core.collection_name("episodic")
-        exported = await self._core.storage.export([episodic_key])
-        for point in exported.get(episodic_key, []):
+        recent = await self._core.storage.recent_points(
+            episodic_key, limit=self._cross_period_candidates
+        )
+        for point in recent:
             key = _point_key(point.get("id", ""))
             if key in seen:
                 continue

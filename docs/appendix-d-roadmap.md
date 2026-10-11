@@ -56,7 +56,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | mediation-harness-information-gain | 12/12 (100%) | Rebuild the offline development harness of the workspace-mediation test around the information-gain measure, with a pooled arm, and retire the coupling and utterance measures. |
 | flaky-group-kill-test | 3/3 (100%) | The group-kill tests wait for the job to finish before reading its status. |
 | hypnos-replay-buffer-order | 4/4 (100%) | Sleep's replay draws on the traces that sleep's consolidation moved, so it no longer finds an empty buffer. |
-| sleep-phase-order-and-replay-window | 5/5 (100%) | Sleep runs its phases in the paper's order and ends with the affective reset; Hypnos opens the replay window itself, and associative replay reads episodic memory on every backend. |
+| sleep-phase-order-and-replay-window | 7/7 (100%) | Sleep runs its phases in the paper's order and ends with the affective reset; Hypnos opens the replay window itself, and associative replay reads episodic memory on every backend. |
 
 ## Open operator and device steps
 

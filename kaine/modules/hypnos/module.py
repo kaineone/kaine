@@ -184,6 +184,8 @@ class Hypnos(BaseModule):
         self._pre_sleep_locus: Optional[str] = None
 
         self._sleep_lock = asyncio.Lock()
+        # Tasks that must outlive a cancel of the sleep (the final affective reset).
+        self._shielded_tasks: set[asyncio.Task[Any]] = set()
         self._builder = DPOPairBuilder()
         self._last_sleep_at: Optional[float] = None
         # Consolidation-divergence magnitude embedder + persisted state path.
@@ -644,6 +646,20 @@ class Hypnos(BaseModule):
             salience=self._baseline_salience,
         )
 
+    async def _run_final_affective_reset(self) -> PhaseResult:
+        """Run phase 5, the affective reset, so that a cancel cannot interrupt it.
+
+        The reset runs as its own task awaited through ``asyncio.shield``. A
+        cancel that arrives while it runs cancels only the wait: the reset still
+        finishes, and the CancelledError propagates to the caller.
+        """
+        task = asyncio.ensure_future(affective_reset(self._thymos))
+        # Hold a reference so a reset left running by a second cancel is not
+        # garbage-collected before it finishes.
+        self._shielded_tasks.add(task)
+        task.add_done_callback(self._shielded_tasks.discard)
+        return await asyncio.shield(task)
+
     async def _run_pipeline_inner(self, trigger: Optional[str] = None) -> dict[str, Any]:
         # Pipeline latency + the started_at/last_sleep_at marks measure REAL
         # infrastructure wall-time (how long the sleep work actually took / when
@@ -668,184 +684,180 @@ class Hypnos(BaseModule):
             )
         phase_results: list[PhaseResult] = []
 
-        # --- Phase 1: Light Consolidation ---
-        # Weak-trace decay + strong-trace tagging + oscillator frequency hook
-        phase_results.append(
-            await light_consolidation(
-                self._mnemos,
-                active_modules=self._active_modules,
-                frequency_scale=0.5,
-            )
-        )
-
-        # --- Phase 2: Deep Consolidation + Downscaling ---
-        # Global activation downscaling. Perception is already suspended for the whole sleep (enter_sleep).
-        phase_results.append(
-            await deep_consolidation(
-                self._mnemos,
-                downscale_factor=self._downscale_factor,
-                replay_window_s=self._replay_window_s,
-            )
-        )
-
-        # --- Phase 3: Associative Replay (cross-period; behind feature flag) ---
-        # Selects cross-period traces, cues Phantasia, and re-injects the
-        # resulting novel associations into the workspace so Nous (pymdp) and
-        # Thymos process them via the NORMAL cognitive cycle — no NAR burst.
-        phase_results.append(
-            await associative_replay(
-                enabled=self._associative_replay_enabled,
-                mnemos=self._mnemos,
-                phantasia=self._phantasia,
-                reinject=self._reinject_association,
-            )
-        )
-
-        # --- Phase 4: Voice Alignment ---
+        reset_done = False
         try:
+            # --- Phase 1: Light Consolidation ---
+            # Weak-trace decay + strong-trace tagging + oscillator frequency hook
+            phase_results.append(
+                await light_consolidation(
+                    self._mnemos,
+                    active_modules=self._active_modules,
+                    frequency_scale=0.5,
+                )
+            )
+
+            # --- Phase 2: Deep Consolidation + Downscaling ---
+            # Global activation downscaling. Perception is already suspended for the whole sleep (enter_sleep).
+            phase_results.append(
+                await deep_consolidation(
+                    self._mnemos,
+                    downscale_factor=self._downscale_factor,
+                    replay_window_s=self._replay_window_s,
+                )
+            )
+
+            # --- Phase 3: Associative Replay (cross-period; behind feature flag) ---
+            # Selects cross-period traces, cues Phantasia, and re-injects the
+            # resulting novel associations into the workspace so Nous (pymdp) and
+            # Thymos process them via the NORMAL cognitive cycle — no NAR burst.
+            phase_results.append(
+                await associative_replay(
+                    enabled=self._associative_replay_enabled,
+                    mnemos=self._mnemos,
+                    phantasia=self._phantasia,
+                    reinject=self._reinject_association,
+                )
+            )
+
+            # --- Phase 4: Voice Alignment ---
             voice_result, voice_phase = await self._run_voice_alignment()
-        except Exception:
-            # Sleep ends with the affective reset even when this phase aborts it.
-            await affective_reset(self._thymos)
-            raise
-        phase_results.append(voice_phase)
+            phase_results.append(voice_phase)
 
-        # Rotate the waking intent log into the per-sleep corpus now that voice
-        # alignment has consumed it.  This must never break sleep, so failures
-        # are caught and logged but do not halt the pipeline.
-        corpus_summary: dict[str, Any] = {
-            "rotated": None,
-            "corpus_bytes": 0,
-            "warned": False,
-            "encrypted_rewrites": 0,
-        }
-        rotated_path: Optional[Path] = None
-        # Only a rotation that raised is a failed measurement; a corpus-ceiling
-        # check failing after a good rotation must not mask a fresh measure.
-        rotation_failed = False
-        rotation_done = False
-        try:
-            rotated_path = await asyncio.to_thread(
-                rotate_intent_log,
-                self._voice_config.intent_log_path,
-                self._voice_config.intent_log_path.parent / "intent_log",
-                sleep_index=self._sleep_count,
-            )
-            rotation_done = True
-            if rotated_path is not None:
-                corpus_summary["rotated"] = rotated_path.name
-
-            corpus_dir = self._voice_config.intent_log_path.parent / "intent_log"
-            for f in sorted(corpus_dir.glob("sleep-*.jsonl")):
-                if await asyncio.to_thread(has_plaintext_line, f):
-                    if await asyncio.to_thread(rewrite_encrypted, f):
-                        corpus_summary["encrypted_rewrites"] += 1
-
-            ceiling_info = await asyncio.to_thread(
-                check_corpus_ceiling,
-                self._voice_config.intent_log_path.parent / "intent_log",
-                ceiling_gb=self._voice_config.corpus_ceiling_gb,
-            )
-            corpus_summary["corpus_bytes"] = ceiling_info["corpus_bytes"]
-            corpus_summary["warned"] = ceiling_info["warned"]
-        except Exception as exc:
-            rotation_failed = not rotation_done
-            # Recorded so the summary never reads a failed rotation as "nothing
-            # to rotate".
-            corpus_summary["error"] = f"{type(exc).__name__}: {exc}"
-            log.warning(
-                "hypnos: intent log corpus rotation/ceiling check failed",
-                exc_info=True,
-            )
-
-        # --- Voice measures (content-free) ----------------------------------
-        # Computed from the freshly rotated corpus. Wrapped in try/except so a
-        # measures failure can never break sleep.
-        voice_measures: Optional[dict[str, Any]] = None
-        if rotated_path is not None:
+            # Rotate the waking intent log into the per-sleep corpus now that voice
+            # alignment has consumed it.  This must never break sleep, so failures
+            # are caught and logged but do not halt the pipeline.
+            corpus_summary: dict[str, Any] = {
+                "rotated": None,
+                "corpus_bytes": 0,
+                "warned": False,
+                "encrypted_rewrites": 0,
+            }
+            rotated_path: Optional[Path] = None
+            # Only a rotation that raised is a failed measurement; a corpus-ceiling
+            # check failing after a good rotation must not mask a fresh measure.
+            rotation_failed = False
+            rotation_done = False
             try:
-                base_profiles_dir = (
-                    Path(__file__).resolve().parent / "base_voice_profiles"
+                rotated_path = await asyncio.to_thread(
+                    rotate_intent_log,
+                    self._voice_config.intent_log_path,
+                    self._voice_config.intent_log_path.parent / "intent_log",
+                    sleep_index=self._sleep_count,
                 )
-                digest = await asyncio.to_thread(
-                    organ_gguf_sha256,
-                    self._organ_gguf_path,
-                    self._voice_config.intent_log_path.parent / "organ_gguf_digest.json",
+                rotation_done = True
+                if rotated_path is not None:
+                    corpus_summary["rotated"] = rotated_path.name
+
+                corpus_dir = self._voice_config.intent_log_path.parent / "intent_log"
+                for f in sorted(corpus_dir.glob("sleep-*.jsonl")):
+                    if await asyncio.to_thread(has_plaintext_line, f):
+                        if await asyncio.to_thread(rewrite_encrypted, f):
+                            corpus_summary["encrypted_rewrites"] += 1
+
+                ceiling_info = await asyncio.to_thread(
+                    check_corpus_ceiling,
+                    self._voice_config.intent_log_path.parent / "intent_log",
+                    ceiling_gb=self._voice_config.corpus_ceiling_gb,
                 )
-                base_profile = await asyncio.to_thread(
-                    load_base_profile,
-                    digest,
-                    base_profiles_dir,
+                corpus_summary["corpus_bytes"] = ceiling_info["corpus_bytes"]
+                corpus_summary["warned"] = ceiling_info["warned"]
+            except Exception as exc:
+                rotation_failed = not rotation_done
+                # Recorded so the summary never reads a failed rotation as "nothing
+                # to rotate".
+                corpus_summary["error"] = f"{type(exc).__name__}: {exc}"
+                log.warning(
+                    "hypnos: intent log corpus rotation/ceiling check failed",
+                    exc_info=True,
                 )
-                cumulative_path = (
-                    self._voice_config.intent_log_path.parent
-                    / "voice_profile_cumulative.json"
-                )
-                cumulative: Optional[dict[str, Any]] = None
-                if cumulative_path.is_file():
-                    try:
-                        cumulative = json.loads(
-                            cumulative_path.read_text(encoding="utf-8")
-                        )
-                    except Exception:
-                        cumulative = None
-                measures, new_cumulative = await asyncio.to_thread(
-                    compute_sleep_measures,
-                    rotated_path,
-                    base_profile=base_profile,
-                    cumulative=cumulative,
-                )
-                voice_measures = measures
-                await asyncio.to_thread(
-                    _append_jsonl,
-                    self._voice_config.intent_log_path.parent / "voice_measures.jsonl",
-                    measures,
-                )
-                await asyncio.to_thread(
-                    write_json_atomic,
-                    self._voice_config.intent_log_path.parent
-                    / "voice_measures_latest.json",
-                    measures,
-                )
-                if new_cumulative is not None:
+
+            # --- Voice measures (content-free) ----------------------------------
+            # Computed from the freshly rotated corpus. Wrapped in try/except so a
+            # measures failure can never break sleep.
+            voice_measures: Optional[dict[str, Any]] = None
+            if rotated_path is not None:
+                try:
+                    base_profiles_dir = (
+                        Path(__file__).resolve().parent / "base_voice_profiles"
+                    )
+                    digest = await asyncio.to_thread(
+                        organ_gguf_sha256,
+                        self._organ_gguf_path,
+                        self._voice_config.intent_log_path.parent / "organ_gguf_digest.json",
+                    )
+                    base_profile = await asyncio.to_thread(
+                        load_base_profile,
+                        digest,
+                        base_profiles_dir,
+                    )
+                    cumulative_path = (
+                        self._voice_config.intent_log_path.parent
+                        / "voice_profile_cumulative.json"
+                    )
+                    cumulative: Optional[dict[str, Any]] = None
+                    if cumulative_path.is_file():
+                        try:
+                            cumulative = json.loads(
+                                cumulative_path.read_text(encoding="utf-8")
+                            )
+                        except Exception:
+                            cumulative = None
+                    measures, new_cumulative = await asyncio.to_thread(
+                        compute_sleep_measures,
+                        rotated_path,
+                        base_profile=base_profile,
+                        cumulative=cumulative,
+                    )
+                    voice_measures = measures
+                    await asyncio.to_thread(
+                        _append_jsonl,
+                        self._voice_config.intent_log_path.parent / "voice_measures.jsonl",
+                        measures,
+                    )
                     await asyncio.to_thread(
                         write_json_atomic,
-                        cumulative_path,
-                        new_cumulative,
+                        self._voice_config.intent_log_path.parent
+                        / "voice_measures_latest.json",
+                        measures,
                     )
-            except Exception:
-                log.warning(
-                    "hypnos: voice measures computation failed",
-                    exc_info=True,
-                )
-                rotation_failed = True
-                voice_measures = None
+                    if new_cumulative is not None:
+                        await asyncio.to_thread(
+                            write_json_atomic,
+                            cumulative_path,
+                            new_cumulative,
+                        )
+                except Exception:
+                    log.warning(
+                        "hypnos: voice measures computation failed",
+                        exc_info=True,
+                    )
+                    rotation_failed = True
+                    voice_measures = None
 
-        if rotation_failed:
-            try:
-                await asyncio.to_thread(
-                    write_json_atomic,
-                    self._voice_config.intent_log_path.parent
-                    / "voice_measures_latest.json",
-                    {
-                        "measurement_failed": True,
-                        "timestamp": time.strftime(
-                            "%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()
-                        ),
-                    },
-                )
-            except Exception:
-                log.warning(
-                    "hypnos: failed to write measurement_failed marker",
-                    exc_info=True,
-                )
-
-        # --- Phase 5: Affective Reset + (implicit) Soma fatigue reset ---
-        # Sleep ends with the affective reset (paper §3.5), so it runs after
-        # voice alignment and its bookkeeping. The Soma fatigue accumulator is
-        # reset by the hypnos.sleep.completed event published below
-        # (soma-forward-model-fatigue wiring).
-        phase_results.append(await affective_reset(self._thymos))
+            if rotation_failed:
+                try:
+                    await asyncio.to_thread(
+                        write_json_atomic,
+                        self._voice_config.intent_log_path.parent
+                        / "voice_measures_latest.json",
+                        {
+                            "measurement_failed": True,
+                            "timestamp": time.strftime(
+                                "%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()
+                            ),
+                        },
+                    )
+                except Exception:
+                    log.warning(
+                        "hypnos: failed to write measurement_failed marker",
+                        exc_info=True,
+                    )
+        finally:
+            # Sleep ends with the affective reset on every path (paper §3.5),
+            # including an exception or a cancel in phases 1 to 4.
+            if not reset_done:
+                reset_done = True
+                phase_results.append(await self._run_final_affective_reset())
 
         elapsed_ms = (time.monotonic() - start) * 1000.0
         # Capture the previous sleep mark BEFORE overwriting it; the ignition
@@ -1388,28 +1400,40 @@ class Hypnos(BaseModule):
             log.info("hypnos: snapshot has no schedule; starting a fresh interval")
 
     async def _run_pipeline(self, trigger: Optional[str] = None) -> dict[str, Any]:
-        """M2 — guarantee ``hypnos.sleep.completed`` is published.
+        """M2: guarantee ``hypnos.sleep.completed`` is published.
 
         The pipeline body publishes the normal completed event on success.
-        If the body raises — including a transient failure of its own
-        completed publish — this wrapper publishes a completed event
+        If the body raises, including a transient failure of its own
+        completed publish, this wrapper publishes a completed event
         carrying an ``"aborted": True`` flag (content-free: the reason field
         carries only the exception class name). Soma treats it identically
         to a normal completion, so ``_in_hypnos`` can never wedge and
         faster_decay always stops.
+
+        ``BaseException`` is caught so a cancellation also publishes the
+        aborted completed event; the original exception is then re-raised.
         """
         try:
             if trigger is None:
                 return await self._run_pipeline_inner()
             return await self._run_pipeline_inner(trigger=trigger)
-        except Exception as exc:
-            log.exception("hypnos: sleep pipeline aborted")
-            try:
-                await self.publish(
+        except BaseException as exc:
+            if isinstance(exc, Exception):
+                log.exception("hypnos: sleep pipeline aborted")
+            else:
+                log.warning("hypnos: sleep pipeline cancelled (%s)", type(exc).__name__)
+            publish = asyncio.ensure_future(
+                self.publish(
                     "hypnos.sleep.completed",
                     {"aborted": True, "reason": type(exc).__name__},
                     salience=self._baseline_salience,
                 )
+            )
+            # Held like the final reset, so a second cancel cannot drop it.
+            self._shielded_tasks.add(publish)
+            publish.add_done_callback(self._shielded_tasks.discard)
+            try:
+                await asyncio.shield(publish)
             except Exception:
                 log.exception("hypnos: aborted-sleep completed publish also failed")
             raise

@@ -59,6 +59,7 @@ All keys are under `[mnemos]` and its sub-tables. Shared keys such as `[embeddin
 | `[mnemos.replay].affect_weight` | float | `0.7` | Weight of the affect intensity in the replay score |
 | `[mnemos.replay].recency_weight` | float | `0.3` | Weight of recency in the replay score |
 | `[mnemos.replay].redact_content` | bool | `true` | Strip `text` from the observer copy of each replay |
+| `[mnemos.replay].cross_period_candidates` | int | `128` | Newest episodic traces that sleep's cross-period selection reads, without vectors; matches `short_term_capacity` |
 
 `recall_on_workspace` and `recall_cooldown_s` are not written in the shipped file; the values above are the constructor defaults. `[mnemos]` rejects `embedder_model_id` and `device` at boot and points to `[embedding].model_id` and `[embedding].device`. The cycle fills `[mnemos.qdrant].api_key`, when it is not set, from `KAINE_QDRANT_API_KEY` or from `[qdrant].api_key` in `config/secrets.toml`, and the Qdrant backend refuses to start without a key.
 
@@ -122,7 +123,7 @@ Hypnos calls Mnemos in its consolidation phases.
 
 Each consolidation pass replaces the kept entries, and Mnemos drops them when it sees `hypnos.sleep.completed`, so a sleep never replays an earlier sleep's traces.
 
-`select_cross_period_traces(periods, per_period)` sorts the available traces by timestamp, splits the time span into `periods` equal windows and takes up to `per_period` traces from each. The available traces are the short-term buffer, the entries phase 1 moved, and the episodic collection, which it reads through the storage backend's `export()`, so it works on the in-memory, Qdrant and sqlite-vec backends alike. Each trace counts once, and a storage error propagates so phase 3 records it.
+`select_cross_period_traces(periods, per_period)` sorts the available traces by timestamp, splits the time span into `periods` equal windows and takes up to `per_period` traces from each. The available traces are the short-term buffer, the entries phase 1 moved, and the newest `cross_period_candidates` traces of the episodic collection, which it reads through the storage backend's `recent_points()` without their vectors, so it works on the in-memory, Qdrant and sqlite-vec backends alike. Each trace counts once, and a storage error propagates so phase 3 records it.
 
 ## Key files
 

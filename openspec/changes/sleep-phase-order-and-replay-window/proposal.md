@@ -35,8 +35,14 @@ differs in three ways that #460 left for this change.
   `voice_alignment`, `affective_reset`. With voice training on, Thymos now
   resets after the training pass, so affect that moves during a long pass is
   not carried into waking.
-  If voice alignment raises, Hypnos runs the affective reset before the
-  aborted sleep is reported, as it did when the reset came first.
+  Phases 1 to 4 and their bookkeeping run inside a `try` whose `finally`
+  runs the affective reset once, as its own task awaited through
+  `asyncio.shield`, so an exception or a cancel in any earlier phase still
+  ends the sleep with the reset, and a second cancel cannot interrupt it. The
+  CancelledError is re-raised, never swallowed. `_run_pipeline` publishes the
+  aborted `hypnos.sleep.completed` on any exception, including a cancel
+  (previously only on `Exception`), so Soma's `_in_hypnos` cannot wedge and
+  Mnemos's sleep-end handling runs.
 - Hypnos owns the replay window. Mnemos gains `open_replay_window()` and
   `close_replay_window()`. Phase 2 opens the window immediately before it calls
   `replay_now()` and closes it in a `finally` once replay is done, inside the
@@ -47,8 +53,12 @@ differs in three ways that #460 left for this change.
   raises `ReplayWindowError`.
 - `select_cross_period_traces()` draws on the short-term buffer, the traces
   phase 1 consolidated (`MnemosCore.last_consolidated`), and the persisted
-  episodic collection read through `MemoryStorage.export()`, which every
-  backend implements. Traces are de-duplicated by point id (Qdrant returns a
+  newest `[mnemos.replay].cross_period_candidates` (default 128, matching
+  `short_term_capacity`) points of the episodic collection, read through a
+  new `MemoryStorage.recent_points()` that returns id, text, payload and
+  affect without vectors. In-memory and sqlite-vec skip the vectors and
+  sqlite-vec orders and limits in SQL; Qdrant scrolls with
+  `with_vectors=False` and keeps a bounded heap of the newest. Traces are de-duplicated by point id (Qdrant returns a
   hex id in canonical hyphenated form, so ids are compared as UUIDs where they
   parse as one). A storage error propagates, so phase 3 records a failure
   instead of combining from a partial pool.
@@ -70,7 +80,9 @@ differs in three ways that #460 left for this change.
 ## Impact
 
 - `kaine/modules/hypnos/phases.py`, `kaine/modules/hypnos/module.py`,
-  `kaine/modules/mnemos/module.py`, `kaine/modules/mnemos/replay.py`
+  `kaine/modules/mnemos/module.py`, `kaine/modules/mnemos/storage.py`,
+  `kaine/boot/factories/mnemos.py`, `config/kaine.toml`
+  (`[mnemos.replay].cross_period_candidates`), `kaine/modules/mnemos/replay.py`
   (docstrings), tests, and the Hypnos, Mnemos and sleep pages of the book.
 - Behaviour with Mnemos enabled: phase 2 no longer fails when phase 1 is
   quick. The base-thesis form has no Mnemos, so there the change is the phase
