@@ -57,7 +57,7 @@ The acoustic path also predicts from a null context, which keeps Audition's own 
 context_gain = (null-context error − error) / running mean error
 ```
 
-over the last `prediction_error_window` acoustic errors. It is `null` when the scored prediction had no context or the running mean is zero. Each report also carries `null_prediction_error` and `mean_prediction_error`, the null-context error and the running mean the gain is computed from; both are `null` when `context_gain` is. The null prediction never enters learning or the competition, and its running means restart with each boot. The tone path takes the context but computes no null prediction and reports no `context_gain`. The matched-selection and pooled arms of the planned test, and its positive control, are not built yet.
+over the last `prediction_error_window` acoustic errors. It is `null` when the scored prediction had no context or the running mean is zero. Each report also carries `null_prediction_error` and `mean_prediction_error`, the null-context error and the running mean the gain is computed from; both are `null` when `context_gain` is. The null prediction never enters learning or the competition, and its running means restart with each boot. The tone path takes the context but computes no null prediction and reports no `context_gain`. The positive control runs, when `[positive_control]` enables it, as two shadow forward models beside the live one (see [Research event streams](../17-research-data/event-streams.md#positive-control-records)). The matched-selection and pooled arms of the planned test are not built yet.
 
 ## Intensity and the alert flag
 

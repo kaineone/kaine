@@ -17,6 +17,7 @@ from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.hardware import resolve_device
 from kaine.modules.base import BaseModule
+from kaine.modules.positive_control import PositiveControlSettings
 
 log = logging.getLogger(__name__)
 
@@ -101,6 +102,7 @@ def make_audition(
         "perception_feed",
     }
     feed_section = dict(section.pop("perception_feed", {}) or {})
+    pc_section = section.pop("positive_control", None)
     _require_keys(section, allowed - {"perception_feed"})
     base_keys = {
         "speaches_url",
@@ -112,6 +114,7 @@ def make_audition(
         "alert_salience",
     }
     kwargs: dict[str, Any] = {k: section[k] for k in base_keys if k in section}
+    kwargs["positive_control"] = PositiveControlSettings.from_config(pc_section)
     if entity_clock is not None:
         kwargs["entity_clock"] = entity_clock
     kwargs["capture_enabled"] = bool(section.get("capture_enabled", False))
