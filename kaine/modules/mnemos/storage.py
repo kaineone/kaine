@@ -884,12 +884,13 @@ class SqliteVecStorage:
                     if not rows:
                         break
                     d_last = float(rows[-1][1])
-                    if len(rows) == page_k:
-                        rows = [
-                            r
-                            for r in rows
-                            if float(r[1]) < d_last
-                        ]
+                    # Record fullness before we mutate rows for tie handling.
+                    full = len(rows) == page_k
+                    if full:
+                        # Keep rows inside the boundary, then resolve boundary ties
+                        # so a short page really means no more results.
+                        boundary_rows = [r for r in rows if float(r[1]) == d_last]
+                        rows = [r for r in rows if float(r[1]) < d_last]
                         tie_cur = db.execute(
                             "SELECT m.point_id, vec_distance_cosine(v.embedding, ?) AS d, "
                             "m.text, m.payload, m.affect "
@@ -897,8 +898,12 @@ class SqliteVecStorage:
                             "WHERE v.collection = ? AND vec_distance_cosine(v.embedding, ?) = ?",
                             (blob, collection, blob, d_last),
                         )
-                        for row in tie_cur.fetchall():
-                            rows.append(row)
+                        tie_rows = list(tie_cur.fetchall())
+                        if tie_rows:
+                            rows.extend(tie_rows)
+                        else:
+                            # Floating-point mismatch must not drop the boundary row.
+                            rows.extend(boundary_rows)
                     for row in rows:
                         point_id, distance, text, payload_json, affect_json = row
                         # vec0 cosine distance → similarity score on the same [-1, 1]
@@ -917,7 +922,7 @@ class SqliteVecStorage:
                         )
                         if len(out) >= k:
                             break
-                    if len(rows) < page_k:
+                    if not full:
                         break
                     last_distance = d_last
                     first_page = False

@@ -355,9 +355,10 @@ class MnemosCore:
     ) -> dict[str, Any]:
         """Downscale trace strengths for one sleep, then prune (paper A.10).
 
-        Replay happens before this method is called. After downscaling,
-        every trace below the floor is deleted, then the weakest traces are
-        removed until the store fits the budget. Nothing else deletes traces.
+        Replay happens before this method is called. Every trace below the
+        floor outside the replayed set is deleted, then the weakest traces
+        outside it are removed until the store fits the budget. A trace
+        replayed in this sleep is never pruned in it (paper A.10).
         """
         async with self._strength_lock:
             names = self.persisted_collection_names()

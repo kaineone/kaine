@@ -983,7 +983,7 @@ async def test_config(bus):
     with pytest.raises(ConfigurationError):
         make_mnemos(bus, {"backend": "inmemory", "storage_budget_bytes": True})
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError, match="unknown"):
         make_mnemos(bus, {"backend": "inmemory", "strength": {"bogus": 1}})
 
 
