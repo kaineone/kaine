@@ -125,6 +125,8 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "alerts",
             "alert",
             "context_gain",
+            "null_prediction_error",
+            "mean_prediction_error",
             "context_age_s",
         }
     ),
@@ -136,6 +138,8 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "habituation_score",
             "alert",
             "context_gain",
+            "null_prediction_error",
+            "mean_prediction_error",
             "context_age_s",
         }
     ),
@@ -186,6 +190,8 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "attended_seconds",
             "alert",
             "context_gain",
+            "null_prediction_error",
+            "mean_prediction_error",
             "context_age_s",
         }
     ),

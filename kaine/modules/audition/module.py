@@ -281,11 +281,12 @@ class Audition(BaseModule):
         change = cosine_change(embedding, self._prev_acoustic_embedding)
         self._prev_acoustic_embedding = embedding
         context_gain: Optional[float] = None
+        null_prediction_error: Optional[float] = None
+        mean_prediction_error: Optional[float] = None
         # Pause adaptation during Hypnos sleep, mirroring Topos.
         self._acoustic_forward_model.suspended = self._in_hypnos
         if getattr(self._acoustic_forward_model, "context_dim", 0) > 0:
-            ctx = self._context.vector()
-            null = self._context.null_vector(("audition",)) if ctx is not None else None
+            ctx, null = self._context.context_and_null(("audition",))
             prediction_error = self._acoustic_forward_model.step(embedding, ctx, null)
         else:
             prediction_error = self._acoustic_forward_model.step(embedding)
@@ -306,6 +307,8 @@ class Audition(BaseModule):
             and mean_err > 0
         ):
             context_gain = (self._acoustic_forward_model.last_null_error - prediction_error) / mean_err
+            null_prediction_error = self._acoustic_forward_model.last_null_error
+            mean_prediction_error = mean_err
 
         # Self-calibrating change alert (perception-drives-salience): the change is
         # judged RELATIVE to its own rolling baseline, not against an absolute
@@ -341,7 +344,10 @@ class Audition(BaseModule):
             # (perception→arousal coupling).
             "normalised_error": normalised,
             # Cross-module broadcast information gain and context age (Appendix A.8).
+            # Paired evaluations behind the information-gain measure.
             "context_gain": context_gain,
+            "null_prediction_error": null_prediction_error,
+            "mean_prediction_error": mean_prediction_error,
             "context_age_s": self._context.age_s(),
             "encoder_model_id": self._acoustic_encoder.model_id,
             "attended_window": window,

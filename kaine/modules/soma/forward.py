@@ -430,6 +430,9 @@ class SubstrateForwardModel:
                 "SubstrateForwardModel: non-finite feature vector; skipping tick"
             )
             self._last_residuals = None
+            # A skipped reading reports no gain.
+            self.last_null_error = None
+            self.last_scored_had_context = False
             return 0.0
 
         # 1. Prediction error from the previous tick's prediction.

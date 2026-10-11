@@ -80,7 +80,7 @@ Alongside each prediction, Topos makes a second prediction from a null context. 
 context_gain = (null-context error − error) / running mean error
 ```
 
-where the running mean is over the last `prediction_error_window` errors. A positive value means other modules' share of the accessed content helped Topos predict its own input. `context_gain` is `null` when the scored prediction was made without a context or the running mean error is zero. The null prediction never enters learning or the competition. The running means behind it are not persisted, so they restart with each boot.
+where the running mean is over the last `prediction_error_window` errors. A positive value means other modules' share of the accessed content helped Topos predict its own input. `context_gain` is `null` when the scored prediction was made without a context or the running mean error is zero. Each report also carries `null_prediction_error` and `mean_prediction_error`, the null-context error and the running mean the gain is computed from; both are `null` when `context_gain` is. The null prediction never enters learning or the competition. The running means behind it are not persisted, so they restart with each boot.
 
 `context_gain` is the measure behind the planned workspace-mediation test (see [Running experiments](../15-experiments/README.md)). Its matched-selection and pooled arms and its positive control are not built yet.
 
@@ -120,7 +120,7 @@ All events are published to the `topos.out` stream.
 
 | Event type | Payload fields | Intensity |
 |---|---|---|
-| `topos.report` | `latent`, `change_score`, `habituation_score`, `encoder_model_id`, `prediction_error`, `normalised_error`, `context_gain`, `context_age_s`, `alert`; with foveation also `peripheral`, `foveal`, `fovea`, `predicted_fovea`; with a playlist feed also `item`, `item_order` | `alert_salience` on an alert, otherwise graded from `baseline_salience` (see above) |
+| `topos.report` | `latent`, `change_score`, `habituation_score`, `encoder_model_id`, `prediction_error`, `normalised_error`, `context_gain`, `null_prediction_error`, `mean_prediction_error`, `context_age_s`, `alert`; with foveation also `peripheral`, `foveal`, `fovea`, `predicted_fovea`; with a playlist feed also `item`, `item_order` | `alert_salience` on an alert, otherwise graded from `baseline_salience` (see above) |
 
 `normalised_error` is the error ratio. `context_age_s` is the entity seconds since Topos received the broadcast it holds as context, or `null` before the first accessed broadcast.
 

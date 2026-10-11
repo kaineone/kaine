@@ -111,3 +111,51 @@ async def test_soma_reports_context_gain(bus: AsyncBus) -> None:
     assert "context_age_s" in payload
     assert isinstance(payload["context_age_s"], float)
     assert payload["context_age_s"] >= 0.0
+
+
+@pytest.mark.asyncio
+async def test_soma_gain_is_zero_when_the_context_carries_nothing(bus: AsyncBus) -> None:
+    soma = Soma(
+        bus,
+        reader=FakeMetricsReader({"cpu_percent": 10.0, "ram_percent": 20.0}),
+        detector=NeverAlertDetector(),
+    )
+
+    for i in range(4):
+        snapshot = WorkspaceSnapshot(
+            tick_index=i,
+            selected_events=[
+                (
+                    f"{i}-0",
+                    Event(
+                        source="topos",
+                        type="topos.report",
+                        payload={"k": 1},
+                        salience=0.5,
+                        timestamp=datetime.now(timezone.utc),
+                    ),
+                )
+            ],
+            inhibited=False,
+            salience_scores={f"{i}-0": 0.5},
+            metadata={"access_threshold": 0.35},
+        )
+        await soma.on_workspace(snapshot)
+        payload = await soma.tick_once()
+
+    assert payload is not None
+    assert payload["context_gain"] == 0.0
+    assert payload["null_prediction_error"] == payload["prediction_error"]
+    assert payload["mean_prediction_error"] > 0.0
+
+
+def test_skipped_reading_reports_no_gain() -> None:
+    m = SubstrateForwardModel(feature_dim=8, units=16, seed=5, context_dim=24)
+    ctx = [0.5] * 24
+    m.step([0.1] * 8, context=ctx, null_context=ctx)
+    m.step([0.2] * 8, context=ctx, null_context=ctx)
+    assert m.last_null_error is not None
+    err = m.step([float("nan")] * 8, context=ctx, null_context=ctx)
+    assert err == 0.0
+    assert m.last_null_error is None
+    assert m.last_scored_had_context is False

@@ -402,11 +402,7 @@ class Soma(BaseModule):
         self._last_read_time = now_read
 
         if getattr(self._forward_model, "context_dim", 0) > 0:
-            ctx = self._context.vector()
-            null = (
-                self._context.null_vector(("soma", "lingua"))
-                if ctx is not None else None
-            )
+            ctx, null = self._context.context_and_null(("soma", "lingua"))
             if getattr(self._forward_model, "accepts_timespan", False):
                 prediction_error = self._forward_model.step(
                     feature_vec, timespan=ts, context=ctx, null_context=null
@@ -424,6 +420,8 @@ class Soma(BaseModule):
         self._prediction_error_window.append(prediction_error)
 
         context_gain: Optional[float] = None
+        null_prediction_error: Optional[float] = None
+        mean_prediction_error: Optional[float] = None
         if (
             getattr(self._forward_model, "last_scored_had_context", False)
             and self._forward_model.last_null_error is not None
@@ -434,6 +432,8 @@ class Soma(BaseModule):
                 context_gain = (
                     self._forward_model.last_null_error - prediction_error
                 ) / mean_err
+                null_prediction_error = self._forward_model.last_null_error
+                mean_prediction_error = mean_err
 
         # --- Subjective clock / warm-up bookkeeping ---
         # Subjective time: the fatigue dt integral and the regulation
@@ -546,7 +546,10 @@ class Soma(BaseModule):
             "alert": bool(alert.is_alert),
             "prediction_error": prediction_error,
             # cross-module broadcast information gain, paper Appendix A.8
+            # paired evaluations behind the information-gain measure
             "context_gain": context_gain,
+            "null_prediction_error": null_prediction_error,
+            "mean_prediction_error": mean_prediction_error,
             "context_age_s": self._context.age_s(),
             "unexpected_error": unexpected_error,
             "fatigue_value": self._fatigue.value,

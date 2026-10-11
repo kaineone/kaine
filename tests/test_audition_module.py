@@ -571,6 +571,8 @@ async def test_perception_event_is_content_free(bus: AsyncBus):
             "energy_dbfs",
             # Content-free numbers: the broadcast information gain and context age.
             "context_gain",
+            "null_prediction_error",
+            "mean_prediction_error",
             "context_age_s",
         }
         # The energy channel is a single number, never samples.
