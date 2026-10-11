@@ -6,7 +6,7 @@ Related: [The cognitive cycle](README.md) · [Architecture](../02-architecture/R
 
 ## Selection pipeline
 
-Every processing tick the cycle reads the events published since its previous read of each active module stream, sorts them by `(source, type, entry_id)` so that a seeded run reproduces, refreshes the affect snapshot the scorer reads, updates the access rate, and passes the list to `Syneidesis.select`. Selection runs on every processing tick. Only on a broadcast tick (the code's `is_experiential`) is the result published; on other ticks the candidates are scored and then discarded.
+Every processing tick the cycle reads the events published since its previous read of each active module stream, sorts them by source, type and bus entry id (the stream breaks any remaining tie) so that a seeded run reproduces, names each candidate `<stream>:<entry_id>`, refreshes the affect snapshot the scorer reads, updates the access rate, and passes the list to `Syneidesis.select`. A bus entry id is unique only within its stream, and two streams can issue the same id in the same millisecond, so the stream-qualified name is what keeps one score per candidate in the score table. Selection runs on every processing tick. Only on a broadcast tick (the code's `is_experiential`) is the result published; on other ticks the candidates are scored and then discarded.
 
 ```mermaid
 flowchart TD
@@ -92,7 +92,7 @@ Both live factors read affect and drives through an `AffectStateProvider` (`kain
 
 `kaine/workspace/syneidesis.py` · `Syneidesis._compose`
 
-Syneidesis sorts the candidates by score in decreasing order. The sort is stable, so equal scores keep the canonical `(source, type, entry_id)` order. The first `[syneidesis].top_k` candidates (default 5) form the coalition. Then:
+Syneidesis sorts the candidates by score in decreasing order. The sort is stable, so equal scores keep the canonical order by source, type and bus entry id. The first `[syneidesis].top_k` candidates (default 5) form the coalition. Then:
 
 ```
 inhibited = best score < θ
@@ -115,9 +115,9 @@ On a broadcast tick the cycle publishes the snapshot to `workspace.broadcast` wh
 | `inhibited` | True when no member reached the threshold |
 | `is_experiential` | True on a broadcast tick |
 | `time_scale` | The entity clock's current multiple of wall-clock time |
-| `salience_scores` | The score of every candidate of the tick, keyed by entry id |
+| `salience_scores` | The score of every candidate of the tick, keyed by the candidate's id `<stream>:<entry_id>` |
 | `metadata` | `access_threshold` (absent from an empty snapshot), and `coherence` when the coherence layer is on |
-| `selected` | The coalition members in rank order, each with `entry_id`, `source`, `type`, `salience` (the reported intensity), `payload`, `timestamp` and `causal_parent` |
+| `selected` | The coalition members in rank order, each with `entry_id` (the same `<stream>:<entry_id>` id that keys its score), `source`, `type`, `salience` (the reported intensity), `payload`, `timestamp` and `causal_parent` |
 
 Only `source="syneidesis"` may publish to `workspace.broadcast`; any other source raises `ReservedStreamError`. Modules read the stream with `AsyncBus.subscribe_workspace_block`, advancing their own cursor.
 

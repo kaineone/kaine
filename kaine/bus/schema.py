@@ -56,6 +56,28 @@ def module_stream(module_name: str) -> str:
     return f"{module_name}.out"
 
 
+def stream_entry_key(stream: str, entry_id: str) -> str:
+    """Return a candidate key that names the stream and its bus entry id.
+
+    A bus entry id is unique only within its stream, so a candidate read
+    from several streams is named by its stream and its id.
+    """
+    return f"{stream}:{entry_id}"
+
+
+def split_stream_entry_key(key: str) -> tuple[Optional[str], str]:
+    """Split a candidate key back into stream and bus entry id.
+
+    A bare entry id, as written by records made before candidate ids carried
+    the stream, comes back with stream None. Redis entry ids never contain a
+    colon, which is why the last colon is the separator.
+    """
+    stream, sep, entry_id = key.rpartition(":")
+    if sep:
+        return (stream, entry_id)
+    return (None, key)
+
+
 def ensure_writable(stream: str, source: str) -> None:
     if stream == WORKSPACE_STREAM and source != SYNEIDESIS_SOURCE:
         raise ReservedStreamError(

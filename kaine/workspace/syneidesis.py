@@ -18,12 +18,26 @@ log = logging.getLogger(__name__)
 ARMS: tuple[str, ...] = ("competitive", "matched", "pooled")
 
 
+def _require_unique_ids(events: list[tuple[str, Event]]) -> None:
+    """Refuse a repeated candidate id.
+
+    The score table holds one score per candidate (paper A.1), so a repeated
+    id would overwrite a score.
+    """
+    seen: set[str] = set()
+    for entry_id, _ in events:
+        if entry_id in seen:
+            raise ValueError(f"duplicate candidate id {entry_id!r}")
+        seen.add(entry_id)
+
+
 class Syneidesis:
     """Global workspace selection per `docs/kaine-paper.md` §2.3.
 
-    Each tick the cycle hands `select` a list of `(entry_id, Event)` and a
-    context dict. `select` scores every event via the configured
-    `SalienceStrategy`, picks the top-k by score, composes a
+    Each tick the cycle hands `select` a list of `(entry_id, Event)`, whose
+    ids are the cycle's stream-qualified keys `<stream>:<entry_id>`, unique
+    within the tick, and a context dict. `select` scores every event via the
+    configured `SalienceStrategy`, picks the top-k by score, composes a
     `WorkspaceSnapshot`, and flags executive inhibition when the top
     score is below `publication_threshold`.
 
@@ -90,6 +104,7 @@ class Syneidesis:
         events: list[tuple[str, Event]],
         context: dict[str, Any],
     ) -> WorkspaceSnapshot:
+        _require_unique_ids(events)
         tick_index = int(context.get("tick_index", 0))
         if self._arm == "pooled":
             return self._pooled(tick_index, events)
@@ -223,6 +238,7 @@ class Syneidesis:
         if self._coherence is None:
             return await self.select(events, context), None
 
+        _require_unique_ids(events)
         tick_index = int(context.get("tick_index", 0))
         if not events:
             # Mirror select()'s empty path: observe once to keep windows aligned,
