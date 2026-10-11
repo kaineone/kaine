@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import time
 import uuid
 from datetime import datetime, timezone
@@ -129,6 +130,9 @@ class Lingua(BaseModule):
         self._model_id = model_id
         self._think = think
         self._temperature = float(temperature)
+        # The individuation probe's own decoding temperature, set by its runtime;
+        # the voice's temperature never reaches the probe.
+        self._probe_temperature = 0.0
         self._max_tokens = int(max_tokens)
         # Workspace access conditions every generation. Lingua caches the
         # latest broadcast it observed (via _snapshot_cache_loop) and renders it
@@ -428,11 +432,22 @@ class Lingua(BaseModule):
             return False
         return True
 
+    def set_probe_temperature(self, value: float) -> None:
+        """Set the probe's fixed decoding temperature."""
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value < 0
+        ):
+            raise ValueError("probe temperature must be a finite number >= 0")
+        self._probe_temperature = float(value)
+
     def probe_conditions(self) -> dict[str, Any]:
         """The fixed generation conditions of the individuation probe (no content)."""
         return {
             "model_id": self._model_id,
-            "temperature": self._temperature,
+            "temperature": self._probe_temperature,
             "think": self._think,
             "persona_digest": self._persona_digest,
             "persona_template_version": PERSONA_TEMPLATE_VERSION,
@@ -452,7 +467,7 @@ class Lingua(BaseModule):
             prompt=ctx.prompt,
             model=self._model_id,
             system=ctx.system,
-            temperature=self._temperature,
+            temperature=self._probe_temperature,
             max_tokens=int(max_tokens),
             think=self._think,
             seed=int(seed),

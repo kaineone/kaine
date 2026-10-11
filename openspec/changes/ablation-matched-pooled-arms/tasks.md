@@ -15,3 +15,4 @@
 - [x] 2.4 Engine-level tests: matched draws only on broadcast ticks; pooled publishes only broadcast ticks
 - [x] 2.5 Greedy decoding out of `thesis_test`; the study layer and the three workspace-mediation study configurations
 - [x] 2.6 Docs and specs: the study layer, how an ablation run selects its arm, the unpersisted matched generator, sampling in general use
+- [x] 2.7 The individuation probe decodes at its own `[individuation].probe_temperature`

@@ -1464,6 +1464,9 @@ disclosure = "You are periodically and privately assessed for how much you have 
 battery_path = ""
 # Probe requests wait until Lingua has been silent this long, so the being speaks first.
 lingua_quiet_s = 10.0
+# Decoding temperature of the probe, fixed apart from the voice's [lingua].temperature
+# so study or voice settings never change the probe's conditions. 0 is greedy.
+probe_temperature = 0.0
 # Answers per battery prompt in the reference.
 n_reference = 16
 # Answers per battery prompt at each look.

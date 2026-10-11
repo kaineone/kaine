@@ -47,6 +47,10 @@ competitive selection today, so neither control can be run.
   within one uninterrupted run, and a restart or revive restarts the stream
   from the seed.
 - Lingua no longer lets an empty pooled broadcast replace its cached coalition.
+- The individuation probe gets its own decoding temperature,
+  `[individuation].probe_temperature` (default 0.0, at least 0), wired from
+  the individuation runtime to Lingua, so moving greedy decoding out of the
+  default profile does not change the probe's conditions.
 
 ## Capabilities
 
@@ -57,6 +61,7 @@ competitive selection today, so neither control can be run.
 - `research-event-log`: the workspace record carries the arm.
 - `configuration-loading`: the study layer.
 - `lingua`: greedy decoding only in study configurations; the cache ignores empty broadcasts.
+- `individuation-boundary`: the probe's own decoding temperature.
 - `module-ignition-study`: the study configuration sets greedy decoding and the
   competitive arm.
 
@@ -66,11 +71,16 @@ competitive selection today, so neither control can be run.
   `kaine/evaluation/observers/research_event_observer.py`,
   `kaine/cycle/__main__.py`, `kaine/research/ignition_study/overlay.py`,
   `kaine/research/ignition_study/runner.py`, `kaine/boot/wiring.py`,
-  `kaine/config.py`, `kaine/modules/lingua/module.py`, `config/kaine.toml`,
+  `kaine/config.py`, `kaine/modules/lingua/module.py`,
+  `kaine/cycle/individuation_runtime.py`, `config/kaine.toml`,
   `config/profiles/thesis_test.toml`, `config/studies/`, docs, tests.
-- An existing being whose individuation reference was captured at
-  temperature 0 sees its probe conditions change on an ordinary boot, so its
-  looks report `conditions_changed` until a new reference is captured.
+- The individuation probe decodes at its own temperature,
+  `[individuation].probe_temperature` (default 0.0), which Lingua's probe
+  request uses and its probe conditions report under the existing
+  `temperature` key. The voice's temperature never reaches the probe, so a
+  reference captured under the old greedy default stays valid after this
+  change, and later study or voice settings cannot change the probe's
+  conditions. `config/profiles/minimal_experiment.toml` is unchanged.
 - With the default arm, selection, access, inhibition and the context are
   unchanged; each broadcast's metadata gains the `arm` key.
 - Not covered: the null-context evaluation and the positive control (a

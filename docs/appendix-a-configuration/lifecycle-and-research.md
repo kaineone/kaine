@@ -73,6 +73,7 @@ Cycle-layer individuation producer. Ships disabled. Requires the `lingua` module
 | `disclosure` | string | *(operator-approved text)* | Disclosure text inserted as a situation fact in the being's Eidolon self-model. Probes fail closed until the fact is present. |
 | `battery_path` | string | `""` | Path to an operator-supplied JSONL preference battery. Empty uses the bundled default. |
 | `lingua_quiet_s` | float | `10.0` | Seconds Lingua must be silent before a probe runs, so the being's own speech goes first. |
+| `probe_temperature` | float | `0.0` | Decoding temperature of the probe, at least 0. It is fixed apart from the voice's `[lingua].temperature`, so a study or a change to the voice never changes the probe's conditions. `0.0` is greedy. |
 | `n_reference` | integer | `16` | Answers captured per prompt in a birth reference. |
 | `n_current` | integer | `8` | Answers sampled per prompt in a look. |
 | `max_tokens` | integer | `160` | Maximum tokens per probe answer. |

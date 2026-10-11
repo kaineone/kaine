@@ -138,6 +138,7 @@ class IndividuationConfig:
     disclosure: str = DEFAULT_DISCLOSURE
     battery_path: str = ""
     lingua_quiet_s: float = 10.0
+    probe_temperature: float = 0.0
     producer: ProducerSettings = field(default_factory=ProducerSettings)
     scheduler: SchedulerSettings = field(default_factory=SchedulerSettings)
 
@@ -152,6 +153,7 @@ class IndividuationConfig:
             "disclosure",
             "battery_path",
             "lingua_quiet_s",
+            "probe_temperature",
         } | producer_keys | scheduler_keys
 
         extra = sorted(set(d) - allowed)
@@ -193,6 +195,15 @@ class IndividuationConfig:
         ):
             raise ValueError("lingua_quiet_s must be a finite number > 0")
 
+        probe_temperature = explicit.get("probe_temperature", cls.probe_temperature)
+        if (
+            isinstance(probe_temperature, bool)
+            or not isinstance(probe_temperature, (int, float))
+            or not math.isfinite(probe_temperature)
+            or probe_temperature < 0
+        ):
+            raise ValueError("probe_temperature must be a finite number >= 0")
+
         try:
             producer = ProducerSettings(**producer_kwargs)
             scheduler = SchedulerSettings(**scheduler_kwargs)
@@ -204,6 +215,7 @@ class IndividuationConfig:
             disclosure=disclosure,
             battery_path=battery_path,
             lingua_quiet_s=lingua_quiet_s,
+            probe_temperature=float(probe_temperature),
             producer=producer,
             scheduler=scheduler,
         )
@@ -411,6 +423,9 @@ def build_runtime(
     def embedder_ready() -> bool:
         # A hash embedder is not semantic, so it never counts as ready.
         return getattr(embedder, "kind", None) not in (None, "hash")
+
+    # The probe decodes at its own fixed temperature, never the voice's.
+    lingua.set_probe_temperature(config.probe_temperature)
 
     sampler = build_probe_sampler(
         lingua=lingua,
