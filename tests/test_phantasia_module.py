@@ -13,7 +13,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-import kaine.modules.phantasia.module as phantasia_module
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
@@ -192,18 +191,30 @@ async def test_scenario_reinjected_onto_phantasia_out(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_window_close_stops_scenarios(bus: AsyncBus):
-    """A cue handled after the window closes is ignored."""
+async def test_window_close_stops_scenarios(bus: AsyncBus, monkeypatch):
+    """A cue published after the window closed is ignored."""
     ph = Phantasia(bus, backend="fake")
     await ph.initialize()
     try:
+        # The clock is patched so the cue's stamp is clearly after the close;
+        # the window bounds are inclusive.
+        t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        monkeypatch.setattr("kaine.modules.phantasia.module._utc_now", lambda: t0)
         ph.open_scenario_window()
         assert ph.window_active is True
+        monkeypatch.setattr(
+            "kaine.modules.phantasia.module._utc_now", lambda: t0 + timedelta(seconds=10)
+        )
         ph.close_scenario_window()
         assert ph.window_active is False
-        await ph._handle_peer_event(
-            "mnemos.out", _event("mnemos", "mnemos.replay", {"memory_id": "m"})
+        cue = Event(
+            timestamp=t0 + timedelta(seconds=20),
+            source="mnemos",
+            type="mnemos.replay",
+            payload={"memory_id": "m"},
+            salience=0.0,
         )
+        await ph._handle_peer_event("mnemos.out", cue)
         events = await _drain(bus)
         assert [e for e in events if e.type == "phantasia.scenario"] == []
     finally:
@@ -281,9 +292,9 @@ async def test_cue_published_before_the_window_is_ignored(bus: AsyncBus, monkeyp
             payload={"memory_id": "m-early"},
             salience=0.0,
         )
-        monkeypatch.setattr(phantasia_module, "_utc_now", lambda: t0 + timedelta(seconds=10))
+        monkeypatch.setattr("kaine.modules.phantasia.module._utc_now", lambda: t0 + timedelta(seconds=10))
         ph.open_scenario_window()
-        monkeypatch.setattr(phantasia_module, "_utc_now", lambda: t0 + timedelta(seconds=20))
+        monkeypatch.setattr("kaine.modules.phantasia.module._utc_now", lambda: t0 + timedelta(seconds=20))
         ph.close_scenario_window()
         await ph._handle_peer_event("mnemos.out", cue)
 
@@ -309,7 +320,7 @@ async def test_stale_cue_during_an_open_window_is_ignored(bus: AsyncBus, monkeyp
             payload={"memory_id": "m-stale"},
             salience=0.0,
         )
-        monkeypatch.setattr(phantasia_module, "_utc_now", lambda: t0 + timedelta(seconds=10))
+        monkeypatch.setattr("kaine.modules.phantasia.module._utc_now", lambda: t0 + timedelta(seconds=10))
         ph.open_scenario_window()
         await ph._handle_peer_event("mnemos.out", stale)
 
@@ -341,12 +352,12 @@ async def test_late_cue_from_back_to_back_windows_is_answered(bus: AsyncBus, mon
             await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
 
         t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
-        monkeypatch.setattr(phantasia_module, "_utc_now", lambda: t0 + timedelta(seconds=10))
+        monkeypatch.setattr("kaine.modules.phantasia.module._utc_now", lambda: t0 + timedelta(seconds=10))
         ph.open_scenario_window()
-        monkeypatch.setattr(phantasia_module, "_utc_now", lambda: t0 + timedelta(seconds=20))
+        monkeypatch.setattr("kaine.modules.phantasia.module._utc_now", lambda: t0 + timedelta(seconds=20))
         ph.close_scenario_window()
 
-        monkeypatch.setattr(phantasia_module, "_utc_now", lambda: t0 + timedelta(seconds=30))
+        monkeypatch.setattr("kaine.modules.phantasia.module._utc_now", lambda: t0 + timedelta(seconds=30))
         ph.open_scenario_window()
 
         first = Event(
