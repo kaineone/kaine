@@ -64,6 +64,9 @@ class RunContext:
     study: Optional[str] = None
     # Digest of the planned-test settings record that gated this run, or None.
     settings_record_sha256: Optional[str] = None
+    # Whether the pilot run data behind the record was verified at boot:
+    # "verified", "absent" or "partial"; None when no record gated the run.
+    settings_record_run_data: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         """Plain-dict view suitable for JSON serialization (manifest, stamping)."""
@@ -126,11 +129,15 @@ def mint_run_context(
     revived_from: str | None = None,
     study: str | None = None,
     settings_record_sha256: str | None = None,
+    settings_record_run_data: str | None = None,
 ) -> RunContext:
     """Assemble a fresh ``RunContext``.
 
     ``settings_record_sha256`` is the digest of the planned-test settings record
     that gated this run, or ``None``.
+
+    ``settings_record_run_data`` is the verification status of the pilot run data
+    behind the record, or ``None``.
 
     ``run_id`` is a fresh uuid4 hex; ``git_sha`` is resolved best-effort; the
     config digest is computed from ``config``. The caller passes ``started_at``
@@ -166,6 +173,7 @@ def mint_run_context(
         revived_from=revived_from,
         study=study,
         settings_record_sha256=settings_record_sha256,
+        settings_record_run_data=settings_record_run_data,
     )
 
 

@@ -47,7 +47,7 @@
 - **THEN** `theta_band`, `b_band`, `age_bins` and the threshold contrast's minimum effect are blocked as requiring rdrobust, and the tone bins and the tone analysis's minimum effect are blocked because the tone variant is not built
 
 ### Requirement: A live planned-test run needs a valid settings record
-Each shipped study whose name starts with `workspace_mediation_` SHALL set the `[planned_test].role` that matches its name (`test` for the three live arms, `pilot` for the three pilot studies, `preliminary`, `positive_control`), and an unknown `workspace_mediation_*` study SHALL be refused. Whatever the study is called, including none, roles `test` and `positive_control` SHALL refuse to start, with exit code 12 and a message naming the reason, unless `[planned_test].settings_record` names a record whose schema, version and digest verify, that is complete with nothing blocked, whose constants equal the paper's (n_cal 30, c_eff 0.5, q_pow 0.65, power 0.9, alpha 0.05, the MSER batch, search end and minimum batches, five bins, the SNR ladder), with thirty counted pilots and n_exact 102, whose values are in range, and whose principal-component files match their recorded sha256; and unless the run's seed was not used by the preliminary or any pilot run. Role `test` SHALL refuse an enabled `[positive_control]` in any mode but `control`; role `positive_control` SHALL require `[positive_control]` enabled in mode `control` with the same record. A gated run SHALL record the record's digest in its run manifest as `settings_record_sha256`. Configurations without a role SHALL be unaffected.
+Each shipped study whose name starts with `workspace_mediation_` SHALL set the `[planned_test].role` that matches its name (`test` for the three live arms, `pilot` for the three pilot studies, `preliminary`, `positive_control`), and an unknown `workspace_mediation_*` study SHALL be refused. Whatever the study is called, including none, roles `test` and `positive_control` SHALL refuse to start, with exit code 12 and a message naming the reason, unless `[planned_test].settings_record` names a record whose schema, version and digest verify, that is complete with nothing blocked, whose constants equal the paper's (n_cal 30, c_eff 0.5, q_pow 0.65, power 0.9, alpha 0.05, the MSER batch, search end and minimum batches, five bins, the SNR ladder), with thirty counted pilots and n_exact 102, whose values are in range, and whose principal-component files match their recorded sha256; and unless the run's seed was not used by the preliminary or any pilot run. Role `test` SHALL refuse an enabled `[positive_control]` in any mode but `control`; role `positive_control` SHALL require `[positive_control]` enabled in mode `control` with the same record. The loader SHALL also require exactly thirty pilot entries with `counted` true, distinct seeds across the preliminary and pilot runs, a reason on every NOT EXERCISED entry, and attempted and NOT EXERCISED counts that agree with the entries. Whenever `[positive_control]` is enabled under a role, its `settings_record` SHALL equal `[planned_test].settings_record`. At boot the gate SHALL recompute the sha256 of each preliminary and pilot run's manifest and research-log records when they are present and refuse a mismatch. A gated run SHALL record the record's digest in its run manifest as `settings_record_sha256`, and the run-data status (`verified`, `absent` or `partial`) as `settings_record_run_data`. Configurations without a role SHALL be unaffected.
 
 #### Scenario: No record
 - **WHEN** a run starts with `KAINE_STUDY=workspace_mediation_competitive` and the record file does not exist
@@ -68,6 +68,14 @@ Each shipped study whose name starts with `workspace_mediation_` SHALL set the `
 #### Scenario: A study with the wrong role
 - **WHEN** `workspace_mediation_competitive` sets role `pilot`
 - **THEN** the boot stops and names the expected role
+
+#### Scenario: Pilot data that changed after calibration
+- **WHEN** a pilot run's research log on the host no longer matches the hash in the record
+- **THEN** the boot stops and names the run
+
+#### Scenario: A record with a duplicate seed
+- **WHEN** two pilot entries of a record share a seed
+- **THEN** the loader refuses the record
 
 #### Scenario: The manifest names the record
 - **WHEN** a live arm boots with a valid record

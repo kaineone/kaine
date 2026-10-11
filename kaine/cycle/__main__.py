@@ -1522,7 +1522,7 @@ async def _phase_run_identity(ctx: BootContext) -> int | None:
     from kaine.config import resolve_study_name
     from kaine.experiment.planned_test_settings import planned_test_gate
 
-    planned_test_reason, settings_record_sha256 = planned_test_gate(
+    planned_test_reason, settings_record_sha256, settings_record_run_data = planned_test_gate(
         resolve_study_name(), ctx.kaine_config, seed
     )
     if planned_test_reason is not None:
@@ -1568,6 +1568,7 @@ async def _phase_run_identity(ctx: BootContext) -> int | None:
         revived_from=ctx.revive.revived_from if ctx.revive is not None else None,
         study=resolve_study_name(),
         settings_record_sha256=settings_record_sha256,
+        settings_record_run_data=settings_record_run_data,
         timing=timing,
     )
     set_run_context(ctx.run_ctx)

@@ -832,8 +832,8 @@ async def test_report_is_published_before_positive_control_steps() -> None:
 
 
 @pytest.mark.asyncio
-async def test_full_queue_fails_the_control() -> None:
-    """When the control queue is full, the control is disabled and a failure record is published."""
+async def test_full_queue_fails_the_control_once() -> None:
+    """A full queue fails the control once and only one terminal record is published."""
     bus = _bus()
     try:
         topos = topos_module.Topos(
@@ -851,31 +851,120 @@ async def test_full_queue_fails_the_control() -> None:
         )
         await topos.on_workspace(_workspace("soma", 0.6, 0.6))
 
-        hold = asyncio.Event()
+        import threading
 
-        async def _blocking_job():
-            await hold.wait()
+        hold = threading.Event()
+        control = topos._positive_control
+        original_after_report = control.after_report
 
-        # Hold the single worker and allow only one pending job.
+        def _held_then_raises(*args, **kwargs):
+            # The in-flight control step blocks, then raises after the control
+            # has already failed for a full queue.
+            hold.wait()
+            raise RuntimeError("released")
+
+        control.after_report = _held_then_raises
         topos._pc_queue = ControlQueue(max_pending=1)
-        assert topos._pc_queue.submit(_blocking_job) is True
 
-        # First report enqueues the control step behind the blocker.
-        await topos.process_frame(None)
-        # Second report finds the queue full and fails the control.
-        await topos.process_frame(None)
-
+        # Report 1: its step runs and blocks. Report 2: queued. Report 3: the
+        # queue is full, so the control fails and publishes its failure record.
+        for _ in range(3):
+            await topos.process_frame(None)
+            await asyncio.sleep(0.05)
         assert topos._positive_control is None
 
         hold.set()
-        await topos._pc_queue.drain()
-        await topos._pc_queue.close()
+        await asyncio.wait_for(topos._pc_queue.drain(), timeout=5)
+        await topos.finish_positive_control()
+        control.after_report = original_after_report
 
         events = await bus.read("positive_control.out", last_id="0")
-        assert events
-        payload = _payloads(events)[-1]
-        assert payload["processor"] == "topos"
-        assert payload["final"] is True
-        assert payload["failed"] is True
+        payloads = _payloads(events)
+        assert sum(1 for p in payloads if p["failed"]) == 1
+        assert sum(1 for p in payloads if p["final"]) == 1
     finally:
         await bus.close()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_drain_has_a_budget() -> None:
+    """finish_positive_control times out a stuck queue and publishes one terminal record."""
+    bus = _bus()
+    try:
+        import dataclasses
+        settings = dataclasses.replace(
+            _control({"topos": 4}),
+            shutdown_drain_s=0.2,
+        )
+        topos = topos_module.Topos(
+            bus,
+            encoder=Varying(),
+            forward_prediction=True,
+            entity_clock=_FixedClock(),
+            positive_control=settings,
+        )
+        topos._forward_model = LatentForwardModel(
+            latent_dim=4,
+            units=8,
+            context_dim=CONTEXT_DIM,
+            seed=4,
+        )
+        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+
+        for _ in range(3):
+            await topos.process_frame(None)
+
+        never = asyncio.Event()
+
+        async def _hung_job():
+            await never.wait()
+
+        assert topos._pc_queue.submit(_hung_job) is True
+
+        await asyncio.wait_for(topos.finish_positive_control(), timeout=5)
+
+        events = await bus.read("positive_control.out", last_id="0")
+        payloads = _payloads(events)
+        assert sum(1 for p in payloads if p["failed"] and p["final"]) == 1
+        assert topos._positive_control is None
+    finally:
+        await bus.close()
+
+
+@pytest.mark.asyncio
+async def test_fail_positive_control_publishes_once() -> None:
+    """Calling _fail_positive_control twice publishes a single failure record."""
+    bus = _bus()
+    try:
+        control = _control({"topos": 4})
+        topos = topos_module.Topos(
+            bus,
+            encoder=Varying(),
+            forward_prediction=True,
+            entity_clock=_FixedClock(),
+            positive_control=control,
+        )
+        pc = topos._positive_control
+        assert pc is not None
+        await topos._fail_positive_control(pc, "x")
+        await topos._fail_positive_control(pc, "x")
+
+        events = await bus.read("positive_control.out", last_id="0")
+        assert len(_payloads(events)) == 1
+        assert topos._positive_control is None
+    finally:
+        await bus.close()
+
+
+def test_from_config_shutdown_drain_s() -> None:
+    """from_config accepts shutdown_drain_s in every mode and rejects bad values."""
+    settings = PositiveControlSettings.from_config(
+        {"enabled": True, "mode": "estimate_pc", "shutdown_drain_s": 2.5},
+    )
+    assert settings.shutdown_drain_s == 2.5
+
+    with pytest.raises(ValueError):
+        PositiveControlSettings.from_config({"enabled": False, "shutdown_drain_s": 0})
+
+    with pytest.raises(ValueError):
+        PositiveControlSettings.from_config({"enabled": False, "shutdown_drain_s": "x"})

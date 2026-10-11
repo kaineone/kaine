@@ -23,6 +23,7 @@ A cycle run needs a stable identity before its data can be trusted. This page ex
 - `revived_from`: when the run was revived from a preservation, the preservation id, or the bundle name if the id is not set.
 - `study`: the study configuration the run's config was loaded with (`KAINE_STUDY`, see [How configuration is loaded](appendix-a-configuration/README.md#how-configuration-is-loaded)), or `null` when none was selected. `config_digest` covers the merged result; `study` names the file.
 - `settings_record_sha256`: for a run of the planned test whose settings record was checked at boot (roles `test` and `positive_control`), the record's digest; otherwise `null`. It ties each run to the settings it was gated by.
+- `settings_record_run_data`: for the same runs, whether the preliminary and pilot runs' manifests and research logs were found and matched the record's hashes at boot (`verified`), were not on this host (`absent`), or were found for some runs only (`partial`); otherwise `null`. A mismatch refuses the boot.
 
 ## Record stamping
 
@@ -36,7 +37,7 @@ The per-sink `seq` lets completeness gating detect a silent drop within any sing
 
 ## Manifest
 
-When `[experiment].write_manifest` is true (the default), the cycle writes the run context once at boot to `data/evaluation/runs/<run_id>/manifest.json` with an atomic write. The `runs` directory is in the metrics-export allowlist (`METRICS_ONLY_DIRS`): the manifest holds only the run id, seed, git sha, model ids, config digest, start time, version, perception feed, plugins, timing, revival source, study and settings-record digest, with no entity interior and no operator-identifying data, so it is export-eligible.
+When `[experiment].write_manifest` is true (the default), the cycle writes the run context once at boot to `data/evaluation/runs/<run_id>/manifest.json` with an atomic write. The `runs` directory is in the metrics-export allowlist (`METRICS_ONLY_DIRS`): the manifest holds only the run id, seed, git sha, model ids, config digest, start time, version, perception feed, plugins, timing, revival source, study, settings-record digest and run-data status, with no entity interior and no operator-identifying data, so it is export-eligible.
 
 ## Deterministic mode
 

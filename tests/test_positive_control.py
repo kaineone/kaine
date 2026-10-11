@@ -175,12 +175,31 @@ def _write_settings_record(tmp_path, complete=True):
         }
 
     theta_eff = {"matched": 0.02, "pooled": 0.03}
+
+    preliminary = {
+        "run_id": "prelim",
+        "seed": 1,
+        "manifest_sha256": "a" * 64,
+        "records_sha256": "b" * 64,
+    }
+
+    pilots = []
+    for seed in range(2, 2 + rules.N_CAL):
+        runs = {}
+        for arm in ("competitive", "matched", "pooled"):
+            runs[arm] = {
+                "run_id": f"pilot{seed}_{arm}",
+                "manifest_sha256": "c" * 64,
+                "records_sha256": "d" * 64,
+            }
+        pilots.append({"seed": seed, "counted": True, "runs": runs})
+
     record = {
         "schema": "kaine.planned_test_settings",
         "schema_version": 1,
         "complete": complete,
         "blocked": {},
-        "inputs": {"preliminary": {"run_id": "prelim", "seed": 1}, "pilots": [{"seed": 2}]},
+        "inputs": {"preliminary": preliminary, "pilots": pilots},
         "constants": {
             "n_cal": rules.N_CAL,
             "c_eff": rules.C_EFF,
@@ -198,6 +217,8 @@ def _write_settings_record(tmp_path, complete=True):
             "theta_eff": theta_eff,
             "min_effect": min(theta_eff.values()) / 2.0,
             "min_reports": 500,
+            "n_attempted": rules.N_CAL,
+            "n_not_exercised": 0,
             "n_counted": rules.N_CAL,
             "n_exact": rules.N_EXACT,
             "snr": {"topos": 4.0, "audition": 4.0, "soma": 4.0},

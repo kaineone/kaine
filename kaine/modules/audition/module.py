@@ -479,9 +479,15 @@ class Audition(BaseModule):
         except asyncio.CancelledError:
             raise
 
-    async def _fail_positive_control(self, control: PositiveControl) -> None:
+    async def _fail_positive_control(self, control: PositiveControl, reason: str) -> None:
         """Publish a failure record and stop the control for this run."""
-        log.exception("audition: positive control failed and is switched off for this run")
+        if self._positive_control is not control:
+            # The control already has a terminal record; do not publish another.
+            return
+        log.error(
+            "audition: positive control %s; it is switched off for this run",
+            reason,
+        )
         try:
             await publish_result(self._bus, control.failure_result())
         except Exception:
@@ -500,13 +506,15 @@ class Audition(BaseModule):
         try:
             control.prepare(self._acoustic_forward_model)
         except Exception:
-            await self._fail_positive_control(control)
+            log.exception("audition: positive control failed")
+            await self._fail_positive_control(control, "raised")
             return
         if not self._pc_queue.submit(
             functools.partial(self._run_positive_control, *args, suspended=suspended)
         ):
-            log.error("audition: positive control fell behind the reports; the queue is full")
-            await self._fail_positive_control(control)
+            await self._fail_positive_control(
+                control, "fell behind the reports; the queue is full"
+            )
 
     async def _run_positive_control(
         self,
@@ -542,7 +550,8 @@ class Audition(BaseModule):
             if result is not None and self._positive_control is control:
                 await publish_result(self._bus, result)
         except Exception:
-            await self._fail_positive_control(control)
+            log.exception("audition: positive control failed")
+            await self._fail_positive_control(control, "raised")
 
     async def finish_positive_control(self) -> None:
         """Publish the control's terminal record and stop the control for this run.
@@ -552,12 +561,23 @@ class Audition(BaseModule):
         """
         control = self._positive_control
         if control is None:
-            await self._pc_queue.close()
+            # Never wait here: a step may still be stuck after the control failed.
+            await self._pc_queue.abort()
             return
-        await self._pc_queue.drain()
+        budget = control.settings.shutdown_drain_s
+        try:
+            await asyncio.wait_for(self._pc_queue.drain(), timeout=budget)
+        except asyncio.TimeoutError:
+            await self._pc_queue.abort()
+            await self._fail_positive_control(
+                control,
+                f"did not finish its queued steps within {budget} s at shutdown",
+            )
+            await self._pc_queue.abort()
+            return
         if self._positive_control is not control:
             # A queued step failed while draining; its failure record is the terminal one.
-            await self._pc_queue.close()
+            await self._pc_queue.abort()
             return
         try:
             await publish_result(self._bus, control.final_result())
@@ -568,7 +588,7 @@ class Audition(BaseModule):
                 exc_info=True,
             )
         self._positive_control = None
-        await self._pc_queue.close()
+        await self._pc_queue.abort()
 
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).

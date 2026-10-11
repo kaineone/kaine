@@ -244,6 +244,7 @@ The positive control of the broadcast information-gain measure (paper §6.3 and 
 | `principal_components_run` | string | none | Mode `ladder` only, and required there: the id of the preliminary run whose principal-component files the pilots use. The boot fails while it is empty or the files are missing. |
 | `settings_record` | string | none | Mode `control` only, and required there: the path of the settings record written by `python -m kaine.experiment.calibrate`. The boot fails unless the record is complete and verifies. |
 | `seed` | integer | `0` | Seed of the components' noise, combined with the run's seed so different runs draw independent noise. |
+| `shutdown_drain_s` | number | `5.0` | Time budget, in seconds, for the control's queued steps at shutdown. Above 0. When the steps do not finish within it, the control is stopped and publishes one failure record, so the run fails closed and shutdown continues. |
 
 ## `[planned_test]`
 
@@ -252,7 +253,7 @@ Set only by the workspace-mediation study configurations (`config/studies/worksp
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `role` | string | none | `preliminary` (the one run that estimates the positive control's principal components), `pilot` (a pilot run of one arm), `test` (a live run of one arm) or `positive_control` (a run of the positive control). |
-| `settings_record` | string | none | Roles `test` and `positive_control`: the settings record derived from the pilot runs. The boot refuses to start, with exit code 12, unless the record's schema and digest verify, it is complete with nothing blocked, its values are in range and its principal-component files match their hashes; it also refuses a seed that the preliminary or a pilot run used. The record's constants must be the paper's, with thirty counted pilots and n_exact 102. For role `positive_control`, `[positive_control]` must be enabled in mode `control` with the same record; for role `test`, an enabled `[positive_control]` must be in mode `control`. The record's digest goes into the run manifest as `settings_record_sha256`. |
+| `settings_record` | string | none | Roles `test` and `positive_control`: the settings record derived from the pilot runs. The boot refuses to start, with exit code 12, unless the record's schema and digest verify, it is complete with nothing blocked, its values are in range and its principal-component files match their hashes; it also refuses a seed that the preliminary or a pilot run used. The record's constants must be the paper's, with thirty counted pilots and n_exact 102. For role `positive_control`, `[positive_control]` must be enabled in mode `control` with the same record; for role `test`, an enabled `[positive_control]` must be in mode `control`. Whenever `[positive_control]` is enabled under a role, its `settings_record` must equal this one (both absent for the preliminary and pilot runs). The record must list exactly thirty counted pilots with distinct seeds and every attempted pilot that was NOT EXERCISED. When the preliminary and pilot runs' manifests and research logs are present, their hashes must match the record's, or the boot is refused. The record's digest goes into the run manifest as `settings_record_sha256`, and whether the run data was `verified`, `absent` or `partial` as `settings_record_run_data`. |
 
 ## `[transfer]`
 

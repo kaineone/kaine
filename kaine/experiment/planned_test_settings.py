@@ -24,6 +24,10 @@ from kaine.experiment.principal_component import (
     canonical_bytes,
     file_sha256,
 )
+from kaine.experiment.run_records import (
+    RunRecords,
+    load_records_for_runs,
+)
 from kaine.storage import resolve
 
 SCHEMA = "kaine.planned_test_settings"
@@ -61,6 +65,18 @@ def record_digest(record: Mapping[str, Any]) -> str:
     return hashlib.sha256(canonical_bytes(stripped)).hexdigest()
 
 
+def records_digest(run_records: RunRecords) -> str:
+    """Return the hex sha256 of the records in ``run_records``."""
+    h = hashlib.sha256()
+    # Iterate streams in sorted order so the digest is independent of dict insertion order.
+    for stream in sorted(run_records.by_stream):
+        records = run_records.by_stream[stream]
+        for record in records:
+            h.update(canonical_bytes({"stream": stream, "record": record}))
+            h.update(b"\n")
+    return h.hexdigest()
+
+
 def write_settings_record(record: dict[str, Any], path: Path) -> str:
     """Write ``record`` to ``path`` and return its digest.
 
@@ -88,6 +104,15 @@ class PcRef:
 
 
 @dataclass(frozen=True)
+class RunRef:
+    """A reference to one run that contributed to the planned-test record."""
+
+    run_id: str
+    manifest_sha256: str
+    records_sha256: str
+
+
+@dataclass(frozen=True)
 class PlannedTestSettings:
     """Validated settings derived from a record on disk."""
 
@@ -100,6 +125,7 @@ class PlannedTestSettings:
     snr: Mapping[str, float]
     principal_components: Mapping[str, PcRef]
     excluded_seeds: frozenset[int]
+    runs: tuple[RunRef, ...]
 
 
 def _check_constant(
@@ -139,6 +165,45 @@ def _check_constant_float(
             f"settings record {str(path)!r} constants.{key} is {actual!r}; "
             f"the paper's value is {expected!r}"
         )
+
+
+def _check_hex64(
+    path: Path,
+    value: Any,
+    field: str,
+) -> str:
+    """Fail if ``value`` is not a 64-character lowercase hex string."""
+    if not isinstance(value, str) or not _HEX64.fullmatch(value):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} {field} must be 64 lowercase "
+            f"hex characters, got {value!r}"
+        )
+    return value
+
+
+def _run_ref_from_raw(
+    path: Path,
+    raw: Any,
+    field: str,
+) -> RunRef:
+    """Validate and freeze a single run reference under ``field``."""
+    if not isinstance(raw, dict):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} {field} must be an object"
+        )
+    run_id = raw.get("run_id")
+    if not isinstance(run_id, str) or not run_id:
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} {field}.run_id must be a "
+            f"non-empty string, got {run_id!r}"
+        )
+    manifest_sha256 = _check_hex64(path, raw.get("manifest_sha256"), f"{field}.manifest_sha256")
+    records_sha256 = _check_hex64(path, raw.get("records_sha256"), f"{field}.records_sha256")
+    return RunRef(
+        run_id=run_id,
+        manifest_sha256=manifest_sha256,
+        records_sha256=records_sha256,
+    )
 
 
 def load_settings_record(path: str | Path) -> PlannedTestSettings:
@@ -260,6 +325,20 @@ def load_settings_record(path: str | Path) -> PlannedTestSettings:
         raise PlannedTestSettingsError(
             f"settings record {str(path)!r} values.n_exact is {n_exact!r}; "
             f"the paper's value is {rules.N_EXACT!r}"
+        )
+
+    raw_n_attempted = values.get("n_attempted")
+    if isinstance(raw_n_attempted, bool) or not isinstance(raw_n_attempted, int):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} values.n_attempted must be an "
+            f"integer, got {raw_n_attempted!r}"
+        )
+
+    raw_n_not_exercised = values.get("n_not_exercised")
+    if isinstance(raw_n_not_exercised, bool) or not isinstance(raw_n_not_exercised, int):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} values.n_not_exercised must be an "
+            f"integer, got {raw_n_not_exercised!r}"
         )
 
     inputs = payload.get("inputs")
@@ -393,26 +472,104 @@ def load_settings_record(path: str | Path) -> PlannedTestSettings:
             )
         principal_components[proc] = PcRef(path=p, sha256=sha)
 
-    # excluded_seeds
+    # inputs: preliminary, pilots, and their run references
     prelim = inputs.get("preliminary")
-    if not isinstance(prelim, dict) or not isinstance(prelim.get("seed"), int) or isinstance(prelim.get("seed"), bool):
+    if not isinstance(prelim, dict):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} inputs.preliminary must be an object"
+        )
+    prelim_ref = _run_ref_from_raw(path, prelim, "inputs.preliminary")
+    prelim_seed = prelim.get("seed")
+    if isinstance(prelim_seed, bool) or not isinstance(prelim_seed, int):
         raise PlannedTestSettingsError(
             f"settings record {str(path)!r} inputs.preliminary.seed must be an "
-            "integer"
+            f"integer, got {prelim_seed!r}"
         )
-    seeds: set[int] = {prelim["seed"]}
+
     pilot_inputs = inputs.get("pilots")
-    if not isinstance(pilot_inputs, list):
+    if not isinstance(pilot_inputs, list) or not pilot_inputs:
         raise PlannedTestSettingsError(
-            f"settings record {str(path)!r} inputs.pilots must be a list"
+            f"settings record {str(path)!r} inputs.pilots must be a non-empty list"
         )
-    for pilot in pilot_inputs:
-        if not isinstance(pilot, dict) or not isinstance(pilot.get("seed"), int) or isinstance(pilot.get("seed"), bool):
+
+    seeds: set[int] = {prelim_seed}
+    run_ids: set[str] = {prelim_ref.run_id}
+    counted = 0
+    runs: list[RunRef] = [prelim_ref]
+
+    for idx, pilot in enumerate(pilot_inputs):
+        field = f"inputs.pilots[{idx}]"
+        if not isinstance(pilot, dict):
             raise PlannedTestSettingsError(
-                f"settings record {str(path)!r} every inputs.pilots entry must "
-                "have an integer seed"
+                f"settings record {str(path)!r} {field} must be an object"
             )
-        seeds.add(pilot["seed"])
+        pilot_seed = pilot.get("seed")
+        if isinstance(pilot_seed, bool) or not isinstance(pilot_seed, int):
+            raise PlannedTestSettingsError(
+                f"settings record {str(path)!r} {field}.seed must be an "
+                f"integer, got {pilot_seed!r}"
+            )
+        counted_flag = pilot.get("counted")
+        if not isinstance(counted_flag, bool):
+            raise PlannedTestSettingsError(
+                f"settings record {str(path)!r} {field}.counted must be a "
+                f"boolean, got {counted_flag!r}"
+            )
+        if counted_flag:
+            counted += 1
+        else:
+            reason = pilot.get("not_exercised_reason")
+            if not isinstance(reason, str) or not reason:
+                raise PlannedTestSettingsError(
+                    f"settings record {str(path)!r} {field}.not_exercised_reason "
+                    f"must be a non-empty string when counted is False"
+                )
+
+        raw_runs = pilot.get("runs")
+        if (
+            not isinstance(raw_runs, dict)
+            or set(raw_runs.keys()) != {"competitive", "matched", "pooled"}
+        ):
+            raise PlannedTestSettingsError(
+                f"settings record {str(path)!r} {field}.runs must contain "
+                f"exactly the arms competitive, matched, and pooled"
+            )
+
+        for arm in ("competitive", "matched", "pooled"):
+            ref = _run_ref_from_raw(path, raw_runs[arm], f"{field}.runs.{arm}")
+            if ref.run_id in run_ids:
+                raise PlannedTestSettingsError(
+                    f"settings record {str(path)!r} {field}.runs.{arm}.run_id "
+                    f"{ref.run_id!r} is repeated"
+                )
+            run_ids.add(ref.run_id)
+            runs.append(ref)
+
+        if pilot_seed in seeds:
+            raise PlannedTestSettingsError(
+                f"settings record {str(path)!r} {field}.seed {pilot_seed} "
+                f"duplicates another preliminary or pilot seed"
+            )
+        seeds.add(pilot_seed)
+
+    if counted != rules.N_CAL:
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} must have exactly {rules.N_CAL} "
+            f"counted pilots, got {counted}"
+        )
+
+    if raw_n_attempted != len(pilot_inputs):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} values.n_attempted is "
+            f"{raw_n_attempted}; it must equal len(inputs.pilots) = {len(pilot_inputs)}"
+        )
+
+    expected_not_exercised = sum(1 for pilot in pilot_inputs if not pilot["counted"])
+    if raw_n_not_exercised != expected_not_exercised:
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} values.n_not_exercised is "
+            f"{raw_n_not_exercised}; it must equal {expected_not_exercised}"
+        )
 
     return PlannedTestSettings(
         path=str(path),
@@ -424,15 +581,74 @@ def load_settings_record(path: str | Path) -> PlannedTestSettings:
         snr=snr,
         principal_components=principal_components,
         excluded_seeds=frozenset(seeds),
+        runs=tuple(runs),
     )
+
+
+
+
+
+def verify_run_data(
+    settings: PlannedTestSettings,
+    *,
+    root: str | Path = "data/evaluation",
+) -> str:
+    """Check the run data behind ``settings`` against its recorded hashes.
+
+    Returns ``"verified"`` when every run is present and matches,
+    ``"absent"`` when none are present, and ``"partial"`` otherwise.
+    """
+    root = resolve(root)
+    run_ids = [ref.run_id for ref in settings.runs]
+    records_by_run = load_records_for_runs(run_ids, root=root)  # dict[str, RunRecords]
+
+    present: list[bool] = []
+    for ref in settings.runs:
+        manifest_path = root / "runs" / ref.run_id / "manifest.json"
+        manifest_exists = manifest_path.is_file()
+        has_records = any(records_by_run[ref.run_id].by_stream.values())
+        present.append(manifest_exists or has_records)
+
+    if not any(present):
+        return "absent"
+
+    for ref, is_present in zip(settings.runs, present):
+        if not is_present:
+            continue
+        # Parse errors are counted per run; unattributable lines count against every run.
+        if records_by_run[ref.run_id].parse_errors > 0:
+            raise PlannedTestSettingsError(
+                "the run data cannot be read because of parse errors"
+            )
+        manifest_path = root / "runs" / ref.run_id / "manifest.json"
+        if not manifest_path.is_file():
+            raise PlannedTestSettingsError(
+                f"the run data differs from the record for run {ref.run_id!r}: "
+                "manifest file is missing"
+            )
+        manifest_sha256 = file_sha256(manifest_path)
+        if manifest_sha256 != ref.manifest_sha256:
+            raise PlannedTestSettingsError(
+                f"the run data differs from the record for run {ref.run_id!r}: "
+                "manifest sha256 does not match"
+            )
+        if records_digest(records_by_run[ref.run_id]) != ref.records_sha256:
+            raise PlannedTestSettingsError(
+                f"the run data differs from the record for run {ref.run_id!r}: "
+                "records digest does not match"
+            )
+
+    if all(present):
+        return "verified"
+    return "partial"
 
 
 def planned_test_gate(
     study: str | None,
     config: Mapping[str, Any],
     seed: int,
-) -> tuple[str | None, str | None]:
-    """Return a refusal reason and the settings digest, or ``(None, None)``.
+) -> tuple[str | None, str | None, str | None]:
+    """Return a refusal reason, the settings digest, and run-data status.
 
     A live run of the planned test needs the settings derived from the pilot
     runs (paper Appendix A.8). This function checks the study name, the role,
@@ -445,6 +661,7 @@ def planned_test_gate(
             return (
                 f"[planned_test] must be a table, got {type(planned_test).__name__!r}",
                 None,
+                None,
             )
         role = planned_test.get("role")
 
@@ -454,11 +671,13 @@ def planned_test_gate(
             return (
                 f"unknown workspace-mediation study {study!r}; known studies are {known}",
                 None,
+                None,
             )
         expected_role = STUDY_ROLES[study]
         if role != expected_role:
             return (
                 f"study {study!r} must set [planned_test].role = {expected_role!r}, got {role!r}",
+                None,
                 None,
             )
 
@@ -466,22 +685,40 @@ def planned_test_gate(
         return (
             f"planned_test role {role!r} is not one of {ROLES!r}",
             None,
+            None,
         )
 
     if role is None:
-        return (None, None)
-
-    if role in ("preliminary", "pilot"):
-        return (None, None)
+        return (None, None, None)
 
     settings_record = (
         planned_test.get("settings_record") if isinstance(planned_test, dict) else None
     )
+
+    pc = config.get("positive_control")
+    # The enabled positive control must share the planned-test settings record
+    # regardless of role, so check before the preliminary/pilot short-circuit.
+    if (
+        role is not None
+        and isinstance(pc, dict)
+        and pc.get("enabled") is True
+        and pc.get("settings_record") != settings_record
+    ):
+        return (
+            "[positive_control].settings_record must equal [planned_test].settings_record",
+            None,
+            None,
+        )
+
+    if role in ("preliminary", "pilot"):
+        return (None, None, None)
+
     if not isinstance(settings_record, str) or not settings_record:
         return (
             f"study {study!r} with role {role!r} needs the settings record "
             "derived from the pilot runs (paper Appendix A.8); run "
             "python -m kaine.experiment.calibrate",
+            None,
             None,
         )
 
@@ -492,17 +729,27 @@ def planned_test_gate(
             f"study {study!r} cannot start without a valid planned-test "
             f"settings record: {exc}",
             None,
+            None,
         )
 
     if seed in settings.excluded_seeds:
         return (
             f"seed {seed} was used by the preliminary or a pilot run and is not "
             "used again (paper A.8)",
+            settings.record_sha256,
+            None,
+        )
+
+    try:
+        run_data = verify_run_data(settings)
+    except PlannedTestSettingsError as exc:
+        return (
+            f"the pilot run data does not match the settings record: {exc}",
+            settings.record_sha256,
             None,
         )
 
     if role == "test":
-        pc = config.get("positive_control")
         if (
             isinstance(pc, dict)
             and pc.get("enabled") is True
@@ -513,10 +760,10 @@ def planned_test_gate(
                 f"a live test run may not carry the positive control in mode {mode!r}; "
                 "only mode control",
                 None,
+                None,
             )
 
     if role == "positive_control":
-        pc = config.get("positive_control")
         if (
             not isinstance(pc, dict)
             or pc.get("enabled") is not True
@@ -527,9 +774,10 @@ def planned_test_gate(
                 f"study {study!r} [positive_control] must enable control mode "
                 "and use the same settings_record as [planned_test]",
                 None,
+                None,
             )
 
-    return (None, settings.record_sha256)
+    return (None, settings.record_sha256, run_data)
 
 
 def planned_test_refusal(

@@ -18,15 +18,27 @@ from kaine.experiment.planned_test_settings import (
     load_settings_record,
     planned_test_gate,
     planned_test_refusal,
+    records_digest,
+    verify_run_data,
     write_settings_record,
 )
 from kaine.experiment.principal_component import (
     PrincipalComponent,
+    file_sha256,
     write_principal_component,
 )
+from kaine.experiment.run_records import load_records_for_runs
 
 
-def _build_record(tmp_path: Path) -> tuple[dict[str, Any], Path]:
+def _build_record(
+    tmp_path: Path,
+    n_pilots: int | None = None,
+    not_exercised: int = 0,
+) -> tuple[dict[str, Any], Path]:
+    if n_pilots is None:
+        n_pilots = rules.N_CAL + not_exercised
+    n_counted = n_pilots - not_exercised
+
     principal_components = {}
     for processor in PROCESSORS:
         path = tmp_path / f"pc_{processor}.json"
@@ -43,14 +55,39 @@ def _build_record(tmp_path: Path) -> tuple[dict[str, Any], Path]:
         sha = write_principal_component(pc, path)
         principal_components[processor] = {"path": str(path), "sha256": sha}
 
+    pilots = []
+    seed = 2
+    for i in range(n_pilots):
+        runs: dict[str, Any] = {}
+        for arm in ("competitive", "matched", "pooled"):
+            runs[arm] = {
+                "run_id": f"run_{i}_{arm}",
+                "manifest_sha256": "a" * 64,
+                "records_sha256": "b" * 64,
+            }
+        entry: dict[str, Any] = {
+            "seed": seed,
+            "counted": i < n_counted,
+            "runs": runs,
+        }
+        if not entry["counted"]:
+            entry["not_exercised_reason"] = "excluded by design"
+        pilots.append(entry)
+        seed += 1
+
     record = {
         "schema": "kaine.planned_test_settings",
         "schema_version": 1,
         "complete": True,
         "blocked": {},
         "inputs": {
-            "preliminary": {"run_id": "prelim", "seed": 1},
-            "pilots": [{"seed": 2}, {"seed": 3}],
+            "preliminary": {
+                "run_id": "prelim",
+                "seed": 1,
+                "manifest_sha256": "0" * 64,
+                "records_sha256": "1" * 64,
+            },
+            "pilots": pilots,
         },
         "constants": {
             "n_cal": rules.N_CAL,
@@ -69,6 +106,8 @@ def _build_record(tmp_path: Path) -> tuple[dict[str, Any], Path]:
             "theta_eff": {"matched": 0.02, "pooled": 0.03},
             "min_effect": 0.01,
             "min_reports": 500,
+            "n_attempted": n_pilots,
+            "n_not_exercised": not_exercised,
             "n_counted": rules.N_CAL,
             "n_exact": rules.N_EXACT,
             "snr": {processor: 4.0 for processor in PROCESSORS},
@@ -77,6 +116,48 @@ def _build_record(tmp_path: Path) -> tuple[dict[str, Any], Path]:
     }
     path = tmp_path / "settings.json"
     return record, path
+
+
+def _write_manifest_and_record(tmp_path: Path, run_id: str, events_file: Path) -> Path:
+    manifest_dir = tmp_path / "runs" / run_id
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = manifest_dir / "manifest.json"
+    manifest_path.write_text(json.dumps({"run_id": run_id}), encoding="utf-8")
+    with events_file.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"run_id": run_id}) + "\n")
+    return manifest_path
+
+
+def _make_record_with_run_data(
+    tmp_path: Path,
+    n_pilots: int | None = None,
+    not_exercised: int = 0,
+) -> tuple[Any, Path]:
+    record, path = _build_record(tmp_path, n_pilots=n_pilots, not_exercised=not_exercised)
+    events_dir = tmp_path / "research_events"
+    events_dir.mkdir(parents=True, exist_ok=True)
+    events_file = events_dir / "research_events-2026-10-11.jsonl"
+    events_file.write_text("", encoding="utf-8")
+
+    prelim = record["inputs"]["preliminary"]
+    manifest_path = _write_manifest_and_record(tmp_path, prelim["run_id"], events_file)
+    prelim["manifest_sha256"] = file_sha256(manifest_path)
+    prelim["records_sha256"] = records_digest(
+        load_records_for_runs([prelim["run_id"]], root=tmp_path)[prelim["run_id"]]
+    )
+
+    for pilot in record["inputs"]["pilots"]:
+        for arm in ("competitive", "matched", "pooled"):
+            ref = pilot["runs"][arm]
+            manifest_path = _write_manifest_and_record(tmp_path, ref["run_id"], events_file)
+            ref["manifest_sha256"] = file_sha256(manifest_path)
+            ref["records_sha256"] = records_digest(
+                load_records_for_runs([ref["run_id"]], root=tmp_path)[ref["run_id"]]
+            )
+
+    write_settings_record(record, path)
+    settings = load_settings_record(path)
+    return settings, path
 
 
 def test_load_returns_values_and_excluded_seeds(tmp_path: Path) -> None:
@@ -88,7 +169,7 @@ def test_load_returns_values_and_excluded_seeds(tmp_path: Path) -> None:
     assert loaded.min_effect == 0.01
     assert loaded.min_reports == 500
     assert dict(loaded.snr) == {processor: 4.0 for processor in PROCESSORS}
-    assert loaded.excluded_seeds == frozenset({1, 2, 3})
+    assert loaded.excluded_seeds == frozenset(range(1, rules.N_CAL + 2))
 
 
 def test_changed_value_fails_digest_check(tmp_path: Path) -> None:
@@ -147,7 +228,7 @@ def test_wrong_mser_ignore_end_is_refused(tmp_path: Path) -> None:
     record, path = _build_record(tmp_path)
     record["constants"]["mser_ignore_end"] = 4
     write_settings_record(record, path)
-    reason, digest = planned_test_gate(
+    reason, digest, run_data = planned_test_gate(
         "workspace_mediation_competitive",
         {"planned_test": {"role": "test", "settings_record": str(path)}},
         99,
@@ -155,13 +236,14 @@ def test_wrong_mser_ignore_end_is_refused(tmp_path: Path) -> None:
     assert reason is not None
     assert "mser_ignore_end" in reason
     assert digest is None
+    assert run_data is None
 
 
 def test_wrong_mser_min_batches_is_refused(tmp_path: Path) -> None:
     record, path = _build_record(tmp_path)
     record["constants"]["mser_min_batches"] = 9
     write_settings_record(record, path)
-    reason, digest = planned_test_gate(
+    reason, digest, run_data = planned_test_gate(
         "workspace_mediation_competitive",
         {"planned_test": {"role": "test", "settings_record": str(path)}},
         99,
@@ -169,84 +251,279 @@ def test_wrong_mser_min_batches_is_refused(tmp_path: Path) -> None:
     assert reason is not None
     assert "mser_min_batches" in reason
     assert digest is None
+    assert run_data is None
 
 
 def test_refusal_checks_n_cal(tmp_path: Path) -> None:
     record, path = _build_record(tmp_path)
     record["constants"]["n_cal"] = 4
     write_settings_record(record, path)
-    reason, _ = planned_test_gate(
+    reason, digest, run_data = planned_test_gate(
         "workspace_mediation_competitive",
         {"planned_test": {"role": "test", "settings_record": str(path)}},
         99,
     )
     assert reason is not None
     assert "n_cal" in reason
+    assert run_data is None
 
 
 def test_refusal_checks_c_eff(tmp_path: Path) -> None:
     record, path = _build_record(tmp_path)
     record["constants"]["c_eff"] = 0.4
     write_settings_record(record, path)
-    reason, _ = planned_test_gate(
+    reason, digest, run_data = planned_test_gate(
         "workspace_mediation_competitive",
         {"planned_test": {"role": "test", "settings_record": str(path)}},
         99,
     )
     assert reason is not None
     assert "c_eff" in reason
+    assert run_data is None
 
 
 def test_refusal_checks_mser_batch(tmp_path: Path) -> None:
     record, path = _build_record(tmp_path)
     record["constants"]["mser_batch"] = 4
     write_settings_record(record, path)
-    reason, _ = planned_test_gate(
+    reason, digest, run_data = planned_test_gate(
         "workspace_mediation_competitive",
         {"planned_test": {"role": "test", "settings_record": str(path)}},
         99,
     )
     assert reason is not None
     assert "mser_batch" in reason
+    assert run_data is None
 
 
 def test_refusal_checks_snr_ladder(tmp_path: Path) -> None:
     record, path = _build_record(tmp_path)
     record["constants"]["snr_ladder"] = [1.0, 2.0]
     write_settings_record(record, path)
-    reason, _ = planned_test_gate(
+    reason, digest, run_data = planned_test_gate(
         "workspace_mediation_competitive",
         {"planned_test": {"role": "test", "settings_record": str(path)}},
         99,
     )
     assert reason is not None
     assert "snr_ladder" in reason
+    assert run_data is None
 
 
 def test_refusal_checks_n_counted(tmp_path: Path) -> None:
     record, path = _build_record(tmp_path)
     record["values"]["n_counted"] = 29
     write_settings_record(record, path)
-    reason, _ = planned_test_gate(
+    reason, digest, run_data = planned_test_gate(
         "workspace_mediation_competitive",
         {"planned_test": {"role": "test", "settings_record": str(path)}},
         99,
     )
     assert reason is not None
     assert "n_counted" in reason
+    assert run_data is None
 
 
 def test_refusal_checks_n_exact(tmp_path: Path) -> None:
     record, path = _build_record(tmp_path)
     record["values"]["n_exact"] = 101
     write_settings_record(record, path)
-    reason, _ = planned_test_gate(
+    reason, digest, run_data = planned_test_gate(
         "workspace_mediation_competitive",
         {"planned_test": {"role": "test", "settings_record": str(path)}},
         99,
     )
     assert reason is not None
     assert "n_exact" in reason
+    assert run_data is None
+
+
+def test_empty_pilots_list_is_refused(tmp_path: Path) -> None:
+    record, path = _build_record(tmp_path, n_pilots=0)
+    record["inputs"]["pilots"] = []
+    record["values"]["n_attempted"] = 0
+    write_settings_record(record, path)
+    reason, digest, run_data = planned_test_gate(
+        None,
+        {"planned_test": {"role": "test", "settings_record": str(path)}},
+        99,
+    )
+    assert reason is not None
+    assert "pilots" in reason
+    assert digest is None
+    assert run_data is None
+
+
+def test_duplicate_pilot_seed_is_refused(tmp_path: Path) -> None:
+    record, path = _build_record(tmp_path, n_pilots=2)
+    record["inputs"]["pilots"][1]["seed"] = record["inputs"]["pilots"][0]["seed"]
+    write_settings_record(record, path)
+    reason, digest, run_data = planned_test_gate(
+        None,
+        {"planned_test": {"role": "test", "settings_record": str(path)}},
+        99,
+    )
+    assert reason is not None
+    assert "seed" in reason
+    assert digest is None
+    assert run_data is None
+
+
+def test_pilot_seed_matching_preliminary_is_refused(tmp_path: Path) -> None:
+    record, path = _build_record(tmp_path, n_pilots=1)
+    record["inputs"]["pilots"][0]["seed"] = record["inputs"]["preliminary"]["seed"]
+    write_settings_record(record, path)
+    reason, digest, run_data = planned_test_gate(
+        None,
+        {"planned_test": {"role": "test", "settings_record": str(path)}},
+        99,
+    )
+    assert reason is not None
+    assert "seed" in reason
+    assert digest is None
+    assert run_data is None
+
+
+def test_too_few_counted_pilots_is_refused(tmp_path: Path) -> None:
+    record, path = _build_record(tmp_path, n_pilots=29)
+    write_settings_record(record, path)
+    reason, digest, run_data = planned_test_gate(
+        None,
+        {"planned_test": {"role": "test", "settings_record": str(path)}},
+        99,
+    )
+    assert reason is not None
+    assert "counted" in reason
+    assert digest is None
+    assert run_data is None
+
+
+def test_not_exercised_pilot_without_reason_is_refused(tmp_path: Path) -> None:
+    record, path = _build_record(tmp_path, not_exercised=1)
+    for pilot in record["inputs"]["pilots"]:
+        if not pilot["counted"]:
+            pilot.pop("not_exercised_reason", None)
+    write_settings_record(record, path)
+    reason, digest, run_data = planned_test_gate(
+        None,
+        {"planned_test": {"role": "test", "settings_record": str(path)}},
+        99,
+    )
+    assert reason is not None
+    assert "not_exercised_reason" in reason
+    assert digest is None
+    assert run_data is None
+
+
+def test_n_attempted_mismatch_is_refused(tmp_path: Path) -> None:
+    record, path = _build_record(tmp_path)
+    record["values"]["n_attempted"] = 999
+    write_settings_record(record, path)
+    reason, digest, run_data = planned_test_gate(
+        None,
+        {"planned_test": {"role": "test", "settings_record": str(path)}},
+        99,
+    )
+    assert reason is not None
+    assert "n_attempted" in reason
+    assert digest is None
+    assert run_data is None
+
+
+def test_n_not_exercised_mismatch_is_refused(tmp_path: Path) -> None:
+    record, path = _build_record(tmp_path, not_exercised=1)
+    record["values"]["n_not_exercised"] = 0
+    write_settings_record(record, path)
+    reason, digest, run_data = planned_test_gate(
+        None,
+        {"planned_test": {"role": "test", "settings_record": str(path)}},
+        99,
+    )
+    assert reason is not None
+    assert "n_not_exercised" in reason
+    assert digest is None
+    assert run_data is None
+
+
+def test_repeated_run_id_is_refused(tmp_path: Path) -> None:
+    record, path = _build_record(tmp_path, n_pilots=2)
+    record["inputs"]["pilots"][0]["runs"]["competitive"]["run_id"] = "prelim"
+    write_settings_record(record, path)
+    reason, digest, run_data = planned_test_gate(
+        None,
+        {"planned_test": {"role": "test", "settings_record": str(path)}},
+        99,
+    )
+    assert reason is not None
+    assert "run_id" in reason
+    assert digest is None
+    assert run_data is None
+
+
+def test_verify_run_data_absent_when_no_run_data(tmp_path: Path) -> None:
+    record, path = _build_record(tmp_path)
+    write_settings_record(record, path)
+    settings = load_settings_record(path)
+    assert verify_run_data(settings, root=tmp_path) == "absent"
+
+
+def test_gate_returns_absent_run_data_when_no_run_data(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    record, path = _build_record(tmp_path)
+    write_settings_record(record, path)
+
+    import kaine.experiment.planned_test_settings as pts
+
+    original = pts.verify_run_data
+
+    def _verify(settings: Any) -> str:
+        return original(settings, root=tmp_path)
+
+    monkeypatch.setattr(pts, "verify_run_data", _verify)
+    reason, digest, run_data = planned_test_gate(
+        None,
+        {"planned_test": {"role": "test", "settings_record": str(path)}},
+        99,
+    )
+    assert reason is None
+    assert digest is not None
+    assert run_data == "absent"
+
+
+def test_verify_run_data_verified_when_run_data_matches(tmp_path: Path) -> None:
+    settings, path = _make_record_with_run_data(tmp_path)
+    assert verify_run_data(settings, root=tmp_path) == "verified"
+
+
+def test_verify_run_data_raises_when_records_differ(tmp_path: Path) -> None:
+    settings, path = _make_record_with_run_data(tmp_path)
+    run_id = settings.runs[0].run_id
+    events_file = tmp_path / "research_events" / "research_events-2026-10-11.jsonl"
+    lines = events_file.read_text(encoding="utf-8").splitlines()
+    new_lines = []
+    for line in lines:
+        obj = json.loads(line)
+        if obj.get("run_id") == run_id:
+            obj["extra"] = "tampered"
+        new_lines.append(json.dumps(obj))
+    events_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+    with pytest.raises(PlannedTestSettingsError, match=run_id):
+        verify_run_data(settings, root=tmp_path)
+
+
+def test_verify_run_data_partial_when_some_runs_missing(tmp_path: Path) -> None:
+    settings, path = _make_record_with_run_data(tmp_path)
+    absent_id = settings.runs[-1].run_id
+    manifest_path = tmp_path / "runs" / absent_id / "manifest.json"
+    manifest_path.unlink()
+    events_file = tmp_path / "research_events" / "research_events-2026-10-11.jsonl"
+    present_ids = [r.run_id for r in settings.runs if r.run_id != absent_id]
+    events_file.write_text(
+        "".join(json.dumps({"run_id": rid}) + "\n" for rid in present_ids),
+        encoding="utf-8",
+    )
+    assert verify_run_data(settings, root=tmp_path) == "partial"
 
 
 def test_refusal_allows_non_workspace_studies() -> None:
@@ -327,26 +604,70 @@ def test_refusal_checks_positive_control_mode(tmp_path: Path) -> None:
     assert planned_test_refusal("workspace_mediation_positive_control", config, 99) is None
 
 
+def test_positive_control_mismatched_settings_record_is_refused_for_test(
+    tmp_path: Path,
+) -> None:
+    record, path = _build_record(tmp_path)
+    write_settings_record(record, path)
+    other_path = tmp_path / "other_settings.json"
+    other_path.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    config = {
+        "planned_test": {"role": "test", "settings_record": str(path)},
+        "positive_control": {
+            "enabled": True,
+            "mode": "control",
+            "settings_record": str(other_path),
+        },
+    }
+    reason, digest, run_data = planned_test_gate(
+        "workspace_mediation_competitive", config, 99
+    )
+    assert reason is not None
+    assert "[positive_control].settings_record must equal [planned_test].settings_record" in reason
+    assert digest is None
+    assert run_data is None
+
+
+def test_positive_control_settings_record_without_planned_test_refused_for_pilot() -> None:
+    config = {
+        "planned_test": {"role": "pilot"},
+        "positive_control": {
+            "enabled": True,
+            "mode": "ladder",
+            "settings_record": "some_settings.json",
+        },
+    }
+    reason, digest, run_data = planned_test_gate(
+        "workspace_mediation_pilot_competitive", config, 99
+    )
+    assert reason is not None
+    assert "[positive_control].settings_record must equal [planned_test].settings_record" in reason
+    assert digest is None
+    assert run_data is None
+
+
 def test_gate_test_role_without_study_or_record_is_refused() -> None:
-    reason, digest = planned_test_gate(None, {"planned_test": {"role": "test"}}, 0)
+    reason, digest, run_data = planned_test_gate(None, {"planned_test": {"role": "test"}}, 0)
     assert reason is not None
     assert digest is None
+    assert run_data is None
 
 
 def test_gate_test_role_with_renamed_study_without_record_is_refused() -> None:
-    reason, digest = planned_test_gate(
+    reason, digest, run_data = planned_test_gate(
         "my_renamed_study",
         {"planned_test": {"role": "test"}},
         0,
     )
     assert reason is not None
     assert digest is None
+    assert run_data is None
 
 
 def test_gate_test_role_with_record_and_no_study_passes(tmp_path: Path) -> None:
     record, path = _build_record(tmp_path)
     write_settings_record(record, path)
-    reason, digest = planned_test_gate(
+    reason, digest, run_data = planned_test_gate(
         None,
         {"planned_test": {"role": "test", "settings_record": str(path)}},
         99,
@@ -354,42 +675,47 @@ def test_gate_test_role_with_record_and_no_study_passes(tmp_path: Path) -> None:
     assert reason is None
     loaded = load_settings_record(path)
     assert digest == loaded.record_sha256
+    assert isinstance(run_data, str)
 
 
 def test_gate_rejects_workspace_study_with_wrong_role() -> None:
-    reason, _ = planned_test_gate(
+    reason, digest, run_data = planned_test_gate(
         "workspace_mediation_competitive",
         {"planned_test": {"role": "pilot"}},
         0,
     )
     assert reason is not None
     assert "role = 'test'" in reason
+    assert run_data is None
 
-    reason, _ = planned_test_gate(
+    reason, digest, run_data = planned_test_gate(
         "workspace_mediation_pilot_matched",
         {"planned_test": {"role": "test"}},
         0,
     )
     assert reason is not None
     assert "role = 'pilot'" in reason
+    assert run_data is None
 
-    reason, _ = planned_test_gate(
+    reason, digest, run_data = planned_test_gate(
         "workspace_mediation_preliminary",
         {"planned_test": {"role": "pilot"}},
         0,
     )
     assert reason is not None
     assert "role = 'preliminary'" in reason
+    assert run_data is None
 
 
 def test_gate_rejects_unknown_workspace_study() -> None:
-    reason, _ = planned_test_gate(
+    reason, digest, run_data = planned_test_gate(
         "workspace_mediation_other",
         {"planned_test": {"role": "test"}},
         0,
     )
     assert reason is not None
     assert "unknown workspace-mediation study" in reason
+    assert run_data is None
 
 
 @pytest.mark.parametrize("study, expected_role", list(STUDY_ROLES.items()))
@@ -410,14 +736,16 @@ def test_gate_accepts_correct_study_role_pairs(tmp_path: Path, study: str, expec
     elif expected_role == "test":
         config["positive_control"] = {"enabled": False}
 
-    reason, digest = planned_test_gate(study, config, 99)
+    reason, digest, run_data = planned_test_gate(study, config, 99)
     assert reason is None
     if expected_role in RECORD_ROLES:
         assert path is not None
         loaded = load_settings_record(path)
         assert digest == loaded.record_sha256
+        assert run_data == "absent"
     else:
         assert digest is None
+        assert run_data is None
 
 
 def test_gate_test_role_refuses_non_control_positive_control_modes(tmp_path: Path) -> None:
@@ -428,21 +756,35 @@ def test_gate_test_role_refuses_non_control_positive_control_modes(tmp_path: Pat
     for mode in ("ladder", "estimate_pc"):
         config = {
             **base_config,
-            "positive_control": {"enabled": True, "mode": mode},
+            "positive_control": {
+                "enabled": True,
+                "mode": mode,
+                "settings_record": str(path),
+            },
         }
-        reason, _ = planned_test_gate("workspace_mediation_competitive", config, 99)
+        reason, digest, run_data = planned_test_gate(
+            "workspace_mediation_competitive", config, 99
+        )
         assert reason is not None
         assert mode in reason
+        assert run_data is None
 
     config = {**base_config, "positive_control": {"enabled": False}}
     assert planned_test_gate("workspace_mediation_competitive", config, 99)[0] is None
 
-    config = {**base_config, "positive_control": {"enabled": True, "mode": "control"}}
+    config = {
+        **base_config,
+        "positive_control": {
+            "enabled": True,
+            "mode": "control",
+            "settings_record": str(path),
+        },
+    }
     assert planned_test_gate("workspace_mediation_competitive", config, 99)[0] is None
 
 
 def test_gate_returns_none_when_no_study_or_planned_test() -> None:
-    assert planned_test_gate(None, {}, 0) == (None, None)
+    assert planned_test_gate(None, {}, 0) == (None, None, None)
 
 
 def test_load_settings_record_with_relative_pc_paths(monkeypatch, tmp_path):

@@ -25,6 +25,8 @@
 - [x] 4.2 Loader checks the paper's constants, n_counted and n_exact; digest in the run manifest and printed by the tool
 - [x] 4.3 Positive control after the report, off the report path; report rates recorded for inspection
 - [x] 4.4 Ladder errors block instead of stopping the tool; s2 approximation documented
+- [x] 4.6 Shutdown drain budget; exactly one terminal record per control
+- [x] 4.7 The record lists and hashes its run set; the gate verifies present run data; positive control and planned test name the same record
 - [x] 4.5 MSER-5 per paper PR #27: 0 <= d <= b - 5, b >= 10, d* <= b/2
 
 ## 5. Open (operator)

@@ -104,6 +104,7 @@ class PositiveControlSettings:
     min_reports: Optional[int] = None
     t_learn_s: Optional[float] = None
     settings_sha256: Optional[str] = None
+    shutdown_drain_s: float = 5.0
     pc_root: Optional[str] = None
 
     def __post_init__(self) -> None:
@@ -129,6 +130,7 @@ class PositiveControlSettings:
             "seed",
             "principal_components_run",
             "settings_record",
+            "shutdown_drain_s",
             "snr",
             "min_effect",
             "min_reports",
@@ -158,8 +160,21 @@ class PositiveControlSettings:
                 f"[positive_control].seed must be an int, got {seed!r}"
             )
 
+        shutdown_drain_s = section.get("shutdown_drain_s", 5.0)
+        if (
+            isinstance(shutdown_drain_s, bool)
+            or not isinstance(shutdown_drain_s, (int, float))
+            or shutdown_drain_s <= 0
+            or shutdown_drain_s == float("inf")
+            or shutdown_drain_s != shutdown_drain_s
+        ):
+            raise ValueError(
+                f"[positive_control].shutdown_drain_s must be a finite number above 0, got {shutdown_drain_s!r}"
+            )
+        shutdown_drain_s = float(shutdown_drain_s)
+
         if not enabled:
-            return cls(enabled=False, seed=int(seed), pc_root=pc_root_str)
+            return cls(shutdown_drain_s=shutdown_drain_s, enabled=False, seed=int(seed), pc_root=pc_root_str)
 
         mode = section.get("mode")
         if mode not in MODES:
@@ -177,6 +192,7 @@ class PositiveControlSettings:
                     "[positive_control].settings_record must be absent in estimate_pc mode"
                 )
             return cls(
+                shutdown_drain_s=shutdown_drain_s,
                 enabled=True,
                 mode="estimate_pc",
                 seed=int(seed),
@@ -213,6 +229,7 @@ class PositiveControlSettings:
                 pc_sha256[processor] = file_sha256(path)
 
             return cls(
+                shutdown_drain_s=shutdown_drain_s,
                 enabled=True,
                 mode="ladder",
                 seed=int(seed),
@@ -254,6 +271,7 @@ class PositiveControlSettings:
             record_sha256s[processor] = ref.sha256
 
         return cls(
+            shutdown_drain_s=shutdown_drain_s,
             enabled=True,
             mode="control",
             seed=int(seed),
@@ -446,6 +464,11 @@ class ShadowProbe:
 
 class PositiveControl:
     """Runs the positive control for one processor and reports the verdict."""
+
+    @property
+    def settings(self) -> PositiveControlSettings:
+        """The settings used for this control run."""
+        return self._settings
 
     def __init__(
         self,
@@ -849,6 +872,20 @@ class ControlQueue:
     async def drain(self) -> None:
         """Return when every submitted job has finished."""
         await self._queue.join()
+
+    async def abort(self) -> None:
+        """Cancel the worker and drop pending jobs so drain returns immediately."""
+        if self._worker is not None and not self._worker.done():
+            self._worker.cancel()
+            try:
+                await self._worker
+            except asyncio.CancelledError:
+                # The worker was cancelled on purpose; do not re-raise.
+                pass
+        while not self._queue.empty():
+            self._queue.get_nowait()
+            self._queue.task_done()
+        self._worker = None
 
     async def close(self) -> None:
         """Drain, then cancel and await the worker task; submit after close restarts it."""

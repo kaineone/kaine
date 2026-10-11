@@ -25,7 +25,6 @@ run with it.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import sys
@@ -66,10 +65,10 @@ from kaine.experiment.calibration_rules import (
 from kaine.experiment.planned_test_settings import (
     SCHEMA,
     SCHEMA_VERSION,
+    records_digest,
     write_settings_record,
 )
 from kaine.experiment.principal_component import (
-    canonical_bytes,
     file_sha256,
     load_principal_component,
     principal_component_path,
@@ -110,17 +109,6 @@ def _flatten_records(run_records: RunRecords) -> Iterable[dict[str, Any]]:
     for records in run_records.by_stream.values():
         for record in records:
             yield record
-
-
-def _records_sha256(run_records: RunRecords) -> str:
-    h = hashlib.sha256()
-    # Iterate streams in sorted order so the digest is independent of dict insertion order.
-    for stream in sorted(run_records.by_stream):
-        records = run_records.by_stream[stream]
-        for record in records:
-            h.update(canonical_bytes({"stream": stream, "record": record}))
-            h.update(b"\n")
-    return h.hexdigest()
 
 
 def included_reports(
@@ -608,7 +596,7 @@ def calibrate(
             "run_id": preliminary_run,
             "seed": pre_seed,
             "manifest_sha256": manifest_sha[preliminary_run],
-            "records_sha256": _records_sha256(records_by_run[preliminary_run]),
+            "records_sha256": records_digest(records_by_run[preliminary_run]),
         },
         "pilots": [],
     }
@@ -624,7 +612,7 @@ def calibrate(
             entry["runs"][arm] = {
                 "run_id": run_id,
                 "manifest_sha256": manifest_sha[run_id],
-                "records_sha256": _records_sha256(records_by_run[run_id]),
+                "records_sha256": records_digest(records_by_run[run_id]),
             }
         inputs["pilots"].append(entry)
 
