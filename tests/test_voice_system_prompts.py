@@ -146,15 +146,6 @@ class _FakeThymos:
         self.resets += 1
 
 
-class _FakeNous:
-    @property
-    def running(self) -> bool:
-        return True
-
-    async def step(self, n: int) -> list[str]:
-        return []
-
-
 class _FakeResetter:
     def __init__(self) -> None:
         self.calls = 0
@@ -206,7 +197,6 @@ def _make_hypnos(
     return Hypnos(
         bus,
         mnemos=_FakeMnemos(),
-        nous_process=_FakeNous(),
         thymos=_FakeThymos(),
         chronos_resetters=[_FakeResetter()],
         trainer=trainer or _RejectingTrainer(),

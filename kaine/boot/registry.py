@@ -267,9 +267,6 @@ def build_registry(
 
     if bool(toggles.get("hypnos", False)):
         # construct_module hands Hypnos its sibling modules from the registry.
-        # Nous is now a pymdp/JAX active-inference engine with no NAR subprocess,
-        # so there is no process for Hypnos's belief-revision phase to step;
-        # that phase skips cleanly when nous_process is None.
         hypnos = construct_module(
             "hypnos",
             bus,
@@ -333,7 +330,6 @@ def construct_module(
             bus,
             section,
             mnemos=mnemos,
-            nous_process=None,
             thymos=thymos,
             phantasia=phantasia,
             kaine_config=kaine_config,
