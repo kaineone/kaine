@@ -221,3 +221,20 @@ def test_malformed_missing_prediction_tick():
             break
     with pytest.raises(ThresholdContrastError):
         following_reports(records, T_LEARN_S)
+
+
+@pytest.mark.parametrize("bad_time", [float("nan"), float("inf"), None])
+def test_report_with_non_finite_time_raises(bad_time):
+    records = make_run(jump=0.2)
+    records.append(
+        {
+            "event_type": "topos.report",
+            "awake": True,
+            "context_gain": 0.1,
+            "entity_time_s": bad_time,
+            "prediction_broadcast_tick": 1,
+            "prediction_context_age_s": 0.5,
+        }
+    )
+    with pytest.raises(ThresholdContrastError):
+        following_reports(records, T_LEARN_S)

@@ -94,13 +94,14 @@ def following_reports(records, t_learn_s: float) -> list[FollowingReport]:
         if not isinstance(awake, bool):
             raise ThresholdContrastError("report awake must be a bool")
         gain = record.get("context_gain")
+        if not _is_finite_number(gain) or not awake:
+            continue
         entity_time = record.get("entity_time_s")
-        if (
-            not _is_finite_number(gain)
-            or not awake
-            or not _is_number(entity_time)
-            or entity_time <= t_learn_s
-        ):
+        # A NaN would compare as after the learning period, so a report with a
+        # defined gain must carry a finite time, as the calibration tool requires.
+        if not _is_finite_number(entity_time):
+            raise ThresholdContrastError("included report entity_time_s must be finite")
+        if entity_time <= t_learn_s:
             continue
         tick = record.get("prediction_broadcast_tick")
         if not isinstance(tick, int) or isinstance(tick, bool):
