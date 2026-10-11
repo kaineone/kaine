@@ -1,6 +1,6 @@
 ## Why
 
-Paper §5.4 lists the null-context evaluation behind the planned test's measure, and the measure's positive control, as work to finish in the live cycle before the live runs. Appendix A.8 defines the gain of a report as the error of the processor's prediction under a null context minus its error under the context it held, over its running mean error. The null context keeps the processor's own share and replaces every other source's contribution by its mean over the contexts adopted so far in the run, replaces components 1 to 4 by their means, and keeps the age and the two flags.
+Paper §5.4 lists the null-context evaluation behind the planned test's measure, and the measure's positive control, as work to finish in the live cycle before the live runs. Appendix A.8 defines the gain of a report as the error of the processor's prediction under a null context minus its error under the context it held, over its running mean error. The null context keeps the processor's own share and replaces every other source's contribution by its mean over the contexts adopted so far in the run, replaces components 1 to 4 (indices 0 to 3 in the code) by their means, and keeps the age and the two flags.
 
 An audit of the code against A.8 finds the per-report gain (`context_gain`) already built to that definition in Topos, Audition's acoustic path and Soma, with three gaps:
 
