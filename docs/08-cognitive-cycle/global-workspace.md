@@ -99,7 +99,7 @@ inhibited = best score < θ
 metadata["access_threshold"] = θ
 ```
 
-where `θ` is `[syneidesis].publication_threshold` (default 0.35), the access threshold. A coalition member is accessed when its own score reaches `θ` (a score equal to `θ` counts). A broadcast is accessed when at least one member is, which is the same as its best score reaching `θ`, so `inhibited` is false exactly when the broadcast is accessed. A member of an accessed broadcast whose score is below `θ` is broadcast but not accessed. With no candidates, Syneidesis returns an empty snapshot marked inhibited, whose metadata holds only the arm.
+where `θ` is `[syneidesis].publication_threshold` (default 0.35), the access threshold. A coalition member is accessed when its own score reaches `θ` (a score equal to `θ` counts). A broadcast is accessed when at least one member is, which is the same as its best score reaching `θ`, so `inhibited` is false exactly when the broadcast is accessed. A member of an accessed broadcast whose score is below `θ` is broadcast but not accessed. With no candidates, Syneidesis returns an empty snapshot marked inhibited, whose metadata holds only the arm (the pooled arm below is the exception: its empty snapshot is not inhibited).
 
 Every broadcast with candidates carries the threshold in its metadata so that each module can tell accessed members from the rest of the coalition. When the coherence layer is on, the threshold applies to the coherence-adjusted scores.
 
