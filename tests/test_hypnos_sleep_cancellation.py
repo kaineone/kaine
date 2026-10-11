@@ -73,9 +73,9 @@ class RecordingMnemos:
             await asyncio.Event().wait()
         return []
 
-    def downscale_activations(self, factor: float) -> int:
+    async def downscale(self, protect=()):
         self.calls.append("downscale")
-        return 0
+        return {"n_new": 0, "factor": 1.0, "protected": len(protect), "total_before": 0.0, "total_after": 0.0, "silent": 0}
 
     async def select_cross_period_traces(
         self,

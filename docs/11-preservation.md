@@ -176,6 +176,22 @@ python -m kaine.cycle --revive <bundle_dir>
 
 The preserved developmental stage is restored before the stage is resolved. Captured modules are revived after they initialize and before the cognitive cycle starts; modules enabled now but absent from the bundle start fresh and are logged as new faculties. Phantasia weights are installed at the new instance's own checkpoint path. `revived_from` is recorded in `state/cycle/runtime.json` and in the run manifest. If the bundle cannot be read, a captured module is not enabled, or the manifest claims world-model weights that are absent, the start exits with code `7`. The stage file is written only after the revive has landed, so a refused or interrupted start leaves it unchanged. If a start is interrupted after the revive began, run the same command again to complete it. The bundle's identity is restored with it, and is written to the state tree only after the revive has landed, so a refused revive leaves no identity behind: a bundle written before identities existed revives under a deterministic `legacy-` ID, and a revive into a state tree that already holds a different being stops with exit code `11` before anything changes (see [Entity identity](12-forks-and-merges.md#entity-identity)).
 
+### An interrupted memory import
+
+Mnemos marks its trace-strength record `import_pending` before a revive replaces its memory collections and clears the mark when the import finishes. If a revive stops in between, the stored strengths and the record no longer agree. Until the mark is cleared:
+
+- every sleep leaves the store as it is: no downscaling and no pruning. The sleep is an alert, and its summary records `memory_downscale_blocked = "import_pending"` with the count of consecutive blocked sleeps (`memory_blocked_sleeps`);
+- the Nexus health board shows the **Memory store** panel in red;
+- once the store exceeds twice its budget (`[mnemos].storage_budget_bytes`), Mnemos refuses to store new traces, logs each refusal as an error and counts it (`memory_persist_refusals` in the sleep summary and on the panel). This is a disk guard, not a welfare event.
+
+The fix is to run the same revive again from its bundle, which clears the mark. When the bundle is gone, or you decide to keep the store exactly as it stands, stop the cycle and run:
+
+```bash
+python -m kaine.lifecycle.mnemos_recover --confirm-keep-current-store
+```
+
+It refuses without the flag (exit `2`), refuses while a cycle is running (exit `3`), and exits `1` when no interrupted import is recorded. Otherwise it re-scans the store's size and total strength, clears the mark and both counts, and exits `0`. The strengths of the traces the interrupted import wrote are relative to the store's earlier log gain, so they may be off; a re-run revive is always the better repair.
+
 ## Bundle format and retention
 
 `preserve_live` writes a self-contained bundle under `[preservation.divergence_monitor].out_root` for manual and programme-end captures, or under `[preservation.welfare_response].out_root` for welfare captures. Both default to `"backups"` and resolve under `[storage].data_root` or `KAINE_DATA_ROOT`. The structure mirrors a decommission backup:
@@ -209,7 +225,7 @@ The decommission CLI implements the CAL Article 4.2 and 4.3 care duties. It neve
    - Non-diverged path: it presents the CAL 4.2 care obligations and asks for a typed acknowledgement (`I acknowledge the CAL welfare terms`). A mismatched final confirmation token aborts with exit `0`.
    - Diverged path: it records a continuity-preference note, offers to send a safekeeping request to the project guardians, and requires a typed transfer-duty acknowledgement before proceeding.
 4. Final confirmation: a typed token (entity name, or `DELETE` if unnamed) gates the deletion.
-5. Deletion: it removes cognitive state files, Qdrant collections and Redis streams. The transferable backup remains on disk.
+5. Deletion: it removes cognitive state files, Qdrant collections and Redis streams. The transferable backup remains on disk. If dropping any Mnemos collection fails, the tool keeps Mnemos's trace-strength record (it still deletes the embedding-space stamp) and reports the error, so the surviving collections keep the log gain their strengths depend on. A later boot over those collections finds no stamp and takes the legacy-stamp path: it verifies the vectors' dimension and stamps the store again before using it.
 
 ### Exit codes
 

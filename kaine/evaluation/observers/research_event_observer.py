@@ -257,7 +257,18 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     "mnemos.replay": frozenset({"memory_ids", "max_affect_intensity", "selection_scores", "count"}),
     "hypnos.sleep.started": frozenset({"started_at"}),
     "hypnos.sleep.completed": frozenset(
-        {"phases_completed", "replay_count", "consolidation_summary_counts", "alert"}
+        {
+            "phases_completed",
+            "replay_count",
+            "consolidation_summary_counts",
+            "alert",
+            "memory_pruned_floor",
+            "memory_pruned_budget",
+            "memory_store_bytes",
+            "memory_downscale_blocked",
+            "memory_blocked_sleeps",
+            "memory_persist_refusals",
+        }
     ),
     # Organ-level consolidation divergence (content-free aggregates only):
     # breadth (rate) + depth (magnitude) of how the entity's conditioned output

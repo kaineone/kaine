@@ -1,0 +1,33 @@
+{# Mnemos store health. `mnemos_store` is the HealthProber snapshot block:
+   {state, import_pending, blocked_sleeps, persist_refusals, store_bytes,
+   budget_bytes, message, since}. The operator's signal for interrupted imports,
+   persist refusals, and store size versus budget. Non-content operational data
+   only. Defensive: missing block -> unknown. #}
+<section id="mnemos-store" class="panel" data-readonly="true">
+  <h3>Memory store</h3>
+  {% if mnemos_store %}
+    {% set ms = mnemos_store %}
+    {% set chip = "up" if ms.state == "ok" else ("degraded" if ms.state == "warning" else ("down" if ms.state == "critical" else "unknown")) %}
+    <p>
+      state: <span class="chip {{ chip }}">{{ ms.state }}</span>
+      {% if ms.since %}<span class="muted">updated {{ ms.since }}</span>{% endif %}
+    </p>
+    {% if ms.message %}<p class="muted">{{ ms.message }}</p>{% endif %}
+
+    {% if ms.blocked_sleeps is not none or ms.persist_refusals is not none or ms.store_bytes is not none or ms.budget_bytes is not none %}
+    <div class="table-wrap">
+      <table class="mono">
+        <thead><tr><th>metric</th><th>value</th></tr></thead>
+        <tbody>
+          {% if ms.blocked_sleeps is not none %}<tr><td>blocked sleeps</td><td>{{ ms.blocked_sleeps }}</td></tr>{% endif %}
+          {% if ms.persist_refusals is not none %}<tr><td>persist refusals</td><td>{{ ms.persist_refusals }}</td></tr>{% endif %}
+          {% if ms.store_bytes is not none %}<tr><td>store bytes</td><td>{{ ms.store_bytes }}</td></tr>{% endif %}
+          {% if ms.budget_bytes is not none %}<tr><td>budget bytes</td><td>{{ ms.budget_bytes }}</td></tr>{% endif %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  {% else %}
+    <p class="chart-empty">Memory store status unavailable.</p>
+  {% endif %}
+</section>

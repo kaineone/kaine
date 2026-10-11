@@ -8,6 +8,7 @@ keep their points out of process.
 
 import uuid
 from pathlib import Path
+from typing import Any, Sequence
 
 import pytest
 
@@ -95,6 +96,58 @@ class _OutOfProcessStorage:
     async def write_stamp(self, key: str, stamp: dict) -> None:
         return await self._inner.write_stamp(key, stamp)
 
+    async def read_meta(self, key: str) -> dict | None:
+        return await self._inner.read_meta(key)
+
+    async def write_meta(self, key: str, value: dict) -> None:
+        return await self._inner.write_meta(key, value)
+
+    async def wake_points(
+        self, collections: Sequence[str], born_sleep: int
+    ) -> list[dict[str, Any]]:
+        result = await self._inner.wake_points(collections, born_sleep)
+        out: list[dict] = []
+        for point in result:
+            new_point = dict(point)
+            new_point["id"] = str(uuid.UUID(point["id"]))
+            out.append(new_point)
+        return out
+
+    async def count_filtered(
+        self,
+        collection: str,
+        *,
+        born_sleep: int | None = None,
+        has_log_base: bool | None = None,
+    ) -> int:
+        return await self._inner.count_filtered(
+            collection,
+            born_sleep=born_sleep,
+            has_log_base=has_log_base,
+        )
+
+    async def total_size(self, collections: Sequence[str]) -> int:
+        return await self._inner.total_size(collections)
+
+    async def scan_store(self, collections: Sequence[str]) -> dict[str, Any]:
+        return await self._inner.scan_store(collections)
+
+    async def weakest(self, collections: Sequence[str], *, limit: int) -> list[dict[str, Any]]:
+        return await self._inner.weakest(collections, limit=limit)
+
+    async def delete_points(self, collection: str, point_ids: Sequence[str]) -> None:
+        return await self._inner.delete_points(collection, point_ids)
+
+    async def set_log_base(
+        self, collection: str, updates: Sequence[tuple[str, float]]
+    ) -> None:
+        return await self._inner.set_log_base(collection, updates)
+
+    async def backfill_strength(
+        self, collections: Sequence[str], *, log_base: float
+    ) -> int:
+        return await self._inner.backfill_strength(collections, log_base=log_base)
+
     async def recent_points(self, collection: str, *, limit: int) -> list[dict]:
         self.recent_calls.append((collection, limit))
         result = await self._inner.recent_points(collection, limit=limit)
@@ -112,6 +165,48 @@ class _OutOfProcessStorage:
 class _FailingStorage(_OutOfProcessStorage):
     async def recent_points(self, collection: str, *, limit: int) -> list[dict]:
         raise StorageError("store down")
+
+    async def read_meta(self, key: str) -> dict | None:
+        return None
+
+    async def write_meta(self, key: str, value: dict) -> None:
+        return None
+
+    async def wake_points(
+        self, collections: Sequence[str], born_sleep: int
+    ) -> list[dict[str, Any]]:
+        return []
+
+    async def count_filtered(
+        self,
+        collection: str,
+        *,
+        born_sleep: int | None = None,
+        has_log_base: bool | None = None,
+    ) -> int:
+        return 0
+
+    async def total_size(self, collections: Sequence[str]) -> int:
+        return 0
+
+    async def scan_store(self, collections: Sequence[str]) -> dict[str, Any]:
+        return {"bytes": 0, "log_base_counts": {}, "unstrengthed": 0}
+
+    async def weakest(self, collections: Sequence[str], *, limit: int) -> list[dict[str, Any]]:
+        return []
+
+    async def delete_points(self, collection: str, point_ids: Sequence[str]) -> None:
+        return None
+
+    async def set_log_base(
+        self, collection: str, updates: Sequence[tuple[str, float]]
+    ) -> None:
+        return None
+
+    async def backfill_strength(
+        self, collections: Sequence[str], *, log_base: float
+    ) -> int:
+        return 0
 
 
 async def _seeded(bus: AsyncBus, storage, **mnemos_kwargs) -> tuple[Mnemos, MnemosCore]:

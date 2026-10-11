@@ -603,6 +603,11 @@ short_term_capacity = 128
 recall_top_k = 5
 baseline_salience = 0.15
 alert_salience = 0.6
+# Storage budget of the persisted memory stores, in bytes (paper A.10, Table A1
+# row B). Set it from the disk this installation can give Mnemos. When a sleep
+# leaves the stores above it, the weakest traces are deleted first until they
+# fit. The paper gives no value; 10 GiB is a safe default, not a recommendation.
+storage_budget_bytes = 10737418240
 
 [mnemos.qdrant]
 host = "127.0.0.1"
@@ -616,11 +621,24 @@ affect_weight = 0.7
 # Weight on recency in the selection score (newer = higher).
 recency_weight = 0.3
 # When true (default), sidecar/observer payloads carry only memory IDs,
-# not trace text — keeps memory content out of operational logs.
+# not trace text, so memory content stays out of operational logs.
 redact_content = true
 # Newest episodic traces sleep's cross-period selection (associative
 # replay) reads, without vectors. Matches short_term_capacity.
 cross_period_candidates = 128
+
+[mnemos.strength]
+# Strength a trace that is never replayed keeps over one entity day of storage
+# at the resting broadcast rate (paper A.10 and Table A1, after the mean
+# decrease of synaptic size in sleep that de Vivo et al. 2017 measured).
+retention_per_day = 0.82
+# Traces stored by one entity day at the resting broadcast rate, N_day =
+# 86400 x f0 with f0 = 10/3 Hz (paper A.10, Table A1). The paper's design value;
+# it does not follow [cycle].experiential_rate_hz.
+traces_per_day = 288000
+# A trace whose strength falls below this floor is deleted in the sleep that
+# weakened it (paper A.10).
+prune_floor = 0.01
 
 [eidolon]
 persistence_path = "state/eidolon/self_model.json"
@@ -1081,10 +1099,7 @@ requested_rest_min_interval_s = 1800.0
 # Whether Hypnos subscribes to soma.fatigue and triggers on threshold crossing.
 # interval_seconds above remains as a max-interval safety net regardless.
 fatigue_triggered = true
-# Synaptic homeostasis downscaling factor (Tononi & Cirelli 2014).
-# Applied to all in-memory activation vectors during phase 2.
-downscale_factor = 0.9
-# Replay window duration (seconds) — informational; replay completes synchronously.
+# Replay window duration in seconds (informational; replay completes synchronously).
 replay_window_s = 5.0
 # Phase-3 associative cross-period replay. When true, Hypnos selects traces
 # spanning >= 2 memory periods, cues Phantasia for scenario extensions, and

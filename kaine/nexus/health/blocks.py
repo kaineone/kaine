@@ -519,6 +519,50 @@ def gpu_preflight_block(gpu_preflight_path: Path) -> dict[str, Any]:
     }
 
 
+def mnemos_store_block(health_path: Path, mnemos_enabled: bool) -> dict[str, Any]:
+    """Read-only Mnemos store health from the shared health file.
+
+    Reads ``state/mnemos/store_health.json`` (written by Mnemos). Never raises;
+    a missing, unreadable, or non-object file yields state ``"unknown"``.
+    Surfaces only non-content operational state: import status, blocked sleep
+    count, persist refusals, store size and budget.
+    """
+    if not mnemos_enabled:
+        return {"state": "disabled", "message": "Mnemos is not enabled"}
+    try:
+        with health_path.open("r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:
+        log.debug("mnemos_store_block failed", exc_info=True)
+        data = None
+    if not isinstance(data, dict):
+        return {"state": "unknown", "message": "no store health recorded"}
+    import_pending = bool(data.get("import_pending"))
+    refusals = int(data.get("persist_refusals", 0) or 0)
+    if import_pending:
+        state = "critical"
+        message = (
+            "an interrupted import is blocking sleep; re-run the revive or run "
+            "python -m kaine.lifecycle.mnemos_recover"
+        )
+    elif refusals > 0:
+        state = "warning"
+        message = data.get("message", "")
+    else:
+        state = "ok"
+        message = data.get("message", "")
+    return {
+        "state": state,
+        "import_pending": import_pending,
+        "blocked_sleeps": data.get("blocked_sleeps", 0),
+        "persist_refusals": refusals,
+        "store_bytes": data.get("store_bytes"),
+        "budget_bytes": data.get("budget_bytes"),
+        "message": message,
+        "since": data.get("updated_at"),
+    }
+
+
 def spot_block(spot_control_path: Path, spot_escalation_path: Path) -> dict[str, Any]:
     """Build the operator-facing Spot supervisor status block.
 
