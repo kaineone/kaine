@@ -54,6 +54,9 @@ from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
+# Bound on each wait in Hypnos.shutdown(): the in-flight sleep, then the held tasks.
+_SHUTDOWN_WAIT_S = 5.0
+
 
 def _append_jsonl(path: Path, record: dict[str, Any]) -> None:
     path = Path(path)
@@ -324,6 +327,43 @@ class Hypnos(BaseModule):
             self._tasks.append(
                 asyncio.create_task(self._soma_consumer_loop(), name="hypnos-soma-consumer")
             )
+
+    async def shutdown(self) -> None:
+        """Stop the loops, then end any in-flight sleep, then await held tasks.
+
+        Awaits ``BaseModule.shutdown()`` first so the background loops stop
+        and no new sleep can start. If a sleep is still running it is cancelled
+        and awaited, so it ends the way a cancelled sleep always does: the
+        affective reset runs and an aborted ``hypnos.sleep.completed`` is published.
+        The held tasks are then awaited so none is left pending when the event
+        loop closes. Each wait is bounded by ``_SHUTDOWN_WAIT_S``, and a task still
+        pending after that is logged and left.
+        """
+        await super().shutdown()
+
+        sleep_task = getattr(self, "_sleep_task", None)
+        if isinstance(sleep_task, asyncio.Task) and not sleep_task.done():
+            sleep_task.cancel()
+            done, pending = await asyncio.wait({sleep_task}, timeout=_SHUTDOWN_WAIT_S)
+            if pending:
+                log.warning("hypnos: shutdown wait expired with sleep still pending")
+            for task in done:
+                # Retrieve the exception so it is not reported at garbage collection.
+                if not task.cancelled():
+                    task.exception()
+
+        held = set(self._shielded_tasks)
+        if held:
+            done, pending = await asyncio.wait(held, timeout=_SHUTDOWN_WAIT_S)
+            if pending:
+                log.warning(
+                    "hypnos: shutdown wait expired with %d held task(s) still pending",
+                    len(pending),
+                )
+            for task in done:
+                # Retrieve the exception so it is not reported at garbage collection.
+                if not task.cancelled():
+                    task.exception()
 
     async def _soma_consumer_loop(self) -> None:
         """Background loop: watch soma.out for maintenance triggers.
@@ -646,6 +686,26 @@ class Hypnos(BaseModule):
             salience=self._baseline_salience,
         )
 
+    def _open_phantasia_window(self) -> None:
+        """Open Phantasia's scenario window before phases 2 and 3."""
+        method = getattr(self._phantasia, "open_scenario_window", None)
+        if method is None:
+            return
+        try:
+            method()
+        except Exception:
+            log.warning("hypnos: opening Phantasia's scenario window failed", exc_info=True)
+
+    def _close_phantasia_window(self) -> None:
+        """Close Phantasia's scenario window after phases 2 and 3."""
+        method = getattr(self._phantasia, "close_scenario_window", None)
+        if method is None:
+            return
+        try:
+            method()
+        except Exception:
+            log.warning("hypnos: closing Phantasia's scenario window failed", exc_info=True)
+
     async def _run_final_affective_reset(self) -> PhaseResult:
         """Run phase 5, the affective reset, so that a cancel cannot interrupt it.
 
@@ -695,28 +755,37 @@ class Hypnos(BaseModule):
                 )
             )
 
-            # --- Phase 2: Deep Consolidation + Downscaling ---
-            # Global activation downscaling. Perception is already suspended for the whole sleep (enter_sleep).
-            phase_results.append(
-                await deep_consolidation(
-                    self._mnemos,
-                    downscale_factor=self._downscale_factor,
-                    replay_window_s=self._replay_window_s,
+            # --- Phases 2 and 3 cue Phantasia ---
+            # Phase 2's replay cues it through mnemos.replay events on the bus
+            # and phase 3 calls it directly. Hypnos opens Phantasia's scenario
+            # window around both, so the window never depends on Phantasia
+            # having seen hypnos.sleep.started, and closes it on any exit.
+            self._open_phantasia_window()
+            try:
+                # --- Phase 2: Deep Consolidation + Downscaling ---
+                # Global activation downscaling. Perception is already suspended for the whole sleep (enter_sleep).
+                phase_results.append(
+                    await deep_consolidation(
+                        self._mnemos,
+                        downscale_factor=self._downscale_factor,
+                        replay_window_s=self._replay_window_s,
+                    )
                 )
-            )
 
-            # --- Phase 3: Associative Replay (cross-period; behind feature flag) ---
-            # Selects cross-period traces, cues Phantasia, and re-injects the
-            # resulting novel associations into the workspace so Nous (pymdp) and
-            # Thymos process them via the NORMAL cognitive cycle — no NAR burst.
-            phase_results.append(
-                await associative_replay(
-                    enabled=self._associative_replay_enabled,
-                    mnemos=self._mnemos,
-                    phantasia=self._phantasia,
-                    reinject=self._reinject_association,
+                # --- Phase 3: Associative Replay (cross-period; behind feature flag) ---
+                # Selects cross-period traces, cues Phantasia, and re-injects the
+                # resulting novel associations into the workspace so Nous (pymdp) and
+                # Thymos process them via the NORMAL cognitive cycle: no NAR burst.
+                phase_results.append(
+                    await associative_replay(
+                        enabled=self._associative_replay_enabled,
+                        mnemos=self._mnemos,
+                        phantasia=self._phantasia,
+                        reinject=self._reinject_association,
+                    )
                 )
-            )
+            finally:
+                self._close_phantasia_window()
 
             # --- Phase 4: Voice Alignment ---
             voice_result, voice_phase = await self._run_voice_alignment()
