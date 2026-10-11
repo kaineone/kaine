@@ -157,14 +157,19 @@ def test_skipped_reading_reports_no_gain() -> None:
     assert m.last_null_error is not None
     err = m.step([float("nan")] * 8, context=ctx, null_context=ctx)
     assert err == 0.0
+    assert m.last_error_defined is False  # skipped input has no defined error
     assert m.last_null_error is None
     assert m.last_scored_had_context is False
     assert m.last_reading_skipped is True
     err2 = m.step([0.3] * 8, context=ctx, null_context=ctx)
     assert err2 == 0.0
+    assert m.last_error_defined is False  # first finite step after a skip has no prediction to score
     assert m.last_null_error is None
     assert m.last_scored_had_context is False
     assert m.last_reading_skipped is False
+    m.step([0.4] * 8, context=ctx, null_context=ctx)
+    assert m.last_error_defined is True  # second finite step after a skip is scored
+    assert m.last_null_error is not None
 
 
 @pytest.mark.asyncio
@@ -214,14 +219,21 @@ async def test_soma_skip_publishes_no_gain_and_leaves_the_window(
     assert p4["context_gain"] is None
     assert p4["null_prediction_error"] is None
     assert p4["mean_prediction_error"] is None
+    assert p4["prediction_error"] is None  # undefined error after skip
     assert list(soma._prediction_error_window) == window_before
 
     p5 = await soma.tick_once()
     assert p5["context_gain"] is None
     assert p5["null_prediction_error"] is None
+    assert p5["prediction_error"] is None  # first finite step after a skip is unscored
+    assert list(soma._prediction_error_window) == window_before  # window still unchanged
 
     p6 = await soma.tick_once()
     assert isinstance(p6["context_gain"], float)
+    assert isinstance(p6["prediction_error"], float)  # second finite step is scored
+    assert list(soma._prediction_error_window) == (
+        window_before + [p6["prediction_error"]]
+    )[-soma._prediction_error_window.maxlen:]
 
 
 @pytest.mark.asyncio

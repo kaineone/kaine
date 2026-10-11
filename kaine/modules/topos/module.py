@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from typing import Any, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
@@ -46,6 +47,18 @@ from kaine.modules.topos.live import (
 )
 
 log = logging.getLogger(__name__)
+
+
+def _finite_or_none(vector: Any) -> Optional[list[float]]:
+    """Return *vector*, or None when it is None or holds a non-finite value.
+
+    A skipped reading publishes None in place of its vector, so no NaN or
+    infinity reaches the bus.
+    """
+    if vector is None or any(not math.isfinite(v) for v in vector):
+        return None
+    return vector
+
 
 _HYPNOS_STREAM: str = "hypnos.out"
 
@@ -157,6 +170,9 @@ class Topos(BaseModule):
         )
         self._change_detector: ChangeDetector = change_detector or CosineChangeDetector()
         self._habituator: SceneHabituator = habituator or RollingMeanHabituator()
+        # Habituation score of the last finite embedding; a skipped embedding
+        # republishes it (None before the first finite one).
+        self._last_habituation: Optional[float] = None
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
         self._change_alert_threshold = float(change_alert_threshold)
@@ -517,8 +533,19 @@ class Topos(BaseModule):
             embedding = peripheral_latent
         else:
             embedding = await self._encode_clip(list(self._frame_buffer))
-        change = float(self._change_detector.observe(embedding))
-        habituation = float(self._habituator.observe(embedding))
+        # A non-finite embedding is skipped: it scores no change and leaves the
+        # change detector and the change history as they were, so the next
+        # embedding is compared with the last finite one.
+        skipped = not all(math.isfinite(v) for v in embedding)
+        change = 0.0 if skipped else float(self._change_detector.observe(embedding))
+        habituation: Optional[float]
+        if skipped:
+            # The habituator does not observe a skipped embedding; the report
+            # carries the last score it gave.
+            habituation = self._last_habituation
+        else:
+            habituation = float(self._habituator.observe(embedding))
+            self._last_habituation = habituation
 
         # Self-calibrating change alert (perception-drives-salience). The alert
         # criterion is RELATIVE to the module's own rolling baseline of change
@@ -528,7 +555,8 @@ class Topos(BaseModule):
         # stream near its own baseline stays quiet. change_alert_threshold survives
         # only as a small absolute FLOOR guard so a large ratio over a near-static
         # stream (tiny mean) cannot fire on noise.
-        self._change_history.append(change)
+        if not skipped:
+            self._change_history.append(change)
         mean_change = (
             sum(self._change_history) / len(self._change_history) if self._change_history else 0.0
         )
@@ -558,7 +586,10 @@ class Topos(BaseModule):
                 )
             else:
                 prediction_error = await asyncio.to_thread(self._forward_model.step, embedding)
-            self._pred_errors.append(prediction_error)
+            # Only a defined error enters the running mean: a skipped reading has
+            # none, nor has the first reading after a skip (paper A.2).
+            if getattr(self._forward_model, "last_error_defined", True):
+                self._pred_errors.append(prediction_error)
 
             # Normalise error against the rolling window mean so a steady,
             # predictable motion yields low salience even at non-zero error.
@@ -625,12 +656,19 @@ class Topos(BaseModule):
         except Exception:
             log.debug("topos preview tap failed (non-fatal)", exc_info=True)
 
+        # A report without a defined error publishes none, so consumers such as
+        # Thymos do not pool a made-up 0.
+        published_error: Optional[float] = (
+            None
+            if skipped or not getattr(self._forward_model, "last_error_defined", True)
+            else prediction_error
+        )
         report: dict[str, Any] = {
-            "latent": embedding,
+            "latent": _finite_or_none(embedding),
             "change_score": change,
             "habituation_score": habituation,
             "encoder_model_id": self._encoder.model_id,
-            "prediction_error": prediction_error,
+            "prediction_error": published_error,
             # Prediction error normalised against the rolling-window mean (the same
             # quantity the alert criterion uses). Exposed so the affect layer can
             # scale arousal by perceptual surprise (perception→arousal coupling).
@@ -655,8 +693,8 @@ class Topos(BaseModule):
             # Foveation on: `latent` is the peripheral gist (kept for backward-
             # compatible consumers); the attended detail and the content-free
             # fovea location ride alongside it.
-            report["peripheral"] = peripheral_latent
-            report["foveal"] = foveal_latent
+            report["peripheral"] = _finite_or_none(peripheral_latent)
+            report["foveal"] = _finite_or_none(foveal_latent)
             report["fovea"] = fovea.to_dict()
             # Attention schema: the content-free predicted next fovea location.
             if predicted_fovea is not None:

@@ -709,3 +709,58 @@ def test_research_observer_keeps_ladder_fields() -> None:
     result = _apply_taxonomy_fields("positive_control.ladder", payload, {})
     assert set(LADDER_FIELDS).issubset(result.keys())
     assert "x" not in result
+
+
+class _VaryingWithGap(Varying):
+    """Varying latents, with a non-finite one at report 5."""
+
+    async def encode(self, image):
+        k = self._counter
+        vec = await super().encode(image)
+        return [float("nan")] * 4 if k == 5 else vec
+
+
+@pytest.mark.asyncio
+async def test_topos_control_stays_paired_across_a_skip():
+    """After a non-finite latent is skipped, the shadow forward models stay
+    paired with the live forward model and resume together."""
+    bus = _bus()
+    try:
+        topos = topos_module.Topos(
+            bus,
+            encoder=_VaryingWithGap(),
+            forward_prediction=True,
+            entity_clock=_FixedClock(),
+            positive_control=_control({"topos": 4}),
+        )
+        topos._forward_model = LatentForwardModel(
+            latent_dim=4,
+            units=8,
+            context_dim=CONTEXT_DIM,
+            seed=4,
+        )
+        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+        control = topos._positive_control
+
+        for i in range(10):
+            if i == 3:
+                await topos.on_workspace(_workspace("thymos", 0.75, 0.75))
+            await topos.process_frame(None)
+            for probe in control._probes:
+                assert [
+                    list(v) for v in probe._shadow._buffer
+                ] == [list(v) for v in topos._forward_model._buffer]
+
+        reports = await _reports(bus, "topos.out")
+        gains = [r["context_gain"] for r in reports]
+        assert gains[5] is None
+        assert gains[6] is None
+        assert isinstance(gains[7], float)
+        assert control._n == sum(1 for g in gains if g is not None)
+
+        for p in _payloads(await bus.read("positive_control.out", last_id="0")):
+            for v in p.values():
+                if isinstance(v, float):
+                    assert math.isfinite(v)
+    finally:
+        await bus.close()

@@ -12,6 +12,7 @@ import pytest
 from kaine.evaluation.benchmarks.workspace_mediation_ablation.runner import (
     MediationConfig,
     _classify,
+    _read_error,
     format_summary,
     run_ablation,
 )
@@ -179,3 +180,10 @@ def test_mediation_stability_counts_verdicts():
     report = run_mediation_stability([1, 2], ticks=30, warmup_ticks=10)
     assert isinstance(report, StabilityReport)
     assert sum(report.verdict_counts.values()) == 2
+
+
+def test_read_error_keeps_a_skipped_error_as_none():
+    """_read_error preserves None for skipped readings and parses numbers."""
+    assert _read_error({"prediction_error": None}) is None
+    assert _read_error({}) is None
+    assert _read_error({"prediction_error": 0.25}) == 0.25

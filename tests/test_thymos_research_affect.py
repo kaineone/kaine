@@ -897,3 +897,72 @@ async def test_peer_consumer_survives_a_bad_event(bus: AsyncBus):
         assert handled == [2]
     finally:
         await thymos.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_skipped_perceptual_reports_leave_the_error_trackers_unchanged(bus):
+    """A None prediction_error from a perceptual module must be ignored,
+    leaving Thymos error trackers and progress exactly as they were."""
+    fake_now = [0.0]
+    thymos = Thymos(
+        bus,
+        clock=lambda: fake_now[0],
+        drift_rate_per_s=0.0,
+        publish_interval_s=999.0,
+    )
+    await thymos.initialize()
+    try:
+        for i in range(20):
+            fake_now[0] = i * 0.1
+            for stream, source, type_ in (
+                ("topos.out", "topos", "topos.report"),
+                ("audition.out", "audition", "audition.perception"),
+            ):
+                await thymos._handle_peer_event(
+                    stream,
+                    Event(
+                        source=source,
+                        type=type_,
+                        payload={"prediction_error": 1.0 + 0.1 * i, "alert": False},
+                        salience=0.5,
+                        timestamp=datetime.now(timezone.utc),
+                    ),
+                )
+        before = (
+            dict(thymos._err_fast_sum),
+            dict(thymos._err_fast_count),
+            dict(thymos._err_slow_sum),
+            dict(thymos._err_slow_count),
+            dict(thymos._err_last_at),
+        )
+        progress_before = thymos._progress()
+        for i in range(20, 40):
+            fake_now[0] = i * 0.1
+            for stream, source, type_ in (
+                ("topos.out", "topos", "topos.report"),
+                ("audition.out", "audition", "audition.perception"),
+            ):
+                await thymos._handle_peer_event(
+                    stream,
+                    Event(
+                        source=source,
+                        type=type_,
+                        payload={
+                            "prediction_error": None,
+                            "normalised_error": 0.0,
+                            "alert": False,
+                        },
+                        salience=0.5,
+                        timestamp=datetime.now(timezone.utc),
+                    ),
+                )
+        assert (
+            dict(thymos._err_fast_sum),
+            dict(thymos._err_fast_count),
+            dict(thymos._err_slow_sum),
+            dict(thymos._err_slow_count),
+            dict(thymos._err_last_at),
+        ) == before
+        assert thymos._progress() == progress_before
+    finally:
+        await thymos.shutdown()

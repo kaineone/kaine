@@ -207,7 +207,10 @@ class Empatheia(BaseModule):
             return
         category = str(payload.get("category") or "neutral")
         confidence = float(payload.get("confidence") or 0.0)
-        prediction_error = float(payload.get("prediction_error") or 0.0)
+        # A skipped reading publishes no error; pass None through so the
+        # agent model does not average a made-up 0.
+        raw_error = payload.get("prediction_error")
+        prediction_error = None if raw_error is None else float(raw_error)
 
         agent_id = self._agent_for(event)
         model = await self._store.get(agent_id)
@@ -244,11 +247,12 @@ class Empatheia(BaseModule):
         # A transcription event counts as an interaction but does not
         # change the emotion histogram. We fold it in as a neutral,
         # low-confidence observation so the interaction_count ticks up.
-        # We do NOT record any text from the payload.
+        # The placeholder carries no error, so it leaves the error
+        # average alone. We do NOT record any text from the payload.
         model.update_from_emotion(
             "neutral",
             confidence=0.0,
-            prediction_error=0.0,
+            prediction_error=None,
             deviation_threshold=self._deviation_threshold,
         )
         await self._store.put(model)

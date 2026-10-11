@@ -3,6 +3,7 @@
 
 import asyncio
 import io
+import math
 import os
 import wave
 from datetime import datetime, timezone
@@ -792,5 +793,155 @@ async def test_acoustic_report_carries_the_paired_evaluations(bus: AsyncBus) -> 
             (payload["null_prediction_error"] - payload["prediction_error"])
             / payload["mean_prediction_error"]
         )
+    finally:
+        await audition.shutdown()
+
+
+def _non_finite_numbers(value):
+    """Every non-finite number anywhere inside *value*."""
+    if isinstance(value, bool):
+        return []
+    if isinstance(value, (int, float)):
+        return [] if math.isfinite(value) else [value]
+    if isinstance(value, dict):
+        return [n for v in value.values() for n in _non_finite_numbers(v)]
+    if isinstance(value, (list, tuple)):
+        return [n for v in value for n in _non_finite_numbers(v)]
+    return []
+
+
+@pytest.mark.asyncio
+async def test_acoustic_path_skips_a_non_finite_embedding(bus, monkeypatch) -> None:
+    torch = pytest.importorskip("torch")
+    audition = _general_audition(bus)
+    await audition.initialize()
+    try:
+        soma_entry = (
+            "1-0",
+            Event(
+                source="soma",
+                type="soma.report",
+                payload={"k": 1},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            ),
+        )
+        await audition.on_workspace(
+            WorkspaceSnapshot(
+                tick_index=1,
+                selected_events=[soma_entry],
+                inhibited=False,
+                salience_scores={soma_entry[0]: 0.5},
+                metadata={"access_threshold": 0.35},
+            )
+        )
+        await audition.process_audio(_tone(7000), sample_rate=16000)
+        await audition.process_audio(_tone(5000), sample_rate=16000)
+        await audition.process_audio(_tone(6000), sample_rate=16000)
+
+        model = audition._acoustic_forward_model
+        buffer_before = [list(v) for v in model._buffer]
+        weights_before = [p.detach().clone() for p in model._net.parameters()]
+        errors_before = list(audition._acoustic_errors)
+        changes_before = list(audition._acoustic_change_history)
+        prev_before = audition._prev_acoustic_embedding
+
+        monkeypatch.setattr(
+            audition._acoustic_encoder,
+            "embed",
+            lambda audio_bytes, sample_rate: [float("nan")] * 8,
+        )
+        await audition.process_audio(_tone(4000), sample_rate=16000)
+        monkeypatch.undo()
+
+        assert [list(v) for v in model._buffer] == buffer_before
+        for saved, current in zip(weights_before, model._net.parameters()):
+            assert torch.equal(saved, current)
+        assert list(audition._acoustic_errors) == errors_before
+        assert list(audition._acoustic_change_history) == changes_before
+        assert audition._prev_acoustic_embedding is prev_before
+
+        await audition.process_audio(_tone(7000), sample_rate=16000)
+        await audition.process_audio(_tone(5000), sample_rate=16000)
+
+        entries = await bus.read("audition.out", last_id="0", count=50)
+        events = [e for _, e in entries if e.type == "audition.perception"]
+        assert len(events) == 6
+        assert isinstance(events[2].payload["context_gain"], float)
+        assert events[3].payload["context_gain"] is None
+        assert events[3].payload["null_prediction_error"] is None
+        assert events[3].payload["mean_prediction_error"] is None
+        assert events[3].payload["prediction_error"] is None  # undefined after skip
+        assert events[3].payload["normalised_error"] == 0.0
+        assert events[3].payload["change_score"] == 0.0
+        assert events[3].payload["alert"] is False
+        assert events[3].salience == pytest.approx(audition._baseline_salience)
+        assert events[4].payload["context_gain"] is None
+        assert events[4].payload["prediction_error"] is None  # undefined on first finite step after skip
+        assert events[4].payload["normalised_error"] == 0.0
+        assert isinstance(events[5].payload["context_gain"], float)
+        window = list(audition._acoustic_errors)
+        assert window == errors_before + [events[5].payload["prediction_error"]]
+        assert events[5].payload["normalised_error"] == pytest.approx(
+            events[5].payload["prediction_error"] / (sum(window) / len(window))
+        )
+        for event in events:
+            assert _non_finite_numbers(event.payload) == []
+    finally:
+        await audition.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_tone_path_skips_a_non_finite_feature_vector(bus, monkeypatch):
+    torch = pytest.importorskip("torch")
+    audition = _make_audition(bus)
+    await audition.initialize()
+    try:
+        await audition.process_audio(_tone(300), sample_rate=16000)
+        await audition.process_audio(_tone(300), sample_rate=16000)
+        await audition.process_audio(_tone(300), sample_rate=16000)
+
+        model = audition._forward_model
+        buffer_before = [list(v) for v in model._buffer]
+        weights_before = [p.detach().clone() for p in model._net.parameters()]
+        errors_before = list(audition._prediction_errors)
+
+        monkeypatch.setattr(
+            "kaine.modules.audition.module.build_feature_vector",
+            lambda *a, **k: [float("nan")] * model.feature_dim,
+        )
+        await audition.process_audio(_tone(300), sample_rate=16000)
+        monkeypatch.undo()
+
+        assert [list(v) for v in model._buffer] == buffer_before
+        for saved, current in zip(weights_before, model._net.parameters()):
+            assert torch.equal(saved, current)
+        assert model.last_reading_skipped is True
+        assert list(audition._prediction_errors) == errors_before
+
+        entries = await bus.read("audition.out", last_id="0", count=50)
+        emotions = [e for _, e in entries if e.type == "audition.emotion"]
+        assert len(emotions) == 4
+        assert emotions[3].payload["prediction_error"] is None
+        assert emotions[3].payload["alert"] is False
+        assert emotions[3].salience == pytest.approx(audition._baseline_salience)
+        for _, e in entries:
+            assert _non_finite_numbers(e.payload) == []
+
+        await audition.process_audio(_tone(300), sample_rate=16000)
+        assert model.last_reading_skipped is False
+        assert model.last_error_defined is False  # first finite step after a skip is unscored
+        assert list(audition._prediction_errors) == errors_before
+
+        await audition.process_audio(_tone(300), sample_rate=16000)
+        assert model.last_error_defined is True  # second finite step after a skip is scored
+        assert len(audition._prediction_errors) == min(
+            len(errors_before) + 1, audition._prediction_errors.maxlen
+        )
+
+        entries = await bus.read("audition.out", last_id="0", count=50)
+        emotions = [e for _, e in entries if e.type == "audition.emotion"]
+        assert emotions[4].payload["prediction_error"] is None
+        assert isinstance(emotions[5].payload["prediction_error"], float)
     finally:
         await audition.shutdown()

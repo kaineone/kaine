@@ -494,8 +494,9 @@ class Soma(BaseModule):
             else:
                 prediction_error = self._forward_model.step(feature_vec)
         self._last_prediction_error = prediction_error
-        # A skipped reading carries no real error to average.
-        if not getattr(self._forward_model, "last_reading_skipped", False):
+        # Only a defined error enters the running mean: a skipped reading has
+        # none, nor has the first reading after a skip (paper A.5).
+        if getattr(self._forward_model, "last_error_defined", True):
             self._prediction_error_window.append(prediction_error)
 
         context_gain: Optional[float] = None
@@ -635,7 +636,13 @@ class Soma(BaseModule):
             "wellness": wellness,
             "alerts": list(alert.keys),
             "alert": bool(alert.is_alert),
-            "prediction_error": prediction_error,
+            # A reading without a defined error (skipped, or the first after a
+            # skip) publishes none, so no consumer averages a made-up 0.
+            "prediction_error": (
+                prediction_error
+                if getattr(self._forward_model, "last_error_defined", True)
+                else None
+            ),
             # cross-module broadcast information gain, paper Appendix A.8
             # paired evaluations behind the information-gain measure
             "context_gain": context_gain,

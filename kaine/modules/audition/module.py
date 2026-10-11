@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from collections import deque
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional
 
@@ -290,8 +291,14 @@ class Audition(BaseModule):
         # Offload the spectral encoder to a thread so the audio loop does not
         # block the event loop (performance-test-coverage).
         embedding = await asyncio.to_thread(self._acoustic_encoder.embed, attended_bytes, sample_rate)
-        change = cosine_change(embedding, self._prev_acoustic_embedding)
-        self._prev_acoustic_embedding = embedding
+        # A non-finite embedding is skipped: it scores no change and leaves the
+        # previous embedding and the change history as they were.
+        skipped = not all(math.isfinite(v) for v in embedding)
+        if skipped:
+            change = 0.0
+        else:
+            change = cosine_change(embedding, self._prev_acoustic_embedding)
+            self._prev_acoustic_embedding = embedding
         # One entity-clock reading per report, for the report and the positive control.
         entity_time_s = self._clock.now()
         context_gain: Optional[float] = None
@@ -305,7 +312,10 @@ class Audition(BaseModule):
             prediction_error = self._acoustic_forward_model.step(embedding, ctx, null)
         else:
             prediction_error = self._acoustic_forward_model.step(embedding)
-        self._acoustic_errors.append(prediction_error)
+        # Only a defined error enters the running mean: a skipped reading has
+        # none, nor has the first reading after a skip (paper A.2).
+        if getattr(self._acoustic_forward_model, "last_error_defined", True):
+            self._acoustic_errors.append(prediction_error)
         # Normalise the error against its rolling mean (Chronos/Topos convention):
         # steady, predictable sound stays low-salience even at non-zero error.
         mean_err = (
@@ -340,7 +350,8 @@ class Audition(BaseModule):
         # judged RELATIVE to its own rolling baseline, not against an absolute
         # constant mis-scaled for one encoder, with the threshold surviving as a
         # small FLOOR guard. An acoustic onset alerts; steady sound stays baseline.
-        self._acoustic_change_history.append(change)
+        if not skipped:
+            self._acoustic_change_history.append(change)
         mean_change = (
             sum(self._acoustic_change_history) / len(self._acoustic_change_history)
             if self._acoustic_change_history
@@ -360,10 +371,17 @@ class Audition(BaseModule):
         # Content-free energy estimate (dBFS), independent of the encoder.
         energy_db = await asyncio.to_thread(energy_dbfs, attended_bytes)
 
+        # A report without a defined error publishes none, so consumers such as
+        # Thymos do not pool a made-up 0.
+        published_error: Optional[float] = (
+            None
+            if skipped or not getattr(self._acoustic_forward_model, "last_error_defined", True)
+            else prediction_error
+        )
         payload: dict[str, Any] = {
             "source_label": source_label,
             "change_score": change,
-            "prediction_error": prediction_error,
+            "prediction_error": published_error,
             "energy_dbfs": energy_db,
             # Normalised acoustic prediction error (rolling-window relative) —
             # exposed so the affect layer can scale arousal by acoustic surprise
@@ -677,7 +695,11 @@ class Audition(BaseModule):
             prediction_error = self._forward_model.step(feature_vec, ctx)
         else:
             prediction_error = self._forward_model.step(feature_vec)
-        self._prediction_errors.append(prediction_error)
+        # Only a defined error enters the running mean: a skipped reading has
+        # none, nor has the first reading after a skip (paper A.2).
+        if getattr(self._forward_model, "last_error_defined", True):
+            self._prediction_errors.append(prediction_error)
+        tone_error_defined = getattr(self._forward_model, "last_error_defined", True)
         error_window = list(self._prediction_errors)
 
         # ------------------------------------------------------------------
@@ -711,6 +733,7 @@ class Audition(BaseModule):
                 len(audio_bytes),
                 prediction_error=prediction_error,
                 error_window=error_window,
+                error_defined=tone_error_defined,
             )
 
         emo_result: Optional[EmotionResult] = None
@@ -726,6 +749,7 @@ class Audition(BaseModule):
                 source_label,
                 prediction_error=prediction_error,
                 error_window=error_window,
+                error_defined=tone_error_defined,
             )
 
         return stt_result, emo_result
@@ -801,6 +825,7 @@ class Audition(BaseModule):
         *,
         prediction_error: float = 0.0,
         error_window: Optional[list[float]] = None,
+        error_defined: bool = True,
     ) -> None:
         salience = self._error_weighted_salience(
             self._baseline_salience,
@@ -816,7 +841,7 @@ class Audition(BaseModule):
                 "sample_rate": int(sample_rate),
                 "audio_bytes_length": int(audio_bytes_length),
                 "latency_ms": result.latency_ms,
-                "prediction_error": prediction_error,
+                "prediction_error": prediction_error if error_defined else None,
                 "backend": self._backend,
             },
             salience=salience,
@@ -853,6 +878,7 @@ class Audition(BaseModule):
         *,
         prediction_error: float = 0.0,
         error_window: Optional[list[float]] = None,
+        error_defined: bool = True,
     ) -> None:
         # Base salience: alert for non-neutral emotions (existing behaviour).
         base_salience = (
@@ -871,7 +897,7 @@ class Audition(BaseModule):
             "model": result.model,
             "source_label": source_label,
             "latency_ms": result.latency_ms,
-            "prediction_error": prediction_error,
+            "prediction_error": prediction_error if error_defined else None,
         }
         # Surface degraded flag so downstream consumers (e.g. Empatheia) can
         # tell that the emotion model did not actually run — the category/
