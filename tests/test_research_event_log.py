@@ -35,6 +35,7 @@ from kaine.evaluation.observers.research_event_observer import (
 )
 from kaine.evaluation.registry import SidecarRegistry
 from kaine.evaluation.sink import AsyncJsonlSink
+from kaine.experiment.log_schema import NONNEG, _bound_for
 from kaine.nexus.privacy import CONTENT_FIELDS
 from kaine.research.submission import (
     DENY_PATTERNS,
@@ -1486,3 +1487,64 @@ async def test_welfare_sensor_silent_advisories_captured_with_exact_allowlist():
     assert "silent_seconds" not in cleared
     assert cleared["sensor_silent_count"] == 1
     assert _no_content_anywhere(cleared)
+
+
+def test_audition_emotion_record_carries_entry_id(tmp_path):
+    observer = ResearchEventObserver(
+        bus=None, sink=AsyncJsonlSink(tmp_path / "re", name="research_events")
+    )
+    event = Event(
+        timestamp=datetime.now(timezone.utc),
+        source="audition",
+        type="audition.emotion",
+        salience=0.8,
+        payload={
+            "category": "happy",
+            "confidence": 0.9,
+            "scores": {"happy": 0.9},
+            "alert": True,
+            "normalised_error": 0.3,
+            "tone_rule": "error_ratio",
+            "classified": True,
+            "latency_ms": 12.0,
+        },
+    )
+    record = observer._build_record(event, "5-0")
+    assert record is not None
+    assert record["entry_id"] == "5-0"
+    assert record["normalised_error"] == 0.3
+    assert record["tone_rule"] == "error_ratio"
+    assert record["classified"] is True
+    assert record["alert"] is True
+    assert "latency_ms" not in record
+
+
+def test_workspace_metadata_record_copies_entry_id():
+    from kaine.evaluation.observers.research_event_observer import (
+        _workspace_metadata_record,
+    )
+
+    snapshot = {
+        "tick_index": 42,
+        "inhibited": False,
+        "salience_scores": {"5-0": 0.7},
+        "selected": [
+            {
+                "entry_id": "5-0",
+                "source": "audition",
+                "type": "audition.emotion",
+                "salience": 0.7,
+                "causal_parent": None,
+                "payload": {"secret": "never-logged"},
+            }
+        ],
+    }
+    record = _workspace_metadata_record(snapshot)
+    assert record["entries"][0]["entry_id"] == "5-0"
+    assert record["entries"][0]["source"] == "audition"
+    assert "payload" not in record["entries"][0]
+    assert "secret" not in str(record)
+
+
+def test_audition_emotion_normalised_error_bound():
+    assert _bound_for("audition.emotion", "normalised_error") == NONNEG

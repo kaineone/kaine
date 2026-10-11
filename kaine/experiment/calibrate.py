@@ -12,10 +12,11 @@ settings record. It applies the rules from the paper's Appendix A.8,
 * pilot classification (not-exercised replacement and r_NE)
 * learning period via MSER-5 over ensemble-averaged processor gains
 * minimum effects from the on-versus-control contrasts
+* the tone analysis's minimum effect from the tone-variant pilot runs
 * positive-control SNR and report count from the competitive ladder; s2_j
   is the larger of the two components' variances at the two ladder rungs
   that bracket SNR_j, which approximates the variance at SNR_j itself
-* always-blocked values that require software or records not yet built
+* values still blocked: the threshold band and its dependants, and the tone bins
 
 A rule that cannot be applied fails closed: its value is null, ``blocked``
 gives the reason, ``complete`` is ``False``, and the boot check refuses a live
@@ -75,12 +76,14 @@ from kaine.experiment.principal_component import (
 )
 from kaine.experiment.run_context import compute_git_sha
 from kaine.experiment.run_records import DEFAULT_ROOT, RunRecords, load_records_for_runs
+from kaine.experiment.tone_analysis import ToneAnalysisError, run_statistic, tone_events
 from kaine.storage import resolve
 
 TOOL_NAME = "kaine.experiment.calibrate"
 TOOL_VERSION = "1"
 ARMS = ("competitive", "matched", "pooled")
 CONTROLS = ("matched", "pooled")
+TONE = "tone"
 PROCESSORS = ("topos", "audition", "soma")
 REPORT_TYPES = {
     "topos": "topos.report",
@@ -92,6 +95,7 @@ PILOT_STUDIES = {
     "competitive": "workspace_mediation_pilot_competitive",
     "matched": "workspace_mediation_pilot_matched",
     "pooled": "workspace_mediation_pilot_pooled",
+    "tone": "workspace_mediation_pilot_tone",
 }
 
 _DEFAULT = object()
@@ -485,19 +489,27 @@ def calibrate(
         raise CalibrationError("plan pilots must be a non-empty list")
 
     seen: set[str] = {preliminary_run}
+    has_tone = isinstance(pilots[0], dict) and TONE in pilots[0]
+    pilot_keys = ARMS + ((TONE,) if has_tone else ())
     for index, pilot in enumerate(pilots):
-        if not isinstance(pilot, dict) or set(pilot.keys()) != set(ARMS):
+        if (
+            not isinstance(pilot, dict)
+            or set(pilot.keys()) != set(pilot_keys)
+        ):
             raise CalibrationError(
-                f"pilot {index} must contain exactly the arms {ARMS!r}"
+                f"pilot {index} must contain exactly the arms {ARMS!r}, "
+                "and the tone variant in every pilot or in none"
             )
-        for arm, run_id in pilot.items():
+        for key, run_id in pilot.items():
             if not isinstance(run_id, str) or not run_id or run_id in seen:
                 raise CalibrationError(
                     f"duplicate or invalid run id {run_id!r} in pilot {index}"
                 )
             seen.add(run_id)
 
-    run_ids = [preliminary_run] + [pilot[arm] for pilot in pilots for arm in ARMS]
+    run_ids = [preliminary_run] + [
+        pilot[key] for pilot in pilots for key in pilot_keys
+    ]
     records_by_run = load_records_for_runs(run_ids, root=root)
 
     for run_id in run_ids:
@@ -535,11 +547,11 @@ def calibrate(
         )
 
     for index, pilot in enumerate(pilots):
-        for arm in ARMS:
-            run_id = pilot[arm]
+        for key in pilot_keys:
+            run_id = pilot[key]
             manifest = manifests[run_id]
             actual_study = manifest.get("study")
-            expected_study = PILOT_STUDIES[arm]
+            expected_study = PILOT_STUDIES[key]
             if actual_study != expected_study:
                 raise CalibrationError(
                     f"run {run_id!r} has study {actual_study!r}, "
@@ -554,7 +566,7 @@ def calibrate(
 
     pilot_seeds: list[int] = []
     for index, pilot in enumerate(pilots):
-        seeds = {manifests[pilot[arm]].get("seed") for arm in ARMS}
+        seeds = {manifests[pilot[key]].get("seed") for key in pilot_keys}
         if len(seeds) != 1:
             raise CalibrationError(
                 f"pilot {index} runs do not share a single seed"
@@ -579,8 +591,8 @@ def calibrate(
 
     pilot_arm_for_run: dict[str, str] = {}
     for pilot in pilots:
-        for arm, run_id in pilot.items():
-            pilot_arm_for_run[run_id] = arm
+        for key, run_id in pilot.items():
+            pilot_arm_for_run[run_id] = "competitive" if key == TONE else key
 
     for run_id, arm in pilot_arm_for_run.items():
         for record in _flatten_records(records_by_run[run_id]):
@@ -607,9 +619,9 @@ def calibrate(
             "not_exercised_reason": None,
             "runs": {},
         }
-        for arm in ARMS:
-            run_id = pilot[arm]
-            entry["runs"][arm] = {
+        for key in pilot_keys:
+            run_id = pilot[key]
+            entry["runs"][key] = {
                 "run_id": run_id,
                 "manifest_sha256": manifest_sha[run_id],
                 "records_sha256": records_digest(records_by_run[run_id]),
@@ -866,6 +878,38 @@ def calibrate(
             theta_eff = None
 
     # ------------------------------------------------------------------
+    # Tone analysis minimum effect
+    # ------------------------------------------------------------------
+    tone_statistics: list[float | None] | None = None
+    min_effect_tone: float | None = None
+    tone_error: str | None = None
+
+    if not has_tone:
+        tone_error = "the plan names no tone-variant pilot runs (paper A.8)"
+    elif n_counted < n_cal:
+        tone_error = "depends on pilots"
+    else:
+        stats: list[float | None] = []
+        for index in counted_indices:
+            run_id = pilots[index][TONE]
+            try:
+                events = tone_events(_flatten_records(records_by_run[run_id]))
+                stats.append(run_statistic(events))
+            except ToneAnalysisError as exc:
+                tone_error = f"run {run_id!r}: {exc}"
+                break
+        if tone_error is None:
+            tone_statistics = stats
+            defined = [s for s in stats if s is not None]
+            try:
+                min_effect_tone = minimum_effect(sample_sd(defined))
+            except CalibrationError as exc:
+                tone_error = (
+                    f"the tone statistic is defined in {len(defined)} "
+                    f"counted pilots: {exc}"
+                )
+
+    # ------------------------------------------------------------------
     # f. Positive control and report count
     # s2_j is the larger of the two components' variances at the two ladder
     # rungs that bracket SNR_j; this approximates the variance at SNR_j itself,
@@ -1014,10 +1058,12 @@ def calibrate(
     )
     blocked["min_effect_threshold_contrast"] = "depends on theta_band and b_band"
     blocked["tone_bins"] = (
-        "the tone variant of the on arm is not built, and audition.emotion "
-        "records do not carry the tone model's error ratio"
+        "open question for the operator: paper A.8 takes the quintiles over "
+        "the tone events of the pilot runs and does not say whether that "
+        "means every pilot run or only the tone-variant pilot runs"
     )
-    blocked["min_effect_tone"] = blocked["tone_bins"]
+    if tone_error is not None:
+        blocked["min_effect_tone"] = tone_error
 
     values: dict[str, Any] = {
         "principal_components": principal_components,
@@ -1051,7 +1097,8 @@ def calibrate(
         "age_bins": None,
         "min_effect_threshold_contrast": None,
         "tone_bins": None,
-        "min_effect_tone": None,
+        "tone_statistics": tone_statistics,
+        "min_effect_tone": min_effect_tone,
     }
 
     created_at = now or datetime.now(timezone.utc).isoformat()
@@ -1130,6 +1177,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"snr={values.get('snr')}")
     print(f"min_reports={values.get('min_reports')}")
     print(f"n_run_planned={values.get('n_run_planned')}")
+    print(f"min_effect_tone={values.get('min_effect_tone')}")
     for key, reason in record.get("blocked", {}).items():
         print(f"blocked {key}: {reason}")
 

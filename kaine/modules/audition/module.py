@@ -132,6 +132,9 @@ class Audition(BaseModule):
         # forward-model prediction-error criterion (normalised >= 2.0). Makes the
         # alert embedding-scale-agnostic and self-calibrating.
         acoustic_change_alert_factor: float = 2.0,
+        # Tone-event salience rule. "categorical" is the default of paper A.2;
+        # "error_ratio" is the tone variant of the on arm (paper A.8).
+        tone_rule: str = "categorical",
         entity_clock: Optional[EntityClock] = None,
         positive_control: Optional[PositiveControlSettings] = None,
     ) -> None:
@@ -140,6 +143,9 @@ class Audition(BaseModule):
             raise ValueError("baseline_salience must be in [0, 1]")
         if not 0.0 <= alert_salience <= 1.0:
             raise ValueError("alert_salience must be in [0, 1]")
+        if tone_rule not in ("categorical", "error_ratio"):
+            raise ValueError("tone_rule must be 'categorical' or 'error_ratio'")
+        self._tone_rule = str(tone_rule)
         self._stt_client: STTClient = stt_client or SpeachesClient(
             base_url=speaches_url, timeout_s=request_timeout_s
         )
@@ -688,6 +694,11 @@ class Audition(BaseModule):
             stream_factory=self._stream_factory,
         )
 
+    @property
+    def tone_rule(self) -> str:
+        """The configured tone-event salience rule."""
+        return self._tone_rule
+
     async def process_audio(
         self,
         audio_bytes: bytes,
@@ -774,6 +785,12 @@ class Audition(BaseModule):
             self._prediction_errors.append(prediction_error)
         tone_error_defined = getattr(self._forward_model, "last_error_defined", True)
         error_window = list(self._prediction_errors)
+        # Running ratio of the tone path's error over W_P, 0 when the error is
+        # not defined (paper A.2).
+        tone_ratio = 0.0
+        if tone_error_defined and error_window:
+            mean_err = sum(error_window) / len(error_window)
+            tone_ratio = prediction_error / mean_err if mean_err > 0 else 0.0
 
         # ------------------------------------------------------------------
         # Prosody (gated by prosody_enabled).
@@ -821,7 +838,7 @@ class Audition(BaseModule):
                 emo_result,
                 source_label,
                 prediction_error=prediction_error,
-                error_window=error_window,
+                error_ratio=tone_ratio,
                 error_defined=tone_error_defined,
             )
 
@@ -950,32 +967,35 @@ class Audition(BaseModule):
         source_label: str,
         *,
         prediction_error: float = 0.0,
-        error_window: Optional[list[float]] = None,
+        error_ratio: float = 0.0,
         error_defined: bool = True,
     ) -> None:
-        # Base salience: alert for non-neutral emotions (existing behaviour).
-        base_salience = (
-            self._baseline_salience if result.category == "neutral" else self._alert_salience
+        # Categorical rule of A.2: a non-neutral tone is an alert. The tone
+        # variant of A.8 grades every tone event by the error ratio alone.
+        degraded = bool(result.raw and result.raw.get("degraded"))
+        alert = self._tone_rule == "categorical" and result.category != "neutral"
+        graded = graded_intensity(
+            self._baseline_salience, self._alert_salience, error_ratio
         )
-        salience = self._error_weighted_salience(
-            base_salience,
-            prediction_error,
-            error_window or [],
-        )
+        salience = self._alert_salience if alert else graded
         payload: dict = {
             "category": result.category,
-            "alert": result.category != "neutral",
+            "alert": alert,
             "confidence": result.confidence,
             "scores": result.scores,
             "model": result.model,
             "source_label": source_label,
             "latency_ms": result.latency_ms,
             "prediction_error": prediction_error if error_defined else None,
+            "normalised_error": error_ratio,
+            "tone_rule": self._tone_rule,
+            "classified": not degraded,
         }
-        # Surface degraded flag so downstream consumers (e.g. Empatheia) can
-        # tell that the emotion model did not actually run — the category/
-        # confidence values are placeholders, not a real classification.
-        if result.raw and result.raw.get("degraded"):
+        # Surface the degraded flag so downstream consumers (for example
+        # Empatheia) can tell that the emotion model did not actually run. The
+        # category and confidence values are placeholders, not a real
+        # classification.
+        if degraded:
             payload["degraded"] = True
         await self.publish(
             "audition.emotion",
@@ -995,6 +1015,8 @@ class Audition(BaseModule):
                 "source_label": source_label,
                 "latency_ms": 0.0,
                 "error": f"{type(exc).__name__}: {exc}",
+                "tone_rule": self._tone_rule,
+                "classified": False,
             },
             salience=self._alert_salience,
         )

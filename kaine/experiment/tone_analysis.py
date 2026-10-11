@@ -1,0 +1,226 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
+"""The tone analysis of the planned test.
+
+Paper §6.3, "Speech sound and tone of voice", and Appendix A.8, "Speech sound
+and tone". In the tone variant of the on arm every tone event is graded by the
+tone model's error ratio alone. The analysis reads a run's research-event
+records of type ``audition.emotion`` and ``workspace.broadcast`` and computes
+the accessed fraction of the emotional tone events minus the accessed fraction
+of the neutral ones. Across runs the statistics enter the exact sign tests of
+the decision rule in ``kaine.experiment.calibration_rules.sign_test_verdict``.
+
+The comparison within bins of the tone error ratio is not implemented here,
+because the paper does not yet say how the bins enter across runs.
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any
+
+from kaine.experiment.calibration_rules import SignTestResult, sign_test_verdict
+
+TONE_EVENT_TYPE = "audition.emotion"
+BROADCAST_EVENT_TYPE = "workspace.broadcast"
+TONE_VARIANT_RULE = "error_ratio"
+NEUTRAL = "neutral"
+
+
+class ToneAnalysisError(ValueError):
+    """A tone-analysis input record was malformed."""
+
+
+@dataclass(frozen=True)
+class ToneEvent:
+    """One classified tone event with its error ratio and access status."""
+
+    entry_id: str
+    emotional: bool
+    error_ratio: float
+    accessed: bool
+
+
+def accessed_members(records: Iterable[Mapping[str, Any]]) -> set[tuple[str, str, str]]:
+    """Return the (source, type, entry_id) tuples of all accessed broadcast members.
+
+    A non-inhibited broadcast contributes its members whose computed score reaches
+    the access threshold. The score is ``salience_scores.get(entry_id, member salience)``,
+    matching ``kaine.modules.context`` (paper A.1). An inhibited broadcast contributes
+    nothing.
+
+    Raises:
+        ToneAnalysisError: on malformed broadcast metadata.
+    """
+    accessed: set[tuple[str, str, str]] = set()
+    for record in records:
+        if record.get("event_type") != BROADCAST_EVENT_TYPE:
+            continue
+
+        inhibited = record.get("inhibited")
+        if not isinstance(inhibited, bool):
+            raise ToneAnalysisError("broadcast record inhibited must be a bool")
+
+        if "entries" in record and not isinstance(record["entries"], list):
+            raise ToneAnalysisError("broadcast entries must be a list or absent")
+        if inhibited:
+            continue
+
+        if "salience_scores" in record and not isinstance(record["salience_scores"], dict):
+            raise ToneAnalysisError("broadcast salience_scores must be a dict or absent")
+
+        threshold = record.get("access_threshold")
+        if threshold is not None:
+            if (
+                not isinstance(threshold, (int, float))
+                or isinstance(threshold, bool)
+                or not math.isfinite(threshold)
+            ):
+                raise ToneAnalysisError("broadcast access_threshold must be a finite number or absent")
+
+        salience_scores = record.get("salience_scores") or {}
+        for member in record.get("entries", []) or []:
+            if not isinstance(member, dict):
+                raise ToneAnalysisError("broadcast member must be a dict")
+            entry_id = member.get("entry_id")
+            source = member.get("source")
+            type_ = member.get("type")
+            if not isinstance(entry_id, str) or not entry_id:
+                raise ToneAnalysisError("broadcast member entry_id must be a non-empty string")
+            if not isinstance(source, str) or not source:
+                raise ToneAnalysisError("broadcast member source must be a non-empty string")
+            if not isinstance(type_, str) or not type_:
+                raise ToneAnalysisError("broadcast member type must be a non-empty string")
+
+            score = salience_scores.get(entry_id, member.get("salience"))
+            if (
+                not isinstance(score, (int, float))
+                or isinstance(score, bool)
+                or not math.isfinite(score)
+            ):
+                raise ToneAnalysisError("broadcast member score must be a finite number")
+
+            if threshold is None or score >= threshold:
+                accessed.add((source, type_, entry_id))
+
+    return accessed
+
+
+def tone_events(
+    records: Iterable[Mapping[str, Any]],
+    *,
+    tone_rule: str = TONE_VARIANT_RULE,
+) -> list[ToneEvent]:
+    """Extract classified tone events and their access status.
+
+    Materializes ``records`` once, computes the set of accessed broadcast members,
+    then returns one ``ToneEvent`` per classified ``audition.emotion`` record in
+    input order. Unclassified events are skipped; malformed records raise.
+
+    Raises:
+        ToneAnalysisError: if a tone record is missing required fields, has an
+            unexpected rule, or carries a non-finite / negative normalised error.
+    """
+    records = list(records)
+    accessed = accessed_members(records)
+
+    events: list[ToneEvent] = []
+    for record in records:
+        if record.get("event_type") != TONE_EVENT_TYPE:
+            continue
+
+        classified = record.get("classified")
+        if not isinstance(classified, bool):
+            raise ToneAnalysisError("tone event classified must be a bool")
+        if not classified:
+            continue
+
+        rule = record.get("tone_rule")
+        if rule != tone_rule:
+            raise ToneAnalysisError(
+                f"tone event rule {rule!r} does not match expected rule {tone_rule!r}"
+            )
+
+        entry_id = record.get("entry_id")
+        source = record.get("source")
+        if not isinstance(entry_id, str) or not entry_id:
+            raise ToneAnalysisError("tone event entry_id must be a non-empty string")
+        if not isinstance(source, str) or not source:
+            raise ToneAnalysisError("tone event source must be a non-empty string")
+
+        category = record.get("category")
+        if not isinstance(category, str):
+            raise ToneAnalysisError("tone event category must be a string")
+
+        error = record.get("normalised_error")
+        if (
+            not isinstance(error, (int, float))
+            or isinstance(error, bool)
+            or not math.isfinite(error)
+            or error < 0
+        ):
+            raise ToneAnalysisError("tone event normalised_error must be a finite non-negative number")
+
+        events.append(
+            ToneEvent(
+                entry_id=entry_id,
+                emotional=category != NEUTRAL,
+                error_ratio=float(error),
+                accessed=(source, TONE_EVENT_TYPE, entry_id) in accessed,
+            )
+        )
+
+    return events
+
+
+def accessed_fractions(events: Sequence[ToneEvent]) -> tuple[float | None, float | None]:
+    """Return (emotional accessed fraction, neutral accessed fraction).
+
+    A group with no event returns ``None``.
+    """
+    emotional = [e for e in events if e.emotional]
+    neutral = [e for e in events if not e.emotional]
+
+    emotional_frac = (
+        None
+        if not emotional
+        else sum(1 for e in emotional if e.accessed) / len(emotional)
+    )
+    neutral_frac = (
+        None if not neutral else sum(1 for e in neutral if e.accessed) / len(neutral)
+    )
+    return emotional_frac, neutral_frac
+
+
+def run_statistic(events: Sequence[ToneEvent]) -> float | None:
+    """Emotional accessed fraction minus neutral accessed fraction.
+
+    ``None`` when either group has no event.
+    """
+    emotional_frac, neutral_frac = accessed_fractions(events)
+    if emotional_frac is None or neutral_frac is None:
+        return None
+    return emotional_frac - neutral_frac
+
+
+def tone_verdict(statistics: Sequence[float | None], min_effect: float) -> SignTestResult:
+    """Sign-test verdict for the tone run-level statistics."""
+    return sign_test_verdict(statistics, min_effect)
+
+
+__all__ = [
+    "BROADCAST_EVENT_TYPE",
+    "NEUTRAL",
+    "TONE_EVENT_TYPE",
+    "TONE_VARIANT_RULE",
+    "ToneAnalysisError",
+    "ToneEvent",
+    "accessed_fractions",
+    "accessed_members",
+    "run_statistic",
+    "tone_events",
+    "tone_verdict",
+]

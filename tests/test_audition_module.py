@@ -23,6 +23,7 @@ from kaine.modules.audition import (
     FakeSTTClient,
 )
 from kaine.modules.audition.acoustic import FakeAcousticEncoder
+from kaine.modules.intensity import graded_intensity
 
 
 def _tone(freq: float, seconds: float = 0.2, amp: float = 0.3, sr: int = 16000) -> bytes:
@@ -947,5 +948,142 @@ async def test_tone_path_skips_a_non_finite_feature_vector(bus, monkeypatch):
         emotions = [e for _, e in entries if e.type == "audition.emotion"]
         assert emotions[4].payload["prediction_error"] is None
         assert isinstance(emotions[5].payload["prediction_error"], float)
+    finally:
+        await audition.shutdown()
+
+
+def test_tone_rule_is_validated(bus: AsyncBus):
+    with pytest.raises(ValueError, match="tone_rule must be 'categorical' or 'error_ratio'"):
+        Audition(bus, stt_client=FakeSTTClient(), tone_rule="other")
+
+
+@pytest.mark.asyncio
+async def test_variant_grades_an_emotional_tone_by_its_error_ratio(bus: AsyncBus):
+    happy = EmotionResult(
+        category="happy",
+        confidence=0.9,
+        scores={c: (0.9 if c == "happy" else 0.0) for c in CATEGORIES},
+        model="fake",
+        latency_ms=1.0,
+    )
+    audition = Audition(
+        bus,
+        stt_client=FakeSTTClient(),
+        emotion_classifier=FakeEmotionClassifier(results=[happy] * 6),
+        stt_model="fake-stt",
+        tone_rule="error_ratio",
+    )
+    await audition.initialize()
+    try:
+        for i in range(6):
+            await audition.process_audio(_tone(300 + 20 * i), sample_rate=16000)
+        entries = await bus.read("audition.out", last_id="0", count=50)
+        emotions = [e for _, e in entries if e.type == "audition.emotion"]
+        assert len(emotions) == 6
+        for event in emotions:
+            payload = event.payload
+            assert payload["alert"] is False
+            assert payload["tone_rule"] == "error_ratio"
+            assert payload["classified"] is True
+            assert event.salience == pytest.approx(
+                graded_intensity(
+                    audition._baseline_salience,
+                    audition._alert_salience,
+                    payload["normalised_error"],
+                )
+            )
+        assert emotions[0].payload["normalised_error"] == 0.0
+    finally:
+        await audition.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_categorical_rule_keeps_the_alert_for_an_emotional_tone(bus: AsyncBus):
+    happy = EmotionResult(
+        category="happy",
+        confidence=0.9,
+        scores={c: (0.9 if c == "happy" else 0.0) for c in CATEGORIES},
+        model="fake",
+        latency_ms=1.0,
+    )
+    audition = Audition(
+        bus,
+        stt_client=FakeSTTClient(),
+        emotion_classifier=FakeEmotionClassifier(results=[happy] * 6),
+        stt_model="fake-stt",
+        tone_rule="categorical",
+    )
+    await audition.initialize()
+    try:
+        for i in range(6):
+            await audition.process_audio(_tone(300 + 20 * i), sample_rate=16000)
+        entries = await bus.read("audition.out", last_id="0", count=50)
+        emotions = [e for _, e in entries if e.type == "audition.emotion"]
+        assert len(emotions) == 6
+        for event in emotions:
+            payload = event.payload
+            assert payload["alert"] is True
+            assert event.salience == pytest.approx(audition._alert_salience)
+            assert payload["tone_rule"] == "categorical"
+    finally:
+        await audition.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_neutral_tone_is_graded_by_the_error_ratio(bus: AsyncBus):
+    neutral = EmotionResult(
+        category="neutral",
+        confidence=0.9,
+        scores={c: (0.9 if c == "neutral" else 0.0) for c in CATEGORIES},
+        model="fake",
+        latency_ms=1.0,
+    )
+    audition = Audition(
+        bus,
+        stt_client=FakeSTTClient(),
+        emotion_classifier=FakeEmotionClassifier(results=[neutral] * 6),
+        stt_model="fake-stt",
+    )
+    await audition.initialize()
+    try:
+        for _ in range(6):
+            await audition.process_audio(_tone(300), sample_rate=16000)
+        entries = await bus.read("audition.out", last_id="0", count=50)
+        emotions = [e for _, e in entries if e.type == "audition.emotion"]
+        assert len(emotions) == 6
+        for event in emotions:
+            payload = event.payload
+            assert payload["alert"] is False
+            assert payload["normalised_error"] >= 0.0
+            assert event.salience == pytest.approx(
+                graded_intensity(
+                    audition._baseline_salience,
+                    audition._alert_salience,
+                    payload["normalised_error"],
+                )
+            )
+    finally:
+        await audition.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_failed_classification_is_not_classified(bus: AsyncBus):
+    class FailingEmo(FakeEmotionClassifier):
+        async def classify(self, audio_bytes, *, sample_rate):
+            raise RuntimeError("ema fail")
+
+    audition = Audition(
+        bus,
+        stt_client=FakeSTTClient(),
+        emotion_classifier=FailingEmo(),
+        stt_model="fake-stt",
+    )
+    await audition.initialize()
+    try:
+        await audition.process_audio(_tone(300), sample_rate=16000)
+        entries = await bus.read("audition.out", last_id="0", count=10)
+        emo = next(e for _, e in entries if e.type == "audition.emotion")
+        assert emo.payload["classified"] is False
+        assert emo.payload["tone_rule"] == "categorical"
     finally:
         await audition.shutdown()

@@ -68,8 +68,14 @@ STUDY_ALLOWED_TABLES: frozenset[str] = frozenset(
         "individuation",
         "planned_test",
         "positive_control",
+        "audition",
     }
 )
+
+# Tables a study may set only partly, and the keys it may set in them.
+STUDY_ALLOWED_KEYS: dict[str, frozenset[str]] = {
+    "audition": frozenset({"tone_rule"}),
+}
 
 # A profile/tier name is a filesystem-safe slug (no path traversal): lowercase
 # letters, digits, and underscores only. The name is turned into
@@ -606,6 +612,18 @@ def _load_merged_config(
                 f"study {study!r} may set only the tables "
                 f"{', '.join(sorted(STUDY_ALLOWED_TABLES))}; it also sets {', '.join(extra)}"
             )
+        for table, keys in STUDY_ALLOWED_KEYS.items():
+            if table in study_raw:
+                section = study_raw[table]
+                if not isinstance(section, dict):
+                    raise ProfileError(
+                        f"study {study!r} table [{table}] must be a dict, got {type(section).__name__}"
+                    )
+                bad = sorted(set(section) - keys)
+                if bad:
+                    raise ProfileError(
+                        f"study {study!r} may set only {', '.join(sorted(keys))} in [{table}]; it also sets {', '.join(bad)}"
+                    )
         merged = deep_merge(merged, study_raw)
 
     validate_config_shape(merged)
@@ -656,9 +674,10 @@ def load_kaine_config(
     deployment tier must never silently change the enabled module set.
 
     A study file may set only the ``[lingua]``, ``[syneidesis]``,
-    ``[experiment]``, ``[individuation]``, ``[planned_test]`` and
-    ``[positive_control]`` tables; any other table, ``[modules]`` included,
-    raises :class:`ProfileError`.
+    ``[experiment]``, ``[individuation]``, ``[planned_test]``,
+    ``[positive_control]`` and ``[audition]`` tables; any other table,
+    ``[modules]`` included, raises :class:`ProfileError`. A study may also set
+    ``[audition].tone_rule`` and no other ``[audition]`` key.
 
     A missing operator file is harmless; a malformed one is tolerated by
     default (falls back with a logged warning). When ``strict_operator`` is true,

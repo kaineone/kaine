@@ -35,7 +35,9 @@ Plus per-type redactions:
   position hash + region label.
 
 Every record carries ``ts`` (ISO-8601 UTC), ``event_type``, ``source``, and
-``tick_index`` / ``incident_id`` when present.
+``tick_index`` / ``incident_id`` when present. ``audition.emotion`` records also
+carry the bus ``entry_id`` so the tone analysis can join them to broadcast
+members (paper A.8).
 
 READ-ONLY: never publishes to the bus.
 """
@@ -192,7 +194,11 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     "thymos.drive": frozenset({"drive", "value", "alert"}),
     "thymos.goal": frozenset({"action", "goal_id"}),
     # --- Perception (derived only) ---
-    "audition.emotion": frozenset({"category", "confidence", "scores"}),
+    # The tone error ratio, the tone rule and whether the tone was classified,
+    # for the tone analysis (paper A.8).
+    "audition.emotion": frozenset(
+        {"category", "confidence", "scores", "alert", "normalised_error", "tone_rule", "classified"}
+    ),
     "audition.prosody": frozenset({"f0_mean_hz", "f0_std_hz"}),
     # Acoustic report (base-thesis hearing path): numeric fields only; the playlist item title is not logged.
     "audition.perception": frozenset(
@@ -545,12 +551,12 @@ class ResearchEventObserver(StreamSubscriberObserver):
     # --- Record construction --------------------------------------------
 
     async def handle(self, stream: str, entry_id: str, event: Event) -> None:
-        record = self._build_record(event)
+        record = self._build_record(event, entry_id)
         if record is None:
             return
         await self._sink.write(record)
 
-    def _build_record(self, event: Event) -> dict[str, Any] | None:
+    def _build_record(self, event: Event, entry_id: str | None = None) -> dict[str, Any] | None:
         allowed = _allowed_fields(event.type)
         if allowed is None:
             # Not in the curated taxonomy — never logged (covers
@@ -577,6 +583,10 @@ class ResearchEventObserver(StreamSubscriberObserver):
             record["tick_index"] = payload.get("tick_index")
         if "incident_id" in payload:
             record["incident_id"] = payload.get("incident_id")
+
+        # Tone events are joined to broadcast members by their bus entry id (paper A.8).
+        if event.type == "audition.emotion" and entry_id is not None:
+            record["entry_id"] = entry_id
 
         # 3) mundus.proprio: opaque hash + region label only, NEVER coordinates.
         if event.type == "mundus.proprio":
@@ -687,8 +697,8 @@ def _workspace_metadata_record(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Build a `workspace.broadcast` metadata record from a snapshot.
 
     Reads the `selected` key (written by kaine/cycle/engine.py): per-entry
-    metadata ONLY ({source, type, salience, causal_parent}), never the entry
-    `payload`/content field.
+    metadata ONLY ({entry_id, source, type, salience, causal_parent}), never the
+    entry `payload`/content field.
 
     Also copies `access_threshold`, `arm` and `coalition_capacity` from
     `metadata` and `published_at` from the snapshot when present.
@@ -720,7 +730,7 @@ def _workspace_metadata_record(snapshot: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(entry, dict):
             continue
         meta: dict[str, Any] = {}
-        for k in ("source", "type", "salience", "causal_parent"):
+        for k in ("entry_id", "source", "type", "salience", "causal_parent"):
             if k in entry:
                 meta[k] = entry[k]
         if meta:

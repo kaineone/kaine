@@ -17,6 +17,7 @@ from kaine.experiment.calibrate import (
     ARMS,
     CONTROLS,
     PROCESSORS,
+    TONE,
     calibrate,
     headline,
     information_gain,
@@ -72,6 +73,8 @@ def _build_evaluation_tree(
     n_reports: int = 200,
     scale: float = 1.0,
     competitive_time_step: float = 1.0,
+    with_tone: bool = False,
+    tone_rule: str = "error_ratio",
     wrong_entity_time_run: str | None = None,
     wrong_pc_sha_run_processor: tuple[str, str] | None = None,
     wrong_study_run_arm: tuple[str, str] | None = None,
@@ -251,6 +254,64 @@ def _build_evaluation_tree(
                             "pc_sha256": pc_hashes[processor],
                         },
                     )
+
+        if with_tone:
+            tone_run_id = f"tone_{pilot_index}"
+            pilot[TONE] = tone_run_id
+            tone_study = "workspace_mediation_pilot_tone"
+            if wrong_study_run_arm == (tone_run_id, TONE):
+                tone_study = "wrong_study"
+            _write_manifest(
+                root / "runs" / tone_run_id / "manifest.json",
+                tone_run_id,
+                seed=200 + pilot_index,
+                study=tone_study,
+            )
+            tone_path = _record_path(root, tone_run_id)
+            c_index = 0 if counted_index is None else counted_index
+            emotional_accessed = 10 + c_index
+            neutral_accessed = 6
+            for k in range(40):
+                entry_id = f"{k}-0"
+                if k < 20:
+                    category = "happy"
+                    accessed = k < emotional_accessed
+                else:
+                    category = "neutral"
+                    accessed = (k - 20) < neutral_accessed
+                _append_record(
+                    tone_path,
+                    {
+                        "run_id": tone_run_id,
+                        "event_type": "audition.emotion",
+                        "source": "audition",
+                        "entry_id": entry_id,
+                        "category": category,
+                        "classified": True,
+                        "tone_rule": tone_rule,
+                        "normalised_error": 0.5,
+                    },
+                )
+                _append_record(
+                    tone_path,
+                    {
+                        "run_id": tone_run_id,
+                        "event_type": "workspace.broadcast",
+                        "arm": "competitive",
+                        "coalition_capacity": 5,
+                        "inhibited": False,
+                        "access_threshold": 0.35,
+                        "salience_scores": {entry_id: 0.6 if accessed else 0.2},
+                        "entries": [
+                            {
+                                "entry_id": entry_id,
+                                "source": "audition",
+                                "type": "audition.emotion",
+                                "salience": 0.5,
+                            }
+                        ],
+                    },
+                )
 
         pilots.append(pilot)
 
@@ -584,3 +645,58 @@ def test_load_records_for_runs_accepts_generator(tmp_path: Path) -> None:
     for run_id in ("a", "b"):
         total = sum(len(records) for records in result[run_id].by_stream.values())
         assert total == 1
+
+
+def test_calibrate_sets_the_tone_minimum_effect(tmp_path: Path) -> None:
+    plan, root = _build_evaluation_tree(
+        tmp_path, n_pilots=5, with_tone=True
+    )
+    record = calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
+
+    assert record["values"]["tone_statistics"] == pytest.approx(
+        [0.2, 0.25, 0.3, 0.35]
+    )
+    expected_sd = statistics.stdev([0.2, 0.25, 0.3, 0.35])
+    assert record["values"]["min_effect_tone"] == pytest.approx(
+        0.5 * expected_sd
+    )
+    assert "min_effect_tone" not in record["blocked"]
+    assert "tone_bins" in record["blocked"]
+    for pilot in record["inputs"]["pilots"]:
+        assert "tone" in pilot["runs"]
+
+
+def test_calibrate_without_tone_blocks_min_effect_tone(tmp_path: Path) -> None:
+    plan, root = _build_evaluation_tree(tmp_path, n_pilots=5)
+    record = calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
+    assert record["blocked"]["min_effect_tone"].startswith(
+        "the plan names no tone-variant pilot runs"
+    )
+
+
+def test_calibrate_mixed_tone_pilots_raises(tmp_path: Path) -> None:
+    plan, root = _build_evaluation_tree(tmp_path, n_pilots=5, with_tone=True)
+    for pilot in plan["pilots"][1:]:
+        del pilot["tone"]
+    with pytest.raises(CalibrationError, match="tone variant in every pilot or in none"):
+        calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
+
+
+def test_calibrate_wrong_tone_rule_blocks_min_effect_tone(tmp_path: Path) -> None:
+    plan, root = _build_evaluation_tree(
+        tmp_path, n_pilots=5, with_tone=True, tone_rule="categorical"
+    )
+    record = calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
+    assert "min_effect_tone" in record["blocked"]
+    assert "tone_0" in record["blocked"]["min_effect_tone"]
+
+
+def test_calibrate_wrong_tone_study_raises(tmp_path: Path) -> None:
+    plan, root = _build_evaluation_tree(
+        tmp_path,
+        n_pilots=5,
+        with_tone=True,
+        wrong_study_run_arm=("tone_0", "tone"),
+    )
+    with pytest.raises(CalibrationError, match="workspace_mediation_pilot_tone"):
+        calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)

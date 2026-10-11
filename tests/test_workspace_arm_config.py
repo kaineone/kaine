@@ -186,3 +186,14 @@ def test_study_resolved_from_environment():
         studies_dir=_REPO / "config" / "studies",
     )
     assert cfg["syneidesis"]["arm"] == "matched"
+
+
+def test_study_may_set_only_the_tone_rule_in_audition(tmp_path):
+    (tmp_path / "ok.toml").write_text('[audition]\ntone_rule = "error_ratio"\n')
+    cfg = load_kaine_config(operator_path=_MISSING, study="ok", studies_dir=tmp_path)
+    assert cfg["audition"]["tone_rule"] == "error_ratio"
+
+    (tmp_path / "bad.toml").write_text("[audition]\nalert_salience = 0.9\n")
+    with pytest.raises(ProfileError) as exc_info:
+        load_kaine_config(operator_path=_MISSING, study="bad", studies_dir=tmp_path)
+    assert "alert_salience" in str(exc_info.value)

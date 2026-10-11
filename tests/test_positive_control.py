@@ -186,7 +186,7 @@ def _write_settings_record(tmp_path, complete=True):
     pilots = []
     for seed in range(2, 2 + rules.N_CAL):
         runs = {}
-        for arm in ("competitive", "matched", "pooled"):
+        for arm in ("competitive", "matched", "pooled", "tone"):
             runs[arm] = {
                 "run_id": f"pilot{seed}_{arm}",
                 "manifest_sha256": "c" * 64,
@@ -222,6 +222,8 @@ def _write_settings_record(tmp_path, complete=True):
             "n_counted": rules.N_CAL,
             "n_exact": rules.N_EXACT,
             "snr": {"topos": 4.0, "audition": 4.0, "soma": 4.0},
+            "min_effect_tone": 0.05,
+            "tone_bins": [0.5, 0.8, 1.1, 1.6],
             "principal_components": pc_refs,
         },
     }
