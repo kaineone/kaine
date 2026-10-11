@@ -188,7 +188,9 @@ Live means everything except `tests/`, `openspec/`, `docs/records/`,
   entries and commit messages keep the old names.
 - Renaming active change IDs such as `mnemos-trace-strength`. They are
   identifiers of past and present work, and the ROADMAP keys on them.
-- Changing what the entity is told (see "Entity-facing text").
+- Changing what the entity is told through the codemod. The one entity-facing
+  change, the disclosure text, is an owner decision made by hand (see
+  "Entity-facing text").
 - Changing behaviour. Every PR in the sequence is a rename or an alias.
 
 ## Decisions
@@ -290,10 +292,12 @@ The codemod asserts both at start, which is what makes a second run a no-op.
 
 ### Entity-facing text
 
-The disclosure string in `[individuation].disclosure` is read to the entity.
-The codemod does not change it, and neither does any later PR in this change.
-Whether "since your birth" becomes "since your maturation", or stays, is an
-owner decision (task 10.4), since changing it changes the entity's stimulus.
+The disclosure string in `[individuation].disclosure` is read to the entity, so
+the codemod never changes it: a rule-driven rewrite must not change what the
+entity is told. The owner decided (2026-10-11) that it becomes
+"You are periodically and privately assessed for how much you have changed since you first woke, for your own protection. The assessment never enters your experience."
+The docs prose PR (step 3) sets it by hand, with the docs that quote it
+(task 4.3).
 
 ### Compatibility
 

@@ -20,6 +20,7 @@
 
 - [ ] 4.1 `--scope prose` over the book, READMEs, live spec prose and active-change prose; resolve the review queue with overrides.
 - [ ] 4.2 Move the 18 `docs/09-modules/` pages and add the "Module names" page mapping old names to new ones.
+- [ ] 4.3 Set `[individuation].disclosure` in `config/kaine.toml` to the owner's text (10.4) by hand, outside the codemod, with the docs that quote it.
 
 ## 5. Compatibility readers (PR 4)
 
@@ -61,4 +62,4 @@
 - [ ] 10.1 The guard turns strict for every scope.
 - [ ] 10.2 CHANGELOG `[Unreleased]` entry; the configuration appendix lists each deprecated name and the last release that reads it.
 - [ ] 10.3 Open `functional-module-names-drop-aliases` for the operator aliases.
-- [ ] 10.4 **Owner decision:** whether `[individuation].disclosure` keeps "since your birth"; it is entity-facing text and stays out of the codemod.
+- [x] 10.4 **Owner decision (decided 2026-10-11):** `[individuation].disclosure` becomes "You are periodically and privately assessed for how much you have changed since you first woke, for your own protection. The assessment never enters your experience." It is entity-facing text, so the codemod never touches it; the change lands by hand in task 4.3.

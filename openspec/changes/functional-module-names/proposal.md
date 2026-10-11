@@ -105,7 +105,8 @@ entrainment marker. "Maternal heartbeat" and "maternal drive" stay.
   and `tools/maintainer/preflight-gate.sh`.
 - Not touched: `openspec/changes/archive/`, `docs/records/`, released
   CHANGELOG entries, third-party code, `data/`, `state/`, `backups/`, the
-  K1-Jev records and the K1-Jev question text, and entity-facing text (which
-  needs an owner decision; design.md, "Entity-facing text").
+  K1-Jev records and the K1-Jev question text, and entity-facing text. The owner's
+  new disclosure text is set by hand in the docs prose PR (design.md,
+  "Entity-facing text").
 - Branches in flight conflict with the identifier PRs. Development is paused,
   and the codemod is deterministic, so a branch rebases by re-running it.
