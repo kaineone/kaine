@@ -40,7 +40,6 @@ from kaine.modules.soma.detector import AlertResult
 from kaine.modules.soma.forward import SubstrateForwardModel
 from kaine.modules.soma.module import Soma
 from kaine.modules.topos.forward import LatentForwardModel
-from kaine.modules.topos.module import Topos
 
 
 def _bus():
@@ -210,7 +209,7 @@ async def test_topos_control_publishes_and_leaves_the_live_report_untouched() ->
     uncontrolled_bus = _bus()
     controlled_bus = _bus()
 
-    uncontrolled = Topos(
+    uncontrolled = topos_module.Topos(
         uncontrolled_bus,
         encoder=Varying(),
         forward_prediction=True,
@@ -223,7 +222,7 @@ async def test_topos_control_publishes_and_leaves_the_live_report_untouched() ->
         seed=4,
     )
 
-    controlled = Topos(
+    controlled = topos_module.Topos(
         controlled_bus,
         encoder=Varying(),
         forward_prediction=True,
@@ -297,7 +296,7 @@ async def test_soma_control_publishes_results(bus: AsyncBus) -> None:
 
 @pytest.mark.asyncio
 async def test_failing_control_switches_itself_off(bus: AsyncBus) -> None:
-    topos = Topos(
+    topos = topos_module.Topos(
         bus,
         encoder=Varying(),
         forward_prediction=True,
@@ -333,7 +332,7 @@ async def test_failing_control_switches_itself_off(bus: AsyncBus) -> None:
 async def test_shutdown_publishes_a_terminal_record() -> None:
     bus = _bus()
     try:
-        topos = Topos(
+        topos = topos_module.Topos(
             bus,
             encoder=Varying(),
             forward_prediction=True,
@@ -389,7 +388,7 @@ async def test_soma_shutdown_publishes_a_terminal_record() -> None:
 
 @pytest.mark.asyncio
 async def test_unpublishable_failure_is_logged_at_error(bus: AsyncBus, caplog) -> None:
-    topos = Topos(
+    topos = topos_module.Topos(
         bus,
         encoder=Varying(),
         forward_prediction=True,
@@ -431,7 +430,7 @@ async def _topos_run(control_settings):
     torch.manual_seed(0)
     bus = _bus()
     try:
-        topos = Topos(
+        topos = topos_module.Topos(
             bus,
             encoder=Varying(),
             forward_prediction=True,
@@ -596,7 +595,7 @@ async def test_terminal_record_reaches_the_research_log(tmp_path) -> None:
         sidecar.build()
         await sidecar.start()
 
-        topos = Topos(
+        topos = topos_module.Topos(
             bus,
             encoder=Varying(),
             forward_prediction=True,
