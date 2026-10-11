@@ -234,3 +234,16 @@ def test_bare_member_id_is_refused():
     records[1]["entries"][0]["entry_id"] = "0-0"
     with pytest.raises(ToneAnalysisError):
         tone_events(records)
+
+
+def test_empty_stream_or_entry_part_is_refused():
+    for bad_entry_id in (":0-0", "audition.out:"):
+        records = _run(1, 1, 0, 0)
+        records[0]["entry_id"] = bad_entry_id
+        with pytest.raises(ToneAnalysisError):
+            tone_events(records)
+
+        records = _run(1, 1, 0, 0)
+        records[1]["entries"][0]["entry_id"] = bad_entry_id
+        with pytest.raises(ToneAnalysisError):
+            tone_events(records)
