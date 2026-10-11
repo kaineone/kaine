@@ -106,8 +106,9 @@ def accessed_members(records: Iterable[Mapping[str, Any]]) -> set[tuple[str, str
                 raise ToneAnalysisError("broadcast member entry_id must be a non-empty string")
             if not all(split_stream_entry_key(entry_id)):
                 raise ToneAnalysisError(
-                    "broadcast member entry_id has no stream; "
-                    "the analysis needs the stream-qualified id <stream>:<entry_id>"
+                    "broadcast member entry_id has no stream: "
+                    "the record predates stream-qualified candidate ids "
+                    "(<stream>:<entry_id>) and cannot be joined; re-record the run"
                 )
             if not isinstance(source, str) or not source:
                 raise ToneAnalysisError("broadcast member source must be a non-empty string")
@@ -177,8 +178,9 @@ def tone_events(
             raise ToneAnalysisError("tone event entry_id must be a non-empty string")
         if not all(split_stream_entry_key(entry_id)):
             raise ToneAnalysisError(
-                "tone event entry_id has no stream; "
-                "the analysis needs the stream-qualified id <stream>:<entry_id>"
+                "tone event entry_id has no stream: "
+                "the record predates stream-qualified candidate ids "
+                "(<stream>:<entry_id>) and cannot be joined; re-record the run"
             )
         if not isinstance(source, str) or not source:
             raise ToneAnalysisError("tone event source must be a non-empty string")

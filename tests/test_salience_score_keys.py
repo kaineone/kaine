@@ -431,3 +431,84 @@ async def test_tone_event_is_accessed_through_the_engine_path(tmp_path):
         # event's score and the tone event read as not accessed.
     finally:
         await bus.close()
+
+
+async def _matched_coalitions(seed):
+    client = fakeredis.FakeRedis(decode_responses=True)
+    syn = Syneidesis(
+        strategy=_strategy(),
+        top_k=2,
+        publication_threshold=0.35,
+        arm="matched",
+        arm_seed=seed,
+    )
+    cycle, bus = _make_cycle(syn, ["soma.out", "topos.out"], client)
+    try:
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        for i in range(12):
+            event = Event(
+                source="soma",
+                type="soma.report",
+                payload={"i": i},
+                salience=0.1 + 0.05 * i,
+                timestamp=base.replace(second=i),
+            )
+            await client.xadd(
+                "soma.out", _encode_event(event), id=f"1760000000000-{i}"
+            )
+        for i in range(3):
+            event = Event(
+                source="topos",
+                type="topos.report",
+                payload={"j": i},
+                salience=0.5,
+                timestamp=base.replace(second=12 + i),
+            )
+            await client.xadd(
+                "topos.out", _encode_event(event), id=f"1760000000000-{i}"
+            )
+        result = await cycle.tick()
+        assert result.is_experiential
+        entries = await client.xrange(WORKSPACE_STREAM)
+        assert len(entries) == 1
+        _entry_id, fields = entries[0]
+        snap = json.loads(fields["snapshot"])
+        return [item["entry_id"] for item in snap["selected"]]
+    finally:
+        await bus.close()
+
+
+@pytest.mark.asyncio
+async def test_matched_draw_is_reproducible_over_the_new_order():
+    # Matched selection must be deterministic for a fixed seed.
+    first = await _matched_coalitions(4)
+    second = await _matched_coalitions(4)
+    assert first == second
+    assert len(first) == 2
+    for entry_id in first:
+        assert entry_id.startswith(("soma.out:", "topos.out:"))
+
+
+@pytest.mark.asyncio
+async def test_read_cursors_stay_raw_bus_ids():
+    client = fakeredis.FakeRedis(decode_responses=True)
+    syn = Syneidesis(strategy=_strategy(), arm="competitive")
+    cycle, bus = _make_cycle(syn, ["soma.out", "topos.out"], client)
+    try:
+        await client.xadd(
+            "soma.out", _encode_event(_soma_event()), id="1760000000000-0"
+        )
+        await client.xadd(
+            "topos.out", _encode_event(_topos_event()), id="1760000000000-0"
+        )
+        await cycle.tick()
+        assert cycle._cursors == {
+            "soma.out": "1760000000000-0",
+            "topos.out": "1760000000000-0",
+        }
+        for value in cycle._cursors.values():
+            assert ":" not in value
+        # The stream-qualified name is only the candidate's id; the read
+        # cursor must stay the raw bus id, or the next XREAD would fail.
+    finally:
+        await bus.close()

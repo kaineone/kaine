@@ -225,14 +225,14 @@ def test_tone_runs_still_needed_counts_defined_differences():
 def test_bare_tone_event_id_is_refused():
     records = _run(1, 1, 0, 0)
     records[0]["entry_id"] = "0-0"
-    with pytest.raises(ToneAnalysisError):
+    with pytest.raises(ToneAnalysisError, match="predates"):
         tone_events(records)
 
 
 def test_bare_member_id_is_refused():
     records = _run(1, 1, 0, 0)
     records[1]["entries"][0]["entry_id"] = "0-0"
-    with pytest.raises(ToneAnalysisError):
+    with pytest.raises(ToneAnalysisError, match="predates"):
         tone_events(records)
 
 

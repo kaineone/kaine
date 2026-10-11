@@ -43,6 +43,15 @@ ablation's top score and candidate count are affected.
 - Docs describe the key; the oscillatory-ablation stimulus comment that
   relied on unique ids across streams is corrected.
 
+## Reproducibility of earlier records
+
+A run recorded before this change is not reproduced bit for bit by this code
+on a tick where one source's candidates have entry ids whose sequence numbers
+differ in digit count (for example `x-2` and `x-10`). The old order compared
+the ids as text and the new order compares them as numbers, so the candidate
+order, and with it equal-score tie-breaks and the matched arm's draw, can
+differ on such a tick. Every other tick keeps its order.
+
 ## Coordination with tone-analysis-inputs
 
 Change `tone-analysis-inputs` (#478, merged first) joined an `audition.emotion`
