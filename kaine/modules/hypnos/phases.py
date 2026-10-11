@@ -85,7 +85,8 @@ async def light_consolidation(
 
     Calls ``consolidate_now()``, which moves every short-term entry into
     episodic memory and drops nothing: no trace is deleted in this phase, and
-    ``entries_consolidated`` counts the entries moved. Strong traces are
+    ``entries_consolidated`` counts the entries moved. Mnemos keeps the moved
+    traces for this sleep, so phase 2's replay draws on them. Strong traces are
     tagged for deep consolidation (no-op at this stage — tagging is implicit
     in the existing salience scoring).
 
@@ -162,8 +163,8 @@ async def deep_consolidation(
     A replay window is then opened.  External perception is suspended for
     the duration using the provided callables (reusing the freeze/locus
     machinery from the Hypnos module layer).  The replay window drives
-    ``mnemos.replay_now()`` (``ReplayEngine`` path, real on this branch
-    since ``mnemos-replay`` has merged).  Perception is always restored after
+    ``mnemos.replay_now()``, which selects from the traces phase 1 consolidated
+    plus any still in the short-term buffer.  Perception is always restored after
     the window regardless of replay outcome.
 
     Args:
