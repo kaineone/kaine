@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""SelfModel document for Eidolon.
+"""SelfModelDocument document for Eidolon.
 
 A frozen JSON-serializable dataclass that describes who KAINE is.
 Every field starts empty — Eidolon discovers identity through
@@ -51,7 +51,7 @@ def generate_launch_name(*, rng: random.Random | None = None) -> str:
 
 
 @dataclass(frozen=True)
-class SelfModel:
+class SelfModelDocument:
     # The entity's name. Empty until assigned. A first name + a surname chosen
     # at first launch (see generate_launch_name); the long-term intent is that
     # an entity renames ITSELF once it has a sense of identity, at which point
@@ -82,7 +82,7 @@ class SelfModel:
         return json.dumps(plain, sort_keys=True, separators=(",", ":"))
 
     @classmethod
-    def from_json(cls, text: str) -> "SelfModel":
+    def from_json(cls, text: str) -> "SelfModelDocument":
         data = json.loads(text)
         return cls(
             name=str(data.get("name", "")),
@@ -100,13 +100,13 @@ class SelfModel:
             situation_facts=[str(x) for x in data.get("situation_facts", [])],
         )
 
-    def with_updates(self, **changes: Any) -> "SelfModel":
-        """Return a new SelfModel with the given fields replaced."""
+    def with_updates(self, **changes: Any) -> "SelfModelDocument":
+        """Return a new SelfModelDocument with the given fields replaced."""
         return replace(self, **changes)
 
 
-def load(path: Path) -> SelfModel:
-    """Load a SelfModel from a JSON path. Missing file → empty model.
+def load(path: Path) -> SelfModelDocument:
+    """Load a SelfModelDocument from a JSON path. Missing file → empty model.
 
     The on-disk bytes are passed through the active StateEncryptor's
     `maybe_decrypt`, so an encrypted self-model is transparently decrypted and
@@ -115,17 +115,17 @@ def load(path: Path) -> SelfModel:
     from kaine.security.crypto import get_state_encryptor
 
     if not path.exists():
-        return SelfModel()
+        return SelfModelDocument()
     raw = path.read_bytes()
     if not raw.strip():
-        return SelfModel()
+        return SelfModelDocument()
     text = get_state_encryptor().maybe_decrypt(raw).decode("utf-8")
     if not text.strip():
-        return SelfModel()
-    return SelfModel.from_json(text)
+        return SelfModelDocument()
+    return SelfModelDocument.from_json(text)
 
 
-def save_atomic(path: Path, model: SelfModel) -> None:
+def save_atomic(path: Path, model: SelfModelDocument) -> None:
     """Write `model` to `path` atomically.
 
     Writes to a sibling `*.tmp` and `os.replace`s into place so a crash

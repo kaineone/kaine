@@ -13,7 +13,7 @@ the required transitive deps. Phantasia SHALL use the vendored RSSM core
 (recurrent + stochastic latent transition, encoder, decoder, imagination rollout)
 and SHALL NOT instantiate the actor, critic, or return heads; policy selection
 remains Nous's responsibility. The world model SHALL be accessible behind a
-`WorldModel` protocol so a `FakeWorldModel` can substitute in tests without
+`WorldModelBackend` protocol so a `FakeWorldModel` can substitute in tests without
 requiring JAX or the vendored code.
 
 #### Scenario: Actor-critic is absent

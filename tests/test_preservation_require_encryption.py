@@ -24,7 +24,7 @@ import pytest
 
 from kaine.lifecycle.manager import ForkManager
 from kaine.lifecycle.preservation import PreservationError
-from kaine.modules.eidolon import Eidolon, SelfModel
+from kaine.modules.eidolon import Eidolon, SelfModelDocument
 from kaine.modules.registry import ModuleRegistry
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
@@ -62,7 +62,7 @@ async def _make_registry(tmp_path: Path) -> ModuleRegistry:
     reg = ModuleRegistry()
     eid = Eidolon(_NullBus(), persistence_path=tmp_path / "sm.json", save_interval_s=60)
     await eid.initialize()
-    eid._model = SelfModel(name="probe", values=["continuity"])
+    eid._model = SelfModelDocument(name="probe", values=["continuity"])
     reg.register(eid)
     return reg
 

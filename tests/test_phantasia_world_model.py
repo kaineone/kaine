@@ -11,14 +11,14 @@ import pytest
 from kaine.modules.phantasia.world_model import (
     FakeWorldModel,
     TrainOutcome,
-    WorldModel,
+    WorldModelBackend,
     load_world_model,
 )
 
 
 def test_fake_satisfies_protocol_without_jax():
     wm = FakeWorldModel(obs_dim=5)
-    assert isinstance(wm, WorldModel)
+    assert isinstance(wm, WorldModelBackend)
     # All protocol methods present and callable without JAX.
     assert callable(wm.observe)
     assert callable(wm.imagine)

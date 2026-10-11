@@ -10,7 +10,7 @@ from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
-from kaine.modules.eidolon import Eidolon, SelfModel
+from kaine.modules.eidolon import Eidolon, SelfModelDocument
 
 
 @pytest.fixture
@@ -54,7 +54,7 @@ async def test_invalid_construction(bus: AsyncBus, tmp_path: Path):
 async def test_initialize_loads_existing_model(bus: AsyncBus, tmp_path: Path):
     p = tmp_path / "model.json"
     p.write_text(
-        SelfModel(values=["honesty"]).to_json(), encoding="utf-8"
+        SelfModelDocument(values=["honesty"]).to_json(), encoding="utf-8"
     )
     eidolon = Eidolon(bus, persistence_path=p, save_interval_s=60)
     await eidolon.initialize()
@@ -72,7 +72,7 @@ async def test_initialize_empty_file_yields_empty_model(bus: AsyncBus, tmp_path:
     try:
         # Empty except for the launch name assigned on first boot.
         assert eidolon.model.name.startswith("Kaine ")
-        assert eidolon.model.with_updates(name="") == SelfModel()
+        assert eidolon.model.with_updates(name="") == SelfModelDocument()
     finally:
         await eidolon.shutdown()
 
@@ -349,7 +349,7 @@ async def test_shutdown_persists_final_state(bus: AsyncBus, tmp_path: Path):
     await eidolon.on_workspace(_snapshot(["soma"]))
     await eidolon.on_workspace(_snapshot(["mnemos"]))
     await eidolon.shutdown()
-    loaded = SelfModel.from_json(p.read_text())
+    loaded = SelfModelDocument.from_json(p.read_text())
     # identity_history should have at least one entry from the drift event.
     assert len(loaded.identity_history) >= 1
 
@@ -506,7 +506,7 @@ async def test_old_per_alert_history_loads_and_is_kept(bus: AsyncBus, tmp_path: 
         assert history[3]["count"] == 2
     finally:
         await eidolon.shutdown()
-    reloaded = SelfModel.from_json(path.read_text())
+    reloaded = SelfModelDocument.from_json(path.read_text())
     assert reloaded.identity_history[:3] == legacy
 
 

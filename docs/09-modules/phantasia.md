@@ -85,7 +85,7 @@ All keys are under `[phantasia]`. The full reference is in [`appendix-a-configur
 
 ### World model protocol and backends
 
-`WorldModel` in `kaine/modules/phantasia/world_model.py` is a runtime-checkable protocol with four methods:
+`WorldModelBackend` in `kaine/modules/phantasia/world_model.py` is a runtime-checkable protocol with four methods:
 
 ```python
 def observe(obs: list[float]) -> float: ...
@@ -104,12 +104,12 @@ def reset_state() -> None: ...
 flowchart TD
     WS[workspace.broadcast\nwaking] --> ENC[encode_snapshot\nOBS_DIM = 19]
     ENC --> BUF[append to ring buffer\nmax 512]
-    ENC --> OBS[WorldModel.observe\nupdate recurrent state]
+    ENC --> OBS[WorldModelBackend.observe\nupdate recurrent state]
     OBS --> ERR[world_error]
     ERR --> PUB_ERR[phantasia.world_error]
 
     REPLAY[mnemos.replay\nduring sleep] --> SEED[reseed from recent buffer]
-    SEED --> IMAGINE[WorldModel.imagine\nhorizon 8]
+    SEED --> IMAGINE[WorldModelBackend.imagine\nhorizon 8]
     IMAGINE --> SCE[phantasia.scenario\nnumeric descriptors]
 ```
 
@@ -137,7 +137,7 @@ Hypnos opens the scenario window before phase 2, whose replay publishes the `mne
 | Path | Purpose |
 |---|---|
 | `kaine/modules/phantasia/module.py` | `Phantasia(BaseModule)`: waking and sleep paths, training, persistence |
-| `kaine/modules/phantasia/world_model.py` | The `WorldModel` protocol, `FakeWorldModel`, `DreamerV3WorldModel`, `NumpyDreamerV3WorldModel`, `TrainOutcome` |
+| `kaine/modules/phantasia/world_model.py` | The `WorldModelBackend` protocol, `FakeWorldModel`, `DreamerV3WorldModel`, `NumpyDreamerV3WorldModel`, `TrainOutcome` |
 | `kaine/modules/phantasia/encoder.py` | `encode_snapshot()`, `observation_dim()`, `SOURCE_ORDER`, `VERSION` |
 | `kaine/modules/phantasia/rssm_numpy.py` | The NumPy core and its hand-written backpropagation |
 | `kaine/modules/phantasia/checkpoint.py` | Atomic, encryption-aware reading and writing of checkpoint bytes |

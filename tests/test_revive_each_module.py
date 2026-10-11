@@ -26,7 +26,7 @@ from kaine.modules.chronos.anomaly import RollingZScoreAnomaly
 from kaine.modules.chronos.featurizer import SnapshotFeaturizer
 from kaine.modules.chronos.module import Chronos
 from kaine.modules.chronos.rumination import RecurrenceRuminationDetector
-from kaine.modules.eidolon.module import Eidolon, SelfModel
+from kaine.modules.eidolon.module import Eidolon, SelfModelDocument
 from kaine.modules.empatheia.agent import AgentModel
 from kaine.modules.empatheia.module import Empatheia
 from kaine.modules.empatheia.store import InMemoryAgentStore
@@ -462,7 +462,7 @@ async def test_roundtrip_nous(bus: AsyncBus, tmp_path: Path) -> None:
 async def test_roundtrip_eidolon(bus: AsyncBus, tmp_path: Path) -> None:
     p = tmp_path / "eidolon.json"
     m1 = Eidolon(bus, persistence_path=p, save_interval_s=60)
-    m1._model = SelfModel(name="Aria", values=["honesty", "curiosity"])
+    m1._model = SelfModelDocument(name="Aria", values=["honesty", "curiosity"])
     m1._drift_count = 7
     m1._internal_cursor = "5-0"
     m1._external_cursor = "9-0"
@@ -817,7 +817,7 @@ def _mutate_nous(m: Nous, i: int) -> None:
 
 
 def _mutate_eidolon(m: Eidolon, i: int) -> None:
-    m._model = SelfModel(name=f"Eid{i}", values=[f"v{i}"])
+    m._model = SelfModelDocument(name=f"Eid{i}", values=[f"v{i}"])
     m._drift_count = i
 
 

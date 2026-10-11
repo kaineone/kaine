@@ -35,7 +35,7 @@ from kaine.bus.config import BusConfig
 from kaine.experiment.run_context import RunContext, set_run_context
 from kaine.lifecycle.manager import ForkManager
 from kaine.lifecycle.preservation import PreservationError, ReviveError
-from kaine.modules.eidolon import Eidolon, SelfModel
+from kaine.modules.eidolon import Eidolon, SelfModelDocument
 from kaine.modules.empatheia.agent import AgentModel
 from kaine.modules.empatheia.module import Empatheia
 from kaine.modules.empatheia.store import QdrantAgentStore
@@ -141,7 +141,7 @@ async def _build_synthetic_entity(
         bus, persistence_path=tmp_path / "self_model.json", save_interval_s=60
     )
     await eidolon.initialize()
-    eidolon._model = SelfModel(name="Aria", values=["honesty", "curiosity"])
+    eidolon._model = SelfModelDocument(name="Aria", values=["honesty", "curiosity"])
     eidolon._drift_count = 3
     reg.register(eidolon)
 

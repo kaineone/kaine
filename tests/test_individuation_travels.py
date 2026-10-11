@@ -26,7 +26,7 @@ from kaine.lifecycle.preservation import (
     extract_bundle_individuation,
     preserve_live,
 )
-from kaine.modules.eidolon import Eidolon, SelfModel
+from kaine.modules.eidolon import Eidolon, SelfModelDocument
 from kaine.modules.registry import ModuleRegistry
 from kaine.security.crypto import (
     CryptoConfig,
@@ -75,7 +75,7 @@ async def _make_eidolon_registry(tmp_path: Path):
         bus, persistence_path=tmp_path / "sm.json", save_interval_s=60
     )
     await eid.initialize()
-    eid._model = SelfModel(name="probe", values=["continuity"])
+    eid._model = SelfModelDocument(name="probe", values=["continuity"])
     reg.register(eid)
     return reg
 

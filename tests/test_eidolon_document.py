@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from kaine.modules.eidolon.document import SelfModel, load, save_atomic
+from kaine.modules.eidolon.document import SelfModelDocument, load, save_atomic
 
 
 def test_empty_default():
-    m = SelfModel()
+    m = SelfModelDocument()
     assert m.values == []
     assert m.behavioral_norms == []
     assert m.capability_map == {}
@@ -22,7 +22,7 @@ def test_empty_default():
 
 
 def test_roundtrip_json_with_voice_fields():
-    m = SelfModel(
+    m = SelfModelDocument(
         internal_speech_count=3,
         external_speech_count=5,
         voice_observations=[
@@ -30,7 +30,7 @@ def test_roundtrip_json_with_voice_fields():
             {"timestamp": 2.0, "channel": "external", "length": 11, "word_count": 2},
         ],
     )
-    m2 = SelfModel.from_json(m.to_json())
+    m2 = SelfModelDocument.from_json(m.to_json())
     assert m == m2
     assert m2.external_speech_count == 5
     assert m2.voice_observations[1]["channel"] == "external"
@@ -45,7 +45,7 @@ def test_pre_change_model_loads_with_voice_defaults():
             # no external_speech_count, no voice_observations
         }
     )
-    m = SelfModel.from_json(legacy)
+    m = SelfModelDocument.from_json(legacy)
     assert m.values == ["honesty"]
     assert m.internal_speech_count == 9
     assert m.external_speech_count == 0
@@ -53,18 +53,18 @@ def test_pre_change_model_loads_with_voice_defaults():
 
 
 def test_roundtrip_json():
-    m = SelfModel(
+    m = SelfModelDocument(
         values=["honesty", "curiosity"],
         personality_baseline={"openness": 0.7},
         internal_speech_count=42,
     )
     text = m.to_json()
-    m2 = SelfModel.from_json(text)
+    m2 = SelfModelDocument.from_json(text)
     assert m == m2
 
 
 def test_with_updates_returns_new_instance():
-    m = SelfModel()
+    m = SelfModelDocument()
     m2 = m.with_updates(internal_speech_count=5)
     assert m.internal_speech_count == 0  # original unchanged
     assert m2.internal_speech_count == 5
@@ -74,7 +74,7 @@ def test_with_updates_returns_new_instance():
 def test_load_missing_file_returns_empty(tmp_path: Path):
     path = tmp_path / "missing.json"
     m = load(path)
-    assert m == SelfModel()
+    assert m == SelfModelDocument()
 
 
 def test_load_existing_file(tmp_path: Path):
@@ -86,7 +86,7 @@ def test_load_existing_file(tmp_path: Path):
 
 def test_save_atomic_writes_file(tmp_path: Path):
     path = tmp_path / "a" / "b" / "model.json"
-    save_atomic(path, SelfModel(values=["x"]))
+    save_atomic(path, SelfModelDocument(values=["x"]))
     assert path.exists()
     loaded = json.loads(path.read_text(encoding="utf-8"))
     assert loaded["values"] == ["x"]
@@ -94,14 +94,14 @@ def test_save_atomic_writes_file(tmp_path: Path):
 
 def test_save_atomic_overwrites_existing(tmp_path: Path):
     path = tmp_path / "model.json"
-    save_atomic(path, SelfModel(values=["one"]))
-    save_atomic(path, SelfModel(values=["two"]))
-    loaded = SelfModel.from_json(path.read_text())
+    save_atomic(path, SelfModelDocument(values=["one"]))
+    save_atomic(path, SelfModelDocument(values=["two"]))
+    loaded = SelfModelDocument.from_json(path.read_text())
     assert loaded.values == ["two"]
 
 
 def test_dataclass_is_frozen():
-    m = SelfModel()
+    m = SelfModelDocument()
     with pytest.raises(Exception):
         m.internal_speech_count = 99  # type: ignore[misc]
 
@@ -110,12 +110,12 @@ def test_load_empty_file_returns_empty(tmp_path: Path):
     path = tmp_path / "empty.json"
     path.write_text("", encoding="utf-8")
     m = load(path)
-    assert m == SelfModel()
+    assert m == SelfModelDocument()
 
 
 def test_personality_baseline_floats_preserved():
-    m = SelfModel(personality_baseline={"openness": 0.7, "conscientiousness": 0.5})
-    m2 = SelfModel.from_json(m.to_json())
+    m = SelfModelDocument(personality_baseline={"openness": 0.7, "conscientiousness": 0.5})
+    m2 = SelfModelDocument.from_json(m.to_json())
     assert m2.personality_baseline == {"openness": 0.7, "conscientiousness": 0.5}
 
 
@@ -132,14 +132,14 @@ def test_generate_launch_name_is_kaine_plus_surname():
 
 
 def test_name_round_trips_through_json():
-    from kaine.modules.eidolon.document import SelfModel
-    m = SelfModel(name="Kaine Vale", values=["honesty"])
-    assert SelfModel.from_json(m.to_json()).name == "Kaine Vale"
+    from kaine.modules.eidolon.document import SelfModelDocument
+    m = SelfModelDocument(name="Kaine Vale", values=["honesty"])
+    assert SelfModelDocument.from_json(m.to_json()).name == "Kaine Vale"
 
 
 def test_name_defaults_empty():
-    from kaine.modules.eidolon.document import SelfModel
-    assert SelfModel().name == ""
+    from kaine.modules.eidolon.document import SelfModelDocument
+    assert SelfModelDocument().name == ""
 
 
 def test_surname_pool_is_the_full_sl_list():
