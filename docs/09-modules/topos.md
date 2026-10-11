@@ -120,7 +120,7 @@ All events are published to the `topos.out` stream.
 
 | Event type | Payload fields | Intensity |
 |---|---|---|
-| `topos.report` | `latent`, `change_score`, `habituation_score`, `encoder_model_id`, `prediction_error`, `normalised_error`, `context_gain`, `null_prediction_error`, `mean_prediction_error`, `context_age_s`, `entity_time_s`, `awake`, `alert`; with foveation also `peripheral`, `foveal`, `fovea`, `predicted_fovea`; with a playlist feed also `item`, `item_order` | `alert_salience` on an alert, otherwise graded from `baseline_salience` (see above) |
+| `topos.report` | `latent`, `change_score`, `habituation_score`, `encoder_model_id`, `prediction_error`, `normalised_error`, `context_gain`, `null_prediction_error`, `mean_prediction_error`, `context_age_s`, `prediction_broadcast_tick`, `prediction_context_age_s`, `entity_time_s`, `awake`, `alert`; with foveation also `peripheral`, `foveal`, `fovea`, `predicted_fovea`; with a playlist feed also `item`, `item_order` | `alert_salience` on an alert, otherwise graded from `baseline_salience` (see above) |
 
 `normalised_error` is the error ratio. `latent`, `peripheral`, `foveal`, `habituation_score` and `prediction_error` can be `null`: a vector that holds a non-finite value is published as `null`, a skipped reading carries the previous habituation score (`null` before the first finite reading), and a report without a defined error (a skipped reading and the reading after it) has a `null` `prediction_error` and a `normalised_error` of 0. `context_age_s` is the entity seconds since Topos received the broadcast it holds as context, or `null` before the first accessed broadcast.
 

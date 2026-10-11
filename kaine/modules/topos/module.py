@@ -184,6 +184,8 @@ class Topos(BaseModule):
         self._clock = entity_clock or EntityClock()
         # Adopted accessed broadcasts provide Topos's prediction context (Appendix A.1).
         self._context = BroadcastContext(self._clock.now)
+        # Latest broadcast tick and context age when the pending prediction was formed (paper A.8).
+        self._prediction_stamp: tuple[Optional[int], Optional[float]] = (None, None)
         # Positive control of the information-gain measure; study configuration only.
         self._positive_control: Optional[PositiveControl] = (
             PositiveControl("topos", positive_control)
@@ -579,13 +581,19 @@ class Topos(BaseModule):
         null_prediction_error: Optional[float] = None
         mean_prediction_error: Optional[float] = None
         normalised_error: float = 0.0  # exposed on the report for the affect coupling
+        scored_stamp: tuple[Optional[int], Optional[float]] = (None, None)
         if self._forward_prediction and self._forward_model is not None:
             self._forward_model.suspended = self._in_hypnos
             ctx = null = None
+            scored_stamp = self._prediction_stamp
             # Offload the MLP forward/backward step to a thread so the event loop
             # stays responsive during vision processing (performance-test-coverage).
+            formed_stamp: tuple[Optional[int], Optional[float]] = (None, None)
             if getattr(self._forward_model, "context_dim", 0) > 0:
                 ctx, null = self._context.context_and_null(("topos",))
+                # Read before the step yields to the event loop, so a broadcast
+                # received during the step cannot change the stamp.
+                formed_stamp = self._context.last_reading
                 prediction_error = await asyncio.to_thread(
                     self._forward_model.step, embedding, ctx, null
                 )
@@ -595,6 +603,13 @@ class Topos(BaseModule):
             # none, nor has the first reading after a skip (paper A.2).
             if getattr(self._forward_model, "last_error_defined", True):
                 self._pred_errors.append(prediction_error)
+
+            # The prediction formed now is scored at the next report; a skipped
+            # reading forms none.
+            if getattr(self._forward_model, "last_reading_skipped", False):
+                self._prediction_stamp = (None, None)
+            else:
+                self._prediction_stamp = formed_stamp
 
             # Normalise error against the rolling window mean so a steady,
             # predictable motion yields low salience even at non-zero error.
@@ -686,6 +701,10 @@ class Topos(BaseModule):
             "null_prediction_error": null_prediction_error,
             "mean_prediction_error": mean_prediction_error,
             "context_age_s": self._context.age_s(),
+            # The broadcast whose receipt preceded the scored prediction and the age
+            # of the context it used (paper A.8).
+            "prediction_broadcast_tick": scored_stamp[0],
+            "prediction_context_age_s": scored_stamp[1],
             # The planned test counts a report only when the entity was awake and the
             # report falls after T_learn, measured in entity time from the start of
             # the run (paper Appendix A.8).

@@ -135,6 +135,8 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "null_prediction_error",
             "mean_prediction_error",
             "context_age_s",
+            "prediction_broadcast_tick",
+            "prediction_context_age_s",
             "entity_time_s",
             "awake",
         }
@@ -150,6 +152,8 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "null_prediction_error",
             "mean_prediction_error",
             "context_age_s",
+            "prediction_broadcast_tick",
+            "prediction_context_age_s",
             "entity_time_s",
             "awake",
         }
@@ -204,6 +208,8 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "null_prediction_error",
             "mean_prediction_error",
             "context_age_s",
+            "prediction_broadcast_tick",
+            "prediction_context_age_s",
             "entity_time_s",
             "awake",
         }
