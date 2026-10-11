@@ -17,6 +17,7 @@ from kaine.experiment.rd_robust import (
     kernel_constants,
     mse_bandwidths,
     rd_estimate,
+    rd_weights,
 )
 
 PHI = (math.sqrt(5) - 1) / 2
@@ -359,3 +360,92 @@ def test_cluster_needs_two_clusters():
     h, b = 0.3, 0.5
     with pytest.raises(RDError):
         rd_estimate(x, y, h, b, vce="hc0", cluster=np.zeros(x.size, dtype=int))
+
+
+def _per_side_cluster_se(w_bc, e_robust, x, cluster, h, b, q=2):
+    """Per-side CR1 clustered standard error used by the reference package."""
+    k = q + 1
+    cutoff = max(h, b)
+    total = 0.0
+    for side_mask in (x < 0, x >= 0):
+        active = side_mask & (np.abs(x) < cutoff)
+        if not np.any(active):
+            continue
+        labels_active = cluster[active]
+        unique, inv = np.unique(labels_active, return_inverse=True)
+        g = unique.size
+        n = int(np.sum(active))
+        if g < 2 or n <= k:
+            continue
+        sums = np.bincount(inv, weights=w_bc[active] * e_robust[active], minlength=g)
+        cr1 = (g / (g - 1)) * ((n - 1) / (n - k))
+        total += cr1 * np.sum(sums ** 2)
+    return math.sqrt(total)
+
+
+def _joint_cluster_se(w_bc, e_robust, x, cluster, h, b, q=2):
+    """Joint Liang-Zeger sandwich with CR1 over both sides."""
+    cutoff = max(h, b)
+    active = np.abs(x) < cutoff
+    labels_active = cluster[active]
+    unique, inv = np.unique(labels_active, return_inverse=True)
+    g = unique.size
+    n = int(np.sum(active))
+    k = 2 * (q + 1)
+    if g < 2:
+        raise RDError("joint variance needs at least two clusters")
+    if n <= k:
+        raise RDError("joint variance needs more active units than parameters")
+    sums = np.bincount(inv, weights=w_bc[active] * e_robust[active], minlength=g)
+    factor = (g / (g - 1)) * ((n - 1) / (n - k))
+    return math.sqrt(factor * np.sum(sums ** 2))
+
+
+def test_rd_weights_reproduce_estimates():
+    for case in _REFERENCE["cases"]:
+        x, y = dataset(case["n"], case["jump"], case["shape"], case["noise"],
+                       case.get("shift", 0.0))
+        h, b = case["h"], case["b"]
+        estimate = rd_estimate(x, y, h, b)
+        weights = rd_weights(x, y, h, b)
+        assert weights.w_conventional @ y == pytest.approx(
+            estimate.tau_conventional, abs=1e-12
+        )
+        assert weights.w_bias_corrected @ y == pytest.approx(
+            estimate.tau_bias_corrected, abs=1e-12
+        )
+
+
+def test_clustered_reference_per_side():
+    for case in _REFERENCE["clustered"]:
+        x, y = dataset(*case["args"])
+        n = case["args"][0]
+        labels = (np.arange(1, n + 1) * 7) % 25
+        h, b = case["h"], case["b"]
+        weights = rd_weights(x, y, h, b)
+        estimate = rd_estimate(x, y, h, b, vce="hc0", cluster=labels)
+
+        assert estimate.tau_bias_corrected == pytest.approx(
+            case["coef_bias_corrected"], abs=1e-10
+        )
+
+        per_side = _per_side_cluster_se(
+            weights.w_bias_corrected, weights.residuals_robust, x, labels, h, b
+        )
+        assert per_side == pytest.approx(case["se_robust"], rel=1e-9)
+
+        joint = _joint_cluster_se(
+            weights.w_bias_corrected, weights.residuals_robust, x, labels, h, b
+        )
+        assert estimate.se_robust == pytest.approx(joint, rel=1e-12)
+
+
+def test_selected_bandwidths_near_reference_package():
+    # The reference package's default selector is a later refinement, not the
+    # S.2.6 selector, so this is a sanity check; the validation of the selector
+    # is the Table S.A.II reproduction.
+    for case in _REFERENCE["selected_bandwidths"]:
+        x, y = dataset(*case["args"])
+        selected = mse_bandwidths(x, y)
+        assert selected.h == pytest.approx(case["h"], rel=0.2)
+        assert selected.b == pytest.approx(case["b"], rel=0.2)

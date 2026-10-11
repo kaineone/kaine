@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from kaine.experiment.calibration_rules import Outcome
-from kaine.experiment.rd_robust import rd_estimate
+from kaine.experiment.rd_robust import rd_estimate, wls_condition
 from kaine.experiment.threshold_contrast import (
     ThresholdContrastError,
     bin_observations,
@@ -18,6 +18,7 @@ from kaine.experiment.threshold_contrast import (
     near_threshold_ages,
     pooled_intervals,
     run_contrast,
+    side_fittable,
     threshold_verdict,
 )
 
@@ -221,6 +222,84 @@ def test_malformed_missing_prediction_tick():
             break
     with pytest.raises(ThresholdContrastError):
         following_reports(records, T_LEARN_S)
+
+
+
+def _make_fittable_run(n_left: int, n_right: int) -> list[dict]:
+    """Return records where one side has a controlled distinct score count."""
+    records: list[dict] = []
+    # Scores spread evenly over each side of the threshold, all within both
+    # bandwidths, so only their number decides whether a side can be fitted.
+    for k in range(1, n_left + 1):
+        d = -(0.01 + 0.19 * (k - 1) / max(n_left - 1, 1))
+        records.append(
+            {
+                "event_type": "workspace.broadcast",
+                "tick_index": k,
+                "salience_scores": {"a": float(0.4 + d), "b": float(0.35 + d)},
+                "access_threshold": 0.4,
+            }
+        )
+        gain = 0.1 if d < 0 else 0.3
+        for report_type in REPORT_TYPES:
+            records.append(
+                {
+                    "event_type": report_type,
+                    "awake": True,
+                    "context_gain": float(gain),
+                    "entity_time_s": 100 + k,
+                    "prediction_broadcast_tick": k,
+                    "prediction_context_age_s": 1.5,
+                }
+            )
+    for k in range(1, n_right + 1):
+        d = 0.01 + 0.19 * (k - 1) / max(n_right - 1, 1)
+        tick = 1000 + k
+        records.append(
+            {
+                "event_type": "workspace.broadcast",
+                "tick_index": tick,
+                "salience_scores": {"a": float(0.4 + d), "b": float(0.35 + d)},
+                "access_threshold": 0.4,
+            }
+        )
+        gain = 0.1 if d < 0 else 0.3
+        for report_type in REPORT_TYPES:
+            records.append(
+                {
+                    "event_type": report_type,
+                    "awake": True,
+                    "context_gain": float(gain),
+                    "entity_time_s": 100 + tick,
+                    "prediction_broadcast_tick": tick,
+                    "prediction_context_age_s": 1.5,
+                }
+            )
+    return records
+
+
+def test_bin_not_fitted_with_nine_distinct_scores_on_a_side():
+    records = _make_fittable_run(n_left=20, n_right=9)
+    result = run_contrast(records, T_LEARN_S, THETA_BAND, B_BAND, AGE_EDGES)
+    # Every report has age 1.5, so only bin 1 has observations.
+    assert result.per_bin[1] is None
+    assert result.contrast is None
+
+
+def test_bin_fitted_with_ten_distinct_scores_on_a_side():
+    records = _make_fittable_run(n_left=20, n_right=10)
+    result = run_contrast(records, T_LEARN_S, THETA_BAND, B_BAND, AGE_EDGES)
+    # Every report has age 1.5, so only bin 1 has observations; the gain is a
+    # step of 0.2 at the threshold.
+    assert result.per_bin[1] == pytest.approx(0.2, abs=1e-10)
+    assert result.contrast == pytest.approx(0.2, abs=1e-10)
+
+
+def test_side_not_fittable_when_scores_are_nearly_coincident():
+    x_side = 0.1 + np.linspace(0, 1e-9, 10)
+    assert np.unique(x_side).size == 10
+    assert wls_condition(x_side, B_BAND, 2) > 1e8
+    assert not side_fittable(x_side, THETA_BAND, B_BAND)
 
 
 @pytest.mark.parametrize("bad_time", [float("nan"), float("inf"), None])

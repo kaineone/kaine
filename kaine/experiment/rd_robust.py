@@ -38,6 +38,14 @@ class RDEstimate:
 
 
 @dataclass(frozen=True, slots=True)
+class RDWeights:
+    w_conventional: np.ndarray
+    w_bias_corrected: np.ndarray
+    residuals_conventional: np.ndarray
+    residuals_robust: np.ndarray
+
+
+@dataclass(frozen=True, slots=True)
 class BandwidthSelection:
     h: float
     b: float
@@ -154,6 +162,10 @@ def _nearest_neighbor_sigma_side(x, y, side_mask, j, nn_window=None):
 
     Abadie and Imbens (2006) with J = j neighbors. Ties at the J-th distance are all
     included.
+
+    Loops in Python over the side's units (O(n J) work, a few seconds per side for
+    about a hundred thousand units), which is acceptable for calibration runs over
+    pooled pilot data and is the cost to watch if it is ever called per tick.
     """
     if j < 1:
         raise RDError("j must be a positive integer")
@@ -245,6 +257,57 @@ def _cluster_variance(w, e, cluster, active, k):
     return factor * sandwich
 
 
+def rd_weights(x, y, h, b, *, p=1, q=2) -> RDWeights:
+    """Return the weight vectors and residuals for RD estimation.
+
+    The bias-corrected coefficient is ``w_bias_corrected @ y``. Residuals are
+    local-linear at h for the conventional variance and local-quadratic at b
+    for the robust variance.
+    """
+    x, y = _validate_x_y(x, y)
+    n = x.size
+    _check_positive_finite(h, "h")
+    _check_positive_finite(b, "b")
+    if p < 0 or p != int(p):
+        raise RDError("p must be a non-negative integer")
+    if q <= p or q != int(q):
+        raise RDError("q must be an integer greater than p")
+    p = int(p)
+    q = int(q)
+
+    left = x < 0
+    right = ~left
+
+    beta_p_r, L_p_r = _local_poly(x[right], y[right], h, p)
+    beta_p_l, L_p_l = _local_poly(x[left], y[left], h, p)
+    beta_q_r, L_q_r = _local_poly(x[right], y[right], b, q)
+    beta_q_l, L_q_l = _local_poly(x[left], y[left], b, q)
+
+    D_r = _D_scalar(x[right], h, p)
+    D_l = _D_scalar(x[left], h, p)
+
+    w_conv = np.zeros(n)
+    w_bc = np.zeros(n)
+    w_conv[right] = L_p_r[0]
+    w_bc[right] = L_p_r[0] - D_r * L_q_r[p + 1]
+    w_conv[left] = -L_p_l[0]
+    w_bc[left] = -L_p_l[0] + D_l * L_q_l[p + 1]
+
+    e_conv = np.zeros(n)
+    e_robust = np.zeros(n)
+    e_conv[right] = _residuals(x[right], y[right], beta_p_r, p)
+    e_conv[left] = _residuals(x[left], y[left], beta_p_l, p)
+    e_robust[right] = _residuals(x[right], y[right], beta_q_r, q)
+    e_robust[left] = _residuals(x[left], y[left], beta_q_l, q)
+
+    return RDWeights(
+        w_conventional=w_conv,
+        w_bias_corrected=w_bc,
+        residuals_conventional=e_conv,
+        residuals_robust=e_robust,
+    )
+
+
 def rd_estimate(
     x,
     y,
@@ -291,20 +354,11 @@ def rd_estimate(
     left = x < 0
     right = ~left
 
-    beta_p_r, L_p_r = _local_poly(x[right], y[right], h, p)
-    beta_p_l, L_p_l = _local_poly(x[left], y[left], h, p)
-    beta_q_r, L_q_r = _local_poly(x[right], y[right], b, q)
-    beta_q_l, L_q_l = _local_poly(x[left], y[left], b, q)
-
-    D_r = _D_scalar(x[right], h, p)
-    D_l = _D_scalar(x[left], h, p)
-
-    w_conv = np.zeros(n)
-    w_bc = np.zeros(n)
-    w_conv[right] = L_p_r[0]
-    w_bc[right] = L_p_r[0] - D_r * L_q_r[p + 1]
-    w_conv[left] = -L_p_l[0]
-    w_bc[left] = -L_p_l[0] + D_l * L_q_l[p + 1]
+    weights = rd_weights(x, y, h, b, p=p, q=q)
+    w_conv = weights.w_conventional
+    w_bc = weights.w_bias_corrected
+    e_conv = weights.residuals_conventional
+    e_robust = weights.residuals_robust
 
     tau_conv = float(w_conv @ y)
     tau_bc = float(w_bc @ y)
@@ -316,12 +370,6 @@ def rd_estimate(
         var_conv = _linear_variance(w_conv, sigma2)
         var_robust = _linear_variance(w_bc, sigma2)
     else:
-        e_conv = np.zeros(n)
-        e_robust = np.zeros(n)
-        e_conv[right] = _residuals(x[right], y[right], beta_p_r, p)
-        e_conv[left] = _residuals(x[left], y[left], beta_p_l, p)
-        e_robust[right] = _residuals(x[right], y[right], beta_q_r, q)
-        e_robust[left] = _residuals(x[left], y[left], beta_q_l, q)
         if cluster is None:
             var_conv = float(np.sum(w_conv ** 2 * e_conv ** 2))
             var_robust = float(np.sum(w_bc ** 2 * e_robust ** 2))
@@ -355,6 +403,33 @@ def rd_estimate(
         h=float(h),
         b=float(b),
     )
+
+
+def wls_condition(x_side, g, m) -> float:
+    """Condition number of the weighted local-polynomial design matrix.
+
+    Paper A.8: rows (1, u_i, ..., u_i^m) with u_i = x_i / g and weights
+    1 - |u_i| over units with |x_i| < g. Returns infinity when fewer than
+    m + 1 distinct x values have positive weight.
+    """
+    x_side = np.asarray(x_side, dtype=float)
+    if x_side.ndim != 1:
+        raise RDError("x_side must be one-dimensional")
+    _check_positive_finite(g, "g")
+    if m < 0 or m != int(m):
+        raise RDError("m must be a non-negative integer")
+    m = int(m)
+    inside = np.abs(x_side) < g
+    x_in = x_side[inside]
+    if x_in.size < m + 1:
+        return math.inf
+    if np.unique(x_in).size < m + 1:
+        return math.inf
+    u = x_in / g
+    w = 1.0 - np.abs(u)
+    R = np.vander(u, N=m + 1, increasing=True)
+    Rw = R.T * w
+    return float(np.linalg.cond(Rw @ R))
 
 
 def _global_poly_coeffs(x_side, y_side, degree):
@@ -474,9 +549,12 @@ def mse_bandwidths(x, y, *, p=1, q=2, nu=0, j=3):
 __all__ = [
     "RDError",
     "RDEstimate",
+    "RDWeights",
     "BandwidthSelection",
     "kernel_constants",
     "bias_constant",
     "rd_estimate",
+    "rd_weights",
+    "wls_condition",
     "mse_bandwidths",
 ]

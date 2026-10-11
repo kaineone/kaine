@@ -24,7 +24,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from kaine.experiment.calibration_rules import SignTestResult, sign_test_verdict
-from kaine.experiment.rd_robust import RDError, RDEstimate, rd_estimate
+from kaine.experiment.rd_robust import RDError, RDEstimate, rd_estimate, wls_condition
 
 
 class ThresholdContrastError(ValueError):
@@ -33,6 +33,9 @@ class ThresholdContrastError(ValueError):
 
 REPORT_TYPES = ("topos.report", "audition.perception", "soma.report")
 BROADCAST_EVENT_TYPE = "workspace.broadcast"
+
+MIN_DISTINCT_PER_SIDE = 10  # Paper A.8, Table A1
+MAX_CONDITION = 1e8  # Paper A.8, Table A1
 
 
 def _is_number(value):
@@ -184,6 +187,35 @@ class RunContrast:
     contrast: float | None
 
 
+def side_fittable(x_side, theta_band, b_band) -> bool:
+    """True when a side has enough distinct, well-conditioned units.
+
+    Paper A.8: at least MIN_DISTINCT_PER_SIDE distinct scores with |x| < theta_band
+    and with |x| < b_band, and the local-linear and local-quadratic weighted
+    least-squares problems are well conditioned.
+    """
+    x_side = np.asarray(x_side, dtype=float)
+    if x_side.ndim != 1:
+        raise ThresholdContrastError("x_side must be one-dimensional")
+    near_theta = x_side[np.abs(x_side) < theta_band]
+    near_b = x_side[np.abs(x_side) < b_band]
+    if np.unique(near_theta).size < MIN_DISTINCT_PER_SIDE:
+        return False
+    if np.unique(near_b).size < MIN_DISTINCT_PER_SIDE:
+        return False
+    if wls_condition(x_side, theta_band, 1) > MAX_CONDITION:
+        return False
+    return wls_condition(x_side, b_band, 2) <= MAX_CONDITION
+
+
+def bin_fittable(xs, theta_band, b_band) -> bool:
+    """True when both sides of the cutoff have fittable units."""
+    xs = np.asarray(xs, dtype=float)
+    return side_fittable(xs[xs >= 0], theta_band, b_band) and side_fittable(
+        xs[xs < 0], theta_band, b_band
+    )
+
+
 def run_contrast(records, t_learn_s, theta_band, b_band, age_edges) -> RunContrast:
     """Estimate tau_{r,a} per bin and the mean contrast across fitted bins."""
     bins = bin_observations(records, t_learn_s, age_edges)
@@ -192,7 +224,7 @@ def run_contrast(records, t_learn_s, theta_band, b_band, age_edges) -> RunContra
     defined: list[float] = []
     for a in range(n_bins):
         xs, ys = bins.get(a, ([], []))
-        if not xs:
+        if not xs or not bin_fittable(xs, theta_band, b_band):
             per_bin[a] = None
             continue
         try:
@@ -230,7 +262,7 @@ def pooled_intervals(
             xs.extend(run_xs)
             ys.extend(run_ys)
             labels.extend([run_id] * len(run_xs))
-        if not xs:
+        if not xs or not bin_fittable(xs, theta_band, b_band):
             results[a] = None
             continue
         try:
@@ -250,6 +282,8 @@ def threshold_verdict(contrasts, min_effect) -> SignTestResult:
 __all__ = [
     "ThresholdContrastError",
     "REPORT_TYPES",
+    "MIN_DISTINCT_PER_SIDE",
+    "MAX_CONDITION",
     "FollowingReport",
     "RunContrast",
     "broadcast_distances",
@@ -257,6 +291,8 @@ __all__ = [
     "bandwidth_observations",
     "near_threshold_ages",
     "bin_observations",
+    "side_fittable",
+    "bin_fittable",
     "run_contrast",
     "pooled_intervals",
     "threshold_verdict",

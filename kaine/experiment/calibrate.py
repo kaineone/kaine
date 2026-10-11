@@ -1029,25 +1029,33 @@ def calibrate(
                 contrast_error = "depends on age_bins"
             else:
                 threshold_contrasts = []
+                contrast_error = None
                 for index in counted_indices:
                     run_id = pilots[index]["competitive"]
-                    threshold_contrasts.append(
-                        run_contrast(
-                            _flatten_records(records_by_run[run_id]),
-                            t_learn_s,
-                            theta_band,
-                            b_band,
-                            age_bins,
-                        ).contrast
-                    )
+                    try:
+                        threshold_contrasts.append(
+                            run_contrast(
+                                _flatten_records(records_by_run[run_id]),
+                                t_learn_s,
+                                theta_band,
+                                b_band,
+                                age_bins,
+                            ).contrast
+                        )
+                    except (RDError, ThresholdContrastError) as exc:
+                        if contrast_error is None:
+                            contrast_error = f"threshold contrast: {exc}"
+                        threshold_contrasts.append(None)
                 defined = [c for c in threshold_contrasts if c is not None]
-                try:
-                    min_effect_threshold_contrast = minimum_effect(sample_sd(defined))
-                except CalibrationError as exc:
-                    contrast_error = (
-                        f"the threshold contrast is defined in {len(defined)} "
-                        f"counted pilots: {exc}"
-                    )
+                # A pilot whose log could not be read blocks the minimum effect.
+                if contrast_error is None:
+                    try:
+                        min_effect_threshold_contrast = minimum_effect(sample_sd(defined))
+                    except CalibrationError as exc:
+                        contrast_error = (
+                            f"the threshold contrast is defined in {len(defined)} "
+                            f"counted pilots: {exc}"
+                        )
 
     # ------------------------------------------------------------------
     # f. Positive control and report count

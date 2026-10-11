@@ -123,5 +123,67 @@
     ]
    }
   }
+ ],
+ "selected_bandwidths": [
+  {
+   "name": "lee_500",
+   "args": [
+    500,
+    0.0,
+    "lee",
+    0.1295,
+    0.0
+   ],
+   "bwselect": "mserd",
+   "h": 0.2748567346552548,
+   "b": 0.42822466922894015
+  },
+  {
+   "name": "curved_600",
+   "args": [
+    600,
+    -0.4,
+    "curved",
+    0.2,
+    0.31
+   ],
+   "bwselect": "mserd",
+   "h": 0.2767432403086177,
+   "b": 0.5479025749010643
+  }
+ ],
+ "clustered": [
+  {
+   "name": "curved_cluster",
+   "args": [
+    600,
+    -0.4,
+    "curved",
+    0.2,
+    0.31
+   ],
+   "h": 0.25,
+   "b": 0.4,
+   "cluster": "(i * 7) % 25 for i = 1..n",
+   "coef_bias_corrected": -0.42831667591689243,
+   "se_conventional": 0.054716530876537904,
+   "se_robust": 0.058600105020494064
+  },
+  {
+   "name": "linear_cluster",
+   "args": [
+    400,
+    0.25,
+    "linear",
+    0.1,
+    0.0
+   ],
+   "h": 0.3,
+   "b": 0.45,
+   "cluster": "(i * 7) % 25 for i = 1..n",
+   "coef_bias_corrected": 0.24260439993307042,
+   "se_conventional": 0.029171106790769917,
+   "se_robust": 0.03175527450462234
+  }
  ]
 }

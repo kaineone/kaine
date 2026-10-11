@@ -171,7 +171,12 @@ def _build_evaluation_tree(
                     if wrong_entity_time_run == run_id and k == 1 and processor == "topos":
                         del record["entity_time_s"]
                     if with_threshold and arm == "competitive":
-                        record["prediction_broadcast_tick"] = 1000 + k
+                        if processor == "topos":
+                            record["prediction_broadcast_tick"] = 1000 + k
+                        elif processor == "audition":
+                            record["prediction_broadcast_tick"] = 1200 + k
+                        elif processor == "soma":
+                            record["prediction_broadcast_tick"] = 1400 + k
                         record["prediction_context_age_s"] = 0.5 + (k % 7) * 0.4
                     _append_record(path, record)
 
@@ -201,9 +206,9 @@ def _build_evaluation_tree(
 
             # Broadcasts.
             if with_threshold and arm == "competitive" and not not_exercised:
-                for k in range(1, N_REPORTS + 1):
+                for k in range(1, 601):
                     tick = 1000 + k
-                    d_k = 0.6 * ((k * 0.6180339887 + 0.13 * pilot_index) % 1.0) - 0.3
+                    d_k = 0.6 * (((tick - 1000) * 0.6180339887 + 0.13 * pilot_index) % 1.0) - 0.3
                     max_score = 0.4 + d_k
                     scores = {str(i): max_score - 0.05 for i in range(7)}
                     scores["0"] = max_score
@@ -782,6 +787,31 @@ def test_arm_pilot_with_the_variant_tone_rule_raises(tmp_path: Path) -> None:
     )
     with pytest.raises(CalibrationError, match="error_ratio"):
         calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
+
+
+
+
+def test_calibrate_survives_a_report_without_preceding_broadcast(tmp_path: Path) -> None:
+    plan, root = _build_evaluation_tree(
+        tmp_path, n_pilots=5, with_tone=True, with_threshold=True
+    )
+    run_id = plan["pilots"][0]["competitive"]
+    path = _record_path(root, run_id)
+    _append_record(
+        path,
+        {
+            "run_id": run_id,
+            "event_type": "topos.report",
+            "processor": "topos",
+            "awake": True,
+            "context_gain": 0.1,
+            "entity_time_s": 10000.0,
+        },
+    )
+    record = calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
+    assert record is not None
+    assert "theta_band" in record["blocked"]
+    assert "prediction_broadcast_tick" in record["blocked"]["theta_band"]
 
 
 def test_calibrate_completes_with_threshold_and_tone(tmp_path: Path) -> None:
