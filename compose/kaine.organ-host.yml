@@ -22,11 +22,7 @@ services:
   kaine-nexus:
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    environment:
-      KAINE_MODEL_SERVER_URL: ${KAINE_MODEL_SERVER_URL:-http://host.docker.internal:11434/v1}
 
   kaine-cycle:
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    environment:
-      KAINE_MODEL_SERVER_URL: ${KAINE_MODEL_SERVER_URL:-http://host.docker.internal:11434/v1}
