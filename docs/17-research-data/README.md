@@ -2,7 +2,7 @@
 
 The evaluation sidecar is a set of read-only observers that run next to the cognitive cycle. They consume bus events, compute metrics, and write daily-rotated JSONL files or in-memory counters surfaced through Nexus diagnostics. This page is for operators who want to know what is recorded, researchers checking a claim, and contributors adding a new instrument.
 
-The sidecar never injects into the cognitive loop and never modifies module state. The [welfare observer](#welfareobserver) is the one exception: it publishes a content-free `welfare.gray_zone` event on `welfare.out` so the autonomous welfare monitor can act on a gray-zone detection. No other observer publishes to the bus.
+The sidecar never injects into the cognitive loop and never modifies module state. The [welfare observer](#welfareobserver) is the one exception: it publishes a content-free `welfare.gray_zone` event on `welfare.out` so the autonomous welfare monitor can act on a gray-zone detection, and a content-free blind-sensor advisory on the same stream, on which the monitor does not act. No other observer publishes to the bus.
 
 For the curated research-event log, see [Research event streams](event-streams.md). For how to take part in research, see [Research participation](participation.md).
 
@@ -138,7 +138,7 @@ Maintains a sliding window of prediction-error magnitudes across the predictive 
 
 ### `WelfareObserver`
 
-- **Streams:** `soma.out`, `hypnos.out`, `thymos.out`, `mnemos.out`
+- **Streams:** `soma.out`, `hypnos.out`, `thymos.out`, `mnemos.out`, `topos.out`, `audition.out`
 - **Toggle:** `[evaluation.observers].welfare`
 - **Output:** `data/evaluation/welfare/welfare-<YYYY-MM-DD>.jsonl`
 
@@ -154,6 +154,14 @@ Detects four gray-zone events:
 The interoceptive-distress threshold and duration are set by `[evaluation.welfare].interoceptive_distress_threshold` (0.8) and `interoceptive_distress_duration_s` (30.0); the other windows are constructor defaults with no config key. Each condition is counted separately. Counts are exposed as properties on the `WelfareObserver` instance for Nexus diagnostics, and each detected event is written to JSONL.
 
 On each detection the observer publishes a `welfare.gray_zone` event on `welfare.out` (source `welfare`). The published payload is the same content-free dict written to the sink: a category label plus numeric scalars and counters, with no field copied from a source event payload. The sustained-interoceptive-distress rule lives in a shared core primitive (`kaine.lifecycle.welfare_signal.SustainedThresholdTracker`) imported by both the observer and the monitor, so the detection rule never diverges across the sidecar boundary. See [Preservation and the safety net](../11-preservation.md).
+
+#### Blind-sensor advisory
+
+The observer also watches each predictive processor for a blind sensor: a run of consecutive reports whose `prediction_error` is null, which a processor publishes for a reading it skipped as non-finite and for the reading after it. The processors are `soma` (`soma.report`), `topos` (`topos.report`), `audition_acoustic` (`audition.perception`) and `audition_tone` (`audition.emotion`). A report without a `prediction_error` key, such as Audition's classifier-failure event, is not a sample.
+
+When a run reaches `[evaluation.welfare].blind_sensor_samples` null samples, the observer publishes one `welfare.blind_sensor` event on `welfare.out` and writes it to the rollup; the first defined error after it publishes `welfare.blind_sensor_cleared`. With the default of 0 the run must instead span one `interoceptive_distress_duration_s` (30 s) of unfrozen time from its first null sample, which is the number of samples that duration holds at the processor's own rate. The payload carries the processor label, `undefined_samples`, `undefined_seconds`, `blind_sensor_samples`, `blind_sensor_duration_s` and `blind_sensor_count`, and nothing copied from a source payload.
+
+A blind sensor is a fault of the being's input, not distress of the being, so the advisory is not a gray-zone event. The welfare-protective monitor reads only `welfare.gray_zone` from `welfare.out` and takes no action on it. The curated research log records both advisory types, and the Nexus entity-care panel lists the processors that are blind now.
 
 ### `NousPolicyObserver`
 
@@ -388,6 +396,7 @@ nous_policy = true
 [evaluation.welfare]
 interoceptive_distress_threshold = 0.8
 interoceptive_distress_duration_s = 30.0
+blind_sensor_samples = 0        # 0: one distress duration at each processor's rate
 
 [individuation]
 enabled = false
@@ -419,7 +428,7 @@ idle_poll_s = 1.0
 
 ## Privacy and persistence notes
 
-- Observers never modify module state and never inject into the cognitive loop. The welfare observer is the one observer that publishes to the bus, and only a content-free `welfare.gray_zone` signal (numeric scalars plus a category label, no source-payload field). Every other observer is publish-silent.
+- Observers never modify module state and never inject into the cognitive loop. The welfare observer is the one observer that publishes to the bus, and only content-free signals on `welfare.out`: `welfare.gray_zone` (numeric scalars plus a category label) and the blind-sensor advisory and its clear (numeric scalars plus a processor label), never a source-payload field. Every other observer is publish-silent.
 - `replay_redact_content = true` (default) ensures no memory text content appears in sidecar JSONL without explicit operator/Guardian opt-in.
 - Individuation evidence lives at the fixed path `state/individuation/` (`reference.json`, `ledger.json` and `reports/` are encrypted; `birth_adapter.gguf` is a copy of the birth voice adapter, stored like the other adapter files). Reports hold only allow-listed scalars and never text from the being. It travels with the being: preservation bundles carry it inside the encrypted tar and a failed copy fails preservation; revive restores it before the cycle starts, moving an existing tree aside under a unique name and keeping it; the decommission backup includes it and a failed copy fails the backup; decommission removes it with the being. Whether research bundles export its content-free reports is an open operator decision, and those reports are not in research bundles today.
 - The A/B divergence instrument processes `user_input` in-memory to produce the cosine score, but only for felt- and event-triggered replies. Replies to heard speech are recorded as content-free skip records, `{entry_id, ts, skipped: "no_user_input_heard_reply"}`, and counted. The JSONL file records the score and metadata and never the input text.

@@ -107,11 +107,12 @@ def preservation_block(
 
 
 def welfare_block(evaluation_logs_path: Path) -> dict[str, Any]:
-    """Read-only welfare gray-zone counters for the entity-care panel.
+    """Read-only welfare counters for the entity-care panel.
 
-    Numeric only — the four §5.5 gray-zone counts from the evaluation JSONL
-    rollup (the Nexus process holds no live sidecar registry). Never raises;
-    a missing rollup yields a ``source: none`` block.
+    Numeric only - the four §5.5 gray-zone counts plus blind-sensor advisory
+    state from the evaluation JSONL rollup (the Nexus process holds no live
+    sidecar registry). Never raises; a missing rollup yields a
+    ``source: none`` block.
     """
     try:
         from kaine.experiment.welfare_counts import welfare_counts_from_jsonl
@@ -124,6 +125,8 @@ def welfare_block(evaluation_logs_path: Path) -> dict[str, Any]:
             "sustained_extreme_vad": None,
             "replay_overload": None,
             "sustained_interoceptive_distress": None,
+            "blind_sensor_advisories": None,
+            "blind_sensors": [],
             "source": "none",
         }
 

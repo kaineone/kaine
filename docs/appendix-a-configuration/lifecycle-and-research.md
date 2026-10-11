@@ -56,12 +56,13 @@ Each toggle below is gated by `[evaluation].enabled`, except that the welfare ob
 
 ### `[evaluation.welfare]`
 
-Tune the sidecar welfare observer's interoceptive-distress rule. These defaults match [`[preservation.welfare_response]`](#preservationwelfare_response). See `kaine/evaluation/config.py` for the full reader.
+Tune the sidecar welfare observer's interoceptive-distress rule and its blind-sensor advisory. These defaults match [`[preservation.welfare_response]`](#preservationwelfare_response). See `kaine/evaluation/config.py` for the full reader.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `interoceptive_distress_threshold` | float | `0.8` | `prediction_error` magnitude at/above which distress is counted. |
 | `interoceptive_distress_duration_s` | float | `30.0` | Seconds the distress must be sustained: wall time while distress samples arrive, unfrozen time after the last sample. |
+| `blind_sensor_samples` | integer | `0` | Consecutive null `prediction_error` samples from one processor after which the observer publishes a `welfare.blind_sensor` advisory. `0` means the run must span `interoceptive_distress_duration_s` of unfrozen time, the number of samples that duration holds at the processor's own rate. The advisory is not a gray-zone event and the protective response does not act on it. |
 
 ### `[individuation]`
 

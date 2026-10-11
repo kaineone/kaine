@@ -22,6 +22,7 @@ sequence of (magnitude, timestamp) inputs always produces the same crossings.
 from __future__ import annotations
 
 from collections import deque
+from typing import NamedTuple
 
 
 class SustainedThresholdTracker:
@@ -158,4 +159,106 @@ class WindowedEventCounter:
         return False
 
 
-__all__ = ["SustainedThresholdTracker", "WindowedEventCounter"]
+#: Operator advisory published by the welfare observer on ``welfare.out`` when a
+#: processor's readings stay undefined, and its clear. Neither is a gray-zone
+#: event: the protective monitor reads only ``welfare.gray_zone`` from that stream.
+BLIND_SENSOR_TYPE = "welfare.blind_sensor"
+BLIND_SENSOR_CLEARED_TYPE = "welfare.blind_sensor_cleared"
+
+#: Report event type -> processor label, for each report that carries a
+#: forward-model prediction error.
+BLIND_SENSOR_PROCESSORS: dict[str, str] = {
+    "soma.report": "soma",
+    "topos.report": "topos",
+    "audition.perception": "audition_acoustic",
+    "audition.emotion": "audition_tone",
+}
+
+
+class RunTransition(NamedTuple):
+    """A blind-sensor state change: ``"raised"`` or ``"cleared"``, with the run's size."""
+
+    transition: str
+    samples: int
+    seconds: float
+
+
+class UndefinedRunTracker:
+    """Track one processor's current run of consecutive undefined samples.
+
+    ``min_samples`` is the configured N; 0 means derive N from the duration.
+    A run begins on the first undefined sample and ends on the first defined
+    sample. With ``min_samples > 0`` the threshold is met when the run holds
+    that many samples. With 0 it is met when the run spans ``duration_s`` from
+    its first sample, which is the number of samples that duration holds at
+    the processor's own rate. The advisory is raised once per run when the
+    threshold is met, and a cleared transition is returned when a defined
+    sample follows a raised advisory.
+    """
+
+    def __init__(self, *, min_samples: int, duration_s: float) -> None:
+        if min_samples < 0:
+            raise ValueError("min_samples must be non-negative")
+        if duration_s <= 0:
+            raise ValueError("duration_s must be positive")
+        self.min_samples = int(min_samples)
+        self.duration_s = float(duration_s)
+        self._samples: int = 0
+        self._start: float | None = None
+        self._raised: bool = False
+
+    @property
+    def samples(self) -> int:
+        return self._samples
+
+    @property
+    def active(self) -> bool:
+        return self._raised
+
+    def observe(self, defined: bool, now: float) -> RunTransition | None:
+        """Record one sample and return a transition if the run changes state."""
+        if not defined:
+            if self._samples == 0:
+                self._start = float(now)
+            self._samples += 1
+            if not self._raised and self._threshold_met(now):
+                self._raised = True
+                return RunTransition(
+                    "raised",
+                    self._samples,
+                    now - self._start,
+                )
+            return None
+        if self._raised:
+            transition = RunTransition(
+                transition="cleared",
+                samples=self._samples,
+                seconds=(now - self._start) if self._start is not None else 0.0,
+            )
+        else:
+            transition = None
+        self._reset()
+        return transition
+
+    def _threshold_met(self, now: float) -> bool:
+        if self.min_samples > 0:
+            return self._samples >= self.min_samples
+        if self._start is None:
+            return False
+        return (now - self._start) >= self.duration_s
+
+    def _reset(self) -> None:
+        self._samples = 0
+        self._start = None
+        self._raised = False
+
+
+__all__ = [
+    "SustainedThresholdTracker",
+    "WindowedEventCounter",
+    "BLIND_SENSOR_CLEARED_TYPE",
+    "BLIND_SENSOR_PROCESSORS",
+    "BLIND_SENSOR_TYPE",
+    "RunTransition",
+    "UndefinedRunTracker",
+]

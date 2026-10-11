@@ -1376,3 +1376,75 @@ def test_single_multiplexed_eventsource_across_the_bundle():
     # The formerly-independent counter-only metrics stream now delegates to the
     # shared dispatcher instead of opening a second EventSource.
     assert "NexusSSE" in js and "subscribeMetrics" in js
+
+
+def test_welfare_block_lists_blind_sensors_until_cleared(tmp_path):
+    welfare_dir = tmp_path / "eval" / "welfare"
+    welfare_dir.mkdir(parents=True)
+    lines = [
+        {
+            "gray_zone_event": "replay_overload",
+            "unmaintained_fatigue_count": 1,
+            "sustained_extreme_vad_count": 2,
+            "replay_overload_count": 4,
+            "sustained_interoceptive_distress_count": 0,
+        },
+        {"advisory": "blind_sensor", "processor": "topos", "blind_sensor_count": 1},
+        {"advisory": "blind_sensor", "processor": "soma", "blind_sensor_count": 2},
+        {"advisory": "blind_sensor_cleared", "processor": "topos", "blind_sensor_count": 2},
+        {"advisory": "blind_sensor", "processor": "not_a_processor", "blind_sensor_count": 2},
+    ]
+    (welfare_dir / "welfare-2026-06-15.jsonl").write_text(
+        "".join(json.dumps(line) + "\n" for line in lines)
+    )
+    block = _prober(tmp_path)._welfare_block()
+    assert block["source"] == "jsonl"
+    assert block["replay_overload"] == 4
+    assert block["sustained_extreme_vad"] == 2
+    assert block["blind_sensor_advisories"] == 2
+    assert block["blind_sensors"] == ["soma"]
+
+
+def test_welfare_block_without_rollup_has_empty_blind_sensors(tmp_path):
+    block = _prober(tmp_path)._welfare_block()
+    assert block["source"] == "none"
+    assert block["blind_sensors"] == []
+    assert block["blind_sensor_advisories"] is None
+
+
+def test_entity_care_template_renders_blind_sensors(tmp_path):
+    from jinja2 import Environment, FileSystemLoader
+
+    templates_dir = Path(__file__).resolve().parents[1] / "kaine" / "nexus" / "templates"
+    env = Environment(loader=FileSystemLoader(str(templates_dir)), autoescape=True)
+    template = env.get_template("_entity_care.html")
+    entity_care = {"diverged": False, "summary": "s", "signals": None, "care_obligations": []}
+    welfare = {
+        "source": "jsonl",
+        "unmaintained_fatigue": 0,
+        "sustained_extreme_vad": 0,
+        "replay_overload": 0,
+        "sustained_interoceptive_distress": 0,
+        "blind_sensor_advisories": 2,
+        "blind_sensors": ["audition_acoustic", "soma"],
+    }
+    defaults = {
+        "entity": {"name": "Test Entity"},
+        "divergence": None,
+        "signals": None,
+        "metrics": None,
+        "care_obligations": [],
+        "summary": None,
+        "model": None,
+        "registry": None,
+    }
+    output = template.render(entity_care=entity_care, welfare=welfare, **defaults)
+    assert "blind-sensor advisories" in output
+    assert "audition_acoustic, soma" in output
+
+    empty_output = template.render(
+        entity_care=entity_care,
+        welfare={**welfare, "blind_sensor_advisories": None, "blind_sensors": []},
+        **defaults,
+    )
+    assert "none" in empty_output

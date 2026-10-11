@@ -27,6 +27,14 @@ Detects and counts four welfare-relevant conditions:
     ``prediction_error`` is already a scalar float published by Soma's
     forward model — no reduction is required.
 
+The observer also follows ``topos.out`` and ``audition.out`` and publishes a
+``welfare.blind_sensor`` advisory on ``welfare.out`` when a processor's
+readings stay undefined (N consecutive null ``prediction_error`` samples,
+``[evaluation.welfare].blind_sensor_samples``, or by default a run spanning
+one interoceptive-distress duration), and ``welfare.blind_sensor_cleared``
+when a defined sample returns. It is an operator advisory about a sensor, not
+a gray-zone event, and the protective monitor does not act on it.
+
 Each event type surfaces as an in-memory count exposed as a property for
 Nexus diagnostics, is written to the JSONL log, AND is published to the bus as a
 ``welfare.gray_zone`` event on ``welfare.out`` (source ``welfare``) so the
@@ -57,9 +65,16 @@ from kaine.evaluation.sink import AsyncJsonlSink
 # The sustained-distress detection logic is shared core-side so the autonomous
 # welfare-protective monitor (kaine.cycle.preservation_monitor) applies the
 # IDENTICAL threshold/duration rule without importing kaine.evaluation. Imported
-# here (and re-exported) so the observer and the monitor never drift.
+# here (and re-exported) so the observer and the monitor never drift. The
+# blind-sensor constants and run tracker live there too, so the research log and
+# Nexus read the same processor labels.
 from kaine.lifecycle.welfare_signal import (  # noqa: F401  (re-export)
+    BLIND_SENSOR_CLEARED_TYPE,
+    BLIND_SENSOR_PROCESSORS,
+    BLIND_SENSOR_TYPE,
+    RunTransition,
     SustainedThresholdTracker,
+    UndefinedRunTracker,
     WindowedEventCounter,
 )
 
@@ -69,6 +84,8 @@ _SOMA_STREAM = "soma.out"
 _HYPNOS_STREAM = "hypnos.out"
 _THYMOS_STREAM = "thymos.out"
 _MNEMOS_STREAM = "mnemos.out"
+_TOPOS_STREAM = "topos.out"
+_AUDITION_STREAM = "audition.out"
 
 # Emitted gray-zone signal: source "welfare" → stream "welfare.out".
 _GRAY_ZONE_SOURCE = "welfare"
@@ -94,7 +111,14 @@ class WelfareObserver(StreamSubscriberObserver):
     """Detects §5.5 Gray-Zone welfare events across multiple streams."""
 
     name = "welfare"
-    streams = (_SOMA_STREAM, _HYPNOS_STREAM, _THYMOS_STREAM, _MNEMOS_STREAM)
+    streams = (
+        _SOMA_STREAM,
+        _HYPNOS_STREAM,
+        _THYMOS_STREAM,
+        _MNEMOS_STREAM,
+        _TOPOS_STREAM,
+        _AUDITION_STREAM,
+    )
 
     def __init__(
         self,
@@ -108,6 +132,7 @@ class WelfareObserver(StreamSubscriberObserver):
         replay_rate_threshold: int = _DEFAULT_REPLAY_RATE_THRESHOLD,
         interoceptive_distress_threshold: float = _DEFAULT_INTEROCEPTIVE_DISTRESS_THRESHOLD,
         interoceptive_distress_duration_s: float = _DEFAULT_INTEROCEPTIVE_DISTRESS_DURATION_S,
+        blind_sensor_samples: int = 0,
         poll_interval_s: float = 0.5,
         unfrozen_clock: UnfrozenClock | None = None,
     ) -> None:
@@ -122,6 +147,7 @@ class WelfareObserver(StreamSubscriberObserver):
         self._replay_rate_threshold = int(replay_rate_threshold)
         self._interoceptive_distress_threshold = float(interoceptive_distress_threshold)
         self._interoceptive_distress_duration_s = float(interoceptive_distress_duration_s)
+        self._blind_sensor_samples = blind_sensor_samples
 
         # --- Gray-zone counters (Nexus diagnostics). ---
         self._unmaintained_fatigue_count: int = 0
@@ -149,6 +175,10 @@ class WelfareObserver(StreamSubscriberObserver):
             duration_s=self._interoceptive_distress_duration_s,
         )
 
+        # --- State for blind-sensor advisory (operator advisory, not gray-zone). ---
+        self._blind_sensor_count: int = 0
+        self._undefined_runs: dict[str, UndefinedRunTracker] = {}
+
     # --- Public counters for Nexus diagnostics ---------------------------
 
     @property
@@ -167,9 +197,20 @@ class WelfareObserver(StreamSubscriberObserver):
     def sustained_interoceptive_distress_count(self) -> int:
         return self._sustained_interoceptive_distress_count
 
+    @property
+    def blind_sensor_count(self) -> int:
+        return self._blind_sensor_count
+
+    @property
+    def blind_sensors(self) -> tuple[str, ...]:
+        return tuple(
+            sorted(label for label, tracker in self._undefined_runs.items() if tracker.active)
+        )
+
     # --- Main loop -------------------------------------------------------
 
     async def handle(self, stream: str, entry_id: str, event: Event) -> None:
+        await self._track_blind_sensor(event)
         handler = self._stream_handlers.get(stream)
         if handler is None:
             return
@@ -208,6 +249,35 @@ class WelfareObserver(StreamSubscriberObserver):
             _THYMOS_STREAM: self._handle_thymos,
             _MNEMOS_STREAM: self._handle_mnemos,
         }
+
+    async def _track_blind_sensor(self, event: Event) -> None:
+        """Follow forward-model reports and emit operator advisories for blind sensors.
+
+        This is not a gray-zone event: the protective monitor ignores it.
+        """
+        processor = BLIND_SENSOR_PROCESSORS.get(event.type)
+        if processor is None:
+            return
+        payload = event.payload or {}
+        if "prediction_error" not in payload:
+            return
+        defined = payload["prediction_error"] is not None
+        now = self._unfrozen.now()
+        tracker = self._undefined_runs.get(processor)
+        if tracker is None:
+            tracker = UndefinedRunTracker(
+                min_samples=self._blind_sensor_samples,
+                duration_s=self._interoceptive_distress_duration_s,
+            )
+            self._undefined_runs[processor] = tracker
+        change = tracker.observe(defined, now)
+        if change is None:
+            return
+        if change.transition == "raised":
+            self._blind_sensor_count += 1
+            await self._emit_blind_sensor(BLIND_SENSOR_TYPE, processor, change)
+        elif change.transition == "cleared":
+            await self._emit_blind_sensor(BLIND_SENSOR_CLEARED_TYPE, processor, change)
 
     # --- Content-free gray-zone emitter ----------------------------------
 
@@ -260,6 +330,53 @@ class WelfareObserver(StreamSubscriberObserver):
             )
         except Exception:
             log.warning("welfare_observer gray-zone publish failed", exc_info=True)
+
+    async def _emit_blind_sensor(
+        self, event_type: str, processor: str, change: RunTransition
+    ) -> None:
+        """Write a blind-sensor advisory to the sink and publish it to the bus.
+
+        CONTENT CONTRACT: the published payload is content-free. The
+        ``processor`` label comes from this observer's fixed lookup table and
+        every other value is a number the observer computed. Nothing is copied
+        from the source event payload.
+        """
+        advisory = "blind_sensor" if event_type == BLIND_SENSOR_TYPE else "blind_sensor_cleared"
+        record: dict[str, Any] = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "advisory": advisory,
+            "processor": processor,
+            "undefined_samples": change.samples,
+            "undefined_seconds": change.seconds,
+            "blind_sensor_samples": self._blind_sensor_samples,
+            "blind_sensor_duration_s": self._interoceptive_distress_duration_s,
+            "blind_sensor_count": self._blind_sensor_count,
+        }
+        try:
+            await self._sink.write(dict(record))
+        except Exception:
+            log.warning("welfare_observer sink write failed", exc_info=True)
+
+        payload: dict[str, Any] = {
+            "processor": processor,
+            "undefined_samples": change.samples,
+            "undefined_seconds": change.seconds,
+            "blind_sensor_samples": self._blind_sensor_samples,
+            "blind_sensor_duration_s": self._interoceptive_distress_duration_s,
+            "blind_sensor_count": self._blind_sensor_count,
+        }
+        try:
+            await self._bus.publish(
+                validate_event(
+                    source=_GRAY_ZONE_SOURCE,
+                    type=event_type,
+                    payload=payload,
+                    salience=_GRAY_ZONE_SALIENCE,
+                    timestamp=datetime.now(timezone.utc),
+                )
+            )
+        except Exception:
+            log.warning("welfare_observer blind-sensor publish failed", exc_info=True)
 
     async def _emit_sustained_interoceptive_distress(self, seconds_sustained: float) -> None:
         self._sustained_interoceptive_distress_count += 1
@@ -441,5 +558,6 @@ def build_welfare_producer(bus, eval_cfg) -> tuple[WelfareObserver, AsyncJsonlSi
         sink,
         interoceptive_distress_threshold=eval_cfg.welfare.interoceptive_distress_threshold,
         interoceptive_distress_duration_s=eval_cfg.welfare.interoceptive_distress_duration_s,
+        blind_sensor_samples=eval_cfg.welfare.blind_sensor_samples,
     )
     return observer, sink

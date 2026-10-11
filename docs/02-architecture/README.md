@@ -264,7 +264,7 @@ Both use CPU-only JAX when JAX is selected. GPU acceleration is operator-configu
 
 ## Evaluation sidecar
 
-`kaine/evaluation/` holds instrumentation that never injects into the cognitive loop. Observers are read-only on module state. The one exception is the welfare observer, which also emits a content-free `welfare.gray_zone` event (numeric scalars and a category label, never a field copied from a source payload) on `welfare.out`, so that the cycle's welfare-protective monitor can act on it.
+`kaine/evaluation/` holds instrumentation that never injects into the cognitive loop. Observers are read-only on module state. The one exception is the welfare observer, which also emits a content-free `welfare.gray_zone` event (numeric scalars and a category label, never a field copied from a source payload) on `welfare.out`, so that the cycle's welfare-protective monitor can act on it, and a content-free blind-sensor advisory on the same stream, which the monitor ignores.
 
 Eight sidecar observers run as async tasks alongside the cycle:
 
@@ -276,7 +276,7 @@ Eight sidecar observers run as async tasks alongside the cycle:
 | `voice_alignment_divergence_observer` | `hypnos.out` | Per-sleep voice-alignment outcome and training metrics |
 | `fatigue_observer` | `soma.out` | Fatigue level history |
 | `prediction_error_observer` | `soma.out`, `chronos.out`, `topos.out`, `audition.out`, `phantasia.out` | Sliding-window mean, p95 and p99 |
-| `welfare_observer` | `soma.out`, `hypnos.out`, `thymos.out`, `mnemos.out` | Gray-zone event counts (also emits `welfare.gray_zone` on `welfare.out`) |
+| `welfare_observer` | `soma.out`, `hypnos.out`, `thymos.out`, `mnemos.out`, `topos.out`, `audition.out` | Gray-zone event counts (also emits `welfare.gray_zone` on `welfare.out`) and the blind-sensor advisory (`welfare.blind_sensor` and its clear on `welfare.out`) |
 | `nous_policy_observer` | `nous.out` | EFE value, horizon, selected action |
 
 The A/B divergence observer (`kaine/evaluation/ab_divergence.py`) pairs each sampled Lingua external-speech event with a bare inference of the same model (no workspace context, no persona) and logs the cosine similarity and `divergence = 1 − cos`. It records how the workspace context changes the organ's text. It is not a measure of the thesis: the organ is a language model following a persona prompt, and the planned test measures the workspace through the processors' own predictions.

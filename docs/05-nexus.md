@@ -161,6 +161,8 @@ The preservation panel lists each action of the preservation monitors, a diverge
 
 Each line shows operational fields only: monitor, transition, reason, action, and preservation or snapshot ids. A failed preservation is shown in the critical colour and needs the operator's attention. See [Preservation](11-preservation.md) for the full behaviour.
 
+The entity-care panel shows the welfare gray-zone counters and, below them, the blind-sensor advisories: how many have been raised and which processors are blind now, meaning their readings have stayed undefined. Both come from the welfare observer's rollup. A blind sensor is a sensor fault, and no protective action follows from it. See [the welfare observer](17-research-data/README.md#blind-sensor-advisory).
+
 ## Live charts and pacing
 
 The diagnostics SSE stream at `/diagnostics/stream` feeds the live charts:
