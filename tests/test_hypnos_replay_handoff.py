@@ -129,7 +129,7 @@ async def test_later_consolidation_does_not_replay_an_earlier_batch(bus: AsyncBu
 
 @pytest.mark.asyncio
 async def test_sleep_completed_drops_the_consolidated_batch(bus: AsyncBus):
-    """A hypnos.sleep.completed event must clear the replay window state."""
+    """hypnos.sleep.completed closes the window and drops the consolidated batch."""
     mnemos = await _new_mnemos(
         bus,
         capacity=8,

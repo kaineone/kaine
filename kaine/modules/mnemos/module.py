@@ -279,6 +279,7 @@ class Mnemos(BaseModule):
                 log.debug("mnemos: Hypnos maintenance window opened")
             elif event.type == "hypnos.sleep.completed":
                 self._replay_engine.close_window()
+                self._core.clear_last_consolidated()
                 log.debug("mnemos: Hypnos maintenance window closed")
 
     @property
@@ -294,31 +295,20 @@ class Mnemos(BaseModule):
     async def replay_now(self) -> list[ReplayEvent]:
         """Run the replay selection during the active Hypnos maintenance window.
 
-        Selects traces from the short-term buffer and recently persisted
-        episodic memories, publishes them as ``mnemos.replay`` events, and
-        returns the list of published events.
+        Selects traces from the short-term buffer plus the traces the latest
+        consolidation pass moved (phase 1 of the same sleep), publishes them
+        as ``mnemos.replay`` events, and returns the list of published events.
 
         Raises `ReplayWindowError` if called outside an active Hypnos window.
         """
         # Build candidates from the short-term buffer (these have timestamps
-        # and affect tags stored on StoredMemory objects).
+        # and affect tags stored on StoredMemory objects) plus the traces
+        # phase 1 consolidated, so phase 2 replays what phase 1 moved.
         candidates: list[ReplayEntry] = []
         for idx, memory in enumerate(self._core._short_term):
-            affect = memory.affect or {}
-            try:
-                intensity = float(affect.get("intensity", 0.0))
-            except (TypeError, ValueError):
-                intensity = 0.0
-            candidates.append(
-                ReplayEntry(
-                    point_id=f"short_term:{idx}",
-                    text=memory.text,
-                    affect_intensity=intensity,
-                    timestamp=memory.timestamp,
-                    payload=dict(memory.payload),
-                    affect=dict(affect) if affect else None,
-                )
-            )
+            candidates.append(_replay_entry(f"short_term:{idx}", memory))
+        for point_id, memory in self._core.last_consolidated:
+            candidates.append(_replay_entry(point_id, memory))
 
         # Delegate selection + guard to the engine.  ReplayWindowError propagates.
         events = self._replay_engine.replay(candidates)
@@ -628,6 +618,23 @@ _RAW_PERCEPTUAL_EVENT_TYPES: frozenset[str] = frozenset(
         "mundus.visual.raw",
     }
 )
+
+
+def _replay_entry(point_id: str, memory: Any) -> ReplayEntry:
+    """Build a ReplayEntry from a StoredMemory with the given point id."""
+    affect = memory.affect or {}
+    try:
+        intensity = float(affect.get("intensity", 0.0))
+    except (TypeError, ValueError):
+        intensity = 0.0
+    return ReplayEntry(
+        point_id=point_id,
+        text=memory.text,
+        affect_intensity=intensity,
+        timestamp=memory.timestamp,
+        payload=dict(memory.payload),
+        affect=dict(affect) if affect else None,
+    )
 
 
 def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:

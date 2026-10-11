@@ -73,6 +73,8 @@ class MnemosCore:
         self._short_term_capacity = int(short_term_capacity)
         self._short_term: deque[StoredMemory] = deque()
         self._short_term_embeddings: deque[tuple[dict[str, Any], list[float]] | None] = deque()
+        # Traces the latest consolidation pass moved, with their episodic point ids, kept for that sleep's replay.
+        self._last_consolidated: list[tuple[str, StoredMemory]] = []
         self._hook = retrigger_hook or _noop_hook
         self._clock = clock
 
@@ -300,15 +302,31 @@ class MnemosCore:
             self._short_term_embeddings = deque([None] * len(self._short_term))
 
     async def consolidate_now(self) -> int:
-        """Flush every short-term entry into episodic. Returns count moved."""
+        """Flush every short-term entry into episodic. Returns count moved.
+
+        The moved traces are kept with their episodic ids until the next
+        pass or ``clear_last_consolidated()``, so this sleep's replay can
+        draw on them.
+        """
         self._rebuild_embeddings_if_desynced()
+        self._last_consolidated = []
         moved = 0
         while self._short_term:
             entry = self._short_term.popleft()
             self._short_term_embeddings.popleft()
-            await self._persist(entry, "episodic")
+            point_id = await self._persist(entry, "episodic")
+            self._last_consolidated.append((point_id, entry))
             moved += 1
         return moved
+
+    @property
+    def last_consolidated(self) -> tuple[tuple[str, StoredMemory], ...]:
+        """Read-only view of the latest consolidated traces."""
+        return tuple(self._last_consolidated)
+
+    def clear_last_consolidated(self) -> None:
+        """Drop the latest consolidated traces (called after sleep)."""
+        self._last_consolidated = []
 
     # ------------------------------------------------------------------
     # Full-fidelity capture / restore (preservation + revive)
