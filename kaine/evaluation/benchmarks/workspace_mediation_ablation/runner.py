@@ -350,15 +350,14 @@ def _classify(effect: dict[str, Any], config: MediationConfig) -> Verdict:
         "competing_fraction": effect["competing_fraction"],
         "accessed_broadcasts": effect["accessed_broadcasts"],
         "min_effect": config.min_effect,
-        "not_exercised": effect["not_exercised"],
         "not_exercised_reason": effect["not_exercised_reason"],
     }
 
     if effect["not_exercised"]:
         reason = effect["not_exercised_reason"]
         return Verdict(
-            outcome=Outcome.NULL,
-            detail=f"NOT EXERCISED: {reason}. {_HARNESS_SUFFIX}",
+            outcome=Outcome.NOT_EXERCISED,
+            detail=f"{reason}. {_HARNESS_SUFFIX}",
             metrics=metrics,
         )
 

@@ -60,6 +60,8 @@ class RunContext:
     timing: dict[str, Any] = field(default_factory=dict)
     # Non-content preservation id that this run was revived from, if any.
     revived_from: Optional[str] = None
+    # Study configuration the run was loaded with (KAINE_STUDY), or None.
+    study: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         """Plain-dict view suitable for JSON serialization (manifest, stamping)."""
@@ -120,6 +122,7 @@ def mint_run_context(
     plugins: Mapping[str, Any] | None = None,
     timing: Mapping[str, Any] | None = None,
     revived_from: str | None = None,
+    study: str | None = None,
 ) -> RunContext:
     """Assemble a fresh ``RunContext``.
 
@@ -139,6 +142,9 @@ def mint_run_context(
 
     ``revived_from`` is the preservation id (or bundle name) when the run is
     started by reviving a preserved individual.
+
+    ``study`` is the study configuration name the run's config was loaded with,
+    or ``None``.
     """
     return RunContext(
         run_id=uuid.uuid4().hex,
@@ -152,6 +158,7 @@ def mint_run_context(
         plugins=dict(plugins or {}),
         timing=dict(timing or {}),
         revived_from=revived_from,
+        study=study,
     )
 
 

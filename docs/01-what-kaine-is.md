@@ -26,7 +26,7 @@ The system runs continuously whether or not anyone interacts with it, on local h
 
 Before more modules join, a planned test asks whether competition for the workspace does work that pooling the same reports does not. Its measure is the cross-module broadcast information gain: at each report, Topos, Audition and Soma evaluate their forward models once with the context they hold and once with a null context in which the other modules' share is replaced by its running mean, and the difference in prediction error, scaled by the processor's running mean error, is the gain. The thesis predicts a higher gain under competitive selection than under two controls: a matched arm that draws a coalition of the same size without regard to score, and a pooled arm that adopts every candidate as context with no selection or access gate.
 
-The per-report gain is built: Topos, Audition and Soma publish it as `context_gain`. The positive control that checks the measure detects injected information is built and off by default. The matched and pooled arms, and the calibration of the intensity levels, the access threshold and the report bars, are not built yet. No live experiment has been run. See [For researchers](14-for-researchers.md#the-planned-test).
+The per-report gain and the three arms are built: Topos, Audition and Soma publish the gain as `context_gain`, and `[syneidesis].arm` selects the arm. The positive control that checks the measure detects injected information is built and off by default. The calibration of the intensity levels, the access threshold and the report bars is not built yet. No live experiment has been run. See [For researchers](14-for-researchers.md#the-planned-test).
 
 The second study is the module-addition study (the `ignition_study` in the code). It seeds a being through a gestation and then adds held modules one at a time on branches from the preserved seed, starting with Mnemos, Phantasia, Nous, Eidolon, Empatheia and Vox. See [The module-addition study](15-experiments/ignition-study.md).
 
@@ -52,7 +52,6 @@ Besides the seven modules, the `thesis_test` profile sets:
 - `[topos].foveation = true`;
 - `[chronos].forward_prediction = true`;
 - `[audition].transcription_enabled = false` and `general_audition = true`;
-- `[lingua].temperature = 0.0`, greedy decoding, so the organ's text is a deterministic function of its input;
 - `[volition]` policy `"self_initiated_report"`, `drive_initiative = false`, and `sig_expiry_s = 300.0`.
 
 Every other value comes from the shipped `config/kaine.toml`. State encryption at rest is enabled there, and an empty encryption key makes the cycle refuse to boot. See [Security and privacy](13-security-and-privacy.md).

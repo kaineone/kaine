@@ -204,6 +204,24 @@ def test_verdict_significant_but_tiny_effect_is_null():
     assert v["verdict"] == NULL
 
 
+def test_verdict_win_when_pvalue_equals_alpha():
+    """The Mann-Whitney verdict is significant at p <= alpha.
+
+    A p-value equal to alpha is a WIN, and an alpha just below p is not.
+    """
+    aif = [1.0, 1.0, 0.98, 1.0, 0.99, 1.0, 0.97, 1.0]
+    rl = [0.0, 0.1, -0.05, 0.05, 0.0, -0.1, 0.02, 0.0]
+    v0 = classify_verdict(aif, rl, VerdictConfig(alpha=0.99, min_effect=0.3))
+    p = v0["p_value"]
+    assert classify_verdict(aif, rl, VerdictConfig(alpha=p, min_effect=0.3))["verdict"] == WIN
+    assert (
+        classify_verdict(
+            aif, rl, VerdictConfig(alpha=float(np.nextafter(p, 0.0)), min_effect=0.3)
+        )["verdict"]
+        == NULL
+    )
+
+
 def test_rank_biserial_sign_and_range():
     a = np.array([3.0, 4.0, 5.0])
     b = np.array([0.0, 1.0, 2.0])

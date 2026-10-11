@@ -61,6 +61,8 @@ This page shows the engineering work in flight, the operator and on-device steps
 | ablation-null-context-positive-control | 10/10 (100%) | The null context differs from the held context only where other modules contributed, and reports carry the paired evaluations behind the gain. The positive control waits on operator decisions. |
 | ablation-positive-control | 9/10 (90%) | The positive control of the information-gain measure: shadow forward models with an informative and a non-informative component, a per-processor verdict in the research log, and an offline all-processors check. Off by default. |
 | sleep-phase-order-and-replay-window | 7/7 (100%) | Sleep runs its phases in the paper's order and ends with the affective reset; Hypnos opens the replay window itself, and associative replay reads episodic memory on every backend. |
+| ablation-matched-pooled-arms | 15/15 (100%) | The matched and pooled control arms of the workspace-mediation test run in the live cycle; greedy decoding moves from the default profile into study configurations. |
+| verdict-not-exercised | 11/11 (100%) | NOT EXERCISED becomes an outcome of the shared verdict vocabulary, kept out of the sign tests and held in the suite's Holm family at p = 1; the suite uses the paper's p <= alpha; the retired minimal experiment profile is removed. |
 | sleep-loose-ends | 7/7 (100%) | Hypnos opens Phantasia's scenario window around the phases that cue it, settles an in-flight sleep at shutdown, and every memory backend ranks a non-finite timestamp as the oldest. |
 
 ## Open operator and device steps
@@ -82,7 +84,7 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 56 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 58 active changes, 268 archived changes and 104 capability specs.
 
 The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 

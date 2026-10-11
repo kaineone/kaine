@@ -116,6 +116,14 @@ salience_goal_factor = "static"
 # arousal, amplifying high priorities and suppressing low ones. 0 disables it.
 arousal_contrast_gain = 8.0
 
+# Arm of the planned workspace-mediation test (paper §6.3, A.8). "competitive"
+# is selection and access as built. "matched" draws each broadcast's coalition
+# at random, of the size competitive selection keeps, seeded from the run seed,
+# with access by the same threshold. "pooled" broadcasts every candidate with no
+# scoring, selection or access gate. The two controls need the coherence layer
+# off. Every broadcast records its arm in the research log.
+arm = "competitive"
+
 [experiment]
 # Per-run identity, seeding, and manifest (research reproducibility).
 # At boot the cycle pins the global RNGs from `seed`, mints a unique run id, and
@@ -1457,6 +1465,9 @@ disclosure = "You are periodically and privately assessed for how much you have 
 battery_path = ""
 # Probe requests wait until Lingua has been silent this long, so the being speaks first.
 lingua_quiet_s = 10.0
+# Decoding temperature of the probe, fixed apart from the voice's [lingua].temperature
+# so study or voice settings never change the probe's conditions. 0 is greedy.
+probe_temperature = 0.0
 # Answers per battery prompt in the reference.
 n_reference = 16
 # Answers per battery prompt at each look.

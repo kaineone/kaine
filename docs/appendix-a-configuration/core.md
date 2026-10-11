@@ -185,7 +185,7 @@ Each tick the controller computes `drive = max(tonic, phasic)`. `tonic` is Thymo
 
 ### Syneidesis
 
-Workspace scoring and access. A candidate's priority is the product of its reported intensity, a novelty factor and a goal factor, clipped to `[0, 1]`; its score applies the arousal level gain and contrast to that priority. There is no per-source precision weight: each processor scales its own error before it reports. The `minimal_experiment` profile sets `top_k = 2`; `thesis_test` keeps the shipped values.
+Workspace scoring and access. A candidate's priority is the product of its reported intensity, a novelty factor and a goal factor, clipped to `[0, 1]`; its score applies the arousal level gain and contrast to that priority. There is no per-source precision weight: each processor scales its own error before it reports. The `thesis_test` profile keeps the shipped values.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -195,6 +195,7 @@ Workspace scoring and access. A candidate's priority is the product of its repor
 | `salience_thymos_factor` | string | `"state_modulator"` | `"state_modulator"` applies Thymos arousal as the level gain and contrast on the score. `"static"` holds the level at a constant with no contrast and logs a warning; it is a negative control. |
 | `salience_goal_factor` | string | `"static"` | `"static"` holds the goal factor at one (the shipped value, logged at INFO). `"drive_relevance"` scores each candidate's relevance to the Thymos drives; it is built but off, because it changes what reaches access. |
 | `arousal_contrast_gain` | float | `8.0` | Maximum contrast gain, reached at arousal 1. The gain is 0 at or below baseline arousal, and `0` disables the contrast. Read only with `salience_thymos_factor = "state_modulator"`. |
+| `arm` | string | `"competitive"` | Arm of the planned workspace-mediation test. `"competitive"` is selection and access as built. `"matched"` draws each broadcast's coalition of the competitive size without regard to score, seeded from the run seed, with access by the same threshold. `"pooled"` broadcasts every candidate with no scoring, selection or access gate. The two controls need `[oscillator].enabled = false`. |
 
 ### Volition
 
@@ -211,7 +212,7 @@ Executive action selection (`kaine/workspace/volition.py`). When the section is 
 | `interrupt_threshold` | float | unset | Opt-in interruption of an utterance in progress. Must satisfy `report_threshold < interrupt_threshold <= 1.0`. |
 | `sig_expiry_s` | float | unset | Entity seconds after which the novelty signature (the top member's source and type) stops blocking a repeat report. Unset means it never expires. |
 
-None of these keys is in the shipped file, so the defaults above apply. The `thesis_test` profile sets `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`; `minimal_experiment` sets `drive_initiative = false`.
+None of these keys is in the shipped file, so the defaults above apply. The `thesis_test` profile sets `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`.
 
 Regardless of policy, inhibition gates first: if `snapshot.inhibited` is true, `Volition.select()` returns no intents.
 

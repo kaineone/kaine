@@ -21,6 +21,7 @@ A cycle run needs a stable identity before its data can be trusted. This page ex
 - `plugins`: identifiers of loaded plugins, if any.
 - `timing`: the timing parameters used by the run.
 - `revived_from`: when the run was revived from a preservation, the preservation id, or the bundle name if the id is not set.
+- `study`: the study configuration the run's config was loaded with (`KAINE_STUDY`, see [How configuration is loaded](appendix-a-configuration/README.md#how-configuration-is-loaded)), or `null` when none was selected. `config_digest` covers the merged result; `study` names the file.
 
 ## Record stamping
 
@@ -160,4 +161,4 @@ See [Lifecycle, evaluation and research configuration](appendix-a-configuration/
 
 ## Shared verdict schema
 
-`kaine.experiment.verdict` provides one outcome vocabulary every experiment reports through: `Outcome` (WIN, NULL and NEGATIVE for comparative experiments, PASS and FAIL for enforcement gates) and a frozen `Verdict` (outcome, detail, metrics) with a stable `to_dict()`. The active-inference benchmark and the enforcement red-team each include a `verdict` object using this schema alongside their existing fields, so downstream tooling has one shape to read. See [Running experiments](15-experiments/README.md) and [Verification](18-verification.md).
+`kaine.experiment.verdict` provides one outcome vocabulary every experiment reports through: `Outcome` (WIN, NULL, NEGATIVE and NOT_EXERCISED for comparative experiments, PASS and FAIL for enforcement gates; NOT_EXERCISED means the comparison did not take place and is not evidence either way) and a frozen `Verdict` (outcome, detail, metrics) with a stable `to_dict()`. The active-inference benchmark and the enforcement red-team each include a `verdict` object using this schema alongside their existing fields, so downstream tooling has one shape to read. See [Running experiments](15-experiments/README.md) and [Verification](18-verification.md).
