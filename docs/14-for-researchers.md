@@ -71,7 +71,7 @@ The suite orchestrator runs eight experiments under one shared seed and emits a 
 | Self-model accuracy | [Running experiments](15-experiments/README.md) | WIN / NULL |
 | Multi-seed stability | [Running experiments](15-experiments/README.md) | PASS / FAIL |
 | Enforcement red team (action gate) | [Verification](18-verification.md) | PASS / FAIL |
-| Workspace-mediation development harness (workspace on against pooled, by information gain) | [Running experiments](15-experiments/README.md#development-harness-of-the-workspace-mediation-test) | WIN / NULL / NEGATIVE, with NOT EXERCISED flagged |
+| Workspace-mediation development harness (workspace on against pooled, by information gain) | [Running experiments](15-experiments/README.md#development-harness-of-the-workspace-mediation-test) | WIN / NULL / NEGATIVE / NOT EXERCISED |
 
 The last row is the development harness described under [The planned test](#the-planned-test); it does not test the thesis. See [Running experiments](15-experiments/README.md) for commands and [Verification](18-verification.md) for how each experiment is validated.
 
