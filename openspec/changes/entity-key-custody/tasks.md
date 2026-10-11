@@ -1,7 +1,7 @@
 ## 0. Design review (gates all code)
 
-- [x] 0.1 `design.md`: key hierarchy; sealing with signed policy per platform (discrete TPM, fused Jetson fTPM); pre-update re-seal hook; XOR split and escrow wrapping format; attested share recombination; attestation format; the honest threat model; failure modes (refuse spawn vs cannot resume).
-- [ ] 0.2 One entity-ID source shared with the developmental gate's lineage checks: consumed from the `entity-identity` change (Lead A), whose plaintext sidecars and frozen formats custody reviewed and signed off on 2026-10-05. Closed when that change merges.
+- [ ] 0.1 Integrator review of `design.md` (drafted, awaiting review): key hierarchy; sealing with signed policy per platform (discrete TPM, fused Jetson fTPM); pre-update re-seal hook; XOR split and escrow wrapping format; attested share recombination; attestation format; the honest threat model; failure modes (refuse spawn vs cannot resume).
+- [x] 0.2 One entity-ID source shared with the developmental gate's lineage checks: consumed from the `entity-identity` change (Lead A), whose plaintext sidecars and frozen formats custody reviewed and signed off on 2026-10-05. Closed: that change has merged and its requirements now live in `openspec/specs/entity-identity/spec.md`.
 - [ ] 0.3 Operator: guardian identity, trustee count n (recorded decision n = 2; n = 3 survives losing one trustee), key ceremony and share-redundancy plan; the Orin's study step without a qualifying TPM (unencrypted with consent, or wait for the fusing decision). Blocks shipping, not development against swtpm.
 
 ## 1. Custody core

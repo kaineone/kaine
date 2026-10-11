@@ -1,5 +1,12 @@
 # Design: entity key custody
 
+## Status
+This is a design awaiting two steps, and nothing in it is implemented. KAINE still runs the single per-install key described under Context.
+- **Integrator review (task 0.1).** The integrator has not reviewed this design yet. No code is written against it until that review signs it off.
+- **The operator's key ceremony (task 0.3).** The guardian's identity, the trustee count n and the share-redundancy plan are decided there. This blocks shipping, not development against swtpm.
+
+The entity-ID dependency (task 0.2) is closed: `entity-identity` has merged, and custody consumes `openspec/specs/entity-identity/spec.md`.
+
 ## Context
 Today KAINE has one AES-256-GCM key per install. It comes from `KAINE_STATE_KEY`, the kernel keyring entry `kaine:state_key`, or `secrets/state_key` (loaded by pre-boot), and a process-global `StateEncryptor` applies it everywhere (`kaine/security/crypto.py`). The envelope is `KAINEgcm1:` ‖ 12-byte nonce ‖ ciphertext. It carries no key id and no associated data.
 

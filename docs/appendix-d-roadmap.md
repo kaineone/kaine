@@ -8,7 +8,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | --- | --- | --- |
 | attention-driven-audition | 19/32 (59%) | Move hearing beyond speech transcription so audio can drive workspace salience. |
 | attention-driven-foveation | 14/18 (78%) | Replace uniform screen downsampling with a foveated capture that keeps fine detail where it matters. |
-| entity-key-custody | 0/12 (0%) | Redesign entity-state encryption so keys can be recovered or rotated without manual re-encryption. |
+| entity-key-custody | 1/12 (8%) | Redesign entity-state encryption so keys can be recovered or rotated without manual re-encryption. Design only: awaiting the integrator's review (task 0.1) and the operator's key ceremony (task 0.3); nothing is implemented. |
 | individuation-rebuild | 56/67 (84%) | Replace the individuation signal with a real test against the being's own birth reference, produced at runtime and read the same way by preservation and decommission. The real-organ calibration (task 10) is next. |
 | module-ignition-study | 29/33 (88%) | The module-addition study: seed a being through a gestation, then add held modules one at a time on branches from the preserved seed, every branch viewing the same film programme, with a content-free report. |
 | module-residency-and-speech-tiers | 9/60 (15%) | Make the same entity run on weak hardware by selectively loading and tiering speech backends. |
