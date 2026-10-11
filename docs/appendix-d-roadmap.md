@@ -53,6 +53,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | gestation-progress-in-bundles | 3/3 (100%) | Gestation progress travels in preservation bundles. |
 | footprint-test-spawn-timeout | 1/1 (100%) | Give the footprint test's spawned child time to report. |
 | config-dead-keys | 9/9 (100%) | Remove configuration keys and an environment variable that drive nothing, and point the host probe at KAINE_TIER. |
+| flaky-group-kill-test | 3/3 (100%) | The group-kill tests wait for the job to finish before reading its status. |
 
 ## Open operator and device steps
 
