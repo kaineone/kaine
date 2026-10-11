@@ -582,20 +582,6 @@ def _python_token_analysis(text: str) -> list[dict]:
     return token_infos
 
 
-def _name_token_sets(tokens: list[dict]) -> tuple[set[str], set[str]]:
-    """Return the bound and attribute NAME strings from the original tokens."""
-    bound: set[str] = set()
-    attr: set[str] = set()
-    for idx, tok in enumerate(tokens):
-        if tok["type"] != tokenize.NAME:
-            continue
-        if idx > 0 and tokens[idx - 1]["type"] == tokenize.OP and tokens[idx - 1]["string"] == ".":
-            attr.add(tok["string"])
-        else:
-            bound.add(tok["string"])
-    return bound, attr
-
-
 def _sequence_imports(
     tokens: list[dict], sequence_old_class: str
 ) -> tuple[bool, set[tuple[int, int]]]:
@@ -851,7 +837,7 @@ def _context_at(offset: int, intervals: list[tuple[int, int, str]]) -> str | Non
     for start, end, ctx in intervals:
         if offset < start:
             return None
-        if start <= offset < end:
+        if offset < end:
             return ctx
     return None
 
@@ -1776,7 +1762,6 @@ def _sequence_alias_adjustments(
     tokens = _python_token_analysis(text)
     if not tokens:
         return replacements, []
-    bound_names, attr_names = _name_token_sets(tokens)
     sequence_bound, kaine_imports = _sequence_imports(tokens, sequence_old_class)
     class_defs = _sequence_class_defs(tokens, sequence_old_class)
 
@@ -2119,8 +2104,6 @@ def new_path(
             if action == "queue":
                 queued.append(Queued(rel_path, 0, old_key, rule_text, segment))
                 continue
-            if action is None:
-                action = "rename"
 
             if move_scope not in scopes:
                 continue
@@ -2530,7 +2513,6 @@ def survey(root: Path, table) -> str:
         names.append((name, label))
 
     name_regexes: dict[str, re.Pattern[str]] = {}
-    regex, group_map = _name_regex(table)
     for count_key, display_label in names:
         if count_key in entries:
             entry = entries[count_key]
