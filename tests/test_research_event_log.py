@@ -1509,14 +1509,45 @@ def test_audition_emotion_record_carries_entry_id(tmp_path):
             "latency_ms": 12.0,
         },
     )
-    record = observer._build_record(event, "5-0")
+    record = observer._build_record(event, "audition.out:5-0")
     assert record is not None
-    assert record["entry_id"] == "5-0"
+    assert record["entry_id"] == "audition.out:5-0"
     assert record["tone_error_ratio"] == 0.3
     assert record["tone_rule"] == "error_ratio"
     assert record["classified"] is True
     assert record["alert"] is True
     assert "latency_ms" not in record
+
+
+@pytest.mark.asyncio
+async def test_handle_writes_stream_qualified_tone_id(tmp_path):
+    observer = ResearchEventObserver(
+        bus=None, sink=AsyncJsonlSink(tmp_path / "re", name="research_events")
+    )
+    event = Event(
+        timestamp=datetime.now(timezone.utc),
+        source="audition",
+        type="audition.emotion",
+        salience=0.8,
+        payload={
+            "category": "happy",
+            "confidence": 0.9,
+            "scores": {"happy": 0.9},
+            "alert": True,
+            "tone_error_ratio": 0.3,
+            "tone_rule": "error_ratio",
+            "classified": True,
+            "latency_ms": 12.0,
+        },
+    )
+    written = []
+    class _FakeSink:
+        async def write(self, record):
+            written.append(record)
+    observer._sink = _FakeSink()
+    await observer.handle("audition.out", "5-0", event)
+    assert len(written) == 1
+    assert written[0]["entry_id"] == "audition.out:5-0"
 
 
 def test_workspace_metadata_record_copies_entry_id():
@@ -1527,10 +1558,10 @@ def test_workspace_metadata_record_copies_entry_id():
     snapshot = {
         "tick_index": 42,
         "inhibited": False,
-        "salience_scores": {"5-0": 0.7},
+        "salience_scores": {"audition.out:5-0": 0.7},
         "selected": [
             {
-                "entry_id": "5-0",
+                "entry_id": "audition.out:5-0",
                 "source": "audition",
                 "type": "audition.emotion",
                 "salience": 0.7,
@@ -1540,7 +1571,7 @@ def test_workspace_metadata_record_copies_entry_id():
         ],
     }
     record = _workspace_metadata_record(snapshot)
-    assert record["entries"][0]["entry_id"] == "5-0"
+    assert record["entries"][0]["entry_id"] == "audition.out:5-0"
     assert record["entries"][0]["source"] == "audition"
     assert "payload" not in record["entries"][0]
     assert "secret" not in str(record)

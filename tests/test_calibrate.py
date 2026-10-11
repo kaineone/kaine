@@ -304,7 +304,7 @@ def _build_evaluation_tree(
             emotional_accessed = 10 + c_index
             neutral_accessed = 6
             for k in range(40):
-                entry_id = f"{k}-0"
+                entry_id = f"audition.out:{k}-0"
                 if k < 20:
                     category = "happy"
                     accessed = k < emotional_accessed
@@ -778,7 +778,7 @@ def test_arm_pilot_with_the_variant_tone_rule_raises(tmp_path: Path) -> None:
             "run_id": "competitive_0",
             "event_type": "audition.emotion",
             "source": "audition",
-            "entry_id": "99-0",
+            "entry_id": "audition.out:99-0",
             "category": "happy",
             "classified": True,
             "tone_rule": "error_ratio",
