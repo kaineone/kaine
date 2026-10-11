@@ -147,6 +147,17 @@ def _read_float(payload: dict[str, Any], key: str, default: float) -> float:
         return default
 
 
+def _read_error(payload: dict[str, Any]) -> Optional[float]:
+    """A report's prediction error, or None when it has none (a skipped reading)."""
+    val = payload.get("prediction_error")
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
 def _read_gain(payload: dict[str, Any]) -> Optional[float]:
     val = payload.get("context_gain")
     if val is None:
@@ -199,8 +210,8 @@ async def _run_arm(
 
     soma_gains: list[Optional[float]] = []
     topos_gains: list[Optional[float]] = []
-    soma_errors: list[float] = []
-    topos_errors: list[float] = []
+    soma_errors: list[Optional[float]] = []
+    topos_errors: list[Optional[float]] = []
     competing_ticks = 0
     accessed_broadcasts = 0
     coalition_sizes: list[int] = []
@@ -211,7 +222,7 @@ async def _run_arm(
         await soma.tick_once()
         soma_report = _last_report(soma_bus, "soma", "soma.report")
         soma_errors.append(
-            _read_float(soma_report.payload, "prediction_error", 0.0)
+            _read_error(soma_report.payload)
             if soma_report is not None
             else 0.0
         )
@@ -219,7 +230,7 @@ async def _run_arm(
         await topos.process_frame(script.topos_frames[t])
         topos_report = _last_report(topos_bus, "topos", "topos.report")
         topos_errors.append(
-            _read_float(topos_report.payload, "prediction_error", 0.0)
+            _read_error(topos_report.payload)
             if topos_report is not None
             else 0.0
         )

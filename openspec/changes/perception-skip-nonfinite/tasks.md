@@ -11,3 +11,5 @@
 - [x] 1.9 The welfare observer and the preservation monitor treat a null Soma error as no sample
 - [x] 1.10 Tests: periodic gaps keep zeros out of the window; normalised error after a skip; Thymos trackers unchanged by null errors; welfare consumers keep the distress episode across null errors; the positive control stays paired across a skip in the running module
 - [x] 1.11 Docs and specs: the nullable report fields
+- [x] 1.12 Empatheia leaves its error average alone for an observation without a defined error; the mediation benchmark records a skipped error as null
+- [x] 1.13 Tests: the protective monitor's timer still fires through null samples, a null mid-batch keeps the loop and the cursor, a missing key keeps its 0 default; the observer fires after a null run and silence; Empatheia and the benchmark reader keep null
