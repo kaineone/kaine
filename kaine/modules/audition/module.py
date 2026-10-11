@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import math
 from collections import deque
@@ -15,6 +16,7 @@ from kaine.entity_clock import EntityClock
 from kaine.modules.context import CONTEXT_DIM, BroadcastContext
 from kaine.modules.intensity import graded_intensity
 from kaine.modules.positive_control import (
+    ControlQueue,
     PositiveControl,
     PositiveControlSettings,
     publish_result,
@@ -228,6 +230,7 @@ class Audition(BaseModule):
             if positive_control is not None and positive_control.enabled
             else None
         )
+        self._pc_queue = ControlQueue()  # Run control steps off the report path.
 
         # Carried-forward acoustic forward-model snapshots for encoders that are
         # not currently running. They are keyed by encoder model_id and never
@@ -299,6 +302,8 @@ class Audition(BaseModule):
         else:
             change = cosine_change(embedding, self._prev_acoustic_embedding)
             self._prev_acoustic_embedding = embedding
+        # One entity-clock reading per report, for the report and the positive control.
+        entity_time_s = self._clock.now()
         context_gain: Optional[float] = None
         null_prediction_error: Optional[float] = None
         mean_prediction_error: Optional[float] = None
@@ -333,9 +338,20 @@ class Audition(BaseModule):
             null_prediction_error = self._acoustic_forward_model.last_null_error
             mean_prediction_error = mean_err
 
+        pc_args: Optional[tuple] = None
+        pc_suspended = False
         # Positive control (study mode only): shadows of the forward model, never the live one.
+        # It is queued after the report is published, off the report path.
         if self._positive_control is not None and getattr(self._acoustic_forward_model, "context_dim", 0) > 0:
-            await self._run_positive_control(embedding, ctx, null, context_gain, mean_prediction_error)
+            pc_args = (
+                embedding,
+                ctx,
+                null,
+                context_gain,
+                mean_prediction_error,
+                entity_time_s,
+            )
+            pc_suspended = bool(getattr(self._acoustic_forward_model, "suspended", False))
 
         # Self-calibrating change alert (perception-drives-salience): the change is
         # judged RELATIVE to its own rolling baseline, not against an absolute
@@ -384,6 +400,11 @@ class Audition(BaseModule):
             "null_prediction_error": null_prediction_error,
             "mean_prediction_error": mean_prediction_error,
             "context_age_s": self._context.age_s(),
+            # The planned test counts a report only when the entity was awake and the
+            # report falls after T_learn, measured in entity time from the start of
+            # the run (paper Appendix A.8).
+            "entity_time_s": entity_time_s,
+            "awake": not self._in_hypnos,
             "encoder_model_id": self._acoustic_encoder.model_id,
             "attended_window": window,
             "attended_seconds": attended_seconds,
@@ -403,6 +424,8 @@ class Audition(BaseModule):
             payload,
             salience=salience,
         )
+        if pc_args is not None:
+            await self._queue_positive_control(pc_args, pc_suspended)
 
     def playlist_audio_position(self) -> tuple[int, float] | None:
         """The audio feed's own delivered position, when a playlist stream is running.
@@ -456,6 +479,43 @@ class Audition(BaseModule):
         except asyncio.CancelledError:
             raise
 
+    async def _fail_positive_control(self, control: PositiveControl, reason: str) -> None:
+        """Publish a failure record and stop the control for this run."""
+        if self._positive_control is not control:
+            # The control already has a terminal record; do not publish another.
+            return
+        log.error(
+            "audition: positive control %s; it is switched off for this run",
+            reason,
+        )
+        try:
+            await publish_result(self._bus, control.failure_result())
+        except Exception:
+            log.error(
+                "audition: could not publish the positive control's failure record; "
+                "the run has no terminal record and cannot pass",
+                exc_info=True,
+            )
+        self._positive_control = None
+
+    async def _queue_positive_control(self, args: tuple, suspended: bool) -> None:
+        """Copy the live model and enqueue a control step after the report."""
+        control = self._positive_control
+        if control is None:
+            return
+        try:
+            control.prepare(self._acoustic_forward_model)
+        except Exception:
+            log.exception("audition: positive control failed")
+            await self._fail_positive_control(control, "raised")
+            return
+        if not self._pc_queue.submit(
+            functools.partial(self._run_positive_control, *args, suspended=suspended)
+        ):
+            await self._fail_positive_control(
+                control, "fell behind the reports; the queue is full"
+            )
+
     async def _run_positive_control(
         self,
         x: list[float],
@@ -463,6 +523,9 @@ class Audition(BaseModule):
         null: Optional[list[float]],
         live_gain: Optional[float],
         live_mean_error: Optional[float],
+        entity_time_s: float,
+        *,
+        suspended: bool,
     ) -> None:
         """Step the positive control after the live report and publish its running result."""
         control = self._positive_control
@@ -478,23 +541,17 @@ class Audition(BaseModule):
                 null,
                 live_gain,
                 live_mean_error,
-                awake=not self._in_hypnos,
+                entity_time_s=entity_time_s,
+                # Wakefulness as it was at the report: the forward model is suspended
+                # exactly while Hypnos holds the processor asleep.
+                awake=not suspended,
+                suspended=suspended,
             )
             if result is not None and self._positive_control is control:
                 await publish_result(self._bus, result)
         except Exception:
-            # A failing control must not break perception. It stops for this run
-            # and records a failure, so the run cannot pass.
-            log.exception("audition: positive control failed and is switched off for this run")
-            try:
-                await publish_result(self._bus, control.failure_result())
-            except Exception:
-                log.error(
-                    "audition: could not publish the positive control's failure record; "
-                    "the run has no terminal record and cannot pass",
-                    exc_info=True,
-                )
-            self._positive_control = None
+            log.exception("audition: positive control failed")
+            await self._fail_positive_control(control, "raised")
 
     async def finish_positive_control(self) -> None:
         """Publish the control's terminal record and stop the control for this run.
@@ -504,6 +561,23 @@ class Audition(BaseModule):
         """
         control = self._positive_control
         if control is None:
+            # Never wait here: a step may still be stuck after the control failed.
+            await self._pc_queue.abort()
+            return
+        budget = control.settings.shutdown_drain_s
+        try:
+            await asyncio.wait_for(self._pc_queue.drain(), timeout=budget)
+        except asyncio.TimeoutError:
+            await self._pc_queue.abort()
+            await self._fail_positive_control(
+                control,
+                f"did not finish its queued steps within {budget} s at shutdown",
+            )
+            await self._pc_queue.abort()
+            return
+        if self._positive_control is not control:
+            # A queued step failed while draining; its failure record is the terminal one.
+            await self._pc_queue.abort()
             return
         try:
             await publish_result(self._bus, control.final_result())
@@ -514,6 +588,7 @@ class Audition(BaseModule):
                 exc_info=True,
             )
         self._positive_control = None
+        await self._pc_queue.abort()
 
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).

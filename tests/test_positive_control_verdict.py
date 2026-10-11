@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ def _result(processor: str, passed: Any, **overrides: Any) -> dict[str, Any]:
     record: dict[str, Any] = {
         "event_type": RESULT_EVENT_TYPE,
         "processor": processor,
+        "mode": "control",
         "n_reports": 200,
         "min_reports": 100,
         "ig_with": 0.06,
@@ -39,9 +41,24 @@ def _result(processor: str, passed: Any, **overrides: Any) -> dict[str, Any]:
         "failed": False,
         "final": True,
         "run_id": "r1",
+        "t_learn_s": 120.0,
+        "settings_sha256": "a" * 64,
     }
     record.update(overrides)
     return record
+
+
+def _write_run(root: Path, run_id: str, records: list[dict[str, Any]]) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "positive_control-2026-01-01.jsonl").write_text(
+        "\n".join(json.dumps(r) for r in records) + "\n"
+    )
+
+
+def _write_research_events(root: Path, records: list[dict[str, Any]]) -> None:
+    path = root / "research_events" / "research_events-2026-10-11.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(json.dumps(r) for r in records) + "\n")
 
 
 def test_verdict_passes_when_all_processors_pass():
@@ -49,8 +66,8 @@ def test_verdict_passes_when_all_processors_pass():
     verdict = verdict_from_records(records)
     assert verdict["passed"] is True
     for processor in PROCESSORS:
-        assert verdict["processors"][processor]["passed"] is True
         assert verdict["reasons"][processor] == "passed"
+        assert verdict["processors"][processor]["reason"] == "passed"
 
 
 def test_verdict_fails_when_processor_missing():
@@ -58,6 +75,7 @@ def test_verdict_fails_when_processor_missing():
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
     assert verdict["missing"] == ["soma"]
+    assert "soma" in verdict["not_passed"]
     assert verdict["reasons"]["soma"] == "no result"
 
 
@@ -158,13 +176,6 @@ def test_verdict_ignores_other_event_types():
     ]
     verdict = verdict_from_records(records)
     assert verdict["passed"] is True
-
-
-def _write_run(root: Path, run_id: str, records: list[dict[str, Any]]) -> None:
-    root.mkdir(parents=True, exist_ok=True)
-    (root / "positive_control-2026-01-01.jsonl").write_text(
-        "\n".join(json.dumps(r) for r in records) + "\n"
-    )
 
 
 def test_main_returns_zero_for_passing_run(tmp_path, capsys):
@@ -288,3 +299,81 @@ def test_parse_error_makes_run_fail(tmp_path, capsys):
     assert "all processors pass: no" in out
     assert "parse_errors: 1" in out
     assert run_verdict("r1", root=root)["parse_errors"] == 1
+
+
+def test_ladder_mode_results_are_ignored():
+    records = [_result(p, True, mode="ladder") for p in PROCESSORS]
+    verdict = verdict_from_records(records)
+    assert verdict["passed"] is False
+    assert set(verdict["missing"]) == set(PROCESSORS)
+    for processor in PROCESSORS:
+        assert verdict["reasons"][processor] == "no result"
+
+
+def test_pooling_two_runs_passes_together(tmp_path):
+    for run_id in ("r1", "r2"):
+        records = [_result(p, True, run_id=run_id, n_reports=60) for p in PROCESSORS]
+        _write_run(tmp_path / run_id, run_id, records)
+    verdict = run_verdict(["r1", "r2"], root=tmp_path)
+    assert verdict["passed"] is True
+    for processor in PROCESSORS:
+        proc = verdict["processors"][processor]
+        assert proc["runs_used"] == ["r1", "r2"]
+        assert proc["n_reports"] == 120
+        assert proc["reason"] == "passed"
+        assert math.isclose(proc["effect"], 0.05)
+
+
+def test_pooling_single_run_with_few_reports_fails(tmp_path):
+    root = tmp_path / "r1"
+    records = [_result(p, True, run_id="r1", n_reports=60) for p in PROCESSORS]
+    _write_run(root, "r1", records)
+    verdict = run_verdict("r1", root=root)
+    assert verdict["passed"] is False
+    for processor in PROCESSORS:
+        assert verdict["reasons"][processor] == "n_reports is below min_reports"
+
+
+def test_pooling_stops_once_min_reports_is_reached(tmp_path):
+    for run_id in ("r1", "r2", "r3"):
+        records = [
+            _result(p, True, run_id=run_id, n_reports=60, failed=(run_id == "r3"))
+            for p in PROCESSORS
+        ]
+        _write_run(tmp_path / run_id, run_id, records)
+    verdict = run_verdict(["r1", "r2", "r3"], root=tmp_path)
+    assert verdict["passed"] is True
+    for processor in PROCESSORS:
+        assert verdict["processors"][processor]["runs_used"] == ["r1", "r2"]
+
+
+def test_incomplete_run_inside_pool_fails_processor(tmp_path):
+    r1_records = [_result(p, True, run_id="r1", n_reports=60) for p in PROCESSORS]
+    r2_records = [_result(p, True, run_id="r2", n_reports=60) for p in PROCESSORS]
+    r2_records[-1] = _result("soma", False, run_id="r2", n_reports=60, failed=True)
+    _write_run(tmp_path / "r1", "r1", r1_records)
+    _write_run(tmp_path / "r2", "r2", r2_records)
+    verdict = run_verdict(["r1", "r2"], root=tmp_path)
+    assert verdict["passed"] is False
+    assert "soma" in verdict["not_passed"]
+    assert verdict["reasons"]["soma"] == "run r2: the control failed"
+
+
+def test_pooling_with_different_settings_fails(tmp_path):
+    r1 = [_result(p, True, run_id="r1", n_reports=60) for p in PROCESSORS]
+    r2 = [_result(p, True, run_id="r2", n_reports=60, settings_sha256="b" * 64) for p in PROCESSORS]
+    _write_run(tmp_path / "r1", "r1", r1)
+    _write_run(tmp_path / "r2", "r2", r2)
+    verdict = run_verdict(["r1", "r2"], root=tmp_path)
+    assert verdict["passed"] is False
+    for processor in PROCESSORS:
+        assert verdict["reasons"][processor] == "runs carry different settings"
+
+
+def test_main_with_two_run_ids_at_research_events_root(tmp_path, capsys):
+    records: list[dict[str, Any]] = []
+    for run_id in ("r1", "r2"):
+        records.extend(_result(p, True, run_id=run_id, n_reports=60) for p in PROCESSORS)
+    _write_research_events(tmp_path, records)
+    assert main(["r1", "r2", "--root", str(tmp_path)]) == 0
+    assert main(["r1", "--root", str(tmp_path)]) == 1
