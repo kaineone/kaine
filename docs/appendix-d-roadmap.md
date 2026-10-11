@@ -65,6 +65,8 @@ This page shows the engineering work in flight, the operator and on-device steps
 | verdict-not-exercised | 11/11 (100%) | NOT EXERCISED becomes an outcome of the shared verdict vocabulary, kept out of the sign tests and held in the suite's Holm family at p = 1; the suite uses the paper's p <= alpha; the retired minimal experiment profile is removed. |
 | perception-skip-nonfinite | 13/13 (100%) | Topos and Audition skip a non-finite reading as Soma does: no buffer append, no weight update, no gain on that report or the next, and the reading stays out of the error window and the change score. |
 | sleep-loose-ends | 7/7 (100%) | Hypnos opens Phantasia's scenario window around the phases that cue it, settles an in-flight sleep at shutdown, and every memory backend ranks a non-finite timestamp as the oldest. |
+| missing-error-consistency | 7/7 (100%) | The CL1 wetware Soma model marks a skipped reading and the next one as having no defined error, as the built-in model does, and Soma teaches no unexpected error from such a reading; an Empatheia merge treats a missing or null behavioural-summary entry as absent, not 0. |
+| blind-sensor-advisory | 10/10 (100%) | A processor whose readings stay undefined raises a content-free `welfare.blind_sensor` advisory on `welfare.out`, and one that stops publishing raises `welfare.sensor_silent`, each with a clear; the protective monitor does not act on them, the research log records them and the Nexus entity-care panel lists the processors that are blind or silent now. |
 | mnemos-trace-strength | 8/8 (100%) | Each Mnemos trace carries a strength that sleep downscales by the number of traces the wake stored, replayed traces keep theirs, sleep prunes at a floor and to an operator storage budget, recall ranks by strength times similarity, and replay draws on the whole wake just ended (paper A.10). |
 
 ## Open operator and device steps
@@ -86,7 +88,7 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 60 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 62 active changes, 268 archived changes and 104 capability specs.
 
 The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 

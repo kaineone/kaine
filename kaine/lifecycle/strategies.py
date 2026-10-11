@@ -291,7 +291,9 @@ class EmpatheiaMergeStrategy:
     - interaction_count: SUM — both branches saw real interactions.
     - emotion_histogram: weighted average by interaction count — each
       branch's histogram is weighted by how many observations it made.
-    - behavioral_summary: weighted average by interaction count.
+    - behavioral_summary: weighted average by interaction count. A missing
+      or null entry on one side is absent, and the merged value then comes
+      from the side that has one.
     - reliability: weighted average by interaction count.
     - first_seen: min (earliest observation).
     - last_seen: max (most recent observation).
@@ -330,6 +332,49 @@ class EmpatheiaMergeStrategy:
         return {"profiles": merged_profiles}
 
 
+def _merge_summary(
+    summary_a: dict[str, Any],
+    summary_b: dict[str, Any],
+    count_a: int,
+    count_b: int,
+) -> dict[str, Any]:
+    """Merge behavioral_summary dicts by interaction count weights.
+
+    A missing or null entry on one side is treated as absent, so the
+    merged value comes from the side that has one. When all contributing
+    sides have an interaction count of zero, the plain mean of their
+    values is used.
+    """
+    all_keys = set(summary_a) | set(summary_b)
+    merged: dict[str, Any] = {}
+
+    for key in all_keys:
+        a_has = key in summary_a and summary_a[key] is not None
+        b_has = key in summary_b and summary_b[key] is not None
+        values = []
+        counts = []
+
+        if a_has:
+            values.append(float(summary_a[key]))
+            counts.append(count_a)
+        if b_has:
+            values.append(float(summary_b[key]))
+            counts.append(count_b)
+
+        if not values:
+            continue
+
+        total = sum(counts)
+        if total == 0:
+            merged[key] = sum(values) / len(values)
+        else:
+            merged[key] = sum(
+                (count / total) * value for count, value in zip(counts, values)
+            )
+
+    return merged
+
+
 def _merge_profiles(
     pa: dict[str, Any], pb: dict[str, Any]
 ) -> dict[str, Any]:
@@ -354,14 +399,10 @@ def _merge_profiles(
         for cat in all_cats
     }
 
-    # Merge behavioral_summary (weighted average).
+    # Merge behavioral_summary.
     bsummary_a = pa.get("behavioral_summary") or {}
     bsummary_b = pb.get("behavioral_summary") or {}
-    all_bkeys = set(bsummary_a) | set(bsummary_b)
-    merged_bsummary = {
-        k: w_a * float(bsummary_a.get(k, 0.0)) + w_b * float(bsummary_b.get(k, 0.0))
-        for k in all_bkeys
-    }
+    merged_bsummary = _merge_summary(bsummary_a, bsummary_b, count_a, count_b)
 
     # Reliability: weighted average.
     reliability = (

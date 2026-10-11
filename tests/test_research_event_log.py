@@ -1367,3 +1367,118 @@ async def test_observer_drains_streams_on_stop():
     assert len(sink.rows) == 1
     assert sink.rows[0]["event_type"] == "positive_control.result"
     assert sink.rows[0]["final"] is True
+
+
+@pytest.mark.asyncio
+async def test_welfare_blind_sensor_advisories_captured_with_exact_allowlist():
+    """B3 - welfare blind-sensor advisories are copied with the processor label
+    and exact numeric allowlist; unknown labels and bools are dropped."""
+    bus = FakeBus()
+    sink = FakeSink()
+    obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
+    bus.push(
+        "welfare.out",
+        _event(
+            "welfare",
+            "welfare.blind_sensor",
+            {
+                "processor": "topos",
+                "undefined_samples": 4,
+                "undefined_seconds": 30.0,
+                "blind_sensor_samples": 0,
+                "blind_sensor_duration_s": 30.0,
+                "blind_sensor_count": 1,
+                # Content and future fields must be dropped by the allowlist.
+                "internal_speech": "SECRET",
+                "some_future_field": "leak",
+            },
+        ),
+    )
+    bus.push(
+        "welfare.out",
+        _event(
+            "welfare",
+            "welfare.blind_sensor_cleared",
+            {
+                "processor": "<script>",
+                "undefined_samples": True,
+                "blind_sensor_count": 1,
+            },
+        ),
+    )
+    await _run(obs)
+    assert len(sink.rows) == 2
+
+    rec = sink.rows[0]
+    assert rec["event_type"] == "welfare.blind_sensor"
+    assert rec["processor"] == "topos"
+    assert rec["undefined_samples"] == 4
+    assert rec["undefined_seconds"] == 30.0
+    assert rec["blind_sensor_samples"] == 0
+    assert rec["blind_sensor_duration_s"] == 30.0
+    assert rec["blind_sensor_count"] == 1
+    assert "internal_speech" not in rec
+    assert "some_future_field" not in rec
+    assert _no_content_anywhere(rec)
+
+    cleared = sink.rows[1]
+    assert cleared["event_type"] == "welfare.blind_sensor_cleared"
+    assert "processor" not in cleared
+    assert "undefined_samples" not in cleared
+    assert cleared["blind_sensor_count"] == 1
+    assert _no_content_anywhere(cleared)
+
+
+async def test_welfare_sensor_silent_advisories_captured_with_exact_allowlist():
+    """B3 - welfare sensor-silent advisories are copied with the processor label
+    and exact numeric allowlist; unknown labels and bools are dropped."""
+    bus = FakeBus()
+    sink = FakeSink()
+    obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
+    bus.push(
+        "welfare.out",
+        _event(
+            "welfare",
+            "welfare.sensor_silent",
+            {
+                "processor": "audition_acoustic",
+                "silent_seconds": 30.0,
+                "sensor_silent_duration_s": 30.0,
+                "sensor_silent_count": 1,
+                # Content and future fields must be dropped by the allowlist.
+                "internal_speech": "SECRET",
+                "some_future_field": "leak",
+            },
+        ),
+    )
+    bus.push(
+        "welfare.out",
+        _event(
+            "welfare",
+            "welfare.sensor_silent_cleared",
+            {
+                "processor": "<b>",
+                "silent_seconds": True,
+                "sensor_silent_count": 1,
+            },
+        ),
+    )
+    await _run(obs)
+    assert len(sink.rows) == 2
+
+    rec = sink.rows[0]
+    assert rec["event_type"] == "welfare.sensor_silent"
+    assert rec["processor"] == "audition_acoustic"
+    assert rec["silent_seconds"] == 30.0
+    assert rec["sensor_silent_duration_s"] == 30.0
+    assert rec["sensor_silent_count"] == 1
+    assert "internal_speech" not in rec
+    assert "some_future_field" not in rec
+    assert _no_content_anywhere(rec)
+
+    cleared = sink.rows[1]
+    assert cleared["event_type"] == "welfare.sensor_silent_cleared"
+    assert "processor" not in cleared
+    assert "silent_seconds" not in cleared
+    assert cleared["sensor_silent_count"] == 1
+    assert _no_content_anywhere(cleared)

@@ -51,6 +51,13 @@ from kaine.bus.schema import Event
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver, WorkspaceSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.evaluation.stream_registry import curated_module_streams
+from kaine.lifecycle.welfare_signal import (
+    BLIND_SENSOR_CLEARED_TYPE,
+    BLIND_SENSOR_PROCESSORS,
+    BLIND_SENSOR_TYPE,
+    SENSOR_SILENT_CLEARED_TYPE,
+    SENSOR_SILENT_TYPE,
+)
 from kaine.modules.praxis.audit_log import _sanitize as _praxis_sanitize
 from kaine.privacy_filter import PrivacyFilter
 
@@ -385,6 +392,10 @@ _TAXONOMY: dict[str, frozenset[str]] = {
         }
     ),
     "welfare.gray_zone": frozenset({"gray_zone_event"}),  # + numeric scalars passthrough
+    BLIND_SENSOR_TYPE: frozenset({"processor"}),  # + numeric scalars via exact allowlist
+    BLIND_SENSOR_CLEARED_TYPE: frozenset({"processor"}),  # + numeric scalars via exact allowlist
+    SENSOR_SILENT_TYPE: frozenset({"processor"}),  # + numeric scalars via exact allowlist
+    SENSOR_SILENT_CLEARED_TYPE: frozenset({"processor"}),  # + numeric scalars via exact allowlist
     "individuation.divergence": frozenset({"divergence_scalar", "significant"}),
     "individuation.alert": frozenset({"inconclusive_since", "days"}),
     "perception.locus.changed": frozenset({"locus", "changed_by"}),
@@ -422,6 +433,30 @@ _WELFARE_NUMERIC_FIELDS = frozenset(
         "interoceptive_distress_threshold",
         "interoceptive_distress_duration_s",
         "sustained_interoceptive_distress_count",
+    }
+)
+
+# EXACT numeric-field allowlist for welfare blind-sensor advisories.
+# Only these five scalar counters may pass through; processor labels are
+# gated independently by BLIND_SENSOR_PROCESSORS.
+_BLIND_SENSOR_NUMERIC_FIELDS = frozenset(
+    {
+        "undefined_samples",
+        "undefined_seconds",
+        "blind_sensor_samples",
+        "blind_sensor_duration_s",
+        "blind_sensor_count",
+    }
+)
+
+# EXACT numeric-field allowlist for welfare sensor-silent advisories.
+# Only these three scalar counters may pass through; processor labels are
+# gated independently by BLIND_SENSOR_PROCESSORS.
+_SENSOR_SILENT_NUMERIC_FIELDS = frozenset(
+    {
+        "silent_seconds",
+        "sensor_silent_duration_s",
+        "sensor_silent_count",
     }
 )
 
@@ -595,10 +630,10 @@ def _apply_taxonomy_fields(
 ) -> dict[str, Any]:
     """Copy ONLY allowlisted payload fields onto `record`.
 
-    Welfare gray-zone is the one special case: the exact numeric-field
-    allowlist (`_WELFARE_NUMERIC_FIELDS`) instead of the taxonomy set, so a
-    payload field cannot smuggle content through. Anything not in the
-    taxonomy produces no additional fields at all.
+    Welfare gray-zone and blind-sensor advisories are special cases: an exact
+    numeric-field allowlist instead of the taxonomy set, so a payload field
+    cannot smuggle content through. Anything not in the taxonomy produces no
+    additional fields at all.
     """
     allowed = _allowed_fields(event_type)
     if allowed is None:
@@ -607,6 +642,24 @@ def _apply_taxonomy_fields(
         if "gray_zone_event" in payload:
             record["gray_zone_event"] = payload.get("gray_zone_event")
         for k in _WELFARE_NUMERIC_FIELDS:
+            v = payload.get(k)
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                record[k] = v
+        return record
+    if event_type in {BLIND_SENSOR_TYPE, BLIND_SENSOR_CLEARED_TYPE}:
+        processor = payload.get("processor")
+        if processor in set(BLIND_SENSOR_PROCESSORS.values()):
+            record["processor"] = processor
+        for k in _BLIND_SENSOR_NUMERIC_FIELDS:
+            v = payload.get(k)
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                record[k] = v
+        return record
+    if event_type in {SENSOR_SILENT_TYPE, SENSOR_SILENT_CLEARED_TYPE}:
+        processor = payload.get("processor")
+        if processor in set(BLIND_SENSOR_PROCESSORS.values()):
+            record["processor"] = processor
+        for k in _SENSOR_SILENT_NUMERIC_FIELDS:
             v = payload.get(k)
             if isinstance(v, (int, float)) and not isinstance(v, bool):
                 record[k] = v

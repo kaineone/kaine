@@ -138,7 +138,7 @@ An event with no `source_label` is attributed to the operator agent.
 `EmpatheiaMergeStrategy` in `kaine/lifecycle/strategies.py`, registered by `default_strategies()` under `empatheia`, merges two branches' profiles:
 
 - `interaction_count` is summed, since both branches heard real interactions.
-- `emotion_histogram`, `behavioral_summary` and `reliability` are averaged, weighted by interaction count.
+- `emotion_histogram`, `behavioral_summary` and `reliability` are averaged, weighted by interaction count. A `behavioral_summary` entry missing or null on one branch, such as the `mean_prediction_error` of an agent that never had a defined error, is absent rather than 0, so the merged entry takes the other branch's value; an entry held by neither branch stays absent.
 - `first_seen` takes the earlier value and `last_seen` the later.
 
 The merged profiles travel in the merged snapshot. Restoring it loads them into the store's cache, which `get()` and `all_profiles()` read first, and each profile reaches Qdrant on its next update. See [Forks and merges](../12-forks-and-merges.md#empatheiamergestrategy). For preservation, `export_preservation_state()` captures every profile and `import_preservation_state()` re-embeds and restores them.

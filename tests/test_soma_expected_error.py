@@ -168,6 +168,35 @@ class SkippableForward:
         return
 
 
+class UndefinedScalarForward:
+    """Scalar-only forward fake (no last_residuals) whose next tick can have no defined error."""
+
+    def __init__(self, error: float = 0.05) -> None:
+        self.error = error
+        self.suspended = False
+        self.adaptation_steps = 0
+        self.last_error_defined: bool = True
+        self.undefined_next: bool = False
+
+    def step(self, feature: list[float]) -> float:
+        if not self.suspended:
+            self.adaptation_steps += 1
+        self.last_error_defined = not self.undefined_next
+        self.undefined_next = False
+        return 0.0 if not self.last_error_defined else self.error
+
+    def prediction_error_to_salience(
+        self, raw_error, baseline_salience, alert_salience, *, error_window=None
+    ) -> float:
+        return baseline_salience
+
+    def state_dict(self) -> dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state: dict[str, Any]) -> None:
+        return
+
+
 class NeverAlert:
     def evaluate(self, metrics: dict[str, float]) -> AlertResult:
         return AlertResult()
@@ -503,6 +532,37 @@ async def test_skipped_tick_does_not_reset(bus) -> None:
 
     assert soma._expected_error.expected == expected_before
     assert soma._expected_error.spread == spread_before
+
+
+@pytest.mark.asyncio
+async def test_scalar_forward_without_a_defined_error_neither_reports_nor_learns(bus) -> None:
+    forward = UndefinedScalarForward(0.05)
+    soma, src = _make_soma(
+        bus,
+        forward_model=forward,
+        detector=NeverAlert(),
+        regulation_warmup_enabled=False,
+        expected_error_tau_s=60.0,
+    )
+    for _ in range(50):
+        src.t += 1.0
+        await soma.tick_once()
+
+    expected_before = soma._expected_error.expected
+    spread_before = soma._expected_error.spread
+
+    forward.undefined_next = True
+    src.t += 1.0
+    payload = await soma.tick_once()
+
+    assert payload["unexpected_error"] == 0.0
+    assert payload["prediction_error"] is None
+    assert soma._expected_error.expected == expected_before
+    assert soma._expected_error.spread == spread_before
+
+    src.t += 1.0
+    payload = await soma.tick_once()
+    assert payload["prediction_error"] == pytest.approx(0.05)
 
 
 @pytest.mark.asyncio
