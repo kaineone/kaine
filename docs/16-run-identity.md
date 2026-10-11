@@ -36,7 +36,7 @@ The per-sink `seq` lets completeness gating detect a silent drop within any sing
 
 ## Manifest
 
-When `[experiment].write_manifest` is true (the default), the cycle writes the run context once at boot to `data/evaluation/runs/<run_id>/manifest.json` with an atomic write. The `runs` directory is in the metrics-export allowlist (`METRICS_ONLY_DIRS`): the manifest holds only the run id, seed, git sha, model ids, config digest, start time, version, perception feed, plugins, timing and revival source, with no entity interior and no operator-identifying data, so it is export-eligible.
+When `[experiment].write_manifest` is true (the default), the cycle writes the run context once at boot to `data/evaluation/runs/<run_id>/manifest.json` with an atomic write. The `runs` directory is in the metrics-export allowlist (`METRICS_ONLY_DIRS`): the manifest holds only the run id, seed, git sha, model ids, config digest, start time, version, perception feed, plugins, timing, revival source, study and settings-record digest, with no entity interior and no operator-identifying data, so it is export-eligible.
 
 ## Deterministic mode
 

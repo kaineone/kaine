@@ -552,8 +552,13 @@ class Audition(BaseModule):
         """
         control = self._positive_control
         if control is None:
+            await self._pc_queue.close()
             return
         await self._pc_queue.drain()
+        if self._positive_control is not control:
+            # A queued step failed while draining; its failure record is the terminal one.
+            await self._pc_queue.close()
+            return
         try:
             await publish_result(self._bus, control.final_result())
         except Exception:

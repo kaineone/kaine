@@ -358,6 +358,9 @@ def test_manifest_is_content_free(tmp_path):
         "revived_from",
         # The study configuration name (KAINE_STUDY), or None. A name only.
         "study",
+        # The digest of the planned-test settings record that gated the run
+        # (paper Appendix A.8), or None for runs the record does not gate. A hash only.
+        "settings_record_sha256",
         # Timing settings (slip-driven-time-dilation): the configured
         # time_scale and the automatic-dilation parameters. Numbers only.
         "timing",
