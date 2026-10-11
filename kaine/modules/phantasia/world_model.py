@@ -3,7 +3,7 @@
 
 """World-model protocol + a zero-dep fake + the real DreamerV3 adapters.
 
-`WorldModel` is the thin contract Phantasia depends on:
+`WorldModelBackend` is the thin contract Phantasia depends on:
 
   * ``observe(obs)``  — fold one observation into the recurrent state, returning
     the world-prediction error (||predicted - actual|| of the latent) as a
@@ -67,7 +67,7 @@ class CheckpointMismatchError(RuntimeError):
 
 
 @runtime_checkable
-class WorldModel(Protocol):
+class WorldModelBackend(Protocol):
     """The contract Phantasia depends on. Implementations hold all state
     in-memory and write NOTHING to disk.
 
@@ -214,7 +214,7 @@ def _decode_checkpoint(
 
 
 class FakeWorldModel:
-    """Deterministic, dependency-free WorldModel for tests and CI.
+    """Deterministic, dependency-free WorldModelBackend for tests and CI.
 
     Models the recurrent state as a simple exponential moving average of the
     observation. Prediction = the running average; world error = mean absolute
@@ -328,7 +328,7 @@ def _isnan(x: float) -> bool:
 
 
 class DreamerV3WorldModel:
-    """Real WorldModel backed by the vendored DreamerV3 RSSM core.
+    """Real WorldModelBackend backed by the vendored DreamerV3 RSSM core.
 
     Imported only by :func:`load_world_model` when backend="dreamerv3" and
     engine="jax". Requires JAX (the ``[worldmodel]`` extra); construction raises
@@ -452,7 +452,7 @@ class DreamerV3WorldModel:
 
 
 class NumpyDreamerV3WorldModel:
-    """JAX-free DreamerV3 WorldModel backed by ``kaine.modules.phantasia.rssm_numpy``.
+    """JAX-free DreamerV3 WorldModelBackend backed by ``kaine.modules.phantasia.rssm_numpy``.
 
     This adapter uses only NumPy and the standard library. A fresh initialisation
     for a given ``seed`` is a different random draw than the JAX engine's
@@ -556,8 +556,8 @@ class NumpyDreamerV3WorldModel:
 
 def load_world_model(
     backend: str, obs_dim: int, *, engine: str = "jax", **kwargs: Any
-) -> WorldModel:
-    """Construct a WorldModel for the configured backend.
+) -> WorldModelBackend:
+    """Construct a WorldModelBackend for the configured backend.
 
     * ``backend="fake"`` (or ``"inmemory"`` / ``"none"``) → :class:`FakeWorldModel`
       (no deps; ``engine`` is ignored).

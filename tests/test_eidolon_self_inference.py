@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from kaine.modules.eidolon.document import SelfModel
+from kaine.modules.eidolon.document import SelfModelDocument
 from kaine.modules.eidolon.self_inference import _NORM_PREFIX, SelfInferenceEngine
 
 # ---------------------------------------------------------------------------
@@ -53,7 +53,7 @@ def _policy_payload(action: str, efe: float = -0.5) -> dict:
 def test_norms_empty_below_min_count():
     """Fields remain empty if observations are below speech_pattern_min_count."""
     engine = _make_engine(speech_pattern_min_count=5)
-    model = SelfModel()
+    model = SelfModelDocument()
 
     # Observe 4 events — one short of the threshold.
     for _ in range(4):
@@ -67,7 +67,7 @@ def test_norms_empty_below_min_count():
 def test_norms_populated_above_min_count():
     """behavioral_norms gains an entry when count >= speech_pattern_min_count."""
     engine = _make_engine(speech_pattern_min_count=3)
-    model = SelfModel()
+    model = SelfModelDocument()
 
     for _ in range(3):
         engine.observe_lingua(_lingua_payload("text here"), "internal.thought")
@@ -80,7 +80,7 @@ def test_norms_populated_above_min_count():
 def test_norms_accumulate_multiple_types():
     """Multiple speech types each produce their own norm entry."""
     engine = _make_engine(speech_pattern_min_count=2)
-    model = SelfModel()
+    model = SelfModelDocument()
 
     for _ in range(2):
         engine.observe_lingua(_lingua_payload(), "internal.thought")
@@ -95,7 +95,7 @@ def test_norms_accumulate_multiple_types():
 def test_unrecognised_speech_type_not_counted():
     """Event types outside the recognised set are silently ignored."""
     engine = _make_engine(speech_pattern_min_count=1)
-    model = SelfModel()
+    model = SelfModelDocument()
 
     engine.observe_lingua(_lingua_payload(), "some.unknown.type")
     updated = engine.maintenance_cycle_end(model)
@@ -109,7 +109,7 @@ def test_unrecognised_speech_type_not_counted():
 def test_vad_stats_empty_before_cycle():
     """personality_baseline remains empty when no VAD samples have been observed."""
     engine = _make_engine()
-    model = SelfModel()
+    model = SelfModelDocument()
     updated = engine.maintenance_cycle_end(model)
     assert updated.personality_baseline == {}
 
@@ -117,7 +117,7 @@ def test_vad_stats_empty_before_cycle():
 def test_vad_stats_update_on_maintenance_cycle():
     """VAD rolling mean/variance are computed after a maintenance cycle end."""
     engine = _make_engine(vad_window_cycles=5)
-    model = SelfModel()
+    model = SelfModelDocument()
 
     # Feed two VAD samples via thymos.state events.
     engine.observe_thymos_state(_thymos_state_payload(0.5, 0.3, 0.1))
@@ -137,7 +137,7 @@ def test_vad_stats_update_on_maintenance_cycle():
 def test_vad_stats_rolling_mean():
     """Rolling mean aggregates across multiple maintenance cycles."""
     engine = _make_engine(vad_window_cycles=10)
-    model = SelfModel()
+    model = SelfModelDocument()
 
     # Three cycles with different VAD.
     for v, a, d in [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0), (0.5, 0.5, 0.5)]:
@@ -163,7 +163,7 @@ def test_no_raw_speech_text_in_self_model(tmp_path: Path):
     from kaine.modules.eidolon.document import save_atomic
 
     engine = _make_engine(speech_pattern_min_count=1)
-    model = SelfModel()
+    model = SelfModelDocument()
 
     secret = "do not store this secret utterance text"
 
@@ -192,9 +192,9 @@ def test_no_raw_speech_text_in_self_model(tmp_path: Path):
 
 
 def test_no_raw_speech_text_in_memory_model():
-    """The in-memory SelfModel JSON must not contain raw speech text."""
+    """The in-memory SelfModelDocument JSON must not contain raw speech text."""
     engine = _make_engine(speech_pattern_min_count=1)
-    model = SelfModel()
+    model = SelfModelDocument()
 
     secret = "private_utterance_content_xyz"
     for _ in range(2):
@@ -203,7 +203,7 @@ def test_no_raw_speech_text_in_memory_model():
     model = engine.maintenance_cycle_end(model)
 
     serialized = model.to_json()
-    assert secret not in serialized, "raw speech text found in in-memory SelfModel JSON"
+    assert secret not in serialized, "raw speech text found in in-memory SelfModelDocument JSON"
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +213,7 @@ def test_no_raw_speech_text_in_memory_model():
 def test_disabled_engine_no_update():
     """When enabled=False, maintenance_cycle_end returns the model unchanged."""
     engine = SelfInferenceEngine(enabled=False)
-    model = SelfModel(values=["honesty"])
+    model = SelfModelDocument(values=["honesty"])
 
     # Try to feed observations — must be silently ignored.
     engine.observe_lingua({"text": "ignored"}, "internal.thought")
@@ -233,7 +233,7 @@ def test_disabled_engine_no_update():
 def test_disabled_engine_no_crash():
     """Disabled engine must not crash under any observation sequence."""
     engine = SelfInferenceEngine(enabled=False)
-    model = SelfModel()
+    model = SelfModelDocument()
 
     for _ in range(100):
         engine.observe_lingua({"text": "x"}, "internal.thought")
@@ -242,7 +242,7 @@ def test_disabled_engine_no_crash():
         engine.observe_nous_policy({"policy": "no_op"})
         model = engine.maintenance_cycle_end(model)
 
-    assert model == SelfModel()
+    assert model == SelfModelDocument()
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +252,7 @@ def test_disabled_engine_no_crash():
 def test_values_derived_from_norms_and_drives():
     """values contains drive labels when both norm and drive thresholds are met."""
     engine = _make_engine(speech_pattern_min_count=2)
-    model = SelfModel()
+    model = SelfModelDocument()
 
     # Enough speech observations for norms.
     for _ in range(2):
@@ -269,7 +269,7 @@ def test_values_derived_from_norms_and_drives():
 def test_values_empty_when_no_norms():
     """values remains empty when norms are not yet populated."""
     engine = _make_engine(speech_pattern_min_count=10)
-    model = SelfModel()
+    model = SelfModelDocument()
 
     # Only drives, no norms.
     for _ in range(5):
@@ -285,7 +285,7 @@ def test_set_whitelist_commands_surfaces_effectors():
     (eidolon-self-inference "Capability map from Praxis whitelist")."""
     engine = SelfInferenceEngine(enabled=True)
     engine.set_whitelist_commands(["notify", "file_write"])
-    model = engine.maintenance_cycle_end(SelfModel())
+    model = engine.maintenance_cycle_end(SelfModelDocument())
     assert model.capability_map.get("effectors") == ["file_write", "notify"]
 
 
@@ -293,5 +293,5 @@ def test_set_whitelist_commands_empty_leaves_effectors_absent():
     """An empty whitelist produces no 'effectors' entry (not an empty list)."""
     engine = SelfInferenceEngine(enabled=True)
     engine.set_whitelist_commands([])
-    model = engine.maintenance_cycle_end(SelfModel())
+    model = engine.maintenance_cycle_end(SelfModelDocument())
     assert "effectors" not in model.capability_map

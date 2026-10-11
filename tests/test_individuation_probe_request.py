@@ -11,7 +11,7 @@ from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.lifecycle.individuation_store import conditioning_digest, read_conditioning_inputs
-from kaine.modules.eidolon.document import SelfModel
+from kaine.modules.eidolon.document import SelfModelDocument
 from kaine.modules.eidolon.module import Eidolon
 from kaine.modules.lingua import (
     EXTERNAL_STREAM,
@@ -52,19 +52,19 @@ def _make_lingua(bus: AsyncBus, tmp_path: Path, responses=None) -> Lingua:
 
 
 def test_self_model_situation_facts_round_trip():
-    sm = SelfModel(
+    sm = SelfModelDocument(
         name="Kaine Voxel",
         values=["autonomy"],
         behavioral_norms=["honesty"],
         situation_facts=["You are periodically assessed for your own protection."],
     )
-    loaded = SelfModel.from_json(sm.to_json())
+    loaded = SelfModelDocument.from_json(sm.to_json())
     assert loaded.situation_facts == sm.situation_facts
     assert loaded == sm
 
 
 def test_self_model_old_json_loads_empty_situation_facts():
-    old = SelfModel.from_json('{"values": ["a"], "behavioral_norms": ["b"]}')
+    old = SelfModelDocument.from_json('{"values": ["a"], "behavioral_norms": ["b"]}')
     assert old.situation_facts == []
 
 
@@ -130,10 +130,10 @@ def test_conditioning_digest_ignores_situation_facts(tmp_path: Path, monkeypatch
         "values": ["autonomy"],
         "behavioral_norms": ["honesty"],
     }
-    with_facts = SelfModel(
+    with_facts = SelfModelDocument(
         **common, situation_facts=["You are periodically assessed for your own protection."]
     )
-    without_facts = SelfModel(**common)
+    without_facts = SelfModelDocument(**common)
 
     path_with = tmp_path / "with_facts.json"
     path_without = tmp_path / "without_facts.json"

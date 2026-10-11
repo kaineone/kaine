@@ -13,7 +13,7 @@ from kaine.bus.client import AsyncBus
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.base import BaseModule
 from kaine.modules.eidolon.document import (
-    SelfModel,
+    SelfModelDocument,
     generate_launch_name,
     load,
     save_atomic,
@@ -103,7 +103,7 @@ class Eidolon(BaseModule):
         self._voice_observations_cap = int(voice_observations_cap)
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
-        self._model: SelfModel = SelfModel()
+        self._model: SelfModelDocument = SelfModelDocument()
         # Whether the newest identity_history entry is a drift episode that is
         # still open (the last broadcast alerted). In memory only: after a
         # restart the next alert opens a new episode.
@@ -121,7 +121,7 @@ class Eidolon(BaseModule):
         self._nous_cursor: str = "0-0"
 
     @property
-    def model(self) -> SelfModel:
+    def model(self) -> SelfModelDocument:
         return self._model
 
     @property
@@ -553,7 +553,7 @@ class Eidolon(BaseModule):
 
     def deserialize(self, state: dict[str, Any]) -> None:
         if "model" in state:
-            self._model = SelfModel.from_json(state["model"])
+            self._model = SelfModelDocument.from_json(state["model"])
         if "drift_count" in state:
             self._drift_count = int(state["drift_count"])
         if "internal_cursor" in state:

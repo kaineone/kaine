@@ -14,7 +14,7 @@ import os
 
 import pytest
 
-from kaine.modules.eidolon.document import SelfModel, load, save_atomic
+from kaine.modules.eidolon.document import SelfModelDocument, load, save_atomic
 from kaine.security.crypto import (
     CryptoConfig,
     StateEncryptor,
@@ -42,8 +42,8 @@ def disabled_global():
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
 
 
-def _model() -> SelfModel:
-    return SelfModel(
+def _model() -> SelfModelDocument:
+    return SelfModelDocument(
         name="Kaine Voxel",
         values=["curiosity"],
         internal_speech_count=7,

@@ -13,8 +13,8 @@
 
 ## 3. Collision pre-renames (PR 2)
 
-- [ ] 3.1 `WorldModel` protocol to `WorldModelBackend`.
-- [ ] 3.2 `SelfModel` document class to `SelfModelDocument`.
+- [x] 3.1 `WorldModel` protocol to `WorldModelBackend`.
+- [x] 3.2 `SelfModel` document class to `SelfModelDocument`.
 
 ## 4. Docs prose (PR 3)
 

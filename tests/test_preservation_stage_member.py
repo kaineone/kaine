@@ -19,7 +19,7 @@ from kaine.lifecycle.preservation import (
     read_bundle_stage,
     set_aside_gestation_files,
 )
-from kaine.modules.eidolon import Eidolon, SelfModel
+from kaine.modules.eidolon import Eidolon, SelfModelDocument
 from kaine.modules.registry import ModuleRegistry
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
@@ -54,7 +54,7 @@ async def eidolon(tmp_path):
     bus = _FakeBus()
     eid = Eidolon(bus, persistence_path=tmp_path / "sm.json", save_interval_s=60)
     await eid.initialize()
-    eid._model = SelfModel(name="stage-test", values=["continuity"])
+    eid._model = SelfModelDocument(name="stage-test", values=["continuity"])
     yield eid
     try:
         await eid.shutdown()

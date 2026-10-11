@@ -11,7 +11,7 @@ from kaine.modules.phantasia.encoder import (
 from kaine.modules.phantasia.module import Phantasia
 from kaine.modules.phantasia.world_model import (
     FakeWorldModel,
-    WorldModel,
+    WorldModelBackend,
     load_world_model,
 )
 
@@ -19,7 +19,7 @@ __all__ = [
     "ENCODER_VERSION",
     "FakeWorldModel",
     "Phantasia",
-    "WorldModel",
+    "WorldModelBackend",
     "encode_snapshot",
     "load_world_model",
     "observation_dim",

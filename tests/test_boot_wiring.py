@@ -906,7 +906,7 @@ def test_wire_eidolon_capabilities_injects_praxis_whitelist(tmp_path):
     Eidolon's self-inference engine, so the self-model's capability_map reflects
     what the entity can execute (eidolon-self-inference spec)."""
     from kaine.boot import _wire_eidolon_capabilities
-    from kaine.modules.eidolon.document import SelfModel
+    from kaine.modules.eidolon.document import SelfModelDocument
     from kaine.modules.registry import ModuleRegistry
 
     bus = _bus()
@@ -934,7 +934,7 @@ def test_wire_eidolon_capabilities_injects_praxis_whitelist(tmp_path):
 
     _wire_eidolon_capabilities(registry)
 
-    model = eidolon.self_inference.maintenance_cycle_end(SelfModel())
+    model = eidolon.self_inference.maintenance_cycle_end(SelfModelDocument())
     assert model.capability_map.get("effectors") == ["file_write", "notify"]
 
 
@@ -981,7 +981,7 @@ def test_rewire_module_restores_self_hearing_gate():
 def test_rewire_module_reseeds_eidolon_whitelist(tmp_path):
     """After Spot rebuilds eidolon, rewire_module must re-inject the Praxis
     effector whitelist into the new self-inference engine."""
-    from kaine.modules.eidolon.document import SelfModel
+    from kaine.modules.eidolon.document import SelfModelDocument
     from kaine.modules.registry import ModuleRegistry
 
     bus = _bus()
@@ -1006,7 +1006,7 @@ def test_rewire_module_reseeds_eidolon_whitelist(tmp_path):
     registry.register(eidolon)
 
     rewire_module(registry, "eidolon", {})
-    model = eidolon.self_inference.maintenance_cycle_end(SelfModel())
+    model = eidolon.self_inference.maintenance_cycle_end(SelfModelDocument())
     assert model.capability_map.get("effectors") == ["file_write", "notify"]
 
     # Simulate Spot rebuilding eidolon.
@@ -1020,7 +1020,7 @@ def test_rewire_module_reseeds_eidolon_whitelist(tmp_path):
     registry.replace("eidolon", new_eidolon)
     rewire_module(registry, "eidolon", {})
 
-    new_model = new_eidolon.self_inference.maintenance_cycle_end(SelfModel())
+    new_model = new_eidolon.self_inference.maintenance_cycle_end(SelfModelDocument())
     assert new_model.capability_map.get("effectors") == ["file_write", "notify"]
 
 

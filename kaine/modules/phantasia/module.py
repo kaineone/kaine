@@ -69,7 +69,7 @@ from kaine.modules.phantasia.encoder import (
 from kaine.modules.phantasia.world_model import (
     CheckpointMismatchError,
     TrainOutcome,
-    WorldModel,
+    WorldModelBackend,
     load_world_model,
 )
 from kaine.storage import resolve
@@ -93,7 +93,7 @@ class Phantasia(BaseModule):
         self,
         bus: AsyncBus,
         *,
-        world_model: Optional[WorldModel] = None,
+        world_model: Optional[WorldModelBackend] = None,
         backend: str = "dreamerv3",
         engine: str = "jax",
         training_enabled: bool = False,
@@ -184,7 +184,7 @@ class Phantasia(BaseModule):
     # ------------------------------------------------------------------
 
     @property
-    def world_model(self) -> WorldModel:
+    def world_model(self) -> WorldModelBackend:
         return self._wm
 
     @property

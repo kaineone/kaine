@@ -66,7 +66,7 @@ class CapabilityMapBuilder:
     # Build
 
     def build(self) -> dict[str, Any]:
-        """Return the capability_map dict to write into SelfModel.
+        """Return the capability_map dict to write into SelfModelDocument.
 
         ``effectors`` — whitelisted Praxis commands (what can be executed).
         ``policy_outcomes`` — per-action stats from Nous EFE history.

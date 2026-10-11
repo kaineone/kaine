@@ -3,7 +3,7 @@
 
 """Self-inference engine for Eidolon.
 
-Populates ``SelfModel.behavioral_norms``, ``personality_baseline``,
+Populates ``SelfModelDocument.behavioral_norms``, ``personality_baseline``,
 ``values``, and ``capability_map`` from observed signals already present
 in the cognitive loop.
 
@@ -18,7 +18,7 @@ Privacy boundary (load-bearing):
   discarded after the numeric summary is extracted.
 
 The engine is disabled by default (``enabled = false`` in config).  When
-disabled all methods are no-ops and the SelfModel fields are not touched.
+disabled all methods are no-ops and the SelfModelDocument fields are not touched.
 
 Seed (operator first-boot fallback):
 - If ``seed_path`` is configured, the seed JSONL is loaded once on
@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from kaine.modules.eidolon.capability_map import CapabilityMapBuilder
-from kaine.modules.eidolon.document import SelfModel
+from kaine.modules.eidolon.document import SelfModelDocument
 
 log = logging.getLogger(__name__)
 
@@ -150,7 +150,7 @@ class SelfInferenceEngine:
     # ------------------------------------------------------------------
     # Seed
 
-    def apply_seed(self, model: SelfModel) -> SelfModel:
+    def apply_seed(self, model: SelfModelDocument) -> SelfModelDocument:
         """Load the seed JSONL and merge into ``model`` on first boot.
 
         Only the four target fields are read from the seed; any other keys
@@ -276,11 +276,11 @@ class SelfInferenceEngine:
     # ------------------------------------------------------------------
     # Maintenance cycle end
 
-    def maintenance_cycle_end(self, model: SelfModel) -> SelfModel:
+    def maintenance_cycle_end(self, model: SelfModelDocument) -> SelfModelDocument:
         """Re-derive all four self-model fields and return the updated model.
 
         Called by ``module.py`` whenever a ``hypnos.sleep.completed`` event
-        is observed.  Writes atomically via ``SelfModel.with_updates``.
+        is observed.  Writes atomically via ``SelfModelDocument.with_updates``.
         Fields that do not yet have sufficient observations are left as they
         are (empty on first boot, seed value if seed was applied).
         """

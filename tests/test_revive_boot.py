@@ -17,7 +17,7 @@ from kaine.cycle.revive_boot import (
     revive_into,
 )
 from kaine.lifecycle.manager import ForkManager
-from kaine.modules.eidolon import Eidolon, SelfModel
+from kaine.modules.eidolon import Eidolon, SelfModelDocument
 from kaine.modules.registry import ModuleRegistry
 
 
@@ -43,7 +43,7 @@ async def bus():
 async def eidolon(tmp_path, bus):
     eid = Eidolon(bus, persistence_path=tmp_path / "sm.json", save_interval_s=60)
     await eid.initialize()
-    eid._model = SelfModel(name="revive-boot-test", values=["continuity"])
+    eid._model = SelfModelDocument(name="revive-boot-test", values=["continuity"])
     yield eid
     try:
         await eid.shutdown()

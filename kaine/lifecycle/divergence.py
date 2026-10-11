@@ -238,9 +238,9 @@ def _read_self_model(self_model_path: Path) -> dict[str, Any] | None:
     """Read + (transparently) decrypt the Eidolon self-model JSON, or None.
 
     We parse the raw JSON dict (after passing it through the active state
-    encryptor's ``maybe_decrypt``) rather than through ``SelfModel.from_json``,
+    encryptor's ``maybe_decrypt``) rather than through ``SelfModelDocument.from_json``,
     because ``drift_count`` is persisted in the on-disk document but is not a
-    field of the ``SelfModel`` dataclass — going through the dataclass would
+    field of the ``SelfModelDocument`` dataclass — going through the dataclass would
     silently drop it. Pure and guarded.
     """
     try:

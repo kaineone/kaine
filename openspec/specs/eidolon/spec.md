@@ -1,40 +1,40 @@
 # eidolon Specification
 
 ## Purpose
-Eidolon is the self-model module that persists a structured `SelfModel` to JSON at a configurable path, updates its drift detector from workspace broadcasts, records drift as episodes, keeps an unbounded identity history by default, and saves periodically and at shutdown.
+Eidolon is the self-model module that persists a structured `SelfModelDocument` to JSON at a configurable path, updates its drift detector from workspace broadcasts, records drift as episodes, keeps an unbounded identity history by default, and saves periodically and at shutdown.
 
 ## Requirements
 
-### Requirement: SelfModel structure and empty defaults
-Eidolon SHALL define a `SelfModel` data type carrying at minimum:
+### Requirement: SelfModelDocument structure and empty defaults
+Eidolon SHALL define a `SelfModelDocument` data type carrying at minimum:
 `values` (list of strings), `behavioral_norms` (list of strings),
 `capability_map` (dict), `personality_baseline` (dict mapping trait
 names to floats), `identity_history` (list of dated snapshots), and
 `internal_speech_count` (int). On a fresh deployment every field
 SHALL be empty / zero — Eidolon prescribes no identity.
 
-#### Scenario: Fresh SelfModel is empty
-- **WHEN** `SelfModel()` is constructed with no arguments
+#### Scenario: Fresh SelfModelDocument is empty
+- **WHEN** `SelfModelDocument()` is constructed with no arguments
 - **THEN** `values == []`, `behavioral_norms == []`,
   `capability_map == {}`, `personality_baseline == {}`,
   `identity_history == []`, and `internal_speech_count == 0`
 
 ### Requirement: JSON persistence at a configurable path
-Eidolon SHALL persist its SelfModel to a JSON file at a configurable
+Eidolon SHALL persist its SelfModelDocument to a JSON file at a configurable
 path (default `state/eidolon/self_model.json`). Writes SHALL be
 atomic — Eidolon writes to a temporary file first and renames it
 into place, so a crash mid-save SHALL NOT corrupt the persisted
 document. On startup, an existing file at the configured path SHALL
-be loaded; absent file means a fresh empty SelfModel is used.
+be loaded; absent file means a fresh empty SelfModelDocument is used.
 
 #### Scenario: Existing file is loaded on init
 - **WHEN** a `self_model.json` with `values = ["honesty"]` exists at
   the configured path
-- **THEN** the Eidolon module after `initialize` has a SelfModel
+- **THEN** the Eidolon module after `initialize` has a SelfModelDocument
   whose `values == ["honesty"]`
 
 #### Scenario: Save is atomic
-- **WHEN** Eidolon writes the SelfModel and is interrupted partway
+- **WHEN** Eidolon writes the SelfModelDocument and is interrupted partway
   through
 - **THEN** the on-disk JSON file is either fully the prior version
   or fully the new version, never half-written
@@ -75,24 +75,24 @@ configured `alert_salience` when the threshold is crossed.
 ### Requirement: Internal-speech subscription increments counter
 Eidolon SHALL subscribe to a configurable internal-speech stream
 (default `lingua.internal`). For each event observed on that stream
-the module SHALL increment `SelfModel.internal_speech_count`.
+the module SHALL increment `SelfModelDocument.internal_speech_count`.
 Eidolon SHALL NOT record the content of internal speech in the
-SelfModel — only the count and bounded hash fingerprints.
+SelfModelDocument — only the count and bounded hash fingerprints.
 
 #### Scenario: Counter increments per internal-speech event
 - **WHEN** three events arrive on the configured internal-speech
   stream while Eidolon is running
-- **THEN** `SelfModel.internal_speech_count` after the third event
+- **THEN** `SelfModelDocument.internal_speech_count` after the third event
   equals the prior count plus three
 
 ### Requirement: Periodic save and final-save-on-shutdown
-Eidolon SHALL persist the SelfModel to disk every `save_interval_s`
+Eidolon SHALL persist the SelfModelDocument to disk every `save_interval_s`
 seconds (default 30) while running. `shutdown()` SHALL force a final
 save regardless of how recently the periodic save fired.
 
 #### Scenario: Shutdown forces a final save
 - **WHEN** `Eidolon.shutdown()` is awaited
-- **THEN** the on-disk file reflects the current in-memory SelfModel
+- **THEN** the on-disk file reflects the current in-memory SelfModelDocument
 
 ### Requirement: Default Eidolon config and disabled-by-default
 The repository SHALL ship an `[eidolon]` block in `config/kaine.toml`

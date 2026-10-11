@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from kaine.modules.eidolon.document import SelfModel
+from kaine.modules.eidolon.document import SelfModelDocument
 from kaine.modules.eidolon.self_inference import _NORM_PREFIX, SelfInferenceEngine
 
 
@@ -44,7 +44,7 @@ def test_seed_populates_all_four_fields(tmp_path: Path):
         },
     )
     engine = SelfInferenceEngine(enabled=True, seed_path=seed)
-    model = engine.apply_seed(SelfModel())
+    model = engine.apply_seed(SelfModelDocument())
 
     assert model.values == ["curiosity", "honesty"]
     assert model.behavioral_norms == ["speech_pattern:think"]
@@ -56,7 +56,7 @@ def test_seed_partial_fields(tmp_path: Path):
     """Seed with only some fields leaves the others at their defaults."""
     seed = _write_seed(tmp_path, {"values": ["transparency"]})
     engine = SelfInferenceEngine(enabled=True, seed_path=seed)
-    model = engine.apply_seed(SelfModel())
+    model = engine.apply_seed(SelfModelDocument())
 
     assert model.values == ["transparency"]
     assert model.behavioral_norms == []
@@ -72,7 +72,7 @@ def test_seed_multiple_lines_last_wins(tmp_path: Path):
         {"values": ["second"]},
     )
     engine = SelfInferenceEngine(enabled=True, seed_path=seed)
-    model = engine.apply_seed(SelfModel())
+    model = engine.apply_seed(SelfModelDocument())
     # The second line overwrites.
     assert model.values == ["second"]
 
@@ -82,7 +82,7 @@ def test_seed_applied_only_once(tmp_path: Path):
     seed = _write_seed(tmp_path, {"values": ["honesty"]})
     engine = SelfInferenceEngine(enabled=True, seed_path=seed)
 
-    model = engine.apply_seed(SelfModel())
+    model = engine.apply_seed(SelfModelDocument())
     assert model.values == ["honesty"]
 
     # Second call must not alter the model (seed is already marked applied).
@@ -110,7 +110,7 @@ def test_observations_update_on_top_of_seed(tmp_path: Path):
         speech_pattern_min_count=2,
         vad_window_cycles=5,
     )
-    model = engine.apply_seed(SelfModel())
+    model = engine.apply_seed(SelfModelDocument())
 
     # Seed is present.
     assert "seeded_norm" in model.behavioral_norms
@@ -134,7 +134,7 @@ def test_observations_update_on_top_of_seed(tmp_path: Path):
 def test_no_seed_applied_without_config():
     """When seed_path is not set, self-model fields start empty."""
     engine = SelfInferenceEngine(enabled=True)  # no seed_path
-    model = engine.apply_seed(SelfModel())
+    model = engine.apply_seed(SelfModelDocument())
 
     assert model.values == []
     assert model.behavioral_norms == []
@@ -146,7 +146,7 @@ def test_no_seed_applied_when_disabled(tmp_path: Path):
     """Disabled engine never applies the seed even if seed_path is configured."""
     seed = _write_seed(tmp_path, {"values": ["should_not_appear"]})
     engine = SelfInferenceEngine(enabled=False, seed_path=seed)
-    model = engine.apply_seed(SelfModel())
+    model = engine.apply_seed(SelfModelDocument())
 
     assert model.values == []
 
@@ -162,7 +162,7 @@ def test_seed_missing_file_does_not_crash(tmp_path: Path):
         seed_path=tmp_path / "nonexistent.jsonl",
     )
     # Must not raise.
-    model = engine.apply_seed(SelfModel())
+    model = engine.apply_seed(SelfModelDocument())
     assert model.values == []
 
 
@@ -177,5 +177,5 @@ def test_seed_blank_lines_and_comments_skipped(tmp_path: Path):
         encoding="utf-8",
     )
     engine = SelfInferenceEngine(enabled=True, seed_path=p)
-    model = engine.apply_seed(SelfModel())
+    model = engine.apply_seed(SelfModelDocument())
     assert model.values == ["curiosity"]
