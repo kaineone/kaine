@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 #
 # OPT-IN UNATTENDED ENTITY START. Enabling this unit starts the entity at boot
-# (with linger) with no person present. Every start is gated by the eight
+# (with linger) with no person present. Every start is gated by the nine
 # conditions of the unattended gate, checked on this host, with no override:
 #
 #   1. preservation enabled ([preservation.divergence_monitor])
@@ -13,6 +13,7 @@
 #   6. Spot enabled and its scratch freeze/restart self-test passing
 #   7. a content-free start notice accepted by a [caretaker] channel
 #   8. a continuous perception input delivering a frame or audio block
+#   9. individuation producer enabled ([individuation].enabled and the lingua module)
 #
 # A refusal exits 6 and leaves the unit failed; the entity stays down.
 # scripts/install-quadlet.sh NEVER installs this file. Install it deliberately

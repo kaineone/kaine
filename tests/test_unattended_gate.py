@@ -8,13 +8,14 @@ from typing import Any
 
 import pytest
 
-from kaine.cycle.research_gate import evaluate_research_gate, evaluate_safety_net
+from kaine.cycle.research_gate import GateResult, evaluate_research_gate, evaluate_safety_net
 from kaine.cycle.unattended_gate import (
     CONDITION_NAMES,
     NOT_BUILT_REASON,
     SAFETY_NET_CONDITIONS,
     Condition,
     SupervisionConfigError,
+    conditions_from_safety_net,
     evaluate_unattended_gate,
     resolve_supervision_mode,
 )
@@ -338,6 +339,13 @@ def test_every_safety_net_check_maps_to_an_unattended_condition(monkeypatch):
     assert numbers.issubset(set(CONDITION_NAMES))
     assert numbers.isdisjoint({6, 7, 8})
     assert numbers | {6, 7, 8} == set(CONDITION_NAMES)
+
+    # A mapped number without a failure reason raises KeyError here, so a gap fails CI.
+    net = GateResult(ok=False, checks={key: False for key in SAFETY_NET_CONDITIONS})
+    conditions = conditions_from_safety_net(net)
+    assert {c.number for c in conditions} == set(SAFETY_NET_CONDITIONS.values())
+    assert all(not c.ok for c in conditions)
+    assert all(c.reason for c in conditions)
 
 
 def test_individuation_failure_withholds_the_caretaker_start_notice(monkeypatch):

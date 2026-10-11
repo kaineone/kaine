@@ -87,11 +87,11 @@ Combining unattended mode with research mode or operator presence is a configura
 
 #### Unattended boot conditions
 
-Besides five of the research-safety-net conditions (all but the individuation check), an unattended boot refuses unless:
+Besides the six research-safety-net conditions (unattended conditions 1 to 5 and 9), an unattended boot refuses unless:
 
-1. **Spot armed and self-tested**: [Spot](06-operation/remote-and-spot.md) is enabled, and a self-test drives a synthetic module through freeze, snapshot, restart and release in a scratch directory.
-2. **Caretaker told**: once every other condition has passed, a content-free "starting unattended" notice must be accepted by at least one `[caretaker]` channel (a desktop notification, or an HTTP POST to a server on your own network; public addresses are refused).
-3. **Continuous input**: the perception feed is `live`, `seeded`, `screen` or `womb` (`off` has no input and a playlist runs out), `topos` or `audition` is enabled to perceive it (with capture enabled for a `live` feed), and a probe reads one frame or audio block and discards it.
+6. **Spot armed and self-tested**: [Spot](06-operation/remote-and-spot.md) is enabled, and a self-test drives a synthetic module through freeze, snapshot, restart and release in a scratch directory.
+7. **Caretaker told**: once every other condition has passed, a content-free "starting unattended" notice must be accepted by at least one `[caretaker]` channel (a desktop notification, or an HTTP POST to a server on your own network; public addresses are refused).
+8. **Continuous input**: the perception feed is `live`, `seeded`, `screen` or `womb` (`off` has no input and a playlist runs out), `topos` or `audition` is enabled to perceive it (with capture enabled for a `live` feed), and a probe reads one frame or audio block and discards it.
 
 The gate is implemented in `kaine/cycle/unattended_gate.py`.
 

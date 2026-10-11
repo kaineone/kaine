@@ -48,6 +48,7 @@ states: the unattended gate covers every condition of the research net.
 - Tests: `tests/test_unattended_gate.py`, `tests/test_unattended_integration.py`,
   `tests/test_unattended_docs.py`,
   `tests/test_cycle_entrypoint.py`.
-- Docs: the unattended sections of the book and the exit-code table.
+- Docs: the unattended sections of the book and the exit-code table, and
+  the condition list in the header of `quadlet/kaine-cycle-unattended.container`.
 - Behaviour: an unattended start with `[individuation]` disabled or Lingua off
   now refuses with exit 6. Operator-present and research boots are unchanged.
