@@ -81,6 +81,7 @@ async def _drain_peer_poll(mnemos: Mnemos, bus: AsyncBus) -> None:
                 if _parse_id(cursor) >= _parse_id(latest_id):
                     return
             except Exception:
+                # An id that does not parse yet means the poll has not caught up; keep waiting.
                 pass
         await asyncio.sleep(0.02)
     pytest.fail("mnemos peer poll did not catch up")
