@@ -174,12 +174,18 @@ def _cosine(a: list[float], b: list[float]) -> float:
 
 
 def _payload_timestamp(payload: Any) -> float:
+    """Return the payload's timestamp as a float.
+
+    Returns 0.0 when missing, unparseable, NaN or infinite so every backend
+    ranks such a point as the oldest.
+    """
     if not isinstance(payload, dict):
         return 0.0
     try:
-        return float(payload.get("timestamp", 0.0))
+        ts = float(payload.get("timestamp", 0.0))
     except (TypeError, ValueError):
         return 0.0
+    return ts if math.isfinite(ts) else 0.0
 
 
 class InMemoryStorage:
@@ -744,10 +750,15 @@ class SqliteVecStorage:
                 raise StorageError("sqlite-vec recent_points before initialize()")
             out: list[dict[str, Any]] = []
             try:
+                # SQLite reads a JSON NaN as NULL and Infinity as an infinite REAL;
+                # both rank as 0.0, as `_payload_timestamp` ranks them on the other backends.
                 cur = db.execute(
-                    "SELECT point_id, text, payload, affect FROM memories "
-                    "WHERE collection = ? "
-                    "ORDER BY COALESCE(CAST(json_extract(payload, '$.timestamp') AS REAL), 0.0) DESC "
+                    "SELECT point_id, text, payload, affect FROM ("
+                    "SELECT point_id, text, payload, affect, "
+                    "CAST(json_extract(payload, '$.timestamp') AS REAL) AS ts "
+                    "FROM memories WHERE collection = ?"
+                    ") ORDER BY CASE WHEN abs(ts) <= 1.7976931348623157e308 "
+                    "THEN ts ELSE 0.0 END DESC "
                     "LIMIT ?",
                     (collection, int(limit)),
                 )
