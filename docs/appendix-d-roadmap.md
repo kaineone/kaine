@@ -64,6 +64,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | ablation-matched-pooled-arms | 15/15 (100%) | The matched and pooled control arms of the workspace-mediation test run in the live cycle; greedy decoding moves from the default profile into study configurations. |
 | verdict-not-exercised | 11/11 (100%) | NOT EXERCISED becomes an outcome of the shared verdict vocabulary, kept out of the sign tests and held in the suite's Holm family at p = 1; the suite uses the paper's p <= alpha; the retired minimal experiment profile is removed. |
 | perception-skip-nonfinite | 13/13 (100%) | Topos and Audition skip a non-finite reading as Soma does: no buffer append, no weight update, no gain on that report or the next, and the reading stays out of the error window and the change score. |
+| missing-error-consistency | 7/7 (100%) | The CL1 wetware Soma model marks a skipped reading and the next one as having no defined error, as the built-in model does, and Soma teaches no unexpected error from such a reading; an Empatheia merge treats a missing or null behavioural-summary entry as absent, not 0. |
 
 ## Open operator and device steps
 
@@ -84,7 +85,7 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 58 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 59 active changes, 268 archived changes and 104 capability specs.
 
 The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 

@@ -57,6 +57,13 @@ class WetwareInteroceptiveModel:
         self._last_hidden: Optional[np.ndarray] = None
         self._last_prediction: Optional[np.ndarray] = None
         self.suspended = False
+        # True when the last step skipped a non-finite input.
+        self.last_reading_skipped: bool = False
+        # False for a skipped reading and for the first reading after one, which
+        # has no prediction to be scored against. The first reading's error of 0
+        # is defined (paper A.5), so it stays True there.
+        self.last_error_defined: bool = True
+        self._after_skip: bool = False
 
     @property
     def feature_dim(self) -> int:
@@ -112,13 +119,31 @@ class WetwareInteroceptiveModel:
         return True
 
     def step(self, feature: Sequence[float]) -> float:
-        """Step the model, adapt the readout, and return the prediction error."""
+        """Step the model, adapt the readout, and return the prediction error.
+
+        Returns 0.0 on the first step and when the input is skipped due to a
+        non-finite feature. A skipped step has no prediction to score, so
+        ``last_error_defined`` is False for that step and for the step
+        immediately following a skip.
+        """
         if len(feature) != self.feature_dim:
             raise ValueError(f"expected {self.feature_dim}-dim input, got {len(feature)}")
         feature_arr = np.asarray(feature, dtype=float)
         if not np.isfinite(feature_arr).all():
-            log.warning("Soma received non-finite input; returning 0.0 without stepping")
+            log.warning(
+                "WetwareInteroceptiveModel: non-finite feature vector; skipping tick"
+            )
+            self._last_prediction = None
+            self._last_hidden = None
+            self.last_error_defined = False
+            self._after_skip = True
+            self.last_reading_skipped = True
             return 0.0
+
+        self.last_reading_skipped = False
+        self.last_error_defined = not self._after_skip
+        self._after_skip = False
+
         if self._last_prediction is None:
             prediction_error = 0.0
         else:
@@ -152,6 +177,9 @@ class WetwareInteroceptiveModel:
         """Clear the readout's running state."""
         self._last_hidden = None
         self._last_prediction = None
+        self.last_reading_skipped = False
+        self.last_error_defined = True
+        self._after_skip = False
 
     def state_dict(self) -> dict[str, Any]:
         return {"weight": self._W.tolist(), "bias": self._b.tolist()}

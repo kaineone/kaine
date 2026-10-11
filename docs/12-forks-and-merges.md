@@ -121,7 +121,7 @@ Empatheia's state is a set of agent profiles keyed by agent id. A profile presen
 | Field | Resolution |
 |-------|-----------|
 | `interaction_count` | Sum (both branches saw real interactions) |
-| `emotion_histogram`, `behavioral_summary`, `reliability` | Average weighted by each parent's interaction count |
+| `emotion_histogram`, `behavioral_summary`, `reliability` | Average weighted by each parent's interaction count. A `behavioral_summary` entry that is missing or null in one parent is absent: the merged entry takes the other parent's value, and an entry held by neither parent stays absent. |
 | `first_seen` / `last_seen` | Earlier / later of the two |
 
 The merged profiles travel in the merged snapshot. Restoring it loads them into Empatheia's store cache, which `get` and `all_profiles` read before Qdrant; each profile is written to Qdrant on its next update.

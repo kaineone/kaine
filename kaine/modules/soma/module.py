@@ -546,7 +546,11 @@ class Soma(BaseModule):
         self._last_expected_time = now
         learn = not bool(getattr(self._forward_model, "suspended", False))
 
-        if not hasattr(self._forward_model, "last_residuals"):
+        if not getattr(self._forward_model, "last_error_defined", True):
+            # A reading without a defined error neither reports nor teaches an
+            # unexpected error, mirroring the built-in model's null residuals.
+            unexpected_error = 0.0
+        elif not hasattr(self._forward_model, "last_residuals"):
             residuals = (prediction_error,)
             unexpected_error = self._expected_error.unexpected(residuals, dt, learn=learn)
         elif self._forward_model.last_residuals is None:
