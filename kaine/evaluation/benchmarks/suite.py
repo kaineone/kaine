@@ -224,7 +224,7 @@ def _mediation_aggregate_verdict(digs: list[Any], config: SuiteConfig) -> Verdic
             f = float(d)
         except (TypeError, ValueError):
             continue
-        if f == f and abs(f) != float("inf"):
+        if np.isfinite(f):
             defined.append(f)
 
     if not defined:
