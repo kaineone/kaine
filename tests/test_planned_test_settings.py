@@ -113,6 +113,7 @@ def _build_record(
             "n_exact": rules.N_EXACT,
             "snr": {processor: 4.0 for processor in PROCESSORS},
             "min_effect_tone": 0.05,
+            "min_effect_tone_adjusted": 0.04,
             "tone_bins": [0.5, 0.8, 1.1, 1.6],
             "principal_components": principal_components,
         },
@@ -843,6 +844,15 @@ def test_min_effect_tone_zero_is_refused(tmp_path: Path) -> None:
         load_settings_record(path)
 
 
+def test_min_effect_tone_adjusted_zero_is_refused(tmp_path: Path) -> None:
+    def zero_adjusted(record: dict[str, Any]) -> None:
+        record["values"]["min_effect_tone_adjusted"] = 0
+
+    path = _write_mutated(tmp_path, zero_adjusted)
+    with pytest.raises(PlannedTestSettingsError, match="min_effect_tone_adjusted"):
+        load_settings_record(path)
+
+
 @pytest.mark.parametrize(
     "tone_bins",
     [
@@ -863,4 +873,5 @@ def test_tone_bins_invalid_is_refused(tmp_path: Path, tone_bins: list[Any]) -> N
 def test_loaded_record_exposes_tone_fields(tmp_path: Path) -> None:
     settings, _ = _make_record_with_run_data(tmp_path)
     assert settings.min_effect_tone == pytest.approx(0.05)
+    assert settings.min_effect_tone_adjusted == pytest.approx(0.04)
     assert settings.tone_bins == (0.5, 0.8, 1.1, 1.6)

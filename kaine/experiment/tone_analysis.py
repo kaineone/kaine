@@ -11,18 +11,20 @@ the accessed fraction of the emotional tone events minus the accessed fraction
 of the neutral ones. Across runs the statistics enter the exact sign tests of
 the decision rule in ``kaine.experiment.calibration_rules.sign_test_verdict``.
 
-The comparison within bins of the tone error ratio is not implemented here,
-because the paper does not yet say how the bins enter across runs.
+The first test is on the run's difference of fractions, the second on its
+adjusted difference over the tone bins; both are made at alpha_test, outside the
+verdict on the thesis, with no multiplicity adjustment (paper A.8).
 """
 
 from __future__ import annotations
 
+import bisect
 import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from kaine.experiment.calibration_rules import SignTestResult, sign_test_verdict
+from kaine.experiment.calibration_rules import N_EXACT, SignTestResult, sign_test_verdict
 
 TONE_EVENT_TYPE = "audition.emotion"
 BROADCAST_EVENT_TYPE = "workspace.broadcast"
@@ -88,6 +90,7 @@ def accessed_members(records: Iterable[Mapping[str, Any]]) -> set[tuple[str, str
         # members always carry the threshold; without it access is unknown.
         if members and threshold is None:
             raise ToneAnalysisError("an accessed broadcast with members has no access_threshold")
+        seen_entry_ids: set[str] = set()
         for member in members:
             if not isinstance(member, dict):
                 raise ToneAnalysisError("broadcast member must be a dict")
@@ -100,6 +103,15 @@ def accessed_members(records: Iterable[Mapping[str, Any]]) -> set[tuple[str, str
                 raise ToneAnalysisError("broadcast member source must be a non-empty string")
             if not isinstance(type_, str) or not type_:
                 raise ToneAnalysisError("broadcast member type must be a non-empty string")
+
+            # The cycle keys salience_scores by entry id alone, so a broadcast
+            # with duplicate entry ids would have ambiguous scores. Remove this
+            # check once scores are keyed by stream and id.
+            if entry_id in seen_entry_ids:
+                raise ToneAnalysisError(
+                    f"a broadcast has two members with entry_id {entry_id!r}"
+                )
+            seen_entry_ids.add(entry_id)
 
             score = salience_scores.get(entry_id, member.get("salience"))
             if (
@@ -161,14 +173,14 @@ def tone_events(
         if not isinstance(category, str):
             raise ToneAnalysisError("tone event category must be a string")
 
-        error = record.get("normalised_error")
+        error = record.get("tone_error_ratio")
         if (
             not isinstance(error, (int, float))
             or isinstance(error, bool)
             or not math.isfinite(error)
             or error < 0
         ):
-            raise ToneAnalysisError("tone event normalised_error must be a finite non-negative number")
+            raise ToneAnalysisError("tone event tone_error_ratio must be a finite non-negative number")
 
         events.append(
             ToneEvent(
@@ -212,6 +224,50 @@ def run_statistic(events: Sequence[ToneEvent]) -> float | None:
     return emotional_frac - neutral_frac
 
 
+def bin_index(error_ratio: float, edges: Sequence[float]) -> int:
+    """Return the tone-error-ratio bin index.
+
+    A value equal to an interior edge falls in the bin above it, matching
+    ``bisect.bisect_right``.
+    """
+    return bisect.bisect_right(edges, error_ratio)
+
+
+def adjusted_statistic(events: Sequence[ToneEvent], edges: Sequence[float]) -> float | None:
+    """Adjusted difference of emotional and neutral accessed fractions.
+
+    Group ``events`` by ``bin_index`` over ``edges``. For each bin that holds
+    both emotional and neutral tone events, compute ``run_statistic`` on the
+    events in that bin. The adjusted statistic is the plain mean of the defined
+    bin statistics; it is ``None`` when no bin has both kinds of event.
+
+    This follows Cochran (1968): stratify by the nuisance variable and average
+    the within-stratum contrasts to remove the confounding (paper A.8).
+    """
+    by_bin: dict[int, list[ToneEvent]] = {}
+    for event in events:
+        by_bin.setdefault(bin_index(event.error_ratio, edges), []).append(event)
+
+    bin_stats = [
+        run_statistic(by_bin[b]) for b in sorted(by_bin) if run_statistic(by_bin[b]) is not None
+    ]
+    if not bin_stats:
+        return None
+    return sum(bin_stats) / len(bin_stats)
+
+
+def tone_runs_still_needed(differences: Sequence[float | None], n_exact: int = N_EXACT) -> int:
+    """Return how many additional tone runs are needed.
+
+    The tone variant is planned with the arms' ``n_run`` and runs are added
+    until at least ``n_exact`` runs give a defined difference (paper A.8).
+    """
+    if n_exact < 1:
+        raise ToneAnalysisError("n_exact must be at least 1")
+    defined = sum(1 for d in differences if d is not None)
+    return max(0, n_exact - defined)
+
+
 def tone_verdict(statistics: Sequence[float | None], min_effect: float) -> SignTestResult:
     """Sign-test verdict for the tone run-level statistics."""
     return sign_test_verdict(statistics, min_effect)
@@ -226,7 +282,10 @@ __all__ = [
     "ToneEvent",
     "accessed_fractions",
     "accessed_members",
+    "adjusted_statistic",
+    "bin_index",
     "run_statistic",
     "tone_events",
+    "tone_runs_still_needed",
     "tone_verdict",
 ]

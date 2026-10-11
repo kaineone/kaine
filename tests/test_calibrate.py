@@ -18,6 +18,7 @@ from kaine.experiment.calibrate import (
     CONTROLS,
     PROCESSORS,
     TONE,
+    _flatten_records,
     calibrate,
     headline,
     information_gain,
@@ -39,6 +40,7 @@ from kaine.experiment.principal_component import (
     write_principal_component,
 )
 from kaine.experiment.run_records import load_records_for_runs
+from kaine.experiment.tone_analysis import adjusted_statistic, tone_events
 
 E_LADDER = [0.0, 0.001, 0.004, 0.01, 0.02, 0.03, 0.04]
 N_REPORTS = 200
@@ -289,7 +291,7 @@ def _build_evaluation_tree(
                         "category": category,
                         "classified": True,
                         "tone_rule": tone_rule,
-                        "normalised_error": 0.5,
+                        "tone_error_ratio": 0.1 * (k % 20),
                     },
                 )
                 _append_record(
@@ -338,6 +340,7 @@ def test_calibrate_completes_except_always_blocked(tmp_path: Path) -> None:
         "min_effect_threshold_contrast",
         "tone_bins",
         "min_effect_tone",
+        "min_effect_tone_adjusted",
     }
     assert set(record["blocked"].keys()) == always_blocked
 
@@ -661,7 +664,29 @@ def test_calibrate_sets_the_tone_minimum_effect(tmp_path: Path) -> None:
         0.5 * expected_sd
     )
     assert "min_effect_tone" not in record["blocked"]
-    assert "tone_bins" in record["blocked"]
+    assert "tone_bins" not in record["blocked"]
+    assert "min_effect_tone_adjusted" not in record["blocked"]
+
+    expected_bins = calibration_rules.quintile_edges(
+        [0.1 * (k % 20) for k in range(40)] * 4
+    )
+    assert record["values"]["tone_bins"] == pytest.approx(expected_bins)
+
+    counted_pilots = [
+        pilot for pilot in record["inputs"]["pilots"] if pilot.get("counted")
+    ]
+    adjusted = []
+    for pilot in counted_pilots:
+        run_id = pilot["runs"][TONE]["run_id"]
+        by_stream = load_records_for_runs([run_id], root=root)
+        tone_records = _flatten_records(by_stream[run_id])
+        adjusted.append(adjusted_statistic(tone_events(tone_records), record["values"]["tone_bins"]))
+
+    assert record["values"]["tone_adjusted_statistics"] == pytest.approx(adjusted)
+    expected_adjusted_sd = statistics.stdev(adjusted)
+    assert record["values"]["min_effect_tone_adjusted"] == pytest.approx(
+        0.5 * expected_adjusted_sd
+    )
     for pilot in record["inputs"]["pilots"]:
         assert "tone" in pilot["runs"]
 
@@ -672,6 +697,8 @@ def test_calibrate_without_tone_blocks_min_effect_tone(tmp_path: Path) -> None:
     assert record["blocked"]["min_effect_tone"].startswith(
         "the plan names no tone-variant pilot runs"
     )
+    assert "tone_bins" in record["blocked"]
+    assert "min_effect_tone_adjusted" in record["blocked"]
 
 
 def test_calibrate_mixed_tone_pilots_raises(tmp_path: Path) -> None:
@@ -699,4 +726,27 @@ def test_calibrate_wrong_tone_study_raises(tmp_path: Path) -> None:
         wrong_study_run_arm=("tone_0", "tone"),
     )
     with pytest.raises(CalibrationError, match="workspace_mediation_pilot_tone"):
+        calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
+
+
+def test_arm_pilot_with_the_variant_tone_rule_raises(tmp_path: Path) -> None:
+    plan, root = _build_evaluation_tree(
+        tmp_path,
+        n_pilots=5,
+        with_tone=True,
+    )
+    _append_record(
+        _record_path(root, "competitive_0"),
+        {
+            "run_id": "competitive_0",
+            "event_type": "audition.emotion",
+            "source": "audition",
+            "entry_id": "99-0",
+            "category": "happy",
+            "classified": True,
+            "tone_rule": "error_ratio",
+            "tone_error_ratio": 0.5,
+        },
+    )
+    with pytest.raises(CalibrationError, match="error_ratio"):
         calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)

@@ -9,9 +9,13 @@ import pytest
 
 from kaine.experiment.tone_analysis import (
     ToneAnalysisError,
+    ToneEvent,
     accessed_fractions,
+    adjusted_statistic,
+    bin_index,
     run_statistic,
     tone_events,
+    tone_runs_still_needed,
     tone_verdict,
 )
 from kaine.experiment.verdict import Outcome
@@ -38,7 +42,7 @@ def _run(n_emotional, accessed_emotional, n_neutral, accessed_neutral):
                 "category": "happy" if emotional else "neutral",
                 "classified": True,
                 "tone_rule": "error_ratio",
-                "normalised_error": 0.5 + 0.01 * i,
+                "tone_error_ratio": 0.5 + 0.01 * i,
             }
         )
         records.append(
@@ -154,3 +158,65 @@ def test_broadcast_without_threshold_raises():
     del records[1]["access_threshold"]
     with pytest.raises(ToneAnalysisError):
         tone_events(records)
+
+
+def test_duplicate_entry_ids_in_one_broadcast_raise():
+    records = _run(1, 1, 0, 0)
+    records[1]["entries"].append(
+        {
+            "entry_id": "0-0",
+            "source": "topos",
+            "type": "topos.report",
+            "salience": 0.5,
+        }
+    )
+    with pytest.raises(ToneAnalysisError):
+        tone_events(records)
+
+
+def test_bin_index_respects_right_edges():
+    edges = [1.0, 2.0, 3.0, 4.0]
+    assert bin_index(0.5, edges) == 0
+    assert bin_index(1.0, edges) == 1
+    assert bin_index(4.5, edges) == 4
+
+
+def test_adjusted_statistic_averages_within_bins():
+    edges = [1.0, 2.0, 3.0, 4.0]
+
+    def make(error, emotional, accessed):
+        return ToneEvent(
+            entry_id=f"{error}-{emotional}-{accessed}",
+            emotional=emotional,
+            error_ratio=error,
+            accessed=accessed,
+        )
+
+    # Bin 0: emotional accessed (1), emotional not accessed (1), neutral not
+    # accessed (2). Emotional fraction 0.5, neutral fraction 0.0, difference 0.5.
+    bin0 = [
+        make(0.5, True, True),
+        make(0.5, True, False),
+        make(0.5, False, False),
+        make(0.5, False, False),
+    ]
+    # Bin 2: emotional accessed (1), neutral accessed (1). Both fractions 1.0.
+    bin2 = [make(2.5, True, True), make(2.5, False, True)]
+    # Bin 4: only neutral events, so no within-bin difference.
+    bin4 = [make(4.5, False, True), make(4.5, False, False)]
+    events = bin0 + bin2 + bin4
+    assert adjusted_statistic(events, edges) == pytest.approx(0.25)
+
+
+def test_adjusted_statistic_none_when_every_bin_has_one_class():
+    edges = [1.0, 2.0, 3.0, 4.0]
+    events = [
+        ToneEvent(entry_id="e1", emotional=True, error_ratio=0.5, accessed=True),
+        ToneEvent(entry_id="n1", emotional=False, error_ratio=2.5, accessed=True),
+    ]
+    assert adjusted_statistic(events, edges) is None
+
+
+def test_tone_runs_still_needed_counts_defined_differences():
+    assert tone_runs_still_needed([0.1] * 100 + [None] * 5) == 2
+    assert tone_runs_still_needed([0.1] * 102) == 0

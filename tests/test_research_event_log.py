@@ -1503,7 +1503,7 @@ def test_audition_emotion_record_carries_entry_id(tmp_path):
             "confidence": 0.9,
             "scores": {"happy": 0.9},
             "alert": True,
-            "normalised_error": 0.3,
+            "tone_error_ratio": 0.3,
             "tone_rule": "error_ratio",
             "classified": True,
             "latency_ms": 12.0,
@@ -1512,7 +1512,7 @@ def test_audition_emotion_record_carries_entry_id(tmp_path):
     record = observer._build_record(event, "5-0")
     assert record is not None
     assert record["entry_id"] == "5-0"
-    assert record["normalised_error"] == 0.3
+    assert record["tone_error_ratio"] == 0.3
     assert record["tone_rule"] == "error_ratio"
     assert record["classified"] is True
     assert record["alert"] is True
@@ -1546,5 +1546,5 @@ def test_workspace_metadata_record_copies_entry_id():
     assert "secret" not in str(record)
 
 
-def test_audition_emotion_normalised_error_bound():
-    assert _bound_for("audition.emotion", "normalised_error") == NONNEG
+def test_audition_emotion_tone_error_ratio_bound():
+    assert _bound_for("audition.emotion", "tone_error_ratio") == NONNEG

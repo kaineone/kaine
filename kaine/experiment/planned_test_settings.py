@@ -130,6 +130,7 @@ class PlannedTestSettings:
     min_reports: int
     snr: Mapping[str, float]
     min_effect_tone: float
+    min_effect_tone_adjusted: float
     tone_bins: tuple[float, ...]
     principal_components: Mapping[str, PcRef]
     excluded_seeds: frozenset[int]
@@ -454,6 +455,20 @@ def load_settings_record(path: str | Path) -> PlannedTestSettings:
         )
     min_effect_tone = float(raw_min_effect_tone)
 
+    # min_effect_tone_adjusted
+    raw_min_effect_tone_adjusted = values.get("min_effect_tone_adjusted")
+    if (
+        isinstance(raw_min_effect_tone_adjusted, bool)
+        or not isinstance(raw_min_effect_tone_adjusted, (int, float))
+        or not math.isfinite(raw_min_effect_tone_adjusted)
+        or raw_min_effect_tone_adjusted <= 0
+    ):
+        raise PlannedTestSettingsError(
+            f"settings record {str(path)!r} value 'min_effect_tone_adjusted' "
+            "must be a positive finite number"
+        )
+    min_effect_tone_adjusted = float(raw_min_effect_tone_adjusted)
+
     # tone_bins
     raw_tone_bins = values.get("tone_bins")
     if (
@@ -640,6 +655,7 @@ def load_settings_record(path: str | Path) -> PlannedTestSettings:
         min_reports=min_reports,
         snr=snr,
         min_effect_tone=min_effect_tone,
+        min_effect_tone_adjusted=min_effect_tone_adjusted,
         tone_bins=tuple(tone_bins),
         principal_components=principal_components,
         excluded_seeds=frozenset(seeds),

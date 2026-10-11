@@ -831,6 +831,7 @@ class Audition(BaseModule):
             await self._publish_emotion_error(
                 source_label=source_label,
                 exc=emo_result_or_exc,
+                error_ratio=tone_ratio,
             )
         else:
             emo_result = emo_result_or_exc
@@ -987,7 +988,7 @@ class Audition(BaseModule):
             "source_label": source_label,
             "latency_ms": result.latency_ms,
             "prediction_error": prediction_error if error_defined else None,
-            "normalised_error": error_ratio,
+            "tone_error_ratio": error_ratio,
             "tone_rule": self._tone_rule,
             "classified": not degraded,
         }
@@ -1003,22 +1004,39 @@ class Audition(BaseModule):
             salience=salience,
         )
 
-    async def _publish_emotion_error(self, *, source_label: str, exc: BaseException) -> None:
+    async def _publish_emotion_error(
+        self,
+        *,
+        source_label: str,
+        exc: BaseException,
+        error_ratio: float = 0.0,
+    ) -> None:
+        # The default categorical rule keeps the existing alert behaviour. The
+        # tone variant of A.8 grades every tone event by the error ratio alone.
+        graded = self._tone_rule == "error_ratio"
+        payload: dict = {
+            "category": "neutral",
+            "alert": not graded,
+            "confidence": 0.0,
+            "scores": {c: (1.0 if c == "neutral" else 0.0) for c in CATEGORIES},
+            "model": self._emotion_classifier.model_id,
+            "source_label": source_label,
+            "latency_ms": 0.0,
+            "error": f"{type(exc).__name__}: {exc}",
+            "tone_rule": self._tone_rule,
+            "classified": False,
+        }
+        if graded:
+            payload["tone_error_ratio"] = error_ratio
+            salience = graded_intensity(
+                self._baseline_salience, self._alert_salience, error_ratio
+            )
+        else:
+            salience = self._alert_salience
         await self.publish(
             "audition.emotion",
-            {
-                "category": "neutral",
-                "alert": True,
-                "confidence": 0.0,
-                "scores": {c: (1.0 if c == "neutral" else 0.0) for c in CATEGORIES},
-                "model": self._emotion_classifier.model_id,
-                "source_label": source_label,
-                "latency_ms": 0.0,
-                "error": f"{type(exc).__name__}: {exc}",
-                "tone_rule": self._tone_rule,
-                "classified": False,
-            },
-            salience=self._alert_salience,
+            payload,
+            salience=salience,
         )
 
     def serialize(self) -> dict[str, Any]:

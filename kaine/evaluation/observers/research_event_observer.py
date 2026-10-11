@@ -197,7 +197,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     # The tone error ratio, the tone rule and whether the tone was classified,
     # for the tone analysis (paper A.8).
     "audition.emotion": frozenset(
-        {"category", "confidence", "scores", "alert", "normalised_error", "tone_rule", "classified"}
+        {"category", "confidence", "scores", "alert", "tone_error_ratio", "tone_rule", "classified"}
     ),
     "audition.prosody": frozenset({"f0_mean_hz", "f0_std_hz"}),
     # Acoustic report (base-thesis hearing path): numeric fields only; the playlist item title is not logged.

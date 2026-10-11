@@ -95,7 +95,7 @@ SCHEMA: dict[str, dict[str, tuple[float, float]]] = {
     # thymos.drive carries {drive, value}; each drive value is in [0, 1].
     "thymos.drive": {"value": UNIT},
     # --- Perception (derived) ---
-    "audition.emotion": {"confidence": UNIT, "normalised_error": NONNEG},
+    "audition.emotion": {"confidence": UNIT, "tone_error_ratio": NONNEG},
     # --- Self / social ---
     # empatheia familiarity() is documented in [0, 1]; social error magnitude
     # is non-negative.

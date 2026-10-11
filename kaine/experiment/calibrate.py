@@ -12,11 +12,11 @@ settings record. It applies the rules from the paper's Appendix A.8,
 * pilot classification (not-exercised replacement and r_NE)
 * learning period via MSER-5 over ensemble-averaged processor gains
 * minimum effects from the on-versus-control contrasts
-* the tone analysis's minimum effect from the tone-variant pilot runs
+* the tone bins and both tone minimum effects from the tone-variant pilot runs
 * positive-control SNR and report count from the competitive ladder; s2_j
   is the larger of the two components' variances at the two ladder rungs
   that bracket SNR_j, which approximates the variance at SNR_j itself
-* values still blocked: the threshold band and its dependants, and the tone bins
+* values still blocked: the threshold band and its dependants
 
 A rule that cannot be applied fails closed: its value is null, ``blocked``
 gives the reason, ``complete`` is ``False``, and the boot check refuses a live
@@ -58,6 +58,7 @@ from kaine.experiment.calibration_rules import (
     minimum_effect,
     mser_truncation,
     planned_run_count,
+    quintile_edges,
     sample_sd,
     sign_test_critical_count,
     sign_test_power,
@@ -76,7 +77,13 @@ from kaine.experiment.principal_component import (
 )
 from kaine.experiment.run_context import compute_git_sha
 from kaine.experiment.run_records import DEFAULT_ROOT, RunRecords, load_records_for_runs
-from kaine.experiment.tone_analysis import ToneAnalysisError, run_statistic, tone_events
+from kaine.experiment.tone_analysis import (
+    ToneAnalysisError,
+    ToneEvent,
+    adjusted_statistic,
+    run_statistic,
+    tone_events,
+)
 from kaine.storage import resolve
 
 TOOL_NAME = "kaine.experiment.calibrate"
@@ -590,11 +597,14 @@ def calibrate(
             )
 
     pilot_arm_for_run: dict[str, str] = {}
+    pilot_key_for_run: dict[str, str] = {}
     for pilot in pilots:
         for key, run_id in pilot.items():
             pilot_arm_for_run[run_id] = "competitive" if key == TONE else key
+            pilot_key_for_run[run_id] = key
 
     for run_id, arm in pilot_arm_for_run.items():
+        key = pilot_key_for_run[run_id]
         for record in _flatten_records(records_by_run[run_id]):
             if record.get("event_type") == "workspace.broadcast":
                 if record.get("arm") != arm:
@@ -602,6 +612,17 @@ def calibrate(
                         f"run {run_id!r} has a broadcast with arm "
                         f"{record.get('arm')!r}, expected {arm!r}"
                     )
+            # The three arms run the categorical tone rule (paper A.2); only the
+            # tone variant runs A.8's rule.
+            if (
+                record.get("event_type") == "audition.emotion"
+                and key != TONE
+                and record.get("tone_rule") == "error_ratio"
+            ):
+                raise CalibrationError(
+                    f"run {run_id!r} is a {key} pilot but its tone events "
+                    "carry tone_rule 'error_ratio', the tone variant's rule"
+                )
 
     inputs: dict[str, Any] = {
         "preliminary": {
@@ -890,10 +911,12 @@ def calibrate(
         tone_error = "depends on pilots"
     else:
         stats: list[float | None] = []
+        events_by_pilot: list[list[ToneEvent]] = []
         for index in counted_indices:
             run_id = pilots[index][TONE]
             try:
                 events = tone_events(_flatten_records(records_by_run[run_id]))
+                events_by_pilot.append(events)
                 stats.append(run_statistic(events))
             except ToneAnalysisError as exc:
                 tone_error = f"run {run_id!r}: {exc}"
@@ -908,6 +931,36 @@ def calibrate(
                     f"the tone statistic is defined in {len(defined)} "
                     f"counted pilots: {exc}"
                 )
+
+    tone_bins: list[float] | None = None
+    tone_bins_error: str | None = None
+    if tone_error is not None:
+        tone_bins_error = tone_error
+    else:
+        try:
+            tone_bins = quintile_edges(
+                [e.error_ratio for events in events_by_pilot for e in events]
+            )
+        except CalibrationError as exc:
+            tone_bins_error = f"tone bins: {exc}"
+
+    tone_adjusted_statistics: list[float | None] | None = None
+    min_effect_tone_adjusted: float | None = None
+    tone_adjusted_error: str | None = None
+    if tone_bins_error is not None:
+        tone_adjusted_error = tone_bins_error
+    else:
+        tone_adjusted_statistics = [
+            adjusted_statistic(events, tone_bins) for events in events_by_pilot
+        ]
+        defined_adjusted = [s for s in tone_adjusted_statistics if s is not None]
+        try:
+            min_effect_tone_adjusted = minimum_effect(sample_sd(defined_adjusted))
+        except CalibrationError as exc:
+            tone_adjusted_error = (
+                f"the adjusted tone statistic is defined in {len(defined_adjusted)} "
+                f"counted pilots: {exc}"
+            )
 
     # ------------------------------------------------------------------
     # f. Positive control and report count
@@ -1054,14 +1107,13 @@ def calibrate(
     blocked["b_band"] = blocked["theta_band"]
     blocked["age_bins"] = (
         "depends on theta_band (the bins are quintiles over the reports that "
-        "follow near-threshold broadcasts)"
+        "follow near-threshold broadcasts in the pilot runs of the on arm)"
     )
     blocked["min_effect_threshold_contrast"] = "depends on theta_band and b_band"
-    blocked["tone_bins"] = (
-        "open question for the operator: paper A.8 takes the quintiles over "
-        "the tone events of the pilot runs and does not say whether that "
-        "means every pilot run or only the tone-variant pilot runs"
-    )
+    if tone_bins_error is not None:
+        blocked["tone_bins"] = tone_bins_error
+    if tone_adjusted_error is not None:
+        blocked["min_effect_tone_adjusted"] = tone_adjusted_error
     if tone_error is not None:
         blocked["min_effect_tone"] = tone_error
 
@@ -1096,9 +1148,11 @@ def calibrate(
         "b_band": None,
         "age_bins": None,
         "min_effect_threshold_contrast": None,
-        "tone_bins": None,
+        "tone_bins": tone_bins,
         "tone_statistics": tone_statistics,
         "min_effect_tone": min_effect_tone,
+        "tone_adjusted_statistics": tone_adjusted_statistics,
+        "min_effect_tone_adjusted": min_effect_tone_adjusted,
     }
 
     created_at = now or datetime.now(timezone.utc).isoformat()
@@ -1177,7 +1231,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"snr={values.get('snr')}")
     print(f"min_reports={values.get('min_reports')}")
     print(f"n_run_planned={values.get('n_run_planned')}")
+    print(f"tone_bins={values.get('tone_bins')}")
     print(f"min_effect_tone={values.get('min_effect_tone')}")
+    print(f"min_effect_tone_adjusted={values.get('min_effect_tone_adjusted')}")
     for key, reason in record.get("blocked", {}).items():
         print(f"blocked {key}: {reason}")
 

@@ -223,6 +223,7 @@ def _write_settings_record(tmp_path, complete=True):
             "n_exact": rules.N_EXACT,
             "snr": {"topos": 4.0, "audition": 4.0, "soma": 4.0},
             "min_effect_tone": 0.05,
+            "min_effect_tone_adjusted": 0.04,
             "tone_bins": [0.5, 0.8, 1.1, 1.6],
             "principal_components": pc_refs,
         },
