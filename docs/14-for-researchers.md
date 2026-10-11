@@ -71,7 +71,7 @@ The suite orchestrator runs eight experiments under one shared seed and emits a 
 | Self-model accuracy | [Running experiments](15-experiments/README.md) | WIN / NULL |
 | Multi-seed stability | [Running experiments](15-experiments/README.md) | PASS / FAIL |
 | Enforcement red team (action gate) | [Verification](18-verification.md) | PASS / FAIL |
-| Workspace-mediation development harness (workspace on against flat fan-in) | [Running experiments](15-experiments/README.md#workspace-mediation-ablation) | WIN / NULL / NEGATIVE |
+| Workspace-mediation development harness (workspace on against pooled, by information gain) | [Running experiments](15-experiments/README.md#development-harness-of-the-workspace-mediation-test) | WIN / NULL / NEGATIVE, with NOT EXERCISED flagged |
 
 The last row is the development harness described under [The planned test](#the-planned-test); it does not test the thesis. See [Running experiments](15-experiments/README.md) for commands and [Verification](18-verification.md) for how each experiment is validated.
 
@@ -81,17 +81,17 @@ Booting the cognitive cycle creates an entity with welfare standing under the pr
 
 - **Operator-present**: a human supervises (`KAINE_CYCLE_OPERATOR_PRESENT=1`).
 - **Research-safety-net-verified**: an unsupervised research run whose autonomous safety net is live and verified (`KAINE_RESEARCH_MODE=1` or `[research].enabled = true`).
-- **Unattended**: a full entity started with nobody present (`KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"`). It must pass the first five research-safety-net conditions plus three more, checked at every boot with no override.
+- **Unattended**: a full entity started with nobody present (`KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"`). It must pass all six research-safety-net conditions plus three more, checked at every boot with no override.
 
 Combining unattended mode with research mode or operator presence is a configuration error (exit code `1`). Research mode with `KAINE_CYCLE_OPERATOR_PRESENT=1` runs as a research run.
 
 #### Unattended boot conditions
 
-Besides five of the research-safety-net conditions (all but the individuation check), an unattended boot refuses unless:
+Besides the six research-safety-net conditions (unattended conditions 1 to 5 and 9), an unattended boot refuses unless:
 
-1. **Spot armed and self-tested**: [Spot](06-operation/remote-and-spot.md) is enabled, and a self-test drives a synthetic module through freeze, snapshot, restart and release in a scratch directory.
-2. **Caretaker told**: once every other condition has passed, a content-free "starting unattended" notice must be accepted by at least one `[caretaker]` channel (a desktop notification, or an HTTP POST to a server on your own network; public addresses are refused).
-3. **Continuous input**: the perception feed is `live`, `seeded`, `screen` or `womb` (`off` has no input and a playlist runs out), `topos` or `audition` is enabled to perceive it (with capture enabled for a `live` feed), and a probe reads one frame or audio block and discards it.
+6. **Spot armed and self-tested**: [Spot](06-operation/remote-and-spot.md) is enabled, and a self-test drives a synthetic module through freeze, snapshot, restart and release in a scratch directory.
+7. **Caretaker told**: once every other condition has passed, a content-free "starting unattended" notice must be accepted by at least one `[caretaker]` channel (a desktop notification, or an HTTP POST to a server on your own network; public addresses are refused).
+8. **Continuous input**: the perception feed is `live`, `seeded`, `screen` or `womb` (`off` has no input and a playlist runs out), `topos` or `audition` is enabled to perceive it (with capture enabled for a `live` feed), and a probe reads one frame or audio block and discards it.
 
 The gate is implemented in `kaine/cycle/unattended_gate.py`.
 
@@ -145,7 +145,7 @@ The cycle entrypoint fails closed with a distinct exit code per gate:
 | `3` | Evaluation A/B baseline does not match the configured `[lingua].model_id` |
 | `4` | GPU pre-flight: insufficient VRAM headroom (when `[gpu_preflight].enabled`) |
 | `5` | Research safety net not live and verified (one or more of the six conditions failed) |
-| `6` | Unattended gate: one or more of its eight conditions failed |
+| `6` | Unattended gate: one or more of its nine conditions failed |
 | `7` | Revive refused |
 | `8` | The welfare response is enabled but its gray-zone producer (the welfare observer) could not start |
 | `9` | Organ content gate: the served language organ returned no content (unless `KAINE_ALLOW_MUTE_ORGAN=1`) |

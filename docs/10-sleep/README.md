@@ -67,7 +67,7 @@ Phase 1 calls `set_frequency(0.5)` on every active module, a no-op unless the os
 
 ### Phase 2: deep consolidation
 
-Phase 2 needs Mnemos and otherwise returns at once with `skipped`. It scales every memory activation vector by `downscale_factor` (0.9), following the synaptic homeostasis hypothesis (Tononi and Cirelli 2014). It then runs `mnemos.replay_now()` while perception is already suspended for the sleep. Metadata: `vectors_downscaled`, `downscale_factor`, `replay_events` and `replay_window_s`.
+Phase 2 needs Mnemos and otherwise returns at once with `skipped`. It scales every memory activation vector by `downscale_factor` (0.9), following the synaptic homeostasis hypothesis (Tononi and Cirelli 2014). It then runs `mnemos.replay_now()` while perception is already suspended for the sleep, and the replay draws on the traces phase 1 moved into episodic memory. Metadata: `vectors_downscaled`, `downscale_factor`, `replay_events` and `replay_window_s`.
 
 ### Phase 3: associative replay
 

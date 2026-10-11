@@ -65,13 +65,6 @@ class _SupportsAffectiveReset(Protocol):
     async def affective_reset(self) -> None: ...
 
 
-class _SupportsStep(Protocol):
-    @property
-    def running(self) -> bool: ...
-
-    async def step(self, n: int) -> list[str]: ...
-
-
 class _SupportsTimeReset(Protocol):
     """Anything Chronos-shaped that exposes a reset/recalibrate entry."""
 
@@ -92,7 +85,8 @@ async def light_consolidation(
 
     Calls ``consolidate_now()``, which moves every short-term entry into
     episodic memory and drops nothing: no trace is deleted in this phase, and
-    ``entries_consolidated`` counts the entries moved. Strong traces are
+    ``entries_consolidated`` counts the entries moved. Mnemos keeps the moved
+    traces for this sleep, so phase 2's replay draws on them. Strong traces are
     tagged for deep consolidation (no-op at this stage — tagging is implicit
     in the existing salience scoring).
 
@@ -169,8 +163,8 @@ async def deep_consolidation(
     A replay window is then opened.  External perception is suspended for
     the duration using the provided callables (reusing the freeze/locus
     machinery from the Hypnos module layer).  The replay window drives
-    ``mnemos.replay_now()`` (``ReplayEngine`` path, real on this branch
-    since ``mnemos-replay`` has merged).  Perception is always restored after
+    ``mnemos.replay_now()``, which selects from the traces phase 1 consolidated
+    plus any still in the short-term buffer.  Perception is always restored after
     the window regardless of replay outcome.
 
     Args:
@@ -508,44 +502,6 @@ async def consolidate_memory(mnemos: Optional[_SupportsMnemos]) -> PhaseResult:
         log.exception("memory_consolidation phase failed")
         return PhaseResult(
             phase="memory_consolidation",
-            success=False,
-            elapsed_ms=_now_ms() - start,
-            error=f"{type(exc).__name__}: {exc}",
-        )
-
-
-async def revise_beliefs(
-    nous_process: Optional[_SupportsStep],
-    *,
-    step_burst: int,
-) -> PhaseResult:
-    """Legacy alias for the belief-revision step.
-
-    Retained for backwards-compat with existing tests (test_hypnos_phases.py).
-    The paper's five-phase ordering no longer includes a separate
-    belief-revision phase; Nous active-inference now runs continuously and
-    is not stepped by Hypnos.
-    """
-    start = _now_ms()
-    if nous_process is None or not getattr(nous_process, "running", False):
-        return PhaseResult(
-            phase="belief_revision",
-            success=True,
-            elapsed_ms=_now_ms() - start,
-            metadata={"skipped": "no Nous available"},
-        )
-    try:
-        lines = await nous_process.step(int(step_burst))
-        return PhaseResult(
-            phase="belief_revision",
-            success=True,
-            elapsed_ms=_now_ms() - start,
-            metadata={"step_burst": int(step_burst), "lines_emitted": len(lines)},
-        )
-    except Exception as exc:
-        log.exception("belief_revision phase failed")
-        return PhaseResult(
-            phase="belief_revision",
             success=False,
             elapsed_ms=_now_ms() - start,
             error=f"{type(exc).__name__}: {exc}",

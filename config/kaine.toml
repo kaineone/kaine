@@ -671,7 +671,6 @@ valence_time_constant_s = 30.0
 valence_progress_gain = 2.0
 baseline_salience = 0.1
 alert_salience = 0.7
-social_drive_time_scale_s = 600.0
 soma_stream = "soma.out"
 chronos_stream = "chronos.out"
 mnemos_stream = "mnemos.out"
@@ -1056,7 +1055,6 @@ decay_s = 10.0
 interval_seconds = 3600.0      # one sleep per hour by default; also the max-interval safety net
 max_deferral_seconds = 600.0   # 10 minutes of deferral allowed
 per_defer_seconds = 60.0
-nous_step_burst = 200
 baseline_salience = 0.5
 alert_salience = 0.8
 # Minimum entity-time seconds between a sleep's end and a Nous-requested rest; bounds rest requests from an exploring Nous.

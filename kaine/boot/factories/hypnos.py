@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
 from kaine.boot.common import _effective_hot_swap_mode
-from kaine.boot.errors import VoiceAlignmentConfigError, _require_keys
+from kaine.boot.errors import VoiceAlignmentConfigError, _require_keys, _warn_retired_keys
 from kaine.bus.client import AsyncBus
 from kaine.defaults import lingua_section_api_key, lingua_section_chat_url
 from kaine.entity_clock import EntityClock
@@ -167,7 +167,6 @@ def make_hypnos(
     section: dict[str, Any],
     *,
     mnemos: Optional[BaseModule] = None,
-    nous_process: Optional[Any] = None,
     thymos: Optional[BaseModule] = None,
     phantasia: Optional[BaseModule] = None,
     kaine_config: Optional[dict[str, Any]] = None,
@@ -180,14 +179,16 @@ def make_hypnos(
         "interval_seconds",
         "max_deferral_seconds",
         "per_defer_seconds",
-        "nous_step_burst",
         "baseline_salience",
         "alert_salience",
         "requested_rest_min_interval_s",
         "voice_alignment",  # nested sub-table
         "consolidation",  # nested sub-table: fatigue_triggered, downscale_factor, replay_window_s
     }
-    _require_keys(section, allowed)
+    # Retired keys: accepted so old operator files boot, ignored with a warning.
+    retired = {"nous_step_burst"}
+    _require_keys(section, allowed | retired)
+    _warn_retired_keys(section, retired, "[hypnos]")
     voice_cfg_section = section.get("voice_alignment") or {}
     voice_config: Optional[VoiceAlignmentConfig] = voice_alignment_config_from_section(
         voice_cfg_section, kaine_config
@@ -206,7 +207,6 @@ def make_hypnos(
         "interval_seconds",
         "max_deferral_seconds",
         "per_defer_seconds",
-        "nous_step_burst",
         "baseline_salience",
         "alert_salience",
     ):
@@ -287,8 +287,6 @@ def make_hypnos(
             kwargs["organ_window_runner"] = runner
     if mnemos is not None:
         kwargs["mnemos"] = mnemos
-    if nous_process is not None:
-        kwargs["nous_process"] = nous_process
     if thymos is not None:
         kwargs["thymos"] = thymos
     if phantasia is not None:

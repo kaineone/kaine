@@ -146,11 +146,12 @@ The full `[thymos]` reference is in the [modules configuration page](../appendix
 | `intent_rate_weight` | float `(0, 1]` | `0.05` | Per-broadcast weight of the intent-rate average |
 | `valence_time_constant_s` | float `> 0` | `30.0` | Time constant of valence's relaxation toward its target |
 | `valence_progress_gain` | float `>= 0` | `2.0` | Gain on learning progress in the pleasantness check |
-| `social_drive_time_scale_s` | float `> 0` | `600.0` | Accepted and validated but unused |
 | `volition_stream` | string | `"volition.out"` | Stream Thymos reads intents from |
 | `soma_stream` | string | `"soma.out"` | Stream Thymos reads Soma reports from |
 | `chronos_stream` | string | `"chronos.out"` | Stream Thymos reads Chronos reports from |
 | `mnemos_stream` | string | `"mnemos.out"` | Stream Thymos reads Mnemos recalls from |
+
+The retired key `social_drive_time_scale_s` is accepted and ignored with a warning, so older local configs still boot.
 
 The perceptual arousal gain (0.15), its cap (4), the interoceptive step (0.05) and the drive hysteresis (0.9) are constants in `kaine/modules/thymos/module.py` and `drives.py`; no config key sets them.
 
@@ -173,7 +174,7 @@ Coupling sub-table `[thymos.coupling]`:
 | `coupling_ceiling` | float `>= 0` | `0.15` | Ceiling on the appraisal-influence weight |
 | `decay_s` | float `> 0` | `10.0` | Seconds over which a perceived-emotion signal decays to zero |
 
-A `coupling_max_rate_per_s` key is accepted and ignored, so older local configs still boot.
+The retired key `coupling_max_rate_per_s` is accepted and ignored with a warning, so older local configs still boot.
 
 ## Affect coupling
 
