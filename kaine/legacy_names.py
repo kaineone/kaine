@@ -184,6 +184,13 @@ DEVELOPMENTAL = {
         "new_prose": "developmental",
         "layer": "5d",
     },
+    "gestating": {
+        "old_class": "Gestating",
+        "new_class": "Developing",
+        "new_key": "developing",
+        "new_prose": "developing",
+        "layer": "5d",
+    },
     "womb": {
         "old_class": "Womb",
         "new_class": "StimulusSource",
@@ -1078,6 +1085,7 @@ STATE_PATHS = (
     {"old": "lifecycle/gestation_progress.json", "new": "lifecycle/development_progress.json", "scope": "persisted"},
     {"old": "lifecycle/gestation_viability.json", "new": "lifecycle/development_viability.json", "scope": "persisted"},
     {"old": "individuation/birth_adapter.gguf", "new": "individuation/maturation_adapter.gguf", "scope": "persisted"},
+    {"old": "individuation/birth_pending", "new": "individuation/maturation_pending", "scope": "persisted"},
 )
 
 COLLECTIONS = (
