@@ -47,17 +47,63 @@ def _font_rows() -> list[tuple[list[str], str, str]]:
 
         licence_match = re.search(r"`([^`]+)`", licence_cell)
         if not licence_match:
-            continue
+            raise AssertionError(
+                f"Row for font {font_paths[0]!r} is missing a licence path in its licence cell"
+            )
         licence_path = licence_match.group(1)
 
         copyright_match = re.search(r'"([^"]+)"', licence_cell)
         if not copyright_match:
-            continue
+            raise AssertionError(
+                f"Row for font {font_paths[0]!r} is missing a copyright line in its licence cell"
+            )
         copyright_line = copyright_match.group(1)
 
         rows.append((font_paths, licence_path, copyright_line))
 
     return rows
+
+
+def _check_full_licence_text(text: str, licence_path: str) -> str | None:
+    """Return an error message if the SIL OFL text is incomplete or out of order."""
+    markers = [
+        "SIL OPEN FONT LICENSE Version 1.1",
+        "PREAMBLE",
+        "DEFINITIONS",
+    ]
+    pos = 0
+    for marker in markers:
+        idx = text.find(marker, pos)
+        if idx == -1:
+            return f"Licence file missing or out-of-order {marker!r}: {licence_path}"
+        pos = idx + len(marker)
+
+    permission_match = re.search(
+        r"PERMISSION (?:&|AND) CONDITIONS", text[pos:]
+    )
+    if not permission_match:
+        return (
+            f"Licence file missing or out-of-order PERMISSION &/AND CONDITIONS heading: "
+            f"{licence_path}"
+        )
+    pos = pos + permission_match.end()
+
+    for cond in ("1)", "2)", "3)", "4)", "5)"):
+        idx = text.find(cond, pos)
+        if idx == -1:
+            return (
+                f"Licence file missing or out-of-order condition {cond!r} "
+                f"after PERMISSION heading: {licence_path}"
+            )
+        pos = idx + len(cond)
+
+    for marker in ("TERMINATION", "DISCLAIMER"):
+        idx = text.find(marker, pos)
+        if idx == -1:
+            return f"Licence file missing or out-of-order {marker} section: {licence_path}"
+        pos = idx + len(marker)
+
+    return None
 
 
 def test_every_font_file_is_credited():
@@ -66,7 +112,7 @@ def test_every_font_file_is_credited():
         credited.update(font_paths)
 
     on_disk = {
-        str(path.relative_to(ROOT))
+        path.relative_to(ROOT).as_posix()
         for path in FONTS_DIR.rglob("*")
         if path.is_file() and path.suffix in FONT_SUFFIXES
     }
@@ -108,11 +154,10 @@ def test_every_font_is_covered_by_its_licence_file():
                 f"Copyright mismatch in {licence_path}: "
                 f"{non_empty_lines[0]!r} != {expected_copyright!r}"
             )
-        if "SIL OPEN FONT LICENSE Version 1.1" not in text:
-            errors.append(f"Licence file missing full SIL header: {licence_path}")
-        for heading in ("TERMINATION", "DISCLAIMER"):
-            if heading not in text:
-                errors.append(f"Licence file missing {heading} section: {licence_path}")
+
+        error = _check_full_licence_text(text, licence_path)
+        if error:
+            errors.append(error)
 
     assert not errors, "\n".join(errors)
 
