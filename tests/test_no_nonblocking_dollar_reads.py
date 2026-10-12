@@ -20,12 +20,13 @@ import pytest
 
 from kaine.setup.wizard import MODULE_ORDER
 from tests import test_revive_each_module as revive
+from tests._module_packages import identifier_for_key
 from tests.test_revive_each_module import _plaintext_encryptor, _run_context  # noqa: F401
 
 _BUILDERS = {
-    name: getattr(revive, f"_build_{name}")
+    name: getattr(revive, f"_build_{identifier_for_key(name)}")
     for name in MODULE_ORDER
-    if hasattr(revive, f"_build_{name}")
+    if hasattr(revive, f"_build_{identifier_for_key(name)}")
 }
 
 
@@ -33,7 +34,11 @@ def test_every_configurable_module_has_a_builder():
     # The recorder module is the only configurable module without a revive builder; it reads
     # no stream with a cursor (grep: no read_entries in kaine/modules/echo).
     missing = sorted(set(MODULE_ORDER) - set(_BUILDERS) - {"echo"})
-    assert not missing, f"add a _build_<name> for {missing} to test_revive_each_module"
+    assert not missing, (
+        "add "
+        + ", ".join(f"_build_{identifier_for_key(name)}" for name in missing)
+        + f" for {missing} to test_revive_each_module"
+    )
 
 
 @pytest.fixture

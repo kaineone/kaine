@@ -216,7 +216,7 @@ def implied_extras(modules: dict[str, bool], shipped: dict[str, Any]) -> list[st
     """
     extras: list[str] = []
     audition_cfg = shipped.get("audition") or {}
-    topos_cfg = shipped.get("topos") or {}
+    vision_cfg = shipped.get("topos") or {}
     oscillator_cfg = shipped.get("oscillator") or {}
     hypnos_va = (shipped.get("hypnos") or {}).get("voice_alignment") or {}
     phantasia_cfg = shipped.get("phantasia") or {}
@@ -234,7 +234,7 @@ def implied_extras(modules: dict[str, bool], shipped: dict[str, Any]) -> list[st
         extras.append("reasoning")
     if modules.get("audition") and bool(audition_cfg.get("capture_enabled")):
         extras.append("audio")
-    if modules.get("topos") and bool(topos_cfg.get("capture_enabled")):
+    if modules.get("topos") and bool(vision_cfg.get("capture_enabled")):
         extras.append("vision")
     if bool(oscillator_cfg.get("enabled")):
         extras.append("oscillator")

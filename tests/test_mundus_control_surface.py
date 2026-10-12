@@ -20,6 +20,7 @@ import pytest
 
 from kaine.bus.config import BusConfig
 from kaine.bus.schema import validate_event
+from kaine.modules.interoception.forward import SubstrateForwardModel
 from kaine.modules.mundus import (
     MOTOR_CHANNELS,
     MOTOR_STAGES,
@@ -34,7 +35,6 @@ from kaine.modules.mundus import (
     clamp_channel,
 )
 from kaine.modules.mundus import control_surface as cs
-from kaine.modules.soma.forward import SubstrateForwardModel
 
 
 @pytest.fixture

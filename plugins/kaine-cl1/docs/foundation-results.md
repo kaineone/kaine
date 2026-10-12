@@ -63,9 +63,9 @@ module can depend on it. Pinned as a regression in
 ## Live integration against real KAINE
 
 The sequence module reference conversion is verified against the **actual** pinned `kaine`
-module (not a stand-in): stock `Chronos(bus, network=WetwareTimingModel(...))` over
+module (not a stand-in): stock `Sequence(bus, network=WetwareTimingModel(...))` over
 a `fakeredis` bus publishes the same `chronos.out` contract as a silicon network
-(`tests/test_chronos_integration.py`). The seam confirmed: `Chronos.__init__`
+(`tests/test_sequence_integration.py`). The seam confirmed: `Sequence.__init__`
 takes `network=` and builds its silicon CfC only when that is `None`, so the
 conversion is pure injection, with no upstream edit.
 
@@ -82,7 +82,7 @@ python -m pytest tests/ -q                # 29 passing (sim-only + live kaine)
 The integration tests `pytest.importorskip("kaine")`, so on a machine without the
 stack the suite still runs (sim-only) and skips them. The forward-prediction
 head (`temporal_prediction_error`) uses torch; its predictive behaviour is covered
-at the model level by `test_chronos_wetware.py`, and the live test covers the event
+at the model level by `test_sequence_wetware.py`, and the live test covers the event
 contract and the module running end-to-end on the substrate.
 
 ## Deferred (honestly)

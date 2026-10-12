@@ -17,8 +17,8 @@ import numpy as np
 import pytest
 import torch
 
-import kaine.modules.topos.module as topos_module
-from kaine.boot import make_soma
+import kaine.modules.vision.module as vision_module
+from kaine.boot import make_interoception
 from kaine.boot.registry import construct_module
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
@@ -34,6 +34,9 @@ from kaine.modules.audition import Audition, FakeEmotionClassifier, FakeSTTClien
 from kaine.modules.audition.acoustic import FakeAcousticEncoder
 from kaine.modules.base import BaseModule
 from kaine.modules.context import CONTEXT_DIM
+from kaine.modules.interoception.detector import AlertResult
+from kaine.modules.interoception.forward import SubstrateForwardModel
+from kaine.modules.interoception.module import Interoception
 from kaine.modules.positive_control import (
     LADDER_FIELDS,
     RESULT_FIELDS,
@@ -42,10 +45,7 @@ from kaine.modules.positive_control import (
     finish_positive_controls,
 )
 from kaine.modules.registry import ModuleRegistry
-from kaine.modules.soma.detector import AlertResult
-from kaine.modules.soma.forward import SubstrateForwardModel
-from kaine.modules.soma.module import Soma
-from kaine.modules.topos.forward import LatentForwardModel
+from kaine.modules.vision.forward import LatentForwardModel
 
 
 def _bus():
@@ -210,10 +210,10 @@ def test_shipped_config_leaves_the_control_off():
     assert "snr" not in pc
 
 
-def test_soma_factory_builds_the_control_only_when_enabled():
+def test_interoception_factory_builds_the_control_only_when_enabled():
     bus = _bus()
-    assert make_soma(bus, {})._positive_control is None
-    controlled = make_soma(
+    assert make_interoception(bus, {})._positive_control is None
+    controlled = make_interoception(
         bus,
         {"positive_control": {"enabled": True, "mode": "estimate_pc"}},
     )
@@ -221,9 +221,9 @@ def test_soma_factory_builds_the_control_only_when_enabled():
 
     assert isinstance(controlled._positive_control, PositiveControl)
     with pytest.raises(ValueError):
-        make_soma(bus, {"positive_control": {"enabled": True}})
+        make_interoception(bus, {"positive_control": {"enabled": True}})
     with pytest.raises(ValueError):
-        make_soma(bus, {"positive_control": {"enabled": True, "snr": 10.0}})
+        make_interoception(bus, {"positive_control": {"enabled": True, "snr": 10.0}})
 
 
 def test_construct_module_passes_the_section():
@@ -242,11 +242,11 @@ def test_construct_module_passes_the_section():
 
 
 @pytest.mark.asyncio
-async def test_topos_control_publishes_and_leaves_the_live_report_untouched() -> None:
+async def test_vision_control_publishes_and_leaves_the_live_report_untouched() -> None:
     uncontrolled_bus = _bus()
     controlled_bus = _bus()
 
-    uncontrolled = topos_module.Topos(
+    uncontrolled = vision_module.Vision(
         uncontrolled_bus,
         encoder=Varying(),
         forward_prediction=True,
@@ -259,7 +259,7 @@ async def test_topos_control_publishes_and_leaves_the_live_report_untouched() ->
         seed=4,
     )
 
-    controlled = topos_module.Topos(
+    controlled = vision_module.Vision(
         controlled_bus,
         encoder=Varying(),
         forward_prediction=True,
@@ -313,8 +313,8 @@ async def test_topos_control_publishes_and_leaves_the_live_report_untouched() ->
 
 
 @pytest.mark.asyncio
-async def test_soma_control_publishes_results(bus: AsyncBus) -> None:
-    soma = Soma(
+async def test_interoception_control_publishes_results(bus: AsyncBus) -> None:
+    interoception = Interoception(
         bus,
         reader=FakeMetricsReader({"cpu_percent": 10.0, "ram_percent": 20.0}),
         detector=NeverAlertDetector(),
@@ -323,12 +323,12 @@ async def test_soma_control_publishes_results(bus: AsyncBus) -> None:
         # record, so every tick records a verdict.
         positive_control=_control({"soma": 8}),
     )
-    await soma.on_workspace(_workspace("topos", 0.7, 0.5))
+    await interoception.on_workspace(_workspace("topos", 0.7, 0.5))
     for _ in range(6):
-        await soma.tick_once()
+        await interoception.tick_once()
 
     # Wait for all queued control steps before inspecting their results.
-    await soma._pc_queue.drain()
+    await interoception._pc_queue.drain()
     events = await bus.read("positive_control.out", last_id="0")
     assert events
     payloads = _payloads(events)
@@ -341,13 +341,13 @@ async def test_soma_control_publishes_results(bus: AsyncBus) -> None:
 
 @pytest.mark.asyncio
 async def test_failing_control_switches_itself_off(bus: AsyncBus) -> None:
-    topos = topos_module.Topos(
+    vision = vision_module.Vision(
         bus,
         encoder=Varying(),
         forward_prediction=True,
         positive_control=_control({"topos": 4}),
     )
-    topos._forward_model = LatentForwardModel(
+    vision._forward_model = LatentForwardModel(
         latent_dim=4,
         units=8,
         context_dim=CONTEXT_DIM,
@@ -357,15 +357,15 @@ async def test_failing_control_switches_itself_off(bus: AsyncBus) -> None:
     def _raise(*args, **kwargs):  # noqa: ARG001
         raise RuntimeError("control failure")
 
-    topos._positive_control.after_report = _raise
+    vision._positive_control.after_report = _raise
 
-    await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+    await vision.on_workspace(_workspace("soma", 0.6, 0.6))
     for _ in range(3):
-        await topos.process_frame(None)
+        await vision.process_frame(None)
 
     # The failure is handled asynchronously on the control queue.
-    await topos._pc_queue.drain()
-    assert topos._positive_control is None
+    await vision._pc_queue.drain()
+    assert vision._positive_control is None
     assert len(await _reports(bus, "topos.out")) == 3
     positive_reports = await _reports(bus, "positive_control.out")
     assert len(positive_reports) == 1
@@ -379,24 +379,24 @@ async def test_failing_control_switches_itself_off(bus: AsyncBus) -> None:
 async def test_shutdown_publishes_a_terminal_record() -> None:
     bus = _bus()
     try:
-        topos = topos_module.Topos(
+        vision = vision_module.Vision(
             bus,
             encoder=Varying(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
             positive_control=_control({"topos": 4}),
         )
-        topos._forward_model = LatentForwardModel(
+        vision._forward_model = LatentForwardModel(
             latent_dim=4,
             units=8,
             context_dim=CONTEXT_DIM,
             seed=4,
         )
 
-        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
         for _ in range(5):
-            await topos.process_frame(None)
-        await topos.shutdown()
+            await vision.process_frame(None)
+        await vision.shutdown()
 
         events = await bus.read("positive_control.out", last_id="0")
         assert events
@@ -409,19 +409,19 @@ async def test_shutdown_publishes_a_terminal_record() -> None:
 
 
 @pytest.mark.asyncio
-async def test_soma_shutdown_publishes_a_terminal_record() -> None:
+async def test_interoception_shutdown_publishes_a_terminal_record() -> None:
     bus = _bus()
     try:
-        soma = Soma(
+        interoception = Interoception(
             bus,
             reader=FakeMetricsReader({"cpu_percent": 10.0, "ram_percent": 20.0}),
             detector=NeverAlertDetector(),
             positive_control=_control({"soma": 8}),
         )
-        await soma.on_workspace(_workspace("topos", 0.7, 0.5))
+        await interoception.on_workspace(_workspace("topos", 0.7, 0.5))
         for _ in range(6):
-            await soma.tick_once()
-        await soma.shutdown()
+            await interoception.tick_once()
+        await interoception.shutdown()
 
         events = await bus.read("positive_control.out", last_id="0")
         assert events
@@ -435,13 +435,13 @@ async def test_soma_shutdown_publishes_a_terminal_record() -> None:
 
 @pytest.mark.asyncio
 async def test_unpublishable_failure_is_logged_at_error(bus: AsyncBus, caplog) -> None:
-    topos = topos_module.Topos(
+    vision = vision_module.Vision(
         bus,
         encoder=Varying(),
         forward_prediction=True,
         positive_control=_control({"topos": 4}),
     )
-    topos._forward_model = LatentForwardModel(
+    vision._forward_model = LatentForwardModel(
         latent_dim=4,
         units=8,
         context_dim=CONTEXT_DIM,
@@ -454,51 +454,51 @@ async def test_unpublishable_failure_is_logged_at_error(bus: AsyncBus, caplog) -
     async def _raise_publish(*args, **kwargs):  # noqa: ARG001
         raise RuntimeError("publish failure")
 
-    topos._positive_control.after_report = _raise
-    original_publish = topos_module.publish_result
-    topos_module.publish_result = _raise_publish
+    vision._positive_control.after_report = _raise
+    original_publish = vision_module.publish_result
+    vision_module.publish_result = _raise_publish
 
     try:
-        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
         for _ in range(3):
-            await topos.process_frame(None)
+            await vision.process_frame(None)
     finally:
-        topos_module.publish_result = original_publish
+        vision_module.publish_result = original_publish
 
     # The failure is handled asynchronously on the control queue.
-    await topos._pc_queue.drain()
-    assert topos._positive_control is None
+    await vision._pc_queue.drain()
+    assert vision._positive_control is None
     assert await _reports(bus, "positive_control.out") == []
     error_messages = [r.message for r in caplog.records if r.levelname == "ERROR"]
     assert any("cannot pass" in m for m in error_messages)
 
 
-async def _topos_run(control_settings):
+async def _vision_run(control_settings):
     random.seed(0)
     np.random.seed(0)
     torch.manual_seed(0)
     bus = _bus()
     try:
-        topos = topos_module.Topos(
+        vision = vision_module.Vision(
             bus,
             encoder=Varying(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
             positive_control=control_settings,
         )
-        topos._forward_model = LatentForwardModel(
+        vision._forward_model = LatentForwardModel(
             latent_dim=4,
             units=8,
             context_dim=CONTEXT_DIM,
             seed=4,
         )
-        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
         for i in range(12):
             if i == 6:
-                await topos.on_workspace(_workspace("thymos", 0.75, 0.75))
-            await topos.process_frame(None)
+                await vision.on_workspace(_workspace("thymos", 0.75, 0.75))
+            await vision.process_frame(None)
         return (
-            topos._forward_model.state_dict(),
+            vision._forward_model.state_dict(),
             random.getstate(),
             np.random.get_state(),
             torch.get_rng_state(),
@@ -508,9 +508,9 @@ async def _topos_run(control_settings):
 
 
 @pytest.mark.asyncio
-async def test_topos_control_leaves_live_weights_and_rng_states_identical() -> None:
-    off = await _topos_run(None)
-    on = await _topos_run(_control({"topos": 4}))
+async def test_vision_control_leaves_live_weights_and_rng_states_identical() -> None:
+    off = await _vision_run(None)
+    on = await _vision_run(_control({"topos": 4}))
 
     assert off[0] == on[0]
     _rng_states_equal(off[1], on[1])
@@ -529,30 +529,30 @@ class _SteppingClock:
         return self._t
 
 
-async def _soma_run(control_settings):
+async def _interoception_run(control_settings):
     random.seed(0)
     np.random.seed(0)
     torch.manual_seed(0)
     bus = _bus()
     try:
-        soma = Soma(
+        interoception = Interoception(
             bus,
             reader=FakeMetricsReader({"cpu_percent": 10.0, "ram_percent": 20.0}),
             detector=NeverAlertDetector(),
             entity_clock=_SteppingClock(),
             positive_control=control_settings,
         )
-        soma._forward_model = SubstrateForwardModel(
+        interoception._forward_model = SubstrateForwardModel(
             feature_dim=8,
             units=16,
             seed=5,
             context_dim=CONTEXT_DIM,
         )
-        await soma.on_workspace(_workspace("topos", 0.7, 0.5))
+        await interoception.on_workspace(_workspace("topos", 0.7, 0.5))
         for _ in range(12):
-            await soma.tick_once()
+            await interoception.tick_once()
         return (
-            soma._forward_model.state_dict(),
+            interoception._forward_model.state_dict(),
             random.getstate(),
             np.random.get_state(),
             torch.get_rng_state(),
@@ -562,9 +562,9 @@ async def _soma_run(control_settings):
 
 
 @pytest.mark.asyncio
-async def test_soma_control_leaves_live_weights_and_rng_states_identical() -> None:
-    off = await _soma_run(None)
-    on = await _soma_run(_control({"soma": 8}))
+async def test_interoception_control_leaves_live_weights_and_rng_states_identical() -> None:
+    off = await _interoception_run(None)
+    on = await _interoception_run(_control({"soma": 8}))
 
     assert off[0] == on[0]
     _rng_states_equal(off[1], on[1])
@@ -638,27 +638,27 @@ async def test_terminal_record_reaches_the_research_log(tmp_path) -> None:
         sidecar.build()
         await sidecar.start()
 
-        topos = topos_module.Topos(
+        vision = vision_module.Vision(
             bus,
             encoder=Varying(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
             positive_control=_control({"topos": 4}),
         )
-        topos._forward_model = LatentForwardModel(
+        vision._forward_model = LatentForwardModel(
             latent_dim=4,
             units=8,
             context_dim=CONTEXT_DIM,
             seed=4,
         )
 
-        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
         for _ in range(6):
-            await topos.process_frame(None)
+            await vision.process_frame(None)
 
-        await finish_positive_controls([topos])
+        await finish_positive_controls([vision])
         await sidecar.stop()
-        await topos.shutdown()
+        await vision.shutdown()
 
         run = load_run_records("run-pc", root=tmp_path)
         pc_records = [
@@ -679,33 +679,33 @@ async def test_terminal_record_reaches_the_research_log(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_topos_report_carries_entity_time_and_awake() -> None:
+async def test_vision_report_carries_entity_time_and_awake() -> None:
     bus = _bus()
     try:
         clock = _FixedClock()
-        topos = topos_module.Topos(
+        vision = vision_module.Vision(
             bus,
             encoder=Varying(),
             forward_prediction=True,
             entity_clock=clock,
         )
-        topos._forward_model = LatentForwardModel(
+        vision._forward_model = LatentForwardModel(
             latent_dim=4,
             units=8,
             context_dim=CONTEXT_DIM,
             seed=4,
         )
 
-        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
-        await topos.process_frame(None)
+        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.process_frame(None)
 
         reports = await _reports(bus, "topos.out")
         assert reports
         assert reports[0]["entity_time_s"] == clock.now()
         assert reports[0]["awake"] is True
 
-        topos._in_hypnos = True
-        await topos.process_frame(None)
+        vision._in_hypnos = True
+        await vision.process_frame(None)
         reports = await _reports(bus, "topos.out")
         assert reports[-1]["awake"] is False
     finally:
@@ -732,37 +732,37 @@ class _VaryingWithGap(Varying):
 
 
 @pytest.mark.asyncio
-async def test_topos_control_stays_paired_across_a_skip():
+async def test_vision_control_stays_paired_across_a_skip():
     """After a non-finite latent is skipped, the shadow forward models stay
     paired with the live forward model and resume together."""
     bus = _bus()
     try:
-        topos = topos_module.Topos(
+        vision = vision_module.Vision(
             bus,
             encoder=_VaryingWithGap(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
             positive_control=_control({"topos": 4}),
         )
-        topos._forward_model = LatentForwardModel(
+        vision._forward_model = LatentForwardModel(
             latent_dim=4,
             units=8,
             context_dim=CONTEXT_DIM,
             seed=4,
         )
-        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
-        control = topos._positive_control
+        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
+        control = vision._positive_control
 
         for i in range(10):
             if i == 3:
-                await topos.on_workspace(_workspace("thymos", 0.75, 0.75))
-            await topos.process_frame(None)
+                await vision.on_workspace(_workspace("thymos", 0.75, 0.75))
+            await vision.process_frame(None)
             # Drain the queued control step before comparing shadow and live state.
-            await topos._pc_queue.drain()
+            await vision._pc_queue.drain()
             for probe in control._probes:
                 assert [
                     list(v) for v in probe._shadow._buffer
-                ] == [list(v) for v in topos._forward_model._buffer]
+                ] == [list(v) for v in vision._forward_model._buffer]
 
         reports = await _reports(bus, "topos.out")
         gains = [r["context_gain"] for r in reports]
@@ -771,7 +771,7 @@ async def test_topos_control_stays_paired_across_a_skip():
         assert isinstance(gains[7], float)
         assert control._n == sum(1 for g in gains if g is not None)
 
-        await topos._pc_queue.drain()
+        await vision._pc_queue.drain()
         for p in _payloads(await bus.read("positive_control.out", last_id="0")):
             for v in p.values():
                 if isinstance(v, float):
@@ -785,37 +785,37 @@ async def test_report_is_published_before_positive_control_steps() -> None:
     """The live report reaches the bus while the queued control step is still blocked."""
     bus = _bus()
     try:
-        topos = topos_module.Topos(
+        vision = vision_module.Vision(
             bus,
             encoder=Varying(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
             positive_control=_control({"topos": 4}),
         )
-        topos._forward_model = LatentForwardModel(
+        vision._forward_model = LatentForwardModel(
             latent_dim=4,
             units=8,
             context_dim=CONTEXT_DIM,
             seed=4,
         )
-        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
 
         # Process three frames with the control unblocked so the shadow has a baseline.
         for _ in range(3):
-            await topos.process_frame(None)
-        await topos._pc_queue.drain()
+            await vision.process_frame(None)
+        await vision._pc_queue.drain()
         initial_pc = await bus.read("positive_control.out", last_id="0")
 
         blocker = threading.Event()
-        original_after_report = topos._positive_control.after_report
+        original_after_report = vision._positive_control.after_report
 
         def _blocked_after_report(*args, **kwargs):  # noqa: ARG001
             blocker.wait()
             return original_after_report(*args, **kwargs)
 
-        topos._positive_control.after_report = _blocked_after_report
+        vision._positive_control.after_report = _blocked_after_report
 
-        await topos.process_frame(None)
+        await vision.process_frame(None)
 
         reports = await _reports(bus, "topos.out")
         assert len(reports) == 4
@@ -823,7 +823,7 @@ async def test_report_is_published_before_positive_control_steps() -> None:
         assert len(pc_while_blocked) == len(initial_pc)
 
         blocker.set()
-        await topos._pc_queue.drain()
+        await vision._pc_queue.drain()
 
         final_pc = await bus.read("positive_control.out", last_id="0")
         assert len(final_pc) == len(initial_pc) + 1
@@ -836,25 +836,25 @@ async def test_full_queue_fails_the_control_once() -> None:
     """A full queue fails the control once and only one terminal record is published."""
     bus = _bus()
     try:
-        topos = topos_module.Topos(
+        vision = vision_module.Vision(
             bus,
             encoder=Varying(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
             positive_control=_control({"topos": 4}),
         )
-        topos._forward_model = LatentForwardModel(
+        vision._forward_model = LatentForwardModel(
             latent_dim=4,
             units=8,
             context_dim=CONTEXT_DIM,
             seed=4,
         )
-        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
 
         import threading
 
         hold = threading.Event()
-        control = topos._positive_control
+        control = vision._positive_control
         original_after_report = control.after_report
 
         def _held_then_raises(*args, **kwargs):
@@ -864,18 +864,18 @@ async def test_full_queue_fails_the_control_once() -> None:
             raise RuntimeError("released")
 
         control.after_report = _held_then_raises
-        topos._pc_queue = ControlQueue(max_pending=1)
+        vision._pc_queue = ControlQueue(max_pending=1)
 
         # Report 1: its step runs and blocks. Report 2: queued. Report 3: the
         # queue is full, so the control fails and publishes its failure record.
         for _ in range(3):
-            await topos.process_frame(None)
+            await vision.process_frame(None)
             await asyncio.sleep(0.05)
-        assert topos._positive_control is None
+        assert vision._positive_control is None
 
         hold.set()
-        await asyncio.wait_for(topos._pc_queue.drain(), timeout=5)
-        await topos.finish_positive_control()
+        await asyncio.wait_for(vision._pc_queue.drain(), timeout=5)
+        await vision.finish_positive_control()
         control.after_report = original_after_report
 
         events = await bus.read("positive_control.out", last_id="0")
@@ -896,37 +896,37 @@ async def test_shutdown_drain_has_a_budget() -> None:
             _control({"topos": 4}),
             shutdown_drain_s=0.2,
         )
-        topos = topos_module.Topos(
+        vision = vision_module.Vision(
             bus,
             encoder=Varying(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
             positive_control=settings,
         )
-        topos._forward_model = LatentForwardModel(
+        vision._forward_model = LatentForwardModel(
             latent_dim=4,
             units=8,
             context_dim=CONTEXT_DIM,
             seed=4,
         )
-        await topos.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
 
         for _ in range(3):
-            await topos.process_frame(None)
+            await vision.process_frame(None)
 
         never = asyncio.Event()
 
         async def _hung_job():
             await never.wait()
 
-        assert topos._pc_queue.submit(_hung_job) is True
+        assert vision._pc_queue.submit(_hung_job) is True
 
-        await asyncio.wait_for(topos.finish_positive_control(), timeout=5)
+        await asyncio.wait_for(vision.finish_positive_control(), timeout=5)
 
         events = await bus.read("positive_control.out", last_id="0")
         payloads = _payloads(events)
         assert sum(1 for p in payloads if p["failed"] and p["final"]) == 1
-        assert topos._positive_control is None
+        assert vision._positive_control is None
     finally:
         await bus.close()
 
@@ -937,21 +937,21 @@ async def test_fail_positive_control_publishes_once() -> None:
     bus = _bus()
     try:
         control = _control({"topos": 4})
-        topos = topos_module.Topos(
+        vision = vision_module.Vision(
             bus,
             encoder=Varying(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
             positive_control=control,
         )
-        pc = topos._positive_control
+        pc = vision._positive_control
         assert pc is not None
-        await topos._fail_positive_control(pc, "x")
-        await topos._fail_positive_control(pc, "x")
+        await vision._fail_positive_control(pc, "x")
+        await vision._fail_positive_control(pc, "x")
 
         events = await bus.read("positive_control.out", last_id="0")
         assert len(_payloads(events)) == 1
-        assert topos._positive_control is None
+        assert vision._positive_control is None
     finally:
         await bus.close()
 

@@ -23,7 +23,7 @@ from kaine.modules.audition import (
     FakeSTTClient,
 )
 from kaine.modules.audition.acoustic import FakeAcousticEncoder
-from kaine.modules.topos import Topos
+from kaine.modules.vision import Vision
 
 
 class _FakeClipEncoder:
@@ -70,12 +70,12 @@ async def bus():
 
 
 @pytest.mark.asyncio
-async def test_scene_cut_produces_an_alert_level_topos_report(bus: AsyncBus):
+async def test_scene_cut_produces_an_alert_level_vision_report(bus: AsyncBus):
     """A hard scene cut MUST raise at least one alert-level topos.report."""
     steady = [0.5, 0.5, 0.5, 0.5]
     cut = [0.5, -0.5, 0.5, -0.5]  # orthogonal → a hard cut
     enc = _FakeClipEncoder([steady] * 6 + [cut] + [steady] * 3)
-    topos = Topos(
+    vision = Vision(
         bus,
         encoder=enc,
         forward_prediction=False,  # attribute the alert to perception, not internals
@@ -84,7 +84,7 @@ async def test_scene_cut_produces_an_alert_level_topos_report(bus: AsyncBus):
         alert_salience=0.7,
     )
     for _ in range(10):
-        await topos.process_frame(None)
+        await vision.process_frame(None)
     entries = await bus.read("topos.out", last_id="0")
     reports = [ev for _, ev in entries]
     alerted = [r for r in reports if r.payload["alert"]]

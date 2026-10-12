@@ -65,7 +65,7 @@ def _owner(tmp_path: Path, **cfg_overrides: Any) -> gestation.GestationOwner:
     config = _config(**cfg_overrides)
     owner = gestation.GestationOwner(
         bus=None,
-        soma=FakeSoma(),
+        interoception=FakeSoma(),
         drive=FakeDrive(),
         beat_phase=lambda: 0.0,
         is_paused=lambda: False,

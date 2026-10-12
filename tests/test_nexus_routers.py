@@ -317,7 +317,7 @@ async def test_post_merge_accepts_valid_merge_form_ids(tmp_path):
         assert r.status_code == 404, r.text
 
 
-class _SomaOnlyModule:
+class _InteroceptionOnlyModule:
     name = "soma"
 
     def serialize(self):
@@ -327,9 +327,9 @@ class _SomaOnlyModule:
         pass
 
 
-class _SomaOnlyRegistry:
+class _InteroceptionOnlyRegistry:
     def all_modules(self):
-        return iter([_SomaOnlyModule()])
+        return iter([_InteroceptionOnlyModule()])
 
 
 @pytest.mark.asyncio
@@ -337,8 +337,8 @@ async def test_post_merge_two_phantasia_world_models_requires_choice(tmp_path):
     """When both parents carry a world model and no choice is given,
     the merge endpoint surfaces a 409 pointing at world_model_from."""
     fm = ForkManager(tmp_path)
-    snap_a = fm.snapshot(_SomaOnlyRegistry(), label="a")
-    snap_b = fm.snapshot(_SomaOnlyRegistry(), label="b")
+    snap_a = fm.snapshot(_InteroceptionOnlyRegistry(), label="a")
+    snap_b = fm.snapshot(_InteroceptionOnlyRegistry(), label="b")
     a_ph_dir = artifacts_dir(tmp_path, snap_a.id, "phantasia")
     b_ph_dir = artifacts_dir(tmp_path, snap_b.id, "phantasia")
     a_ph_dir.mkdir(parents=True, exist_ok=True)
@@ -361,8 +361,8 @@ async def test_post_merge_two_phantasia_world_models_requires_choice(tmp_path):
 async def test_post_merge_two_phantasia_world_models_choice_b(tmp_path):
     """Passing world_model_from='b' succeeds and carries b's world model."""
     fm = ForkManager(tmp_path)
-    snap_a = fm.snapshot(_SomaOnlyRegistry(), label="a")
-    snap_b = fm.snapshot(_SomaOnlyRegistry(), label="b")
+    snap_a = fm.snapshot(_InteroceptionOnlyRegistry(), label="a")
+    snap_b = fm.snapshot(_InteroceptionOnlyRegistry(), label="b")
     a_ph_dir = artifacts_dir(tmp_path, snap_a.id, "phantasia")
     b_ph_dir = artifacts_dir(tmp_path, snap_b.id, "phantasia")
     a_ph_dir.mkdir(parents=True, exist_ok=True)

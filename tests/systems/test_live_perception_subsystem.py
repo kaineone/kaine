@@ -20,8 +20,8 @@ from kaine.modules.audition.emotion import FakeEmotionClassifier
 from kaine.modules.audition.live import LiveMicConfig, LiveMicrophone
 from kaine.modules.audition.module import Audition
 from kaine.modules.audition.stt_client import FakeSTTClient
-from kaine.modules.topos.live import LiveCamera, LiveCameraConfig
-from kaine.modules.topos.module import Topos
+from kaine.modules.vision.live import LiveCamera, LiveCameraConfig
+from kaine.modules.vision.module import Vision
 from tests.systems._harness import SubsystemHarness
 
 # --- audio path ------------------------------------------------------
@@ -146,7 +146,7 @@ class _ScriptedVideoSource:
 
 
 @pytest.mark.asyncio
-async def test_live_camera_drives_topos_subsystem_end_to_end():
+async def test_live_camera_drives_vision_subsystem_end_to_end():
     async with SubsystemHarness() as h:
         live_cam = LiveCamera(
             sink=lambda image: None,  # patched below
@@ -162,15 +162,15 @@ async def test_live_camera_drives_topos_subsystem_end_to_end():
             ),
             bgr_to_rgb=lambda frame: ("rgb", frame),
         )
-        topos = Topos(
+        vision = Vision(
             h.bus,
             encoder=_StubEncoder(),
             capture_enabled=True,
             live_camera=live_cam,
         )
-        live_cam._sink = topos.process_frame  # test-only seam
+        live_cam._sink = vision.process_frame  # test-only seam
 
-        await h.register(topos)
+        await h.register(vision)
         events = await h.collect(
             "topos.out", count=1, timeout=3.0, filter_type="topos.report"
         )

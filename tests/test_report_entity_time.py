@@ -17,9 +17,9 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.audition import Audition, FakeEmotionClassifier, FakeSTTClient
 from kaine.modules.audition.acoustic import FakeAcousticEncoder
 from kaine.modules.context import CONTEXT_DIM
-from kaine.modules.soma.detector import AlertResult
-from kaine.modules.soma.forward import SubstrateForwardModel
-from kaine.modules.soma.module import Soma
+from kaine.modules.interoception.detector import AlertResult
+from kaine.modules.interoception.forward import SubstrateForwardModel
+from kaine.modules.interoception.module import Interoception
 
 
 def _bus():
@@ -112,24 +112,24 @@ class NeverAlertDetector:
 
 
 @pytest.mark.asyncio
-async def test_soma_report_carries_entity_time_and_awake() -> None:
+async def test_interoception_report_carries_entity_time_and_awake() -> None:
     bus = _bus()
     try:
         clock = _FixedClock()
-        soma = Soma(
+        interoception = Interoception(
             bus,
             reader=FakeMetricsReader({"cpu_percent": 10.0, "ram_percent": 20.0}),
             detector=NeverAlertDetector(),
             entity_clock=clock,
         )
-        soma._forward_model = SubstrateForwardModel(
+        interoception._forward_model = SubstrateForwardModel(
             feature_dim=8,
             units=16,
             seed=5,
             context_dim=CONTEXT_DIM,
         )
-        await soma.on_workspace(_workspace("topos", 0.7, 0.5))
-        await soma.tick_once()
+        await interoception.on_workspace(_workspace("topos", 0.7, 0.5))
+        await interoception.tick_once()
 
         events = await bus.read("soma.out", last_id="0")
         reports = _typed_payloads(events, "soma.report")

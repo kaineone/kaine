@@ -58,7 +58,7 @@ The design assumed automatic dilation absorbs model loads. It cannot: the contro
 
 - **New code:** `kaine/residency/` (budget, ledger, manager, planner, lanes, events), `kaine/setup/footprint.py` (calibration and fit report), a llama-swap config generator under `kaine/setup/`.
 - **Changed code:**
-  - engine clients gain `ensure_loaded()` / `unload()`: `kaine/modules/audition/sherpa_stt.py`, `kaine/modules/vox/sherpa_tts.py`, `kaine/modules/topos/encoder.py`, `kaine/modules/audition/emotion.py`, `kaine/text_embedding.py`;
+  - engine clients gain `ensure_loaded()` / `unload()`: `kaine/modules/audition/sherpa_stt.py`, `kaine/modules/vox/sherpa_tts.py`, `kaine/modules/vision/encoder.py`, `kaine/modules/audition/emotion.py`, `kaine/text_embedding.py`;
   - `kaine/modules/hypnos/organ_window.py` routes through the manager;
   - `kaine/cycle/spot.py` treats residency waits as liveness;
   - `kaine/modules/audition/module.py` gets the bounded audio queue;

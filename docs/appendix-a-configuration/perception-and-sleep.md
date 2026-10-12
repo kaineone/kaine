@@ -121,7 +121,7 @@ Entrainment is judged against surrogate heartbeats, with no fixed phase-locking 
 
 ### Screen capture
 
-Only read when `[perception_feed].mode = "screen"`. Video goes to the vision module (`kaine/modules/topos/screen.py`) and desktop audio goes to the audition module (`kaine/modules/audition/monitor.py`). For native-detail foveal crops, enable `native` together with `[topos].foveation`. None of these keys is in the shipped file (it carries them as a commented example under `[perception_feed.screen]`), so the defaults below apply.
+Only read when `[perception_feed].mode = "screen"`. Video goes to the vision module (`kaine/modules/vision/screen.py`) and desktop audio goes to the audition module (`kaine/modules/audition/monitor.py`). For native-detail foveal crops, enable `native` together with `[topos].foveation`. None of these keys is in the shipped file (it carries them as a commented example under `[perception_feed.screen]`), so the defaults below apply.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

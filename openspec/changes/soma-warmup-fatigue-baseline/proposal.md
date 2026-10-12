@@ -15,6 +15,6 @@ During the interoception module's developmental warm-up, the fatigue accumulator
 
 ## Impact
 
-- **Code:** `kaine/modules/soma/module.py`.
+- **Code:** `kaine/modules/interoception/module.py`.
 - **Behaviour:** during warm-up, spikes in unexpected error above its own recent level now build fatigue, as designed; cold-start ignorance is still stripped. Sleep may come slightly earlier in the first 20 minutes of a boot. Outside warm-up nothing changes.
 - **Docs:** `docs/09-modules/interoception.md`.

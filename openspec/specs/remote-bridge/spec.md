@@ -11,7 +11,7 @@ The cycle SHALL provide an optional WebSocket bridge
 injects remote operator audio/video into the perception modules and streams
 generated speech and the conversation transcript back to connected clients.
 Remote video frames SHALL be decoded to in-memory images and passed to
-`Topos.process_frame`; remote audio SHALL flow through the existing
+`Vision.process_frame`; remote audio SHALL flow through the existing
 `LiveMicrophone` VAD/utterance assembly via an injected network stream and
 reach `Audition.process_audio` with `source_label = "remote"`; generated
 speech SHALL be tapped from the vocal module via a composed `Player` without disabling
@@ -25,7 +25,7 @@ configured, connections without it SHALL be rejected.
 
 #### Scenario: Remote frame reaches Vision
 - **WHEN** a connected client sends a binary JPEG frame to `/ingest/video`
-- **THEN** the bridge decodes it in memory and `Topos.process_frame` receives
+- **THEN** the bridge decodes it in memory and `Vision.process_frame` receives
   a PIL image
 
 #### Scenario: Remote audio reaches Audition through the real VAD path

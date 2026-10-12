@@ -150,7 +150,7 @@ def owner_factory(tmp_path: Path):
         clock: FakeClock | None = None,
         bus: FakeBus | None = None,
         drive: FakeDrive | None = None,
-        soma: FakeSoma | None = None,
+        interoception: FakeSoma | None = None,
         beat_phase: Any = None,
         surrogate_beat_phases: Any = None,
         is_paused: Any = None,
@@ -160,14 +160,14 @@ def owner_factory(tmp_path: Path):
         clock = clock or FakeClock()
         bus = bus or FakeBus()
         drive = drive or FakeDrive()
-        soma = soma or FakeSoma()
+        interoception = interoception or FakeSoma()
         beat_phase = beat_phase or (lambda: 0.0)
         is_paused = is_paused or (lambda: False)
         config = config or _config()
         state_path = state_path or tmp_path / "gestation_readout.json"
         return GestationOwner(
             bus,
-            soma=soma,
+            interoception=interoception,
             drive=drive,
             beat_phase=beat_phase,
             surrogate_beat_phases=surrogate_beat_phases,
@@ -444,12 +444,12 @@ async def test_plv_pairing_ignores_missing_beat_phases(owner_factory):
         config=config,
     )
 
-    soma = owner._soma
+    interoception = owner._interoception
     activity_fn, state_fn = _make_locking_callbacks(
         owner, clock, beat_freq=1.0, own_freq=0.6, amplitude=1.0
     )
-    soma.self_rhythm_activity = activity_fn
-    soma.self_rhythm_state = state_fn
+    interoception.self_rhythm_activity = activity_fn
+    interoception.self_rhythm_state = state_fn
 
     dt = 1.0 / config.sample_hz
 

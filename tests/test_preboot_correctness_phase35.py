@@ -74,9 +74,9 @@ def _engine_stub(bus, **attrs) -> CognitiveCycle:
     eng._cursors = {}
     eng._error_counts = {}
     eng._control_cursor = "0"
-    eng._soma_out_cursor = "0"
+    eng._interoception_out_cursor = "0"
     eng._control_err_last_log = 0.0
-    eng._soma_err_last_log = 0.0
+    eng._interoception_err_last_log = 0.0
     eng._seed_cursors_to_tail = False  # ctor default; tail tests override
     eng._logical_dt = BASE_EPOCH
     eng._logical_last_tick = None
@@ -98,11 +98,11 @@ async def test_restart_does_not_replay_stale_events():
     eng = _engine_stub(bus)
     eng._seed_cursors_to_tail = True  # tail-seeding behavior under test
     # the interoception module's consumer: cursor must be seeded to the tail before any read...
-    await eng.consume_soma_regulation("soma.out")
+    await eng.consume_interoception_regulation("soma.out")
     assert all(last_id == tail for _, last_id in bus.reads), (
         "cursor must be seeded at the stream tail, not 0"
     )
-    assert eng._soma_out_cursor == "18-1"
+    assert eng._interoception_out_cursor == "18-1"
     # ...and the control consumer seeds independently the same way.
     bus2 = _ScriptedBus(batches=[([], None)], tail=tail)
     eng2 = _engine_stub(bus2)
@@ -120,17 +120,17 @@ async def test_poison_batch_does_not_stall_streams():
         batches=[([], "5-1"), ([("5-2", _evt("soma.regulation", action="noop"))], "5-2")]
     )
     eng = _engine_stub(bus)
-    await eng.consume_soma_regulation("soma.out")
-    assert eng._soma_out_cursor == "5-1"  # advanced past the poison batch
-    await eng.consume_soma_regulation("soma.out")
-    assert eng._soma_out_cursor == "5-2"  # subsequent entries consumed
+    await eng.consume_interoception_regulation("soma.out")
+    assert eng._interoception_out_cursor == "5-1"  # advanced past the poison batch
+    await eng.consume_interoception_regulation("soma.out")
+    assert eng._interoception_out_cursor == "5-2"  # subsequent entries consumed
     # _safe_read path (workspace streams).
     bus2 = _ScriptedBus(batches=[([], "9-1")])
     eng2 = _engine_stub(bus2, _read_count=16)
     entries, last_scanned = await eng2._safe_read("workspace", "0")
     assert entries == [] and last_scanned == "9-1"
     # interoception module cycle consumer.
-    SomaModule = _find_class("kaine.modules.soma.module", "_cycle_consumer_loop")
+    InteroceptionModule = _find_class("kaine.modules.interoception.module", "_cycle_consumer_loop")
     bus3 = _ScriptedBus(
         batches=[
             ([], "3-1"),  # poison batch on the cycle stream
@@ -144,7 +144,7 @@ async def test_poison_batch_does_not_stall_streams():
         _cycle_cursor="0",
         _reader=SimpleNamespace(update_cycle_latency_sample=lambda x: None),
     )
-    task = asyncio.create_task(SomaModule._cycle_consumer_loop(stub))
+    task = asyncio.create_task(InteroceptionModule._cycle_consumer_loop(stub))
     for _ in range(200):
         if stub._cycle_cursor == "3-2":
             break
@@ -205,11 +205,11 @@ async def test_persistent_redis_failure_is_visible(caplog):
         for _ in range(5):
             await eng.consume_control_events("control.in")
         for _ in range(5):
-            await eng.consume_soma_regulation("soma.out")
+            await eng.consume_interoception_regulation("soma.out")
     control_warns = [r for r in caplog.records if "control consumer read failed" in r.getMessage()]
-    soma_warns = [r for r in caplog.records if "soma consumer read failed" in r.getMessage()]
+    interoception_warns = [r for r in caplog.records if "soma consumer read failed" in r.getMessage()]
     assert len(control_warns) == 1, "exactly one rate-limited WARNING per window"
-    assert len(soma_warns) == 1, "exactly one rate-limited WARNING per window"
+    assert len(interoception_warns) == 1, "exactly one rate-limited WARNING per window"
 
 
 # ---------------------------------------------------------------- M1 / M2 / L3
@@ -275,7 +275,7 @@ class _M2Stub:
 
 
 @pytest.mark.asyncio
-async def test_transient_publish_failure_does_not_wedge_soma():
+async def test_transient_publish_failure_does_not_wedge_interoception():
     stub = _M2Stub()
     with pytest.raises(ConnectionError):  # the original failure re-raises honestly
         await Hypnos._run_pipeline(stub)
@@ -290,7 +290,7 @@ class _HypConsumerStub:
     def __init__(self, bus):
         self._stopped = asyncio.Event()
         self._bus = bus
-        self._soma_cursor = "0"
+        self._interoception_cursor = "0"
         self._sleep_lock = asyncio.Lock()
         self._sleep_pending = False
         self._sleep_task = None
@@ -321,7 +321,7 @@ async def test_sleep_task_not_collected_and_no_double_trigger():
     stub._fatigue_triggered_enter_sleep_inner = types.MethodType(
         Hypnos._fatigue_triggered_enter_sleep_inner, stub
     )
-    consumer = asyncio.create_task(Hypnos._soma_consumer_loop(stub))
+    consumer = asyncio.create_task(Hypnos._interoception_consumer_loop(stub))
     for _ in range(200):
         if stub.enter_started == 1:
             break

@@ -522,7 +522,7 @@ class GestationOwner:
         self,
         bus: Any,
         *,
-        soma: Any,
+        interoception: Any,
         drive: Any,
         beat_phase: Callable[[], float],
         is_paused: Callable[[], bool],
@@ -533,7 +533,7 @@ class GestationOwner:
         surrogate_beat_phases: Callable[[], list[float]] | None = None,
     ) -> None:
         self._bus = bus
-        self._soma = soma
+        self._interoception = interoception
         self._drive = drive
         self._beat_phase = beat_phase
         self._surrogate_beat_phases = surrogate_beat_phases
@@ -566,8 +566,8 @@ class GestationOwner:
             tuple[float, float | None, float | None, float | None, str, float | None, tuple | None]
         ] = deque(maxlen=max(max_samples, 16))
 
-        soma_maxlen = int((self._config.recovery_cap_seconds + 120.0) * 2.0)
-        self._soma_series: deque[tuple[float, float]] = deque(maxlen=max(soma_maxlen, 16))
+        interoception_maxlen = int((self._config.recovery_cap_seconds + 120.0) * 2.0)
+        self._interoception_series: deque[tuple[float, float]] = deque(maxlen=max(interoception_maxlen, 16))
 
         self._settle_until: float = (
             self._started_at + self._config.readout_period_seconds
@@ -601,10 +601,10 @@ class GestationOwner:
         self._probe_end: float | None = None
 
         self._last_perturbation: tuple[float, float] | None = None
-        self._last_soma_read_at: float = -1.0
+        self._last_interoception_read_at: float = -1.0
 
-        self._topos_cursor: str | None = None
-        self._soma_cursor: str | None = None
+        self._vision_cursor: str | None = None
+        self._interoception_cursor: str | None = None
 
         self._endogenous_self_sustain: bool | None = None
         self._entrain_then_autonomy: bool | None = None
@@ -622,7 +622,7 @@ class GestationOwner:
         self._self_rhythm_baseline_hz: float | None = None
         self._self_rhythm_baseline_count: int = 0
 
-        identity = getattr(getattr(soma, "_self_rhythm", None), "identity", None)
+        identity = getattr(getattr(interoception, "_self_rhythm", None), "identity", None)
         self._baseline_key = f"{self._seed}:{identity or 'none'}"
 
         self._load_baseline()
@@ -792,20 +792,20 @@ class GestationOwner:
             return True
 
     async def _ensure_cursors(self) -> None:
-        if self._topos_cursor is None:
+        if self._vision_cursor is None:
             try:
                 latest = await self._bus.latest("topos.out")
-                self._topos_cursor = latest[0] if latest else "0"
+                self._vision_cursor = latest[0] if latest else "0"
             except Exception:
                 log.warning("gestation: failed to initialise topos cursor", exc_info=True)
-                self._topos_cursor = "0"
-        if self._soma_cursor is None:
+                self._vision_cursor = "0"
+        if self._interoception_cursor is None:
             try:
                 latest = await self._bus.latest("soma.out")
-                self._soma_cursor = latest[0] if latest else "0"
+                self._interoception_cursor = latest[0] if latest else "0"
             except Exception:
                 log.warning("gestation: failed to initialise soma cursor", exc_info=True)
-                self._soma_cursor = "0"
+                self._interoception_cursor = "0"
 
 
     def _advance_lived(self, now: float, paused: bool) -> None:
@@ -834,7 +834,7 @@ class GestationOwner:
         self._paused_last_step = paused
 
         self._sample(now)
-        await self._read_soma_reports(now)
+        await self._read_interoception_reports(now)
 
         if now >= self._next_readout_at:
             await self._do_readout(now)
@@ -866,7 +866,7 @@ class GestationOwner:
         phase: float | None = None
         amplitude: float | None = None
         try:
-            state = self._soma.self_rhythm_state()
+            state = self._interoception.self_rhythm_state()
             if state is not None:
                 phase = float(state[0])
                 amplitude = float(state[1])
@@ -877,8 +877,8 @@ class GestationOwner:
 
         activity: float | None = None
         try:
-            if hasattr(self._soma, "self_rhythm_activity"):
-                raw = self._soma.self_rhythm_activity()
+            if hasattr(self._interoception, "self_rhythm_activity"):
+                raw = self._interoception.self_rhythm_activity()
                 if raw is not None:
                     activity = float(raw)
         except Exception:
@@ -1244,20 +1244,20 @@ class GestationOwner:
                     "Gestation unviable (%s): %s", verdict["rule"], verdict["reason"]
                 )
 
-    async def _read_soma_reports(self, now: float) -> None:
-        if now - self._last_soma_read_at < 1.0:
+    async def _read_interoception_reports(self, now: float) -> None:
+        if now - self._last_interoception_read_at < 1.0:
             return
-        self._last_soma_read_at = now
+        self._last_interoception_read_at = now
 
-        if self._soma_cursor is None:
+        if self._interoception_cursor is None:
             return
 
         try:
             entries, last_scanned = await self._bus.read_entries(
-                "soma.out", last_id=self._soma_cursor, count=1000
+                "soma.out", last_id=self._interoception_cursor, count=1000
             )
             for entry_id, event in entries:
-                self._soma_cursor = entry_id
+                self._interoception_cursor = entry_id
                 if event.type != "soma.report":
                     continue
                 err = (
@@ -1270,22 +1270,22 @@ class GestationOwner:
                     and not isinstance(err, bool)
                     and math.isfinite(err)
                 ):
-                    self._soma_series.append((now, float(err)))
+                    self._interoception_series.append((now, float(err)))
             if last_scanned is not None:
-                self._soma_cursor = last_scanned
+                self._interoception_cursor = last_scanned
         except Exception:
             log.warning("gestation: failed to read soma reports", exc_info=True)
 
         cutoff = now - (self._config.recovery_cap_seconds + 120.0)
-        while self._soma_series and self._soma_series[0][0] < cutoff:
-            self._soma_series.popleft()
+        while self._interoception_series and self._interoception_series[0][0] < cutoff:
+            self._interoception_series.popleft()
 
-    async def _read_topos_errors(self) -> list[float]:
-        if self._topos_cursor is None:
+    async def _read_vision_errors(self) -> list[float]:
+        if self._vision_cursor is None:
             return []
         try:
             entries, last_scanned = await self._bus.read_entries(
-                "topos.out", last_id=self._topos_cursor, count=1000
+                "topos.out", last_id=self._vision_cursor, count=1000
             )
         except Exception:
             log.warning("gestation: failed to read topos reports", exc_info=True)
@@ -1293,7 +1293,7 @@ class GestationOwner:
 
         errors: list[float] = []
         for entry_id, event in entries:
-            self._topos_cursor = entry_id
+            self._vision_cursor = entry_id
             if event.type != "topos.report":
                 continue
             err = (
@@ -1308,7 +1308,7 @@ class GestationOwner:
             ):
                 errors.append(float(err))
         if last_scanned is not None:
-            self._topos_cursor = last_scanned
+            self._vision_cursor = last_scanned
         return errors
 
     async def _do_readout(self, now: float) -> None:
@@ -1329,7 +1329,7 @@ class GestationOwner:
                 hrv_phases.append(phase)
         self._hrv_variability = hrv_cv(hrv_times, hrv_phases)
 
-        current_errors = await self._read_topos_errors()
+        current_errors = await self._read_vision_errors()
         ratio: float | None = None
         if current_errors:
             median_current = float(np.median(current_errors))
@@ -1344,8 +1344,8 @@ class GestationOwner:
         if self._last_perturbation is not None:
             pert_start, pert_end = self._last_perturbation
             recovery = recovery_seconds(
-                [s[0] for s in self._soma_series],
-                [s[1] for s in self._soma_series],
+                [s[0] for s in self._interoception_series],
+                [s[1] for s in self._interoception_series],
                 perturbation_start=pert_start,
                 perturbation_end=pert_end,
                 tolerance=self._config.recovery_tolerance,

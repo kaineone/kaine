@@ -67,18 +67,18 @@ def check_input_condition(
             )
 
         modules = dict(config.get("modules") or {})
-        topos_on = bool(modules.get("topos"))
+        vision_on = bool(modules.get("topos"))
         audition_on = bool(modules.get("audition"))
 
         surfaces: list[tuple[str, Callable[..., tuple[bool, str]], tuple[Any, ...]]] = []
 
         if mode == "live":
-            topos_cfg = dict(config.get("topos") or {})
+            vision_cfg = dict(config.get("topos") or {})
             audition_cfg = dict(config.get("audition") or {})
-            topos_ready = topos_on and bool(topos_cfg.get("capture_enabled"))
+            vision_ready = vision_on and bool(vision_cfg.get("capture_enabled"))
             audition_ready = audition_on and bool(audition_cfg.get("capture_enabled"))
 
-            if not (topos_ready or audition_ready):
+            if not (vision_ready or audition_ready):
                 return Condition(
                     number=8,
                     name=CONDITION_NAMES[8],
@@ -88,9 +88,9 @@ def check_input_condition(
                     ),
                 )
 
-            if topos_ready:
+            if vision_ready:
                 surfaces.append(
-                    ("camera", _probe_camera, (topos_cfg, camera_factory))
+                    ("camera", _probe_camera, (vision_cfg, camera_factory))
                 )
             if audition_ready:
                 surfaces.append(
@@ -101,7 +101,7 @@ def check_input_condition(
                     )
                 )
         else:
-            if not (topos_on or audition_on):
+            if not (vision_on or audition_on):
                 return Condition(
                     number=8,
                     name=CONDITION_NAMES[8],
@@ -109,7 +109,7 @@ def check_input_condition(
                     reason="no perceiving module: enable topos or audition",
                 )
 
-            if topos_on:
+            if vision_on:
                 surfaces.append(
                     ("video source", _probe_seeded_video, (perception_check, config))
                 )
@@ -152,14 +152,14 @@ def check_input_condition(
 
 
 def _probe_camera(
-    topos_cfg: dict[str, Any], camera_factory: Callable[..., Any] | None
+    vision_cfg: dict[str, Any], camera_factory: Callable[..., Any] | None
 ) -> tuple[bool, str]:
     if camera_factory is None:
-        from kaine.modules.topos.live import _default_source_factory as camera_factory
+        from kaine.modules.vision.live import _default_source_factory as camera_factory
 
-    device = topos_cfg.get("capture_device", 0)
-    width = topos_cfg.get("capture_width")
-    height = topos_cfg.get("capture_height")
+    device = vision_cfg.get("capture_device", 0)
+    width = vision_cfg.get("capture_width")
+    height = vision_cfg.get("capture_height")
 
     source = camera_factory(device, width=width, height=height)
     try:

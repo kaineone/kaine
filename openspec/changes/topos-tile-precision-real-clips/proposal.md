@@ -20,7 +20,7 @@ The top-down channel stays unwired, as the foveation design decided ("no pretend
 
 ## Impact
 
-- **Code:** `kaine/modules/topos/{foveation,module}.py`.
+- **Code:** `kaine/modules/vision/{foveation,module}.py`.
 - **Behaviour:** the fovea favours surprising change over habitual change; the peripheral and foveal latents now carry motion, so the vision module's change and prediction-error statistics, and the arousal startles they drive, change. The stimulus source prediction-error marker reads the vision module's error and is re-validated in the follow-up validation step.
 - **Cost:** 32 crops and resizes per clip tick instead of 2, with the same two encodes; `scripts/bench_foveation.py` is to be re-run on the host before the next study.
 - **Docs:** `docs/09-modules/vision.md`.

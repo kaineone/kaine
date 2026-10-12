@@ -161,7 +161,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "awake",
         }
     ),
-    # the sequence module's report (kaine/modules/chronos/module.py) — content-free
+    # the sequence module's report (kaine/modules/sequence/module.py) — content-free
     # aggregates ONLY: `temporal_context` and `feature_vector` are latent
     # content and are deliberately excluded.
     "chronos.report": frozenset(

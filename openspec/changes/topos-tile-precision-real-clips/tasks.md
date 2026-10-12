@@ -4,7 +4,7 @@
 
 ## 2. Real clips
 
-- [x] 2.1 `Topos.process_frame`: with foveation on, derive peripheral and foveal views from every buffered frame at the fovea chosen on the latest frame, and encode those clips.
+- [x] 2.1 `Vision.process_frame`: with foveation on, derive peripheral and foveal views from every buffered frame at the fovea chosen on the latest frame, and encode those clips.
 
 ## 3. Tests, docs
 

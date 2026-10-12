@@ -94,16 +94,16 @@ async def test_coherence_metadata_present_when_enabled():
         await _publish(bus, "chronos", "b", 0.8)
 
         # Advance fake oscillators so phases differ between the two modules.
-        osc_soma = FakeOscillator()
-        osc_chronos = FakeOscillator(phase_step=0.9)
+        osc_interoception = FakeOscillator()
+        osc_sequence = FakeOscillator(phase_step=0.9)
         for _ in range(12):
-            osc_soma.step(0.5)
-            osc_chronos.step(0.5)
+            osc_interoception.step(0.5)
+            osc_sequence.step(0.5)
 
         registry = _PhaseRegistry(
             modules=[
-                _PhaseModule("soma", osc_soma),
-                _PhaseModule("chronos", osc_chronos),
+                _PhaseModule("soma", osc_interoception),
+                _PhaseModule("chronos", osc_sequence),
             ],
             streams=["soma.out", "chronos.out"],
         )

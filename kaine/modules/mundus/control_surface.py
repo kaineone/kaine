@@ -16,7 +16,7 @@ gaze decoupled from the body, ``strafe`` deferred. Each control tick the surface
 emits a clamped :class:`ControlCommand`, forwarded by the embodiment module to the body; the
 loop is closed by feeding an **efference copy** of the emitted command plus the
 proprioceptive feedback into KAINE's *existing* forward-model machinery
-(the interoception module's :class:`~kaine.modules.soma.forward.SubstrateForwardModel`) — no new
+(the interoception module's :class:`~kaine.modules.interoception.forward.SubstrateForwardModel`) — no new
 learner is introduced.
 
 Emergent, not hard-wired
@@ -289,7 +289,7 @@ class EfferenceLoop:
     the proprioceptive feedback and fed to a forward model that predicts the next
     such vector, compares it to what arrives, and corrects online (predict ->
     compare -> correct; Wolpert et al. 1995). This REUSES the interoception module's
-    :class:`~kaine.modules.soma.forward.SubstrateForwardModel` (a frozen CfC
+    :class:`~kaine.modules.interoception.forward.SubstrateForwardModel` (a frozen CfC
     reservoir + online linear readout) — it introduces **no new learner**. The
     forward model is injectable so the closed loop can be exercised without torch
     in tests; the default is the real substrate forward model.
@@ -306,7 +306,7 @@ class EfferenceLoop:
         """The forward model, constructing the default lazily on first use."""
         if self._fm is None:
             # Reuse the interoception module's existing forward model — do NOT add a new learner.
-            from kaine.modules.soma.forward import SubstrateForwardModel
+            from kaine.modules.interoception.forward import SubstrateForwardModel
 
             self._fm = SubstrateForwardModel(feature_dim=self.FEATURE_DIM)
         return self._fm

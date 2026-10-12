@@ -61,7 +61,7 @@ def _event(source, type_, payload):
     )
 
 
-def test_filter_topos_vectors_removed():
+def test_filter_vision_vectors_removed():
     payload = {
         "latent": [0.1] * 768,
         "peripheral": [0.2] * 768,

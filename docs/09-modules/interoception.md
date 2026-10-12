@@ -19,14 +19,14 @@ The interoception module is the architecture's analog of interoception, the sens
 
 ## Forward model
 
-`SubstrateForwardModel` (`kaine/modules/soma/forward.py`) is a reservoir with an online readout, run on the CPU:
+`SubstrateForwardModel` (`kaine/modules/interoception/forward.py`) is a reservoir with an online readout, run on the CPU:
 
 ```text
 feature vector → CfC reservoir (frozen, seeded, forward_model_units hidden units) → hidden state h
 [h ‖ broadcast context] → linear readout (online) → predicted next feature vector
 ```
 
-The reservoir is a closed-form continuous-time network (Hasani et al. 2022), the same pattern the sequence module uses (`kaine/modules/chronos/network.py`). Its weights are generated in NumPy from a reservoir seed, identically for both backends, and never trained; the two backends compute the same step and agree to 1e-5. Only the linear readout learns, from the hidden state and the 24-component broadcast context together with a bias. The readout's context weights start at zero.
+The reservoir is a closed-form continuous-time network (Hasani et al. 2022), the same pattern the sequence module uses (`kaine/modules/sequence/network.py`). Its weights are generated in NumPy from a reservoir seed, identically for both backends, and never trained; the two backends compute the same step and agree to 1e-5. Only the linear readout learns, from the hidden state and the 24-component broadcast context together with a bias. The readout's context weights start at zero.
 
 At each reading the interoception module:
 
@@ -38,7 +38,7 @@ Each step passes the reservoir the time that actually elapsed: the timespan is t
 
 The feature vector holds `cpu_percent/100`, `ram_percent/100`, `cycle_latency/(2·target)`, and the hottest GPU's `gpu_*_temp_c/100` (0.0 with no GPU telemetry) in slots 0 to 3. With the self-rhythm running, slots 4 to 6 carry `0.5 + 0.5·sin(phase)`, `0.5 + 0.5·cos(phase)`, and `min(1, 2·amplitude)`; otherwise they are 0.0. Slot 7 carries the busiest GPU's `gpu_*_vram_percent/100` (feature layout 2). Every value is clamped to `[0, 1]`.
 
-A plugin can replace the forward model through the `forward_model` seam in `kaine/boot/factories/soma.py`. A replacement receives a timespan only if it declares `accepts_timespan = True`, and receives the context only if it reports a `context_dim` above zero.
+A plugin can replace the forward model through the `forward_model` seam in `kaine/boot/factories/interoception.py`. A replacement receives a timespan only if it declares `accepts_timespan = True`, and receives the context only if it reports a `context_dim` above zero.
 
 ### Broadcast context
 
@@ -171,23 +171,23 @@ Section `[soma]` in `config/kaine.toml`. See [Module configuration](../appendix-
 
 ```mermaid
 graph TD
-    SysMetrics["SystemMetricsReader\n(psutil + pynvml)"] -->|"read_metrics()"| SomaTick["Soma.tick_once()"]
+    SysMetrics["SystemMetricsReader\n(psutil + pynvml)"] -->|"read_metrics()"| InteroceptionTick["Interoception.tick_once()"]
     CycleOut["cycle.out / cycle.tick\n(wall_duration_ms)"] -->|rolling average| SysMetrics
-    HypnosOut["hypnos.out"] -->|sleep.started / completed| SomaTick
+    HypnosOut["hypnos.out"] -->|sleep.started / completed| InteroceptionTick
     WS["workspace broadcast"] -->|accessed members| Ctx["BroadcastContext\n24 components"]
 
-    SomaTick --> WellnessCalc["compute_wellness()"]
-    SomaTick --> AnomalyDet["ThresholdAnomalyDetector\nmetric above hard threshold"]
-    SomaTick --> FwdModel["SubstrateForwardModel\nfrozen CfC reservoir, then linear readout over hidden state and context"]
+    InteroceptionTick --> WellnessCalc["compute_wellness()"]
+    InteroceptionTick --> AnomalyDet["ThresholdAnomalyDetector\nmetric above hard threshold"]
+    InteroceptionTick --> FwdModel["SubstrateForwardModel\nfrozen CfC reservoir, then linear readout over hidden state and context"]
     Ctx --> FwdModel
     FwdModel -->|per-channel error| ExpModel["ExpectedErrorModel\nexpected plus band times spread"]
     ExpModel -->|unexpected error| FatigueAcc["FatigueAccumulator"]
     ExpModel -->|unexpected error| RegDet["RegulationDetector"]
-    FatigueAcc -->|threshold crossed| SomaFatigue["soma.fatigue"]
-    RegDet -->|window completed| SomaReg["soma.regulation"]
-    WellnessCalc --> SomaReport["soma.report\nintensity, alert, context_gain"]
-    AnomalyDet --> SomaReport
-    FwdModel -->|error, null-context error| SomaReport
+    FatigueAcc -->|threshold crossed| InteroceptionFatigue["soma.fatigue"]
+    RegDet -->|window completed| InteroceptionReg["soma.regulation"]
+    WellnessCalc --> InteroceptionReport["soma.report\nintensity, alert, context_gain"]
+    AnomalyDet --> InteroceptionReport
+    FwdModel -->|error, null-context error| InteroceptionReport
 ```
 
 ### Metric collection
@@ -219,38 +219,38 @@ The interoception module needs no external service. GPU metrics appear when `pyn
 
 | File | Role |
 |---|---|
-| `kaine/modules/soma/module.py` | `Soma` class: reading loop, intensity and alert rule, context adoption, warm-up, the sleep module loop, serialization |
-| `kaine/modules/soma/forward.py` | `SubstrateForwardModel` with its context input, `metrics_to_feature_vector()` |
+| `kaine/modules/interoception/module.py` | `Interoception` class: reading loop, intensity and alert rule, context adoption, warm-up, the sleep module loop, serialization |
+| `kaine/modules/interoception/forward.py` | `SubstrateForwardModel` with its context input, `metrics_to_feature_vector()` |
 | `kaine/modules/context.py` | `BroadcastContext`: context featurization, adoption, null context |
-| `kaine/modules/soma/reader.py` | `SystemMetricsReader`: `psutil` and `pynvml` |
-| `kaine/modules/soma/wellness.py` | `compute_wellness()` |
-| `kaine/modules/soma/detector.py` | `ThresholdAnomalyDetector` and the `AnomalyDetector` protocol |
-| `kaine/modules/soma/expected_error.py` | `ExpectedErrorModel`: learned expected error and spread |
-| `kaine/modules/soma/fatigue.py` | `FatigueAccumulator` |
-| `kaine/modules/soma/regulation.py` | `RegulationDetector`: the advisory ladder |
+| `kaine/modules/interoception/reader.py` | `SystemMetricsReader`: `psutil` and `pynvml` |
+| `kaine/modules/interoception/wellness.py` | `compute_wellness()` |
+| `kaine/modules/interoception/detector.py` | `ThresholdAnomalyDetector` and the `AnomalyDetector` protocol |
+| `kaine/modules/interoception/expected_error.py` | `ExpectedErrorModel`: learned expected error and spread |
+| `kaine/modules/interoception/fatigue.py` | `FatigueAccumulator` |
+| `kaine/modules/interoception/regulation.py` | `RegulationDetector`: the advisory ladder |
 | `kaine/oscillator/module_oscillator.py` | `SelfRhythmOscillator` |
 
 ## Tests
 
 | File | What it verifies |
 |---|---|
-| `tests/test_soma_module.py` | Reading loop, alert intensity, wellness integration |
-| `tests/test_soma_context.py` | Readout restore with zero context weights, null-context error, `context_gain` on reports |
+| `tests/test_interoception_module.py` | Reading loop, alert intensity, wellness integration |
+| `tests/test_interoception_context.py` | Readout restore with zero context weights, null-context error, `context_gain` on reports |
 | `tests/test_broadcast_context.py` | Context featurization, adoption of accessed members, inhibited broadcasts, null context |
 | `tests/test_graded_intensity.py` | The shared graded-intensity rule |
-| `tests/test_soma_forward.py` | `SubstrateForwardModel` step, non-finite guard, serialization |
-| `tests/test_soma_expected_error.py` | `ExpectedErrorModel` learning and the unexpected error |
-| `tests/test_soma_fatigue.py` | `FatigueAccumulator` dynamics, threshold crossing, reset |
-| `tests/test_soma_regulation.py` | `RegulationDetector` escalation and episode reset |
-| `tests/test_soma_detector.py` | `ThresholdAnomalyDetector` and wildcard matching |
-| `tests/test_soma_wellness.py` | `compute_wellness()` weighting and curves |
-| `tests/test_soma_system_reader.py` | `SystemMetricsReader` without `pynvml` |
-| `tests/test_soma_hypnos_flag.py` | Sleep flag and suspension of learning |
-| `tests/test_soma_warmup.py` | Developmental warm-up |
-| `tests/test_soma_self_rhythm.py` | Self-rhythm integration |
-| `tests/test_soma_self_rhythm_boot.py` | Boot wiring of the self-rhythm loop |
-| `tests/test_cycle_soma_regulation.py` | `CycleEngine.consume_soma_regulation` advisory handling |
-| `tests/systems/test_soma_subsystem.py` | Redis-backed subsystem integration |
+| `tests/test_interoception_forward.py` | `SubstrateForwardModel` step, non-finite guard, serialization |
+| `tests/test_interoception_expected_error.py` | `ExpectedErrorModel` learning and the unexpected error |
+| `tests/test_interoception_fatigue.py` | `FatigueAccumulator` dynamics, threshold crossing, reset |
+| `tests/test_interoception_regulation.py` | `RegulationDetector` escalation and episode reset |
+| `tests/test_interoception_detector.py` | `ThresholdAnomalyDetector` and wildcard matching |
+| `tests/test_interoception_wellness.py` | `compute_wellness()` weighting and curves |
+| `tests/test_interoception_system_reader.py` | `SystemMetricsReader` without `pynvml` |
+| `tests/test_interoception_hypnos_flag.py` | Sleep flag and suspension of learning |
+| `tests/test_interoception_warmup.py` | Developmental warm-up |
+| `tests/test_interoception_self_rhythm.py` | Self-rhythm integration |
+| `tests/test_interoception_self_rhythm_boot.py` | Boot wiring of the self-rhythm loop |
+| `tests/test_cycle_interoception_regulation.py` | `CycleEngine.consume_soma_regulation` advisory handling |
+| `tests/systems/test_interoception_subsystem.py` | Redis-backed subsystem integration |
 
 ## Spec and related
 

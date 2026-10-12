@@ -51,7 +51,7 @@ def _perception_mode(config: dict) -> str | None:
     return (config.get("perception_feed") or {}).get("mode")
 
 
-def _topos_cv2_needed(config: dict) -> bool:
+def _vision_cv2_needed(config: dict) -> bool:
     if (config.get("topos") or {}).get("capture_enabled"):
         return True
     return _perception_mode(config) == "playlist"
@@ -130,11 +130,11 @@ def _phantasia_jax_engine(config: dict) -> bool:
     )
 
 
-def _soma_torch_needed(config: dict) -> bool:
+def _interoception_torch_needed(config: dict) -> bool:
     return (config.get("soma") or {}).get("cfc_backend", "numpy") == "torch"
 
 
-def _chronos_torch_needed(config: dict) -> bool:
+def _sequence_torch_needed(config: dict) -> bool:
     return (config.get("chronos") or {}).get("cfc_backend", "numpy") == "torch"
 
 
@@ -148,13 +148,13 @@ def _nous_pymdp_backend(config: dict) -> bool:
 #: explicitly requested.
 REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
     "soma": (
-        Requirement("torch", "core", predicate=_soma_torch_needed),
-        Requirement("ncps", "core", predicate=_soma_torch_needed),
+        Requirement("torch", "core", predicate=_interoception_torch_needed),
+        Requirement("ncps", "core", predicate=_interoception_torch_needed),
         Requirement("pynvml", "nvidia", severity="warning"),
     ),
     "chronos": (
-        Requirement("torch", "core", predicate=_chronos_torch_needed),
-        Requirement("ncps", "core", predicate=_chronos_torch_needed),
+        Requirement("torch", "core", predicate=_sequence_torch_needed),
+        Requirement("ncps", "core", predicate=_sequence_torch_needed),
     ),
     "mnemos": (
         Requirement("sentence_transformers", "memory", predicate=_embedding_torch_backend),
@@ -181,7 +181,7 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
         Requirement("torch", "core"),
         Requirement("transformers", "vision"),
         Requirement("PIL", "vision"),
-        Requirement("cv2", "vision", predicate=_topos_cv2_needed),
+        Requirement("cv2", "vision", predicate=_vision_cv2_needed),
     ),
     "audition": (
         Requirement("sounddevice", "audio", predicate=_audition_sounddevice_needed),

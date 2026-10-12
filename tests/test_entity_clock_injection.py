@@ -19,9 +19,9 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
-from kaine.modules.chronos.featurizer import SnapshotFeaturizer
-from kaine.modules.chronos.module import Chronos
-from kaine.modules.soma.module import Soma
+from kaine.modules.interoception.module import Interoception
+from kaine.modules.sequence.featurizer import SnapshotFeaturizer
+from kaine.modules.sequence.module import Sequence
 from kaine.modules.thymos.state import DimensionalState
 from kaine.modules.vox import FakePlayer, FakeTTSClient, Vox
 
@@ -54,11 +54,11 @@ def _bus() -> AsyncBus:
 
 
 async def _drive_one_cycle_tick(
-    bus: AsyncBus, soma: Soma, reader: FakeReader, wall_duration_ms: float
+    bus: AsyncBus, interoception: Interoception, reader: FakeReader, wall_duration_ms: float
 ) -> None:
     """Publish a single cycle.tick and run the interoception module's consumer until it is processed."""
     await bus.client.xadd(
-        soma._cycle_stream,
+        interoception._cycle_stream,
         {
             "source": "cycle",
             "type": "cycle.tick",
@@ -77,48 +77,48 @@ async def _drive_one_cycle_tick(
         if not processed.done():
             processed.set_result(None)
 
-    soma._reader.update_cycle_latency_sample = _update  # type: ignore[method-assign]
+    interoception._reader.update_cycle_latency_sample = _update  # type: ignore[method-assign]
 
-    task = asyncio.create_task(soma._cycle_consumer_loop())
+    task = asyncio.create_task(interoception._cycle_consumer_loop())
     await asyncio.wait_for(processed, timeout=1.0)
-    soma._stopped.set()
+    interoception._stopped.set()
     await asyncio.wait_for(task, timeout=5.0)
 
 
 @pytest.mark.parametrize("scale, expected_delta", [(1.0, 2.0), (0.5, 1.0)])
-def test_chronos_delta_and_interaction_follow_entity_clock(scale, expected_delta):
+def test_sequence_delta_and_interaction_follow_entity_clock(scale, expected_delta):
     ticker = Ticker()
     clock = EntityClock(scale=scale, monotonic=ticker)
     bus = _bus()
     try:
-        chronos = Chronos(
+        sequence = Sequence(
             bus,
             featurizer=SnapshotFeaturizer(clock=clock.now),
             entity_clock=clock,
         )
 
         snap = WorkspaceSnapshot(tick_index=0, selected_events=[], inhibited=False)
-        chronos._featurizer.featurize(snap)
+        sequence._featurizer.featurize(snap)
         ticker.advance(2.0)
-        vec = chronos._featurizer.featurize(snap)
+        vec = sequence._featurizer.featurize(snap)
         delta = math.expm1(vec[20])
         assert abs(delta - expected_delta) < 1e-9
 
-        chronos._last_interaction_at = chronos._clock()
+        sequence._last_interaction_at = sequence._clock()
         ticker.advance(2.0)
-        assert abs(chronos._time_since_last_interaction_s() - expected_delta) < 1e-9
+        assert abs(sequence._time_since_last_interaction_s() - expected_delta) < 1e-9
     finally:
         asyncio.run(bus.close())
 
 
-def test_chronos_explicit_clock_wins_over_entity_clock():
+def test_sequence_explicit_clock_wins_over_entity_clock():
     ticker = Ticker()
     clock = EntityClock(scale=0.5, monotonic=ticker)
     bus = _bus()
     try:
-        chronos = Chronos(bus, entity_clock=clock, clock=lambda: 42.0)
-        assert chronos._clock() == 42.0
-        assert chronos._featurizer._clock() == 42.0
+        sequence = Sequence(bus, entity_clock=clock, clock=lambda: 42.0)
+        assert sequence._clock() == 42.0
+        assert sequence._featurizer._clock() == 42.0
     finally:
         asyncio.run(bus.close())
 
@@ -169,21 +169,21 @@ def test_vox_mirroring_decay_follows_entity_clock(scale, expected_elapsed, tmp_p
 
 
 @pytest.mark.parametrize("scale, expected_latency", [(1.0, 300.0), (0.5, 150.0)])
-def test_soma_cycle_latency_scaled_to_subjective_time(scale, expected_latency):
+def test_interoception_cycle_latency_scaled_to_subjective_time(scale, expected_latency):
     ticker = Ticker()
     clock = EntityClock(scale=scale, monotonic=ticker)
     bus = _bus()
     try:
         reader = FakeReader()
-        soma = Soma(bus, reader=reader, entity_clock=clock)
+        interoception = Interoception(bus, reader=reader, entity_clock=clock)
 
-        asyncio.run(_drive_one_cycle_tick(bus, soma, reader, wall_duration_ms=300))
+        asyncio.run(_drive_one_cycle_tick(bus, interoception, reader, wall_duration_ms=300))
         assert reader.latency_samples == [expected_latency]
     finally:
         asyncio.run(bus.close())
 
 
-def test_boot_passes_registry_entity_clock_to_chronos_and_vox():
+def test_boot_passes_registry_entity_clock_to_sequence_and_vox():
     bus = _bus()
     try:
         ticker = Ticker()
@@ -195,16 +195,16 @@ def test_boot_passes_registry_entity_clock_to_chronos_and_vox():
         _vox_module.ChatterboxClient = lambda **kw: FakeTTSClient()
 
         try:
-            chronos = construct_module(
+            sequence = construct_module(
                 "chronos",
                 bus,
                 {"chronos": {}},
                 registry={},
                 entity_clock=clock,
             )
-            assert chronos._clock() == clock.now()
-            assert chronos._clock.__self__ is clock
-            assert chronos._featurizer._clock() == clock.now()
+            assert sequence._clock() == clock.now()
+            assert sequence._clock.__self__ is clock
+            assert sequence._featurizer._clock() == clock.now()
 
             vox = construct_module(
                 "vox",

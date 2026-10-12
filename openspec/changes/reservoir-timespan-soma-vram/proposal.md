@@ -20,7 +20,7 @@ Two findings of the mathematics review of 2026-10-08.
 
 ## Impact
 
-- **Code:** `kaine/cfc_numpy.py`, `kaine/modules/soma/{forward,module}.py`, `kaine/modules/chronos/{network,module}.py`.
+- **Code:** `kaine/cfc_numpy.py`, `kaine/modules/interoception/{forward,module}.py`, `kaine/modules/sequence/{network,module}.py`.
 - **Behaviour:** The interoception and sequence modules' prediction errors now respond to irregular timing; at steady cadence they are close to before. On GPU hosts the interoception module's raw error now includes VRAM, so model loads and unloads are interoceptive events. The interoception module's salience feeds the self-rhythm's own drive, so the live heartbeat entrainment markers see a slightly different signal; the archived offline developmental validation does not use these paths and is re-run in the follow-up validation step.
 - **Docs:** `docs/09-modules/interoception.md`, `docs/09-modules/sequence.md`.
 - **Paper:** §3.5 and Appendix A.5 (the reservoir timespan) and Table A1 (`n_x` note).

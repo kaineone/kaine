@@ -51,8 +51,8 @@ SHALL log a single warning and continue producing reports without any
 
 #### Scenario: NVML init failure does not stop Interoception
 - **WHEN** `pynvml.nvmlInit()` raises an exception during
-  `Soma.initialize`
-- **THEN** `Soma.initialize` completes successfully and subsequent
+  `Interoception.initialize`
+- **THEN** `Interoception.initialize` completes successfully and subsequent
   `soma.report` events contain no `gpu_*` keys but still contain
   `cpu_percent`, `ram_percent`, and other CPU-side metrics
 

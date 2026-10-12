@@ -223,15 +223,15 @@ async def _benchmark_vision(cfg: dict[str, Any], encodes: int) -> dict[str, Any]
     """Time the vision module's DINOv2 encode of one seeded frame over `encodes` iters."""
     out: dict[str, Any] = {"ran": False, "reason": "", "samples_ms": []}
 
-    topos_cfg = cfg.get("topos") or {}
-    width = int(topos_cfg.get("capture_width", 640))
-    height = int(topos_cfg.get("capture_height", 480))
-    model_id = topos_cfg.get("encoder_model_id")
-    device_pref = topos_cfg.get("device", "auto")
+    vision_cfg = cfg.get("topos") or {}
+    width = int(vision_cfg.get("capture_width", 640))
+    height = int(vision_cfg.get("capture_height", 480))
+    model_id = vision_cfg.get("encoder_model_id")
+    device_pref = vision_cfg.get("device", "auto")
 
     # Build one seeded frame (never a camera; never persisted).
     try:
-        from kaine.modules.topos.feed import SeededProceduralSource, SeededSchedule
+        from kaine.modules.vision.feed import SeededProceduralSource, SeededSchedule
 
         source = SeededProceduralSource(
             SeededSchedule(seed=0, width=width, height=height)
@@ -246,7 +246,7 @@ async def _benchmark_vision(cfg: dict[str, Any], encodes: int) -> dict[str, Any]
         return out
 
     try:
-        from kaine.modules.topos.encoder import DINOv2Encoder
+        from kaine.modules.vision.encoder import DINOv2Encoder
 
         kw: dict[str, Any] = {"device_preference": device_pref}
         if model_id:

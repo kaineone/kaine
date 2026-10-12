@@ -35,7 +35,7 @@ returning a fixed/centre fovea.
 - [x] 1.2 A workspace→vision module attention channel: an optional top-down bias region
       (from the planning module / the social cognition module / a goal), injected without the vision module importing the
       workspace (a provider/callback seam, like the affect seam).
-      (`Topos.set_top_down_bias_provider` / `set_arousal_provider`.)
+      (`Vision.set_top_down_bias_provider` / `set_arousal_provider`.)
 - [x] 1.3 Select the single fovea target as the argmax of the precision-weighted
       combination of bottom-up saliency and the top-down bias, with dwell/hysteresis
       to damp thrashing; fovea size from the affect module's arousal value (distinct visual
@@ -64,13 +64,13 @@ returning a fixed/centre fovea.
 
 - [x] 2.1 Publish a *predicted next fovea* from a small forward model (the attention
       schema); expose it content-free for the self-model and diagnostics.
-      (`kaine/modules/topos/foveation.py:FoveaPredictor` — a constant-velocity
+      (`kaine/modules/vision/foveation.py:FoveaPredictor` — a constant-velocity
       forward model of the fovea trajectory; wired in
-      `kaine/modules/topos/module.py:Topos.process_frame` which publishes
+      `kaine/modules/vision/module.py:Vision.process_frame` which publishes
       `report["predicted_fovea"]` as a content-free `{x, y, size}` alongside the
       current fovea when foveation is on. Covered by
       `tests/test_foveation.py` (5 `FoveaPredictor` cases) and
-      `tests/test_topos_module.py::test_attention_schema_predicts_toward_the_fovea_trajectory`.)
+      `tests/test_vision_module.py::test_attention_schema_predicts_toward_the_fovea_trajectory`.)
 
 ## 3. Phase 3 — saccadic native fovea
 

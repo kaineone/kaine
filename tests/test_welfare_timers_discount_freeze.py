@@ -134,7 +134,7 @@ def _unfrozen_clock(u: _Mono) -> UnfrozenClock:
     )
 
 
-async def _push_soma(bus: AsyncBus, prediction_error: float, warmup_active: bool = False):
+async def _push_interoception(bus: AsyncBus, prediction_error: float, warmup_active: bool = False):
     await bus.publish(
         validate_event(
             source="soma",
@@ -202,7 +202,7 @@ async def test_monitor_sample_before_a_60s_freeze_does_not_cross(bus):
     mon = _make_monitor(bus, cfg, u)
     stop = asyncio.Event()
 
-    await _push_soma(bus, 0.9)
+    await _push_interoception(bus, 0.9)
     await mon._poll_once(stop)  # onset at unfrozen 0
     control_state.freeze(reason="test", source="operator")
     for t_s in (1.0, 15.0, 31.0, 45.0, 60.0):  # time passes while frozen
@@ -226,7 +226,7 @@ async def test_monitor_same_sample_without_freeze_crosses_at_30s(bus):
     mon = _make_monitor(bus, cfg, u)
     stop = asyncio.Event()
 
-    await _push_soma(bus, 0.9)
+    await _push_interoception(bus, 0.9)
     await mon._poll_once(stop)
     u.value = 15.0
     await mon._poll_once(stop)
@@ -252,21 +252,21 @@ async def test_monitor_sustained_distress_crosses_on_wall_time_while_sampling_th
     mon = _make_monitor(bus, cfg, u, wall=u)
     stop = asyncio.Event()
 
-    await _push_soma(bus, 0.9)
+    await _push_interoception(bus, 0.9)
     await mon._poll_once(stop)  # onset at unfrozen 0
     u.value = 10.0
     await mon._poll_once(stop)  # 10 s unfrozen
     control_state.freeze(reason="test", source="operator")
     u.value = 11.0
-    await _push_soma(bus, 0.9)
+    await _push_interoception(bus, 0.9)
     await mon._poll_once(stop)  # 11 s of wall time, sampled while frozen
     assert mon._fork_manager.calls == []
     u.value = 29.0
-    await _push_soma(bus, 0.9)
+    await _push_interoception(bus, 0.9)
     await mon._poll_once(stop)  # 29 s
     assert mon._fork_manager.calls == []
     u.value = 30.5
-    await _push_soma(bus, 0.9)
+    await _push_interoception(bus, 0.9)
     await mon._poll_once(stop)  # 30.5 s of wall time: crosses while still frozen
     assert len(mon._fork_manager.calls) == 1
     control_state.stand_down(source="operator")
@@ -287,11 +287,11 @@ async def test_monitor_low_sample_during_freeze_resets_sustained_timer(bus):
     mon = _make_monitor(bus, cfg, u)
     stop = asyncio.Event()
 
-    await _push_soma(bus, 0.9)
+    await _push_interoception(bus, 0.9)
     await mon._poll_once(stop)
     control_state.freeze(reason="test", source="operator")
     u.value = 5.0
-    await _push_soma(bus, 0.0)
+    await _push_interoception(bus, 0.0)
     await mon._poll_once(stop)
     control_state.stand_down(source="operator")
     for t_s in (6.0, 40.0, 80.0):
@@ -353,7 +353,7 @@ async def test_monitor_warmup_not_consumed_by_freeze(bus):
     await mon._poll_once(stop)  # release poll adds nothing
     # Still inside the warm-up (unfrozen time is about 1 s): a sustained
     # crossing within it does not act.
-    await _push_soma(bus, 0.9)
+    await _push_interoception(bus, 0.9)
     u.value = 302.0
     await mon._poll_once(stop)
     u.value = 340.0
@@ -361,7 +361,7 @@ async def test_monitor_warmup_not_consumed_by_freeze(bus):
     assert mon._fork_manager.calls == []
     # Past the warm-up: a new onset and sustained duration act.
     u.value = 425.0
-    await _push_soma(bus, 0.9)
+    await _push_interoception(bus, 0.9)
     await mon._poll_once(stop)  # about 124 s unfrozen
     u.value = 456.0
     await mon._poll_once(stop)
@@ -385,7 +385,7 @@ async def test_monitor_corrupt_control_file_counts_and_records_once(bus, tmp_pat
     stop = asyncio.Event()
 
     (tmp_path / "control.json").write_text("{not json")
-    await _push_soma(bus, 0.9)
+    await _push_interoception(bus, 0.9)
     await mon._poll_once(stop)
     assert len(stub.records) == 1
     assert stub.records[0]["kind"] == "freeze_state_unreadable"
@@ -459,7 +459,7 @@ async def test_observer_fatigue_pauses_during_freeze():
         unfrozen_clock=_unfrozen_clock(u),
     )
 
-    await obs._handle_soma(
+    await obs._handle_interoception(
         "1-0", _event("soma", "soma.fatigue", {"value": 105.0, "threshold": 100.0})
     )
     control_state.freeze(reason="test", source="operator")
@@ -494,7 +494,7 @@ async def test_observer_corrupt_control_file_counts_and_records_once(tmp_path):
         unfrozen_clock=_unfrozen_clock(u),
     )
 
-    await obs._handle_soma(
+    await obs._handle_interoception(
         "1-0",
         _event("soma", "soma.fatigue", {"value": 105.0, "threshold": 100.0}),
     )
@@ -740,7 +740,7 @@ async def test_monitor_sustained_distress_fires_by_wall_time_while_sampling_thro
     mon = _make_monitor(bus, cfg, u, wall)
     stop = asyncio.Event()
 
-    await _push_soma(bus, 0.9)
+    await _push_interoception(bus, 0.9)
     wall.value = 0.0
     u.value = 0.0
     await mon._poll_once(stop)  # onset
@@ -749,7 +749,7 @@ async def test_monitor_sustained_distress_fires_by_wall_time_while_sampling_thro
     for t_s in (5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0):
         wall.value = t_s
         u.value = t_s
-        await _push_soma(bus, 0.9)
+        await _push_interoception(bus, 0.9)
         await mon._poll_once(stop)
         if t_s < 30.0:
             assert mon._fork_manager.calls == []
@@ -779,14 +779,14 @@ async def test_observer_sustained_distress_fires_by_wall_time_while_sampling_thr
     )
 
     u.value = 0.0
-    await obs._handle_soma(
+    await obs._handle_interoception(
         "1-0", _event("soma", "soma.report", {"prediction_error": 0.9})
     )
 
     control_state.freeze(reason="test", source="operator")
     for t_s in (5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0):
         u.value = t_s
-        await obs._handle_soma(
+        await obs._handle_interoception(
             f"{int(t_s)}-0",
             _event("soma", "soma.report", {"prediction_error": 0.9}),
         )
@@ -827,12 +827,12 @@ async def test_observer_sustained_distress_fires_once_on_dense_unfrozen_samples(
     )
 
     u.value = 0.0
-    await obs._handle_soma(
+    await obs._handle_interoception(
         "0-0", _event("soma", "soma.report", {"prediction_error": 0.9})
     )
     for t_s in range(1, 31):
         u.value = float(t_s)
-        await obs._handle_soma(
+        await obs._handle_interoception(
             f"{t_s}-0", _event("soma", "soma.report", {"prediction_error": 0.9})
         )
         if t_s < 30:
@@ -993,7 +993,7 @@ def test_cycle_wiring_uses_one_shared_unfrozen_clock():
 
 
 @pytest.mark.asyncio
-async def test_monitor_zero_ceiling_means_the_soma_flag_never_extends_warmup(bus):
+async def test_monitor_zero_ceiling_means_the_interoception_flag_never_extends_warmup(bus):
     """warmup_ceiling_s = 0 disables the interoception warm-up extension: a flag that
     stays set (stuck) must not hold the gate open, so sustained distress still
     crosses at its duration."""
@@ -1010,7 +1010,7 @@ async def test_monitor_zero_ceiling_means_the_soma_flag_never_extends_warmup(bus
     stop = asyncio.Event()
     for t_s in (0.0, 10.0, 20.0, 30.5):
         u.value = t_s
-        await _push_soma(bus, 0.9, warmup_active=True)
+        await _push_interoception(bus, 0.9, warmup_active=True)
         await mon._poll_once(stop)
     assert len(mon._fork_manager.calls) == 1
 
@@ -1036,7 +1036,7 @@ async def test_monitor_freeze_cannot_stretch_the_warmup_floor_past_its_wall_boun
     t = 10.0
     while t <= 200.0:
         u.value = t
-        await _push_soma(bus, 0.9)
+        await _push_interoception(bus, 0.9)
         await mon._poll_once(stop)
         if t < 120.0:
             assert mon._fork_manager.calls == [], t
@@ -1104,14 +1104,14 @@ async def test_observer_null_error_is_no_distress_sample():
     )
 
     u.value = 0.0
-    await obs._handle_soma(
+    await obs._handle_interoception(
         "0-0", _event("soma", "soma.report", {"prediction_error": 0.9})
     )
     assert obs._interoceptive_distress.active_since is not None
 
     for t_s in range(1, 11):
         u.value = float(t_s)
-        await obs._handle_soma(
+        await obs._handle_interoception(
             f"{t_s}-0",
             _event("soma", "soma.report", {"prediction_error": None}),
         )
@@ -1122,7 +1122,7 @@ async def test_observer_null_error_is_no_distress_sample():
         for r in sink.rows
     )
 
-    await obs._handle_soma(
+    await obs._handle_interoception(
         "11-0", _event("soma", "soma.report", {"prediction_error": 0.0})
     )
     assert obs._interoceptive_distress.active_since is None
@@ -1151,13 +1151,13 @@ async def test_monitor_null_samples_leave_the_timer_to_fire(bus):
 
     mon._distress.check_timeout = counting
 
-    await _push_soma(bus, 0.9)
+    await _push_interoception(bus, 0.9)
     stop = asyncio.Event()
     await mon._poll_once(stop)
 
     for t_s in range(1, 11):
         u.value = float(t_s)
-        await _push_soma(bus, None)  # type: ignore[arg-type]
+        await _push_interoception(bus, None)  # type: ignore[arg-type]
         await mon._poll_once(stop)
         assert mon._fork_manager.calls == []
         assert mon._distress.active_since is not None
@@ -1183,9 +1183,9 @@ async def test_monitor_null_mid_batch_keeps_the_loop_and_cursor(bus):
     mon = _make_monitor(bus, cfg, u)
     stop = asyncio.Event()
 
-    await _push_soma(bus, 0.9)
-    await _push_soma(bus, None)  # type: ignore[arg-type]
-    await _push_soma(bus, 0.9)
+    await _push_interoception(bus, 0.9)
+    await _push_interoception(bus, None)  # type: ignore[arg-type]
+    await _push_interoception(bus, 0.9)
     await mon._poll_once(stop)
 
     entries = await bus.read("soma.out", last_id="0")
@@ -1212,7 +1212,7 @@ async def test_monitor_missing_error_key_counts_as_zero(bus):
     mon = _make_monitor(bus, cfg, u)
     stop = asyncio.Event()
 
-    await _push_soma(bus, 0.9)
+    await _push_interoception(bus, 0.9)
     await mon._poll_once(stop)
     u.value = 1.0
     await bus.publish(
@@ -1252,13 +1252,13 @@ async def test_observer_null_run_then_silence_still_fires():
     )
 
     u.value = 0.0
-    await obs._handle_soma(
+    await obs._handle_interoception(
         "0-0", _event("soma", "soma.report", {"prediction_error": 0.9})
     )
 
     for t_s in range(1, 11):
         u.value = float(t_s)
-        await obs._handle_soma(
+        await obs._handle_interoception(
             f"{t_s}-0",
             _event("soma", "soma.report", {"prediction_error": None}),
         )

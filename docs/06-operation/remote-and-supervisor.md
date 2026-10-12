@@ -14,7 +14,7 @@ The bridge listens on one port, `[remote_bridge].port` (default `8089`), with se
 
 | Path | Direction | Payload |
 |---|---|---|
-| `/ingest/video` | client to entity | Binary JPEG or PNG frames. The bridge converts each frame to an in-memory `PIL.Image` and passes it to `Topos.process_frame()`. Only the latest frame is kept, capped at `video_max_fps` (4.0). |
+| `/ingest/video` | client to entity | Binary JPEG or PNG frames. The bridge converts each frame to an in-memory `PIL.Image` and passes it to `Vision.process_frame()`. Only the latest frame is kept, capped at `video_max_fps` (4.0). |
 | `/ingest/audio` | client to entity | Binary int16 mono PCM at `audio_sample_rate` (16000). It goes through the same voice-activity and utterance pipeline as the physical microphone, then to `Audition.process_audio(..., source_label="remote")`. |
 | `/speech` | entity to client | Binary WAV clips tapped from vocal playback. Local playback continues. |
 | `/transcript` | entity to client | JSON lines: `{role: "entity"\|"heard", text, type, source_label, ts}`. |

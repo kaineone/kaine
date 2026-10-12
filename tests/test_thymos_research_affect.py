@@ -355,10 +355,10 @@ async def test_learning_progress_averaged_over_sources(bus):
     try:
         for i in range(40):
             fake_now[0] = i * 0.1
-            topos_err = 1.0 - 0.8 * i / 39
+            vision_err = 1.0 - 0.8 * i / 39
             await thymos._handle_peer_event(
                 "topos.out",
-                _report("topos", "topos.report", topos_err),
+                _report("topos", "topos.report", vision_err),
             )
             await thymos._handle_peer_event(
                 "audition.out",
@@ -372,35 +372,35 @@ async def test_learning_progress_averaged_over_sources(bus):
         mixed_signed = thymos._progress()[1]
         assert mixed_signed > 0.0
 
-        topos_only = Thymos(
+        vision_only = Thymos(
             bus,
             clock=lambda: fake_now[0],
             drift_rate_per_s=0.0,
             publish_interval_s=999.0,
         )
-        await topos_only.initialize()
+        await vision_only.initialize()
         try:
             for i in range(40):
                 fake_now[0] = i * 0.1
-                topos_err = 1.0 - 0.8 * i / 39
-                await topos_only._handle_peer_event(
+                vision_err = 1.0 - 0.8 * i / 39
+                await vision_only._handle_peer_event(
                     "topos.out",
-                    _report("topos", "topos.report", topos_err),
+                    _report("topos", "topos.report", vision_err),
                 )
                 if (i + 1) % 3 == 0:
-                    await topos_only._tick()
+                    await vision_only._tick()
             fake_now[0] = 4.0
-            await topos_only._tick()
-            topos_signed = topos_only._progress()[1]
-            assert mixed_signed < topos_signed
+            await vision_only._tick()
+            vision_signed = vision_only._progress()[1]
+            assert mixed_signed < vision_signed
         finally:
-            await topos_only.shutdown()
+            await vision_only.shutdown()
     finally:
         await thymos.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_soma_report_without_wellness_keeps_prior(bus: AsyncBus):
+async def test_interoception_report_without_wellness_keeps_prior(bus: AsyncBus):
     fake_now = [0.0]
     thymos = Thymos(bus, clock=lambda: fake_now[0], publish_interval_s=999.0)
     await thymos.initialize()

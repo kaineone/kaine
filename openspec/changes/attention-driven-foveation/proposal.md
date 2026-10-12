@@ -92,7 +92,7 @@ implement it. The lead reviews this design before any code lands.
   in the workspace for the bottom-up/top-down combination), `entity-time` (the
   two-clocks cadence the fovea updates on). All shipped.
 - **Repo (at implementation time, not in this change):** would touch
-  `kaine/modules/topos/module.py` and the salience/forward-model path (spatial
+  `kaine/modules/vision/module.py` and the salience/forward-model path (spatial
   map + fovea selection + dual-view encode), the perception feed builders in
   `kaine/boot.py` (moderate-res grab + optional native region capture), config
   `[perception_feed]`/`[topos]`, and `docs/09-modules/vision.md`. No entity is booted

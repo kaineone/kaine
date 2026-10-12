@@ -48,7 +48,7 @@ def _strategy():
     )
 
 
-def _soma_event(salience=0.9):
+def _interoception_event(salience=0.9):
     return Event(
         source="soma",
         type="soma.report",
@@ -58,7 +58,7 @@ def _soma_event(salience=0.9):
     )
 
 
-def _topos_event(salience=0.1):
+def _vision_event(salience=0.1):
     return Event(
         source="topos",
         type="topos.report",
@@ -104,8 +104,8 @@ async def test_scores_from_two_streams_with_one_entry_id_both_survive(arm, arm_s
     )
     cycle, bus = _make_cycle(syn, ["soma.out", "topos.out"], client)
     try:
-        await client.xadd("soma.out", _encode_event(_soma_event()), id="1760000000000-0")
-        await client.xadd("topos.out", _encode_event(_topos_event()), id="1760000000000-0")
+        await client.xadd("soma.out", _encode_event(_interoception_event()), id="1760000000000-0")
+        await client.xadd("topos.out", _encode_event(_vision_event()), id="1760000000000-0")
         result = await cycle.tick()
         assert result.is_experiential
         entries = await client.xrange(WORKSPACE_STREAM)
@@ -138,8 +138,8 @@ async def test_broadcast_context_reads_each_members_own_score():
     )
     cycle, bus = _make_cycle(syn, ["soma.out", "topos.out"], client)
     try:
-        await client.xadd("soma.out", _encode_event(_soma_event()), id="1760000000000-0")
-        await client.xadd("topos.out", _encode_event(_topos_event()), id="1760000000000-0")
+        await client.xadd("soma.out", _encode_event(_interoception_event()), id="1760000000000-0")
+        await client.xadd("topos.out", _encode_event(_vision_event()), id="1760000000000-0")
         await cycle.tick()
         entries = await client.xrange(WORKSPACE_STREAM)
         assert len(entries) == 1
@@ -179,30 +179,30 @@ async def test_candidates_are_ordered_by_source_first():
     syn = FakeSyneidesis()
     cycle, bus = _make_cycle(syn, ["topos.out", "soma.out"], client)
     try:
-        topos_event = Event(
+        vision_event = Event(
             source="topos",
             type="topos.report",
             payload={"order": "third"},
             salience=0.5,
             timestamp=datetime(2026, 1, 1, 0, 0, 2, tzinfo=timezone.utc),
         )
-        soma_first = Event(
+        interoception_first = Event(
             source="soma",
             type="soma.report",
             payload={"order": "first"},
             salience=0.5,
             timestamp=datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
         )
-        soma_second = Event(
+        interoception_second = Event(
             source="soma",
             type="soma.report",
             payload={"order": "second"},
             salience=0.5,
             timestamp=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
         )
-        await client.xadd("topos.out", _encode_event(topos_event), id="1760000000000-0")
-        await client.xadd("soma.out", _encode_event(soma_first), id="1760000000000-0")
-        await client.xadd("soma.out", _encode_event(soma_second), id="1760000000000-1")
+        await client.xadd("topos.out", _encode_event(vision_event), id="1760000000000-0")
+        await client.xadd("soma.out", _encode_event(interoception_first), id="1760000000000-0")
+        await client.xadd("soma.out", _encode_event(interoception_second), id="1760000000000-1")
         await cycle.tick()
         assert len(syn.calls) == 1
         events = syn.calls[0]["events"]
@@ -308,7 +308,7 @@ async def test_select_dual_refuses_duplicate_candidate_ids():
         ),
     )
     with pytest.raises(ValueError):
-        await syne.select_dual([("a", _soma_event()), ("a", _topos_event())], ctx)
+        await syne.select_dual([("a", _interoception_event()), ("a", _vision_event())], ctx)
 
 
 @pytest.mark.asyncio
@@ -328,7 +328,7 @@ async def test_select_dual_keeps_one_score_per_candidate():
     )
     ids = ["soma.out:1760000000000-0", "topos.out:1760000000000-0"]
     primary, counterfactual = await syne.select_dual(
-        [(ids[0], _soma_event()), (ids[1], _topos_event())], ctx
+        [(ids[0], _interoception_event()), (ids[1], _vision_event())], ctx
     )
     assert counterfactual is not None
     for snapshot in (primary, counterfactual):
@@ -399,7 +399,7 @@ async def test_tone_event_is_accessed_through_the_engine_path(tmp_path):
             "audition.out", _encode_event(tone_event), id="1760000000000-0"
         )
         await client.xadd(
-            "soma.out", _encode_event(_soma_event(0.1)), id="1760000000000-0"
+            "soma.out", _encode_event(_interoception_event(0.1)), id="1760000000000-0"
         )
         result = await cycle.tick()
         assert result.is_experiential
@@ -496,10 +496,10 @@ async def test_read_cursors_stay_raw_bus_ids():
     cycle, bus = _make_cycle(syn, ["soma.out", "topos.out"], client)
     try:
         await client.xadd(
-            "soma.out", _encode_event(_soma_event()), id="1760000000000-0"
+            "soma.out", _encode_event(_interoception_event()), id="1760000000000-0"
         )
         await client.xadd(
-            "topos.out", _encode_event(_topos_event()), id="1760000000000-0"
+            "topos.out", _encode_event(_vision_event()), id="1760000000000-0"
         )
         await cycle.tick()
         assert cycle._cursors == {

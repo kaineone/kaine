@@ -199,7 +199,7 @@ def _make_hypnos(
         bus,
         mnemos=_FakeMnemos(),
         thymos=_FakeThymos(),
-        chronos_resetters=[_FakeResetter()],
+        sequence_resetters=[_FakeResetter()],
         trainer=trainer or _RejectingTrainer(),
         voice_alignment_config=config,
     )

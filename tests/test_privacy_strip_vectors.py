@@ -30,7 +30,7 @@ def test_strip_vectors_removes_vector_fields_and_long_numeric_lists():
     assert stripped["nested"]["body"] == "nested text"
 
 
-def test_serialize_snapshot_strips_topos_vectors_and_omits_tick_and_entry_ids():
+def test_serialize_snapshot_strips_vision_vectors_and_omits_tick_and_entry_ids():
     values = [0.123456 + i * 1e-6 for i in range(768)]
     event = (
         "entry-42",

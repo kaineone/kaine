@@ -14,6 +14,7 @@ import pytest
 from kaine import extras as extras_module
 from kaine.boot import ConfigurationError, build_registry
 from kaine.extras import Missing, check, format_missing
+from tests._module_packages import identifier_for_key
 
 
 def _make_find_spec(available: set[str]):
@@ -24,7 +25,7 @@ def _make_find_spec(available: set[str]):
     return _find_spec
 
 
-def test_check_reports_missing_core_for_enabled_soma_chronos(monkeypatch):
+def test_check_reports_missing_core_for_enabled_interoception_sequence(monkeypatch):
     monkeypatch.setattr(
         importlib.util, "find_spec", _make_find_spec(set())
     )
@@ -45,7 +46,7 @@ def test_check_reports_missing_core_for_enabled_soma_chronos(monkeypatch):
 
     message = format_missing(missing)
     assert 'pip install "kaine[core]"' in message
-    assert "Soma" not in message  # format uses lowercase module keys
+    assert "Interoception" not in message  # format uses lowercase module keys
 
 
 def test_check_respects_module_toggles(monkeypatch):
@@ -159,7 +160,7 @@ def test_hypnos_warns_sentence_transformers_when_embedding_backend_torch(monkeyp
     )
 
 
-def test_topos_cv2_needed_when_capture_enabled(monkeypatch):
+def test_vision_cv2_needed_when_capture_enabled(monkeypatch):
     monkeypatch.setattr(
         importlib.util,
         "find_spec",
@@ -170,7 +171,7 @@ def test_topos_cv2_needed_when_capture_enabled(monkeypatch):
     assert any(m.import_name == "cv2" and m.extra == "vision" for m in missing)
 
 
-def test_topos_cv2_needed_in_playlist_mode(monkeypatch):
+def test_vision_cv2_needed_in_playlist_mode(monkeypatch):
     monkeypatch.setattr(
         importlib.util,
         "find_spec",
@@ -185,7 +186,7 @@ def test_topos_cv2_needed_in_playlist_mode(monkeypatch):
     assert any(m.import_name == "cv2" and m.extra == "vision" for m in missing)
 
 
-def test_topos_cv2_not_needed_without_capture_or_playlist(monkeypatch):
+def test_vision_cv2_not_needed_without_capture_or_playlist(monkeypatch):
     monkeypatch.setattr(
         importlib.util,
         "find_spec",
@@ -352,7 +353,7 @@ def test_phantasia_fake_backend_needs_nothing(monkeypatch):
     assert not missing
 
 
-def test_soma_missing_pynvml_is_warning(monkeypatch):
+def test_interoception_missing_pynvml_is_warning(monkeypatch):
     monkeypatch.setattr(
         importlib.util,
         "find_spec",
@@ -495,7 +496,7 @@ def _collect_top_level_imports(*paths: Path) -> set[str]:
 
 
 def _module_dir(name: str) -> Path:
-    return Path(__file__).resolve().parents[1] / "kaine" / "modules" / name
+    return Path(__file__).resolve().parents[1] / "kaine" / "modules" / identifier_for_key(name)
 
 
 def _repo_root() -> Path:
@@ -506,7 +507,7 @@ def test_table_matches_real_module_imports():
     repo = _repo_root()
     extra_files = {
         "sentence_transformers": [repo / "kaine" / "text_embedding.py"],
-        "pynvml": [repo / "kaine" / "modules" / "soma" / "reader.py"],
+        "pynvml": [repo / "kaine" / "modules" / "interoception" / "reader.py"],
     }
     for name, reqs in extras_module.REQUIREMENTS.items():
         if name == "nexus":

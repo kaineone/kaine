@@ -158,7 +158,7 @@ async def test_complete_and_abandon_goal_publish_events(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_soma_report_nudges_state(bus: AsyncBus):
+async def test_interoception_report_nudges_state(bus: AsyncBus):
     # Rewritten for research affect: wellness is stored as a valence target, and
     # only interoception *alerts* produce an immediate arousal nudge.
     thymos = Thymos(bus)
@@ -189,7 +189,7 @@ async def test_soma_report_nudges_state(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_chronos_report_arms_social_drive(bus: AsyncBus):
+async def test_sequence_report_arms_social_drive(bus: AsyncBus):
     # Rewritten for research affect: the first chronos.report arms the social
     # drive; subsequent ticks build it with u=1, and a newly-reset TSLI relieves it.
     fake_now = [0.0]

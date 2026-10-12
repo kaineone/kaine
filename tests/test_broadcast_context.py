@@ -8,12 +8,12 @@ import pytest
 
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
-from kaine.modules.chronos.featurizer import SnapshotFeaturizer
 from kaine.modules.context import (
     ADDITIVE_INDICES,
     BroadcastContext,
     featurize_events,
 )
+from kaine.modules.sequence.featurizer import SnapshotFeaturizer
 
 
 def _ev(source, type_, salience, **payload):
@@ -26,7 +26,7 @@ def _ev(source, type_, salience, **payload):
     )
 
 
-def test_featurize_matches_chronos_featurizer():
+def test_featurize_matches_sequence_featurizer():
     events = [
         ("topos", "topos.report", 0.7),
         ("audition", "audition.perception", 0.6),
@@ -301,10 +301,10 @@ def test_null_replaces_only_other_sources_by_their_running_mean():
     b, null = ctx.context_and_null({"topos"})
     assert null is not b
 
-    topos_current = featurize_events(
+    vision_current = featurize_events(
         [(s, t, w) for (s, t, w) in broadcasts[2] if s == "topos"], 0.0
     )
-    non_topos_means = [
+    non_vision_means = [
         sum(
             featurize_events(
                 [(s, t, w) for (s, t, w) in broadcast if s != "topos"], 0.0
@@ -314,7 +314,7 @@ def test_null_replaces_only_other_sources_by_their_running_mean():
         for i in range(len(b))
     ]
     for i in ADDITIVE_INDICES:
-        assert null[i] == pytest.approx(topos_current[i] + non_topos_means[i])
+        assert null[i] == pytest.approx(vision_current[i] + non_vision_means[i])
 
     all_means = [
         sum(

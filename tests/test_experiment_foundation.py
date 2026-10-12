@@ -225,7 +225,7 @@ def test_seeded_perception_covariate_round_trips_to_regenerate(tmp_path):
         SeededAudioSchedule,
         SeededProceduralAudioStream,
     )
-    from kaine.modules.topos.feed import SeededProceduralSource, SeededSchedule
+    from kaine.modules.vision.feed import SeededProceduralSource, SeededSchedule
 
     config = {
         "topos": {"capture_width": 48, "capture_height": 32},

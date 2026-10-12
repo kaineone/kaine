@@ -134,7 +134,7 @@ def test_eidolon_self_model_template_omits_raw_content():
     assert isinstance(out, str)
 
 
-def test_soma_report_template_includes_prediction_error_and_fatigue():
+def test_interoception_report_template_includes_prediction_error_and_fatigue():
     from kaine.faithful.templates import TEMPLATES
 
     fn = TEMPLATES[("soma", "soma.report")]
@@ -148,7 +148,7 @@ def test_soma_report_template_includes_prediction_error_and_fatigue():
     assert "42.5" in out or "fatigue" in out.lower()
 
 
-def test_soma_report_template_no_prediction_error_still_works():
+def test_interoception_report_template_no_prediction_error_still_works():
     """Extending soma.report must not break the case where new fields are absent."""
     from kaine.faithful.templates import TEMPLATES
 
@@ -158,7 +158,7 @@ def test_soma_report_template_no_prediction_error_still_works():
     assert "0.8" in out
 
 
-def test_chronos_report_template_includes_temporal_prediction_error():
+def test_sequence_report_template_includes_temporal_prediction_error():
     from kaine.faithful.templates import TEMPLATES
 
     fn = TEMPLATES[("chronos", "chronos.report")]
@@ -767,7 +767,7 @@ def test_perception_feed_block_seeded_surfaces_seed(tmp_path):
             "video": {"surprise_interval": 30},
             "audio": {"base_strength": 0.3},
         },
-        topos_capture_geometry=(320, 240),
+        vision_capture_geometry=(320, 240),
         audition_capture_geometry=(16000, 1),
     )
     block = prober._perception_feed_block()

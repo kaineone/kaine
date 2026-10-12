@@ -37,8 +37,8 @@ from kaine.modules.audition import (
 )
 from kaine.modules.audition.live import LiveMicConfig
 from kaine.modules.perception.module import PerceptionLocus
-from kaine.modules.topos.live import LiveCameraConfig
-from kaine.modules.topos.module import Topos
+from kaine.modules.vision.live import LiveCameraConfig
+from kaine.modules.vision.module import Vision
 
 
 class _FakeEncoder:
@@ -89,16 +89,16 @@ def virtual_feed_state(tmp_path, monkeypatch):
     return desired
 
 
-def _make_topos(bus: AsyncBus) -> Topos:
+def _make_vision(bus: AsyncBus) -> Vision:
     # Seeded video source factory (mirror of what boot injects in seeded mode).
-    from kaine.modules.topos.feed import SeededProceduralSource, SeededSchedule
+    from kaine.modules.vision.feed import SeededProceduralSource, SeededSchedule
 
     schedule = SeededSchedule(seed=0, width=64, height=48, surprise_interval=5)
 
     def _seeded_factory(device, *, width, height):  # noqa: ANN001, ARG001
         return SeededProceduralSource(schedule)
 
-    return Topos(
+    return Vision(
         bus,
         encoder=_FakeEncoder(),
         capture_enabled=True,
@@ -157,25 +157,25 @@ async def _wait_for_events(bus: AsyncBus, stream: str, *, timeout_s: float = 8.0
 async def test_seeded_feed_delivers_vision_and_hearing(bus, virtual_feed_state):
     """The smoking gun: with the seeded feed selected (virtual locus), the vision module
     publishes to topos.out and Audition publishes to audition.out."""
-    topos = _make_topos(bus)
+    vision = _make_vision(bus)
     audition = _make_audition(bus)
     perception = PerceptionLocus(bus, desired_path=virtual_feed_state)
 
-    await topos.initialize()
+    await vision.initialize()
     await audition.initialize()
     await perception.initialize()
     try:
-        topos_events = await _wait_for_events(bus, "topos.out")
+        vision_events = await _wait_for_events(bus, "topos.out")
         audition_events = await _wait_for_events(bus, "audition.out")
 
-        assert topos_events, "topos.out received no events — vision is dark"
-        assert any(e.type == "topos.report" for e in topos_events)
+        assert vision_events, "topos.out received no events — vision is dark"
+        assert any(e.type == "topos.report" for e in vision_events)
 
         assert audition_events, "audition.out received no events — hearing is dark"
         types = {e.type for e in audition_events}
         assert {"audition.transcription", "audition.emotion"} & types
     finally:
-        await topos.shutdown()
+        await vision.shutdown()
         await audition.shutdown()
         await perception.shutdown()
 
@@ -195,12 +195,12 @@ async def test_physical_locus_keeps_virtual_feed_dark(bus, tmp_path, monkeypatch
     perception_state.write_desired_audio(True, desired)
     perception_state.write_desired_locus("physical", path=desired)
 
-    topos = _make_topos(bus)
-    await topos.initialize()
+    vision = _make_vision(bus)
+    await vision.initialize()
     try:
-        topos_events = await _wait_for_events(bus, "topos.out", timeout_s=1.5)
-        assert not topos_events, (
+        vision_events = await _wait_for_events(bus, "topos.out", timeout_s=1.5)
+        assert not vision_events, (
             "virtual seeded feed published while locus=physical — XOR violated"
         )
     finally:
-        await topos.shutdown()
+        await vision.shutdown()

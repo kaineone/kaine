@@ -8,7 +8,7 @@ the frozen InternVideo-Next base checkpoint. A fresh clone has NO weights: the
 ~182 MB fp16 ``model.safetensors`` is fetched ONCE at setup time into a
 deterministic, git-ignored local dir under ``state/models/`` — mirroring the
 language-organ GGUF fetch (:mod:`kaine.setup.organ`) — so runtime is fully local:
-:mod:`kaine.modules.topos.internvideo_next_loader` loads only from this dir and
+:mod:`kaine.modules.vision.internvideo_next_loader` loads only from this dir and
 NEVER touches the network.
 
 Only ``model.safetensors`` is fetched here — the modeling code
@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-from kaine.modules.topos.internvideo_next_loader import (
+from kaine.modules.vision.internvideo_next_loader import (
     PINNED_REVISION,
     WEIGHTS_FILENAME,
     default_weights_dir,

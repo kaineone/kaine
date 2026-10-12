@@ -16,11 +16,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import numpy as np
 import pytest
 
-from kaine.boot import make_soma
+from kaine.boot import make_interoception
 from kaine.cycle.gestation import GestationOwner, GestationReadoutConfig, entrainment_plv
 
 
-def _soma_section() -> dict[str, Any]:
+def _interoception_section() -> dict[str, Any]:
     path = Path(__file__).parents[1] / "config" / "kaine.toml"
     if path.exists():
         with path.open("rb") as f:
@@ -40,13 +40,13 @@ def _make_osc(**kwargs: Any):
 
 
 def _owner(tmp_path: Path, seed: int = 0, identity: str | None = "id-a"):
-    soma = MagicMock()
+    interoception = MagicMock()
     if identity is not None:
-        soma._self_rhythm = MagicMock()
-        soma._self_rhythm.identity = identity
+        interoception._self_rhythm = MagicMock()
+        interoception._self_rhythm.identity = identity
     else:
-        soma._self_rhythm = None
-    soma.self_rhythm_state.return_value = (0.0, 1.0)
+        interoception._self_rhythm = None
+    interoception.self_rhythm_state.return_value = (0.0, 1.0)
 
     config = GestationReadoutConfig.from_dict(
         {
@@ -75,7 +75,7 @@ def _owner(tmp_path: Path, seed: int = 0, identity: str | None = "id-a"):
     state_path = tmp_path / "gestation.json"
     owner = GestationOwner(
         bus=MagicMock(),
-        soma=soma,
+        interoception=interoception,
         drive=MagicMock(),
         beat_phase=lambda: 0.0,
         is_paused=lambda: False,
@@ -87,24 +87,24 @@ def _owner(tmp_path: Path, seed: int = 0, identity: str | None = "id-a"):
     return owner, state_path
 
 
-def test_make_soma_with_shipped_config():
+def test_make_interoception_with_shipped_config():
     bus = MagicMock()
-    section = _soma_section()
-    soma = make_soma(bus, section, entity_clock=None)
-    assert soma is not None
-    assert getattr(soma, "_self_rhythm", None) is None
+    section = _interoception_section()
+    interoception = make_interoception(bus, section, entity_clock=None)
+    assert interoception is not None
+    assert getattr(interoception, "_self_rhythm", None) is None
 
 
 @pytest.mark.parametrize("eta", [-1, True])
-def test_make_soma_disabled_rejects_invalid_eta(eta):
+def test_make_interoception_disabled_rejects_invalid_eta(eta):
     bus = MagicMock()
     section = {"self_rhythm_enabled": False, "self_rhythm_eta": eta}
     with pytest.raises(ValueError, match="self_rhythm_eta"):
-        make_soma(bus, section, entity_clock=None)
+        make_interoception(bus, section, entity_clock=None)
 
 
 @pytest.mark.parametrize("eta", [-1, True])
-def test_make_soma_enabled_rejects_invalid_eta(eta):
+def test_make_interoception_enabled_rejects_invalid_eta(eta):
     bus = MagicMock()
     section = {
         "self_rhythm_enabled": True,
@@ -115,7 +115,7 @@ def test_make_soma_enabled_rejects_invalid_eta(eta):
         "kaine.oscillator.module_oscillator.make_self_rhythm_oscillator", return_value=MagicMock()
     ):
         with pytest.raises(ValueError, match="self_rhythm_eta"):
-            make_soma(bus, section, entity_clock=None)
+            make_interoception(bus, section, entity_clock=None)
 
 
 def test_oscillator_restore_keeps_constructor_params():

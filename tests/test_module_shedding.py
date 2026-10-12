@@ -104,7 +104,7 @@ async def test_no_lingua_combination():
 
 
 @pytest.mark.asyncio
-async def test_no_topos_combination():
+async def test_no_vision_combination():
     names = [n for n in CANONICAL_MODULE_NAMES if n != "topos"]
     await _run(names)
 
@@ -120,7 +120,7 @@ async def test_perception_only_combination():
 
 
 @pytest.mark.asyncio
-async def test_lone_soma_combination():
+async def test_lone_interoception_combination():
     await _run(["soma"])
 
 

@@ -16,14 +16,14 @@ import torch
 
 import kaine.hardware
 import kaine.storage
-from kaine.boot.factories.topos import make_topos
+from kaine.boot.factories.vision import make_vision
 from kaine.modules.audition.emotion import (
     CATEGORIES,
     DEFAULT_EMOTION_MODEL_ID,
     Emotion2vecClassifier,
 )
-from kaine.modules.topos.encoder import DINOv2Encoder, InternVideoNextEncoder
-from kaine.modules.topos.internvideo_next_loader import load_internvideo_next
+from kaine.modules.vision.encoder import DINOv2Encoder, InternVideoNextEncoder
+from kaine.modules.vision.internvideo_next_loader import load_internvideo_next
 from kaine.setup.internvideo_next import internvideo_next_download_cmd
 
 
@@ -54,7 +54,7 @@ class _MockBus:
     pass
 
 
-def _load_topos_section(tmp_path: Path, env: dict[str, str]) -> dict[str, object]:
+def _load_vision_section(tmp_path: Path, env: dict[str, str]) -> dict[str, object]:
     toml_path = tmp_path / "kaine.toml"
     toml_path.write_text(
         '[topos]\nencoder_local_dir = "state/models/internvideo_next_base_p14_res224_f16"\n'
@@ -65,15 +65,15 @@ def _load_topos_section(tmp_path: Path, env: dict[str, str]) -> dict[str, object
     return normalized["topos"]
 
 
-def _capture_topos(section: dict[str, object], monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+def _capture_vision(section: dict[str, object], monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
     captured: dict[str, object] = {}
 
     class CaptureTopos:
         def __init__(self, bus: object, *, entity_clock: object = None, **kwargs: object) -> None:
             captured.update(kwargs)
 
-    monkeypatch.setattr("kaine.modules.topos.module.Topos", CaptureTopos)
-    make_topos(_MockBus(), section, entity_clock=None)
+    monkeypatch.setattr("kaine.modules.vision.module.Vision", CaptureTopos)
+    make_vision(_MockBus(), section, entity_clock=None)
     return captured
 
 
@@ -167,7 +167,7 @@ def test_emotion2vec_cpu_load_fails_when_float_cast_blocked(monkeypatch: pytest.
     assert clf._model is None
 
 
-def test_topos_encoder_resolves_weights_under_data_root(tmp_path: Path):
+def test_vision_encoder_resolves_weights_under_data_root(tmp_path: Path):
     kaine.storage.set_data_root(tmp_path)
     try:
         encoder = InternVideoNextEncoder()
@@ -197,7 +197,7 @@ def test_resolve_device_logs_actual_fallback_cpu(monkeypatch: pytest.MonkeyPatch
     assert any(record.message.endswith("falling back to cpu") for record in caplog.records)
 
 
-def test_topos_encoder_follows_models_dir_set_after_import(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_vision_encoder_follows_models_dir_set_after_import(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     # The container sets KAINE_MODELS_DIR for the process; the encoder must read
     # it when it loads, not freeze the weights path when its module is imported.
     models = tmp_path / "models"
@@ -208,8 +208,8 @@ def test_topos_encoder_follows_models_dir_set_after_import(tmp_path: Path, monke
     assert str(models) in str(excinfo.value)
 
 
-def test_topos_loads_float32_on_cpu(monkeypatch: pytest.MonkeyPatch):
-    import kaine.modules.topos.internvideo_next_loader as loader
+def test_vision_loads_float32_on_cpu(monkeypatch: pytest.MonkeyPatch):
+    import kaine.modules.vision.internvideo_next_loader as loader
 
     seen = {}
 
@@ -268,31 +268,31 @@ def test_resolve_dtype_fp16_on_cuda_and_xpu():
     assert kaine.hardware.resolve_dtype("cpu") == torch.float32
 
 
-def test_topos_encoder_local_dir_uses_models_dir_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_vision_encoder_local_dir_uses_models_dir_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     app = tmp_path / "app"
     models = tmp_path / "models"
     env = {"KAINE_DATA_ROOT": str(app), "KAINE_MODELS_DIR": str(models)}
-    section = _load_topos_section(tmp_path, env)
-    captured = _capture_topos(section, monkeypatch)
+    section = _load_vision_section(tmp_path, env)
+    captured = _capture_vision(section, monkeypatch)
     assert captured["encoder_weights_dir"] == str(models / "internvideo_next_base_p14_res224_f16")
 
 
-def test_topos_encoder_local_dir_falls_back_to_data_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_vision_encoder_local_dir_falls_back_to_data_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     app = tmp_path / "app"
     env = {"KAINE_DATA_ROOT": str(app)}
-    section = _load_topos_section(tmp_path, env)
-    captured = _capture_topos(section, monkeypatch)
+    section = _load_vision_section(tmp_path, env)
+    captured = _capture_vision(section, monkeypatch)
     assert captured["encoder_weights_dir"] == str(
         app / "state" / "models" / "internvideo_next_base_p14_res224_f16"
     )
 
 
-def test_topos_encoder_local_dir_uses_models_dir_without_a_data_root(
+def test_vision_encoder_local_dir_uses_models_dir_without_a_data_root(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     models = tmp_path / "models"
-    section = _load_topos_section(tmp_path, {"KAINE_MODELS_DIR": str(models)})
-    captured = _capture_topos(section, monkeypatch)
+    section = _load_vision_section(tmp_path, {"KAINE_MODELS_DIR": str(models)})
+    captured = _capture_vision(section, monkeypatch)
     assert captured["encoder_weights_dir"] == str(models / "internvideo_next_base_p14_res224_f16")
 
 
@@ -305,7 +305,7 @@ def test_internvideo_next_real_load_never_sets_fp16_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     transformers = pytest.importorskip("transformers")
-    from kaine.modules.topos import internvideo_next_loader as loader
+    from kaine.modules.vision import internvideo_next_loader as loader
 
     weights_dir = tmp_path / "weights"
     vendored_dir = tmp_path / "vendored"

@@ -260,7 +260,7 @@ def test_absent_sherpa_stt_has_fetch_command(monkeypatch):
     assert info.fetch_command == "python -m kaine.setup.speech_models --stt custom-stt"
 
 
-def test_topos_internvideo_next_empty_dir_is_absent(tmp_path, monkeypatch):
+def test_vision_internvideo_next_empty_dir_is_absent(tmp_path, monkeypatch):
     _hermetic_selection(monkeypatch)
     config = {
         "modules": {"topos": True},
@@ -275,7 +275,7 @@ def test_topos_internvideo_next_empty_dir_is_absent(tmp_path, monkeypatch):
     assert infos[0].fetch_command == "python -m kaine.setup.internvideo_next --yes"
 
 
-def test_topos_dinov2_absent_when_hf_cached_false(monkeypatch):
+def test_vision_dinov2_absent_when_hf_cached_false(monkeypatch):
     _hermetic_selection(monkeypatch)
     monkeypatch.setattr(
         "kaine.setup.footprint._hf_cached", lambda model_id, *, cache_dir=None: False
@@ -289,7 +289,7 @@ def test_topos_dinov2_absent_when_hf_cached_false(monkeypatch):
     assert infos[0].model_id == "facebook/dinov2-small"
 
 
-def test_topos_dinov2_present_when_hf_cached_true(monkeypatch):
+def test_vision_dinov2_present_when_hf_cached_true(monkeypatch):
     _hermetic_selection(monkeypatch)
     monkeypatch.setattr(
         "kaine.setup.footprint._hf_cached", lambda model_id, *, cache_dir=None: True

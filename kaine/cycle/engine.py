@@ -203,7 +203,7 @@ class CognitiveCycle:
         # L4 — rate-limit guards (monotonic ts of the last WARNING) for the
         # control / interoception module consumer loops.
         self._control_err_last_log = 0.0
-        self._soma_err_last_log = 0.0
+        self._interoception_err_last_log = 0.0
         self._experience_acc = 0.0
         self._control_cursor: str = "0"
         self._paused = asyncio.Event()
@@ -232,7 +232,7 @@ class CognitiveCycle:
         self._overrun_ticks: int = 0
 
         # soma.regulation consumer state.
-        self._soma_out_cursor: str = "0"
+        self._interoception_out_cursor: str = "0"
         # Advisory / diagnostic latch only. The early-maintenance trigger is
         # event-driven: the sleep module observes the soma.regulation/request_maintenance
         # event on soma.out directly. Nothing reads this flag to drive behaviour.
@@ -860,7 +860,7 @@ class CognitiveCycle:
             if event.type == "cycle.set_rates":
                 await self.apply_rate_control_event(event.payload)
 
-    async def consume_soma_regulation(self, soma_stream: str = "soma.out") -> None:
+    async def consume_interoception_regulation(self, interoception_stream: str = "soma.out") -> None:
         """Drain pending ``soma.regulation`` events from the interoception stream.
 
         Actions are advisory only: the cycle acts on them within safe
@@ -890,24 +890,24 @@ class CognitiveCycle:
         # first call resolves the stream tail so a restarted engine never
         # replays historical reduce_rate advisories; otherwise "0" reads
         # from the start (the historical library semantics).
-        if self._soma_out_cursor == "0" and self._seed_cursors_to_tail:
-            self._soma_out_cursor = await self._tail_id(soma_stream)
-        cursor = self._soma_out_cursor
+        if self._interoception_out_cursor == "0" and self._seed_cursors_to_tail:
+            self._interoception_out_cursor = await self._tail_id(interoception_stream)
+        cursor = self._interoception_out_cursor
         try:
             entries, last_scanned = await self._bus.read_entries(
-                soma_stream, last_id=cursor, count=32, block_ms=0
+                interoception_stream, last_id=cursor, count=32, block_ms=0
             )
         except Exception as exc:
             # L4 — visible, rate-limited (one WARNING per 60 s window).
             now = time.monotonic()
-            if now - self._soma_err_last_log >= 60.0:
-                self._soma_err_last_log = now
+            if now - self._interoception_err_last_log >= 60.0:
+                self._interoception_err_last_log = now
                 log.warning("soma consumer read failed: %s", exc)
             return
         # H2 — advance by last_scanned so a poison batch cannot stall the
         # cursor.
         if last_scanned:
-            self._soma_out_cursor = last_scanned
+            self._interoception_out_cursor = last_scanned
         if not entries:
             return
         for entry_id, event in entries:
@@ -971,7 +971,7 @@ class CognitiveCycle:
                 break
             tick_start_wall = self._entity_clock.wall()
             await self.consume_control_events()
-            await self.consume_soma_regulation()
+            await self.consume_interoception_regulation()
             result = await self.tick()
             busy_end_wall = self._entity_clock.wall()
             busy_ms = max(0.0, (busy_end_wall - tick_start_wall) * 1000.0)

@@ -94,7 +94,7 @@ graph TD
     EvalGates -->|allowed| WriteDesired["write_desired_locus()\natomic write to desired.json"]
     WriteDesired --> ChangedEvent["perception.locus.changed\n{locus, by: 'entity'}"]
     EvalGates -->|denied| DeniedEvent["perception.locus.denied\n{requested, reason}"]
-    WriteDesired -.->|poll| Topos["Topos\neffective_video_capture()"]
+    WriteDesired -.->|poll| Vision["Vision\neffective_video_capture()"]
     WriteDesired -.->|poll| Audition["Audition\neffective_audio_capture()"]
 ```
 

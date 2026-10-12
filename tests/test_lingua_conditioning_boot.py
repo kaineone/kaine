@@ -54,7 +54,7 @@ def _snap(triples):
     )
 
 
-def _soma_event(wellness: float = 0.5):
+def _interoception_event(wellness: float = 0.5):
     return Event(
         source="soma",
         type="soma.report",
@@ -105,7 +105,7 @@ async def test_make_lingua_threads_persona_and_budget_config(bus, tmp_path):
         context_max_events=3,
         context_char_budget=500,
     )
-    snap = _snap([("e1", _soma_event(), 0.9)])
+    snap = _snap([("e1", _interoception_event(), 0.9)])
     await lingua.speak("hello there", snapshot=snap)
 
     req = lingua.chat_client.requests[-1]

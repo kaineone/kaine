@@ -244,7 +244,7 @@ def test_apply_scale_only_leaves_rates():
     assert summary["processing_rate_hz"] is None
 
 
-def test_apply_vision_via_topos_handle():
+def test_apply_vision_via_vision_handle():
     # The handle is the "vision module" exposing a live_camera attr, not the
     # camera directly — the seam resolves it.
     clock = _FakeClock()
@@ -323,7 +323,7 @@ def test_profileless_fork_end_to_end_is_behavior_preserving(tmp_path):
 
 def test_apply_against_real_entity_clock_and_camera():
     from kaine.entity_clock import EntityClock
-    from kaine.modules.topos.live import LiveCamera, LiveCameraConfig
+    from kaine.modules.vision.live import LiveCamera, LiveCameraConfig
 
     clock = EntityClock(scale=1.0)
 

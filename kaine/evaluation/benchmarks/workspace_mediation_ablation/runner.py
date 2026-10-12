@@ -48,10 +48,10 @@ from kaine.evaluation.benchmarks.workspace_mediation_ablation.stimulus import (
 from kaine.experiment.seeding import set_global_seed
 from kaine.experiment.verdict import Outcome, Verdict
 from kaine.modules.context import CONTEXT_DIM
-from kaine.modules.soma import AlertResult
-from kaine.modules.soma.module import Soma
-from kaine.modules.topos.forward import LatentForwardModel
-from kaine.modules.topos.module import Topos
+from kaine.modules.interoception import AlertResult
+from kaine.modules.interoception.module import Interoception
+from kaine.modules.vision.forward import LatentForwardModel
+from kaine.modules.vision.module import Vision
 from kaine.workspace import (
     NoveltyTracker,
     RuleBasedSalience,
@@ -84,11 +84,11 @@ class MediationConfig:
     access_threshold: float = 0.05
     min_effect: float = 0.05
     n_background: int = 2
-    soma_units: int = 16
-    topos_units: int = 32
+    interoception_units: int = 16
+    vision_units: int = 32
     # The harness raises the vision module's learning rate so a short run shows learning;
     # the live module keeps its own default.
-    topos_lr: float = 0.02
+    vision_lr: float = 0.02
 
     def __post_init__(self) -> None:
         if self.top_k <= 0:
@@ -103,7 +103,7 @@ class MediationConfig:
             raise ValueError("min_effect must be >= 0")
         if self.n_background < 0:
             raise ValueError("n_background must be >= 0")
-        if self.topos_lr <= 0:
+        if self.vision_lr <= 0:
             raise ValueError("topos_lr must be positive")
 
     def as_dict(self) -> dict[str, Any]:
@@ -115,9 +115,9 @@ class MediationConfig:
             "access_threshold": self.access_threshold,
             "min_effect": self.min_effect,
             "n_background": self.n_background,
-            "soma_units": self.soma_units,
-            "topos_units": self.topos_units,
-            "topos_lr": self.topos_lr,
+            "soma_units": self.interoception_units,
+            "topos_units": self.vision_units,
+            "topos_lr": self.vision_lr,
         }
 
 
@@ -178,40 +178,40 @@ async def _run_arm(
     set_global_seed(config.seed)
     clock = [0.0]
 
-    soma_bus = ScriptedBus({})
-    soma = Soma(
-        soma_bus,
-        reader=ScriptedMetricsReader(script.soma_metrics),
+    interoception_bus = ScriptedBus({})
+    interoception = Interoception(
+        interoception_bus,
+        reader=ScriptedMetricsReader(script.interoception_metrics),
         detector=_NeverAlertDetector(),
-        forward_model_units=config.soma_units,
+        forward_model_units=config.interoception_units,
         reservoir_seed=config.seed + 1,
         cfc_backend="numpy",
         entity_clock=EntityClock(monotonic=lambda: clock[0]),
     )
 
-    topos_bus = ScriptedBus({})
+    vision_bus = ScriptedBus({})
     encoder = VectorEncoder(LATENT_DIM)
-    topos = Topos(
-        topos_bus,
+    vision = Vision(
+        vision_bus,
         encoder=encoder,
         forward_prediction=True,
-        forward_model_units=config.topos_units,
+        forward_model_units=config.vision_units,
         entity_clock=EntityClock(monotonic=lambda: clock[0]),
     )
-    topos._forward_model = LatentForwardModel(
+    vision._forward_model = LatentForwardModel(
         latent_dim=LATENT_DIM,
-        units=config.topos_units,
-        lr=config.topos_lr,
+        units=config.vision_units,
+        lr=config.vision_lr,
         seed=config.seed + 2,
         context_dim=CONTEXT_DIM,
     )
 
     syn = _build_syneidesis(config) if arm == "workspace_on" else None
 
-    soma_gains: list[Optional[float]] = []
-    topos_gains: list[Optional[float]] = []
-    soma_errors: list[Optional[float]] = []
-    topos_errors: list[Optional[float]] = []
+    interoception_gains: list[Optional[float]] = []
+    vision_gains: list[Optional[float]] = []
+    interoception_errors: list[Optional[float]] = []
+    vision_errors: list[Optional[float]] = []
     competing_ticks = 0
     accessed_broadcasts = 0
     coalition_sizes: list[int] = []
@@ -219,27 +219,27 @@ async def _run_arm(
     for t in range(config.ticks):
         clock[0] = float(t)
 
-        await soma.tick_once()
-        soma_report = _last_report(soma_bus, "soma", "soma.report")
-        soma_errors.append(
-            _read_error(soma_report.payload)
-            if soma_report is not None
+        await interoception.tick_once()
+        interoception_report = _last_report(interoception_bus, "soma", "soma.report")
+        interoception_errors.append(
+            _read_error(interoception_report.payload)
+            if interoception_report is not None
             else 0.0
         )
 
-        await topos.process_frame(script.topos_frames[t])
-        topos_report = _last_report(topos_bus, "topos", "topos.report")
-        topos_errors.append(
-            _read_error(topos_report.payload)
-            if topos_report is not None
+        await vision.process_frame(script.vision_frames[t])
+        vision_report = _last_report(vision_bus, "topos", "topos.report")
+        vision_errors.append(
+            _read_error(vision_report.payload)
+            if vision_report is not None
             else 0.0
         )
 
         candidates: list[tuple[str, Event]] = []
-        if soma_report is not None:
-            candidates.append((f"{t + 1}-s", soma_report))
-        if topos_report is not None:
-            candidates.append((f"{t + 1}-t", topos_report))
+        if interoception_report is not None:
+            candidates.append((f"{t + 1}-s", interoception_report))
+        if vision_report is not None:
+            candidates.append((f"{t + 1}-t", vision_report))
         for k, ev in enumerate(script.background[t]):
             candidates.append((f"{t + 1}-b{k}", ev))
 
@@ -259,39 +259,39 @@ async def _run_arm(
             snapshot = pooled_snapshot(t, candidates)
             coalition_sizes.append(len(candidates))
 
-        await soma.on_workspace(snapshot)
-        await topos.on_workspace(snapshot)
+        await interoception.on_workspace(snapshot)
+        await vision.on_workspace(snapshot)
 
-        soma_gains.append(
-            _read_gain(soma_report.payload) if soma_report is not None else None
+        interoception_gains.append(
+            _read_gain(interoception_report.payload) if interoception_report is not None else None
         )
-        topos_gains.append(
-            _read_gain(topos_report.payload) if topos_report is not None else None
+        vision_gains.append(
+            _read_gain(vision_report.payload) if vision_report is not None else None
         )
 
     included_reports = {
         "soma": sum(
             1
-            for i, g in enumerate(soma_gains)
+            for i, g in enumerate(interoception_gains)
             if i >= config.warmup_ticks and g is not None and math.isfinite(g)
         ),
         "topos": sum(
             1
-            for i, g in enumerate(topos_gains)
+            for i, g in enumerate(vision_gains)
             if i >= config.warmup_ticks and g is not None and math.isfinite(g)
         ),
     }
     ig_by_processor = {
-        "soma": mean_gain(soma_gains, skip=config.warmup_ticks),
-        "topos": mean_gain(topos_gains, skip=config.warmup_ticks),
+        "soma": mean_gain(interoception_gains, skip=config.warmup_ticks),
+        "topos": mean_gain(vision_gains, skip=config.warmup_ticks),
     }
     ig = headline_gain(ig_by_processor)
 
     return {
-        "soma_gain": soma_gains,
-        "topos_gain": topos_gains,
-        "soma_error": soma_errors,
-        "topos_error": topos_errors,
+        "soma_gain": interoception_gains,
+        "topos_gain": vision_gains,
+        "soma_error": interoception_errors,
+        "topos_error": vision_errors,
         "competing_ticks": competing_ticks,
         "accessed_broadcasts": accessed_broadcasts,
         "coalition_sizes": coalition_sizes,

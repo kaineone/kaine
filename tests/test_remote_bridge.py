@@ -153,8 +153,8 @@ def test_network_audio_stream_rechunks_exactly():
 
 @pytest.mark.asyncio
 async def test_token_rejects_and_accepts(bus):
-    topos = _StubTopos()
-    bridge = RemoteBridge(_config(token="s3cret"), bus=bus, topos=topos)
+    vision = _StubTopos()
+    bridge = RemoteBridge(_config(token="s3cret"), bus=bus, vision=vision)
     url = await _started(bridge)
     try:
         # No token → closed with 4401 before any payload is processed.
@@ -162,7 +162,7 @@ async def test_token_rejects_and_accepts(bus):
             with pytest.raises(websockets.exceptions.ConnectionClosed) as exc_info:
                 await ws.recv()
             assert exc_info.value.rcvd.code == 4401
-        assert topos.frames == []
+        assert vision.frames == []
 
         # Correct token via Authorization header → frame accepted.
         async with websockets.connect(
@@ -170,7 +170,7 @@ async def test_token_rejects_and_accepts(bus):
             additional_headers={"Authorization": "Bearer s3cret"},
         ) as ws:
             await ws.send(_jpeg_bytes())
-            await _wait_for(lambda: len(topos.frames) == 1)
+            await _wait_for(lambda: len(vision.frames) == 1)
     finally:
         await bridge.stop()
 
@@ -181,15 +181,15 @@ async def test_token_rejects_and_accepts(bus):
 
 
 @pytest.mark.asyncio
-async def test_video_frame_reaches_topos_as_pil_image(bus):
-    topos = _StubTopos()
-    bridge = RemoteBridge(_config(), bus=bus, topos=topos)
+async def test_video_frame_reaches_vision_as_pil_image(bus):
+    vision = _StubTopos()
+    bridge = RemoteBridge(_config(), bus=bus, vision=vision)
     url = await _started(bridge)
     try:
         async with websockets.connect(f"{url}/ingest/video") as ws:
             await ws.send(_jpeg_bytes())
-            await _wait_for(lambda: len(topos.frames) == 1)
-        image = topos.frames[0]
+            await _wait_for(lambda: len(vision.frames) == 1)
+        image = vision.frames[0]
         assert image.size == (32, 24)  # a real decoded PIL image
         assert bridge.frames_in == 1
     finally:
@@ -198,8 +198,8 @@ async def test_video_frame_reaches_topos_as_pil_image(bus):
 
 @pytest.mark.asyncio
 async def test_video_rate_limit_drops_excess_frames(bus):
-    topos = _StubTopos()
-    bridge = RemoteBridge(_config(video_max_fps=1.0), bus=bus, topos=topos)
+    vision = _StubTopos()
+    bridge = RemoteBridge(_config(video_max_fps=1.0), bus=bus, vision=vision)
     url = await _started(bridge)
     try:
         frame = _jpeg_bytes()
@@ -531,8 +531,8 @@ async def test_claim_senses_sets_and_restores_physical_video(bus, monkeypatch):
         ps, "write_desired_audio", lambda active, path=None: writes.append(("audio", active))
     )
 
-    topos = _StubTopos()
-    bridge = RemoteBridge(_config(claim_senses=True), bus=bus, topos=topos)
+    vision = _StubTopos()
+    bridge = RemoteBridge(_config(claim_senses=True), bus=bus, vision=vision)
     url = await _started(bridge)
     try:
         async with websockets.connect(f"{url}/ingest/video") as ws:
@@ -565,9 +565,9 @@ async def test_full_exchange_writes_nothing_to_disk(bus, monkeypatch, tmp_path):
     """ZERO-PERSISTENCE: a complete ingest/egress exchange writes no media
     artifacts to disk, even transiently. Deterministic: uses a private temp
     directory and a system audit hook instead of the machine-wide /tmp."""
-    topos = _StubTopos()
+    vision = _StubTopos()
     audition = _StubAudition()
-    bridge = RemoteBridge(_config(), bus=bus, topos=topos, audition=audition)
+    bridge = RemoteBridge(_config(), bus=bus, vision=vision, audition=audition)
 
     private_tmp = redirect_temp(tmp_path, monkeypatch)
     pre_project = scan(PROJECT_ROOT, BANNED_EXTENSIONS)
@@ -577,7 +577,7 @@ async def test_full_exchange_writes_nothing_to_disk(bus, monkeypatch, tmp_path):
         try:
             async with websockets.connect(f"{url}/ingest/video") as wsv:
                 await wsv.send(_jpeg_bytes())
-                await _wait_for(lambda: topos.frames)
+                await _wait_for(lambda: vision.frames)
             async with websockets.connect(f"{url}/ingest/audio") as wsa:
                 await _wait_for(
                     lambda: bridge._net_stream is not None and bridge._net_stream._running,
@@ -681,8 +681,8 @@ async def test_subprotocol_token_is_rejected(bus):
     """Subprotocol token channels are intentionally disabled: they leak the
     secret into handshake logs and browser history. Only Authorization: Bearer
     is accepted."""
-    topos = _StubTopos()
-    bridge = RemoteBridge(_config(token="s3cret"), bus=bus, topos=topos)
+    vision = _StubTopos()
+    bridge = RemoteBridge(_config(token="s3cret"), bus=bus, vision=vision)
     url = await _started(bridge)
     try:
         async with websockets.connect(
@@ -691,7 +691,7 @@ async def test_subprotocol_token_is_rejected(bus):
             with pytest.raises(websockets.exceptions.ConnectionClosed) as exc_info:
                 await ws.recv()
             assert exc_info.value.rcvd.code == 4401
-        assert topos.frames == []
+        assert vision.frames == []
     finally:
         await bridge.stop()
 
@@ -700,15 +700,15 @@ async def test_subprotocol_token_is_rejected(bus):
 async def test_query_param_token_is_rejected(bus):
     """Query-string tokens are intentionally disabled: they appear in proxy
     and server logs. Only Authorization: Bearer is accepted."""
-    topos = _StubTopos()
-    bridge = RemoteBridge(_config(token="s3cret"), bus=bus, topos=topos)
+    vision = _StubTopos()
+    bridge = RemoteBridge(_config(token="s3cret"), bus=bus, vision=vision)
     url = await _started(bridge)
     try:
         async with websockets.connect(f"{url}/ingest/video?token=s3cret") as ws:
             with pytest.raises(websockets.exceptions.ConnectionClosed) as exc_info:
                 await ws.recv()
             assert exc_info.value.rcvd.code == 4401
-        assert topos.frames == []
+        assert vision.frames == []
     finally:
         await bridge.stop()
 
@@ -716,8 +716,8 @@ async def test_query_param_token_is_rejected(bus):
 @pytest.mark.asyncio
 async def test_bearer_header_path_works(bus):
     """The Authorization: Bearer path remains valid (constant-time compare)."""
-    topos = _StubTopos()
-    bridge = RemoteBridge(_config(token="s3cret"), bus=bus, topos=topos)
+    vision = _StubTopos()
+    bridge = RemoteBridge(_config(token="s3cret"), bus=bus, vision=vision)
     url = await _started(bridge)
     try:
         async with websockets.connect(
@@ -725,7 +725,7 @@ async def test_bearer_header_path_works(bus):
             additional_headers={"Authorization": "Bearer s3cret"},
         ) as ws:
             await ws.send(_jpeg_bytes())
-            await _wait_for(lambda: len(topos.frames) == 1)
+            await _wait_for(lambda: len(vision.frames) == 1)
     finally:
         await bridge.stop()
 
@@ -733,13 +733,13 @@ async def test_bearer_header_path_works(bus):
 def test_constant_time_token_predicate():
     """_token_ok uses hmac.compare_digest semantics: exact match only, empty
     never matches, and the no-token-configured fast path still allows."""
-    bridge = RemoteBridge(_config(token="s3cret"), bus=None, topos=_StubTopos())
+    bridge = RemoteBridge(_config(token="s3cret"), bus=None, vision=_StubTopos())
     assert bridge._token_ok("s3cret") is True
     assert bridge._token_ok("s3crxt") is False
     assert bridge._token_ok("") is False
     assert bridge._token_ok("s3cret-longer") is False
     # No token configured → _authorized short-circuits to allow.
-    open_bridge = RemoteBridge(_config(token=""), bus=None, topos=_StubTopos())
+    open_bridge = RemoteBridge(_config(token=""), bus=None, vision=_StubTopos())
 
     class _Conn:
         class request:
@@ -753,12 +753,12 @@ def test_constant_time_token_predicate():
 async def test_origin_allowlist_refuses_and_accepts(bus):
     """A disallowed browser Origin is refused at handshake; an allowed Origin
     and a no-Origin native client are accepted."""
-    topos = _StubTopos()
+    vision = _StubTopos()
     bridge = RemoteBridge(
         # High fps ceiling so back-to-back accepted frames aren't rate-dropped.
         _config(allowed_origins=(None, "http://127.0.0.1:17893"), video_max_fps=1000.0),
         bus=bus,
-        topos=topos,
+        vision=vision,
     )
     url = await _started(bridge)
     try:
@@ -771,12 +771,12 @@ async def test_origin_allowlist_refuses_and_accepts(bus):
         # Allowed Origin → accepted, frame ingested.
         async with websockets.connect(f"{url}/ingest/video", origin="http://127.0.0.1:17893") as ws:
             await ws.send(_jpeg_bytes())
-            await _wait_for(lambda: len(topos.frames) == 1)
+            await _wait_for(lambda: len(vision.frames) == 1)
 
         # No Origin (native client) → accepted (None is in the allowlist).
         async with websockets.connect(f"{url}/ingest/video") as ws:
             await ws.send(_jpeg_bytes())
-            await _wait_for(lambda: len(topos.frames) == 2)
+            await _wait_for(lambda: len(vision.frames) == 2)
     finally:
         await bridge.stop()
 
@@ -791,17 +791,17 @@ def test_parse_origins_maps_null_and_empty_to_none():
 
 
 @pytest.mark.asyncio
-async def test_oversized_image_is_dropped_without_reaching_topos(bus):
+async def test_oversized_image_is_dropped_without_reaching_vision(bus):
     """A frame whose declared size exceeds the pixel cap is dropped (counted)
     without raising and without calling topos.process_frame."""
-    topos = _StubTopos()
-    bridge = RemoteBridge(_config(), bus=bus, topos=topos)
+    vision = _StubTopos()
+    bridge = RemoteBridge(_config(), bus=bus, vision=vision)
     url = await _started(bridge)
     try:
         async with websockets.connect(f"{url}/ingest/video") as ws:
             await ws.send(_oversized_png())
             await _wait_for(lambda: bridge.frames_dropped >= 1, timeout=3.0)
-        assert topos.frames == []  # never decoded/processed
+        assert vision.frames == []  # never decoded/processed
         assert bridge.frames_in == 0
     finally:
         await bridge.stop()
@@ -832,11 +832,11 @@ def test_ssl_context_built_only_when_cert_and_key_present(tmp_path):
     neither) yields None (plain ws, unchanged behavior)."""
     import ssl as _ssl
 
-    bridge_none = RemoteBridge(_config(), bus=None, topos=_StubTopos())
+    bridge_none = RemoteBridge(_config(), bus=None, vision=_StubTopos())
     assert bridge_none._build_ssl_context() is None
 
     # Only one of the pair → still plain ws.
-    bridge_partial = RemoteBridge(_config(ssl_certfile="/x/cert.pem"), bus=None, topos=_StubTopos())
+    bridge_partial = RemoteBridge(_config(ssl_certfile="/x/cert.pem"), bus=None, vision=_StubTopos())
     assert bridge_partial._build_ssl_context() is None
 
     # A real self-signed cert+key → a usable SSLContext.
@@ -844,7 +844,7 @@ def test_ssl_context_built_only_when_cert_and_key_present(tmp_path):
     bridge_tls = RemoteBridge(
         _config(ssl_certfile=str(cert_path), ssl_keyfile=str(key_path)),
         bus=None,
-        topos=_StubTopos(),
+        vision=_StubTopos(),
     )
     ctx = bridge_tls._build_ssl_context()
     assert isinstance(ctx, _ssl.SSLContext)

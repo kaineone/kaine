@@ -25,6 +25,6 @@ The pre-conference audit of 2026-10-10 found four defects in how the affect and 
 
 ## Impact
 
-- **Code:** `kaine/modules/thymos/module.py`, `kaine/modules/chronos/module.py`, `kaine/modules/soma/module.py` (comment only).
-- **Tests:** `tests/test_thymos_research_affect.py`, `tests/test_chronos_module.py`, `tests/test_reservoir_timespan.py`.
+- **Code:** `kaine/modules/thymos/module.py`, `kaine/modules/sequence/module.py`, `kaine/modules/interoception/module.py` (comment only).
+- **Tests:** `tests/test_thymos_research_affect.py`, `tests/test_sequence_module.py`, `tests/test_reservoir_timespan.py`.
 - **Preserved entities:** The sequence module's snapshots written before this change restore with the clamp above.

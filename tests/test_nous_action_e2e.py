@@ -48,7 +48,7 @@ def _event(
     )
 
 
-def _soma_report(value: float = 0.5) -> tuple[str, Event]:
+def _interoception_report(value: float = 0.5) -> tuple[str, Event]:
     return ("s1", _event("soma", "soma.report", {"wellness": value}))
 
 
@@ -117,7 +117,7 @@ async def test_nous_proposal_drives_intent_and_internal_speech(
     bus: AsyncBus, tmp_path: Path
 ):
     volition = Volition(policy=NousProposalSource(lambda s: []))
-    snap = _snapshot([_proposal("p1", "think"), _soma_report()], inhibited=False)
+    snap = _snapshot([_proposal("p1", "think"), _interoception_report()], inhibited=False)
     cycle = _Cycle(bus, volition)
 
     await CognitiveCycle._run_volition(cycle, snap)
@@ -153,7 +153,7 @@ async def test_inhibited_nous_proposal_publishes_no_intent_and_inhibited_outcome
     bus: AsyncBus,
 ):
     volition = Volition(policy=NousProposalSource(lambda s: []))
-    snap = _snapshot([_proposal("p1", "think"), _soma_report()], inhibited=True)
+    snap = _snapshot([_proposal("p1", "think"), _interoception_report()], inhibited=True)
     cycle = _Cycle(bus, volition)
 
     await CognitiveCycle._run_volition(cycle, snap)

@@ -29,7 +29,7 @@ import pytest
 
 from kaine import perception_state
 from kaine.modules.audition.live import LiveMicConfig, LiveMicrophone
-from kaine.modules.topos.live import LiveCamera, LiveCameraConfig
+from kaine.modules.vision.live import LiveCamera, LiveCameraConfig
 
 RAW_SENSE_EXTENSIONS = (
     # audio
@@ -312,7 +312,7 @@ async def test_deterministic_feed_sources_persist_no_raw_frames(tmp_path, monkey
     the same zero-persistence invariant as the live camera: synthesizing /
     decoding frames must leave NO raw frame on disk. Drives the seeded source
     through LiveCamera and verifies no raw-sense file appears."""
-    from kaine.modules.topos.feed import SeededProceduralSource, SeededSchedule
+    from kaine.modules.vision.feed import SeededProceduralSource, SeededSchedule
 
     runtime_path = tmp_path / "state" / "perception" / "runtime.json"
     desired_path = tmp_path / "state" / "perception" / "desired.json"
@@ -373,10 +373,11 @@ def test_no_frame_writers_in_perception_feed_module():
 
     Extends the static guard to the new sources: besides cv2.imwrite/VideoWriter
     (covered repo-wide above), forbid PIL Image.save / numpy.save / ndarray
-    .tofile / imageio.imwrite / plt.imsave in kaine/modules/topos/feed.py — any
+    .tofile / imageio.imwrite / plt.imsave in kaine/modules/vision/feed.py — any
     of which would persist a synthesized/decoded frame."""
     repo_root = Path(__file__).parent.parent
-    target = repo_root / "kaine" / "modules" / "topos" / "feed.py"
+    target = repo_root / "kaine" / "modules" / "vision" / "feed.py"
+    assert target.is_file(), target
     proc = subprocess.run(
         [
             "git",
@@ -407,7 +408,7 @@ def test_perception_preview_persists_nothing():
         # The loopback preview server bridges the RAM holder to the dashboard over a
         # socket — it must never spill a frame to disk either.
         repo_root / "kaine" / "perception_preview_server.py",
-        repo_root / "kaine" / "modules" / "topos" / "module.py",
+        repo_root / "kaine" / "modules" / "vision" / "module.py",
         repo_root / "kaine" / "modules" / "audition" / "live.py",
     ]
     # Frame/audio persisting calls forbidden across all three files. `wave.open`
@@ -417,6 +418,7 @@ def test_perception_preview_persists_nothing():
         r"(cv2\.(imwrite|VideoWriter)|imsave\(|np\.save\(|numpy\.save\(|\.tofile\()"
     )
     for target in targets:
+        assert target.is_file(), target
         proc = subprocess.run(
             ["git", "grep", "-nE", pattern, "--", str(target)],
             cwd=repo_root,
@@ -455,7 +457,7 @@ def test_perception_preview_persists_nothing():
 
 
 @pytest.mark.asyncio
-async def test_topos_preview_tap_writes_no_frame_to_disk(tmp_path, monkeypatch):
+async def test_vision_preview_tap_writes_no_frame_to_disk(tmp_path, monkeypatch):
     """With the dev override ON, driving Topos.process_frame captures a single
     in-memory JPEG but leaves NO raw frame on disk (repo/state/data/tmp)."""
     from tests.zero_persistence import (
@@ -472,7 +474,7 @@ async def test_topos_preview_tap_writes_no_frame_to_disk(tmp_path, monkeypatch):
     from kaine import perception_preview
     from kaine.bus.client import AsyncBus
     from kaine.bus.config import BusConfig
-    from kaine.modules.topos import Topos
+    from kaine.modules.vision import Vision
 
     class _Enc:
         model_id = "fake/enc"
@@ -499,14 +501,14 @@ async def test_topos_preview_tap_writes_no_frame_to_disk(tmp_path, monkeypatch):
 
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
-    topos = Topos(bus, encoder=_Enc())
+    vision = Vision(bus, encoder=_Enc())
     try:
         with WriteRecorder() as recorder:
             for _ in range(5):
-                await topos.process_frame(PILImage.new("RGB", (32, 24), (7, 7, 7)))
+                await vision.process_frame(PILImage.new("RGB", (32, 24), (7, 7, 7)))
             # The preview lives in memory only.
-            assert topos._preview_jpeg is not None
-            assert perception_preview.get_video_jpeg() == topos._preview_jpeg
+            assert vision._preview_jpeg is not None
+            assert perception_preview.get_video_jpeg() == vision._preview_jpeg
 
         post_repo = scan(tmp_path, RAW_SENSE_EXTENSIONS)
         post_state = scan(Path("state"), RAW_SENSE_EXTENSIONS)

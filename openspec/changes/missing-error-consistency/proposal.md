@@ -23,5 +23,5 @@ The CL1 plugin's wetware interoception backend, `WetwareInteroceptiveModel`, ret
 
 ## Impact
 
-- `plugins/kaine-cl1/src/kaine_cl1/backends/soma.py`, `kaine/modules/soma/module.py`, `kaine/lifecycle/strategies.py`, docs, tests.
+- `plugins/kaine-cl1/src/kaine_cl1/backends/interoception.py`, `kaine/modules/interoception/module.py`, `kaine/lifecycle/strategies.py`, docs, tests.
 - Finite readings and merges of fully defined summaries behave exactly as before. The plugin's version is unchanged; it has never been bumped per change.

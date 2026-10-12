@@ -11,7 +11,7 @@ from kaine.modules.audition.feed import (
     WombAudioSchedule,
     WombProceduralAudioStream,
 )
-from kaine.modules.topos.feed import WombClock, WombProceduralSource, WombSchedule
+from kaine.modules.vision.feed import WombClock, WombProceduralSource, WombSchedule
 from kaine.modules.womb_signal import (
     WombParams,
     beat_pulse,
@@ -496,7 +496,7 @@ def test_womb_is_cpu_only_and_torch_free() -> None:
 
     code = (
         "import sys\n"
-        "from kaine.modules.topos.feed import WombClock, WombProceduralSource, WombSchedule\n"
+        "from kaine.modules.vision.feed import WombClock, WombProceduralSource, WombSchedule\n"
         "from kaine.modules.audition.feed import WombAudioSchedule, WombProceduralAudioStream\n"
         "from kaine.modules.womb_signal import WombParams\n"
         "c = WombClock(lived_offset_seconds=0.0)\n"

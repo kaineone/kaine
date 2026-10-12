@@ -9,7 +9,7 @@ import time
 from typing import Any
 
 from kaine.cycle.input_check import check_input_condition
-from kaine.modules.topos.live import PerceptionUnavailableError
+from kaine.modules.vision.live import PerceptionUnavailableError
 from kaine.preboot import CheckResult
 from tests.zero_persistence import (
     WriteRecorder,

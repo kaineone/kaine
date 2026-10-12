@@ -39,7 +39,7 @@ The perceptual locus module decides whether the real camera runs. `effective_vid
 
 ## Forward model
 
-`LatentForwardModel` (`kaine/modules/topos/forward.py`) is a network with one hidden layer of tanh units, run on the CPU:
+`LatentForwardModel` (`kaine/modules/vision/forward.py`) is a network with one hidden layer of tanh units, run on the CPU:
 
 ```text
 [embedding ‖ buffer mean ‖ broadcast context] → Linear(2·d + 24 → units) → Tanh → Linear(units → d)
@@ -205,7 +205,7 @@ graph TD
     Cam["LiveCamera or feed source"]
     LocusGate["perception locus gate"]
     LocusGate -->|open| Cam
-    Cam -->|PIL.Image| ProcessFrame["Topos.process_frame()"]
+    Cam -->|PIL.Image| ProcessFrame["Vision.process_frame()"]
 
     ProcessFrame --> RingBuf["RAM-only 16-frame ring buffer"]
     RingBuf -->|one clip every clip_stride frames| Encode["frozen encoder\n16-frame clip to one embedding"]
@@ -223,7 +223,7 @@ graph TD
 
 ### InternVideo-Next encoder
 
-The encoder loads lazily on the first `initialize()`. It uses the vendored, revision-pinned modeling code in `external/internvideo_next/` and the locally cached weights through `kaine/modules/topos/internvideo_next_loader.py`, with `trust_remote_code=False` and `local_files_only=True`. `encode_clip` builds a 16-frame tensor, runs the frozen model, and pools its `[1, 4096, 768]` output to 768 dimensions through the native attention-pool head (`pooling = "attention"`) or a mean over patch tokens (`pooling = "mean"`). The pooled vector is not L2-normalized. `latent_dim` is measured from a dummy clip at load. Inference runs in a thread so the event loop stays free.
+The encoder loads lazily on the first `initialize()`. It uses the vendored, revision-pinned modeling code in `external/internvideo_next/` and the locally cached weights through `kaine/modules/vision/internvideo_next_loader.py`, with `trust_remote_code=False` and `local_files_only=True`. `encode_clip` builds a 16-frame tensor, runs the frozen model, and pools its `[1, 4096, 768]` output to 768 dimensions through the native attention-pool head (`pooling = "attention"`) or a mean over patch tokens (`pooling = "mean"`). The pooled vector is not L2-normalized. `latent_dim` is measured from a dummy clip at load. Inference runs in a thread so the event loop stays free.
 
 ### DINOv2 fallback
 
@@ -237,7 +237,7 @@ Foveation is off in the shipped `config/kaine.toml` and on in the `thesis_test` 
 
 On each clip report, from the latest frame:
 
-1. `SpatialSaliency` (`kaine/modules/topos/foveation.py`) reduces the frame to a `foveation_grid` of tile gray-level means and measures each tile's absolute change since the previous clip report. Each tile keeps an exponentially weighted mean and variance of its change (weight 0.05 per report). A tile's salience is a z-score: its change in excess of the running mean, divided by `sqrt(variance + s0²)`, where `s0` is a tenth of the mean change across tiles, a soft floor. The statistics are taken before this report's update. The z-score is the counterpart for frame change of the processors' error scaling: a tile that flickers habitually draws the fovea less than one whose change is rare. For the first five updates the raw change is used.
+1. `SpatialSaliency` (`kaine/modules/vision/foveation.py`) reduces the frame to a `foveation_grid` of tile gray-level means and measures each tile's absolute change since the previous clip report. Each tile keeps an exponentially weighted mean and variance of its change (weight 0.05 per report). A tile's salience is a z-score: its change in excess of the running mean, divided by `sqrt(variance + s0²)`, where `s0` is a tenth of the mean change across tiles, a soft floor. The statistics are taken before this report's update. The z-score is the counterpart for frame change of the processors' error scaling: a tile that flickers habitually draws the fovea less than one whose change is rare. For the first five updates the raw change is used.
 2. `combine_saliency` and `select_fovea` pick the most salient tile's center. The fovea moves only when that tile's salience exceeds the held tile's by the `foveation_hysteresis` fraction, and it holds its place when no tile stands out (starting at the frame's center). `combine_saliency` accepts a top-down bias map, but no shipped configuration wires a provider, so selection runs on the bottom-up map alone. The fovea's size comes from the affect module's current arousal (`arousal_to_size`): higher arousal gives a smaller fovea.
 3. `foveate` cuts a downsampled `peripheral` gist and a full-detail `foveal` crop around the fovea from each buffered frame.
 4. Two encodes produce the `peripheral` and `foveal` embeddings. The peripheral embedding drives the change score, the habituation score, and the forward model; the foveal embedding carries the attended detail.
@@ -253,7 +253,7 @@ Arousal reaches the vision module through a provider callback wired at boot (`se
 
 ### Camera supervisor
 
-`kaine/modules/topos/live.py` runs as a background asyncio task. It polls `effective_video_capture()` every 250 ms, opens `cv2.VideoCapture` in a thread, discards the warm-up frames, and calls `process_frame()` every capture interval. The raw BGR array is released after conversion to RGB, and only the `PIL.Image` is passed on.
+`kaine/modules/vision/live.py` runs as a background asyncio task. It polls `effective_video_capture()` every 250 ms, opens `cv2.VideoCapture` in a thread, discards the warm-up frames, and calls `process_frame()` every capture interval. The raw BGR array is released after conversion to RGB, and only the `PIL.Image` is passed on.
 
 ### Dashboard live-preview tap
 
@@ -263,19 +263,19 @@ At the end of `process_frame()`, if the operator has set `KAINE_PERCEPTION_PREVI
 
 | File | Role |
 |---|---|
-| `kaine/modules/topos/module.py` | `Topos` class: `process_frame()`, intensity and alert rule, context adoption, sleep loop, serialization |
-| `kaine/modules/topos/forward.py` | `LatentForwardModel`, the online forward model with its context input |
+| `kaine/modules/vision/module.py` | `Vision` class: `process_frame()`, intensity and alert rule, context adoption, sleep loop, serialization |
+| `kaine/modules/vision/forward.py` | `LatentForwardModel`, the online forward model with its context input |
 | `kaine/modules/context.py` | `BroadcastContext`: context featurization, adoption, null context |
 | `kaine/modules/intensity.py` | `graded_intensity()`, shared by the four predictive processors |
-| `kaine/modules/topos/encoder.py` | `InternVideoNextEncoder`, `DINOv2Encoder`, the `Encoder` protocol, `make_encoder`, image coercion |
-| `kaine/modules/topos/internvideo_next_loader.py` | Offline loader for the vendored InternVideo-Next weights |
+| `kaine/modules/vision/encoder.py` | `InternVideoNextEncoder`, `DINOv2Encoder`, the `Encoder` protocol, `make_encoder`, image coercion |
+| `kaine/modules/vision/internvideo_next_loader.py` | Offline loader for the vendored InternVideo-Next weights |
 | `external/internvideo_next/` | Vendored, revision-pinned InternVideo-Next modeling code (MIT) and its `UPSTREAM` provenance |
-| `kaine/modules/topos/change.py` | `CosineChangeDetector` and the `ChangeDetector` protocol |
-| `kaine/modules/topos/habituation.py` | `RollingMeanHabituator` and the `SceneHabituator` protocol |
-| `kaine/modules/topos/foveation.py` | Spatial saliency, fovea selection, arousal-to-size mapping, view cutting, `FoveaPredictor` |
-| `kaine/modules/topos/live.py` | `LiveCamera`: camera supervisor task and locus gate |
-| `kaine/modules/topos/feed.py` | Deterministic video sources for the perception feed |
-| `kaine/modules/topos/screen.py` | Screen-capture source through `ffmpeg` |
+| `kaine/modules/vision/change.py` | `CosineChangeDetector` and the `ChangeDetector` protocol |
+| `kaine/modules/vision/habituation.py` | `RollingMeanHabituator` and the `SceneHabituator` protocol |
+| `kaine/modules/vision/foveation.py` | Spatial saliency, fovea selection, arousal-to-size mapping, view cutting, `FoveaPredictor` |
+| `kaine/modules/vision/live.py` | `LiveCamera`: camera supervisor task and locus gate |
+| `kaine/modules/vision/feed.py` | Deterministic video sources for the perception feed |
+| `kaine/modules/vision/screen.py` | Screen-capture source through `ffmpeg` |
 
 ## Enabling and using vision
 
@@ -344,21 +344,21 @@ The vision and audition modules are separate modules with separate loops, so the
 
 | File | What it verifies |
 |---|---|
-| `tests/test_topos_module.py` | `process_frame()`, change and habituation integration, intensity |
-| `tests/test_topos_encoder.py` | `DINOv2Encoder` lazy load and `Encoder` protocol substitution |
-| `tests/test_topos_internvideo_next.py` | InternVideo-Next encoder |
-| `tests/test_topos_change.py` | `CosineChangeDetector` boundary cases |
-| `tests/test_topos_habituation.py` | `RollingMeanHabituator` on static and varied scenes |
-| `tests/test_topos_forward.py` | `LatentForwardModel` step, non-finite guard, serialization |
+| `tests/test_vision_module.py` | `process_frame()`, change and habituation integration, intensity |
+| `tests/test_vision_encoder.py` | `DINOv2Encoder` lazy load and `Encoder` protocol substitution |
+| `tests/test_vision_internvideo_next.py` | InternVideo-Next encoder |
+| `tests/test_vision_change.py` | `CosineChangeDetector` boundary cases |
+| `tests/test_vision_habituation.py` | `RollingMeanHabituator` on static and varied scenes |
+| `tests/test_vision_forward.py` | `LatentForwardModel` step, non-finite guard, serialization |
 | `tests/test_forward_model_context.py` | Context input of the vision and audition modules' forward models, null-context error, restore of checkpoints saved before the context input |
 | `tests/test_broadcast_context.py` | Context featurization, adoption of accessed members, inhibited broadcasts, null context |
 | `tests/test_graded_intensity.py` | The shared graded-intensity rule |
 | `tests/test_foveation.py` | Spatial saliency, fovea selection, arousal-to-size mapping, view cutting, `FoveaPredictor` |
 | `tests/test_foveation_wiring.py` | Wiring of the arousal provider at the composition root |
-| `tests/test_topos_dinov2.py` | DINOv2 frozen weights and device placement |
-| `tests/test_topos_live.py` | `LiveCamera` open and close, locus gate |
-| `tests/test_topos_feed.py` | Seeded source determinism, cadence, and seed decorrelation; playlist verification and failing closed |
-| `tests/systems/test_topos_subsystem.py` | Redis-backed subsystem integration |
+| `tests/test_vision_dinov2.py` | DINOv2 frozen weights and device placement |
+| `tests/test_vision_live.py` | `LiveCamera` open and close, locus gate |
+| `tests/test_vision_feed.py` | Seeded source determinism, cadence, and seed decorrelation; playlist verification and failing closed |
+| `tests/systems/test_vision_subsystem.py` | Redis-backed subsystem integration |
 
 ## Spec and related
 

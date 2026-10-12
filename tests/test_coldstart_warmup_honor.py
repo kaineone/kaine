@@ -71,7 +71,7 @@ class _StubFM:
         )
 
 
-async def _push_soma(bus: AsyncBus, prediction_error: float, warmup_active: bool):
+async def _push_interoception(bus: AsyncBus, prediction_error: float, warmup_active: bool):
     await bus.publish(
         validate_event(
             source="soma",
@@ -114,7 +114,7 @@ async def test_warmup_active_gates_then_releases(bus):
     # Cold-start: high distress but warmup_active=true, sustained well past the
     # duration — must be drained, never counted.
     for step in (0.0, 2.0, 4.0):
-        await _push_soma(bus, 0.9, warmup_active=True)
+        await _push_interoception(bus, 0.9, warmup_active=True)
         t["v"] = step
         await mon._poll_once(stop)
     assert mon._fork_manager.calls == []
@@ -124,7 +124,7 @@ async def test_warmup_active_gates_then_releases(bus):
     # transition report (flips the flag), then counting resumes: onset, then a
     # sustained crossing past distress_duration_s.
     for step in (10.0, 12.0, 14.0):
-        await _push_soma(bus, 0.9, warmup_active=False)
+        await _push_interoception(bus, 0.9, warmup_active=False)
         t["v"] = step
         await mon._poll_once(stop)
     assert len(mon._fork_manager.calls) == 1
@@ -147,15 +147,15 @@ async def test_warmup_ceiling_rearms_on_stuck_flag(bus):
     stop = asyncio.Event()
 
     # First poll stamps the run origin (t=0) with the flag stuck true.
-    await _push_soma(bus, 0.9, warmup_active=True)
+    await _push_interoception(bus, 0.9, warmup_active=True)
     await mon._poll_once(stop)
     assert mon._fork_manager.calls == []
 
     # Past the ceiling, the flag is ignored: distress re-accrues and fires.
-    await _push_soma(bus, 0.9, warmup_active=True)
+    await _push_interoception(bus, 0.9, warmup_active=True)
     t["v"] = 200.0
     await mon._poll_once(stop)
-    await _push_soma(bus, 0.9, warmup_active=True)
+    await _push_interoception(bus, 0.9, warmup_active=True)
     t["v"] = 202.0
     await mon._poll_once(stop)
     assert len(mon._fork_manager.calls) == 1

@@ -103,11 +103,11 @@ from kaine.lifecycle.welfare_signal import (  # noqa: F401  (re-export)
 
 log = logging.getLogger(__name__)
 
-_SOMA_STREAM = "soma.out"
+_INTEROCEPTION_STREAM = "soma.out"
 _HYPNOS_STREAM = "hypnos.out"
 _THYMOS_STREAM = "thymos.out"
 _MNEMOS_STREAM = "mnemos.out"
-_TOPOS_STREAM = "topos.out"
+_VISION_STREAM = "topos.out"
 _AUDITION_STREAM = "audition.out"
 
 # Emitted gray-zone signal: source "welfare" → stream "welfare.out".
@@ -135,11 +135,11 @@ class WelfareObserver(StreamSubscriberObserver):
 
     name = "welfare"
     streams = (
-        _SOMA_STREAM,
+        _INTEROCEPTION_STREAM,
         _HYPNOS_STREAM,
         _THYMOS_STREAM,
         _MNEMOS_STREAM,
-        _TOPOS_STREAM,
+        _VISION_STREAM,
         _AUDITION_STREAM,
     )
 
@@ -272,7 +272,7 @@ class WelfareObserver(StreamSubscriberObserver):
 
         cursors: dict[str, str] = {}
         for stream in self.streams:
-            if stream in (_TOPOS_STREAM, _AUDITION_STREAM):
+            if stream in (_VISION_STREAM, _AUDITION_STREAM):
                 cursors[stream] = await self._tail_cursor(stream)
             else:
                 cursors[stream] = "0"
@@ -322,7 +322,7 @@ class WelfareObserver(StreamSubscriberObserver):
     @property
     def _stream_handlers(self) -> dict[str, Any]:
         return {
-            _SOMA_STREAM: self._handle_soma,
+            _INTEROCEPTION_STREAM: self._handle_interoception,
             _HYPNOS_STREAM: self._handle_hypnos,
             _THYMOS_STREAM: self._handle_thymos,
             _MNEMOS_STREAM: self._handle_mnemos,
@@ -562,7 +562,7 @@ class WelfareObserver(StreamSubscriberObserver):
 
     # --- Stream handlers -------------------------------------------------
 
-    async def _handle_soma(self, entry_id: str, event: Event) -> None:
+    async def _handle_interoception(self, entry_id: str, event: Event) -> None:
         if event.type == "soma.fatigue":
             # Record fatigue threshold crossing time.
             self._fatigue_crossed_at = self._unfrozen.now()

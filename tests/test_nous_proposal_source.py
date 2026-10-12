@@ -38,7 +38,7 @@ def _event(
     )
 
 
-def _soma_report(value: float = 0.5) -> tuple[str, Event]:
+def _interoception_report(value: float = 0.5) -> tuple[str, Event]:
     return ("s1", _event("soma", "soma.report", {"wellness": value}))
 
 
@@ -116,14 +116,14 @@ def test_inhibited_snapshot_with_proposal_returns_empty_intents_and_inhibited_ou
 
 def test_snapshot_without_proposal_produces_no_intent_and_no_outcome():
     v = Volition(policy=NousProposalSource(lambda s: []))
-    snap = _snapshot([_soma_report()])
+    snap = _snapshot([_interoception_report()])
     assert v.select(snap) == []
     assert v.proposal_outcomes(snap) == []
 
 
 def test_conscious_think_proposal_emits_think_intent_from_nous():
     v = Volition(policy=NousProposalSource(lambda s: []))
-    snap = _snapshot([_soma_report(), _proposal("p1", "think")])
+    snap = _snapshot([_interoception_report(), _proposal("p1", "think")])
     intents = v.select(snap)
     assert len(intents) == 1
     intent = intents[0]
@@ -152,14 +152,14 @@ def test_second_think_within_refractory_is_refractory():
     source = NousProposalSource(lambda s: [], clock=clock)
     v = Volition(policy=source)
 
-    snap1 = _snapshot([_soma_report(), _proposal("p1", "think")])
+    snap1 = _snapshot([_interoception_report(), _proposal("p1", "think")])
     assert v.select(snap1)
     assert v.proposal_outcomes(snap1)[0]["reason"] == "realized"
 
     # Clear the in-flight guard with the entity's own internal speech, but stay
     # inside the refractory window.
     clock.advance(1.0)
-    snap2 = _snapshot([_own_internal_speech(), _soma_report(), _proposal("p2", "think")])
+    snap2 = _snapshot([_own_internal_speech(), _interoception_report(), _proposal("p2", "think")])
     assert v.select(snap2) == []
     assert v.proposal_outcomes(snap2)[0]["reason"] == "refractory"
 
@@ -172,14 +172,14 @@ def test_inner_think_in_flight_declines_think():
             return []
 
     v = Volition(policy=NousProposalSource(Inner()))
-    snap = _snapshot([_soma_report(), _proposal("p1", "think")])
+    snap = _snapshot([_interoception_report(), _proposal("p1", "think")])
     assert v.select(snap) == []
     assert v.proposal_outcomes(snap)[0]["reason"] == "in_flight"
 
 
 def test_inner_speak_supersedes_speak_proposal():
     v = Volition(policy=NousProposalSource(lambda s: [Intent(kind=SPEAK, about="hi")]))
-    snap = _snapshot([_soma_report(), _proposal("p1", "speak")])
+    snap = _snapshot([_interoception_report(), _proposal("p1", "speak")])
     intents = v.select(snap)
     assert len(intents) == 1
     assert intents[0].kind == SPEAK
@@ -210,7 +210,7 @@ def test_rest_proposal_emits_rest_intent_without_signature():
     v = Volition(policy=NousProposalSource(lambda s: [], clock=clock), signer=FakeSigner())
     # Rest is refractory from construction until the minimum interval passes.
     clock.advance(1800.0)
-    snap = _snapshot([_soma_report(), _proposal("p1", "rest")])
+    snap = _snapshot([_interoception_report(), _proposal("p1", "rest")])
     intents = v.select(snap)
     assert len(intents) == 1
     assert intents[0].kind == REST
@@ -228,7 +228,7 @@ def test_rest_proposal_emits_rest_intent_without_signature():
 
 def test_drive_actions_false_records_disabled_and_emits_no_intent():
     v = Volition(policy=NousProposalSource(lambda s: [], drive_actions=False))
-    snap = _snapshot([_soma_report(), _proposal("p1", "think")])
+    snap = _snapshot([_interoception_report(), _proposal("p1", "think")])
     assert v.select(snap) == []
     outcomes = v.proposal_outcomes(snap)
     assert outcomes[0] == {
@@ -456,7 +456,7 @@ def test_think_guard_clears_on_own_internal_speech_without_proposal():
     source = NousProposalSource(lambda s: [], clock=clock, think_refractory_s=3.0)
     v = Volition(policy=source)
 
-    snap1 = _snapshot([_soma_report(), _proposal("p1", "think")])
+    snap1 = _snapshot([_interoception_report(), _proposal("p1", "think")])
     assert v.select(snap1)[0].kind == THINK
 
     # The entity's own internal speech appears on a snapshot with no proposal;
@@ -468,7 +468,7 @@ def test_think_guard_clears_on_own_internal_speech_without_proposal():
     # Enough time has passed for the refractory window, so the next think
     # proposal is realized.
     clock.advance(4.0)
-    snap3 = _snapshot([_soma_report(), _proposal("p2", "think")])
+    snap3 = _snapshot([_interoception_report(), _proposal("p2", "think")])
     intents = v.select(snap3)
     assert len(intents) == 1
     assert intents[0].kind == THINK
@@ -480,17 +480,17 @@ def test_think_guard_clears_after_timeout_on_no_proposal_snapshot():
     source = NousProposalSource(lambda s: [], clock=clock, think_refractory_s=3.0)
     v = Volition(policy=source)
 
-    snap1 = _snapshot([_soma_report(), _proposal("p1", "think")])
+    snap1 = _snapshot([_interoception_report(), _proposal("p1", "think")])
     assert v.select(snap1)[0].kind == THINK
 
     # No proposal for longer than the guard timeout; the guard is cleared.
     clock.advance(50.0)
-    snap2 = _snapshot([_soma_report()])
+    snap2 = _snapshot([_interoception_report()])
     assert v.select(snap2) == []
 
     # The refractory window has also passed, so the next proposal is realized.
     clock.advance(1.0)
-    snap3 = _snapshot([_soma_report(), _proposal("p2", "think")])
+    snap3 = _snapshot([_interoception_report(), _proposal("p2", "think")])
     intents = v.select(snap3)
     assert len(intents) == 1
     assert intents[0].kind == THINK
@@ -501,8 +501,8 @@ def test_speak_referent_skips_entitys_own_external_speech():
     v = Volition(policy=source)
 
     own = _own_speech()  # most salient, but must not be the referent
-    soma = ("s1", _event("soma", "soma.report", {"wellness": 0.6}, salience=0.4))
-    snap = _snapshot([own, soma, _proposal("p1", "speak")])
+    interoception = ("s1", _event("soma", "soma.report", {"wellness": 0.6}, salience=0.4))
+    snap = _snapshot([own, interoception, _proposal("p1", "speak")])
     intents = v.select(snap)
     assert len(intents) == 1
     assert intents[0].kind == SPEAK
@@ -541,7 +541,7 @@ def test_two_proposals_most_salient_first_supersedes_second():
     # p1 is more salient than p2, so p1 is considered and p2 is superseded.
     p1 = _proposal("p1", "think", preference=0.9, salience=0.9)
     p2 = _proposal("p2", "think", preference=0.5, salience=0.5)
-    snap = _snapshot([_soma_report(), p1, p2])
+    snap = _snapshot([_interoception_report(), p1, p2])
     intents = v.select(snap)
     assert len(intents) == 1
     assert intents[0].kind == THINK
@@ -563,7 +563,7 @@ def test_plain_callable_fallback_filters_inner_intents():
     source = NousProposalSource(inner, clock=clock, speak_refractory_s=8.0)
     v = Volition(policy=source)
 
-    snap1 = _snapshot([_soma_report(), _proposal("p1", "speak")])
+    snap1 = _snapshot([_interoception_report(), _proposal("p1", "speak")])
     intents1 = v.select(snap1)
     assert len(intents1) == 1
     assert intents1[0].origin == "nous"

@@ -164,7 +164,7 @@ def _fmt(value: Any) -> str:
     return str(value)
 
 
-def _t_soma_report(payload: dict[str, Any]) -> str:
+def _t_interoception_report(payload: dict[str, Any]) -> str:
     wellness = payload.get("wellness")
     alerts = payload.get("alerts") or []
     prediction_error = payload.get("prediction_error")
@@ -181,7 +181,7 @@ def _t_soma_report(payload: dict[str, Any]) -> str:
     return ", ".join(parts) + "."
 
 
-def _t_chronos_report(payload: dict[str, Any]) -> str:
+def _t_sequence_report(payload: dict[str, Any]) -> str:
     score = payload.get("anomaly_score")
     hab = payload.get("habituation_score")
     rumination = payload.get("rumination_detected")
@@ -200,7 +200,7 @@ def _t_chronos_report(payload: dict[str, Any]) -> str:
     return ", ".join(parts) + "."
 
 
-def _t_topos_report(payload: dict[str, Any]) -> str:
+def _t_vision_report(payload: dict[str, Any]) -> str:
     change = payload.get("change_score")
     hab = payload.get("habituation_score")
     model = payload.get("encoder_model_id", "unknown encoder")
@@ -300,7 +300,7 @@ def _t_audition_emotion(payload: dict[str, Any]) -> str:
     return f"Voice heard with emotional tone {_fmt(category)}."
 
 
-def _t_soma_fatigue(payload: dict[str, Any]) -> str:
+def _t_interoception_fatigue(payload: dict[str, Any]) -> str:
     value = payload.get("value")
     threshold = payload.get("threshold")
     crossed = payload.get("crossed", False)
@@ -312,7 +312,7 @@ def _t_soma_fatigue(payload: dict[str, Any]) -> str:
     return f"Soma fatigue {_fmt(value)} (threshold {_fmt(threshold)})."
 
 
-def _t_soma_regulation(payload: dict[str, Any]) -> str:
+def _t_interoception_regulation(payload: dict[str, Any]) -> str:
     action = payload.get("action", "unknown")
     reason = payload.get("reason", "")
     severity = payload.get("severity")
@@ -489,9 +489,9 @@ def _t_eidolon_self_model(payload: dict[str, Any]) -> str:
 
 
 TEMPLATES: dict[tuple[str, str], TemplateFn] = {
-    ("soma", "soma.report"): _t_soma_report,
-    ("chronos", "chronos.report"): _t_chronos_report,
-    ("topos", "topos.report"): _t_topos_report,
+    ("soma", "soma.report"): _t_interoception_report,
+    ("chronos", "chronos.report"): _t_sequence_report,
+    ("topos", "topos.report"): _t_vision_report,
     ("nous", "nous.belief"): _t_nous_belief,
     ("nous", "nous.policy"): _t_nous_policy,
     ("mnemos", "mnemos.recall"): _t_mnemos_recall,
@@ -503,8 +503,8 @@ TEMPLATES: dict[tuple[str, str], TemplateFn] = {
     ("cycle", "cycle.tick"): _t_cycle_tick,
     ("audition", "audition.transcription"): _t_audition_transcription,
     ("audition", "audition.emotion"): _t_audition_emotion,
-    ("soma", "soma.fatigue"): _t_soma_fatigue,
-    ("soma", "soma.regulation"): _t_soma_regulation,
+    ("soma", "soma.fatigue"): _t_interoception_fatigue,
+    ("soma", "soma.regulation"): _t_interoception_regulation,
     ("empatheia", "empatheia.agent_model"): _t_empatheia_agent_model,
     ("empatheia", "empatheia.social_error"): _t_empatheia_social_error,
     ("phantasia", "phantasia.world_error"): _t_phantasia_world_error,

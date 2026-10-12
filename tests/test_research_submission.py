@@ -867,7 +867,7 @@ def test_cli_preview_blocks_on_inadmissible_eval_root(tmp_path: Path, monkeypatc
 # ---------------------------------------------------------------------------
 
 
-def _plant_soma_out_of_range(eval_root: Path, run_id: str) -> None:
+def _plant_interoception_out_of_range(eval_root: Path, run_id: str) -> None:
     """Append one out-of-range soma.report record for run_id (its own file)."""
     eval_root.mkdir(parents=True, exist_ok=True)
     with (eval_root / f"soma.report-{run_id}.jsonl").open("a", encoding="utf-8") as fh:
@@ -884,7 +884,7 @@ def test_pinned_run_still_detects_other_runs_present(tmp_path: Path):
 
     eval_root = tmp_path / "evaluation"
     _plant_run(eval_root, "run-A", complete=True)           # clean primary
-    _plant_soma_out_of_range(eval_root, "run-B")            # unaccounted bad run
+    _plant_interoception_out_of_range(eval_root, "run-B")            # unaccounted bad run
     out_dir = tmp_path / "out"
     with pytest.raises(AdmissibilityError) as excinfo:
         build_research_bundle(
@@ -904,7 +904,7 @@ def test_pinned_nonexistent_run_id_does_not_vouch(tmp_path: Path):
     from kaine.research.submission import AdmissibilityError, build_research_bundle
 
     eval_root = tmp_path / "evaluation"
-    _plant_soma_out_of_range(eval_root, "run-REAL-BAD")
+    _plant_interoception_out_of_range(eval_root, "run-REAL-BAD")
     _plant_run(eval_root, "run-REAL-BAD", complete=True)
     out_dir = tmp_path / "out"
     with pytest.raises(AdmissibilityError) as excinfo:

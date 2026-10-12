@@ -18,7 +18,7 @@ from kaine.bus.schema import Event
 
 _BASE_EPOCH = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
-# Metric keys the interoception module's feature vector reads (see soma/forward.py metrics_to_feature_vector).
+# Metric keys the interoception module's feature vector reads (see interoception/forward.py metrics_to_feature_vector).
 _BASE_METRICS = {
     "cpu_percent": 12.0,
     "ram_percent": 30.0,
@@ -104,8 +104,8 @@ class StimulusScript:
     per tick.
     """
 
-    soma_metrics: list[dict[str, float]]
-    topos_frames: list[list[float]]
+    interoception_metrics: list[dict[str, float]]
+    vision_frames: list[list[float]]
     background: list[list[Event]]
 
 
@@ -132,51 +132,51 @@ class MediationStimulus:
         if n_background < 0:
             raise ValueError(f"n_background must be >= 0, got {n_background}")
 
-        soma_rng = random.Random(f"{seed}:{self.name}:soma")
-        topos_rng = random.Random(f"{seed}:{self.name}:topos")
+        interoception_rng = random.Random(f"{seed}:{self.name}:soma")
+        vision_rng = random.Random(f"{seed}:{self.name}:topos")
         scenes_rng = random.Random(f"{seed}:{self.name}:scenes")
         background_rng = random.Random(f"{seed}:{self.name}:background")
 
-        soma_led = [soma_rng.random() < self.event_rate for _ in range(ticks)]
-        topos_led = [topos_rng.random() < self.event_rate for _ in range(ticks)]
+        interoception_led = [interoception_rng.random() < self.event_rate for _ in range(ticks)]
+        vision_led = [vision_rng.random() < self.event_rate for _ in range(ticks)]
 
         scenes = [
             [scenes_rng.gauss(0.0, 1.0) for _ in range(LATENT_DIM)]
             for _ in range(self.n_scenes)
         ]
 
-        soma_metrics: list[dict[str, float]] = []
-        topos_frames: list[list[float]] = []
+        interoception_metrics: list[dict[str, float]] = []
+        vision_frames: list[list[float]] = []
         background: list[list[Event]] = []
 
         scene_idx = 0
         for t in range(ticks):
             # Jitter the base substrate, then add a spike on spike ticks.
             m = dict(_BASE_METRICS)
-            m["cpu_percent"] += soma_rng.uniform(-1.0, 1.0)
+            m["cpu_percent"] += interoception_rng.uniform(-1.0, 1.0)
             spike = False
             if self.coupled:
-                if soma_led[t] or (t >= LAG and topos_led[t - LAG]):
+                if interoception_led[t] or (t >= LAG and vision_led[t - LAG]):
                     spike = True
-            elif soma_led[t]:
+            elif interoception_led[t]:
                 spike = True
             if spike:
                 m["cpu_percent"] += 40.0
                 m["cycle_latency_avg_ms"] += 40.0 * 8.0
                 m["gpu_0_temp_c"] += 40.0 * 0.4
-            soma_metrics.append(m)
+            interoception_metrics.append(m)
 
             # Advance the scene on cut ticks; add per-component sensor noise.
             cut = False
             if self.coupled:
-                if topos_led[t] or (t >= LAG and soma_led[t - LAG]):
+                if vision_led[t] or (t >= LAG and interoception_led[t - LAG]):
                     cut = True
-            elif topos_led[t]:
+            elif vision_led[t]:
                 cut = True
             if cut:
                 scene_idx = (scene_idx + 1) % self.n_scenes
-            frame = [v + topos_rng.gauss(0.0, self.frame_noise) for v in scenes[scene_idx]]
-            topos_frames.append(frame)
+            frame = [v + vision_rng.gauss(0.0, self.frame_noise) for v in scenes[scene_idx]]
+            vision_frames.append(frame)
 
             # Background candidates stand in for the other base-thesis candidates.
             # They carry no information about either processor's input.
@@ -193,8 +193,8 @@ class MediationStimulus:
             background.append(tick_bg)
 
         return StimulusScript(
-            soma_metrics=soma_metrics,
-            topos_frames=topos_frames,
+            interoception_metrics=interoception_metrics,
+            vision_frames=vision_frames,
             background=background,
         )
 

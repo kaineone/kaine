@@ -3,7 +3,7 @@
 
 """General auditory perception core — represent and attend to any sound.
 
-The auditory analog of ``topos/foveation.py``. Hearing is a perceptual sense, not
+The auditory analog of ``vision/foveation.py``. Hearing is a perceptual sense, not
 a transcription front end: an incoming audio window is turned into a general
 acoustic embedding that represents speech, music, and environmental sound alike,
 so a novel or sudden sound is salient by its change and prediction error whether

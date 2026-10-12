@@ -89,7 +89,7 @@ def _make_hypnos(bus: AsyncBus, tmp_path: Path, **kwargs) -> Hypnos:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_soma_fatigue_triggers_maintenance(bus: AsyncBus, tmp_path: Path):
+async def test_interoception_fatigue_triggers_maintenance(bus: AsyncBus, tmp_path: Path):
     """When soma.fatigue with crossed=true is published, the sleep module triggers sleep."""
     hypnos = _make_hypnos(bus, tmp_path, fatigue_triggered=True)
     # Initialise (seeds the interoception module's cursor and starts consumer loop)
@@ -128,7 +128,7 @@ async def test_soma_fatigue_triggers_maintenance(bus: AsyncBus, tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_soma_regulation_request_maintenance_triggers(bus: AsyncBus, tmp_path: Path):
+async def test_interoception_regulation_request_maintenance_triggers(bus: AsyncBus, tmp_path: Path):
     """soma.regulation with action=request_maintenance triggers a sleep cycle."""
     hypnos = _make_hypnos(bus, tmp_path, fatigue_triggered=True)
     await hypnos.initialize()
@@ -166,7 +166,7 @@ async def test_soma_regulation_request_maintenance_triggers(bus: AsyncBus, tmp_p
 
 
 @pytest.mark.asyncio
-async def test_soma_regulation_other_action_does_not_trigger(bus: AsyncBus, tmp_path: Path):
+async def test_interoception_regulation_other_action_does_not_trigger(bus: AsyncBus, tmp_path: Path):
     """soma.regulation with a non-maintenance action must NOT trigger sleep."""
     hypnos = _make_hypnos(bus, tmp_path, fatigue_triggered=True)
     await hypnos.initialize()
@@ -199,7 +199,7 @@ async def test_soma_regulation_other_action_does_not_trigger(bus: AsyncBus, tmp_
 
 
 @pytest.mark.asyncio
-async def test_soma_fatigue_not_crossed_does_not_trigger(bus: AsyncBus, tmp_path: Path):
+async def test_interoception_fatigue_not_crossed_does_not_trigger(bus: AsyncBus, tmp_path: Path):
     """soma.fatigue with crossed=false should NOT trigger maintenance."""
     hypnos = _make_hypnos(bus, tmp_path, fatigue_triggered=True)
     await hypnos.initialize()

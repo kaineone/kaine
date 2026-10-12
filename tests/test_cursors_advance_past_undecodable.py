@@ -89,7 +89,7 @@ async def test_nexus_bridge_advances_past_undecodable_batch() -> None:
 
 
 @pytest.mark.asyncio
-async def test_gestation_soma_reader_advances_past_undecodable_batch(
+async def test_gestation_interoception_reader_advances_past_undecodable_batch(
     tmp_path: Path,
 ) -> None:
     bus = _make_bus()
@@ -128,7 +128,7 @@ async def test_gestation_soma_reader_advances_past_undecodable_batch(
 
     owner = GestationOwner(
         bus,
-        soma=FakeSoma(),
+        interoception=FakeSoma(),
         drive=FakeDrive(),
         beat_phase=lambda: 0.0,
         surrogate_beat_phases=None,
@@ -137,16 +137,16 @@ async def test_gestation_soma_reader_advances_past_undecodable_batch(
         clock=lambda: 0.0,
         state_path=tmp_path / "gestation_readout.json",
     )
-    owner._soma_cursor = "0-0"
+    owner._interoception_cursor = "0-0"
 
     for _ in range(1100):
         await bus.client.xadd("soma.out", {"junk": "x"})
 
     await bus.publish(_event("soma", "soma.report", {"prediction_error": 0.5}))
 
-    await owner._read_soma_reports(10.0)
-    await owner._read_soma_reports(20.0)
-    await owner._read_soma_reports(30.0)
+    await owner._read_interoception_reports(10.0)
+    await owner._read_interoception_reports(20.0)
+    await owner._read_interoception_reports(30.0)
 
-    assert len(owner._soma_series) == 1
-    assert math.isclose(owner._soma_series[0][1], 0.5)
+    assert len(owner._interoception_series) == 1
+    assert math.isclose(owner._interoception_series[0][1], 0.5)

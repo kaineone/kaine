@@ -136,8 +136,8 @@ def _load_toml(path: Path) -> dict[str, Any]:
 
 def _absolute_encoder_dir(repo_root: Path, base_config: dict[str, Any]) -> str:
     """Resolve ``[topos].encoder_local_dir`` absolutely against the repository."""
-    topos = base_config.get("topos", {})
-    value = topos.get("encoder_local_dir")
+    vision = base_config.get("topos", {})
+    value = vision.get("encoder_local_dir")
     if not value:
         target = repo_root / "state" / "models"
     else:

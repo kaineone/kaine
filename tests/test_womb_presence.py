@@ -16,7 +16,7 @@ from kaine.cycle.womb_presence import (
     PRESENCE_TYPE,
     WombPresencePublisher,
 )
-from kaine.modules.topos.feed import WombClock
+from kaine.modules.vision.feed import WombClock
 
 
 class FakeClock:

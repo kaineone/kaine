@@ -33,7 +33,7 @@ LINGUA_INTERNAL_STREAM = "lingua.internal"
 # --- Module output streams (one per module under kaine/modules/) ----------
 
 AUDITION_STREAM = module_stream("audition")
-CHRONOS_STREAM = module_stream("chronos")
+SEQUENCE_STREAM = module_stream("chronos")
 ECHO_STREAM = module_stream("echo")
 EIDOLON_STREAM = module_stream("eidolon")
 EMPATHEIA_STREAM = module_stream("empatheia")
@@ -46,9 +46,9 @@ NOUS_STREAM = module_stream("nous")
 PERCEPTION_STREAM = module_stream("perception")
 PHANTASIA_STREAM = module_stream("phantasia")
 PRAXIS_STREAM = module_stream("praxis")
-SOMA_STREAM = module_stream("soma")
+INTEROCEPTION_STREAM = module_stream("soma")
 THYMOS_STREAM = module_stream("thymos")
-TOPOS_STREAM = module_stream("topos")
+VISION_STREAM = module_stream("topos")
 VOX_STREAM = module_stream("vox")
 
 # --- Cycle-layer and lifecycle producers -----------------------------------
@@ -69,7 +69,7 @@ WELFARE_STREAM = module_stream("welfare")
 MODULE_STREAMS: frozenset[str] = frozenset(
     {
         AUDITION_STREAM,
-        CHRONOS_STREAM,
+        SEQUENCE_STREAM,
         ECHO_STREAM,
         EIDOLON_STREAM,
         EMPATHEIA_STREAM,
@@ -81,9 +81,9 @@ MODULE_STREAMS: frozenset[str] = frozenset(
         PERCEPTION_STREAM,
         PHANTASIA_STREAM,
         PRAXIS_STREAM,
-        SOMA_STREAM,
+        INTEROCEPTION_STREAM,
         THYMOS_STREAM,
-        TOPOS_STREAM,
+        VISION_STREAM,
         VOX_STREAM,
     }
 )
@@ -107,7 +107,7 @@ KNOWN_STREAMS: frozenset[str] = MODULE_STREAMS | frozenset(
 
 __all__ = [
     "AUDITION_STREAM",
-    "CHRONOS_STREAM",
+    "SEQUENCE_STREAM",
     "CYCLE_STREAM",
     "ECHO_STREAM",
     "EIDOLON_STREAM",
@@ -128,10 +128,10 @@ __all__ = [
     "PHANTASIA_STREAM",
     "PRAXIS_STREAM",
     "PRESERVATION_STREAM",
-    "SOMA_STREAM",
+    "INTEROCEPTION_STREAM",
     "SPOT_STREAM",
     "THYMOS_STREAM",
-    "TOPOS_STREAM",
+    "VISION_STREAM",
     "VOLITION_FEEDBACK_STREAM",
     "VOLITION_STREAM",
     "VOX_STREAM",

@@ -205,7 +205,7 @@ def test_fallback_with_empty_payload():
     assert "no payload" in out
 
 
-def test_soma_report_alerts_branch():
+def test_interoception_report_alerts_branch():
     out = TEMPLATES[("soma", "soma.report")]({"wellness": 0.2, "alerts": ["cpu_percent"]})
     assert "cpu_percent" in out
     assert "alerts" in out
@@ -227,18 +227,18 @@ def test_cycle_tick_omits_slip_when_zero():
     assert "slip" not in out.lower()
 
 
-def test_soma_fatigue_crossed_branch():
+def test_interoception_fatigue_crossed_branch():
     out = TEMPLATES[("soma", "soma.fatigue")]({"value": 105.0, "threshold": 100.0, "crossed": True})
     assert "crossed" in out.lower() or "maintenance" in out.lower()
     assert "105" in out or "105.0" in out
 
 
-def test_soma_fatigue_not_crossed():
+def test_interoception_fatigue_not_crossed():
     out = TEMPLATES[("soma", "soma.fatigue")]({"value": 50.0, "threshold": 100.0, "crossed": False})
     assert "50" in out
 
 
-def test_soma_regulation_renders_action():
+def test_interoception_regulation_renders_action():
     out = TEMPLATES[("soma", "soma.regulation")](
         {"action": "shed_module", "reason": "too hot", "severity": 2}
     )

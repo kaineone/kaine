@@ -49,14 +49,14 @@ from typing import TYPE_CHECKING, Any, Callable
 from kaine.modules.audition.live import PerceptionUnavailableError
 from kaine.modules.perception_prng import keyed_u64 as _keyed_u64
 from kaine.modules.perception_prng import unit_float as _unit_float
-from kaine.modules.topos.feed import (
+from kaine.modules.vision.feed import (
     PlaylistClock,
     PlaylistManifest,
     PlaylistPosition,
 )
 
 if TYPE_CHECKING:  # numpy-importing; loaded lazily at render time
-    from kaine.modules.topos.feed import WombClock
+    from kaine.modules.vision.feed import WombClock
     from kaine.modules.womb_signal import WombParams
 
 log = logging.getLogger(__name__)
@@ -131,7 +131,7 @@ class WombAudioSchedule:
 # and the same surprise_interval — both modalities decide a slot fires from the
 # identical coin flip, making surprises cross-modal (a video blob and an audio
 # burst on the same slot). See SeededProceduralSource._SALT_ONSET in
-# kaine/modules/topos/feed.py.
+# kaine/modules/vision/feed.py.
 _SALT_AUDIO_BASE = 0xE100
 _SALT_AUDIO_CONTENT = 0xE3
 # Shared with the video source's onset draw (topos.feed _SALT_ONSET = 0xA1).

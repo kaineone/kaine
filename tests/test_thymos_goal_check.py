@@ -89,7 +89,7 @@ async def test_social_drive_served_by_audition_positive(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_social_drive_ignored_by_soma_negative(bus: AsyncBus):
+async def test_social_drive_ignored_by_interoception_negative(bus: AsyncBus):
     """Social drive 0.8 + only non-serving interoception events → -0.8."""
     thymos = Thymos(bus, publish_interval_s=5.0, clock=lambda: 0.0)
     await thymos.initialize()

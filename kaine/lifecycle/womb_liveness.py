@@ -99,8 +99,8 @@ async def _check_local_womb(
             "[modules].soma is disabled — the womb's self-rhythm has no host",
         )
 
-    soma_section = dict(config.get("soma") or {})
-    if not soma_section.get("self_rhythm_enabled"):
+    interoception_section = dict(config.get("soma") or {})
+    if not interoception_section.get("self_rhythm_enabled"):
         return WombLiveness(
             False,
             "local",

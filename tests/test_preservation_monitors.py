@@ -365,7 +365,7 @@ async def test_divergence_preserve_is_read_only_real_forkmanager(bus, tmp_path, 
 # ---------------------------------------------------------------------------
 
 
-async def _push_soma_report(bus: AsyncBus, prediction_error: float):
+async def _push_interoception_report(bus: AsyncBus, prediction_error: float):
     await bus.publish(
         validate_event(
             source="soma",
@@ -407,7 +407,7 @@ async def test_welfare_sustained_distress_preserves_then_pauses(bus, tmp_path):
 
     stop = asyncio.Event()
     # Onset.
-    await _push_soma_report(bus, 0.9)
+    await _push_interoception_report(bus, 0.9)
     clock["t"] = 0.0
     await mon._poll_once(stop)
     assert fm.calls == []  # not yet sustained
@@ -435,8 +435,8 @@ async def test_welfare_transient_does_not_interrupt(bus, tmp_path):
     clock = {"t": 0.0}
     mon = _welfare_monitor(bus, reg, fm, cfg, clock=lambda: clock["t"])
     stop = asyncio.Event()
-    await _push_soma_report(bus, 0.9)   # spike
-    await _push_soma_report(bus, 0.1)   # drops below → resets
+    await _push_interoception_report(bus, 0.9)   # spike
+    await _push_interoception_report(bus, 0.1)   # drops below → resets
     await mon._poll_once(stop)
     clock["t"] = 100.0
     await mon._poll_once(stop)
@@ -460,7 +460,7 @@ async def test_welfare_action_end_calls_on_end(bus, tmp_path):
         clock=lambda: clock["t"],
     )
     stop = asyncio.Event()
-    await _push_soma_report(bus, 0.9)
+    await _push_interoception_report(bus, 0.9)
     await mon._poll_once(stop)
     clock["t"] = 5.0
     await mon._poll_once(stop)
@@ -482,7 +482,7 @@ async def test_welfare_action_notify_preserves_and_continues(bus, tmp_path):
     clock = {"t": 0.0}
     mon = _welfare_monitor(bus, reg, fm, cfg, clock=lambda: clock["t"])
     stop = asyncio.Event()
-    await _push_soma_report(bus, 0.9)
+    await _push_interoception_report(bus, 0.9)
     await mon._poll_once(stop)
     clock["t"] = 5.0
     await mon._poll_once(stop)
@@ -522,13 +522,13 @@ async def test_welfare_repeated_distress_arm_fires_and_latches_one_preserve(
     stop = asyncio.Event()
     # Onset, then a later poll past the duration → timer-driven sustained crossing
     # which (repeat_threshold=1) immediately reclassifies to repeated_distress.
-    await _push_soma_report(bus, 0.9)
+    await _push_interoception_report(bus, 0.9)
     clock["t"] = 0.0
     await mon._poll_once(stop)
     clock["t"] = 5.0
     await mon._poll_once(stop)
     # A further crossing attempt must NOT add a second preserve (pause latched).
-    await _push_soma_report(bus, 0.9)
+    await _push_interoception_report(bus, 0.9)
     clock["t"] = 10.0
     await mon._poll_once(stop)
     clock["t"] = 15.0
@@ -566,7 +566,7 @@ async def test_welfare_still_pauses_when_preservation_fails(bus, tmp_path):
     clock = {"t": 0.0}
     mon = _welfare_monitor(bus, reg, fm, cfg, clock=lambda: clock["t"])
     stop = asyncio.Event()
-    await _push_soma_report(bus, 0.9)
+    await _push_interoception_report(bus, 0.9)
     clock["t"] = 0.0
     await mon._poll_once(stop)            # onset — not yet sustained
     clock["t"] = 5.0
@@ -601,7 +601,7 @@ async def test_welfare_action_end_without_on_end_falls_back_to_pause(bus, tmp_pa
     clock = {"t": 0.0}
     mon = _welfare_monitor(bus, reg, fm, cfg, on_end=None, clock=lambda: clock["t"])
     stop = asyncio.Event()
-    await _push_soma_report(bus, 0.9)
+    await _push_interoception_report(bus, 0.9)
     clock["t"] = 0.0
     await mon._poll_once(stop)
     clock["t"] = 5.0
@@ -638,11 +638,11 @@ async def test_welfare_boot_transient_within_warmup_does_not_act(bus, tmp_path):
     mon = _welfare_monitor(bus, reg, fm, cfg, clock=lambda: clock["t"], warmup_s=120.0)
     stop = asyncio.Event()
     # Onset + sustained beyond duration, but all within the 120 s warm-up window.
-    await _push_soma_report(bus, 0.9)
+    await _push_interoception_report(bus, 0.9)
     clock["t"] = 1.0
     await mon._poll_once(stop)
     clock["t"] = 60.0
-    await _push_soma_report(bus, 0.9)
+    await _push_interoception_report(bus, 0.9)
     await mon._poll_once(stop)
     assert fm.calls == []  # no protective action during warm-up
     assert control_state.read_control().frozen is False
@@ -672,7 +672,7 @@ async def test_welfare_sustained_distress_after_warmup_still_acts(bus, tmp_path)
     await mon._poll_once(stop)
     # Now (past warm-up) drive a genuine sustained crossing.
     clock["t"] = 40.0
-    await _push_soma_report(bus, 0.9)
+    await _push_interoception_report(bus, 0.9)
     await mon._poll_once(stop)
     clock["t"] = 45.0
     await mon._poll_once(stop)  # timer-driven sustained crossing
@@ -781,10 +781,10 @@ async def test_welfare_repeated_distress_classification(bus, tmp_path):
     mon = _welfare_monitor(bus, reg, fm, cfg, clock=lambda: clock["t"])
     stop = asyncio.Event()
     # Onset then a later sample beyond duration so observe() fires on the sample.
-    await _push_soma_report(bus, 0.9)
+    await _push_interoception_report(bus, 0.9)
     clock["t"] = 0.0
     await mon._poll_once(stop)
-    await _push_soma_report(bus, 0.9)
+    await _push_interoception_report(bus, 0.9)
     clock["t"] = 2.0
     await mon._poll_once(stop)
     assert len(fm.calls) == 1
@@ -911,7 +911,7 @@ async def test_welfare_pause_acts_once_despite_multiple_crossings_in_one_poll(
     # Two sustained-distress segments, separated by a reset, plus a gray-zone
     # stream that would cross on its own.
     for mag in [0.9, 0.9, 0.9, 0.1, 0.9, 0.9, 0.9]:
-        await _push_soma_report(bus, mag)
+        await _push_interoception_report(bus, mag)
     for _ in range(5):
         await _push_gray_zone(bus, "replay_overload")
 
@@ -947,7 +947,7 @@ async def test_welfare_notify_responds_to_each_crossing_in_order(bus, tmp_path):
     stop = asyncio.Event()
 
     for mag in [0.9, 0.9, 0.9, 0.1, 0.9, 0.9, 0.9]:
-        await _push_soma_report(bus, mag)
+        await _push_interoception_report(bus, mag)
     for _ in range(5):
         await _push_gray_zone(bus, "replay_overload")
 
@@ -990,7 +990,7 @@ async def test_welfare_gray_zone_drained_even_when_distress_crossed(
     for _ in range(3):
         await _push_gray_zone(bus, "replay_overload")
     for _ in range(3):
-        await _push_soma_report(bus, 0.9)
+        await _push_interoception_report(bus, 0.9)
 
     await mon._poll_once(stop)
 
@@ -1017,7 +1017,7 @@ async def _multi_crossing_monitor(bus, tmp_path, action):
     )
     mon = _welfare_monitor(bus, reg, fm, cfg, clock=_make_clock(0.0, 0.5))
     for mag in [0.9, 0.9, 0.9, 0.1, 0.9, 0.9, 0.9]:
-        await _push_soma_report(bus, mag)
+        await _push_interoception_report(bus, mag)
     for _ in range(5):
         await _push_gray_zone(bus, "replay_overload")
     given: list[str] = []
@@ -1069,13 +1069,13 @@ async def test_welfare_null_error_does_not_reset_distress(bus, tmp_path):
     mon = _welfare_monitor(bus, reg, fm, cfg, clock=lambda: clock["t"])
 
     stop = asyncio.Event()
-    await _push_soma_report(bus, 0.9)
+    await _push_interoception_report(bus, 0.9)
     clock["t"] = 0.0
     await mon._poll_once(stop)
     assert fm.calls == []
 
     for _ in range(3):
-        await _push_soma_report(bus, None)
+        await _push_interoception_report(bus, None)
     clock["t"] = 0.5
     await mon._poll_once(stop)
     assert fm.calls == []
