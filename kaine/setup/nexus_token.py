@@ -33,7 +33,11 @@ def ensure_nexus_token(
     env = os.environ if env is None else env
     out("\n")
 
-    env_token = (legacy_aliases.getenv("KAINE_NEXUS_TOKEN", "", environ=env) or "").strip()
+    try:
+        env_token = (legacy_aliases.getenv("KAINE_NEXUS_TOKEN", "", environ=env) or "").strip()
+    except legacy_aliases.LegacyNameConflict as exc:
+        out(f"Dashboard sign-in token: {exc}. Nothing written.\n")
+        return "conflict"
     if env_token:
         if len(env_token) < _MIN_NEXUS_TOKEN_LEN:
             out(

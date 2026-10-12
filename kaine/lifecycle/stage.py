@@ -64,17 +64,29 @@ class StageValueError(Exception):
     a stage. The cycle refuses to boot on it.
     """
 
-    def __init__(self, value: Any, path: Path | None = None) -> None:
+    def __init__(
+        self, value: Any, path: Path | None = None, *, top_level: bool = False
+    ) -> None:
         self.value = value
         self.path = path
+        self.top_level = top_level
         self.value_repr = _stage_repr(value)
-        if path is not None:
-            message = (
-                f"stage file {path} holds an unrecognized stage value {self.value_repr}; "
-                "inspect it, then correct it or move it aside"
-            )
+        if top_level:
+            if path is not None:
+                message = (
+                    f"stage file {path} does not hold a JSON object ({self.value_repr}); "
+                    "inspect it, then correct it or move it aside"
+                )
+            else:
+                message = f"stage data is not a JSON object ({self.value_repr})"
         else:
-            message = f"unrecognized stage value {self.value_repr}"
+            if path is not None:
+                message = (
+                    f"stage file {path} holds an unrecognized stage value {self.value_repr}; "
+                    "inspect it, then correct it or move it aside"
+                )
+            else:
+                message = f"unrecognized stage value {self.value_repr}"
         super().__init__(message)
 
 
@@ -246,6 +258,8 @@ class StageState:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "StageState":
+        if data is not None and not isinstance(data, dict):
+            raise StageValueError(data, top_level=True)
         data = legacy_aliases.map_stage_record(dict(data or {}))
         if "stage" in data:
             stage = _coerce_stage(data["stage"])
@@ -289,10 +303,12 @@ def read_stage(path: Path | None = None) -> StageState | None:
         # `embodied` (never regress a possibly-lived mind into the stimulus source), not
         # crash boot.
         return StageState(stage=EMBODIED)
+    if not isinstance(data, dict):
+        raise StageValueError(data, path=target, top_level=True) from None
     try:
         return StageState.from_dict(data)
     except StageValueError as exc:
-        raise StageValueError(exc.value, path=target) from None
+        raise StageValueError(exc.value, path=target, top_level=exc.top_level) from None
     except (ValueError, TypeError):
         # A corrupt, malformed or unreadable stage file must fail safe toward
         # `embodied` (never regress a possibly-lived mind into the stimulus source), not

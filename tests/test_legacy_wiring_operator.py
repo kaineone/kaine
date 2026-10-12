@@ -399,3 +399,32 @@ def test_wiring_inert_while_pending(monkeypatch):
     layer = {"thymos": {"x": 1}}
     assert legacy_aliases.normalize_config_layer(layer, "f") is layer
     legacy_aliases.check_environment(environ={"KAINE_NEXUS_PORT": "1", "KAINE_DASHBOARD_PORT": "2"})
+
+
+def test_setup_token_conflict_is_reported_not_raised(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        legacy_names,
+        "ENV_VARS",
+        ({"old": "KAINE_OLDNEXUS_TOKEN", "new": "KAINE_NEXUS_TOKEN", "scope": "operator"},),
+    )
+    monkeypatch.setattr(legacy_names, "COMPOSE_VARS", ())
+    monkeypatch.setitem(legacy_names.SCOPE_STATUS, "operator", "done")
+    monkeypatch.setattr(legacy_aliases, "_env_warnings_seen", set())
+
+    lines = []
+    env = {
+        "KAINE_OLDNEXUS_TOKEN": "a" * 40,
+        "KAINE_NEXUS_TOKEN": "b" * 40,
+    }
+    source = ensure_nexus_token(
+        tmp_path / "secrets.toml",
+        out=lines.append,
+        env=env,
+    )
+    assert source == "conflict"
+    output = "".join(lines)
+    assert "KAINE_OLDNEXUS_TOKEN" in output
+    assert "KAINE_NEXUS_TOKEN" in output
+    assert "a" * 40 not in output
+    assert "b" * 40 not in output
+    assert not (tmp_path / "secrets.toml").exists()

@@ -868,11 +868,16 @@ def read_bundle_stage(bundle: Path) -> dict | None:
         text = raw.decode("utf-8")
 
     try:
-        return json.loads(text)
+        data = json.loads(text)
     except json.JSONDecodeError as exc:
         raise ReviveError(
             f"bundle {bundle.name}/stage.json is not valid JSON: {exc}"
         ) from exc
+    if not isinstance(data, dict):
+        raise ReviveError(
+            f"bundle {bundle.name}/stage.json is not a JSON object"
+        )
+    return data
 
 
 def extract_bundle_individuation(bundle: Path, dest: Path) -> bool:
