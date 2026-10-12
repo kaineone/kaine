@@ -552,6 +552,9 @@ GUARDED = {
 
 _MODULE_CLASSES = "Topos|Soma|Chronos|Thymos|Hypnos|Mnemos|Phantasia|Lingua|Vox|Nous|Volition|Eidolon|Empatheia|Syneidesis|Praxis|Mundus|Spot|Nexus|Echo|Audition"
 
+# Dashboard JavaScript globals (window.NexusAuth, NexusBirth, ...).
+_DASHBOARD_JS_GLOBALS = r"(?<![A-Za-z0-9_])Nexus(?:Auth|Birth|Caretaker|ChartRouting|Charts|Conn|Controls|Flow|Freeze|LiveSeries|Metrics|Perception|Preservation|Preview|RedAlert|RelTime|Reveal|Sections|Spot|SSE|Stream|Visibility|Vitals)(?![A-Za-z0-9_])"
+
 # Explicit overrides for review-queue items are added by later pull requests.
 RESOLUTIONS = [
     {
@@ -559,6 +562,30 @@ RESOLUTIONS = [
         "action": "keep",
         "pattern": r"kaine\.nexus\.sessionKey",
         "why": "browser storage key held in the operator's browser; renamed with the UI strings",
+    },
+    {
+        "name": "nexus",
+        "action": "keep",
+        "pattern": _DASHBOARD_JS_GLOBALS,
+        "why": "dashboard JavaScript global; renamed with the UI strings",
+    },
+    {
+        "name": "spot",
+        "action": "keep",
+        "pattern": _DASHBOARD_JS_GLOBALS,
+        "why": "dashboard JavaScript global; renamed with the UI strings",
+    },
+    {
+        "name": "birth",
+        "action": "keep",
+        "pattern": _DASHBOARD_JS_GLOBALS,
+        "why": "dashboard JavaScript global; renamed with the UI strings",
+    },
+    {
+        "name": "perception",
+        "action": "keep",
+        "pattern": _DASHBOARD_JS_GLOBALS,
+        "why": "dashboard JavaScript global; renamed with the UI strings",
     },
     {
         "name": "perception",
