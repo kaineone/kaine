@@ -5,7 +5,7 @@
 
 Covers the two OPTIONAL local-only research recorders:
 - ExternalUtteranceLog: external speech only, no inner speech, no bystander input.
-- NexusRecord: the exact filtered payload the dashboard bridge displays.
+- DashboardRecord: the exact filtered payload the dashboard bridge displays.
 
 Also verifies config gating, defaults, and export-allowlist confinement.
 """
@@ -19,15 +19,15 @@ from pathlib import Path
 import pytest
 
 from kaine.bus.schema import Event
+from kaine.dashboard.privacy import PrivacyFilter
 from kaine.evaluation.config import (
+    DashboardRecordConfig,
     ExternalUtterancesConfig,
-    NexusRecordConfig,
     RawArchiveConfinementError,
     ResearchEventLogConfig,
 )
+from kaine.evaluation.observers.dashboard_record import DashboardRecord
 from kaine.evaluation.observers.external_utterance_log import ExternalUtteranceLog
-from kaine.evaluation.observers.nexus_record import NexusRecord
-from kaine.nexus.privacy import PrivacyFilter
 
 # ---------------------------------------------------------------------------
 # Helpers (copied from tests/test_research_event_log.py)
@@ -177,7 +177,7 @@ async def test_external_utterance_log_writes_even_when_text_missing():
 def test_external_utterance_log_stream_list_and_source_guard():
     pkg_root = Path(__file__).parent.parent / "kaine" / "evaluation" / "observers"
     eul_src = (pkg_root / "external_utterance_log.py").read_text()
-    nr_src = (pkg_root / "nexus_record.py").read_text()
+    nr_src = (pkg_root / "dashboard_record.py").read_text()
 
     forbidden = ("lingua.internal", "lingua.out", "internal_speech")
     for token in forbidden:
@@ -188,15 +188,15 @@ def test_external_utterance_log_stream_list_and_source_guard():
 
 
 # ---------------------------------------------------------------------------
-# NexusRecord
+# DashboardRecord
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_nexus_record_writes_filtered_payload():
+async def test_dashboard_record_writes_filtered_payload():
     bus = FakeBus()
     sink = FakeSink()
-    observer = NexusRecord(bus, sink, NexusRecordConfig(enabled=True))
+    observer = DashboardRecord(bus, sink, DashboardRecordConfig(enabled=True))
 
     event = _event(
         "lingua",
@@ -221,10 +221,10 @@ async def test_nexus_record_writes_filtered_payload():
 
 
 @pytest.mark.asyncio
-async def test_nexus_record_of_vision_report_holds_no_vector():
+async def test_dashboard_record_of_vision_report_holds_no_vector():
     bus = FakeBus()
     sink = FakeSink()
-    observer = NexusRecord(bus, sink, NexusRecordConfig(enabled=True))
+    observer = DashboardRecord(bus, sink, DashboardRecordConfig(enabled=True))
 
     event = _event(
         "topos",
@@ -249,10 +249,10 @@ async def test_nexus_record_of_vision_report_holds_no_vector():
 
 
 @pytest.mark.asyncio
-async def test_nexus_record_drops_event_when_filter_fails():
+async def test_dashboard_record_drops_event_when_filter_fails():
     bus = FakeBus()
     sink = FakeSink()
-    observer = NexusRecord(bus, sink, NexusRecordConfig(enabled=True))
+    observer = DashboardRecord(bus, sink, DashboardRecordConfig(enabled=True))
 
     class _BrokenFilter:
         def filter(self, event, *, surface="diagnostics"):
@@ -272,10 +272,10 @@ async def test_nexus_record_drops_event_when_filter_fails():
     assert sink.rows == []
 
 
-def test_nexus_record_subscribes_to_diagnostics_streams():
+def test_dashboard_record_subscribes_to_diagnostics_streams():
     from kaine.evaluation.stream_registry import diagnostics_streams
 
-    assert NexusRecord.streams == diagnostics_streams()
+    assert DashboardRecord.streams == diagnostics_streams()
 
 
 # ---------------------------------------------------------------------------
@@ -286,11 +286,11 @@ def test_nexus_record_subscribes_to_diagnostics_streams():
 def test_run_recording_configs_default_disabled():
     cfg = ResearchEventLogConfig.from_mapping({})
     assert cfg.external_utterances.enabled is False
-    assert cfg.nexus_record.enabled is False
+    assert cfg.dashboard_record.enabled is False
     assert cfg.external_utterances.log_dir == "state/research/external_utterances"
-    assert cfg.nexus_record.log_dir == "data/nexus_record"
+    assert cfg.dashboard_record.log_dir == "data/nexus_record"
     assert cfg.external_utterances.retention_days == 0
-    assert cfg.nexus_record.retention_days == 0
+    assert cfg.dashboard_record.retention_days == 0
 
 
 def test_run_recording_configs_parse_enabled_values():
@@ -310,8 +310,8 @@ def test_run_recording_configs_parse_enabled_values():
     )
     assert cfg.external_utterances.enabled is True
     assert cfg.external_utterances.retention_days == 7
-    assert cfg.nexus_record.enabled is True
-    assert cfg.nexus_record.retention_days == 14
+    assert cfg.dashboard_record.enabled is True
+    assert cfg.dashboard_record.retention_days == 14
 
 
 def test_run_recording_configs_refuse_export_allowlist():
@@ -320,6 +320,6 @@ def test_run_recording_configs_refuse_export_allowlist():
             {"log_dir": "data/evaluation/external_utterances"}
         )
     with pytest.raises(RawArchiveConfinementError):
-        NexusRecordConfig.from_mapping(
+        DashboardRecordConfig.from_mapping(
             {"log_dir": "data/evaluation/nexus_record"}
         )

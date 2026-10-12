@@ -12,8 +12,8 @@ Four consumers take their stream lists from the registry helpers:
 |---|---|---|
 | Research-event observer | `curated_module_streams()` | `kaine/evaluation/observers/research_event_observer.py` |
 | Raw bus archive | `raw_archive_module_streams()` | `kaine/evaluation/observers/raw_bus_archive_consumer.py` |
-| dashboard diagnostics panel | `diagnostics_streams()` | `kaine/nexus/__main__.py` |
-| dashboard record consumer | `diagnostics_streams()` | `kaine/evaluation/observers/nexus_record.py` |
+| dashboard diagnostics panel | `diagnostics_streams()` | `kaine/dashboard/__main__.py` |
+| dashboard record consumer | `diagnostics_streams()` | `kaine/evaluation/observers/dashboard_record.py` |
 
 All four call the registry helpers, so a stream added in one consumer and not in the registry fails the drift tests.
 

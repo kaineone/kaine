@@ -44,7 +44,7 @@ states: the unattended gate covers every condition of the research net.
 
 - Code: `kaine/cycle/unattended_gate.py`, docstrings in
   `kaine/cycle/__main__.py`, the label in
-  `kaine/nexus/templates/_run_identity.html` and `kaine/nexus/static/nexus.js`.
+  `kaine/dashboard/templates/_run_identity.html` and `kaine/dashboard/static/dashboard.js`.
 - Tests: `tests/test_unattended_gate.py`, `tests/test_unattended_integration.py`,
   `tests/test_unattended_docs.py`,
   `tests/test_cycle_entrypoint.py`.

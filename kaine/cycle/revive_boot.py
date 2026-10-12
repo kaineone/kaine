@@ -352,10 +352,10 @@ class ReviveSession:
                 target = _stage_module.STAGE_PATH
 
             # Developmental progress travels with the entity (awake time persists across boots). The bundle is authoritative: development files already here are moved aside first.
-            gestation_dir = resolve(target).parent
+            development_dir = resolve(target).parent
             try:
-                _preservation.set_aside_gestation_files(gestation_dir)
-                _preservation.extract_bundle_gestation(self._plan.bundle, gestation_dir)
+                _preservation.set_aside_development_files(development_dir)
+                _preservation.extract_bundle_development(self._plan.bundle, development_dir)
             except Exception as exc:
                 raise ReviveRefused(
                     f"could not restore gestation progress: {type(exc).__name__}: {exc}"

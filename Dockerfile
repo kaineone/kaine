@@ -191,7 +191,7 @@ USER kaine
 # default CMD is the cognitive cycle — but the cycle STILL refuses to boot
 # without KAINE_CYCLE_OPERATOR_PRESENT=1 (or the research safety net), so a bare
 # `docker run` of this image never starts an entity. The Nexus service overrides
-# CMD with `-m kaine.nexus`.
+# CMD with `-m kaine.dashboard`.
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/kaine-entrypoint"]
 CMD ["python", "-m", "kaine.cycle"]
 

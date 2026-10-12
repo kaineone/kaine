@@ -198,7 +198,7 @@ def test_all_published_ports_are_loopback_only():
             assert str(mapping).startswith("127.0.0.1:"), f"{name}: {mapping}"
 
 
-def test_compose_nexus_has_privacy_hardening_environment():
+def test_compose_dashboard_has_privacy_hardening_environment():
     doc = _load_compose()
     env = doc["services"]["kaine-nexus"]["environment"]
     # Non-loopback binding is explicitly enabled inside the container (publishing
@@ -211,7 +211,7 @@ def test_compose_nexus_has_privacy_hardening_environment():
     assert "${KAINE_NEXUS_HOST_PORT:-8088}" in env["KAINE_NEXUS_ALLOWED_ORIGINS"]
 
 
-def test_cycle_and_nexus_depend_on_healthy_data_services():
+def test_cycle_and_dashboard_depend_on_healthy_data_services():
     doc = _load_compose()
     for svc_name in ("kaine-cycle", "kaine-nexus"):
         deps = doc["services"][svc_name]["depends_on"]
@@ -219,14 +219,14 @@ def test_cycle_and_nexus_depend_on_healthy_data_services():
             assert deps[dep]["condition"] == "service_healthy", (svc_name, dep)
 
 
-def test_nexus_and_cycle_share_image_different_command():
+def test_dashboard_and_cycle_share_image_different_command():
     doc = _load_compose()
-    nexus = doc["services"]["kaine-nexus"]
+    dashboard = doc["services"]["kaine-nexus"]
     cycle = doc["services"]["kaine-cycle"]
     # Both build from the same Dockerfile (via the shared x-kaine-image anchor).
-    assert nexus["build"]["dockerfile"] == "Dockerfile"
+    assert dashboard["build"]["dockerfile"] == "Dockerfile"
     assert cycle["build"]["dockerfile"] == "Dockerfile"
-    assert nexus["command"] == ["python", "-m", "kaine.nexus"]
+    assert dashboard["command"] == ["python", "-m", "kaine.dashboard"]
     assert cycle["command"] == ["python", "-m", "kaine.cycle"]
 
 
@@ -352,7 +352,7 @@ def test_quadlet_cycle_has_no_install_section():
     assert _has_section((_QUADLET / "kaine-redis.container").read_text(), "[Install]")
 
 
-def test_quadlet_nexus_privacy_hardening_and_python_healthcheck():
+def test_quadlet_dashboard_privacy_hardening_and_python_healthcheck():
     text = (_QUADLET / "kaine-nexus.container").read_text()
     # The dashboard binds all-interfaces inside the container; the published port is loopback-only.
     assert "Environment=KAINE_NEXUS_HOST=0.0.0.0" in text
@@ -544,7 +544,7 @@ def test_quadlet_generator_renders_redis_wrapper(tmp_path: Path):
     assert '--maxmemory \\"$$m\\"' in exec_start
 
 
-def test_quadlet_cycle_and_nexus_have_redis_url():
+def test_quadlet_cycle_and_dashboard_have_redis_url():
     url = "Environment=KAINE_REDIS_URL=redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0"
     assert url in (_QUADLET / "kaine-cycle.container").read_text()
     assert url in (_QUADLET / "kaine-nexus.container").read_text()
@@ -886,7 +886,7 @@ def test_study_volume_is_a_declared_named_volume():
 
 # run-recording 2.2 — the dashboard record directory is on a durable volume
 # --------------------------------------------------------------------------
-def test_nexus_record_dir_is_on_a_durable_volume_in_every_cycle_deployment():
+def test_dashboard_record_dir_is_on_a_durable_volume_in_every_cycle_deployment():
     cfg = tomllib.loads((_REPO_ROOT / "config" / "kaine.toml").read_text())
     log_dir = cfg["research_event_log"]["nexus_record"]["log_dir"]
     target = "/app/" + log_dir

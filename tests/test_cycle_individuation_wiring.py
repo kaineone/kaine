@@ -5,7 +5,11 @@ import asyncio
 import tomllib
 from pathlib import Path
 
-from kaine.cycle.__main__ import _compose_birth_hooks, _individuation_refusal, _run_individuation
+from kaine.cycle.__main__ import (
+    _compose_maturation_hooks,
+    _individuation_refusal,
+    _run_individuation,
+)
 from kaine.cycle.individuation_runtime import DEFAULT_DISCLOSURE, IndividuationConfig
 from kaine.evaluation.observers.research_event_observer import _TAXONOMY
 
@@ -65,8 +69,8 @@ def test_shipped_config_parses():
     # in the shipped section is accepted.
 
 
-def test_compose_birth_hooks_empty_and_continues():
-    assert _compose_birth_hooks(None, None) is None
+def test_compose_maturation_hooks_empty_and_continues():
+    assert _compose_maturation_hooks(None, None) is None
 
     calls = []
 
@@ -76,7 +80,7 @@ def test_compose_birth_hooks_empty_and_continues():
     def good_hook():
         calls.append("good")
 
-    composed = _compose_birth_hooks(bad_hook, good_hook)
+    composed = _compose_maturation_hooks(bad_hook, good_hook)
     assert composed is not None
     composed()
     assert calls == ["good"]

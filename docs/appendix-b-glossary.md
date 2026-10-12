@@ -86,7 +86,7 @@ The continuous loop that runs whether or not anyone interacts with the entity. A
 
 ### Continuous embodiment control surface
 
-The continuous motor surface for an embodiment body (`kaine/modules/mundus/control_surface.py`). It is built to emit five clamped continuous channels (`drive`, `yaw_rate`, `gaze_yaw`, `gaze_pitch`, `interact`) as an `intent.avatar.control` command each tick, under a freeze-then-free curriculum that frees degrees of freedom on demonstrated competence. Nothing drives its tick loop yet, so it is inert at runtime, and it is off by default. See [Embodiment adapters](20-embodiment-adapters.md).
+The continuous motor surface for an embodiment body (`kaine/modules/embodiment/control_surface.py`). It is built to emit five clamped continuous channels (`drive`, `yaw_rate`, `gaze_yaw`, `gaze_pitch`, `interact`) as an `intent.avatar.control` command each tick, under a freeze-then-free curriculum that frees degrees of freedom on demonstrated competence. Nothing drives its tick loop yet, so it is inert at runtime, and it is off by default. See [Embodiment adapters](20-embodiment-adapters.md).
 
 ---
 

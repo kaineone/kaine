@@ -22,7 +22,7 @@ def test_canonical_names_match_module_packages():
       not module packages.
 
     Documented package exclusion: ``echo`` is a test-only single-file module
-    (kaine/modules/echo.py, not a package) and is deliberately excluded
+    (kaine/modules/recorder.py, not a package) and is deliberately excluded
     from the research streams. ``perception_prng`` is an implementation
     detail of ``perception``, not a research stream source.
     """

@@ -501,8 +501,8 @@ def test_research_record_is_numeric_only(tmp_path: Path):
     assert "text" not in record
 
 
-def test_nexus_entity_care_surfaces_numeric_consolidation(tmp_path: Path, monkeypatch):
-    from kaine.nexus.health import HealthProber
+def test_dashboard_entity_care_surfaces_numeric_consolidation(tmp_path: Path, monkeypatch):
+    from kaine.dashboard.health import HealthProber
 
     state_root = tmp_path / "state"
     _plant_consolidation(state_root, rate=0.8, magnitude=0.3)

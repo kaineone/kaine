@@ -72,25 +72,25 @@ def test_runtime_adapter_rule_does_not_hash(tmp_path: Path, monkeypatch):
     assert runtime.scheduler._blocked_reason() == "adapter_unverifiable"
 
 
-async def test_birth_marker_survives_restart(tmp_path: Path):
+async def test_maturation_marker_survives_restart(tmp_path: Path):
     runtime = build(tmp_path, is_gestating=lambda: False)
-    runtime.on_birth()
-    assert runtime.paths.birth_pending.exists()
+    runtime.on_maturation()
+    assert runtime.paths.maturation_pending.exists()
 
     runtime2 = build(tmp_path, is_gestating=lambda: False)
     await runtime2.start()
     assert runtime2.scheduler._capture_kind == "birth"
 
 
-def test_sleep_clears_birth_marker(tmp_path: Path):
+def test_sleep_clears_maturation_marker(tmp_path: Path):
     runtime = build(tmp_path, is_gestating=lambda: False)
-    runtime.on_birth()
-    assert runtime.paths.birth_pending.exists()
+    runtime.on_maturation()
+    assert runtime.paths.maturation_pending.exists()
     assert runtime.scheduler._capture_kind == "birth"
 
     runtime.scheduler.notify_sleep_completed()
     assert runtime.scheduler._capture_kind == "capture"
-    assert not runtime.paths.birth_pending.exists()
+    assert not runtime.paths.maturation_pending.exists()
 
 
 async def test_existing_reference_removes_stale_marker(tmp_path: Path):
@@ -99,27 +99,27 @@ async def test_existing_reference_removes_stale_marker(tmp_path: Path):
     paths.root.mkdir(parents=True, exist_ok=True)
     doc = _make_reference(paths, "ref-1")
     save_reference(paths, doc)
-    paths.birth_pending.write_text("1", encoding="utf-8")
-    assert paths.birth_pending.exists()
+    paths.maturation_pending.write_text("1", encoding="utf-8")
+    assert paths.maturation_pending.exists()
 
     runtime2 = build(tmp_path, is_gestating=lambda: False)
     await runtime2.start()
-    assert not runtime2.paths.birth_pending.exists()
+    assert not runtime2.paths.maturation_pending.exists()
     assert runtime2.scheduler._capture_kind is None
 
 
-async def test_start_does_not_override_pending_birth(tmp_path: Path):
+async def test_start_does_not_override_pending_maturation(tmp_path: Path):
     runtime = build(tmp_path, is_gestating=lambda: False)
-    runtime.on_birth()
+    runtime.on_maturation()
     await runtime.start()
     assert runtime.scheduler._capture_kind == "birth"
-    assert runtime.paths.birth_pending.exists()
+    assert runtime.paths.maturation_pending.exists()
 
 
-async def test_start_keeps_a_pending_birth_request_without_a_marker(tmp_path: Path):
+async def test_start_keeps_a_pending_maturation_request_without_a_marker(tmp_path: Path):
     # As when writing the marker failed: the in-memory request still wins.
     runtime = build(tmp_path, is_gestating=lambda: False)
     runtime.scheduler.request_capture("birth")
-    assert not runtime.paths.birth_pending.exists()
+    assert not runtime.paths.maturation_pending.exists()
     await runtime.start()
     assert runtime.scheduler._capture_kind == "birth"

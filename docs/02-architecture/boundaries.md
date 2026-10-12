@@ -15,7 +15,7 @@ Only two entrypoints are allowed to wire the sidecar in:
 | Seam | Role |
 |------|------|
 | `kaine/cycle/__main__.py` | Boots the cognitive cycle and constructs the sidecar registry if evaluation is enabled. |
-| `kaine/nexus/__main__.py` | Boots the operator UI process and surfaces sidecar output. |
+| `kaine/dashboard/__main__.py` | Boots the operator UI process and surfaces sidecar output. |
 
 These are entrypoints, and nothing else imports them. The dependency runs from each entrypoint to both halves, and never from core to evaluation.
 
@@ -25,7 +25,7 @@ When core code needs logic that lives in evaluation, do not import it. Move the 
 
 ## Boundary-neutral shared homes
 
-Boundary-neutral homes sit between core and evaluation. They may import neither the core runtime (`kaine/cycle/`, `kaine/modules/`, `kaine/nexus/`, `kaine/workspace/`) nor `kaine/evaluation/`. The contract in [`pyproject.toml`](../../pyproject.toml) lists 13 neutral homes; the most used are:
+Boundary-neutral homes sit between core and evaluation. They may import neither the core runtime (`kaine/cycle/`, `kaine/modules/`, `kaine/dashboard/`, `kaine/workspace/`) nor `kaine/evaluation/`. The contract in [`pyproject.toml`](../../pyproject.toml) lists 13 neutral homes; the most used are:
 
 | Home | Contents |
 |------|----------|
@@ -55,7 +55,7 @@ There are no `ignore_imports` exceptions for this rule. Any `from kaine.modules.
 
 ### Evaluation and Dashboard
 
-`kaine/evaluation/` must not import `kaine/nexus/` internals. The sidecar observes the bus and runs headless; the dashboard is only a presentation seam.
+`kaine/evaluation/` must not import `kaine/dashboard/` internals. The sidecar observes the bus and runs headless; the dashboard is only a presentation seam.
 
 ### The core runtime and edge features
 

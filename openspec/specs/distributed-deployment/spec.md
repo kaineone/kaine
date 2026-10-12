@@ -68,14 +68,14 @@ disallowed per the boundary requirement above.
 - **AND** no live computation is performed on the untrusted holders of the shares
 
 ### Requirement: Quadlet cycle and Dashboard units can reach the Redis bus
-`quadlet/kaine-cycle.container` and `quadlet/kaine-nexus.container` SHALL set `Environment=KAINE_REDIS_URL=redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0` so the in-container processes connect to the Redis service by container name, matching `compose/kaine.yml`.
+`quadlet/kaine-cycle.container` and `quadlet/kaine-dashboard.container` SHALL set `Environment=KAINE_REDIS_URL=redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0` so the in-container processes connect to the Redis service by container name, matching `compose/kaine.yml`.
 
 #### Scenario: Cycle container has Redis URL
 - **WHEN** `quadlet/kaine-cycle.container` is inspected
 - **THEN** it contains `KAINE_REDIS_URL` pointing to `kaine-redis:6379/0`
 
 #### Scenario: Dashboard container has Redis URL
-- **WHEN** `quadlet/kaine-nexus.container` is inspected
+- **WHEN** `quadlet/kaine-dashboard.container` is inspected
 - **THEN** it contains `KAINE_REDIS_URL` pointing to `kaine-redis:6379/0`
 
 ### Requirement: Quadlet Qdrant healthcheck uses only tools in the image

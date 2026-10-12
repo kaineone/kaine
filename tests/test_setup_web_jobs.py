@@ -828,7 +828,7 @@ def test_job_id_from_other_session_returns_404(tmp_path, monkeypatch):
             assert ok.status_code == 200
 
 
-def test_default_specs_no_cycle_and_nexus_port_from_config(tmp_path, monkeypatch):
+def test_default_specs_no_cycle_and_dashboard_port_from_config(tmp_path, monkeypatch):
     repo_root = tmp_path / "repo"
     config_dir = repo_root / "config"
     config_dir.mkdir(parents=True)
@@ -873,9 +873,9 @@ def test_default_specs_no_cycle_and_nexus_port_from_config(tmp_path, monkeypatch
     idx = argv.index("--operator-config")
     assert argv[idx + 1] == str(operator_path)
 
-    nexus_spec = next(s for s in specs if s.name == "nexus")
-    assert nexus_spec.ready_probe is not None
-    nexus_spec.ready_probe()
+    dashboard_spec = next(s for s in specs if s.name == "nexus")
+    assert dashboard_spec.ready_probe is not None
+    dashboard_spec.ready_probe()
     assert recorded_ports == [9123]
 
 
@@ -1644,7 +1644,7 @@ def test_pinned_job_route_behaviour(tmp_path, monkeypatch):
         _wait_for_job(app.state.runner, "slow", timeout=10.0)
 
 
-def test_build_job_specs_malformed_operator_toml_returns_no_nexus(tmp_path):
+def test_build_job_specs_malformed_operator_toml_returns_no_dashboard(tmp_path):
     shipped = tmp_path / "shipped.toml"
     shipped.write_text("[modules]\nlingua = false\n")
     operator = tmp_path / "operator.toml"

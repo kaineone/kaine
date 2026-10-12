@@ -333,7 +333,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     # --- Safety / ops ---
     # The supervisor's structured freeze annotation (run<->incident cross-link). Field
     # names mirror the durable incident_log transition records (incident_log.py
-    # / spot.py). `incident_id` and `tick_index` are lifted to the top level by
+    # / supervisor.py). `incident_id` and `tick_index` are lifted to the top level by
     # _build_record; the rest are non-sensitive operational metadata. NO content
     # fields, NO operator paths (free-text is path-scrubbed at the producer).
     "spot.incident": frozenset(

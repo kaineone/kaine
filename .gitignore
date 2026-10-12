@@ -44,7 +44,7 @@ state/
 state/eidolon/
 state/perception/
 # Trained/merged LoRA adapter *output* only — anchored so it never matches source
-# packages such as kaine/modules/mundus/adapters/. (state/ already covers these.)
+# packages such as kaine/modules/embodiment/adapters/. (state/ already covers these.)
 state/hypnos/adapters/
 state/forks/merged_adapters/
 runtime-logs/

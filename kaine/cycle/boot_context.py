@@ -26,7 +26,7 @@ class BootContext:
     revive: Any = None  # parameter
     identity: Any = None  # set by _phase_stage
     kaine_config: Any = None  # parameter
-    fresh_gestation: Any = None  # set by _phase_stage
+    fresh_development: Any = None  # set by _phase_stage
     stage_state: Any = None  # set by _phase_stage
     staging_enabled: Any = None  # set by _phase_stage
     eval_cfg: Any = None  # set by _phase_preconditions
@@ -39,7 +39,7 @@ class BootContext:
     preservation_cfg: Any = None  # set by _phase_bus
     welfare_producer: Any = None  # set by _phase_bus
     _publish_lifecycle: Any = None  # set by _phase_womb_hold
-    womb_ready: Any = None  # set by _phase_womb_hold
+    stimulus_source_ready: Any = None  # set by _phase_womb_hold
     intent_secret: Any = None  # set by _phase_registry
     registry: Any = None  # set by _phase_registry
     ds_config: Any = None  # set by _phase_maturation_gate
@@ -52,7 +52,7 @@ class BootContext:
     workspace: Any = None  # set by _phase_workspace
     action_selection: Any = None  # set by _phase_volition
     cycle: Any = None  # set by _phase_cycle
-    spot_cfg: Any = None  # set by _phase_supervision
+    supervisor_cfg: Any = None  # set by _phase_supervision
     fork_manager: Any = None  # set by _phase_supervision
     rebuild_module: Any = None  # set by _phase_supervision
     sidecar: Any = None  # set by _phase_sidecar
@@ -61,7 +61,7 @@ class BootContext:
     perception_preview: Any = None  # set by _phase_preview
     remote_bridge: Any = None  # set by _phase_remote_bridge
     stop_event: Any = None  # set by _phase_signals
-    spot: Any = None  # set by _phase_spot
+    supervisor: Any = None  # set by _phase_spot
     divergence_monitor: Any = None  # set by _phase_safety_net
     unfrozen_clock: Any = None  # set by _phase_safety_net; one per process, shared by the welfare timers
     welfare_monitor: Any = None  # set by _phase_safety_net
@@ -69,16 +69,16 @@ class BootContext:
     _caretaker_tasks: Any = None  # set by _phase_safety_net
     cycle_task: Any = None  # set by _phase_launch
     freeze_task: Any = None  # set by _phase_launch
-    spot_task: Any = None  # set by _phase_launch
+    supervisor_task: Any = None  # set by _phase_launch
     divergence_task: Any = None  # set by _phase_launch
     welfare_task: Any = None  # set by _phase_launch
     gate_task: Any = None  # set by _phase_birth
     individuation_task: Any = None  # set by _phase_birth
-    womb_watch_task: Any = None  # set by _phase_womb_watch
+    stimulus_source_watch_task: Any = None  # set by _phase_womb_watch
     caretaker_task: Any = None  # set by _phase_caretaker
     input_watch_task: Any = None  # set by _phase_caretaker
-    womb_presence_task: Any = None  # set by _phase_gestation
-    gestation_task: Any = None  # set by _phase_gestation
+    stimulus_source_presence_task: Any = None  # set by _phase_gestation
+    development_task: Any = None  # set by _phase_gestation
     preserve_task: Any = None  # set by _phase_watchers
     programme_end_task: Any = None  # set by _phase_watchers
     utterance_outcome: Any = None  # set by _phase_watchers

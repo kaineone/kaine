@@ -34,7 +34,7 @@ In token mode:
 
 - The sign-in page is at `/login`.
 - Scripts must send `Authorization: Bearer <token>`.
-- The dashboard signs in at `/login` and then uses the issued per-session key in the `X-Nexus-Session-Key` header together with the session cookie.
+- The dashboard signs in at `/login` and then uses the issued per-session key in the `X-Dashboard-Session-Key` header together with the session cookie.
 - State-changing routes and the diagnostics SSE stream at `/diagnostics/stream` require a valid operator session.
 
 ## Read-only view
@@ -109,7 +109,7 @@ The sidecar writes JSONL under `data/` and an optional `summary.json` for batch 
 
 ## Presence visualizer
 
-The console leads with a ferrofluid-style affect visualizer, rendered with Three.js from `kaine/nexus/static/vendor/vendor/` with no CDN fetch. With no entity running it shows an idle state. When a cycle is up, it follows the derived affect in `thymos.state` (`valence`, `arousal`) carried on the diagnostics SSE stream, and it never receives raw audio or content.
+The console leads with a ferrofluid-style affect visualizer, rendered with Three.js from `kaine/dashboard/static/vendor/vendor/` with no CDN fetch. With no entity running it shows an idle state. When a cycle is up, it follows the derived affect in `thymos.state` (`valence`, `arousal`) carried on the diagnostics SSE stream, and it never receives raw audio or content.
 
 ## Health and services board
 

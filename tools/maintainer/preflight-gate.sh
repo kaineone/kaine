@@ -19,8 +19,8 @@ step() { echo "== $1"; shift; if "$@"; then echo "   ok"; else echo "   FAILED";
 step "ruff" "$BIN/ruff" check kaine tests plugins
 step "lint-imports" env PYTHONPATH="$WT" "$BIN/lint-imports"
 step "redteam" env PYTHONPATH="$WT" "$PY" -m pytest -q -p no:cacheprovider tests/test_evaluation_redteam.py \
-  tests/test_fork_merge_snapshot.py tests/test_effectors_audit_log.py tests/test_effectors.py tests/test_nexus_privacy.py
-step "redteam-http" env PYTHONPATH="$WT" "$PY" -m pytest -q -p no:cacheprovider tests/test_nexus_routers.py -k "traversal or merge_form"
+  tests/test_fork_merge_snapshot.py tests/test_effectors_audit_log.py tests/test_effectors.py tests/test_dashboard_privacy.py
+step "redteam-http" env PYTHONPATH="$WT" "$PY" -m pytest -q -p no:cacheprovider tests/test_dashboard_routers.py -k "traversal or merge_form"
 # GATE_WORKERS (default 8) sets the parallelism. CUDA_VISIBLE_DEVICES="": the
 # suite runs CPU-only, as CI does, and never holds GPU memory.
 step "suite (fast, -n 8)" env CUDA_VISIBLE_DEVICES="" PYTHONPATH="$WT" "$HERE/safe-run.sh" "$PY" -m pytest -q -p no:cacheprovider \

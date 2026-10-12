@@ -17,11 +17,11 @@ from kaine.config import (
     validate_config_shape,
 )
 from kaine.cycle import __main__ as cycle_main
-from kaine.modules.mundus.module import operator_approved
-from kaine.nexus.config import NexusConfigError, load_nexus_config
+from kaine.dashboard.config import DashboardConfigError, load_dashboard_config
+from kaine.modules.embodiment.module import operator_approved
 from kaine.plugins import PluginError, load_plugins
 from kaine.research.ignition_study.__main__ import _build_parser
-from kaine.setup.nexus_token import ensure_nexus_token
+from kaine.setup.dashboard_token import ensure_dashboard_token
 
 
 class FakeDist:
@@ -172,7 +172,7 @@ def test_study_table_alias_allowed_after_normalization(tmp_path, monkeypatch, _n
     assert merged["lingua"]["x"] == 1
 
 
-def test_nexus_config_table_alias(tmp_path, monkeypatch):
+def test_dashboard_config_table_alias(tmp_path, monkeypatch):
     monkeypatch.setattr(
         legacy_names,
         "CONFIG_TABLES",
@@ -187,7 +187,7 @@ def test_nexus_config_table_alias(tmp_path, monkeypatch):
     overlay = tmp_path / "kaine.operator.toml"
     overlay.write_text("[oldnexus]\nport = 9100\n")
 
-    cfg = load_nexus_config(
+    cfg = load_dashboard_config(
         path=shipped,
         operator_path=overlay,
         secrets_path=tmp_path / "none.toml",
@@ -195,7 +195,7 @@ def test_nexus_config_table_alias(tmp_path, monkeypatch):
     assert cfg.port == 9100
 
 
-def test_nexus_env_alias_conflict(monkeypatch, tmp_path):
+def test_dashboard_env_alias_conflict(monkeypatch, tmp_path):
     monkeypatch.setattr(
         legacy_names,
         "ENV_VARS",
@@ -211,12 +211,12 @@ def test_nexus_env_alias_conflict(monkeypatch, tmp_path):
 
     monkeypatch.setenv("KAINE_OLDNEXUS_PORT", "9200")
     monkeypatch.delenv("KAINE_NEXUS_PORT", raising=False)
-    cfg = load_nexus_config(path=shipped, secrets_path=secrets)
+    cfg = load_dashboard_config(path=shipped, secrets_path=secrets)
     assert cfg.port == 9200
 
     monkeypatch.setenv("KAINE_NEXUS_PORT", "9300")
-    with pytest.raises(NexusConfigError) as exc_info:
-        load_nexus_config(path=shipped, secrets_path=secrets)
+    with pytest.raises(DashboardConfigError) as exc_info:
+        load_dashboard_config(path=shipped, secrets_path=secrets)
     msg = str(exc_info.value)
     assert "KAINE_OLDNEXUS_PORT" in msg
     assert "KAINE_NEXUS_PORT" in msg
@@ -224,7 +224,7 @@ def test_nexus_env_alias_conflict(monkeypatch, tmp_path):
     assert "9300" not in msg
 
 
-def test_mundus_operator_approved_alias(monkeypatch):
+def test_embodiment_operator_approved_alias(monkeypatch):
     monkeypatch.setattr(
         legacy_names,
         "ENV_VARS",
@@ -303,7 +303,7 @@ def test_setup_token_reads_old_env(monkeypatch, tmp_path):
 
     lines = []
     token = "x" * 40
-    source = ensure_nexus_token(
+    source = ensure_dashboard_token(
         tmp_path / "secrets.toml",
         out=lines.append,
         env={"KAINE_OLDNEXUS_TOKEN": token},
@@ -322,7 +322,7 @@ def test_cli_flag_alias(monkeypatch):
     args = _build_parser().parse_args(
         ["init", "--study-id", "s", "--programme-manifest", "m.json", "--db-oldname", "7"]
     )
-    assert args.db_gestation == 7
+    assert args.db_development == 7
 
     parser = _build_parser()
     sub_action = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
@@ -416,7 +416,7 @@ def test_setup_token_conflict_is_reported_not_raised(monkeypatch, tmp_path):
         "KAINE_OLDNEXUS_TOKEN": "a" * 40,
         "KAINE_NEXUS_TOKEN": "b" * 40,
     }
-    source = ensure_nexus_token(
+    source = ensure_dashboard_token(
         tmp_path / "secrets.toml",
         out=lines.append,
         env=env,

@@ -75,7 +75,7 @@ def test_read_stage_refuses_long_value(tmp_path: Path) -> None:
     assert p.read_bytes() == before
 
 
-def test_read_stage_missing_key_defaults_to_gestation(tmp_path: Path) -> None:
+def test_read_stage_missing_key_defaults_to_development(tmp_path: Path) -> None:
     p = tmp_path / "lifecycle" / "stage.json"
     p.parent.mkdir(parents=True, exist_ok=True)
     content = json.dumps({"lived_seconds": 1.0}).encode("utf-8")
@@ -83,7 +83,7 @@ def test_read_stage_missing_key_defaults_to_gestation(tmp_path: Path) -> None:
     before = p.read_bytes()
     result = stage.read_stage(p)
     assert result is not None
-    assert result.stage == stage.GESTATION
+    assert result.stage == stage.DEVELOPMENT
     assert p.read_bytes() == before
 
 
@@ -171,7 +171,7 @@ def test_never_regress_with_synthetic_alias(monkeypatch) -> None:
         stage._coerce_stage("larval")
 
 
-def test_pending_scope_keeps_gestation_readable() -> None:
+def test_pending_scope_keeps_development_readable() -> None:
     assert legacy_names.SCOPE_STATUS.get("persisted") != "done"
     assert stage._coerce_stage("gestation") == "gestation"
 
@@ -233,7 +233,7 @@ def test_empty_object_stage_reads_as_developmental_stage(tmp_path: Path) -> None
     before = p.read_bytes()
     result = stage.read_stage(p)
     assert result is not None
-    assert result.stage == stage.GESTATION
+    assert result.stage == stage.DEVELOPMENT
     assert p.read_bytes() == before
 
 

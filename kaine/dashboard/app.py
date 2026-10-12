@@ -1,0 +1,227 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any, Awaitable, Callable
+
+from fastapi import Depends, FastAPI
+from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import MutableHeaders
+from starlette.responses import JSONResponse, RedirectResponse
+
+from kaine.bus.schema import Event
+from kaine.dashboard.auth import (
+    DashboardAuthError,
+    LoginRateLimiter,
+    SessionStore,
+    auth_error_handler,
+    build_auth_router,
+    landing_path,
+    require_operator_token,
+)
+from kaine.dashboard.bridge import BusBridge
+from kaine.dashboard.caretaker import build_caretaker_router
+from kaine.dashboard.config import DashboardConfig
+from kaine.dashboard.conversation import (
+    ConversationState,
+    build_conversation_router,
+)
+from kaine.dashboard.csrf import DashboardCSRFMiddleware
+from kaine.dashboard.cycle_control import build_cycle_control_router, control_snapshot
+from kaine.dashboard.diagnostics import (
+    build_diagnostics_router,
+    build_health_router,
+    push_snapshots_periodically,
+)
+from kaine.dashboard.health import HealthProber
+from kaine.dashboard.maturation import build_maturation_router
+from kaine.dashboard.perception import build_perception_router, perception_snapshot
+from kaine.dashboard.privacy import PrivacyFilter
+from kaine.lifecycle.manager import ForkManager
+
+log = logging.getLogger(__name__)
+
+
+class FrameOptionsMiddleware:
+    """Set anti-clickjacking headers on every HTTP response without touching bodies.
+
+    This only intercepts the response-start ASGI message, so SSE streams and
+    other chunked responses keep flowing unchanged.
+    """
+
+    def __init__(self, app: Callable) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def wrapped_send(message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(raw=message["headers"])
+                headers["X-Frame-Options"] = "DENY"
+
+                csp = headers.get("content-security-policy")
+                directive = "frame-ancestors 'none'"
+                if csp is None:
+                    headers["Content-Security-Policy"] = directive
+                elif directive not in csp:
+                    headers["Content-Security-Policy"] = f"{csp}; {directive}"
+
+            await send(message)
+
+        await self.app(scope, receive, wrapped_send)
+
+
+def create_app(
+    *,
+    config: DashboardConfig,
+    bridge: BusBridge,
+    history_loader: Callable[[int], Awaitable[list[tuple[str, Event]]]],
+    metrics_snapshot: Callable[[], dict[str, Any]],
+    fork_manager: ForkManager | None = None,
+    fork_manager_reason: str | None = None,
+    adapters_lister: Callable[[], list[dict[str, Any]]] | None = None,
+    conversation_state: ConversationState | None = None,
+    health_prober: HealthProber | None = None,
+    rate_control_publisher: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    evaluation_provider: Callable[[], dict[str, Any]] | None = None,
+) -> FastAPI:
+    state = conversation_state or ConversationState()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        await bridge.start()
+        # Task 2.2: server-push a combined metrics+health snapshot over the
+        # single diagnostics stream (retires the client-side NexusVitals/
+        # NexusMetrics/NexusSpot poll loops — see push_snapshots_periodically).
+        # Only started when the diagnostics router (and thus /diagnostics/
+        # stream) is actually mounted.
+        pusher_task: asyncio.Task[None] | None = None
+        if config.diagnostics_enabled:
+            pusher_task = asyncio.create_task(
+                push_snapshots_periodically(
+                    bridge,
+                    metrics_snapshot=metrics_snapshot,
+                    health_prober=health_prober,
+                ),
+                name="nexus-snapshot-pusher",
+            )
+        try:
+            yield
+        finally:
+            if pusher_task is not None:
+                pusher_task.cancel()
+                try:
+                    await pusher_task
+                except asyncio.CancelledError:
+                    # Expected: we just cancelled pusher_task and are awaiting it
+                    # to unwind during lifespan teardown. Suppress intentionally.
+                    pass
+            await bridge.stop()
+
+    app = FastAPI(lifespan=lifespan)
+    app.state.config = config
+    app.state.sessions = SessionStore(
+        idle_seconds=config.session_idle_minutes * 60,
+        max_age_seconds=getattr(config, "session_max_hours", 24) * 3600,
+    )
+    app.state.login_limiter = LoginRateLimiter(
+        max_failures=config.login_max_failures,
+        window_s=config.login_failure_window_s,
+    )
+    app.add_exception_handler(DashboardAuthError, auth_error_handler)
+
+    static_dir = Path(__file__).parent / "static"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    # CSRF/Origin protection rejects cross-origin or rebinding requests with
+    # 403 before they reach route handlers.
+    app.add_middleware(DashboardCSRFMiddleware, config=config)
+
+    # Anti-clickjacking headers on every response (headers only, so SSE streams
+    # are unaffected).
+    app.add_middleware(FrameOptionsMiddleware)
+
+    # Read-only mode: refuse any non-safe HTTP method before it reaches a route
+    # handler. This covers every present and future control endpoint.
+    if config.read_only:
+
+        @app.middleware("http")
+        async def read_only_middleware(request, call_next):
+            if request.method not in ("GET", "HEAD", "OPTIONS"):
+                return JSONResponse(
+                    {"detail": "Nexus is in read-only mode: controls are off"},
+                    status_code=403,
+                )
+            return await call_next(request)
+
+    # Auth surface: login/logout and the login form. No auth dependencies.
+    app.include_router(build_auth_router(config))
+
+    # Auth dependency: required for state-changing endpoints and privileged
+    # read surfaces when conversation or dev content override is enabled.
+    privileged_read = config.conversation_enabled or config.dev_content_override
+    state_change_dep = [Depends(require_operator_token)]
+    read_dep = [Depends(require_operator_token)] if privileged_read else []
+    app.state.read_dependencies = read_dep
+
+    if config.conversation_enabled:
+        app.include_router(
+            build_conversation_router(
+                state,
+                perception_provider=perception_snapshot,
+                cycle_control_provider=control_snapshot,
+                # The unified console at `/` reuses the diagnostics + evaluation
+                # surfaces, so it is wired with the same providers.
+                fork_manager=fork_manager,
+                metrics_snapshot=metrics_snapshot,
+                adapters_lister=adapters_lister,
+                dev_content_override=config.dev_content_override,
+                health_prober=health_prober,
+                rate_control_publisher=rate_control_publisher,
+                evaluation_provider=evaluation_provider,
+            ),
+            dependencies=read_dep,
+        )
+    if config.diagnostics_enabled:
+        app.include_router(
+            build_diagnostics_router(
+                bridge,
+                fork_manager=fork_manager,
+                fork_manager_reason=fork_manager_reason,
+                metrics_snapshot=metrics_snapshot,
+                adapters_lister=adapters_lister,
+                dev_content_override=config.dev_content_override,
+                perception_provider=perception_snapshot,
+                cycle_control_provider=control_snapshot,
+                health_prober=health_prober,
+                rate_control_publisher=rate_control_publisher,
+            ),
+            dependencies=read_dep,
+        )
+        # Health endpoint is always unauthenticated so container probes keep
+        # working regardless of the privileged-read gate.
+        app.include_router(build_health_router(health_prober))
+        app.include_router(build_perception_router(), dependencies=state_change_dep)
+        app.include_router(build_cycle_control_router(), dependencies=state_change_dep)
+        app.include_router(build_caretaker_router(), dependencies=state_change_dep)
+        app.include_router(build_maturation_router(), dependencies=state_change_dep)
+
+    if not config.conversation_enabled:
+        @app.get("/", include_in_schema=False)
+        async def root_redirect() -> RedirectResponse:
+            return RedirectResponse(landing_path(config), status_code=307)
+
+    return app
+
+
+def make_default_privacy_filter(config: DashboardConfig) -> PrivacyFilter:
+    return PrivacyFilter(dev_content_override=config.dev_content_override)

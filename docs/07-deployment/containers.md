@@ -15,7 +15,7 @@ With no profile selected, the configuration loader applies the base-thesis `thes
 | `kaine-model-server` | OpenAI-compatible language organ (llama.cpp `llama-server`) | `127.0.0.1:11434` (`KAINE_MODEL_SERVER_HOST_PORT`) | card 0 (`KAINE_ORGAN_GPU`) |
 | `kaine-speaches` | speech-to-text (faster-distil-Whisper) | `127.0.0.1:8000` (`KAINE_SPEACHES_HOST_PORT`) | none, CPU only |
 | `kaine-chatterbox` | text-to-speech | `127.0.0.1:8883` (`KAINE_CHATTERBOX_HOST_PORT`) | card 1 (`KAINE_VISION_GPU`) |
-| `kaine-nexus` | dashboard (`python -m kaine.nexus`, served by uvicorn) | `127.0.0.1:8088` (`KAINE_NEXUS_HOST_PORT`) | none |
+| `kaine-nexus` | dashboard (`python -m kaine.dashboard`, served by uvicorn) | `127.0.0.1:8088` (`KAINE_NEXUS_HOST_PORT`) | none |
 | `kaine-cycle` | the cognitive cycle, which is the entity (`--profile cycle`) | none | card 1 |
 | `kaine-study` | runner of the module-addition study, called the ignition study in code (`--profile study`) | none | card 1 |
 | `kaine-trainer` | voice-alignment trainer service (`--profile training`) | none | `KAINE_TRAINER_GPU`, defaulting to the organ's card |

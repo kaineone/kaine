@@ -15,9 +15,9 @@ import pytest_asyncio
 from kaine.lifecycle import stage
 from kaine.lifecycle.manager import ForkManager
 from kaine.lifecycle.preservation import (
-    extract_bundle_gestation,
+    extract_bundle_development,
     read_bundle_stage,
-    set_aside_gestation_files,
+    set_aside_development_files,
 )
 from kaine.modules.registry import ModuleRegistry
 from kaine.modules.self_model import SelfModel, SelfModelDocument
@@ -138,7 +138,7 @@ async def test_read_bundle_stage_with_encryption(tmp_path, self_model, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_bundle_carries_gestation_progress_not_verdict(tmp_path, self_model):
+async def test_bundle_carries_development_progress_not_verdict(tmp_path, self_model):
     lifecycle_dir = tmp_path / "lifecycle"
     lifecycle_dir.mkdir()
     progress = {"k": {"awake_seconds": 120.0}}
@@ -153,7 +153,7 @@ async def test_bundle_carries_gestation_progress_not_verdict(tmp_path, self_mode
     stage_path = lifecycle_dir / "stage.json"
     bundle, _ = await _preserve_bundle(tmp_path, self_model, monkeypatch_stage=stage_path)
 
-    restored = extract_bundle_gestation(bundle, tmp_path / "revived")
+    restored = extract_bundle_development(bundle, tmp_path / "revived")
     assert restored == ["gestation_progress.json", "gestation_readout.json"]
     assert (
         json.loads((tmp_path / "revived" / "gestation_progress.json").read_text())
@@ -168,7 +168,7 @@ async def test_bundle_carries_gestation_progress_not_verdict(tmp_path, self_mode
 
 
 @pytest.mark.asyncio
-async def test_bundle_without_gestation_files_restores_nothing(tmp_path, self_model):
+async def test_bundle_without_development_files_restores_nothing(tmp_path, self_model):
     lifecycle_dir = tmp_path / "lifecycle"
     lifecycle_dir.mkdir()
     (lifecycle_dir / "stage.json").write_text(json.dumps({"stage": "embodied"}))
@@ -176,11 +176,11 @@ async def test_bundle_without_gestation_files_restores_nothing(tmp_path, self_mo
     bundle, _ = await _preserve_bundle(
         tmp_path, self_model, monkeypatch_stage=lifecycle_dir / "stage.json"
     )
-    assert extract_bundle_gestation(bundle, tmp_path / "revived") == []
+    assert extract_bundle_development(bundle, tmp_path / "revived") == []
 
 
 @pytest.mark.asyncio
-async def test_gestation_files_travel_encrypted(tmp_path, self_model, monkeypatch):
+async def test_development_files_travel_encrypted(tmp_path, self_model, monkeypatch):
     # The key comes from the environment, as in production; no skip: an
     # encrypted bundle must carry and return the developmental progress.
     monkeypatch.setenv(
@@ -198,7 +198,7 @@ async def test_gestation_files_travel_encrypted(tmp_path, self_model, monkeypatc
         bundle, _ = await _preserve_bundle(
             tmp_path, self_model, monkeypatch_stage=lifecycle_dir / "stage.json"
         )
-        restored = extract_bundle_gestation(bundle, tmp_path / "revived")
+        restored = extract_bundle_development(bundle, tmp_path / "revived")
     finally:
         set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
 
@@ -210,14 +210,14 @@ async def test_gestation_files_travel_encrypted(tmp_path, self_model, monkeypatc
     )
     assert not (bundle / "gestation").exists()
 
-def test_set_aside_gestation_files_keeps_them(tmp_path):
+def test_set_aside_development_files_keeps_them(tmp_path):
     dest = tmp_path / "lifecycle"
     dest.mkdir()
     (dest / "gestation_progress.json").write_text("{}")
     (dest / "gestation_viability.json").write_text("{}")
 
     originals = {"gestation_progress.json", "gestation_viability.json"}
-    moved = set_aside_gestation_files(dest)
+    moved = set_aside_development_files(dest)
     assert len(moved) == 2
     for original in originals:
         assert not (dest / original).exists()
@@ -225,4 +225,4 @@ def test_set_aside_gestation_files_keeps_them(tmp_path):
         assert p.exists()
         assert any(p.name.startswith(f"{original}.replaced-") for original in originals)
 
-    assert set_aside_gestation_files(tmp_path / "missing") == []
+    assert set_aside_development_files(tmp_path / "missing") == []

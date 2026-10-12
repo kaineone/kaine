@@ -18,7 +18,7 @@ loop — only read-only probes and throwaway round-trips):
 
   1. SERVICES   — Redis / Qdrant / the organ's OpenAI endpoint / Speaches /
                   Chatterbox are reachable. Reuses the exact probes the dashboard
-                  health board uses (``kaine.nexus.health``).
+                  health board uses (``kaine.dashboard.health``).
   2. ORGAN      — the configured language organ actually GENERATES content
                   (not merely listed/served-but-mute). Reuses the boot-time
                   content gate (``kaine.organ_probe.verify_organ_generates``).
@@ -54,7 +54,7 @@ loop — only read-only probes and throwaway round-trips):
 Every check is best-effort and NEVER raises out of this module — a check that
 cannot run reports the honest gap as a FAIL/WARN/SKIP row with a reason, never
 a silent pass and never an uncaught traceback (mirrors the "never raises"
-contract of ``kaine.nexus.health`` and ``kaine.organ_server.served``).
+contract of ``kaine.dashboard.health`` and ``kaine.organ_server.served``).
 
 Exit code is non-zero iff any check reports FAIL (a WARN row reports a risk
 but does not fail the gate), so this composes as a CI / boot-script gate: ``python -m kaine.preboot && python -m kaine.cycle``.
@@ -94,11 +94,11 @@ from kaine.config import (
 from kaine.cycle.ignition_log import IgnitionLogConfig
 from kaine.cycle.preservation_monitor import PreservationConfig
 from kaine.cycle.research_gate import research_mode_requested, run_preflight_self_check
+from kaine.dashboard import health
+from kaine.dashboard.config import load_dashboard_config
+from kaine.dashboard.health import load_health_prober
 from kaine.defaults import language_section_api_key, language_section_chat_url
 from kaine.net import port_listening
-from kaine.nexus import health
-from kaine.nexus.config import load_nexus_config
-from kaine.nexus.health import load_health_prober
 from kaine.organ_probe import verify_organ_generates
 from kaine.security.crypto import CryptoConfigError, install_from_section
 from kaine.storage import configured_data_root, resolve, storage_min_free_gb
@@ -154,13 +154,13 @@ async def check_services(
 ) -> list[CheckResult]:
     """Probe every configured dependency via the shared dashboard health prober.
 
-    Reuses :func:`kaine.nexus.health.load_health_prober` (which already
+    Reuses :func:`kaine.dashboard.health.load_health_prober` (which already
     deep-merges the operator config and resolves Redis/Qdrant secrets) and
     :meth:`HealthProber.snapshot` — no probe logic is duplicated here, only
     the up/not_configured/else -> PASS/SKIP/FAIL mapping appropriate to a
     boot gate (a dashboard tolerates "degraded"; a boot gate must not).
     """
-    from kaine.nexus.health.probes import (
+    from kaine.dashboard.health.probes import (
         SHERPA_PROBE_CHILD_TIMEOUT_S,
         get_sherpa_probe_wait,
         set_sherpa_probe_wait,
@@ -198,10 +198,10 @@ async def check_services(
         results.append(CheckResult(GROUP_SERVICES, "(no dependencies probed)", SKIP, ""))
 
     try:
-        nexus_cfg = load_nexus_config(
+        dashboard_cfg = load_dashboard_config(
             kaine_toml or SHIPPED_CONFIG_PATH, operator_path=OPERATOR_CONFIG_PATH
         )
-        port = nexus_cfg.port
+        port = dashboard_cfg.port
         if port_listening(port):
             results.append(
                 CheckResult(
@@ -217,7 +217,7 @@ async def check_services(
                     GROUP_SERVICES,
                     "Nexus (live)",
                     FAIL,
-                    f"Nexus is not running on port {port}; start it (setup finish page \"Start Nexus\", or python -m kaine.nexus) before spawning",
+                    f"Nexus is not running on port {port}; start it (setup finish page \"Start Nexus\", or python -m kaine.dashboard) before spawning",
                 )
             )
     except Exception as exc:
@@ -1324,7 +1324,7 @@ async def run_async_checks(config: dict[str, Any]) -> list[CheckResult]:
 
     The state-encryption key is resolved into the environment FIRST, before
     SERVICES runs — the SERVICES group includes the dashboard health board's own
-    ``State encryption`` probe (``kaine.nexus.health.probe_state_encryption``),
+    ``State encryption`` probe (``kaine.dashboard.health.probe_state_encryption``),
     which reads ``$KAINE_STATE_KEY`` directly. Resolving the key here (once)
     keeps that probe and the WELFARE NET check below consistent instead of
     the SERVICES probe falsely reporting no-key because it ran first.

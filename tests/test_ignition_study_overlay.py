@@ -69,7 +69,7 @@ def plan(repo):
     }
 
 
-def test_overlay_gestation_modules(repo, plan):
+def test_overlay_development_modules(repo, plan):
     overlay, enabled, _ = build_overlay(
         plan, "gestation", "gestation", 0, repo, repo / "config" / "kaine.toml",
         repo / "config" / "kaine.operator.toml",
@@ -204,7 +204,7 @@ def test_operator_encoder_dir_wins_and_is_made_absolute(tmp_path):
     assert got == str((tmp_path / "models" / "mine").resolve())
 
 
-def test_overlay_self_rhythm_enabled_gestation(repo, plan):
+def test_overlay_self_rhythm_enabled_development(repo, plan):
     overlay, _, _ = build_overlay(
         plan, "gestation", "gestation", 0, repo, repo / "config" / "kaine.toml",
         repo / "config" / "kaine.operator.toml",
@@ -314,7 +314,7 @@ def test_overlay_never_enables_raw_archive(repo, plan):
         assert overlay["research_event_log"]["raw_archive"]["enabled"] is False
 
 
-def test_overlay_never_enables_nexus_record_or_trajectory(repo, plan):
+def test_overlay_never_enables_dashboard_record_or_trajectory(repo, plan):
     op = repo / "config" / "kaine.operator.toml"
     op.write_text(
         "[research_event_log.nexus_record]\nenabled = true\n[evaluation]\nworkspace_trajectory = true\n"

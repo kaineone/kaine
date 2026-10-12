@@ -68,7 +68,7 @@ jobs:
           tests/test_fork_merge_snapshot.py
           tests/test_effectors_audit_log.py
           tests/test_effectors.py
-          tests/test_nexus_privacy.py
+          tests/test_dashboard_privacy.py
 
       - name: Run P1 HTTP-boundary regression tests
         env:
@@ -77,9 +77,9 @@ jobs:
         # merges endpoint validation. Run as a separate step with a `-k` selector so
         # only the traversal/merge-validation nodes execute — these need just
         # fastapi/httpx/pydantic/jinja2 and never reach the optional-audio runtime
-        # paths that the rest of tests/test_nexus_routers.py exercises. (A global
+        # paths that the rest of tests/test_dashboard_routers.py exercises. (A global
         # `-k` in the step above would wrongly deselect the other files' tests.)
         run: >-
           python -m pytest -q
-          tests/test_nexus_routers.py
+          tests/test_dashboard_routers.py
           -k "traversal or merge_form"

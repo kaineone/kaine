@@ -14,8 +14,8 @@ import pytest
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
-from kaine.cycle.gestation import GestationOwner, GestationReadoutConfig
-from kaine.nexus.bridge import BusBridge
+from kaine.cycle.development import DevelopmentOwner, DevelopmentReadoutConfig
+from kaine.dashboard.bridge import BusBridge
 from kaine.privacy_filter import PrivacyFilter
 
 fakeredis = pytest.importorskip("fakeredis.aioredis")
@@ -63,7 +63,7 @@ def test_no_bus_read_calls_in_cursor_advancing_code() -> None:
 
 
 @pytest.mark.asyncio
-async def test_nexus_bridge_advances_past_undecodable_batch() -> None:
+async def test_dashboard_bridge_advances_past_undecodable_batch() -> None:
     bus = _make_bus()
     stream = "topos.out"
     bridge = BusBridge(bus, PrivacyFilter(), streams=[stream], read_count=64)
@@ -89,7 +89,7 @@ async def test_nexus_bridge_advances_past_undecodable_batch() -> None:
 
 
 @pytest.mark.asyncio
-async def test_gestation_interoception_reader_advances_past_undecodable_batch(
+async def test_development_interoception_reader_advances_past_undecodable_batch(
     tmp_path: Path,
 ) -> None:
     bus = _make_bus()
@@ -102,7 +102,7 @@ async def test_gestation_interoception_reader_advances_past_undecodable_batch(
         def self_rhythm_state(self) -> tuple[float, float] | None:
             return (0.0, 1.0)
 
-    config = GestationReadoutConfig.from_dict(
+    config = DevelopmentReadoutConfig.from_dict(
         {
             "entrainment_replications": 1.0,
             "surrogate_count": 3.0,
@@ -126,7 +126,7 @@ async def test_gestation_interoception_reader_advances_past_undecodable_batch(
         }
     )
 
-    owner = GestationOwner(
+    owner = DevelopmentOwner(
         bus,
         interoception=FakeInteroception(),
         drive=FakeDrive(),

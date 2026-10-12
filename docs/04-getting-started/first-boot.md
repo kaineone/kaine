@@ -73,7 +73,7 @@ The project keeps the held modules off until the base-thesis test has a result, 
 In a dedicated terminal:
 
 ```bash
-python -m kaine.nexus
+python -m kaine.dashboard
 ```
 
 The dashboard starts on `http://127.0.0.1:8088/diagnostics/`. With the cycle not yet up, the page reports `cycle_status: not running`.

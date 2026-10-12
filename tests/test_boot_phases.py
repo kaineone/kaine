@@ -204,8 +204,8 @@ def test_escalation_exit_code(
     """Escalated supervisor returns 70; otherwise the runner returns 0."""
     shutdown_calls: list[cyc.BootContext] = []
 
-    async def set_spot(ctx: cyc.BootContext) -> None:
-        ctx.spot = types.SimpleNamespace(escalated=escalated)
+    async def set_supervisor(ctx: cyc.BootContext) -> None:
+        ctx.supervisor = types.SimpleNamespace(escalated=escalated)
         return None
 
     async def noop(_ctx: cyc.BootContext) -> None:
@@ -214,15 +214,15 @@ def test_escalation_exit_code(
     async def recording_shutdown(ctx: cyc.BootContext) -> None:
         shutdown_calls.append(ctx)
 
-    monkeypatch.setattr(cyc, "_BOOT_PHASES", (set_spot,))
+    monkeypatch.setattr(cyc, "_BOOT_PHASES", (set_supervisor,))
     monkeypatch.setattr(cyc, "_run_until_stopped", noop)
     monkeypatch.setattr(cyc, "_shutdown", recording_shutdown)
 
     result = asyncio.run(cyc._boot_and_run(kaine_config={}))
     assert result == expected
     assert len(shutdown_calls) == 1
-    assert shutdown_calls[0].spot is not None
-    assert shutdown_calls[0].spot.escalated is escalated
+    assert shutdown_calls[0].supervisor is not None
+    assert shutdown_calls[0].supervisor.escalated is escalated
 
 
 def test_phase_exception_skips_shutdown(monkeypatch: pytest.MonkeyPatch) -> None:

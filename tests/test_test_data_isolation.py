@@ -119,9 +119,9 @@ def test_fork_shallow_watch(tmp_path):
     root = tmp_path / "real"
     state = root / "state"
     forks = state / "forks"
-    being_a = forks / "beingA"
-    being_a.mkdir(parents=True)
-    (being_a / "inner.json").write_text("{}")
+    entity_a = forks / "beingA"
+    entity_a.mkdir(parents=True)
+    (entity_a / "inner.json").write_text("{}")
 
     # Creating a new being is visible through the forks directory and the new key.
     before = _data_root_fingerprint(str(root))
@@ -132,7 +132,7 @@ def test_fork_shallow_watch(tmp_path):
 
     # A write deep inside an existing fork is not walked into.
     before2 = _data_root_fingerprint(str(root))
-    deep = being_a / "x" / "y.json"
+    deep = entity_a / "x" / "y.json"
     deep.parent.mkdir()
     deep.write_text("[]")
     after2 = _data_root_fingerprint(str(root))
@@ -141,7 +141,7 @@ def test_fork_shallow_watch(tmp_path):
     assert str(deep) not in after2
     # ...but the entity itself is seen to change (its own mtime moved), so a
     # write into a preserved entity is still caught without reading it.
-    assert str(being_a) in _changed_dirs(before2, after2)
+    assert str(entity_a) in _changed_dirs(before2, after2)
 
 
 def test_real_root_skip_ignores_operator_dirs(tmp_path):

@@ -16,6 +16,10 @@ from typing import Any
 import httpx
 import pytest
 
+from kaine.dashboard.app import create_app
+from kaine.dashboard.bridge import BusBridge
+from kaine.dashboard.config import DashboardConfig
+from kaine.dashboard.privacy import PrivacyFilter
 from kaine.lifecycle.adapter_merge import TiesDareAdapterMerger
 from kaine.lifecycle.manager import (
     FakeAdapterMerger,
@@ -23,10 +27,6 @@ from kaine.lifecycle.manager import (
     UnmergedAdaptersError,
     merger_from_name,
 )
-from kaine.nexus.app import create_app
-from kaine.nexus.bridge import BusBridge
-from kaine.nexus.config import NexusConfig
-from kaine.nexus.privacy import PrivacyFilter
 
 
 class _FakeModule:
@@ -191,8 +191,8 @@ def test_merge_checks_without_base_model_path_leaves_loader_none():
     assert m._model_loader is None
 
 
-async def _make_nexus_client(*, fork_manager: ForkManager | None = None):
-    config = NexusConfig(
+async def _make_dashboard_client(*, fork_manager: ForkManager | None = None):
+    config = DashboardConfig(
         conversation_enabled=True,
         host_allowlist=("127.0.0.1", "localhost", "test"),
         operator_token="test-token",
@@ -233,7 +233,7 @@ async def test_merge_handler_runs_merge_in_thread(tmp_path: Path):
     a = mgr.snapshot(reg, adapters=[])
     b = mgr.snapshot(reg, adapters=[])
 
-    client = await _make_nexus_client(fork_manager=mgr)
+    client = await _make_dashboard_client(fork_manager=mgr)
     async with client:
         response = await client.post(
             "/diagnostics/merges",
@@ -258,7 +258,7 @@ async def test_merge_handler_reports_rejected_merge(tmp_path: Path):
     a = mgr.snapshot(reg, adapters=["adapters/a"])
     b = mgr.snapshot(reg, adapters=["adapters/b"])
 
-    client = await _make_nexus_client(fork_manager=mgr)
+    client = await _make_dashboard_client(fork_manager=mgr)
     async with client:
         response = await client.post(
             "/diagnostics/merges",

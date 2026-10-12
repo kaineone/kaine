@@ -25,7 +25,7 @@ The codebase has several related wiring and quality problems: the language modul
 
 - `kaine/modules/language/module.py`, `kaine/bus/schema.py`, `kaine/cycle/engine.py`, `kaine/modules/registry.py`.
 - `kaine/evaluation/stream_registry.py`, `kaine/evaluation/observers/*.py`.
-- `kaine/nexus/conversation.py` and other consumers of stream literals.
+- `kaine/dashboard/conversation.py` and other consumers of stream literals.
 - `config/kaine.toml` stream references.
 - `pyproject.toml` (`[tool.ruff]`, `[tool.setuptools] packages`, import-linter contracts).
 - `.pre-commit-config.yaml` and `.github/workflows/*.yml`.

@@ -280,9 +280,9 @@ def test_threshold_validation(tmp_path: Path, threshold: float, ok: bool):
             _cfg(tmp_path, capability_loss_threshold=threshold)
 
 
-def test_nexus_factory_requires_probes(tmp_path: Path, monkeypatch):
+def test_dashboard_factory_requires_probes(tmp_path: Path, monkeypatch):
     import kaine.security.crypto as _crypto
-    from kaine.nexus.__main__ import _build_fork_manager
+    from kaine.dashboard.__main__ import _build_fork_manager
 
     monkeypatch.setattr(_crypto, "install_from_section", lambda section: None)
 

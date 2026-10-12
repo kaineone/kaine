@@ -185,7 +185,7 @@ def test_unattended_gate_checks_keys_in_order():
     assert list(result.checks.keys()) == expected
 
 
-def test_evaluate_unattended_gate_includes_spot_condition(monkeypatch):
+def test_evaluate_unattended_gate_includes_supervisor_condition(monkeypatch):
     from kaine.cycle import __main__ as cycle_main
     from kaine.cycle.research_gate import GateResult
     from kaine.cycle.unattended_gate import Condition
@@ -213,7 +213,7 @@ def test_evaluate_unattended_gate_includes_spot_condition(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "kaine.cycle.spot_selftest.check_spot_condition",
+        "kaine.cycle.supervisor_selftest.check_supervisor_condition",
         lambda section, timeout_s=None: passing,
     )
     result = cycle_main._evaluate_unattended_gate({})
@@ -221,7 +221,7 @@ def test_evaluate_unattended_gate_includes_spot_condition(monkeypatch):
     assert tuple(c.number for c in result.failed) == (7, 8)
 
     monkeypatch.setattr(
-        "kaine.cycle.spot_selftest.check_spot_condition",
+        "kaine.cycle.supervisor_selftest.check_supervisor_condition",
         lambda section, timeout_s=None: failing,
     )
     result = cycle_main._evaluate_unattended_gate({})
@@ -248,7 +248,7 @@ def test_evaluate_unattended_gate_uses_input_condition(monkeypatch):
         },
     )()
 
-    spot = Condition(
+    supervisor = Condition(
         number=6, name="Spot armed and self-tested", ok=True, reason=""
     )
     eight_ok = Condition(number=8, name="continuous input", ok=True, reason="")
@@ -256,7 +256,7 @@ def test_evaluate_unattended_gate_uses_input_condition(monkeypatch):
 
     monkeypatch.setattr(main_module, "_evaluate_research_safety_net", lambda cfg: net)
     monkeypatch.setattr(
-        "kaine.cycle.spot_selftest.check_spot_condition", lambda cfg: spot
+        "kaine.cycle.supervisor_selftest.check_supervisor_condition", lambda cfg: supervisor
     )
     monkeypatch.setattr(
         "kaine.cycle.input_check.check_input_condition", lambda cfg: eight_ok
@@ -367,7 +367,7 @@ def test_individuation_failure_withholds_the_caretaker_start_notice(monkeypatch)
         },
     )()
 
-    spot = Condition(
+    supervisor = Condition(
         number=6, name="Spot armed and self-tested", ok=True, reason=""
     )
     eight_ok = Condition(number=8, name="continuous input", ok=True, reason="")
@@ -387,7 +387,7 @@ def test_individuation_failure_withholds_the_caretaker_start_notice(monkeypatch)
 
     monkeypatch.setattr(main_module, "_evaluate_research_safety_net", lambda cfg: net)
     monkeypatch.setattr(
-        "kaine.cycle.spot_selftest.check_spot_condition", lambda cfg: spot
+        "kaine.cycle.supervisor_selftest.check_supervisor_condition", lambda cfg: supervisor
     )
     monkeypatch.setattr(
         "kaine.cycle.input_check.check_input_condition", lambda cfg: eight_ok

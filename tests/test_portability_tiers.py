@@ -779,7 +779,7 @@ def test_language_llama_cpp_backend_degrades_to_http_when_dep_absent():
 
 def test_backend_failures_surface_on_health_snapshot():
     from kaine.backend_state import record_backend_failure
-    from kaine.nexus.health.prober import HealthProber
+    from kaine.dashboard.health.prober import HealthProber
 
     record_backend_failure("lingua", "llama_cpp", "no wheel", fallback="ollama")
     block = HealthProber._backends_block(object.__new__(HealthProber))

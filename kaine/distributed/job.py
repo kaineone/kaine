@@ -48,8 +48,8 @@ class JobKind(str, Enum):
     #: A bounded forked temporary being: an existing ``ForkManager`` snapshot +
     #: a directive + an optional per-fork ``time_scale``, run to completion
     #: off-host, returning its post-run snapshot. Reuses the fork/dilation/merge
-    #: machinery — no new runtime (see :mod:`kaine.distributed.fork_being`).
-    FORKED_BEING = "forked_being"
+    #: machinery — no new runtime (see :mod:`kaine.distributed.fork_entity`).
+    FORKED_ENTITY = "forked_being"
 
 
 class ArtifactKind(str, Enum):
@@ -76,7 +76,7 @@ _DEFAULT_ARTIFACT: dict[JobKind, ArtifactKind] = {
     JobKind.ABLITERATE: ArtifactKind.MODIFIED_MODEL,
     JobKind.CONSOLIDATE: ArtifactKind.MEMORY_DELTA,
     JobKind.EVAL: ArtifactKind.EVAL_REPORT,
-    JobKind.FORKED_BEING: ArtifactKind.FORK_SNAPSHOT,
+    JobKind.FORKED_ENTITY: ArtifactKind.FORK_SNAPSHOT,
 }
 
 
@@ -153,7 +153,7 @@ class BatchJob:
         go to an anonymous volunteer at all (it may not, until a volunteer-host
         welfare-and-security model exists — see the runner ordering + BOINC).
         """
-        return self.kind is JobKind.FORKED_BEING
+        return self.kind is JobKind.FORKED_ENTITY
 
     def to_dict(self) -> dict[str, Any]:
         return {

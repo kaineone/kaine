@@ -4,12 +4,12 @@
 from kaine.modules.affect import Affect
 from kaine.modules.audition import Audition
 from kaine.modules.base import BaseModule
-from kaine.modules.echo import EchoModule
 from kaine.modules.effectors import Effectors
 from kaine.modules.episodic_memory import EpisodicMemory
 from kaine.modules.interoception import Interoception
 from kaine.modules.language import Language
 from kaine.modules.planning import Planning
+from kaine.modules.recorder import RecorderModule
 from kaine.modules.registry import ModuleRegistry
 from kaine.modules.self_model import SelfModel
 from kaine.modules.sequence import Sequence
@@ -24,7 +24,7 @@ __all__ = [
     "Vocal",
     "BaseModule",
     "Sequence",
-    "EchoModule",
+    "RecorderModule",
     "SelfModel",
     "SocialCognition",
     "Sleep",

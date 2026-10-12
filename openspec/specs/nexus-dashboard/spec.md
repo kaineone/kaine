@@ -127,7 +127,7 @@ without `dev_content_override`.
 
 ### Requirement: Dashboard reports incomplete setup without a traceback
 When the event bus cannot be configured, for example because no Redis password
-exists yet, `python -m kaine.nexus` SHALL exit with status 1. It SHALL log a
+exists yet, `python -m kaine.dashboard` SHALL exit with status 1. It SHALL log a
 single message that names the setup step that fixes the problem, and SHALL NOT
 print a traceback.
 
@@ -269,7 +269,7 @@ The diagnostics and evaluation pages SHALL lay their boards out so that a board'
 The dashboard auth script SHALL replace `window.EventSource` with its wrapper without error when the browser's `EventSource` defines `CONNECTING`, `OPEN` and `CLOSED` as read-only, and the wrapper SHALL expose the same constant values.
 
 #### Scenario: Read-only constants
-- **WHEN** `nexus_auth.js` loads in a page whose `EventSource` constants are non-writable
+- **WHEN** `dashboard_auth.js` loads in a page whose `EventSource` constants are non-writable
 - **THEN** no error is thrown, `window.EventSource` is the wrapper, and `window.EventSource.OPEN` equals the original value
 
 ### Requirement: Perception availability survives missing system libraries

@@ -93,11 +93,11 @@ class IndividuationPaths:
         return self.root / "reports"
 
     @property
-    def birth_adapter(self) -> Path:
+    def maturation_adapter(self) -> Path:
         return self.root / "birth_adapter.gguf"
 
     @property
-    def birth_pending(self) -> Path:
+    def maturation_pending(self) -> Path:
         return self.root / "birth_pending"
 
 
@@ -300,7 +300,7 @@ def load_reference(paths: IndividuationPaths) -> ReferenceDoc | None:
     return ReferenceDoc.from_dict(d)
 
 
-def copy_birth_adapter(
+def copy_maturation_adapter(
     paths: IndividuationPaths, adapter_file: Path | None
 ) -> str:
     """Copy the maturation adapter next to the reference and return its digest."""
@@ -309,10 +309,10 @@ def copy_birth_adapter(
 
     from kaine.modules.sleep.organ_adapter import sha256_file
 
-    paths.birth_adapter.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(adapter_file, paths.birth_adapter)
-    os.chmod(paths.birth_adapter, 0o600)
-    return sha256_file(paths.birth_adapter)
+    paths.maturation_adapter.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(adapter_file, paths.maturation_adapter)
+    os.chmod(paths.maturation_adapter, 0o600)
+    return sha256_file(paths.maturation_adapter)
 
 
 @dataclass(frozen=True)

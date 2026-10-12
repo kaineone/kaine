@@ -261,7 +261,7 @@ async def test_capture_abort(tmp_path: Path) -> None:
     assert sampler.calls == 0
 
 
-async def test_unchanged_being(tmp_path: Path) -> None:
+async def test_unchanged_entity(tmp_path: Path) -> None:
     sampler = FakeSampler(variant="birth")
     sink = FakeSink()
     core, paths = make_core(tmp_path, sampler=sampler, report_sink=sink)
@@ -616,7 +616,7 @@ async def test_capture_conditioning_change_writes_nothing(tmp_path: Path) -> Non
         tmp_path,
         sampler=sampler,
         conditioning_inputs=conditioning,
-        birth_adapter_file=lambda: adapter,
+        maturation_adapter_file=lambda: adapter,
     )
 
     doc, reason = await core.capture_reference("birth")
@@ -624,21 +624,21 @@ async def test_capture_conditioning_change_writes_nothing(tmp_path: Path) -> Non
     assert reason == "conditioning_changed_mid_run"
     assert not paths.reference.exists()
     assert not paths.ledger.exists()
-    assert not paths.birth_adapter.exists()
+    assert not paths.maturation_adapter.exists()
 
 
-async def test_capture_copies_birth_adapter_only_for_birth(tmp_path: Path) -> None:
+async def test_capture_copies_maturation_adapter_only_for_maturation(tmp_path: Path) -> None:
     adapter = tmp_path / "adapter.gguf"
     adapter.write_bytes(b"birth adapter")
-    core, paths = make_core(tmp_path, birth_adapter_file=lambda: adapter)
+    core, paths = make_core(tmp_path, maturation_adapter_file=lambda: adapter)
     await core.capture_reference("birth")
-    assert paths.birth_adapter.read_bytes() == b"birth adapter"
+    assert paths.maturation_adapter.read_bytes() == b"birth adapter"
 
     adapter.write_bytes(b"later adapter")
     doc, reason = await core.capture_reference("capture", regenerate=True)
     assert reason is None
     assert doc.reference_kind == "capture"
-    assert paths.birth_adapter.read_bytes() == b"birth adapter"
+    assert paths.maturation_adapter.read_bytes() == b"birth adapter"
 
 
 async def test_capture_refuses_existing_reference_before_sampling(
@@ -655,7 +655,7 @@ async def test_capture_refuses_existing_reference_before_sampling(
     assert load_reference(paths).reference_id == first.reference_id
 
 
-async def test_birth_regeneration_is_refused(tmp_path: Path) -> None:
+async def test_maturation_regeneration_is_refused(tmp_path: Path) -> None:
     sampler = FakeSampler(variant="birth")
     core, paths = make_core(tmp_path, sampler=sampler)
     with pytest.raises(ValueError):

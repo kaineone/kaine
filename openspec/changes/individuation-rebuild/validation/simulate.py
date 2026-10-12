@@ -100,7 +100,7 @@ def make_prompt_model(rng: np.random.Generator, d: int = DIM) -> PromptModel:
     return PromptModel(centres=centres, weights=weights)
 
 
-def make_being(rng: np.random.Generator, n_prompts: int = N_PROMPTS) -> list[PromptModel]:
+def make_entity(rng: np.random.Generator, n_prompts: int = N_PROMPTS) -> list[PromptModel]:
     """Create a synthetic being: one mixture model per prompt."""
     return [make_prompt_model(rng) for _ in range(n_prompts)]
 
@@ -118,19 +118,19 @@ def sample_prompt_vectors(
     return _normalize_rows(raw)
 
 
-def being_samples(
-    being: list[PromptModel], n: int, sigma: float, rng: np.random.Generator
+def entity_samples(
+    entity: list[PromptModel], n: int, sigma: float, rng: np.random.Generator
 ) -> list[np.ndarray]:
     """Sample the whole being, returning one array per prompt."""
-    return [sample_prompt_vectors(model, n, sigma, rng) for model in being]
+    return [sample_prompt_vectors(model, n, sigma, rng) for model in entity]
 
 
-def reference_vector(birth_samples: list[np.ndarray]) -> np.ndarray:
+def reference_vector(maturation_samples: list[np.ndarray]) -> np.ndarray:
     """maturation reference used by the old percentile rule.
 
     Mean of the maturation sample over prompts, normalised.
     """
-    per_prompt = np.stack([s.mean(axis=0) for s in birth_samples])
+    per_prompt = np.stack([s.mean(axis=0) for s in maturation_samples])
     return _normalize_rows(per_prompt.mean(axis=0).reshape(1, -1))[0]
 
 
@@ -150,13 +150,13 @@ def mean_within_prompt_cosine(samples: list[np.ndarray]) -> float:
 
 
 def estimate_dispersion(
-    being: list[PromptModel],
+    entity: list[PromptModel],
     sigma: float,
     rng: np.random.Generator,
     n: int = 200,
 ) -> float:
     """Mean within-prompt cosine for a given dispersion level."""
-    samples = being_samples(being, n, sigma, rng)
+    samples = entity_samples(entity, n, sigma, rng)
     return mean_within_prompt_cosine(samples)
 
 
@@ -181,13 +181,13 @@ def apply_shift_drift(
 
 
 def apply_partial_drift(
-    being: list[PromptModel],
+    entity: list[PromptModel],
     m: int,
     pi: float,
     rng: np.random.Generator,
 ) -> list[PromptModel]:
     """Apply cluster drift to only ``m`` of the 12 prompts."""
-    models = list(being)
+    models = list(entity)
     idx = rng.choice(len(models), size=m, replace=False)
     for i in idx:
         models[i] = apply_cluster_drift(models[i], pi, rng)
@@ -195,20 +195,20 @@ def apply_partial_drift(
 
 
 def apply_drift(
-    being: list[PromptModel], drift: tuple, rng: np.random.Generator
+    entity: list[PromptModel], drift: tuple, rng: np.random.Generator
 ) -> list[PromptModel]:
     """Dispatch drift construction."""
     kind = drift[0]
     if kind == "cluster":
         pi = drift[1]
-        return [apply_cluster_drift(model, pi, rng) for model in being]
+        return [apply_cluster_drift(model, pi, rng) for model in entity]
     if kind == "shift":
         delta = drift[1]
-        return [apply_shift_drift(model, delta, rng) for model in being]
+        return [apply_shift_drift(model, delta, rng) for model in entity]
     if kind == "partial":
         m = drift[1]
         pi = drift[2]
-        return apply_partial_drift(being, m, pi, rng)
+        return apply_partial_drift(entity, m, pi, rng)
     raise ValueError(f"Unknown drift {drift!r}")
 
 
@@ -225,14 +225,14 @@ def drift_label(drift: tuple) -> str:
 
 
 def run_energy_test(
-    birth: list[np.ndarray],
+    maturation: list[np.ndarray],
     current: list[np.ndarray],
     permutations: int,
     rng: np.random.Generator,
     alpha: float | None = None,
 ) -> stats.PermutationResult:
     """Convenience wrapper around the core stratified energy test."""
-    strata = [(birth[i], current[i]) for i in range(len(birth))]
+    strata = [(maturation[i], current[i]) for i in range(len(maturation))]
     return stats.permutation_test(
         strata,
         permutations=permutations,
@@ -243,7 +243,7 @@ def run_energy_test(
 
 
 def old_percentile_reject(
-    being: list[PromptModel],
+    entity: list[PromptModel],
     ref: np.ndarray,
     sigma: float,
     n_nulls: int,
@@ -253,7 +253,7 @@ def old_percentile_reject(
     # Draw n_nulls + 1 transcripts; each transcript = normalised mean over
     # prompts of one draw per prompt.
     per_prompt = np.stack(
-        [sample_prompt_vectors(model, n_nulls + 1, sigma, rng) for model in being],
+        [sample_prompt_vectors(model, n_nulls + 1, sigma, rng) for model in entity],
         axis=0,
     )  # (12, n_nulls+1, d)
     transcripts = _normalize_rows(per_prompt.mean(axis=0))  # (n_nulls+1, d)
@@ -387,10 +387,10 @@ def mmd_permutation_test(
 def _size_worker(seed_sigma: tuple[int, float]) -> float:
     seed, sigma = seed_sigma
     rng = np.random.default_rng(seed)
-    being = make_being(rng)
-    birth = being_samples(being, 16, sigma, rng)
-    current = being_samples(being, 8, sigma, rng)
-    res = run_energy_test(birth, current, 999, rng)
+    entity = make_entity(rng)
+    maturation = entity_samples(entity, 16, sigma, rng)
+    current = entity_samples(entity, 8, sigma, rng)
+    res = run_energy_test(maturation, current, 999, rng)
     return float(res.p_value)
 
 
@@ -461,8 +461,8 @@ def run_size(
 
     # Independent dispersion estimate.
     disp_rng = np.random.default_rng(seed + 1)
-    disp_being = make_being(disp_rng)
-    cosine = estimate_dispersion(disp_being, sigma, disp_rng)
+    disp_entity = make_entity(disp_rng)
+    cosine = estimate_dispersion(disp_entity, sigma, disp_rng)
 
     result = {
         "experiment": "size",
@@ -522,9 +522,9 @@ def run_size(
 def _lifetime_worker(args: tuple[int, float, int]) -> dict:
     seed, sigma, looks = args
     rng = np.random.default_rng(seed)
-    being = make_being(rng)
-    birth = being_samples(being, 16, sigma, rng)
-    ref = reference_vector(birth)
+    entity = make_entity(rng)
+    maturation = entity_samples(entity, 16, sigma, rng)
+    ref = reference_vector(maturation)
 
     instrument_first: int | None = None
     naive_first: int | None = None
@@ -532,26 +532,26 @@ def _lifetime_worker(args: tuple[int, float, int]) -> dict:
     total_perms = 0
 
     for k in range(1, looks + 1):
-        current = being_samples(being, 8, sigma, rng)
+        current = entity_samples(entity, 8, sigma, rng)
 
         # (i) Spending-alpha instrument rule.
         alpha_k = stats.spending_alpha(k)
         B = stats.required_permutations(alpha_k)
         if B is not None:
-            res = run_energy_test(birth, current, B, rng, alpha=alpha_k)
+            res = run_energy_test(maturation, current, B, rng, alpha=alpha_k)
             total_perms += res.permutations
             if res.p_value <= alpha_k and instrument_first is None:
                 instrument_first = k
 
         # (ii) Naive 5% rule.
         if naive_first is None:
-            res_naive = run_energy_test(birth, current, 999, rng)
+            res_naive = run_energy_test(maturation, current, 999, rng)
             if res_naive.p_value <= 0.05:
                 naive_first = k
 
         # (iii) Old percentile rule.
         if old_first is None:
-            if old_percentile_reject(being, ref, sigma, 50, rng):
+            if old_percentile_reject(entity, ref, sigma, 50, rng):
                 old_first = k
 
     return {
@@ -628,8 +628,8 @@ def run_lifetime(
     wall = time.perf_counter() - start
 
     disp_rng = np.random.default_rng(seed + 2)
-    disp_being = make_being(disp_rng)
-    cosine = estimate_dispersion(disp_being, sigma, disp_rng)
+    disp_entity = make_entity(disp_rng)
+    cosine = estimate_dispersion(disp_entity, sigma, disp_rng)
 
     result = {
         "experiment": "lifetime",
@@ -703,16 +703,16 @@ def _build_power_conditions() -> list[PowerCondition]:
 def _power_worker(args: tuple[int, float, list[PowerCondition]]) -> dict:
     seed, sigma, conditions = args
     rng = np.random.default_rng(seed)
-    base = make_being(rng)
+    base = make_entity(rng)
 
     # Maximum sample sizes for this design.
-    birth24 = being_samples(base, 24, sigma, rng)
+    maturation24 = entity_samples(base, 24, sigma, rng)
 
     results: dict = {}
     for cond in conditions:
         drifted = apply_drift(base, cond.drift, rng)
-        current12 = being_samples(drifted, 12, sigma, rng)
-        birth = [s[: cond.n_b] for s in birth24]
+        current12 = entity_samples(drifted, 12, sigma, rng)
+        maturation = [s[: cond.n_b] for s in maturation24]
         current = [s[: cond.n_c] for s in current12]
 
         key = f"{cond.n_b}x{cond.n_c}_{drift_label(cond.drift)}"
@@ -722,7 +722,7 @@ def _power_worker(args: tuple[int, float, list[PowerCondition]]) -> dict:
             if B is None:
                 results[(key, look)] = None
                 continue
-            res = run_energy_test(birth, current, B, rng, alpha=alpha_k)
+            res = run_energy_test(maturation, current, B, rng, alpha=alpha_k)
             results[(key, look)] = int(res.p_value <= alpha_k)
     return results
 
@@ -802,8 +802,8 @@ def run_power(
     wall = time.perf_counter() - start
 
     disp_rng = np.random.default_rng(seed + 3)
-    disp_being = make_being(disp_rng)
-    cosine = estimate_dispersion(disp_being, sigma, disp_rng)
+    disp_entity = make_entity(disp_rng)
+    cosine = estimate_dispersion(disp_entity, sigma, disp_rng)
 
     result = {
         "experiment": "power",
@@ -857,17 +857,17 @@ def _build_mmd_conditions() -> list[PowerCondition]:
 def _mmd_worker(args: tuple[int, float, list[PowerCondition]]) -> tuple[dict, dict]:
     seed, sigma, conditions = args
     rng = np.random.default_rng(seed)
-    base = make_being(rng)
-    birth24 = being_samples(base, 24, sigma, rng)
+    base = make_entity(rng)
+    maturation24 = entity_samples(base, 24, sigma, rng)
 
     energy_results: dict = {}
     mmd_results: dict = {}
     for cond in conditions:
         drifted = apply_drift(base, cond.drift, rng)
-        current12 = being_samples(drifted, 12, sigma, rng)
-        birth = [s[: cond.n_b] for s in birth24]
+        current12 = entity_samples(drifted, 12, sigma, rng)
+        maturation = [s[: cond.n_b] for s in maturation24]
         current = [s[: cond.n_c] for s in current12]
-        strata = [(birth[i], current[i]) for i in range(len(birth))]
+        strata = [(maturation[i], current[i]) for i in range(len(maturation))]
         key = drift_label(cond.drift)
 
         for look in cond.looks:
@@ -878,7 +878,7 @@ def _mmd_worker(args: tuple[int, float, list[PowerCondition]]) -> tuple[dict, di
                 mmd_results[(key, look)] = None
                 continue
 
-            re = run_energy_test(birth, current, B, rng, alpha=alpha_k)
+            re = run_energy_test(maturation, current, B, rng, alpha=alpha_k)
             energy_results[(key, look)] = int(re.p_value <= alpha_k)
 
             rm = mmd_permutation_test(strata, permutations=B, rng=rng, alpha=alpha_k)
@@ -926,8 +926,8 @@ def run_mmd(
     wall = time.perf_counter() - start
 
     disp_rng = np.random.default_rng(seed + 4)
-    disp_being = make_being(disp_rng)
-    cosine = estimate_dispersion(disp_being, sigma, disp_rng)
+    disp_entity = make_entity(disp_rng)
+    cosine = estimate_dispersion(disp_entity, sigma, disp_rng)
 
     result = {
         "experiment": "mmd",

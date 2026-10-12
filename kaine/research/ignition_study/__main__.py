@@ -14,7 +14,7 @@ from kaine.config import load_kaine_config
 from kaine.defaults import DEFAULT_REDIS_PORT
 from kaine.research.ignition_study import analysis
 from kaine.research.ignition_study.plan import (
-    DEFAULT_GESTATION_BUDGET_SECONDS,
+    DEFAULT_DEVELOPMENT_BUDGET_SECONDS,
     DEFAULT_VIEWING_BUDGET_SECONDS,
     init_study,
     load_plan,
@@ -76,7 +76,7 @@ def _cmd_init(args: argparse.Namespace) -> int:
         "redis": {
             "base_url": args.redis_base_url,
             "db": {
-                "gestation": args.db_gestation,
+                "gestation": args.db_development,
                 "branch": args.db_branch,
                 "repeat": args.db_repeat,
                 "accumulate": args.db_accumulate,
@@ -89,7 +89,7 @@ def _cmd_init(args: argparse.Namespace) -> int:
             "accumulate": f"study_{args.study_id}_a_",
         },
         "viewing_budget_seconds": args.viewing_budget_seconds,
-        "gestation_budget_seconds": args.gestation_budget_seconds,
+        "gestation_budget_seconds": args.development_budget_seconds,
         "min_free_gb": args.min_free_gb,
     }
     if args.voice_alignment_step:
@@ -190,7 +190,7 @@ def _build_parser() -> argparse.ArgumentParser:
     init_p.add_argument(
         "--gestation-budget-seconds",
         type=float,
-        default=DEFAULT_GESTATION_BUDGET_SECONDS,
+        default=DEFAULT_DEVELOPMENT_BUDGET_SECONDS,
     )
     init_p.add_argument(
         "--min-free-gb",

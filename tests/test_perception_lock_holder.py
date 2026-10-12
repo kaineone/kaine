@@ -17,7 +17,7 @@ def desired_path(tmp_path: Path) -> Path:
     return tmp_path / "desired.json"
 
 
-def test_gestation_lock_holds_womb_against_other_writers(desired_path: Path) -> None:
+def test_development_lock_holds_stimulus_source_against_other_writers(desired_path: Path) -> None:
     write_desired_locus("virtual", locked=True, locked_by="gestation", path=desired_path)
 
     # A non-developmental-phase write (no locked_by) cannot move the locus.
@@ -42,7 +42,7 @@ def test_gestation_lock_holds_womb_against_other_writers(desired_path: Path) -> 
     assert state.locked_by == "gestation"
 
 
-def test_gestation_holder_can_unlock_and_then_normal_writes_work(desired_path: Path) -> None:
+def test_development_holder_can_unlock_and_then_normal_writes_work(desired_path: Path) -> None:
     write_desired_locus("virtual", locked=True, locked_by="gestation", path=desired_path)
 
     write_desired_locus("physical", locked=False, locked_by="gestation", path=desired_path)
@@ -68,7 +68,7 @@ def test_operator_lock_behavior_unchanged(desired_path: Path) -> None:
     assert state.locked_by == "operator"
 
 
-def test_unknown_locus_in_gestation_lock_resolves_to_virtual(desired_path: Path) -> None:
+def test_unknown_locus_in_development_lock_resolves_to_virtual(desired_path: Path) -> None:
     desired_path.write_text(
         '{"locus": "unknown_place", "locus_locked": true, "locked_by": "gestation"}'
     )
@@ -84,7 +84,7 @@ def test_unknown_locus_when_unlocked_resolves_to_physical(desired_path: Path) ->
     assert state.locus == "physical"
 
 
-def test_sleep_restore_path_does_not_move_gestation_lock(desired_path: Path) -> None:
+def test_sleep_restore_path_does_not_move_development_lock(desired_path: Path) -> None:
     write_desired_locus("virtual", locked=True, locked_by="gestation", path=desired_path)
 
     # The sleep module records the pre-sleep locus as raw string (physical, virtual, off)

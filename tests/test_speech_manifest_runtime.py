@@ -18,7 +18,7 @@ import pytest
     [
         "kaine.modules.audition.sherpa_stt",
         "kaine.modules.vocal.sherpa_tts",
-        "kaine.nexus.health.probes",
+        "kaine.dashboard.health.probes",
     ],
 )
 def test_speech_runtime_does_not_import_setup(importer: str) -> None:

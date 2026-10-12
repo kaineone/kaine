@@ -1,10 +1,10 @@
 # Perceptual locus
 
-This page covers `PerceptionLocus`, the module registered as `perception`. It arbitrates the perceptual locus, which decides whether the entity perceives through physical sensors, through virtual feeds, or not at all, and it gates locus changes that the entity itself requests. The paper claims no brain function for it. Read this page if you are enabling the module, configuring physical or virtual perception, or writing a module that reads the locus.
+This page covers `PerceptualLocus`, the module registered as `perception`. It arbitrates the perceptual locus, which decides whether the entity perceives through physical sensors, through virtual feeds, or not at all, and it gates locus changes that the entity itself requests. The paper claims no brain function for it. Read this page if you are enabling the module, configuring physical or virtual perception, or writing a module that reads the locus.
 
 ## Status
 
-`PerceptionLocus` is built and tested, and held: `perception` is `false` in the shipped `[modules]` block of `config/kaine.toml` and in the base-thesis `thesis_test` profile. It needs no optional extra. It needs the bus (Redis).
+`PerceptualLocus` is built and tested, and held: `perception` is `false` in the shipped `[modules]` block of `config/kaine.toml` and in the base-thesis `thesis_test` profile. It needs no optional extra. It needs the bus (Redis).
 
 The locus itself does not depend on this module. The locus state in `kaine.perception_state` is always in force: boot selects the virtual locus for the seeded, playlist and developmental feeds, and the operator sets the locus through the dashboard. What the module adds is the path by which the entity may switch its own locus. No module produces the `intent.perception.switch` event that path consumes, so the self-switch cannot fire even with `allow_self_switch = true`; the flag is reserved for later virtual-world work, and locus changes are operator-driven.
 
@@ -26,12 +26,12 @@ min_dwell_s = 30.0
 | `virtual` | The virtual feeds (seeded, playlist, developmental, or an in-world body) may run; the real camera and microphone are off |
 | `off` | All perceptual input is off |
 
-Physical and virtual perception exclude each other. `PerceptionLocus` does not start or stop the camera or microphone. The vision and audition modules poll the capture functions of `kaine.perception_state` and follow a change within one sensor poll interval.
+Physical and virtual perception exclude each other. `PerceptualLocus` does not start or stop the camera or microphone. The vision and audition modules poll the capture functions of `kaine.perception_state` and follow a change within one sensor poll interval.
 
 Two paths change the locus:
 
 1. The operator path. In the dashboard, `POST /diagnostics/perception/locus` sets the locus and the lock, and `POST /diagnostics/perception/toggle` changes only the audio and video desired flags. The operator can also edit `state/perception/desired.json`.
-2. The entity path. `PerceptionLocus` reads `intent.perception.switch` events from the action selection module stream and applies a switch only if every gate below passes.
+2. The entity path. `PerceptualLocus` reads `intent.perception.switch` events from the action selection module stream and applies a switch only if every gate below passes.
 
 ## Self-switch gates
 
@@ -46,7 +46,7 @@ All six gates must pass for an entity-initiated switch, checked in this order by
 | Not inhibited | the latest broadcast was not inhibited |
 | Dwell elapsed | at least `min_dwell_s` (default 30.0) entity-time seconds since the last switch |
 
-If any gate fails, `PerceptionLocus` publishes `perception.locus.denied` with a reason. A lock held by the developmental phase gives the reason "locus locked by development gate".
+If any gate fails, `PerceptualLocus` publishes `perception.locus.denied` with a reason. A lock held by the developmental phase gives the reason "locus locked by development gate".
 
 ## Inputs
 
@@ -70,7 +70,7 @@ On a successful switch, `perception_state.write_desired_locus(requested)` writes
 
 ## Configuration
 
-`make_perception()` in `kaine/boot/factories/perception.py` reads `[perception]`.
+`make_perception()` in `kaine/boot/factories/perceptual_locus.py` reads `[perception]`.
 
 | Constructor parameter | Config key | Type | Default | Meaning |
 |---|---|---|---|---|
@@ -87,8 +87,8 @@ The operator can always set the locus through `POST /diagnostics/perception/locu
 ```mermaid
 graph TD
     VStream["ActionSelection stream\nintent.perception.switch"] -->|_intent_loop| HandleSwitch["_handle_switch(event)"]
-    WS["workspace.broadcast\ninhibited flag"] -->|on_workspace| PerceptionLocus["PerceptionLocus._inhibited"]
-    PerceptionLocus --> HandleSwitch
+    WS["workspace.broadcast\ninhibited flag"] -->|on_workspace| PerceptualLocus["PerceptualLocus._inhibited"]
+    PerceptualLocus --> HandleSwitch
     HandleSwitch --> ReadDesired["read_desired()"]
     ReadDesired --> EvalGates{"evaluate_locus_switch()\nvalid locus\nnot the same\nnot locked\nallow_self_switch\nnot inhibited\ndwell elapsed"}
     EvalGates -->|allowed| WriteDesired["write_desired_locus()\natomic write to desired.json"]
@@ -140,11 +140,11 @@ allow_self_switch = false
 min_dwell_s = 30.0
 ```
 
-Setting `allow_self_switch = true` has no effect until a module produces `intent.perception.switch`. Use `POST /diagnostics/perception/locus` (`kaine/nexus/perception.py`) to set the locus or the lock from the dashboard, and `POST /diagnostics/perception/toggle` to change only the desired flags.
+Setting `allow_self_switch = true` has no effect until a module produces `intent.perception.switch`. Use `POST /diagnostics/perception/locus` (`kaine/dashboard/perception.py`) to set the locus or the lock from the dashboard, and `POST /diagnostics/perception/toggle` to change only the desired flags.
 
 ## What is kept
 
-`PerceptionLocus` keeps no sensory content. The files involved are:
+`PerceptualLocus` keeps no sensory content. The files involved are:
 
 - `state/perception/desired.json`, holding booleans, the locus, `locus_locked` and `locked_by`;
 - `state/perception/runtime.json`, written by `LiveMicrophone` and `LiveCamera` with start and stop timestamps only.
@@ -161,7 +161,7 @@ The events `perception.locus.changed` and `perception.locus.denied` carry the lo
 
 ## Spec and related
 
-- OpenSpec: `openspec/specs/perception-locus/spec.md`, the contract (physical excludes virtual, operator control and lock, gated self-switch) implemented by `kaine/modules/perception/module.py`
+- OpenSpec: `openspec/specs/perception-locus/spec.md`, the contract (physical excludes virtual, operator control and lock, gated self-switch) implemented by `kaine/modules/perceptual_locus/module.py`
 - [Where perception comes from](../08-cognitive-cycle/perceptual-locus.md)
 - [The cognitive cycle](../08-cognitive-cycle/README.md)
 - [Vision](vision.md) and [Audition](audition.md), which follow the locus

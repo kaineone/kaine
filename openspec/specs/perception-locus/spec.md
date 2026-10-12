@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines the perception-locus contract shipped by the live `kaine/modules/perception/`
+Defines the perception-locus contract shipped by the live `kaine/modules/perceptual_locus/`
 module: the single authority that binds the entity's perceptual organs to exactly one
 world at a time (physical XOR virtual), the operator's live control and lock over it
 from the dashboard, and the gated policy under which the entity may switch its own locus. This

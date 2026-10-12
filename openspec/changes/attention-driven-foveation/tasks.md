@@ -97,7 +97,7 @@ returning a fixed/centre fovea.
       (`FoveaTarget.to_dict()`). Actually *routing* it into the embodiment module's gaze channel
       is a cross-module embodiment integration: the embodiment module's `gaze_yaw`/`gaze_pitch`
       are bidirectional rate channels driven by the learned `MotorPolicy`
-      (`kaine/modules/mundus/control_surface.py`), and wiring the screen fovea into
+      (`kaine/modules/embodiment/control_surface.py`), and wiring the screen fovea into
       them competes with that learner. That coupling belongs to the embodiment
       active-vision work, not this perception change. The forward-compatible signal
       shape exists now, so the two need not diverge.*

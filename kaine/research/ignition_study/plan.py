@@ -21,7 +21,7 @@ LOCK_FILE = ".lock"
 LINES = ["gestation", "branch", "repeat", "accumulate"]
 
 DEFAULT_VIEWING_BUDGET_SECONDS = 6 * 60 * 60  # programme length + 2 h
-DEFAULT_GESTATION_BUDGET_SECONDS = 96 * 60 * 60  # 24 h minimum + 72 h headroom
+DEFAULT_DEVELOPMENT_BUDGET_SECONDS = 96 * 60 * 60  # 24 h minimum + 72 h headroom
 
 
 def voice_alignment_steps(plan: dict[str, Any]) -> list[dict[str, Any]]:
@@ -111,7 +111,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         )
 
     plan.setdefault("viewing_budget_seconds", DEFAULT_VIEWING_BUDGET_SECONDS)
-    plan.setdefault("gestation_budget_seconds", DEFAULT_GESTATION_BUDGET_SECONDS)
+    plan.setdefault("gestation_budget_seconds", DEFAULT_DEVELOPMENT_BUDGET_SECONDS)
     for key in ("viewing_budget_seconds", "gestation_budget_seconds"):
         if not isinstance(plan[key], (int, float)) or plan[key] <= 0:
             raise ValueError(f"{key} must be positive")

@@ -461,11 +461,11 @@ idle_poll_s = 1.0
 | `kaine/evaluation/ab_divergence.py` | A/B divergence test (bare inference + cosine) |
 | `kaine/evaluation/sink.py` | `AsyncJsonlSink`: daily-rotated JSONL writer |
 | `kaine/evaluation/registry.py` | `SidecarRegistry`: constructs and starts observers |
-| `kaine/evaluation/nexus_tab.py` | dashboard diagnostics surface for sidecar metrics |
+| `kaine/evaluation/dashboard_tab.py` | dashboard diagnostics surface for sidecar metrics |
 | `kaine/evaluation/stream_registry.py` | Canonical module-stream registry |
 | `data/evaluation/` | Output directory for all sidecar JSONL |
 
-The `kaine/evaluation/observers/` directory also contains `ablation_observer.py`, `external_utterance_log.py`, `nexus_record.py`, and `raw_bus_archive_consumer.py`.
+The `kaine/evaluation/observers/` directory also contains `ablation_observer.py`, `external_utterance_log.py`, `dashboard_record.py`, and `raw_bus_archive_consumer.py`.
 
 ## Research event observer
 

@@ -14,11 +14,11 @@ from kaine.boot.errors import ConfigurationError
 from kaine.boot.factories.affect import make_affect
 from kaine.boot.factories.audition import make_audition
 from kaine.boot.factories.effectors import make_effectors
+from kaine.boot.factories.embodiment import make_embodiment
 from kaine.boot.factories.episodic_memory import make_episodic_memory
 from kaine.boot.factories.interoception import make_interoception
 from kaine.boot.factories.language import make_language
-from kaine.boot.factories.mundus import make_mundus
-from kaine.boot.factories.perception import make_perception
+from kaine.boot.factories.perceptual_locus import make_perceptual_locus
 from kaine.boot.factories.planning import make_planning
 from kaine.boot.factories.self_model import make_self_model
 from kaine.boot.factories.sequence import make_sequence
@@ -28,7 +28,10 @@ from kaine.boot.factories.vision import make_vision
 from kaine.boot.factories.vocal import make_vocal
 from kaine.boot.factories.world_model import make_world_model
 from kaine.boot.metrics import _log_device_assignments
-from kaine.boot.perception_feed import _install_shared_womb_clock, _install_womb_world_transition
+from kaine.boot.perception_feed import (
+    _install_shared_stimulus_source_clock,
+    _install_stimulus_source_world_transition,
+)
 from kaine.boot.security import install_state_encryption
 from kaine.boot.wiring import (
     _wire_affect_drive_relevance,
@@ -58,8 +61,8 @@ SIMPLE_FACTORIES: dict[str, ModuleFactory] = {
     "lingua": make_language,
     "audition": make_audition,
     "vox": make_vocal,
-    "mundus": make_mundus,
-    "perception": make_perception,
+    "mundus": make_embodiment,
+    "perception": make_perceptual_locus,
     "empatheia": make_social_cognition,
     "phantasia": make_world_model,
 }
@@ -155,7 +158,7 @@ def build_registry(
     # nothing — the "awake but senseless" failure. mode off/live leave the
     # desired-state to the operator (live = real camera/mic, operator-toggled).
     _feed_mode = str(perception_feed.get("mode", "off")).lower()
-    _womb_world_transition = None
+    _stimulus_source_world_transition = None
     # Playlist real-time A/V sync (playlist-realtime-av-sync): the video and audio
     # playlist feeds must share ONE start-clock so they present the same manifest
     # item at the same wall-clock moment and cross item boundaries together. Build
@@ -199,7 +202,7 @@ def build_registry(
         # end of the crossfade. When the conditions do not hold, boot logs why
         # and the programme starts as before.
         if perception_feed.get("_shared_playlist_clock") is not None:
-            _womb_world_transition = _install_womb_world_transition(
+            _stimulus_source_world_transition = _install_stimulus_source_world_transition(
                 perception_feed,
                 kaine_config,
                 perception_feed["_shared_playlist_clock"],
@@ -213,7 +216,7 @@ def build_registry(
     if _feed_mode == "womb" and (
         bool(toggles.get("topos", False)) or bool(toggles.get("audition", False))
     ):
-        _install_shared_womb_clock(
+        _install_shared_stimulus_source_clock(
             perception_feed, kaine_config, entity_clock, stage_state=boot_stage
         )
     if _feed_mode in ("seeded", "playlist", "womb") and (
@@ -259,11 +262,11 @@ def build_registry(
             continue
         registry.register(module)
         log.info("registered module %s", name)
-    if _womb_world_transition is not None:
+    if _stimulus_source_world_transition is not None:
         # The video surface starts and judges the crossfade only if the vision module is
         # really there; without it the audio surface does, so a vision module whose
         # backend could not load never leaves the programme held.
-        _womb_world_transition.controller.set_video_present("topos" in registry)
+        _stimulus_source_world_transition.controller.set_video_present("topos" in registry)
 
     if bool(toggles.get("hypnos", False)):
         # construct_module hands the sleep module its sibling modules from the registry.

@@ -14,7 +14,7 @@ job descriptor (:mod:`kaine.distributed.job`), the trusted-side re-verification
 gate (:mod:`kaine.distributed.gate`), the trusted-first runner abstraction
 (:mod:`kaine.distributed.runner`), the BOINC volunteer contract + guardrails
 (:mod:`kaine.distributed.boinc`), and the forked-temporary-entity job kind
-(:mod:`kaine.distributed.fork_being`).
+(:mod:`kaine.distributed.fork_entity`).
 """
 from __future__ import annotations
 
@@ -28,9 +28,9 @@ from kaine.distributed.boinc import (
     enforce_output_boundary,
     quorum_validate,
 )
-from kaine.distributed.fork_being import (
-    build_forked_being_job,
-    forked_being_gate,
+from kaine.distributed.fork_entity import (
+    build_forked_entity_job,
+    forked_entity_gate,
 )
 from kaine.distributed.gate import (
     GateResult,
@@ -76,10 +76,10 @@ __all__ = [
     "VerificationGate",
     "VerifierOutcome",
     "WorkUnit",
-    "build_forked_being_job",
+    "build_forked_entity_job",
     "default_artifact_for",
     "enforce_output_boundary",
-    "forked_being_gate",
+    "forked_entity_gate",
     "order_runners",
     "promote_if_verified",
     "quorum_validate",

@@ -77,7 +77,7 @@ def test_smoke_verdict_fail_when_any_failure():
 
 
 # ---------------------------------------------------------------------------
-# 1. SERVICES — reuses kaine.nexus.health
+# 1. SERVICES — reuses kaine.dashboard.health
 # ---------------------------------------------------------------------------
 
 

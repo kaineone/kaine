@@ -27,7 +27,7 @@ from kaine.cycle.revive_boot import (
     ReviveRefused,
     prepare_revive,
 )
-from kaine.distributed.fork_being import build_forked_being_job
+from kaine.distributed.fork_entity import build_forked_entity_job
 from kaine.experiment.run_context import RunContext, set_run_context
 from kaine.lifecycle.decommission import capture_backup
 from kaine.lifecycle.divergence import DivergenceAssessment
@@ -343,12 +343,12 @@ def test_capture_backup_manifest_carries_identity(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_build_forked_being_job_carries_fork_identity(tmp_path):
+async def test_build_forked_entity_job_carries_fork_identity(tmp_path):
     identity = mint_identity()
     fm = ForkManager(tmp_path / "forks", identity_source=lambda: identity)
     snap = fm.snapshot(_Registry())
 
-    job = build_forked_being_job(
+    job = build_forked_entity_job(
         snap.id, "explore and return", fork_root=fm.root
     )
     assert job.inputs.get("fork_identity") == {
@@ -357,7 +357,7 @@ async def test_build_forked_being_job_carries_fork_identity(tmp_path):
     }
 
 
-def test_resolve_boot_identity_fresh_tree_mints_despite_foreign_beings(tmp_path):
+def test_resolve_boot_identity_fresh_tree_mints_despite_foreign_entities(tmp_path):
     state_root = tmp_path / "state"
     (state_root / "forks" / "foreign").mkdir(parents=True)
     write_identity_sidecar(state_root / "forks" / "foreign", mint_identity())

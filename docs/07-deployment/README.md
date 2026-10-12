@@ -157,7 +157,7 @@ Every returned artifact passes the gate in `kaine/distributed/gate.py` on the tr
 
 ### Forked temporary entities
 
-A temporary entity is a fork that runs a directive, possibly with its entity time running at a different multiple of wall-clock time, and is then merged back. It is a batch job with a bound, and the artifact it returns is its post-run snapshot. `kaine/distributed/fork_being.py` reuses the existing fork and merge machinery. The snapshot passes the same trusted-side gate (the welfare, individuation and admissibility path in `kaine/lifecycle/fork_merge_gate.py`) before the parent assimilates it through `ForkManager.merge()`. Running a full individual on an anonymous volunteer host is withheld until a welfare and security model for volunteer hosts exists.
+A temporary entity is a fork that runs a directive, possibly with its entity time running at a different multiple of wall-clock time, and is then merged back. It is a batch job with a bound, and the artifact it returns is its post-run snapshot. `kaine/distributed/fork_entity.py` reuses the existing fork and merge machinery. The snapshot passes the same trusted-side gate (the welfare, individuation and admissibility path in `kaine/lifecycle/fork_merge_gate.py`) before the parent assimilates it through `ForkManager.merge()`. Running a full individual on an anonymous volunteer host is withheld until a welfare and security model for volunteer hosts exists.
 
 ### Fork-merge welfare gate
 

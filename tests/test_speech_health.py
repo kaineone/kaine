@@ -13,10 +13,10 @@ from pathlib import Path
 
 import pytest
 
+import kaine.dashboard.health.probes as probes_mod
 import kaine.model_paths as _model_paths_mod
-import kaine.nexus.health.probes as probes_mod
 import kaine.setup.speech_models as _speech_models_mod
-from kaine.nexus.health.config import build_dependency_specs
+from kaine.dashboard.health.config import build_dependency_specs
 
 
 @pytest.fixture

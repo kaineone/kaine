@@ -178,7 +178,7 @@ def test_input_triggered_via_resolved_transcription_member():
     assert "E1" in report.input_triggered_entry_ids
 
 
-def test_input_triggered_via_coalition_membership_mundus_chat():
+def test_input_triggered_via_coalition_membership_embodiment_chat():
     # The resolved member itself is not external, but mundus.chat was in the
     # winning coalition of the triggering broadcast.
     broadcasts = [

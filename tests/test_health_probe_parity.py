@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import asyncio
 
-from kaine.nexus.health.config import build_dependency_specs
-from kaine.nexus.health.probes import NOT_CONFIGURED
+from kaine.dashboard.health.config import build_dependency_specs
+from kaine.dashboard.health.probes import NOT_CONFIGURED
 
 
 def _specs(monkeypatch, *, redis_env=None, audition_cfg=None):
@@ -122,7 +122,7 @@ class TestSpeachesTranscriptionGating:
         spec = _spec_named(specs, "Speaches (STT)")
 
         probed = []
-        from kaine.nexus.health import probes as probes_mod
+        from kaine.dashboard.health import probes as probes_mod
 
         async def fake_speaches(**kwargs):
             probed.append(kwargs)
@@ -143,7 +143,7 @@ class TestSpeachesTranscriptionGating:
 
         # config.py imports probe_speaches BY NAME, so patch its binding
         # (patching the probes module attr would not reach the lambda).
-        from kaine.nexus.health import config as config_mod
+        from kaine.dashboard.health import config as config_mod
 
         async def fake_speaches(*, base_url):
             return "up", f"speaches ok at {base_url}"
@@ -158,7 +158,7 @@ class TestSpeachesTranscriptionGating:
         specs = _specs(monkeypatch, audition_cfg={})
         spec = _spec_named(specs, "Speaches (STT)")
 
-        from kaine.nexus.health import config as config_mod
+        from kaine.dashboard.health import config as config_mod
 
         async def fake_speaches(*, base_url):
             return "up", "ok"

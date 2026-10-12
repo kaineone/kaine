@@ -244,14 +244,14 @@ def test_fork_manager_has_no_retention_parameter():
 def test_legacy_retention_key_warns_and_deletes_nothing(tmp_path, caplog):
     import logging
 
-    from kaine.nexus.__main__ import _build_fork_manager
+    from kaine.dashboard.__main__ import _build_fork_manager
 
     root = tmp_path / "forks"
 
     def lifecycle_loader():
         return {"snapshots_path": str(root), "max_snapshots_retained": 2}
 
-    with caplog.at_level(logging.WARNING, logger="kaine.nexus"):
+    with caplog.at_level(logging.WARNING, logger="kaine.dashboard"):
         mgr, reason = _build_fork_manager(lifecycle_loader, lambda: {"enabled": False})
     assert reason is None
     assert isinstance(mgr, ForkManager)
@@ -263,12 +263,12 @@ def test_legacy_retention_key_warns_and_deletes_nothing(tmp_path, caplog):
 def test_legacy_retention_key_zero_or_absent_is_silent(tmp_path, caplog):
     import logging
 
-    from kaine.nexus.__main__ import _build_fork_manager
+    from kaine.dashboard.__main__ import _build_fork_manager
 
     for cfg in ({}, {"max_snapshots_retained": 0}):
         caplog.clear()
         cfg = {"snapshots_path": str(tmp_path / "forks"), **cfg}
-        with caplog.at_level(logging.WARNING, logger="kaine.nexus"):
+        with caplog.at_level(logging.WARNING, logger="kaine.dashboard"):
             _build_fork_manager(lambda cfg=cfg: cfg, lambda: {"enabled": False})
         assert not any("max_snapshots_retained" in r.getMessage() for r in caplog.records)
 

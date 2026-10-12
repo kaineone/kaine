@@ -36,7 +36,7 @@ def _write_measures(root, measures):
     )
 
 
-def test_silent_being_not_diverged_abstains(tmp_path):
+def test_silent_entity_not_diverged_abstains(tmp_path):
     root = _state(tmp_path)
     result = assess_divergence(state_root=root)
     assert not result.diverged
@@ -44,7 +44,7 @@ def test_silent_being_not_diverged_abstains(tmp_path):
     assert result.signals["voice_has_spoken"] is False
 
 
-def test_silent_being_with_consolidation_over_threshold_is_diverged(tmp_path):
+def test_silent_entity_with_consolidation_over_threshold_is_diverged(tmp_path):
     root = _state(tmp_path)
     sleep = root / "hypnos"
     sleep.mkdir(parents=True, exist_ok=True)

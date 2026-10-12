@@ -8,7 +8,7 @@ import builtins
 
 import pytest
 
-from kaine.nexus.health import DOWN, UP, planning_health_probe
+from kaine.dashboard.health import DOWN, UP, planning_health_probe
 
 
 @pytest.mark.asyncio

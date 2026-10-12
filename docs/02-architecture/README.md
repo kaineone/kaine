@@ -46,8 +46,8 @@ graph TD
     end
 
     subgraph Embodiment["Embodiment group (held)"]
-        PerceptionLocus["Perception\n(locus arbiter)"]
-        Mundus["Mundus\n(control surface)"]
+        PerceptualLocus["Perception\n(locus arbiter)"]
+        Embodiment["Embodiment\n(control surface)"]
     end
 
     Bus["Redis Streams\nevent bus"]
@@ -83,12 +83,12 @@ graph TD
     Bus -->|"accessed content"| Language
 
     Language -.->|"text to speak"| Vocal
-    PerceptionLocus -.->|"physical XOR virtual gate"| Vision
-    PerceptionLocus -.->|"physical XOR virtual gate"| Audition
-    Mundus -.->|"mundus.*"| Bus
+    PerceptualLocus -.->|"physical XOR virtual gate"| Vision
+    PerceptualLocus -.->|"physical XOR virtual gate"| Audition
+    Embodiment -.->|"mundus.*"| Bus
 
     classDef inactive stroke-dasharray: 5 5,opacity:0.6;
-    class Planning,EpisodicMemory,SelfModel,WorldModel,SocialCognition,Vocal,Effectors,PerceptionLocus,Mundus inactive;
+    class Planning,EpisodicMemory,SelfModel,WorldModel,SocialCognition,Vocal,Effectors,PerceptualLocus,Embodiment inactive;
 ```
 
 ## Module roster
@@ -111,10 +111,10 @@ graph TD
 | 12 | **Vocal** | Expression | Held | `kaine/modules/vocal/` | Chatterbox TTS and sherpa-onnx Kokoro; prosody modulated by the affect module; prosodic mirroring |
 | 13 | **Effectors** | Expression | Held | `kaine/modules/effectors/` | File-write, notify and shell effectors (empty whitelist by default) |
 | 14 | **Sleep** | Maintenance | Active | `kaine/modules/sleep/` | Fatigue-triggered sleep with a five-phase consolidation pipeline and the affective reset; DPO + LoRA voice alignment (bf16 by default, 4-bit optional; Unsloth), off in the base thesis |
-| 15 | **Perception** | Embodiment | Held | `kaine/modules/perception/` | Physical-XOR-virtual perceptual-locus arbiter; policy-gated entity self-switch |
-| 16 | **Embodiment** | Embodiment | Held | `kaine/modules/mundus/` | Body-agnostic embodiment control surface that routes perception and action to a body through a pluggable adapter. Nothing drives its per-tick loop yet, only the `stub` adapter ships, and activation is double-gated (config and an operator environment variable) |
+| 15 | **Perception** | Embodiment | Held | `kaine/modules/perceptual_locus/` | Physical-XOR-virtual perceptual-locus arbiter; policy-gated entity self-switch |
+| 16 | **Embodiment** | Embodiment | Held | `kaine/modules/embodiment/` | Body-agnostic embodiment control surface that routes perception and action to a body through a pluggable adapter. Nothing drives its per-tick loop yet, only the `stub` adapter ships, and activation is double-gated (config and an operator environment variable) |
 
-A seventeenth module, **Recorder** (`kaine/modules/echo.py`), is test infrastructure. It must stay disabled in production.
+A seventeenth module, **Recorder** (`kaine/modules/recorder.py`), is test infrastructure. It must stay disabled in production.
 
 Per-module implementation, configuration and safety details are in [Chapter 9, The modules](../09-modules/README.md).
 
@@ -226,7 +226,7 @@ The privacy model rests on one invariant: no raw sensory data is written to disk
 - Live microphone audio is processed by Audition in memory and released.
 - The perception state files (`state/perception/runtime.json`, `state/perception/desired.json`) hold only operational booleans, the locus and ISO timestamps.
 - The freeze file (`state/cycle/control.json`) holds per-source records of `source`, `reason` and `frozen_at`.
-- The dashboard privacy boundary (`kaine/nexus/privacy.py` re-exports `kaine/privacy_filter.py`) strips a hard-coded list of fifteen content-bearing fields from every diagnostics stream before messages reach clients: `text`, `body`, `content`, `internal_speech`, `belief_text`, `memory_text`, `affect_reason`, `transcription`, `user_input`, `faithful_rendering`, `description`, `statement`, `values`, `behavioral_norms` and `situation_facts`. Vector fields are always stripped. `[nexus].dev_content_override = true` disables the stripping for development only.
+- The dashboard privacy boundary (`kaine/dashboard/privacy.py` re-exports `kaine/privacy_filter.py`) strips a hard-coded list of fifteen content-bearing fields from every diagnostics stream before messages reach clients: `text`, `body`, `content`, `internal_speech`, `belief_text`, `memory_text`, `affect_reason`, `transcription`, `user_input`, `faithful_rendering`, `description`, `statement`, `values`, `behavioral_norms` and `situation_facts`. Vector fields are always stripped. `[nexus].dev_content_override = true` disables the stripping for development only.
 
 See [Where perception comes from](../08-cognitive-cycle/perceptual-locus.md) for the physical, virtual and off loci.
 
@@ -283,7 +283,7 @@ The A/B divergence observer (`kaine/evaluation/ab_divergence.py`) pairs each sam
 
 The individuation producer (`kaine/cycle/individuation_producer.py`, `individuation_scheduler.py`, `individuation_runtime.py`) measures whether an entity has changed measurably since its maturation reference. It is enabled by `[individuation].enabled` and requires the `lingua` module. Its evidence is encrypted welfare evidence under `state/individuation/` and is kept apart from sidecar research data. The shared divergence verdict (`kaine/lifecycle/divergence.py`) is used by the decommission CLI, the dashboard entity-care panel, the fork merge gate and the live divergence monitor.
 
-Core runtime must run with the sidecar absent, so nothing under `kaine/` imports `kaine.evaluation` except the two composition-root entrypoints (`kaine/cycle/__main__.py`, `kaine/nexus/__main__.py`). Import contracts enforce this and the broader package layering. See [Code boundaries](./boundaries.md) and [The evaluation sidecar](../17-research-data/README.md).
+Core runtime must run with the sidecar absent, so nothing under `kaine/` imports `kaine.evaluation` except the two composition-root entrypoints (`kaine/cycle/__main__.py`, `kaine/dashboard/__main__.py`). Import contracts enforce this and the broader package layering. See [Code boundaries](./boundaries.md) and [The evaluation sidecar](../17-research-data/README.md).
 
 ## Fork and merge
 

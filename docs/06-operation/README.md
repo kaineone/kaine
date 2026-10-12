@@ -8,7 +8,7 @@ This page covers normal operation of a running KAINE instance: starting and stop
 
 ```bash
 # Terminal 1: the Nexus dashboard
-python -m kaine.nexus
+python -m kaine.dashboard
 
 # Terminal 2: the cognitive cycle (an operator is present)
 export KAINE_CYCLE_OPERATOR_PRESENT=1

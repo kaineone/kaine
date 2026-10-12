@@ -12,7 +12,7 @@ import pytest
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.__main__ import _shutdown_modules
-from kaine.cycle.spot import Spot
+from kaine.cycle.supervisor import Supervisor
 from kaine.modules.registry import shutdown_order
 from kaine.modules.sleep import FakeTrainer, Sleep, VoiceAlignmentConfig
 
@@ -123,7 +123,7 @@ async def test_cycle_shuts_sleep_down_while_affect_is_up(bus, tmp_path):
     assert affect.down is True
 
 
-async def test_spot_shutdown_all_shuts_sleep_down_first():
+async def test_supervisor_shutdown_all_shuts_sleep_down_first():
     """The supervisor shuts the sleep module down before the other modules."""
     order: list[str] = []
 
@@ -134,5 +134,5 @@ async def test_spot_shutdown_all_shuts_sleep_down_first():
     b = types.SimpleNamespace(name="b", shutdown=lambda: record_shutdown("b"))
     sleep = types.SimpleNamespace(name="hypnos", shutdown=lambda: record_shutdown("hypnos"))
     registry = types.SimpleNamespace(all_modules=lambda: [a, b, sleep])
-    await Spot._shutdown_all(types.SimpleNamespace(_registry=registry))
+    await Supervisor._shutdown_all(types.SimpleNamespace(_registry=registry))
     assert order == ["hypnos", "a", "b"]

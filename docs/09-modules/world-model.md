@@ -187,7 +187,7 @@ Fork snapshots store module artifacts in `<snapshot root>/<id>/artifacts/<module
 - `fork` records `metadata["artifacts_from_parent"]` (`kaine/lifecycle/manager.py`) and copies the parent's world model artifacts into the child's own snapshot, unless the world model module is shed, so every fork owns an independent copy.
 - `restore` writes the weights to the world model module's own `checkpoint_path` and logs a warning when the snapshot has no world model.
 - Symlinked artifact directories are never followed.
-- `merge` refuses when both parents carry a world model unless `world_model_from="a"` or `"b"` names the one that continues, because two learned models cannot be averaged. The dashboard `/diagnostics/merges` route accepts `world_model_from` (`kaine/nexus/diagnostics.py`). `merge` records each module's artifact source in `metadata["artifact_sources"]`.
+- `merge` refuses when both parents carry a world model unless `world_model_from="a"` or `"b"` names the one that continues, because two learned models cannot be averaged. The dashboard `/diagnostics/merges` route accepts `world_model_from` (`kaine/dashboard/diagnostics.py`). `merge` records each module's artifact source in `metadata["artifact_sources"]`.
 
 ## Tests
 

@@ -39,11 +39,11 @@ from kaine.config import (
     load_kaine_config,
     load_runtime_config,
 )
+from kaine.dashboard.config import load_dashboard_config
 from kaine.hardware import describe_host
 from kaine.net import SERVICE_PORTS, port_listening
-from kaine.nexus.config import load_nexus_config
 from kaine.setup import tomlwriter
-from kaine.setup.nexus_token import DEFAULT_SECRETS_PATH, ensure_nexus_token
+from kaine.setup.dashboard_token import DEFAULT_SECRETS_PATH, ensure_dashboard_token
 from kaine.setup.steps import (
     OWNED_KEYS,
     Field,
@@ -145,10 +145,10 @@ def _resolved_secrets_path(state, repo_root):
     return repo_root / secrets_path
 
 
-def _nexus_config_for(request):
+def _dashboard_config_for(request):
     state = request.app.state.setup
     repo_root = request.app.state.repo_root
-    return load_nexus_config(
+    return load_dashboard_config(
         state.shipped_config_path,
         operator_path=state.operator_path,
         secrets_path=_resolved_secrets_path(state, repo_root),
@@ -471,7 +471,7 @@ def create_setup_app(
         data_root = (existing.get("storage") or {}).get("data_root")
         storage_old_root = Path(data_root) if data_root else Path.cwd()
 
-    static_dir = Path(__file__).resolve().parents[2] / "nexus" / "static"
+    static_dir = Path(__file__).resolve().parents[2] / "dashboard" / "static"
     if not static_dir.exists() or not static_dir.is_dir():
         raise ValueError(f"Nexus static directory not found at {static_dir}")
 
@@ -762,7 +762,7 @@ def create_setup_app(
         os.replace(tmp_path, state.operator_path)
 
         token_note: list[str] = []
-        ensure_nexus_token(
+        ensure_dashboard_token(
             _resolved_secrets_path(state, request.app.state.repo_root),
             out=token_note.append,
         )
@@ -953,28 +953,28 @@ def create_setup_app(
             for name, port in SERVICE_PORTS.items()
         ]
 
-        nexus_port: int | None = None
-        nexus_running = False
-        nexus_available = False
-        nexus_error = None
+        dashboard_port: int | None = None
+        dashboard_running = False
+        dashboard_available = False
+        dashboard_error = None
         try:
-            nexus_cfg = _nexus_config_for(request)
-            nexus_port = nexus_cfg.port
-            nexus_running = port_listening(nexus_port)
-            nexus_available = True
+            dashboard_cfg = _dashboard_config_for(request)
+            dashboard_port = dashboard_cfg.port
+            dashboard_running = port_listening(dashboard_port)
+            dashboard_available = True
         except Exception as exc:
-            nexus_error = f"Nexus config could not be read ({type(exc).__name__})"
+            dashboard_error = f"Nexus config could not be read ({type(exc).__name__})"
 
         return {
             "service_lights": service_lights,
-            "nexus_available": nexus_available,
-            "nexus_port": nexus_port,
-            "nexus_running": nexus_running,
+            "nexus_available": dashboard_available,
+            "nexus_port": dashboard_port,
+            "nexus_running": dashboard_running,
             "token_note": sess.get("token_note", []),
             "token": token,
             "show_missing": show_missing,
             "secrets_path": state.secrets_path,
-            "nexus_error": nexus_error,
+            "nexus_error": dashboard_error,
             "saved": sess.get("saved", False),
             "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
             "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
@@ -1007,16 +1007,16 @@ def create_setup_app(
             )
 
         token = None
-        nexus_error = None
+        dashboard_error = None
         try:
-            nexus_cfg = _nexus_config_for(request)
-            token = nexus_cfg.operator_token or None
+            dashboard_cfg = _dashboard_config_for(request)
+            token = dashboard_cfg.operator_token or None
         except Exception as exc:
-            nexus_error = f"Nexus config could not be read ({type(exc).__name__})"
+            dashboard_error = f"Nexus config could not be read ({type(exc).__name__})"
 
         context = _finish_context(request, token=token, show_missing=token is None)
-        if nexus_error is not None:
-            context["nexus_error"] = nexus_error
+        if dashboard_error is not None:
+            context["nexus_error"] = dashboard_error
 
         response = templates.TemplateResponse(
             request,
@@ -1385,10 +1385,10 @@ def create_setup_app(
             if outcome == "exited":
                 request.app.state.spawned = None
 
-            nexus_url = None
+            dashboard_url = None
             try:
-                nexus_cfg = _nexus_config_for(request)
-                nexus_url = f"http://127.0.0.1:{nexus_cfg.port}/"
+                dashboard_cfg = _dashboard_config_for(request)
+                dashboard_url = f"http://127.0.0.1:{dashboard_cfg.port}/"
             except Exception:
                 # No readable dashboard config: the page shows no dashboard link.
                 pass
@@ -1412,7 +1412,7 @@ def create_setup_app(
                     "error_summary": errors,
                     "log_path": log_path,
                     "stderr_path": stderr_path,
-                    "nexus_url": nexus_url,
+                    "nexus_url": dashboard_url,
                 },
             )
         finally:

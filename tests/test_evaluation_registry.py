@@ -131,10 +131,10 @@ def test_no_core_module_imports_kaine_evaluation():
     )
     matches = [line for line in proc.stdout.strip().splitlines() if line]
     # The cycle entrypoint and the dashboard entrypoint are the allowed coupling points.
-    # nexus/__main__.py uses a lazy/optional import to mount the tab when enabled.
+    # dashboard/__main__.py uses a lazy/optional import to mount the tab when enabled.
     allowed = {
         "kaine/cycle/__main__.py",
-        "kaine/nexus/__main__.py",
+        "kaine/dashboard/__main__.py",
     }
     unexpected = set(matches) - allowed - {p + "/" for p in allowed}
     # Filter out any kaine/evaluation/ files (they're allowed to import each other).

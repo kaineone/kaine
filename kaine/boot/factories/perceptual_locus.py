@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
+"""The Perception factory."""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    pass
+from kaine.boot.config_kwargs import config_kwargs
+from kaine.bus.client import AsyncBus
+from kaine.entity_clock import EntityClock
+from kaine.modules.base import BaseModule
+
+
+def make_perceptual_locus(
+    bus: AsyncBus,
+    section: dict[str, Any],
+    *,
+    entity_clock: Optional[EntityClock] = None,
+) -> BaseModule:
+    from kaine.modules.perceptual_locus.module import PerceptualLocus
+
+    kwargs: dict[str, Any] = {}
+    kwargs.update(
+        config_kwargs(section, ("allow_self_switch", "min_dwell_s"), PerceptualLocus)
+    )
+    return PerceptualLocus(bus, entity_clock=entity_clock, **kwargs)

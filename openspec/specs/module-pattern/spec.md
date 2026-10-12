@@ -72,7 +72,7 @@ change.
 - **THEN** the second `register` call raises `ValueError`
 
 ### Requirement: EchoModule end-to-end canary
-`EchoModule` SHALL be a `BaseModule` subclass that records every
+`RecorderModule` SHALL be a `BaseModule` subclass that records every
 workspace snapshot it observes in a list accessible as
 `module.snapshots`. The Phase 1 end-to-end integration test SHALL
 publish one event, run one cycle tick, and assert that EchoModule's

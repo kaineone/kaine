@@ -24,9 +24,9 @@ The dashboard web console is described in [the dashboard](../05-dashboard.md). T
 - `"open"` (shipped default): no sign-in. Anyone who can reach the address can view and control the entity. The dashboard listens only on loopback by default, so "anyone" means programs and people on this computer, plus the operator's tailnet if they choose to serve it there. The Host allowlist and Origin checks still apply.
 - `"token"`: an operator token is required. Use it whenever the dashboard is reachable by anyone you do not fully trust. Override per launch with `KAINE_NEXUS_ACCESS=token`.
 
-In token mode, the operator token must be at least 32 characters and must live only in `KAINE_NEXUS_TOKEN` or in `config/secrets.toml` under `[nexus] operator_token`. The dashboard refuses to start if a non-empty token appears in `config/kaine.toml` or `config/kaine.operator.toml` ([`kaine/nexus/config.py`](../../kaine/nexus/config.py)). If no token is configured in token mode, privileged endpoints return 401.
+In token mode, the operator token must be at least 32 characters and must live only in `KAINE_NEXUS_TOKEN` or in `config/secrets.toml` under `[nexus] operator_token`. The dashboard refuses to start if a non-empty token appears in `config/kaine.toml` or `config/kaine.operator.toml` ([`kaine/dashboard/config.py`](../../kaine/dashboard/config.py)). If no token is configured in token mode, privileged endpoints return 401.
 
-A browser signs in once at `/login`. The session cookie authorizes page loads and reads, and every state-changing request also carries the per-session `X-Nexus-Session-Key` header that the login page stores. Scripts can send `Authorization: Bearer <token>` instead.
+A browser signs in once at `/login`. The session cookie authorizes page loads and reads, and every state-changing request also carries the per-session `X-Dashboard-Session-Key` header that the login page stores. Scripts can send `Authorization: Bearer <token>` instead.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -52,9 +52,9 @@ See [the configuration overview](./README.md) for how `config/secrets.toml` is l
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `host_allowlist` | list or comma-separated string | `["127.0.0.1", "localhost", "::1"]` | Allowed `Host` header values. The check runs on every request ([`kaine/nexus/csrf.py`](../../kaine/nexus/csrf.py)). Setting this key replaces the default, so keep the loopback names when adding a reverse-proxy hostname or tailnet host. |
-| `allowed_origins` | list or comma-separated string | Derived from the final port after environment and overlay overrides; includes `http://127.0.0.1:<port>`, `http://localhost:<port>` and `http://[::1]:<port>` | Allowed `Origin` values for state-changing requests ([`kaine/nexus/config.py`](../../kaine/nexus/config.py)). Setting this key replaces the default. |
-| `non_loopback_allowed` | boolean | `false` | Explicit opt-in required to bind a non-loopback interface. When `false`, `python -m kaine.nexus` exits if `host` is not loopback. |
+| `host_allowlist` | list or comma-separated string | `["127.0.0.1", "localhost", "::1"]` | Allowed `Host` header values. The check runs on every request ([`kaine/dashboard/csrf.py`](../../kaine/dashboard/csrf.py)). Setting this key replaces the default, so keep the loopback names when adding a reverse-proxy hostname or tailnet host. |
+| `allowed_origins` | list or comma-separated string | Derived from the final port after environment and overlay overrides; includes `http://127.0.0.1:<port>`, `http://localhost:<port>` and `http://[::1]:<port>` | Allowed `Origin` values for state-changing requests ([`kaine/dashboard/config.py`](../../kaine/dashboard/config.py)). Setting this key replaces the default. |
+| `non_loopback_allowed` | boolean | `false` | Explicit opt-in required to bind a non-loopback interface. When `false`, `python -m kaine.dashboard` exits if `host` is not loopback. |
 
 To add a tailnet host or reverse-proxy hostname, include it in both `host_allowlist` and `allowed_origins`, or set `KAINE_NEXUS_EXTRA_HOSTS` to a comma-separated list; the loader appends those hosts to `host_allowlist` and derives matching origins from the final port.
 

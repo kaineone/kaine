@@ -661,7 +661,7 @@ def test_import_boundary():
     script = """
 import sys
 import kaine.decision.client as client
-forbidden = ("kaine.modules", "kaine.evaluation", "kaine.cycle", "kaine.nexus")
+forbidden = ("kaine.modules", "kaine.evaluation", "kaine.cycle", "kaine.dashboard")
 loaded = [name for name in forbidden if name in sys.modules]
 if loaded:
     print("forbidden", loaded)

@@ -25,8 +25,8 @@ from kaine.hardware import device_consumers, recommend_tier
 from kaine.net import SERVICE_PORTS, port_listening
 from kaine.organ_server.device_map import compose_gpu_env, device_map, write_env_values
 from kaine.setup import tomlwriter
-from kaine.setup.nexus_token import DEFAULT_SECRETS_PATH
-from kaine.setup.nexus_token import ensure_nexus_token as _ensure_nexus_token
+from kaine.setup.dashboard_token import DEFAULT_SECRETS_PATH
+from kaine.setup.dashboard_token import ensure_dashboard_token as _ensure_dashboard_token
 from kaine.setup.steps import OWNED_KEYS, assert_owned, owned_changes
 from kaine.setup.storage_step import existing_volumes, write_volume_override
 from kaine.setup.wizard import WizardResult, run_wizard
@@ -413,7 +413,7 @@ def _print_next_steps(
 
     line()
     line("Then launch (two terminals):")
-    line("  python -m kaine.nexus                          # dashboard")
+    line("  python -m kaine.dashboard                          # dashboard")
     line("  KAINE_CYCLE_OPERATOR_PRESENT=1 python -m kaine.cycle   # the entity")
     line()
     line("Recommended first: KAINE_FIRST_BOOT_OPERATOR_PRESENT=1 scripts/first-boot.sh")
@@ -684,7 +684,7 @@ def main(
     )
 
     # Resolved at call time (not as the argparse default) so tests can redirect it.
-    _ensure_nexus_token(args.secrets_path or DEFAULT_SECRETS_PATH, out=write)
+    _ensure_dashboard_token(args.secrets_path or DEFAULT_SECRETS_PATH, out=write)
 
     _print_next_steps(merged, operator_path=operator_path, out=write)
     return 0

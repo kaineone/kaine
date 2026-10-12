@@ -17,7 +17,7 @@ The decision server is a second resident model, and residency must know about it
 The sleep module's organ window stops the language-organ server to free memory for voice-alignment training. The decision server is a separate process, and the window SHALL NOT stop it: the refusal veto's second judge (`instrument-graders-v2`) needs it while the organ is unloaded. The window's own code touches only the organ service (`OrganServerController`), and a test pins that no decision-server stop is issued during an organ window. When residency multiplexes memory on a small host, the decision server is a separate background-class rung, and the manager decides whether it may be resident during training. The organ window never decides that.
 
 ## Client (`kaine/decision/client.py`)
-- **Dependencies:** standard library plus `httpx`, and `kaine.decision.schema`. No import of `kaine.modules`, `kaine.evaluation`, `kaine.cycle` or `kaine.nexus`. This is the boundary-neutral home the integrator registers.
+- **Dependencies:** standard library plus `httpx`, and `kaine.decision.schema`. No import of `kaine.modules`, `kaine.evaluation`, `kaine.cycle` or `kaine.dashboard`. This is the boundary-neutral home the integrator registers.
 - `DecisionConfig.from_section([decision])` reads:
   - `enabled` (False);
   - `url` (`http://127.0.0.1:11436`);

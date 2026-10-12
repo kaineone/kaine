@@ -11,15 +11,15 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from kaine.cycle import control_state as cs
-from kaine.nexus.config import NexusConfig
-from kaine.nexus.cycle_control import build_cycle_control_router
+from kaine.dashboard.config import DashboardConfig
+from kaine.dashboard.cycle_control import build_cycle_control_router
 
 
 def _app(tmp_path, *, read_only=False):
     ctrl = tmp_path / "control.json"
     audit = tmp_path / "audit.jsonl"
     app = FastAPI()
-    app.state.config = NexusConfig(
+    app.state.config = DashboardConfig(
         operator_token="test-token",
         host_allowlist=("127.0.0.1", "localhost", "testserver"),
         read_only=read_only,
@@ -180,14 +180,14 @@ def test_override_refused_in_read_only_mode():
     # Read-only mode is enforced by the real app's middleware, before any route.
     from unittest.mock import AsyncMock
 
-    from kaine.nexus.app import create_app
+    from kaine.dashboard.app import create_app
 
     bridge = AsyncMock()
 
     async def history_loader(lookback):
         return []
 
-    config = NexusConfig(access="open", read_only=True, operator_token="")
+    config = DashboardConfig(access="open", read_only=True, operator_token="")
     app = create_app(
         config=config,
         bridge=bridge,

@@ -280,5 +280,5 @@ For the full config schema, see [Lifecycle, evaluation and research](appendix-a-
 | [`kaine/lifecycle/decommission.py`](../kaine/lifecycle/decommission.py) | CAL-gated entity removal |
 | [`kaine/lifecycle/divergence.py`](../kaine/lifecycle/divergence.py) | Shared divergence verdict used by the monitor, CLI, dashboard panel and merge gate |
 | [`kaine/cycle/individuation_producer.py`](../kaine/cycle/individuation_producer.py) | Cycle-layer individuation producer |
-| [`kaine/nexus/diagnostics.py`](../kaine/nexus/diagnostics.py) | dashboard `POST …/merges` endpoint |
+| [`kaine/dashboard/diagnostics.py`](../kaine/dashboard/diagnostics.py) | dashboard `POST …/merges` endpoint |
 | `state/forks/` | Snapshot storage root |

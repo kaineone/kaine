@@ -9,7 +9,7 @@ Structural import contracts that keep KAINE's layers apart: the core runtime nev
 The codebase SHALL enforce the core/evaluation sidecar boundary with a structural
 import-contract checker (not only a string grep): no module under `kaine/` may
 import `kaine.evaluation` except the two composition-root entrypoints
-(`kaine/cycle/__main__.py`, `kaine/nexus/__main__.py`). The check SHALL run fast
+(`kaine/cycle/__main__.py`, `kaine/dashboard/__main__.py`). The check SHALL run fast
 (pre-commit and a dedicated CI step, independent of the full test suite) and SHALL
 report a precise contract violation naming the offending module.
 

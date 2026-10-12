@@ -12,8 +12,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from kaine.nexus import health
-from kaine.nexus.health import DEGRADED, UP, probe_chat_llm
+from kaine.dashboard import health
+from kaine.dashboard.health import DEGRADED, UP, probe_chat_llm
 
 
 class _ModelsResp:

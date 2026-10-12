@@ -47,6 +47,9 @@ from kaine.boot.factories.audition import (  # noqa: F401 - re-exported
 from kaine.boot.factories.effectors import (  # noqa: F401 - re-exported
     make_effectors,
 )
+from kaine.boot.factories.embodiment import (  # noqa: F401 - re-exported
+    make_embodiment,
+)
 from kaine.boot.factories.episodic_memory import (  # noqa: F401 - re-exported
     make_episodic_memory,
 )
@@ -56,11 +59,8 @@ from kaine.boot.factories.interoception import (  # noqa: F401 - re-exported
 from kaine.boot.factories.language import (  # noqa: F401 - re-exported
     make_language,
 )
-from kaine.boot.factories.mundus import (  # noqa: F401 - re-exported
-    make_mundus,
-)
-from kaine.boot.factories.perception import (  # noqa: F401 - re-exported
-    make_perception,
+from kaine.boot.factories.perceptual_locus import (  # noqa: F401 - re-exported
+    make_perceptual_locus,
 )
 from kaine.boot.factories.planning import (  # noqa: F401 - re-exported
     _PLANNING_COMPLEXITY_THRESHOLD,
@@ -105,16 +105,16 @@ from kaine.boot.perception_feed import (  # noqa: F401 - re-exported
     _build_perception_feed_audio_factory,
     _build_perception_feed_video_factory,
     _build_screen_source_factory,
-    _build_womb_world_transition,
-    _install_shared_womb_clock,
-    _install_womb_world_transition,
-    _plan_womb_world_transition,
-    _shared_womb_objects,
+    _build_stimulus_source_world_transition,
+    _install_shared_stimulus_source_clock,
+    _install_stimulus_source_world_transition,
+    _plan_stimulus_source_world_transition,
+    _shared_stimulus_source_objects,
+    _stimulus_source_lived_offset,
+    _stimulus_source_params,
     _transition_event_publisher,
     _transition_perceived,
     _transition_setting,
-    _womb_lived_offset,
-    _womb_params,
     gather_perception_feed_descriptor,
 )
 from kaine.boot.registry import (  # noqa: F401 - re-exported

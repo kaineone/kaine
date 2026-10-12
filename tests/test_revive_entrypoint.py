@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 import pytest_asyncio
 
-from kaine.boot import _install_shared_womb_clock
+from kaine.boot import _install_shared_stimulus_source_clock
 from kaine.cycle.__main__ import (
     _resolve_boot_stage,
     _revive_or_refuse,
@@ -374,7 +374,7 @@ def test_resolve_boot_stage_override_uses_stage_and_skips_file(
     assert fresh is False
 
 
-def test_install_shared_womb_clock_uses_stage_state_and_ignores_file(
+def test_install_shared_stimulus_source_clock_uses_stage_state_and_ignores_file(
     tmp_path, monkeypatch
 ):
     monkeypatch.chdir(tmp_path)
@@ -386,7 +386,7 @@ def test_install_shared_womb_clock_uses_stage_state_and_ignores_file(
 
     built: list[Any] = []
 
-    class FakeWombClock:
+    class FakeStimulusSourceClock:
         def __init__(self, *, lived_offset_seconds: float):
             self.lived_offset_seconds = lived_offset_seconds
             self.born = False
@@ -395,10 +395,10 @@ def test_install_shared_womb_clock_uses_stage_state_and_ignores_file(
         def mark_born(self) -> None:
             self.born = True
 
-    monkeypatch.setattr("kaine.modules.vision.feed.WombClock", FakeWombClock)
+    monkeypatch.setattr("kaine.modules.vision.feed.StimulusSourceClock", FakeStimulusSourceClock)
 
     feed: dict[str, Any] = {}
-    _install_shared_womb_clock(feed, None, None, stage_state=override)
+    _install_shared_stimulus_source_clock(feed, None, None, stage_state=override)
 
     assert len(built) == 1
     clock = built[0]

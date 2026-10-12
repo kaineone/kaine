@@ -56,16 +56,16 @@ from typing import Any, Mapping
 LIFECYCLE_SOURCE = "lifecycle"
 LIFECYCLE_STREAM = "lifecycle.out"
 
-STAGE_GESTATION_STARTED = "stage.gestation.started"
-STAGE_GESTATION_NO_STIMULUS = "stage.gestation.no_stimulus"
-STAGE_BIRTH_READY = "stage.birth.ready"
-STAGE_BIRTH = "stage.birth"
+STAGE_DEVELOPMENT_STARTED = "stage.gestation.started"
+STAGE_DEVELOPMENT_NO_STIMULUS = "stage.gestation.no_stimulus"
+STAGE_MATURATION_READY = "stage.birth.ready"
+STAGE_MATURATION = "stage.birth"
 
 # Maturation-decision actions.
 ACTION_GESTATING = "gestating"
 ACTION_HOLD_AWAITING_EMBODIMENT = "hold_awaiting_embodiment"
 ACTION_HOLD_AWAITING_ACK = "hold_awaiting_ack"
-ACTION_BIRTH = "birth"
+ACTION_MATURATION = "birth"
 
 REASON_BORN_INTO_PERCEPTUAL_WORLD = "born_into_perceptual_world"
 
@@ -84,7 +84,7 @@ class RegulationThresholds:
     endogenous_self_sustain: bool = True
     entrain_then_autonomy: bool = True
     hrv_variability_floor: float = 0.2
-    womb_prediction_error_ceiling: float = 0.3
+    stimulus_source_prediction_error_ceiling: float = 0.3
     return_to_baseline_seconds_ceiling: float = 30.0
 
     @classmethod
@@ -101,10 +101,10 @@ class RegulationThresholds:
             hrv_variability_floor=float(
                 d.get("hrv_variability_floor", base.hrv_variability_floor)
             ),
-            womb_prediction_error_ceiling=float(
+            stimulus_source_prediction_error_ceiling=float(
                 d.get(
                     "womb_prediction_error_ceiling",
-                    base.womb_prediction_error_ceiling,
+                    base.stimulus_source_prediction_error_ceiling,
                 )
             ),
             return_to_baseline_seconds_ceiling=float(
@@ -129,13 +129,13 @@ class MaturationConfig:
     min_lived_seconds: float = 86400.0
     gate_cadence_seconds: float = 60.0
     readout_max_age_cadences: float = 3.0
-    require_operator_ack_for_birth: bool = False
+    require_operator_ack_for_maturation: bool = False
     # Stimulus source timing knobs.
-    womb_ready_retry_seconds: float = 5.0
-    womb_check_seconds: float = 1.0
-    womb_loss_after_seconds: float = 5.0
-    womb_arm_timeout_seconds: float = 120.0
-    womb_presence_window_seconds: float = 3.0
+    stimulus_source_ready_retry_seconds: float = 5.0
+    stimulus_source_check_seconds: float = 1.0
+    stimulus_source_loss_after_seconds: float = 5.0
+    stimulus_source_arm_timeout_seconds: float = 120.0
+    stimulus_source_presence_window_seconds: float = 3.0
     regulation_thresholds: RegulationThresholds = field(
         default_factory=RegulationThresholds
     )
@@ -157,28 +157,28 @@ class MaturationConfig:
             readout_max_age_cadences=float(
                 d.get("readout_max_age_cadences", base.readout_max_age_cadences)
             ),
-            require_operator_ack_for_birth=bool(
+            require_operator_ack_for_maturation=bool(
                 d.get(
                     "require_operator_ack_for_birth",
-                    base.require_operator_ack_for_birth,
+                    base.require_operator_ack_for_maturation,
                 )
             ),
-            womb_ready_retry_seconds=float(
-                d.get("womb_ready_retry_seconds", base.womb_ready_retry_seconds)
+            stimulus_source_ready_retry_seconds=float(
+                d.get("womb_ready_retry_seconds", base.stimulus_source_ready_retry_seconds)
             ),
-            womb_check_seconds=float(
-                d.get("womb_check_seconds", base.womb_check_seconds)
+            stimulus_source_check_seconds=float(
+                d.get("womb_check_seconds", base.stimulus_source_check_seconds)
             ),
-            womb_loss_after_seconds=float(
-                d.get("womb_loss_after_seconds", base.womb_loss_after_seconds)
+            stimulus_source_loss_after_seconds=float(
+                d.get("womb_loss_after_seconds", base.stimulus_source_loss_after_seconds)
             ),
-            womb_arm_timeout_seconds=float(
-                d.get("womb_arm_timeout_seconds", base.womb_arm_timeout_seconds)
+            stimulus_source_arm_timeout_seconds=float(
+                d.get("womb_arm_timeout_seconds", base.stimulus_source_arm_timeout_seconds)
             ),
-            womb_presence_window_seconds=float(
+            stimulus_source_presence_window_seconds=float(
                 d.get(
                     "womb_presence_window_seconds",
-                    base.womb_presence_window_seconds,
+                    base.stimulus_source_presence_window_seconds,
                 )
             ),
             regulation_thresholds=RegulationThresholds.from_dict(
@@ -197,7 +197,7 @@ class Faculties:
 
     sleep: bool = True
     world_model: bool = True
-    mundus: bool = True
+    embodiment: bool = True
 
 
 # --- Readiness (C1 ^ C2 ^ C3, fail-closed) ---------------------------------
@@ -268,7 +268,7 @@ def _evaluate_c1(
         )
 
     pe = _num(readout.get("womb_prediction_error"))
-    if pe is None or pe > t.womb_prediction_error_ceiling:
+    if pe is None or pe > t.stimulus_source_prediction_error_ceiling:
         return ConditionResult(
             "C1_regulation_baseline", False, "womb prediction error above ceiling"
         )
@@ -376,24 +376,24 @@ def evaluate_readiness(
 
 
 def embodiment_available(
-    *, mundus_enabled: bool, operator_approved: bool, reachable: bool
+    *, embodiment_enabled: bool, operator_approved: bool, reachable: bool
 ) -> bool:
     """Whether the entity can actually be born into an embodied world: the embodiment module's
     existing two-layer gate (``[mundus].enabled`` config layer AND
     ``KAINE_MUNDUS_OPERATOR_APPROVED=1`` operator layer) AND reachability. This
     is READ as a precondition; the gate never flips the embodiment module on."""
-    return bool(mundus_enabled) and bool(operator_approved) and bool(reachable)
+    return bool(embodiment_enabled) and bool(operator_approved) and bool(reachable)
 
 
 @dataclass(frozen=True)
-class BirthDecision:
+class MaturationDecision:
     action: str
     reason: str
     readiness: Readiness
 
     @property
-    def should_birth(self) -> bool:
-        return self.action == ACTION_BIRTH
+    def should_maturation(self) -> bool:
+        return self.action == ACTION_MATURATION
 
     @property
     def holding(self) -> bool:
@@ -403,14 +403,14 @@ class BirthDecision:
         )
 
 
-def decide_birth(
+def decide_maturation(
     *,
     readiness: Readiness,
     embodiment_ready: bool,
     operator_ack: bool = False,
     require_operator_ack: bool = False,
     faculties: Faculties = Faculties(),
-) -> BirthDecision:
+) -> MaturationDecision:
     """Combine developmental readiness with the embodiment-availability guard.
 
     - not developmentally ready               -> keep gestating (report unmet Cn);
@@ -424,23 +424,23 @@ def decide_birth(
     - ready ^ available ^ (ack not required or given) -> MATURATION.
     """
     if not readiness.ready:
-        return BirthDecision(
+        return MaturationDecision(
             ACTION_GESTATING, "unmet: " + ",".join(readiness.unmet), readiness
         )
-    if faculties.mundus and not embodiment_ready:
-        return BirthDecision(
+    if faculties.embodiment and not embodiment_ready:
+        return MaturationDecision(
             ACTION_HOLD_AWAITING_EMBODIMENT, "awaiting_embodiment", readiness
         )
     if require_operator_ack and not operator_ack:
-        return BirthDecision(
+        return MaturationDecision(
             ACTION_HOLD_AWAITING_ACK, "awaiting_operator_ack", readiness
         )
     reason = (
         REASON_BORN_INTO_PERCEPTUAL_WORLD
-        if not faculties.mundus
+        if not faculties.embodiment
         else "ready_and_available"
     )
-    return BirthDecision(ACTION_BIRTH, reason, readiness)
+    return MaturationDecision(ACTION_MATURATION, reason, readiness)
 
 
 # --- Stage-event payload builders ------------------------------------------
@@ -449,15 +449,15 @@ def decide_birth(
 # Payloads carry only operational/observability fields — never sensory content.
 
 
-def gestation_started_payload(*, gestation_started_at: str | None) -> dict[str, Any]:
+def development_started_payload(*, gestation_started_at: str | None) -> dict[str, Any]:
     return {"stage": "gestation", "gestation_started_at": gestation_started_at}
 
 
-def gestation_no_stimulus_payload() -> dict[str, Any]:
+def development_no_stimulus_payload() -> dict[str, Any]:
     return {"stage": "gestation", "reason": "no_womb_feed_configured"}
 
 
-def birth_ready_payload(decision: BirthDecision) -> dict[str, Any]:
+def maturation_ready_payload(decision: MaturationDecision) -> dict[str, Any]:
     return {
         "reason": decision.reason,
         "passed_markers": list(decision.readiness.passed_markers),
@@ -465,7 +465,7 @@ def birth_ready_payload(decision: BirthDecision) -> dict[str, Any]:
     }
 
 
-def birth_payload(
+def maturation_payload(
     *,
     readiness: Readiness,
     sleep_count: int | None,
@@ -478,7 +478,7 @@ def birth_payload(
         "not_applicable": list(readiness.not_applicable),
         "sleep_count": sleep_count,
         "lived_seconds": lived_seconds,
-        "world": "embodied" if faculties.mundus else "perceptual",
+        "world": "embodied" if faculties.embodiment else "perceptual",
         "conditions": {
             "c2_sleep_required": bool(faculties.sleep),
             "c2_consolidation_required": bool(faculties.sleep and faculties.world_model),

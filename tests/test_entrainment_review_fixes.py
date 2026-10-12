@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 
 from kaine.boot import make_interoception
-from kaine.cycle.gestation import GestationOwner, GestationReadoutConfig, entrainment_plv
+from kaine.cycle.development import DevelopmentOwner, DevelopmentReadoutConfig, entrainment_plv
 
 
 def _interoception_section() -> dict[str, Any]:
@@ -48,7 +48,7 @@ def _owner(tmp_path: Path, seed: int = 0, identity: str | None = "id-a"):
         interoception._self_rhythm = None
     interoception.self_rhythm_state.return_value = (0.0, 1.0)
 
-    config = GestationReadoutConfig.from_dict(
+    config = DevelopmentReadoutConfig.from_dict(
         {
             "readout_period_seconds": 10.0,
             "sample_hz": 10.0,
@@ -73,7 +73,7 @@ def _owner(tmp_path: Path, seed: int = 0, identity: str | None = "id-a"):
         }
     )
     state_path = tmp_path / "gestation.json"
-    owner = GestationOwner(
+    owner = DevelopmentOwner(
         bus=MagicMock(),
         interoception=interoception,
         drive=MagicMock(),
@@ -180,16 +180,16 @@ def test_oscillator_identities_are_unique():
     assert len(osc2.identity) == 32
 
 
-def test_gestation_readout_config_surrogate_count_validation():
+def test_development_readout_config_surrogate_count_validation():
     with pytest.raises(ValueError):
-        GestationReadoutConfig.from_dict({"surrogate_count": 0})
+        DevelopmentReadoutConfig.from_dict({"surrogate_count": 0})
     with pytest.raises(ValueError):
-        GestationReadoutConfig.from_dict({"surrogate_count": 3.5})
-    cfg = GestationReadoutConfig.from_dict({"surrogate_count": 19})
+        DevelopmentReadoutConfig.from_dict({"surrogate_count": 3.5})
+    cfg = DevelopmentReadoutConfig.from_dict({"surrogate_count": 19})
     assert cfg.surrogate_count == 19.0
 
 
-def test_gestation_ignores_baseline_from_other_being(tmp_path: Path):
+def test_development_ignores_baseline_from_other_entity(tmp_path: Path):
     owner, path = _owner(tmp_path, seed=1, identity="id-a")
     path.write_text(
         json.dumps(
@@ -207,7 +207,7 @@ def test_gestation_ignores_baseline_from_other_being(tmp_path: Path):
     assert owner2._self_rhythm_baseline_count == 0
 
 
-def test_gestation_uses_baseline_for_same_being(tmp_path: Path):
+def test_development_uses_baseline_for_same_entity(tmp_path: Path):
     owner, path = _owner(tmp_path, seed=2, identity="id-c")
     path.write_text(
         json.dumps(

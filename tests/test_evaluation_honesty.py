@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 import pytest
 
 from kaine.bus.schema import Event
+from kaine.dashboard.health import DEGRADED, DOWN, UP, planning_health_probe
 from kaine.evaluation.ab_divergence import (
     ABDivergenceObserver,
     FakeBareInferenceClient,
@@ -34,7 +35,6 @@ from kaine.evaluation.self_model_accuracy import (
     SelfModelAccuracyRunner,
     parse_claims,
 )
-from kaine.nexus.health import DEGRADED, DOWN, UP, planning_health_probe
 
 # ---------------------------------------------------------------------------
 # Shared test helpers

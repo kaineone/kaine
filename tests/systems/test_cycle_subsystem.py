@@ -49,11 +49,11 @@ async def test_tick_with_empty_registry_runs_clean():
 async def test_tick_collects_from_registered_module_stream():
     async with SubsystemHarness() as h:
         registry = ModuleRegistry()
-        from kaine.modules.echo import EchoModule
+        from kaine.modules.recorder import RecorderModule
 
-        echo = EchoModule(h.bus)
-        registry.register(echo)
-        await echo.initialize()
+        recorder = RecorderModule(h.bus)
+        registry.register(recorder)
+        await recorder.initialize()
 
         cycle = CognitiveCycle(
             bus=h.bus,
@@ -63,13 +63,13 @@ async def test_tick_collects_from_registered_module_stream():
             experiential_rate_hz=10.0,
         )
 
-        await echo.publish_one(salience=0.9)
+        await recorder.publish_one(salience=0.9)
         result = await cycle.tick()
         assert result.events_collected >= 1
         # Workspace broadcast SHOULD have been written.
         raw = await h.bus._client.xrange("workspace.broadcast")
         assert len(raw) == 1
-        await echo.shutdown()
+        await recorder.shutdown()
 
 
 @pytest.mark.asyncio

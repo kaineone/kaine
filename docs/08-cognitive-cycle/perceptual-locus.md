@@ -22,7 +22,7 @@ Two files under `state/perception/` carry the locus state.
 
 ### `state/perception/desired.json`
 
-Written by `POST /diagnostics/perception/toggle` (audio and video desired flags), `POST /diagnostics/perception/locus` (locus and lock), the `PerceptionLocus` module, `select_virtual_feed()` at boot, the cycle's freeze watch, the sleep module when it suspends and restores perception, and the development gate. It holds the commanded state:
+Written by `POST /diagnostics/perception/toggle` (audio and video desired flags), `POST /diagnostics/perception/locus` (locus and lock), the `PerceptualLocus` module, `select_virtual_feed()` at boot, the cycle's freeze watch, the sleep module when it suspends and restores perception, and the development gate. It holds the commanded state:
 
 ```json
 {
@@ -87,13 +87,13 @@ The [audition module](../09-modules/audition.md) and [vision module](../09-modul
 
 ## Operator-initiated locus switch
 
-The dashboard endpoint `POST /diagnostics/perception/locus`, implemented in `kaine/nexus/perception.py`, writes the new locus to `state/perception/desired.json` directly via `write_desired_locus()`. This normally bypasses the entity self-switch gates. It does not bypass a development lock: when `locus_locked` is `true` and `locked_by` is `gestation`, every write from anyone other than the development holder is ignored, including operator writes. No bus event is published for an operator switch.
+The dashboard endpoint `POST /diagnostics/perception/locus`, implemented in `kaine/dashboard/perception.py`, writes the new locus to `state/perception/desired.json` directly via `write_desired_locus()`. This normally bypasses the entity self-switch gates. It does not bypass a development lock: when `locus_locked` is `true` and `locked_by` is `gestation`, every write from anyone other than the development holder is ignored, including operator writes. No bus event is published for an operator switch.
 
 ## Entity self-switch
 
-`kaine/modules/perception/module.py` contains `PerceptionLocus`, the module that handles entity-initiated locus switches. It watches `volition.out` for `intent.perception.switch` intents and applies the `evaluate_locus_switch` gate.
+`kaine/modules/perceptual_locus/module.py` contains `PerceptualLocus`, the module that handles entity-initiated locus switches. It watches `volition.out` for `intent.perception.switch` intents and applies the `evaluate_locus_switch` gate.
 
-This path is currently an unreachable producer gap. `PerceptionLocus` is a real consumer and the gate is tested, but nothing in the codebase emits `intent.perception.switch`: the action selection module emits only `intent.speak`, `intent.think`, `intent.act`, and `intent.rest`. Until a producer lands, the entity cannot self-switch, and `allow_self_switch` should stay at its default of `false`. Locus changes are operator-driven.
+This path is currently an unreachable producer gap. `PerceptualLocus` is a real consumer and the gate is tested, but nothing in the codebase emits `intent.perception.switch`: the action selection module emits only `intent.speak`, `intent.think`, `intent.act`, and `intent.rest`. Until a producer lands, the entity cannot self-switch, and `allow_self_switch` should stay at its default of `false`. Locus changes are operator-driven.
 
 ```mermaid
 flowchart TD
@@ -116,10 +116,10 @@ Gate parameters:
 
 | Parameter | Default | Source |
 |-----------|---------|--------|
-| `allow_self_switch` | `false` | `PerceptionLocus` constructor |
-| `min_dwell_s` | `30.0` | `PerceptionLocus` constructor |
+| `allow_self_switch` | `false` | `PerceptualLocus` constructor |
+| `min_dwell_s` | `30.0` | `PerceptualLocus` constructor |
 
-On allow: `PerceptionLocus` writes `state/perception/desired.json` with the new locus and publishes `perception.locus.changed` to `perception.out`.
+On allow: `PerceptualLocus` writes `state/perception/desired.json` with the new locus and publishes `perception.locus.changed` to `perception.out`.
 
 On deny: it publishes `perception.locus.denied` to `perception.out` with the reason.
 
@@ -163,7 +163,7 @@ They never contain transcribed text, audio bytes, video frames, or frame metadat
 
 Setting `locus = "virtual"` forces the real camera and microphone off through `effective_audio_capture` and `effective_video_capture`. The default locus is `physical`. A configured feed (seeded, playlist, stimulus source or screen) gives the vision and audition modules a source factory, and they then poll the virtual gates, so such a feed delivers only in the `virtual` locus.
 
-The `virtual` locus is gated by `[perception_feed].mode`. The valid modes are `off`, `seeded`, `playlist`, `womb`, `live`, and `screen`. When the mode is `seeded`, `playlist` or `womb`, boot calls `select_virtual_feed()` to bind the entity directly into the `virtual` locus, provided the [audition module](../09-modules/audition.md) or [vision module](../09-modules/vision.md) is enabled. Boot does not do this for `screen`, so a screen feed delivers only once the operator sets the locus to `virtual`. The embodiment module (`kaine/modules/mundus/`) is an unrelated embodiment control plane and is not required for virtual-locus availability.
+The `virtual` locus is gated by `[perception_feed].mode`. The valid modes are `off`, `seeded`, `playlist`, `womb`, `live`, and `screen`. When the mode is `seeded`, `playlist` or `womb`, boot calls `select_virtual_feed()` to bind the entity directly into the `virtual` locus, provided the [audition module](../09-modules/audition.md) or [vision module](../09-modules/vision.md) is enabled. Boot does not do this for `screen`, so a screen feed delivers only once the operator sets the locus to `virtual`. The embodiment module (`kaine/modules/embodiment/`) is an unrelated embodiment control plane and is not required for virtual-locus availability.
 
 Feeds that boot binds to the virtual locus:
 
@@ -175,7 +175,7 @@ The offline experiment battery does not depend on these feeds. The planned live 
 
 ## Configuration reference
 
-The locus value itself (`physical`, `virtual`, or `off`) is set at runtime through the dashboard or, once a producer exists, the `PerceptionLocus` self-switch path. The `[perception]` section in `kaine.toml` configures the self-switch gate:
+The locus value itself (`physical`, `virtual`, or `off`) is set at runtime through the dashboard or, once a producer exists, the `PerceptualLocus` self-switch path. The `[perception]` section in `kaine.toml` configures the self-switch gate:
 
 ```toml
 [perception]
@@ -183,16 +183,16 @@ allow_self_switch = false
 min_dwell_s = 30.0
 ```
 
-`boot.make_perception()` in `kaine/boot/factories/perception.py` reads this section and passes the keys to the `PerceptionLocus` constructor.
+`boot.make_perception()` in `kaine/boot/factories/perceptual_locus.py` reads this section and passes the keys to the `PerceptualLocus` constructor.
 
-The `PerceptionLocus` module is toggled via:
+The `PerceptualLocus` module is toggled via:
 
 ```toml
 [modules]
-perception = false   # shipped default; set true to enable PerceptionLocus
+perception = false   # shipped default; set true to enable PerceptualLocus
 ```
 
-The `[modules].perception` entry enables `PerceptionLocus`. The actual perception tasks (`LiveMicrophone`, `LiveCamera`) are part of the [audition module](../09-modules/audition.md) and [vision module](../09-modules/vision.md).
+The `[modules].perception` entry enables `PerceptualLocus`. The actual perception tasks (`LiveMicrophone`, `LiveCamera`) are part of the [audition module](../09-modules/audition.md) and [vision module](../09-modules/vision.md).
 
 State files:
 
@@ -206,9 +206,9 @@ For `[perception_feed]` settings, see [Perception feed and sleep configuration](
 | File | Role |
 |------|------|
 | `kaine/perception_state.py` | `PerceptionState`, `DesiredState`, locus coercion, `effective_audio_capture`, `effective_video_capture`, `effective_virtual_*_capture`, `evaluate_locus_switch`, `select_virtual_feed` |
-| `kaine/modules/perception/module.py` | `PerceptionLocus`: entity self-switch gating and intent consumer |
+| `kaine/modules/perceptual_locus/module.py` | `PerceptualLocus`: entity self-switch gating and intent consumer |
 | `kaine/modules/audition/` | `LiveMicrophone`: polls desired state through `effective_audio_capture`, or `effective_virtual_audio_capture` for a configured feed |
 | `kaine/modules/vision/` | `LiveCamera`: polls desired state through `effective_video_capture`, or `effective_virtual_video_capture` for a configured feed |
-| `kaine/nexus/perception.py` | Operator perception endpoints |
+| `kaine/dashboard/perception.py` | Operator perception endpoints |
 | `state/perception/desired.json` | Commanded locus, sensor flags, and lock |
 | `state/perception/runtime.json` | Live capture status |

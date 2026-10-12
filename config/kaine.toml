@@ -1753,7 +1753,7 @@ login_failure_window_s = 300
 # tailnet host or reverse-proxy hostname, e.g.
 #   host_allowlist = ["127.0.0.1", "localhost", "::1", "my-host.tailnet.example"]
 # Explicit opt-in required to bind a non-loopback interface. When false,
-# `python -m kaine.nexus` exits if host is not loopback.
+# `python -m kaine.dashboard` exits if host is not loopback.
 non_loopback_allowed = false
 
 [security.state_encryption]

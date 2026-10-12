@@ -203,11 +203,11 @@ async def test_start_disclosure_and_boot_capture(tmp_path: Path):
     assert runtime.scheduler._capture_kind == "capture"
 
 
-async def test_start_gestating_on_birth(tmp_path: Path):
+async def test_start_gestating_on_maturation(tmp_path: Path):
     runtime = build(tmp_path, is_gestating=lambda: True)
     await runtime.start()
     assert runtime.scheduler._capture_kind is None
-    runtime.on_birth()
+    runtime.on_maturation()
     assert runtime.scheduler._capture_kind == "birth"
     runtime.scheduler.notify_sleep_completed()
     assert runtime.scheduler._capture_kind == "capture"

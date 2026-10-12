@@ -6,7 +6,7 @@
 # the owner-only (0700) posture on the mounted state/model volumes — the
 # 0700/0600 protection the security work established must hold INSIDE the
 # container too (design §7) — then execs the requested command (default
-# `python -m kaine.cycle`, or `python -m kaine.nexus` for the web UI).
+# `python -m kaine.cycle`, or `python -m kaine.dashboard` for the web UI).
 #
 # It deliberately does NOT set any boot-gate variable. The cycle refuses to boot
 # unless the operator explicitly exports KAINE_CYCLE_OPERATOR_PRESENT=1 (or the

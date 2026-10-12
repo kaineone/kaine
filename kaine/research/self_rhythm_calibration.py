@@ -23,8 +23,8 @@ from typing import Iterable
 import numpy as np
 from scipy.signal import butter, hilbert, sosfiltfilt, welch
 
-from kaine.modules.womb_drive import MaternalDriveProvider
-from kaine.modules.womb_signal import WombParams, heartbeat_phase
+from kaine.modules.stimulus_source_drive import MaternalDriveProvider
+from kaine.modules.stimulus_source_signal import StimulusSourceParams, heartbeat_phase
 from kaine.oscillator.module_oscillator import make_self_rhythm_oscillator
 
 STEP_HZ: float = 20.0
@@ -37,7 +37,7 @@ class SimClock:
         self.t: float = 0.0
         self.offset: float = offset
 
-    def womb_seconds(self) -> float:
+    def stimulus_source_seconds(self) -> float:
         return self.offset + self.t
 
 
@@ -62,7 +62,7 @@ def window_metrics(
     beat: np.ndarray,
     tau_rec: float,
     seed: int,
-    params: WombParams,
+    params: StimulusSourceParams,
     step_hz: float = STEP_HZ,
 ) -> dict:
     """PLV and frequency metrics for one 300-second window.
@@ -191,7 +191,7 @@ def simulate_driven(
     for bpm in bpms:
         for eta in etas:
             for sc in scales:
-                params = WombParams(heartbeat_bpm=bpm)
+                params = StimulusSourceParams(heartbeat_bpm=bpm)
                 clock = SimClock()
                 prov = MaternalDriveProvider(clock, params, seed=seed, scale=sc)
                 osc = make_self_rhythm_oscillator(
@@ -216,7 +216,7 @@ def simulate_driven(
                     osc.step(own, external_drive=ext)
                     rate = osc.last_rate
                     beat = 2.0 * math.pi * float(
-                        heartbeat_phase(seed, clock.womb_seconds(), params)
+                        heartbeat_phase(seed, clock.stimulus_source_seconds(), params)
                     )
                     tau_rec = osc.tau_rec
 

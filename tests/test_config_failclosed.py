@@ -13,9 +13,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from kaine.config import ConfigShapeError, validate_config_shape
+from kaine.dashboard.__main__ import _build_fork_manager
+from kaine.dashboard.diagnostics import build_diagnostics_router
 from kaine.lifecycle.__main__ import main as decommission_main
-from kaine.nexus.__main__ import _build_fork_manager
-from kaine.nexus.diagnostics import build_diagnostics_router
 from kaine.research.__main__ import main as research_main
 from kaine.security import crypto as crypto_module
 
@@ -147,11 +147,11 @@ def test_decommission_main_rejects_missing_encryption_key(tmp_path, monkeypatch)
     assert not backup_root.exists() or not any(backup_root.iterdir())
 
 
-def test_nexus_build_fork_manager_fails_closed_on_missing_key(monkeypatch, caplog):
+def test_dashboard_build_fork_manager_fails_closed_on_missing_key(monkeypatch, caplog):
     monkeypatch.delenv("KAINE_STATE_KEY", raising=False)
     monkeypatch.setattr(crypto_module, "_load_key_from_keyring", lambda: None)
 
-    with caplog.at_level(logging.ERROR, logger="kaine.nexus"):
+    with caplog.at_level(logging.ERROR, logger="kaine.dashboard"):
         result, reason = _build_fork_manager(lambda: {}, lambda: {"enabled": True})
 
     assert result is None
@@ -159,7 +159,7 @@ def test_nexus_build_fork_manager_fails_closed_on_missing_key(monkeypatch, caplo
     assert any("CryptoConfigError" in rec.message for rec in caplog.records)
 
 
-def test_nexus_forks_json_reports_disabled_when_no_fork_manager():
+def test_dashboard_forks_json_reports_disabled_when_no_fork_manager():
     app = FastAPI()
     bridge = MagicMock()
     router = build_diagnostics_router(

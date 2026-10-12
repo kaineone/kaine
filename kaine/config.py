@@ -13,7 +13,7 @@ that this loader deep-merges over the shipped file — operator values win.
 The cognitive cycle entrypoint and the dashboard route through
 :func:`load_kaine_config`, so an operator override applies wherever the
 configuration is consumed. The dashboard's own ``[nexus]`` section is the exception:
-:mod:`kaine.nexus.config` reads it from ``config/kaine.toml``,
+:mod:`kaine.dashboard.config` reads it from ``config/kaine.toml``,
 ``config/kaine.operator.toml`` and ``config/secrets.toml`` directly.
 
 Deployment tiers (tier0..tier3) are applied as a separate layer between the

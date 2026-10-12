@@ -315,7 +315,7 @@ def _create_study(
     *,
     order: list[str] = ORDER,
     viewing_budget_seconds: float = 5.0,
-    gestation_budget_seconds: float = 5.0,
+    development_budget_seconds: float = 5.0,
 ) -> Path:
     repo_root = tmp_path / "repo"
     _write_repo(repo_root)
@@ -334,7 +334,7 @@ def _create_study(
         },
         "collections": {"gestation": "r_g_", "branch": "r_b_", "repeat": "r_r_", "accumulate": "r_a_"},
         "viewing_budget_seconds": viewing_budget_seconds,
-        "gestation_budget_seconds": gestation_budget_seconds,
+        "gestation_budget_seconds": development_budget_seconds,
     }
     study_dir = tmp_path / "study"
     init_study(study_dir, validate_plan(plan))
@@ -922,7 +922,7 @@ def test_check_world_model_manifest(tmp_path: Path, text: str, expected):
     assert _check_world_model_manifest(str(tmp_path)) == expected
 
 
-def _birth_request_time(study_dir: Path) -> float:
+def _maturation_request_time(study_dir: Path) -> float:
     from datetime import datetime
 
     req = json.loads(
@@ -932,7 +932,7 @@ def _birth_request_time(study_dir: Path) -> float:
     return datetime.fromisoformat(req["requested_at"]).timestamp()
 
 
-def test_birth_preservation_waits_for_the_bloom_end(tmp_path: Path, known_modules, monkeypatch):
+def test_maturation_preservation_waits_for_the_bloom_end(tmp_path: Path, known_modules, monkeypatch):
     from datetime import datetime
 
     study_dir = _create_study(tmp_path, viewings=1)
@@ -940,17 +940,17 @@ def test_birth_preservation_waits_for_the_bloom_end(tmp_path: Path, known_module
     script.write_text(STANDIN_SCRIPT)
     monkeypatch.setenv("IGNITION_STANDIN_BLOOM_SECONDS", "0.8")
     # A long fallback: only the stage file's bloom end can release the request.
-    assert _run(_runner(study_dir, script, birth_bloom_margin_seconds=60.0)) == "complete"
+    assert _run(_runner(study_dir, script, maturation_bloom_margin_seconds=60.0)) == "complete"
 
     stage = json.loads(
         (study_dir / "gestation" / "state" / "lifecycle" / "stage.json").read_text()
     )
     bloom_end = datetime.fromisoformat(stage["birth_bloom_ends_at"]).timestamp()
-    assert _birth_request_time(study_dir) >= bloom_end
+    assert _maturation_request_time(study_dir) >= bloom_end
     assert _load_steps(study_dir)[0]["outcome"] == "complete"
 
 
-def test_birth_preservation_waits_the_fallback_without_a_bloom_end(
+def test_maturation_preservation_waits_the_fallback_without_a_bloom_end(
     tmp_path: Path, known_modules, monkeypatch
 ):
     study_dir = _create_study(tmp_path, viewings=1)
@@ -960,14 +960,14 @@ def test_birth_preservation_waits_the_fallback_without_a_bloom_end(
     # The child's own configured bloom length, plus the margin.
     with open(tmp_path / "repo" / "config" / "kaine.toml", "a") as fh:
         fh.write("[perception_feed.womb]\nbirth_transition_seconds = 0.4\n")
-    assert _run(_runner(study_dir, script, birth_bloom_margin_seconds=0.3)) == "complete"
+    assert _run(_runner(study_dir, script, maturation_bloom_margin_seconds=0.3)) == "complete"
 
     stage = json.loads(
         (study_dir / "gestation" / "state" / "lifecycle" / "stage.json").read_text()
     )
     assert "birth_bloom_ends_at" not in stage
     embodied_at = float((study_dir / "embodied_at.txt").read_text())
-    assert _birth_request_time(study_dir) - embodied_at >= 0.4 + 0.3
+    assert _maturation_request_time(study_dir) - embodied_at >= 0.4 + 0.3
 
 
 def test_runner_refuses_the_operator_bus_database(tmp_path: Path, known_modules, monkeypatch):
@@ -1120,7 +1120,7 @@ def test_failed_timeout_preservation_records_a_critical_step(
     # clock (below) exhausts it, so the retry never times out on a slow host.
     budget = 30.0
     study_dir = _create_study(
-        tmp_path, viewings=1, gestation_budget_seconds=budget, viewing_budget_seconds=budget
+        tmp_path, viewings=1, development_budget_seconds=budget, viewing_budget_seconds=budget
     )
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
@@ -1215,7 +1215,7 @@ GESTATING_SCRIPT = textwrap.dedent(
 
 
 @pytest.mark.parametrize("foreign", ["before_spawn", "after_spawn", "reused_pid"])
-def test_an_earlier_childs_runtime_never_triggers_the_birth_preservation(
+def test_an_earlier_childs_runtime_never_triggers_the_maturation_preservation(
     tmp_path: Path, known_modules, foreign: str
 ):
     """runtime.json saying "embodied" that the child this attempt started did
@@ -1224,7 +1224,7 @@ def test_an_earlier_childs_runtime_never_triggers_the_birth_preservation(
     not an earlier child's record whose pid the new child happens to reuse."""
     import subprocess
 
-    study_dir = _create_study(tmp_path, viewings=1, gestation_budget_seconds=3600.0)
+    study_dir = _create_study(tmp_path, viewings=1, development_budget_seconds=3600.0)
     gestating = tmp_path / "gestating.py"
     gestating.write_text(GESTATING_SCRIPT)
     release = tmp_path / "release"
@@ -1377,7 +1377,7 @@ def test_cycle_process_alive_checks_the_command_line():
 
 
 @pytest.mark.parametrize(
-    "womb_toml, expected",
+    "stimulus_source_toml, expected",
     [
         (None, "default"),
         ("birth_transition_seconds = 12.5\n", 12.5),
@@ -1385,24 +1385,24 @@ def test_cycle_process_alive_checks_the_command_line():
         ('birth_transition_seconds = "soon"\n', "max"),
     ],
 )
-def test_birth_bloom_fallback_follows_the_child_configuration(
-    tmp_path: Path, known_modules, womb_toml, expected
+def test_maturation_bloom_fallback_follows_the_child_configuration(
+    tmp_path: Path, known_modules, stimulus_source_toml, expected
 ):
     import os
 
-    from kaine.modules.womb_signal import WombParams
-    from kaine.research.ignition_study.runner import BIRTH_BLOOM_MAX_SECONDS
+    from kaine.modules.stimulus_source_signal import StimulusSourceParams
+    from kaine.research.ignition_study.runner import MATURATION_BLOOM_MAX_SECONDS
 
     study_dir = _create_study(tmp_path, viewings=1)
-    if womb_toml is not None:
+    if stimulus_source_toml is not None:
         with open(tmp_path / "repo" / "config" / "kaine.toml", "a") as fh:
-            fh.write("[perception_feed.womb]\n" + womb_toml)
-    runner = _runner(study_dir, tmp_path / "unused.py", birth_bloom_margin_seconds=1.5)
-    got = runner._birth_bloom_fallback_seconds(study_dir / "gestation", dict(os.environ))
+            fh.write("[perception_feed.womb]\n" + stimulus_source_toml)
+    runner = _runner(study_dir, tmp_path / "unused.py", maturation_bloom_margin_seconds=1.5)
+    got = runner._maturation_bloom_fallback_seconds(study_dir / "gestation", dict(os.environ))
     if expected == "default":
-        assert got == WombParams().birth_transition_seconds + 1.5
+        assert got == StimulusSourceParams().maturation_transition_seconds + 1.5
     elif expected == "max":
-        assert got == BIRTH_BLOOM_MAX_SECONDS + 1.5
+        assert got == MATURATION_BLOOM_MAX_SECONDS + 1.5
     else:
         assert got == expected + 1.5
 
@@ -1564,7 +1564,7 @@ def _write_pair(line_dir: Path, reason: str, bundle: Path) -> None:
     )
 
 
-def test_resume_adopts_an_unrecorded_birth_preservation(tmp_path: Path, known_modules):
+def test_resume_adopts_an_unrecorded_maturation_preservation(tmp_path: Path, known_modules):
     study_dir = _create_study(tmp_path, viewings=1)
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
@@ -1586,7 +1586,7 @@ def test_resume_adopts_an_unrecorded_birth_preservation(tmp_path: Path, known_mo
     assert all(s["revived_from"] == str(seed) for s in steps[1:4])
 
 
-def test_resume_gestates_when_the_pair_is_not_a_birth(tmp_path: Path, known_modules):
+def test_resume_gestates_when_the_pair_is_not_a_maturation(tmp_path: Path, known_modules):
     study_dir = _create_study(tmp_path, viewings=1)
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
