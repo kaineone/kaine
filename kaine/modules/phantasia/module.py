@@ -3,7 +3,7 @@
 
 """The world model module — imagination module (DreamerV3 RSSM core).
 
-The world model module is KAINE's world model. It is NOT an agent: it has no actor, critic,
+The world model module is KAINE's learned model of its world. It is NOT an agent: it has no actor, critic,
 reward, or return head — action selection is the planning module's job (pymdp active
 inference). The world model module only models and imagines.
 
