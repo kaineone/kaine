@@ -137,7 +137,7 @@ class IndividuationConfig:
     enabled: bool = False
     disclosure: str = DEFAULT_DISCLOSURE
     battery_path: str = ""
-    lingua_quiet_s: float = 10.0
+    language_quiet_s: float = 10.0
     probe_temperature: float = 0.0
     producer: ProducerSettings = field(default_factory=ProducerSettings)
     scheduler: SchedulerSettings = field(default_factory=SchedulerSettings)
@@ -187,11 +187,11 @@ class IndividuationConfig:
         if not isinstance(battery_path, str):
             raise ValueError("battery_path must be a str")
 
-        lingua_quiet_s = explicit.get("lingua_quiet_s", cls.lingua_quiet_s)
+        language_quiet_s = explicit.get("lingua_quiet_s", cls.language_quiet_s)
         if (
-            not isinstance(lingua_quiet_s, (int, float))
-            or not math.isfinite(lingua_quiet_s)
-            or lingua_quiet_s <= 0
+            not isinstance(language_quiet_s, (int, float))
+            or not math.isfinite(language_quiet_s)
+            or language_quiet_s <= 0
         ):
             raise ValueError("lingua_quiet_s must be a finite number > 0")
 
@@ -214,7 +214,7 @@ class IndividuationConfig:
             enabled=enabled,
             disclosure=disclosure,
             battery_path=battery_path,
-            lingua_quiet_s=lingua_quiet_s,
+            language_quiet_s=language_quiet_s,
             probe_temperature=float(probe_temperature),
             producer=producer,
             scheduler=scheduler,
@@ -399,7 +399,7 @@ def build_runtime(
     *,
     config: IndividuationConfig,
     battery: Sequence[str],
-    lingua: Any,
+    language: Any,
     ensure_fact: Callable[[str], Awaitable[bool]],
     embedder: Any,
     adapter_output_dir: Path | None,
@@ -425,10 +425,10 @@ def build_runtime(
         return getattr(embedder, "kind", None) not in (None, "hash")
 
     # The probe decodes at its own fixed temperature, never the voice's.
-    lingua.set_probe_temperature(config.probe_temperature)
+    language.set_probe_temperature(config.probe_temperature)
 
     sampler = build_probe_sampler(
-        lingua=lingua,
+        language=language,
         max_tokens=config.producer.max_tokens,
         required_fact=config.disclosure,
         adapter_expected=adapter_expected_from(adapter_output_dir)
@@ -472,7 +472,7 @@ def build_runtime(
         organ_unloaded=organ_unloaded,
         paused=is_paused,
         embedder_ready=embedder_ready,
-        lingua_idle=lambda: lingua.is_idle(config.lingua_quiet_s),
+        language_idle=lambda: language.is_idle(config.language_quiet_s),
         alert=runtime.alert,
         adapter_verifiable=adapter_verifiable,
         on_capture_kind_change=_on_capture_kind_change,
@@ -480,7 +480,7 @@ def build_runtime(
 
     def _conditions() -> dict:
         conds = {
-            **lingua.probe_conditions(),
+            **language.probe_conditions(),
             "max_tokens": config.producer.max_tokens,
             "embedder_id": str(embedder.model_id),
             "embedder_kind": str(getattr(embedder, "kind", "")),
@@ -499,7 +499,7 @@ def build_runtime(
         embedder_id=str(embedder.model_id),
         conditions=_conditions,
         conditioning_inputs=lambda: conditioning_from_snapshot(
-            lingua.probe_self_model(), adapter_output_dir
+            language.probe_self_model(), adapter_output_dir
         ),
         born_at=born_at,
         birth_adapter_file=lambda: _birth_adapter_file(adapter_output_dir),

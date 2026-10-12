@@ -12,7 +12,7 @@ import pytest
 
 from kaine.lifecycle.__main__ import main
 from kaine.lifecycle.manager import merger_from_name
-from kaine.modules.eidolon import Eidolon
+from kaine.modules.self_model import SelfModel
 from kaine.storage import set_data_root
 
 # Helpers reused from the existing decommission CLI and preservation tests.
@@ -109,9 +109,9 @@ def test_merger_from_name_output_dir_under_data_root(tmp_path):
     assert output_dir == root / "state" / "forks" / "merged_adapters"
 
 
-def test_eidolon_default_persistence_path_under_data_root(tmp_path):
+def test_self_model_default_persistence_path_under_data_root(tmp_path):
     """The self-model module's default persistence path resolves under the installed data root."""
     root = tmp_path / "root"
     set_data_root(root)
-    eidolon = Eidolon(_FakeBus())
-    assert eidolon._persistence_path == root / "state" / "eidolon" / "self_model.json"
+    self_model = SelfModel(_FakeBus())
+    assert self_model._persistence_path == root / "state" / "eidolon" / "self_model.json"

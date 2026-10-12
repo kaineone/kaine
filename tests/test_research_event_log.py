@@ -350,7 +350,7 @@ async def test_mundus_visual_raw_never_logged():
 
 
 @pytest.mark.asyncio
-async def test_praxis_action_content_stripped():
+async def test_effectors_action_content_stripped():
     """6.7 — praxis.action → metadata kept, content/body/stdout stripped."""
     bus = FakeBus()
     sink = FakeSink()
@@ -446,7 +446,7 @@ async def test_interoception_unexpected_error_is_recorded():
 
 
 @pytest.mark.asyncio
-async def test_eidolon_drift_scalar_only_no_self_model():
+async def test_self_model_drift_scalar_only_no_self_model():
     """6.15 — eidolon.drift → scalars kept, no self-model doc."""
     bus = FakeBus()
     sink = FakeSink()
@@ -1052,7 +1052,7 @@ def _taxonomy_record(event_type, payload):
 
 
 def test_intent_speak_think_act_survive_taxonomy():
-    # Real action selection payload shape (kaine/workspace/volition.py).
+    # Real action selection payload shape (kaine/workspace/action_selection.py).
     for kind, event_type in (
         ("speak", "intent.speak"),
         ("think", "intent.think"),
@@ -1069,7 +1069,7 @@ def test_intent_speak_think_act_survive_taxonomy():
     assert _allowed_fields("intent.teleport") is None
 
 
-def test_nous_action_event_types_in_taxonomy():
+def test_planning_action_event_types_in_taxonomy():
     from kaine.evaluation.observers.research_event_observer import _allowed_fields
 
     for event_type in (
@@ -1337,7 +1337,7 @@ def test_audition_prosody_hz_fields():
     assert record["f0_std_hz"] == 18.2
 
 
-def test_raw_bus_archive_lingua_aggregate():
+def test_raw_bus_archive_language_aggregate():
     """The language module now publishes an aggregate lingua.out stream; the raw archive
     follows the canonical module stream set, not the mode-specific split."""
     from kaine.evaluation.observers.raw_bus_archive_consumer import (

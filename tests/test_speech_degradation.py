@@ -11,11 +11,11 @@ from typing import Any
 import pytest
 
 import kaine.backend_state
-from kaine.boot import ConfigurationError, make_vox
+from kaine.boot import ConfigurationError, make_vocal
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.modules.audition import Audition, FakeEmotionClassifier
-from kaine.modules.vox import FakePlayer, Vox
+from kaine.modules.vocal import FakePlayer, Vocal
 
 
 @pytest.fixture
@@ -105,9 +105,9 @@ async def test_audition_initialize_degrades_on_warm_up_failure(bus: AsyncBus) ->
 
 
 @pytest.mark.asyncio
-async def test_vox_initialize_degrades_on_warm_up_failure(bus: AsyncBus, tmp_path: Path) -> None:
+async def test_vocal_initialize_degrades_on_warm_up_failure(bus: AsyncBus, tmp_path: Path) -> None:
     tts_client = _FailingTTSClient()
-    vox = Vox(
+    vocal = Vocal(
         bus,
         tts_client=tts_client,
         player=FakePlayer(),
@@ -117,10 +117,10 @@ async def test_vox_initialize_degrades_on_warm_up_failure(bus: AsyncBus, tmp_pat
         sink_path=tmp_path / "vox",
     )
 
-    await vox.initialize()
+    await vocal.initialize()
 
-    assert vox._tts_unavailable is not None
-    assert "native boom" in vox._tts_unavailable
+    assert vocal._tts_unavailable is not None
+    assert "native boom" in vocal._tts_unavailable
     assert any(
         _failure_matches(f, module="vox", backend="sherpa_onnx", reason_sub="native boom")
         for f in kaine.backend_state.backend_failures()
@@ -128,16 +128,16 @@ async def test_vox_initialize_degrades_on_warm_up_failure(bus: AsyncBus, tmp_pat
 
     # A muted vocal module does not raise: it returns empty audio (the failure event is
     # rate-limited and published at baseline salience; see the test below).
-    result = await vox.synthesize_text("hello")
+    result = await vocal.synthesize_text("hello")
     assert result.bytes_produced == 0
     assert not tts_client.synthesized
 
-    await vox.shutdown()
+    await vocal.shutdown()
 
 
-def test_make_vox_unknown_backend_reports_raw_value(bus: AsyncBus) -> None:
+def test_make_vocal_unknown_backend_reports_raw_value(bus: AsyncBus) -> None:
     with pytest.raises(ConfigurationError, match=r"'not_a_backend'"):
-        make_vox(bus, {"backend": "not_a_backend"})
+        make_vocal(bus, {"backend": "not_a_backend"})
 
 
 class _FakeClock:
@@ -152,9 +152,9 @@ class _FakeClock:
 
 
 @pytest.mark.asyncio
-async def test_dormant_muted_vox_publishes_nothing(bus: AsyncBus, tmp_path: Path) -> None:
+async def test_dormant_muted_vocal_publishes_nothing(bus: AsyncBus, tmp_path: Path) -> None:
     tts_client = _FailingTTSClient()
-    vox = Vox(
+    vocal = Vocal(
         bus,
         tts_client=tts_client,
         player=FakePlayer(),
@@ -162,31 +162,31 @@ async def test_dormant_muted_vox_publishes_nothing(bus: AsyncBus, tmp_path: Path
         applied_prosody=("speed_factor",),
         sink_path=tmp_path / "vox",
     )
-    await vox.initialize()
-    assert vox._tts_unavailable is not None
+    await vocal.initialize()
+    assert vocal._tts_unavailable is not None
 
-    vox.set_dormant(True)
-    assert vox.dormant is True
+    vocal.set_dormant(True)
+    assert vocal.dormant is True
 
     published = []
 
     async def _capture(*args, **kwargs):
         published.append((args, kwargs))
 
-    vox._publish_event = _capture
+    vocal._publish_event = _capture
 
-    result = await vox.synthesize_text("hello")
+    result = await vocal.synthesize_text("hello")
     assert result.audio == b""
     assert published == []
 
-    await vox.shutdown()
+    await vocal.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_muted_vox_publishes_baseline_failure_once_per_60s(bus: AsyncBus, tmp_path: Path) -> None:
+async def test_muted_vocal_publishes_baseline_failure_once_per_60s(bus: AsyncBus, tmp_path: Path) -> None:
     clock = _FakeClock()
     tts_client = _FailingTTSClient()
-    vox = Vox(
+    vocal = Vocal(
         bus,
         tts_client=tts_client,
         player=FakePlayer(),
@@ -197,9 +197,9 @@ async def test_muted_vox_publishes_baseline_failure_once_per_60s(bus: AsyncBus, 
         sink_path=tmp_path / "vox",
         entity_clock=clock,
     )
-    await vox.initialize()
-    assert vox._tts_unavailable is not None
-    assert not vox.dormant
+    await vocal.initialize()
+    assert vocal._tts_unavailable is not None
+    assert not vocal.dormant
 
     published = []
 
@@ -217,9 +217,9 @@ async def test_muted_vox_publishes_baseline_failure_once_per_60s(bus: AsyncBus, 
             }
         )
 
-    vox._publish_event = _capture
+    vocal._publish_event = _capture
 
-    first = await vox.synthesize_text("first")
+    first = await vocal.synthesize_text("first")
     assert first.audio == b""
     assert len(published) == 1
     assert published[0]["success"] is False
@@ -227,15 +227,15 @@ async def test_muted_vox_publishes_baseline_failure_once_per_60s(bus: AsyncBus, 
     assert published[0]["salience"] == 0.25
 
     clock.advance(10.0)
-    second = await vox.synthesize_text("second")
+    second = await vocal.synthesize_text("second")
     assert second.audio == b""
     assert len(published) == 1
 
     clock.advance(60.0)
-    third = await vox.synthesize_text("third")
+    third = await vocal.synthesize_text("third")
     assert third.audio == b""
     assert len(published) == 2
     assert published[1]["success"] is False
     assert published[1]["salience"] == 0.25
 
-    await vox.shutdown()
+    await vocal.shutdown()

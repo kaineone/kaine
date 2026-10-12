@@ -193,7 +193,7 @@ async def test_non_operator_speech_is_not_reply(bus, tmp_path):
     assert rec["preempted"] is False
 
 
-async def test_empatheia_and_social_drive(bus, tmp_path):
+async def test_social_cognition_and_social_drive(bus, tmp_path):
     path = tmp_path / "outcomes.jsonl"
     observer = UtteranceOutcomeObserver(bus, path=path, poll_interval_s=0.01)
     await observer.start()
@@ -557,13 +557,13 @@ async def test_write_record_runs_off_event_loop(bus, tmp_path, monkeypatch):
         ({"outcome_reply_window_s": "12.5"}, 12.5, False, None),
     ],
 )
-def test_reply_window_from_lingua(
+def test_reply_window_from_language(
     section, expected, should_warn, expected_type, caplog
 ):
-    from kaine.cycle.utterance_outcome import reply_window_from_lingua
+    from kaine.cycle.utterance_outcome import reply_window_from_language
 
     caplog.set_level(logging.WARNING)
-    result = reply_window_from_lingua(section)
+    result = reply_window_from_language(section)
     assert result == expected
     warns = [r for r in caplog.records if r.levelno == logging.WARNING]
     if should_warn:
@@ -596,9 +596,9 @@ async def test_phase_utterance_outcome_boots_despite_bad_reply_window(
         async def read_entries(self, stream, *, last_id, count, block_ms):
             return ([], None)
 
-    for lingua in ({"outcome_reply_window_s": "abc"}, None):
+    for language in ({"outcome_reply_window_s": "abc"}, None):
         ctx = types.SimpleNamespace(
-            kaine_config={"modules": {"lingua": True}, "lingua": lingua},
+            kaine_config={"modules": {"lingua": True}, "lingua": language},
             bus=FakeBus(),
             utterance_outcome=None,
         )

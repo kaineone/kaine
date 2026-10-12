@@ -18,5 +18,5 @@ This change lands in three pull requests.
 
 ## Impact
 
-- **Code:** new `kaine/modules/context.py`; `kaine/workspace/syneidesis.py` (metadata only) in this PR.
+- **Code:** new `kaine/modules/context.py`; `kaine/workspace/core.py` (metadata only) in this PR.
 - **Behaviour:** none in this PR; later PRs make the processors condition on the context.

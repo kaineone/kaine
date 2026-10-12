@@ -137,7 +137,7 @@ def test_implied_extras(
     assert wizard.implied_extras(modules, shipped) == expected
 
 
-def test_vox_sherpa_onnx_skips_chatterbox_voice_prompt(
+def test_vocal_sherpa_onnx_skips_chatterbox_voice_prompt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(

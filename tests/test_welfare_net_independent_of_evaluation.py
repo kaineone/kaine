@@ -30,8 +30,8 @@ from kaine.evaluation.observers.welfare_observer import (
 from kaine.evaluation.registry import SidecarRegistry
 from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.experiment.run_context import RunContext, set_run_context
-from kaine.modules.eidolon import Eidolon, SelfModelDocument
 from kaine.modules.registry import ModuleRegistry
+from kaine.modules.self_model import SelfModel, SelfModelDocument
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
 # ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ def _control_to_tmp(tmp_path, monkeypatch):
 
 async def _entity(bus: AsyncBus, tmp_path: Path, *, name="Aria"):
     reg = ModuleRegistry()
-    eid = Eidolon(bus, persistence_path=tmp_path / "sm.json", save_interval_s=60)
+    eid = SelfModel(bus, persistence_path=tmp_path / "sm.json", save_interval_s=60)
     await eid.initialize()
     eid._model = SelfModelDocument(name=name, values=["honesty"])
     reg.register(eid)
@@ -134,7 +134,7 @@ async def test_build_welfare_producer_matches_registry_shape(bus, tmp_path):
                 "interoceptive_distress_duration_s": 30.0,
             },
         },
-        lingua_model_id=None,
+        language_model_id=None,
     )
     observer, sink = build_welfare_producer(bus, eval_cfg)
     assert isinstance(observer, WelfareObserver)
@@ -160,7 +160,7 @@ async def test_registry_does_not_build_a_second_welfare_observer(bus, tmp_path):
                 "nous_policy": False,
             },
         },
-        lingua_model_id=None,
+        language_model_id=None,
     )
     external, _external_sink = build_welfare_producer(bus, eval_cfg)
     registry = SidecarRegistry(bus=bus, config=eval_cfg, welfare_observer=external)
@@ -181,7 +181,7 @@ async def test_registry_does_not_build_a_second_welfare_observer(bus, tmp_path):
 async def test_welfare_producer_starts_only_with_welfare_response(bus, tmp_path):
     eval_cfg = EvaluationConfig.from_mapping(
         {"enabled": False, "paths": {"evaluation_logs": str(tmp_path), "retention_days": 7}},
-        lingua_model_id=None,
+        language_model_id=None,
     )
     disabled_cfg = PreservationConfig.from_section({"welfare_response": {"enabled": False}})
     assert await _start_welfare_producer(bus, eval_cfg, disabled_cfg) is None
@@ -201,7 +201,7 @@ async def test_welfare_producer_starts_only_with_welfare_response(bus, tmp_path)
 async def test_welfare_producer_start_failure_refuses_to_run(bus, tmp_path, monkeypatch):
     eval_cfg = EvaluationConfig.from_mapping(
         {"enabled": False, "paths": {"evaluation_logs": str(tmp_path), "retention_days": 7}},
-        lingua_model_id=None,
+        language_model_id=None,
     )
     preservation_cfg = PreservationConfig.from_section(
         {"welfare_response": {"enabled": True}}
@@ -240,7 +240,7 @@ async def test_supervisor_ignores_a_live_producer(bus, tmp_path):
 
     eval_cfg = EvaluationConfig.from_mapping(
         {"enabled": False, "paths": {"evaluation_logs": str(tmp_path), "retention_days": 7}},
-        lingua_model_id=None,
+        language_model_id=None,
     )
     preservation_cfg = PreservationConfig.from_section(
         {"welfare_response": {"enabled": True}}
@@ -264,7 +264,7 @@ async def test_supervisor_restarts_a_dead_producer(bus, tmp_path):
 
     eval_cfg = EvaluationConfig.from_mapping(
         {"enabled": False, "paths": {"evaluation_logs": str(tmp_path), "retention_days": 7}},
-        lingua_model_id=None,
+        language_model_id=None,
     )
     preservation_cfg = PreservationConfig.from_section(
         {"welfare_response": {"enabled": True}}
@@ -310,7 +310,7 @@ async def test_restarted_producer_does_not_replay_backlog(bus, tmp_path):
 
     eval_cfg = EvaluationConfig.from_mapping(
         {"enabled": False, "paths": {"evaluation_logs": str(tmp_path), "retention_days": 7}},
-        lingua_model_id=None,
+        language_model_id=None,
     )
     preservation_cfg = PreservationConfig.from_section(
         {"welfare_response": {"enabled": True}}
@@ -375,7 +375,7 @@ async def test_restarted_producer_does_not_replay_backlog(bus, tmp_path):
 async def test_producer_construction_failure_refuses(bus, tmp_path, monkeypatch):
     eval_cfg = EvaluationConfig.from_mapping(
         {"enabled": False, "paths": {"evaluation_logs": str(tmp_path), "retention_days": 7}},
-        lingua_model_id=None,
+        language_model_id=None,
     )
     preservation_cfg = PreservationConfig.from_section(
         {"welfare_response": {"enabled": True}}
@@ -423,7 +423,7 @@ async def test_gray_zone_reaches_the_monitor_with_evaluation_off(bus, tmp_path):
                 "interoceptive_distress_duration_s": 30.0,
             },
         },
-        lingua_model_id=None,
+        language_model_id=None,
     )
     preservation_cfg = PreservationConfig.from_section(
         {"welfare_response": {"enabled": True}}
@@ -493,7 +493,7 @@ async def test_cancel_during_emit_leaves_detector_state_consistent(bus, tmp_path
     same burst on the next replay event."""
     eval_cfg = EvaluationConfig.from_mapping(
         {"enabled": False, "paths": {"evaluation_logs": str(tmp_path), "retention_days": 7}},
-        lingua_model_id=None,
+        language_model_id=None,
     )
     observer, _sink = build_welfare_producer(bus, eval_cfg)
     observer._consolidation_window_s = 60.0

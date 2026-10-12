@@ -204,7 +204,7 @@ def _encrypted_state_without_key(state_root: Path) -> Path | None:
 def _resolve_entity_name(state_root: Path, config: dict[str, Any]) -> str:
     """Best-effort entity name from the self-model, else 'entity'."""
     try:
-        from kaine.modules.eidolon.document import load as load_self_model
+        from kaine.modules.self_model.document import load as load_self_model
 
         sm_path = state_root / "eidolon" / "self_model.json"
         if sm_path.is_file():

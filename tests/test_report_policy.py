@@ -10,12 +10,12 @@ import pytest
 
 from kaine.bus.schema import validate_event
 from kaine.cycle.types import WorkspaceSnapshot
-from kaine.workspace.report_policy import SelfInitiatedReportPolicy
-from kaine.workspace.volition import (
+from kaine.workspace.action_selection import (
     OWN_EXTERNAL_SPEECH_TYPE,
     SPEAK,
     THINK,
 )
+from kaine.workspace.report_policy import SelfInitiatedReportPolicy
 
 
 def _kinds(intents):

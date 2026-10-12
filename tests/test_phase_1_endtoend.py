@@ -20,7 +20,7 @@ from kaine.workspace import (
     RuleBasedSalience,
     StaticAffectModulator,
     StaticGoalScorer,
-    Syneidesis,
+    Workspace,
 )
 
 
@@ -30,7 +30,7 @@ async def test_phase_1_end_to_end_delivery():
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
 
-    syneidesis = Syneidesis(
+    workspace = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
@@ -46,7 +46,7 @@ async def test_phase_1_end_to_end_delivery():
     import time
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=syneidesis,
+        workspace=workspace,
         registry=registry,
         processing_rate_hz=10.0,
         experiential_rate_hz=10.0,
@@ -92,7 +92,7 @@ async def test_phase_1_end_to_end_with_multiple_modules():
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
 
-    syn = Syneidesis(
+    syn = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
@@ -114,7 +114,7 @@ async def test_phase_1_end_to_end_with_multiple_modules():
     import time
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=syn,
+        workspace=syn,
         registry=registry,
         processing_rate_hz=10.0,
         experiential_rate_hz=10.0,

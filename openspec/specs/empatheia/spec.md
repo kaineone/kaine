@@ -22,7 +22,7 @@ backed store (with an in-memory backend for tests).
 - **THEN** the agent model is recovered with its interaction count intact
 
 ### Requirement: Agent profile fork/merge persistence
-The social cognition module SHALL implement `serialize()` / `deserialize()` on `AgentStore`, and the lifecycle layer SHALL provide an `EmpatheiaMergeStrategy` (beside `EpisodicMemoryMergeStrategy` in `kaine.lifecycle.strategies`) that `default_strategies()` registers under `"empatheia"`, so that agent profiles survive the fork/merge cycle. On merge, the strategy MUST reconcile two diverged profile sets: interaction counts are summed, histograms, behavioural summaries and reliability are averaged with interaction count as the weight, `first_seen` takes the earlier and `last_seen` the later value. The merged profiles SHALL be carried in the merged snapshot; restoring that snapshot loads them into the store, which serves them before any Qdrant copy and writes each to Qdrant on its next update.
+The social cognition module SHALL implement `serialize()` / `deserialize()` on `AgentStore`, and the lifecycle layer SHALL provide an `SocialCognitionMergeStrategy` (beside `EpisodicMemoryMergeStrategy` in `kaine.lifecycle.strategies`) that `default_strategies()` registers under `"empatheia"`, so that agent profiles survive the fork/merge cycle. On merge, the strategy MUST reconcile two diverged profile sets: interaction counts are summed, histograms, behavioural summaries and reliability are averaged with interaction count as the weight, `first_seen` takes the earlier and `last_seen` the later value. The merged profiles SHALL be carried in the merged snapshot; restoring that snapshot loads them into the store, which serves them before any Qdrant copy and writes each to Qdrant on its next update.
 
 #### Scenario: Fork/merge round-trip preserves interaction count
 - **WHEN** an agent profile is updated in a forked instance and the fork is merged
@@ -105,7 +105,7 @@ conscious coalition and evaluation logs.
 
 ### Requirement: Social cognition skips agent-model fold on degraded emotion events
 
-`Empatheia._handle_emotion()` SHALL skip the agent-model fold (and NOT
+`SocialCognition._handle_emotion()` SHALL skip the agent-model fold (and NOT
 increment `interaction_count`) when the incoming `audition.emotion` payload
 carries `"degraded": true`.  A non-running emotion model MUST NOT inflate
 familiarity or interaction counts.

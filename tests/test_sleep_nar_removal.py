@@ -54,7 +54,7 @@ class FakeAffect:
         return None
 
 
-def test_sleep_takes_no_nous_collaborator():
+def test_sleep_takes_no_planning_collaborator():
     params = inspect.signature(Sleep.__init__).parameters
     assert "nous_process" not in params
     assert "nous_step_burst" not in params

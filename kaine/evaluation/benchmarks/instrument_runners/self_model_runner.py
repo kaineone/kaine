@@ -11,7 +11,7 @@ battery of planted-signal / claim cases, offline.
 
 For each battery case the runner plants a known affect_correlation record (a fixed
 valence / arousal / hedge vector) into a temp evaluation-logs dir, drives the real
-``EidolonAccuracyRunner`` with a self-description carrying a known claim, and
+``SelfModelAccuracyRunner`` with a self-description carrying a known claim, and
 compares the scorer's output to the expected score. A WIN means the scorer
 reproduced EVERY expected score (its fixed-threshold arithmetic behaves as
 specified); NULL otherwise.
@@ -39,7 +39,7 @@ from typing import Any, Optional
 from kaine.evaluation.benchmarks.instrument_runners.shared import (
     format_verdict_summary,
 )
-from kaine.evaluation.eidolon_accuracy import EidolonAccuracyRunner
+from kaine.evaluation.self_model_accuracy import SelfModelAccuracyRunner
 from kaine.experiment.seeding import set_global_seed
 from kaine.experiment.verdict import Outcome, Verdict
 
@@ -138,7 +138,7 @@ async def _run_case(case: _Case, logs_dir: Path) -> dict[str, Any]:
         arousal=case.arousal,
         hedge_word_count=case.hedge_word_count,
     )
-    runner = EidolonAccuracyRunner(
+    runner = SelfModelAccuracyRunner(
         _CaptureSink(),
         cognitive_client=_FixedCognitiveClient(case.description),
         evaluation_logs_dir=case_dir,

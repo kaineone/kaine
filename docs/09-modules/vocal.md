@@ -27,7 +27,7 @@ The sherpa-onnx backend has these limits:
 
 ### Choosing a voice
 
-KAINE ships no voice files and its configuration names no voice. When no voice is configured, the vocal module picks one that the engine itself ships, so an enabled module can speak without operator-local files. The rule lives in `kaine/modules/vox/voices.py` and is deterministic: the same list and the same settings give the same voice on every start.
+KAINE ships no voice files and its configuration names no voice. When no voice is configured, the vocal module picks one that the engine itself ships, so an enabled module can speak without operator-local files. The rule lives in `kaine/modules/vocal/voices.py` and is deterministic: the same list and the same settings give the same voice on every start.
 
 An explicit voice always wins, in this order:
 
@@ -131,7 +131,7 @@ Full reference: [`[vox]` in the modules configuration](../appendix-a-configurati
 
 ### From affect to Chatterbox parameters
 
-`affect_to_chatterbox()` in `kaine/modules/vox/mapping.py` is a pure function from `DimensionalState` to `ChatterboxParams`.
+`affect_to_chatterbox()` in `kaine/modules/vocal/mapping.py` is a pure function from `DimensionalState` to `ChatterboxParams`.
 
 | Input | Parameter | Mapping |
 |---|---|---|
@@ -181,13 +181,13 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 
 | File | Role |
 |---|---|
-| `kaine/modules/vox/module.py` | `Vox`: consumer loops, synthesis, playback, publication |
-| `kaine/modules/vox/sherpa_tts.py` | The sherpa-onnx Kokoro backend |
-| `kaine/modules/vox/mapping.py` | `affect_to_chatterbox()` and `ChatterboxParams` |
-| `kaine/modules/vox/mirroring.py` | `blend_prosody()` and `decayed_strength()` |
-| `kaine/modules/vox/client.py` | `ChatterboxClient`, `TTSRequest`, `SynthesisResult` |
-| `kaine/modules/vox/playback.py` | The `Player` abstraction, `build_player()`, `wav_duration_s()` |
-| `kaine/modules/vox/coordination.py` | `SpeakingGate` |
+| `kaine/modules/vocal/module.py` | `Vocal`: consumer loops, synthesis, playback, publication |
+| `kaine/modules/vocal/sherpa_tts.py` | The sherpa-onnx Kokoro backend |
+| `kaine/modules/vocal/mapping.py` | `affect_to_chatterbox()` and `ChatterboxParams` |
+| `kaine/modules/vocal/mirroring.py` | `blend_prosody()` and `decayed_strength()` |
+| `kaine/modules/vocal/client.py` | `ChatterboxClient`, `TTSRequest`, `SynthesisResult` |
+| `kaine/modules/vocal/playback.py` | The `Player` abstraction, `build_player()`, `wav_duration_s()` |
+| `kaine/modules/vocal/coordination.py` | `SpeakingGate` |
 
 ## Enabling
 
@@ -208,13 +208,13 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 
 | File | Coverage |
 |---|---|
-| `tests/test_vox_mapping.py` | Monotonicity of the affect mapping |
-| `tests/test_vox_mirroring.py` | `blend_prosody` bounds; `decayed_strength` decay |
-| `tests/test_vox_client.py` | `ChatterboxClient` request shaping |
-| `tests/test_vox_playback.py` | The `Player` abstraction; `wav_duration_s` |
-| `tests/test_vox_module.py` | Consumer loop, affect tracking, the mirroring switch |
-| `tests/test_vox_voices.py` | The voice selection rule: determinism, the gender filter, explicit voices, the Kokoro table |
-| `tests/test_vox_default_voice.py` | Picking a shipped voice against a fake Chatterbox server and a fake Kokoro table; silence with a clear message when none can be chosen |
+| `tests/test_vocal_mapping.py` | Monotonicity of the affect mapping |
+| `tests/test_vocal_mirroring.py` | `blend_prosody` bounds; `decayed_strength` decay |
+| `tests/test_vocal_client.py` | `ChatterboxClient` request shaping |
+| `tests/test_vocal_playback.py` | The `Player` abstraction; `wav_duration_s` |
+| `tests/test_vocal_module.py` | Consumer loop, affect tracking, the mirroring switch |
+| `tests/test_vocal_voices.py` | The voice selection rule: determinism, the gender filter, explicit voices, the Kokoro table |
+| `tests/test_vocal_default_voice.py` | Picking a shipped voice against a fake Chatterbox server and a fake Kokoro table; silence with a clear message when none can be chosen |
 | `tests/test_setup_voice_discovery.py` | The setup wizard reads the server's voice list by filename |
 | `tests/test_sherpa_speech_engines.py` | sherpa-onnx engine integration |
 | `tests/test_speech_models.py` | Model download and verification |

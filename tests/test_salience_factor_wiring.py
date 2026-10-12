@@ -22,6 +22,7 @@ from kaine.cycle import CognitiveCycle
 from kaine.cycle.affect_state import AffectStateProvider
 from kaine.modules.affect.modulator import StateModulator
 from kaine.modules.affect.state import DimensionalState
+from kaine.workspace.core import Workspace
 from kaine.workspace.novelty import NoveltyTracker
 from kaine.workspace.salience import RuleBasedSalience
 from kaine.workspace.strategies import (
@@ -30,8 +31,7 @@ from kaine.workspace.strategies import (
     StaticGoalScorer,
     build_drive_sources,
 )
-from kaine.workspace.syneidesis import Syneidesis
-from tests._fakes import FakeClock, FakeRegistry, FakeSyneidesis
+from tests._fakes import FakeClock, FakeRegistry, FakeWorkspace
 
 
 def _event(source: str, intensity: float, payload=None, type_: str = "percept") -> Event:
@@ -127,7 +127,7 @@ def test_provider_drive_values_is_a_copy():
 
 
 async def _select_one(strategy, event) -> tuple:
-    syn = Syneidesis(strategy, top_k=1, publication_threshold=0.35)
+    syn = Workspace(strategy, top_k=1, publication_threshold=0.35)
     snap = await syn.select([("1-0", event)], {"tick_index": 1})
     return snap
 
@@ -232,7 +232,7 @@ async def test_static_fallback_reproduces_two_factor_selection_bit_for_bit():
     ]
 
     strategy = RuleBasedSalience(NoveltyTracker(window=4), StaticGoalScorer(), StaticAffectModulator())
-    syn = Syneidesis(strategy, top_k=3, publication_threshold=0.35)
+    syn = Workspace(strategy, top_k=3, publication_threshold=0.35)
     snap = await syn.select(list(events), {"tick_index": 1})
 
     # Independent two-factor reference: intensity * novelty, same order/algorithm.
@@ -265,7 +265,7 @@ async def test_real_four_factor_selection_is_deterministic():
             ),
             StateModulator(provider.dimensional_state),
         )
-        return Syneidesis(strategy, top_k=3, publication_threshold=0.05)
+        return Workspace(strategy, top_k=3, publication_threshold=0.05)
 
     async def select():
         syn = run()
@@ -408,7 +408,7 @@ async def test_engine_calls_observer_before_select_with_sorted_batch():
     order: list[str] = []
     seen: list[list] = []
 
-    class RecordingSyneidesis(FakeSyneidesis):
+    class RecordingWorkspace(FakeWorkspace):
         async def select(self, events, context):
             order.append("select")
             return await super().select(events, context)
@@ -423,7 +423,7 @@ async def test_engine_calls_observer_before_select_with_sorted_batch():
         await bus.publish(_event("audition", 0.5))
         cycle = CognitiveCycle(
             bus=bus,
-            syneidesis=RecordingSyneidesis(),
+            workspace=RecordingWorkspace(),
             registry=FakeRegistry(["soma.out", "audition.out"]),
             clock=FakeClock(),
             sleep=FakeClock().sleep,
@@ -451,10 +451,10 @@ async def test_engine_swallows_observer_exception_and_tick_continues():
 
     try:
         await bus.publish(_event("soma", 0.5))
-        syn = FakeSyneidesis()
+        syn = FakeWorkspace()
         cycle = CognitiveCycle(
             bus=bus,
-            syneidesis=syn,
+            workspace=syn,
             registry=FakeRegistry(["soma.out"]),
             clock=FakeClock(),
             sleep=FakeClock().sleep,

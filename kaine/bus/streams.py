@@ -19,37 +19,37 @@ from kaine.bus.schema import WORKSPACE_STREAM, module_stream
 #: Tick, rate and time-scale events from the cycle engine.
 CYCLE_STREAM = "cycle.out"
 #: Intents chosen by the action selection module.
-VOLITION_STREAM = module_stream("volition")
+ACTION_SELECTION_STREAM = module_stream("volition")
 #: Outcomes reported back to the action selection module by the effectors module.
-VOLITION_FEEDBACK_STREAM = "volition_feedback.out"
+ACTION_SELECTION_FEEDBACK_STREAM = "volition_feedback.out"
 
 # --- The language module's speech channels ---------------------------------------------
 
 #: Speech addressed to the world (the vocal module reads it).
-LINGUA_EXTERNAL_STREAM = "lingua.external"
+LANGUAGE_EXTERNAL_STREAM = "lingua.external"
 #: Inner speech (the self-model module reads it; the vocal module never does).
-LINGUA_INTERNAL_STREAM = "lingua.internal"
+LANGUAGE_INTERNAL_STREAM = "lingua.internal"
 
 # --- Module output streams (one per module under kaine/modules/) ----------
 
 AUDITION_STREAM = module_stream("audition")
 SEQUENCE_STREAM = module_stream("chronos")
 ECHO_STREAM = module_stream("echo")
-EIDOLON_STREAM = module_stream("eidolon")
-EMPATHEIA_STREAM = module_stream("empatheia")
+SELF_MODEL_STREAM = module_stream("eidolon")
+SOCIAL_COGNITION_STREAM = module_stream("empatheia")
 SLEEP_STREAM = module_stream("hypnos")
 #: The language module's aggregate stream: a copy of every utterance on either channel.
-LINGUA_STREAM = module_stream("lingua")
+LANGUAGE_STREAM = module_stream("lingua")
 EPISODIC_MEMORY_STREAM = module_stream("mnemos")
 MUNDUS_STREAM = module_stream("mundus")
-NOUS_STREAM = module_stream("nous")
+PLANNING_STREAM = module_stream("nous")
 PERCEPTION_STREAM = module_stream("perception")
 WORLD_MODEL_STREAM = module_stream("phantasia")
-PRAXIS_STREAM = module_stream("praxis")
+EFFECTORS_STREAM = module_stream("praxis")
 INTEROCEPTION_STREAM = module_stream("soma")
 AFFECT_STREAM = module_stream("thymos")
 VISION_STREAM = module_stream("topos")
-VOX_STREAM = module_stream("vox")
+VOCAL_STREAM = module_stream("vox")
 
 # --- Cycle-layer and lifecycle producers -----------------------------------
 
@@ -71,20 +71,20 @@ MODULE_STREAMS: frozenset[str] = frozenset(
         AUDITION_STREAM,
         SEQUENCE_STREAM,
         ECHO_STREAM,
-        EIDOLON_STREAM,
-        EMPATHEIA_STREAM,
+        SELF_MODEL_STREAM,
+        SOCIAL_COGNITION_STREAM,
         SLEEP_STREAM,
-        LINGUA_STREAM,
+        LANGUAGE_STREAM,
         EPISODIC_MEMORY_STREAM,
         MUNDUS_STREAM,
-        NOUS_STREAM,
+        PLANNING_STREAM,
         PERCEPTION_STREAM,
         WORLD_MODEL_STREAM,
-        PRAXIS_STREAM,
+        EFFECTORS_STREAM,
         INTEROCEPTION_STREAM,
         AFFECT_STREAM,
         VISION_STREAM,
-        VOX_STREAM,
+        VOCAL_STREAM,
     }
 )
 
@@ -92,10 +92,10 @@ KNOWN_STREAMS: frozenset[str] = MODULE_STREAMS | frozenset(
     {
         WORKSPACE_STREAM,
         CYCLE_STREAM,
-        VOLITION_STREAM,
-        VOLITION_FEEDBACK_STREAM,
-        LINGUA_EXTERNAL_STREAM,
-        LINGUA_INTERNAL_STREAM,
+        ACTION_SELECTION_STREAM,
+        ACTION_SELECTION_FEEDBACK_STREAM,
+        LANGUAGE_EXTERNAL_STREAM,
+        LANGUAGE_INTERNAL_STREAM,
         GESTATION_STREAM,
         INDIVIDUATION_STREAM,
         LIFECYCLE_STREAM,
@@ -110,31 +110,31 @@ __all__ = [
     "SEQUENCE_STREAM",
     "CYCLE_STREAM",
     "ECHO_STREAM",
-    "EIDOLON_STREAM",
-    "EMPATHEIA_STREAM",
+    "SELF_MODEL_STREAM",
+    "SOCIAL_COGNITION_STREAM",
     "GESTATION_STREAM",
     "SLEEP_STREAM",
     "INDIVIDUATION_STREAM",
     "KNOWN_STREAMS",
     "LIFECYCLE_STREAM",
-    "LINGUA_EXTERNAL_STREAM",
-    "LINGUA_INTERNAL_STREAM",
-    "LINGUA_STREAM",
+    "LANGUAGE_EXTERNAL_STREAM",
+    "LANGUAGE_INTERNAL_STREAM",
+    "LANGUAGE_STREAM",
     "EPISODIC_MEMORY_STREAM",
     "MODULE_STREAMS",
     "MUNDUS_STREAM",
-    "NOUS_STREAM",
+    "PLANNING_STREAM",
     "PERCEPTION_STREAM",
     "WORLD_MODEL_STREAM",
-    "PRAXIS_STREAM",
+    "EFFECTORS_STREAM",
     "PRESERVATION_STREAM",
     "INTEROCEPTION_STREAM",
     "SPOT_STREAM",
     "AFFECT_STREAM",
     "VISION_STREAM",
-    "VOLITION_FEEDBACK_STREAM",
-    "VOLITION_STREAM",
-    "VOX_STREAM",
+    "ACTION_SELECTION_FEEDBACK_STREAM",
+    "ACTION_SELECTION_STREAM",
+    "VOCAL_STREAM",
     "WELFARE_STREAM",
     "WORKSPACE_STREAM",
 ]

@@ -49,7 +49,7 @@ from kaine import legacy_aliases, perception_state
 from kaine.modules.base import BaseModule
 from kaine.modules.mundus.adapter import EmbodimentAdapter, FeedFrame
 from kaine.modules.mundus.channels import CONTINUOUS_CHANNEL_RANGE
-from kaine.workspace.volition import VOLITION_STREAM
+from kaine.workspace.action_selection import ACTION_SELECTION_STREAM
 
 if TYPE_CHECKING:
     # Imported for typing only — the control surface is injected at construction,
@@ -85,7 +85,7 @@ class Mundus(BaseModule):
         continuous_expose: Optional[dict[str, bool]] = None,
         mirror_speech: bool = True,
         speech_stream: str = "lingua.external",
-        intent_stream: str = VOLITION_STREAM,
+        intent_stream: str = ACTION_SELECTION_STREAM,
         locus_reader: Optional[Callable[[], str]] = None,
         control_surface: Optional["ContinuousMotorSurface"] = None,
     ) -> None:

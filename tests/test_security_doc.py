@@ -31,7 +31,7 @@ def test_security_md_exists() -> None:
     assert SECURITY_PATH.exists(), "SECURITY.md not found at repo root"
 
 
-def test_security_md_mentions_eidolon_self_model(security_text: str) -> None:
+def test_security_md_mentions_self_model_self_model(security_text: str) -> None:
     """§4 must name the self-model file."""
     assert "self_model" in security_text, (
         "SECURITY.md §4 does not mention the Eidolon self-model "
@@ -55,7 +55,7 @@ def test_security_md_mentions_world_model(security_text: str) -> None:
     )
 
 
-def test_security_md_mentions_empatheia(security_text: str) -> None:
+def test_security_md_mentions_social_cognition(security_text: str) -> None:
     """§4 must name the social cognition module's Qdrant store."""
     assert "social cognition" in security_text, (
         "SECURITY.md §4 does not mention the Social cognition Qdrant store "

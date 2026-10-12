@@ -148,7 +148,7 @@ class EpisodicMemoryMergeStrategy:
         return out
 
 
-class NousMergeStrategy:
+class PlanningMergeStrategy:
     """The planning module (active inference): one-sided selection by posterior certainty.
 
     The planning module is now a pymdp/JAX active-inference engine — there is no NAR subprocess
@@ -189,7 +189,7 @@ class NousMergeStrategy:
         return out
 
 
-class EidolonMergeStrategy:
+class SelfModelMergeStrategy:
     """The self-model module: dedup values/norms, sum speech count, concatenate history."""
 
     def merge(self, state_a, state_b):
@@ -283,7 +283,7 @@ class AffectMergeStrategy:
         return out
 
 
-class EmpatheiaMergeStrategy:
+class SocialCognitionMergeStrategy:
     """Reconcile two diverged AgentStore snapshots.
 
     Semantics
@@ -430,8 +430,8 @@ def default_strategies() -> dict[str, MergeStrategy]:
     """Map of module-name → strategy for KAINE's stock modules."""
     return {
         "mnemos": EpisodicMemoryMergeStrategy(),
-        "nous": NousMergeStrategy(),
-        "eidolon": EidolonMergeStrategy(),
+        "nous": PlanningMergeStrategy(),
+        "eidolon": SelfModelMergeStrategy(),
         "thymos": AffectMergeStrategy(),
-        "empatheia": EmpatheiaMergeStrategy(),
+        "empatheia": SocialCognitionMergeStrategy(),
     }

@@ -18,7 +18,7 @@ from kaine.boot import (
     build_registry,
     construct_module,
     make_interoception,
-    make_nous,
+    make_planning,
     make_sequence,
 )
 from kaine.bus.client import AsyncBus
@@ -27,7 +27,7 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.interoception.forward import SubstrateForwardModel
 from kaine.modules.interoception.module import Interoception
-from kaine.modules.nous import FakeEngine, Nous
+from kaine.modules.planning import FakeEngine, Planning
 from kaine.modules.registry import ModuleRegistry
 from kaine.modules.sequence.featurizer import SnapshotFeaturizer
 from kaine.modules.sequence.module import Sequence
@@ -221,39 +221,39 @@ async def test_interoception_injected_forward_model_tick_never_builds_substrate(
 # ---------------------------------------------------------------------------
 
 
-def _engine_of(nous: Nous) -> Any:
-    return getattr(nous, "engine", getattr(nous, "_engine", None))
+def _engine_of(planning: Planning) -> Any:
+    return getattr(planning, "engine", getattr(planning, "_engine", None))
 
 
-def test_make_nous_injected_engine_bypasses_pymdp_build(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_make_planning_injected_engine_bypasses_pymdp_build(monkeypatch: pytest.MonkeyPatch) -> None:
     bus = _bus()
     try:
         fake_engine = FakeEngine()
         monkeypatch.setattr(
-            "kaine.modules.nous.engine.PymdpEngine",
+            "kaine.modules.planning.engine.PymdpEngine",
             _FailingCallable("PymdpEngine"),
         )
         monkeypatch.setattr(
-            "kaine.modules.nous.generative_model.build_generative_model",
+            "kaine.modules.planning.generative_model.build_generative_model",
             _FailingCallable("build_generative_model"),
         )
 
-        nous = make_nous(
+        planning = make_planning(
             bus,
             {"baseline_salience": 0.1, "alert_salience": 0.7},
             injections={"engine": fake_engine},
         )
-        assert _engine_of(nous) is fake_engine
+        assert _engine_of(planning) is fake_engine
     finally:
         asyncio.run(bus.close())
 
 
-def test_make_nous_rejects_oversized_envelope_even_with_injected_engine() -> None:
+def test_make_planning_rejects_oversized_envelope_even_with_injected_engine() -> None:
     bus = _bus()
     try:
         fake_engine = FakeEngine()
         with pytest.raises(ConfigurationError):
-            make_nous(
+            make_planning(
                 bus,
                 {
                     "factors": 50,
@@ -267,11 +267,11 @@ def test_make_nous_rejects_oversized_envelope_even_with_injected_engine() -> Non
         asyncio.run(bus.close())
 
 
-def test_make_nous_rejects_unknown_injection() -> None:
+def test_make_planning_rejects_unknown_injection() -> None:
     bus = _bus()
     try:
         with pytest.raises(ConfigurationError, match="does not accept injection"):
-            make_nous(
+            make_planning(
                 bus,
                 {},
                 injections={"engine": FakeEngine(), "lobes": 7},
@@ -365,8 +365,8 @@ def test_construct_module_matches_build_registry_calls(monkeypatch: pytest.Monke
 
     monkeypatch.setattr("kaine.boot.registry.install_state_encryption", lambda cfg: None)
     monkeypatch.setattr("kaine.boot.registry._wire_self_hearing_gate", lambda reg: None)
-    monkeypatch.setattr("kaine.boot.registry._wire_lingua_self_model", lambda reg: None)
-    monkeypatch.setattr("kaine.boot.registry._wire_eidolon_capabilities", lambda reg: None)
+    monkeypatch.setattr("kaine.boot.registry._wire_language_self_model", lambda reg: None)
+    monkeypatch.setattr("kaine.boot.registry._wire_self_model_capabilities", lambda reg: None)
     monkeypatch.setattr("kaine.boot.registry._log_device_assignments", lambda reg, cfg: None)
     monkeypatch.setattr("kaine.boot.registry._wire_oscillators", lambda reg, cfg: None)
 

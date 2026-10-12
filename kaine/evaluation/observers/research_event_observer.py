@@ -61,7 +61,7 @@ from kaine.lifecycle.welfare_signal import (
     SENSOR_SILENT_CLEARED_TYPE,
     SENSOR_SILENT_TYPE,
 )
-from kaine.modules.praxis.audit_log import _sanitize as _praxis_sanitize
+from kaine.modules.effectors.audit_log import _sanitize as _effectors_sanitize
 from kaine.privacy_filter import PrivacyFilter
 
 log = logging.getLogger(__name__)
@@ -112,7 +112,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "tick_count",
         }
     ),
-    # Real action selection module's intent types (kaine/workspace/volition.py) — EXACT keys,
+    # Real action selection module's intent types (kaine/workspace/action_selection.py) — EXACT keys,
     # no prefix matching: an unknown intent.* subtype is NOT logged.
     "intent.speak": frozenset({"kind", "about_tag", "effector", "origin"}),
     "intent.think": frozenset({"kind", "about_tag", "effector", "origin"}),
@@ -584,7 +584,7 @@ class ResearchEventObserver(StreamSubscriberObserver):
             for f in _REDACTED_DROP:
                 payload.pop(f, None)
         elif event.type == "praxis.action":
-            payload = _praxis_sanitize(payload)
+            payload = _effectors_sanitize(payload)
 
         record: dict[str, Any] = {
             "ts": _iso_now(),

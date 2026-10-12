@@ -9,10 +9,10 @@ import kaine.lifecycle.divergence as _divergence_mod
 import kaine.memory_kinds as _memory_kinds
 import kaine.organ_window_state as _organ_window_state
 from kaine import legacy_names
-from kaine.modules.empatheia.module import Empatheia
 from kaine.modules.episodic_memory.memory import EpisodicMemoryCore, recover_interrupted_import
 from kaine.modules.episodic_memory.module import EpisodicMemory
 from kaine.modules.episodic_memory.storage import SqliteVecStorage
+from kaine.modules.social_cognition.module import SocialCognition
 from kaine.modules.world_model.module import WorldModel
 
 PERSISTED_DONE = legacy_names.SCOPE_STATUS.get("persisted") == "done"
@@ -98,10 +98,10 @@ def test_episodic_memory_collection_prefix_pinned():
         assert f"{defaults[0]}{kind}" == f"{expected_prefix}{kind}"
 
 
-def test_empatheia_collection_pinned():
+def test_social_cognition_collection_pinned():
     """The social-cognition collection name must follow the legacy table."""
     expected = _collection(_SOCIAL_ENTRY["old"])
-    default = inspect.signature(Empatheia.__init__).parameters["collection"].default
+    default = inspect.signature(SocialCognition.__init__).parameters["collection"].default
     assert default == expected
 
 

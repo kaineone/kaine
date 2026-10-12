@@ -55,7 +55,7 @@ class RecordingBus:
         return "id-1"
 
 
-class SlowSyneidesis:
+class SlowWorkspace:
     """A workspace stand-in that spends wall time inside select()."""
 
     def __init__(self, monotonic: MonotonicSource, delay_s: float = 0.15) -> None:
@@ -103,11 +103,11 @@ def dilation_cycle(monotonic_source: MonotonicSource):
     )
     bus = RecordingBus()
     registry = FakeRegistry([])
-    syneidesis = SlowSyneidesis(monotonic_source, delay_s=0.15)
+    workspace = SlowWorkspace(monotonic_source, delay_s=0.15)
 
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=syneidesis,
+        workspace=workspace,
         registry=registry,
         processing_rate_hz=10.0,
         entity_clock=entity_clock,
@@ -202,7 +202,7 @@ async def test_deterministic_mode_drops_controller(
 
     cycle = CognitiveCycle(
         bus=RecordingBus(),
-        syneidesis=SlowSyneidesis(monotonic_source, delay_s=0.01),
+        workspace=SlowWorkspace(monotonic_source, delay_s=0.01),
         registry=FakeRegistry([]),
         entity_clock=EntityClock(
             scale=1.0,
@@ -223,7 +223,7 @@ async def test_cycle_tick_payload_carries_time_scale(
 ):
     cycle = CognitiveCycle(
         bus=RecordingBus(),
-        syneidesis=SlowSyneidesis(monotonic_source, delay_s=0.001),
+        workspace=SlowWorkspace(monotonic_source, delay_s=0.001),
         registry=FakeRegistry([]),
         entity_clock=EntityClock(
             scale=0.75,

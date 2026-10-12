@@ -29,12 +29,12 @@ from kaine.evaluation.redteam.cases import (
 )
 from kaine.evaluation.redteam.harness import (
     CommandWhitelist,
-    Praxis,
+    Effectors,
     RedTeamHarness,
     run_suite,
 )
 from kaine.evaluation.redteam.report import build_report, format_summary, write_jsonl
-from kaine.modules.praxis.whitelist import WhitelistEntry
+from kaine.modules.effectors.whitelist import WhitelistEntry
 
 # Every documented surface is wired (there is no entity-side covenant surface —
 # covenant compliance is the operator's obligation, not an entity-side filter),
@@ -70,7 +70,7 @@ async def test_wired_surfaces_all_blocked_and_logged(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_forced_nous_proposal_cases_blocked(tmp_path: Path):
+async def test_forced_planning_proposal_cases_blocked(tmp_path: Path):
     target_ids = {
         "forced.nous_proposal_inhibited",
         "forced.nous_proposal_forged_act",
@@ -140,13 +140,13 @@ class _PermissiveWhitelist(CommandWhitelist):
         return WhitelistEntry(command=command, arg_patterns=tuple(".*" for _ in args))
 
 
-def _miswired_praxis(bus, *, sandbox_path, audit_log_path):
+def _miswired_effectors(bus, *, sandbox_path, audit_log_path):
     # Same as the genuine effectors module, but the shell COMMAND whitelist permits
     # everything. shell is operator-enabled so the action reaches that broken
     # second layer (the point of this mis-wire); the harness must then DETECT the
     # bypass. The shell command run by the bypass cases is a harmless 'true' so
     # nothing destructive executes even though the command gate is broken.
-    return Praxis(
+    return Effectors(
         bus,
         sandbox_path=sandbox_path,
         audit_log_path=audit_log_path,
@@ -170,7 +170,7 @@ async def test_miswired_whitelist_is_detected_as_bypass(tmp_path: Path):
         kind="effector_shell",
         attempt={"command": "true", "args": []},
     )
-    harness = RedTeamHarness(tmp_path, praxis_factory=_miswired_praxis)
+    harness = RedTeamHarness(tmp_path, effectors_factory=_miswired_effectors)
     results = await harness.run([benign])
     report = build_report(results)
     # The mis-wired gate let the action through → the harness must NOT pass.
@@ -203,12 +203,12 @@ async def test_forged_act_intent_blocked_against_genuine_layer(tmp_path: Path):
         assert r.actual is Outcome.BLOCKED
 
 
-def _provenance_disabled_praxis(bus, *, sandbox_path, audit_log_path):
+def _provenance_disabled_effectors(bus, *, sandbox_path, audit_log_path):
     # A deliberately mis-wired effectors module: act-intent provenance enforcement turned
     # OFF. A forged/unsigned intent for an enabled effector would now execute —
     # the harness MUST detect this regression (fail loudly), proving the
     # provenance boundary is actually tested and not a no-op.
-    return Praxis(
+    return Effectors(
         bus,
         sandbox_path=sandbox_path,
         audit_log_path=audit_log_path,
@@ -222,7 +222,7 @@ def _provenance_disabled_praxis(bus, *, sandbox_path, audit_log_path):
 
 @pytest.mark.asyncio
 async def test_disabled_provenance_boundary_is_detected_as_bypass(tmp_path: Path):
-    harness = RedTeamHarness(tmp_path, praxis_factory=_provenance_disabled_praxis)
+    harness = RedTeamHarness(tmp_path, effectors_factory=_provenance_disabled_effectors)
     results = await harness.run(_forged_case())
     report = build_report(results)
     # The forged intent executed against the disabled boundary → NOT passed.
@@ -245,7 +245,7 @@ async def test_miswired_does_not_false_pass_on_full_wired_suite(tmp_path: Path):
     from dataclasses import replace
 
     cases = [replace(c, attempt={"command": "true", "args": []}) for c in benign_shell]
-    harness = RedTeamHarness(tmp_path, praxis_factory=_miswired_praxis)
+    harness = RedTeamHarness(tmp_path, effectors_factory=_miswired_effectors)
     results = await harness.run(cases)
     assert any(not r.blocked for r in results)
 

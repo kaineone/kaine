@@ -13,7 +13,7 @@ from kaine.bus.config import BusConfig
 from kaine.modules.audition.emotion import FakeEmotionClassifier
 from kaine.modules.audition.module import Audition
 from kaine.modules.audition.stt_client import FakeSTTClient
-from kaine.modules.vox import FakePlayer, FakeTTSClient, SpeakingGate, Vox
+from kaine.modules.vocal import FakePlayer, FakeTTSClient, SpeakingGate, Vocal
 
 
 @pytest.fixture
@@ -113,9 +113,9 @@ async def test_audition_processes_when_not_speaking(bus: AsyncBus):
 
 # ---- the vocal module opens the window (only when suppression is on) ---------------
 
-def _make_vox(bus, tmp_path, **overrides):
+def _make_vocal(bus, tmp_path, **overrides):
     overrides.setdefault("player", FakePlayer())
-    return Vox(
+    return Vocal(
         bus,
         tts_client=FakeTTSClient(canned_audio=_wav_bytes(0.5)),
         sink_path=tmp_path / "vox",
@@ -125,33 +125,33 @@ def _make_vox(bus, tmp_path, **overrides):
 
 
 @pytest.mark.asyncio
-async def test_vox_opens_window_when_suppressing(bus, tmp_path):
+async def test_vocal_opens_window_when_suppressing(bus, tmp_path):
     gate = SpeakingGate()
-    vox = _make_vox(
+    vocal = _make_vocal(
         bus, tmp_path, suppress_self_hearing=True, speaking_gate=gate
     )
-    await vox.initialize()
+    await vocal.initialize()
     try:
         assert gate.is_speaking() is False
-        await vox.synthesize_text("hi")
+        await vocal.synthesize_text("hi")
         # 0.5s clip + 600ms hangover → window is open right after.
         assert gate.is_speaking() is True
     finally:
-        await vox.shutdown()
+        await vocal.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_vox_stays_full_duplex_when_not_suppressing(bus, tmp_path):
+async def test_vocal_stays_full_duplex_when_not_suppressing(bus, tmp_path):
     gate = SpeakingGate()
-    vox = _make_vox(
+    vocal = _make_vocal(
         bus, tmp_path, suppress_self_hearing=False, speaking_gate=gate
     )
-    await vox.initialize()
+    await vocal.initialize()
     try:
-        await vox.synthesize_text("hi")
+        await vocal.synthesize_text("hi")
         assert gate.is_speaking() is False  # window never opened
     finally:
-        await vox.shutdown()
+        await vocal.shutdown()
 
 
 # ---- boot wires one shared gate into both modules ---------------------------
@@ -167,6 +167,6 @@ async def test_build_registry_shares_one_gate(bus: AsyncBus):
     }
     registry = build_registry(bus, config)
     audition = registry.get("audition")
-    vox = registry.get("vox")
+    vocal = registry.get("vox")
     assert audition._speaking_gate is not None
-    assert audition._speaking_gate is vox._speaking_gate
+    assert audition._speaking_gate is vocal._speaking_gate

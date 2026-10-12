@@ -81,7 +81,7 @@ Last-write-wins for scalar keys; recursive union for dicts; deduplication by `re
 
 When the defaulted prefixes or embedding spaces differ, the merged episodic memory module state records `metadata.parent_prefixes`, `metadata.prefix_mismatch`, and `metadata.embedding_space_mismatch`.
 
-### NousMergeStrategy
+### PlanningMergeStrategy
 
 The planning module holds posterior probability distributions over hidden-state factors. Merging distributions has no principled field-level union, so the strategy keeps the fork whose posterior is more certain:
 
@@ -95,7 +95,7 @@ Lower entropy wins. Ties go to state A. The merged planning module state records
 - `discarded_fork_entropy`, the entropy of the dropped state;
 - `nous.merge_warning = True` when `|discarded - kept| > warning_threshold` (default 0.2)
 
-### EidolonMergeStrategy
+### SelfModelMergeStrategy
 
 | Field | Resolution |
 |-------|-----------|
@@ -114,7 +114,7 @@ Lower entropy wins. Ties go to state A. The merged planning module state records
 | `goals` | Deduplicated union by goal ID; tagged by source fork |
 | `emotional_history` | Concatenated; tagged by source fork |
 
-### EmpatheiaMergeStrategy
+### SocialCognitionMergeStrategy
 
 The social cognition module's state is a set of agent profiles keyed by agent id. A profile present in only one parent is kept as it is. For an agent both parents know:
 

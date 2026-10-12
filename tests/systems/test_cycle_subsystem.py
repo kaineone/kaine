@@ -13,13 +13,13 @@ from kaine.workspace import (
     RuleBasedSalience,
     StaticAffectModulator,
     StaticGoalScorer,
-    Syneidesis,
+    Workspace,
 )
 from tests.systems._harness import SubsystemHarness
 
 
-def _syneidesis():
-    return Syneidesis(
+def _workspace():
+    return Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
@@ -35,7 +35,7 @@ async def test_tick_with_empty_registry_runs_clean():
     async with SubsystemHarness() as h:
         cycle = CognitiveCycle(
             bus=h.bus,
-            syneidesis=_syneidesis(),
+            workspace=_workspace(),
             registry=ModuleRegistry(),
             processing_rate_hz=10.0,
             experiential_rate_hz=10.0,
@@ -57,7 +57,7 @@ async def test_tick_collects_from_registered_module_stream():
 
         cycle = CognitiveCycle(
             bus=h.bus,
-            syneidesis=_syneidesis(),
+            workspace=_workspace(),
             registry=registry,
             processing_rate_hz=10.0,
             experiential_rate_hz=10.0,
@@ -77,7 +77,7 @@ async def test_runtime_rate_control_event_changes_pacing():
     async with SubsystemHarness() as h:
         cycle = CognitiveCycle(
             bus=h.bus,
-            syneidesis=_syneidesis(),
+            workspace=_workspace(),
             registry=ModuleRegistry(),
             processing_rate_hz=3.0,
             experiential_rate_hz=3.0,

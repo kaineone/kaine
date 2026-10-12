@@ -247,7 +247,7 @@ async def test_audit_window_counts_events_before_requested_sleep(sleep):
 
 
 @pytest.mark.asyncio
-async def test_volition_consumer_loop_publishes_rest_request(sleep):
+async def test_action_selection_consumer_loop_publishes_rest_request(sleep):
     intent = Event(
         source="volition",
         type="intent.rest",
@@ -262,7 +262,7 @@ async def test_volition_consumer_loop_publishes_rest_request(sleep):
     )
     await sleep._bus.publish(intent)
 
-    task = asyncio.create_task(sleep._volition_consumer_loop())
+    task = asyncio.create_task(sleep._action_selection_consumer_loop())
     requests = []
     for _ in range(50):
         requests = await _read_rest_requests(sleep._bus)

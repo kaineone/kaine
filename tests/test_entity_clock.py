@@ -25,7 +25,7 @@ import pytest
 from kaine.bus.schema import Event
 from kaine.cycle.engine import BASE_EPOCH, CognitiveCycle
 from kaine.entity_clock import EntityClock
-from tests._fakes import FakeClock, FakeRegistry, FakeSyneidesis
+from tests._fakes import FakeClock, FakeRegistry, FakeWorkspace
 
 # ----------------------------------------------------------------------------
 # A controllable real-clock/real-sleep pair (real seconds, deterministic).
@@ -170,7 +170,7 @@ def _build_engine(*, scale: float = 1.0, rate: float = 5.0, clock=None, sleep=No
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=FakeSyneidesis(),
+        workspace=FakeWorkspace(),
         registry=FakeRegistry([]),
         processing_rate_hz=rate,
         experiential_rate_hz=rate,
@@ -227,7 +227,7 @@ def _logical_engine(*, scale: float, rate: float = 3.333) -> CognitiveCycle:
     clk = FakeClock()
     return CognitiveCycle(
         bus=_NullBus(),
-        syneidesis=FakeSyneidesis(),
+        workspace=FakeWorkspace(),
         registry=FakeRegistry([]),
         processing_rate_hz=rate,
         experiential_rate_hz=rate,
@@ -375,7 +375,7 @@ async def test_default_time_scale_is_one_and_paces_as_before():
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=FakeSyneidesis(),
+        workspace=FakeWorkspace(),
         registry=FakeRegistry([]),
         processing_rate_hz=5.0,
         experiential_rate_hz=5.0,
@@ -393,7 +393,7 @@ async def test_default_time_scale_is_one_and_paces_as_before():
     bus2 = AsyncBus(BusConfig(password="x", audit_required=False), client=client2)
     cycle2 = CognitiveCycle(
         bus=bus2,
-        syneidesis=FakeSyneidesis(),
+        workspace=FakeWorkspace(),
         registry=FakeRegistry([]),
         processing_rate_hz=5.0,
         experiential_rate_hz=5.0,

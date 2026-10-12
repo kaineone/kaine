@@ -24,10 +24,7 @@ from kaine.lifecycle.manager import ForkManager
 from kaine.modules.affect import DimensionalState
 from kaine.modules.affect.module import Affect
 from kaine.modules.audition.module import Audition
-from kaine.modules.eidolon.module import Eidolon, SelfModelDocument
-from kaine.modules.empatheia.agent import AgentModel
-from kaine.modules.empatheia.module import Empatheia
-from kaine.modules.empatheia.store import InMemoryAgentStore
+from kaine.modules.effectors.module import Effectors
 from kaine.modules.episodic_memory import (
     EpisodicMemory,
     EpisodicMemoryCore,
@@ -35,21 +32,24 @@ from kaine.modules.episodic_memory import (
     InMemoryStorage,
 )
 from kaine.modules.interoception.module import Interoception
-from kaine.modules.lingua.intent_log import IntentExpressionLog
-from kaine.modules.lingua.module import Lingua
+from kaine.modules.language.intent_log import IntentExpressionLog
+from kaine.modules.language.module import Language
 from kaine.modules.mundus.module import Mundus
-from kaine.modules.nous.module import Nous
 from kaine.modules.perception.module import PerceptionLocus
-from kaine.modules.praxis.module import Praxis
+from kaine.modules.planning.module import Planning
 from kaine.modules.registry import ModuleRegistry
+from kaine.modules.self_model.module import SelfModel, SelfModelDocument
 from kaine.modules.sequence.anomaly import RollingZScoreAnomaly
 from kaine.modules.sequence.featurizer import SnapshotFeaturizer
 from kaine.modules.sequence.module import Sequence
 from kaine.modules.sequence.rumination import RecurrenceRuminationDetector
 from kaine.modules.sleep import VoiceAlignmentConfig
 from kaine.modules.sleep.module import Sleep
+from kaine.modules.social_cognition.agent import AgentModel
+from kaine.modules.social_cognition.module import SocialCognition
+from kaine.modules.social_cognition.store import InMemoryAgentStore
 from kaine.modules.vision.module import Vision
-from kaine.modules.vox.module import Vox
+from kaine.modules.vocal.module import Vocal
 from kaine.modules.world_model.module import WorldModel
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
@@ -322,10 +322,10 @@ async def test_roundtrip_audition(bus: AsyncBus, tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_roundtrip_lingua(bus: AsyncBus, tmp_path: Path) -> None:
+async def test_roundtrip_language(bus: AsyncBus, tmp_path: Path) -> None:
     log_path = tmp_path / "lingua" / "intent.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    m1 = Lingua(
+    m1 = Language(
         bus,
         chat_client=_FakeChatClient(),
         intent_log=IntentExpressionLog(log_path),
@@ -336,7 +336,7 @@ async def test_roundtrip_lingua(bus: AsyncBus, tmp_path: Path) -> None:
     )
     m1._intent_cursor = "7-0"
     state = _json_roundtrip(m1.serialize())
-    m2 = Lingua(
+    m2 = Language(
         bus,
         chat_client=_FakeChatClient(),
         intent_log=IntentExpressionLog(tmp_path / "lingua2" / "intent.jsonl"),
@@ -453,46 +453,46 @@ async def test_roundtrip_world_model(bus: AsyncBus, tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_roundtrip_nous(bus: AsyncBus, tmp_path: Path) -> None:
-    m1 = Nous(bus, engine=_FakeEngine())
+async def test_roundtrip_planning(bus: AsyncBus, tmp_path: Path) -> None:
+    m1 = Planning(bus, engine=_FakeEngine())
     m1._last_action = "move"
     m1._last_posterior = [[0.2, 0.8], [0.5, 0.5]]
     state = _json_roundtrip(m1.serialize())
-    m2 = Nous(bus, engine=_FakeEngine())
+    m2 = Planning(bus, engine=_FakeEngine())
     m2.deserialize(state)
     assert _json_roundtrip(m2.serialize()) == state
 
 
 @pytest.mark.asyncio
-async def test_roundtrip_eidolon(bus: AsyncBus, tmp_path: Path) -> None:
+async def test_roundtrip_self_model(bus: AsyncBus, tmp_path: Path) -> None:
     p = tmp_path / "eidolon.json"
-    m1 = Eidolon(bus, persistence_path=p, save_interval_s=60)
+    m1 = SelfModel(bus, persistence_path=p, save_interval_s=60)
     m1._model = SelfModelDocument(name="Aria", values=["honesty", "curiosity"])
     m1._drift_count = 7
     m1._internal_cursor = "5-0"
     m1._external_cursor = "9-0"
     state = _json_roundtrip(m1.serialize())
-    m2 = Eidolon(bus, persistence_path=tmp_path / "eidolon2.json", save_interval_s=60)
+    m2 = SelfModel(bus, persistence_path=tmp_path / "eidolon2.json", save_interval_s=60)
     m2.deserialize(state)
     assert _json_roundtrip(m2.serialize()) == state
 
 
 @pytest.mark.asyncio
-async def test_roundtrip_empatheia(bus: AsyncBus, tmp_path: Path) -> None:
+async def test_roundtrip_social_cognition(bus: AsyncBus, tmp_path: Path) -> None:
     store = InMemoryAgentStore()
-    m1 = Empatheia(bus, store=store)
+    m1 = SocialCognition(bus, store=store)
     model = AgentModel(id="operator", label="operator", interaction_count=5)
     profiles = {model.id: model.to_dict()}
     m1._store.deserialize(json.dumps(profiles).encode("utf-8"))
     state = _json_roundtrip(m1.serialize())
-    m2 = Empatheia(bus, store=InMemoryAgentStore())
+    m2 = SocialCognition(bus, store=InMemoryAgentStore())
     m2.deserialize(state)
     assert _json_roundtrip(m2.serialize()) == state
 
 
 @pytest.mark.asyncio
-async def test_roundtrip_vox(bus: AsyncBus, tmp_path: Path) -> None:
-    m1 = Vox(
+async def test_roundtrip_vocal(bus: AsyncBus, tmp_path: Path) -> None:
+    m1 = Vocal(
         bus,
         tts_client=_FakeTTSClient(),
         player=_FakePlayer(),
@@ -501,7 +501,7 @@ async def test_roundtrip_vox(bus: AsyncBus, tmp_path: Path) -> None:
     m1._current_state = DimensionalState(valence=0.5, arousal=0.7, dominance=-0.2)
     m1._voice_mode = "cloned"
     state = _json_roundtrip(m1.serialize())
-    m2 = Vox(
+    m2 = Vocal(
         bus,
         tts_client=_FakeTTSClient(),
         player=_FakePlayer(),
@@ -510,7 +510,7 @@ async def test_roundtrip_vox(bus: AsyncBus, tmp_path: Path) -> None:
     m2.deserialize(state)
     got = _json_roundtrip(m2.serialize())
     # voice_mode is echoed configuration, not restored state.
-    fresh = Vox(
+    fresh = Vocal(
         bus,
         tts_client=_FakeTTSClient(),
         player=_FakePlayer(),
@@ -523,15 +523,15 @@ async def test_roundtrip_vox(bus: AsyncBus, tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_roundtrip_praxis(bus: AsyncBus, tmp_path: Path) -> None:
-    m1 = Praxis(
+async def test_roundtrip_effectors(bus: AsyncBus, tmp_path: Path) -> None:
+    m1 = Effectors(
         bus,
         sandbox_path=tmp_path / "sb",
         audit_log_path=tmp_path / "audit.log",
         enabled_effectors=["file_write"],
     )
     state = _json_roundtrip(m1.serialize())
-    m2 = Praxis(
+    m2 = Effectors(
         bus,
         sandbox_path=tmp_path / "sb2",
         audit_log_path=tmp_path / "audit2.log",
@@ -627,10 +627,10 @@ async def _build_audition(bus: AsyncBus, tmp_path: Path, name: str) -> Audition:
     return m
 
 
-async def _build_lingua(bus: AsyncBus, tmp_path: Path, name: str) -> Lingua:
+async def _build_language(bus: AsyncBus, tmp_path: Path, name: str) -> Language:
     log_path = tmp_path / name / "intent.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    m = Lingua(
+    m = Language(
         bus,
         chat_client=_FakeChatClient(),
         intent_log=IntentExpressionLog(log_path),
@@ -686,27 +686,27 @@ async def _build_world_model(bus: AsyncBus, tmp_path: Path, name: str) -> WorldM
     return m
 
 
-async def _build_nous(bus: AsyncBus, tmp_path: Path, name: str) -> Nous:
-    m = Nous(bus, engine=_FakeEngine())
+async def _build_planning(bus: AsyncBus, tmp_path: Path, name: str) -> Planning:
+    m = Planning(bus, engine=_FakeEngine())
     await m.initialize()
     return m
 
 
-async def _build_eidolon(bus: AsyncBus, tmp_path: Path, name: str) -> Eidolon:
+async def _build_self_model(bus: AsyncBus, tmp_path: Path, name: str) -> SelfModel:
     p = tmp_path / f"{name}.json"
-    m = Eidolon(bus, persistence_path=p, save_interval_s=60)
+    m = SelfModel(bus, persistence_path=p, save_interval_s=60)
     await m.initialize()
     return m
 
 
-async def _build_empatheia(bus: AsyncBus, tmp_path: Path, name: str) -> Empatheia:
-    m = Empatheia(bus, store=InMemoryAgentStore())
+async def _build_social_cognition(bus: AsyncBus, tmp_path: Path, name: str) -> SocialCognition:
+    m = SocialCognition(bus, store=InMemoryAgentStore())
     await m.initialize()
     return m
 
 
-async def _build_vox(bus: AsyncBus, tmp_path: Path, name: str) -> Vox:
-    m = Vox(
+async def _build_vocal(bus: AsyncBus, tmp_path: Path, name: str) -> Vocal:
+    m = Vocal(
         bus,
         tts_client=_FakeTTSClient(),
         player=_FakePlayer(),
@@ -716,8 +716,8 @@ async def _build_vox(bus: AsyncBus, tmp_path: Path, name: str) -> Vox:
     return m
 
 
-async def _build_praxis(bus: AsyncBus, tmp_path: Path, name: str) -> Praxis:
-    m = Praxis(
+async def _build_effectors(bus: AsyncBus, tmp_path: Path, name: str) -> Effectors:
+    m = Effectors(
         bus,
         sandbox_path=tmp_path / name / "sb",
         audit_log_path=tmp_path / name / "audit.log",
@@ -750,7 +750,7 @@ BASE_FACTORIES: dict[str, Any] = {
     "chronos": _build_sequence,
     "topos": _build_vision,
     "audition": _build_audition,
-    "lingua": _build_lingua,
+    "lingua": _build_language,
 }
 
 ORDER: list[tuple[str, Any]] = [
@@ -758,11 +758,11 @@ ORDER: list[tuple[str, Any]] = [
     ("mnemos", _build_episodic_memory),
     ("hypnos", _build_sleep),
     ("phantasia", _build_world_model),
-    ("nous", _build_nous),
-    ("eidolon", _build_eidolon),
-    ("empatheia", _build_empatheia),
-    ("vox", _build_vox),
-    ("praxis", _build_praxis),
+    ("nous", _build_planning),
+    ("eidolon", _build_self_model),
+    ("empatheia", _build_social_cognition),
+    ("vox", _build_vocal),
+    ("praxis", _build_effectors),
     ("perception", _build_perception),
     ("mundus", _build_mundus),
 ]
@@ -789,7 +789,7 @@ def _mutate_audition(m: Audition, i: int) -> None:
     m._stt_model = f"stt-{i}"
 
 
-def _mutate_lingua(m: Lingua, i: int) -> None:
+def _mutate_language(m: Language, i: int) -> None:
     m._model_id = f"lingua-{i}"
     m._temperature = 0.5 + i * 0.05
     m._intent_cursor = f"{i}-0"
@@ -816,23 +816,23 @@ def _mutate_world_model(m: WorldModel, i: int) -> None:
     m._training_enabled = True
 
 
-def _mutate_nous(m: Nous, i: int) -> None:
+def _mutate_planning(m: Planning, i: int) -> None:
     m._last_action = f"act-{i}"
     m._last_posterior = [[0.1 * i, 1.0 - 0.1 * i]]
 
 
-def _mutate_eidolon(m: Eidolon, i: int) -> None:
+def _mutate_self_model(m: SelfModel, i: int) -> None:
     m._model = SelfModelDocument(name=f"Eid{i}", values=[f"v{i}"])
     m._drift_count = i
 
 
-async def _mutate_empatheia(m: Empatheia, i: int) -> None:
+async def _mutate_social_cognition(m: SocialCognition, i: int) -> None:
     agent = AgentModel(id=f"agent-{i}", label=f"agent-{i}", interaction_count=i)
     profiles = {agent.id: agent.to_dict()}
     m._store.deserialize(json.dumps(profiles).encode("utf-8"))
 
 
-def _mutate_vox(m: Vox, i: int) -> None:
+def _mutate_vocal(m: Vocal, i: int) -> None:
     # Keep every dimension inside its clamp range so the round-trip is exact.
     m._current_state = DimensionalState(
         valence=0.05 * i, arousal=0.08 * i, dominance=-0.05 * i
@@ -840,7 +840,7 @@ def _mutate_vox(m: Vox, i: int) -> None:
     m._voice_mode = f"mode-{i}"
 
 
-def _mutate_praxis(m: Praxis, i: int) -> None:
+def _mutate_effectors(m: Effectors, i: int) -> None:
     # The effectors module's serialize() returns the fixed effector set only.
     pass
 
@@ -859,16 +859,16 @@ MUTATORS: dict[str, Any] = {
     "chronos": _mutate_sequence,
     "topos": _mutate_vision,
     "audition": _mutate_audition,
-    "lingua": _mutate_lingua,
+    "lingua": _mutate_language,
     "thymos": _mutate_affect,
     "mnemos": _mutate_episodic_memory,
     "hypnos": _mutate_sleep,
     "phantasia": _mutate_world_model,
-    "nous": _mutate_nous,
-    "eidolon": _mutate_eidolon,
-    "empatheia": _mutate_empatheia,
-    "vox": _mutate_vox,
-    "praxis": _mutate_praxis,
+    "nous": _mutate_planning,
+    "eidolon": _mutate_self_model,
+    "empatheia": _mutate_social_cognition,
+    "vox": _mutate_vocal,
+    "praxis": _mutate_effectors,
     "perception": _mutate_perception,
     "mundus": _mutate_mundus,
 }

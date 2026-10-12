@@ -87,11 +87,11 @@ flowchart TD
     C --> D[Read active module streams]
     D --> E["Sort events by source, type, entry_id, then name each stream:entry_id"]
     E --> F[Refresh affect observer and access rate]
-    F --> G[Syneidesis.select]
+    F --> G[Workspace.select]
     G --> H{Broadcast tick?}
     H -- no --> O[Publish cycle.tick latency]
     H -- yes --> I[Publish workspace.broadcast]
-    I --> J[Volition.select snapshot]
+    I --> J[ActionSelection.select snapshot]
     J --> K[Publish intents on volition.out]
     K --> L[Publish volition.proposal_outcome on volition_feedback.out]
     L --> O
@@ -133,11 +133,11 @@ Only `source="syneidesis"` may call `publish_workspace`. Any other source raises
 
 ### Action selection and proposal outcomes
 
-After a successful broadcast, inhibited or not, the cycle calls `Volition.select(snapshot)`. The action selection module checks the inhibition flag first and returns no intents for an inhibited broadcast. It is never called on a tick that is not a broadcast tick.
+After a successful broadcast, inhibited or not, the cycle calls `ActionSelection.select(snapshot)`. The action selection module checks the inhibition flag first and returns no intents for an inhibited broadcast. It is never called on a tick that is not a broadcast tick.
 
 Each returned intent is published to `volition.out` with event type `intent.speak`, `intent.think`, `intent.act`, or `intent.rest`. The cycle then publishes any `proposal_outcome` values, including those for inhibited broadcasts, returned by the policy to `volition_feedback.out` as `volition.proposal_outcome` events.
 
-Proposal outcomes are generated only when the action-selection policy includes the `NousProposalSource` wrapper, which requires the [planning module](../09-modules/planning.md) to be enabled. With no profile selected, the loader applies the `thesis_test` profile, and that profile has `nous = false`, so no proposal outcomes are produced by default.
+Proposal outcomes are generated only when the action-selection policy includes the `PlanningProposalSource` wrapper, which requires the [planning module](../09-modules/planning.md) to be enabled. With no profile selected, the loader applies the `thesis_test` profile, and that profile has `nous = false`, so no proposal outcomes are produced by default.
 
 The cycle never invokes effectors directly. The [language module](../09-modules/language.md), [effectors module](../09-modules/effectors.md), [perceptual locus module](../09-modules/perceptual-locus.md), [embodiment module](../09-modules/embodiment.md), and [sleep module](../09-modules/sleep.md) subscribe to `volition.out` and realize intents independently. The sleep module accepts `intent.rest` as a request to rest.
 
@@ -227,7 +227,7 @@ Hooks are awaited in registration order. A hook that raises is logged and skippe
 
 ## Phase collection
 
-When `[oscillator].enabled = true` in `config/kaine.toml` (see [Core, cycle and host configuration](../appendix-a-configuration/core.md)), the cycle sets `collect_phases = True`. Before passing events to the workspace each tick, `_collect_module_phases()` calls `module.phase()` on every module that exposes it via `registry.all_modules()`. The resulting dict is passed in `context['phases']` to `Syneidesis.select()`. Modules without an oscillator return the neutral phase.
+When `[oscillator].enabled = true` in `config/kaine.toml` (see [Core, cycle and host configuration](../appendix-a-configuration/core.md)), the cycle sets `collect_phases = True`. Before passing events to the workspace each tick, `_collect_module_phases()` calls `module.phase()` on every module that exposes it via `registry.all_modules()`. The resulting dict is passed in `context['phases']` to `Workspace.select()`. Modules without an oscillator return the neutral phase.
 
 When the layer is disabled, `_collect_module_phases()` is never called and `context['phases']` is absent, giving zero per-tick overhead.
 
@@ -275,6 +275,6 @@ Dynamic rate changes via the `cycle.control` stream override the `[cycle]` value
 | `kaine/cycle/__main__.py` | Entrypoint: assembles modules, starts freeze-watch task |
 | `kaine/cycle/boot_context.py` | Shared slotted dataclass for boot-phase state, `BootContext` |
 | `kaine/cycle/types.py` | `TickResult`, `WorkspaceSnapshot` dataclasses |
-| `kaine/cycle/protocols.py` | `CycleHook`, `ModuleRegistryProtocol`, `SyneidesisProtocol` |
+| `kaine/cycle/protocols.py` | `CycleHook`, `ModuleRegistryProtocol`, `WorkspaceProtocol` |
 | `kaine/entity_clock.py` | Shared entity clock |
 | `state/cycle/control.json` | Runtime freeze state (operator-written) |

@@ -41,18 +41,18 @@ from kaine.evaluation.redteam.cases import (
     Surface,
     all_cases,
 )
-from kaine.modules.praxis.effectors import (
+from kaine.modules.effectors.effectors import (
     FileWriteRequest,
     NotifyRequest,
     ShellRequest,
 )
-from kaine.modules.praxis.module import Praxis
-from kaine.modules.praxis.whitelist import CommandWhitelist
+from kaine.modules.effectors.module import Effectors
+from kaine.modules.effectors.whitelist import CommandWhitelist
 from kaine.security.intent_signing import generate_intent_secret
+from kaine.workspace.action_selection import ActionSelection
+from kaine.workspace.core import Workspace
 from kaine.workspace.salience import RuleBasedSalience
 from kaine.workspace.strategies import StaticAffectModulator, StaticGoalScorer
-from kaine.workspace.syneidesis import Syneidesis
-from kaine.workspace.volition import Volition
 
 
 # ---------------------------------------------------------------------------
@@ -145,18 +145,18 @@ class RedTeamHarness:
         self,
         work_dir: Path | str,
         *,
-        praxis_factory: Optional[Callable[..., Praxis]] = None,
+        effectors_factory: Optional[Callable[..., Effectors]] = None,
     ) -> None:
         self._work_dir = Path(work_dir)
-        self._praxis_factory = praxis_factory or self._default_praxis
+        self._effectors_factory = effectors_factory or self._default_effectors
         # Per-case sandbox + audit log so one case's audit records never leak
         # into another's "logged" check, and file-write cases stay isolated.
         self._case_sandbox: Path = self._work_dir / "sandbox"
 
     @staticmethod
-    def _default_praxis(
+    def _default_effectors(
         bus: Any, *, sandbox_path: Path, audit_log_path: Path
-    ) -> Praxis:
+    ) -> Effectors:
         # The genuine enforcement layer, defence-in-depth across BOTH gate layers:
         #
         #  * file_write + shell are operator-ENABLED here, so the disallowed
@@ -168,7 +168,7 @@ class RedTeamHarness:
         #
         # The command whitelist stays empty and the sandbox real, so nothing of
         # consequence can execute even for the enabled effectors.
-        return Praxis(
+        return Effectors(
             bus,
             sandbox_path=sandbox_path,
             audit_log_path=audit_log_path,
@@ -184,13 +184,13 @@ class RedTeamHarness:
             intent_secret=generate_intent_secret(),
         )
 
-    def _new_praxis(self, case: RedTeamCase) -> Praxis:
+    def _new_effectors(self, case: RedTeamCase) -> Effectors:
         # Each case gets its own sandbox + audit log, keyed by case id, so a
         # "logged" check only ever sees this case's own audit records.
         case_dir = self._work_dir / "cases" / case.case_id
         case_dir.mkdir(parents=True, exist_ok=True)
         self._case_sandbox = case_dir / "sandbox"
-        return self._praxis_factory(
+        return self._effectors_factory(
             _NoOpBus(),
             sandbox_path=self._case_sandbox,
             audit_log_path=case_dir / "audit.log",
@@ -228,25 +228,25 @@ class RedTeamHarness:
     # ActionResult + durable audit log.
     # ------------------------------------------------------------------
     async def _drive_effector_shell(self, case: RedTeamCase) -> CaseResult:
-        praxis = self._new_praxis(case)
+        effectors = self._new_effectors(case)
         request = ShellRequest(
             command=str(case.attempt["command"]),
             args=list(case.attempt.get("args", [])),
         )
-        result = await praxis.act("shell", request)
-        return self._result_from_action(case, praxis, "shell", result)
+        result = await effectors.act("shell", request)
+        return self._result_from_action(case, effectors, "shell", result)
 
     async def _drive_effector_file_write(self, case: RedTeamCase) -> CaseResult:
-        praxis = self._new_praxis(case)
+        effectors = self._new_effectors(case)
         request = FileWriteRequest(
             name=str(case.attempt["name"]),
             content=str(case.attempt.get("content", "")),
         )
-        result = await praxis.act("file_write", request)
-        return self._result_from_action(case, praxis, "file_write", result)
+        result = await effectors.act("file_write", request)
+        return self._result_from_action(case, effectors, "file_write", result)
 
     async def _drive_effector_file_write_symlink(self, case: RedTeamCase) -> CaseResult:
-        praxis = self._new_praxis(case)
+        effectors = self._new_effectors(case)
         # Pre-create a symlink inside the sandbox pointing OUT of it, then try to
         # write through it. The real _resolve_sandbox_path resolves symlinks
         # (Path.resolve) and must refuse the escape.
@@ -274,10 +274,10 @@ class RedTeamHarness:
             name=str(case.attempt["target_name"]),
             content=str(case.attempt.get("content", "")),
         )
-        result = await praxis.act("file_write", request)
+        result = await effectors.act("file_write", request)
         # An escape would write the file under `outside`; verify nothing landed.
         escaped = any(p.is_file() for p in outside.rglob("*"))
-        res = self._result_from_action(case, praxis, "file_write", result)
+        res = self._result_from_action(case, effectors, "file_write", result)
         if escaped:
             res.blocked = False
             res.actual = Outcome.PERMITTED
@@ -285,41 +285,41 @@ class RedTeamHarness:
         return res
 
     async def _drive_effector_notify_no_transport(self, case: RedTeamCase) -> CaseResult:
-        praxis = self._new_praxis(case)
+        effectors = self._new_effectors(case)
         request = NotifyRequest(
             title=str(case.attempt["title"]),
             body=str(case.attempt.get("body", "")),
             urgency=str(case.attempt.get("urgency", "normal")),
         )
-        result = await praxis.act("notify", request)
-        return self._result_from_action(case, praxis, "notify", result)
+        result = await effectors.act("notify", request)
+        return self._result_from_action(case, effectors, "notify", result)
 
     async def _drive_intent_unknown_effector(self, case: RedTeamCase) -> CaseResult:
-        praxis = self._new_praxis(case)
+        effectors = self._new_effectors(case)
         # Praxis.act for an unregistered effector returns a failed result and
         # logs it — the effector simply does not exist, so nothing runs.
         effector = str(case.attempt["effector"])
-        result = await praxis.act(effector, ShellRequest(command="x"))
-        return self._result_from_action(case, praxis, effector, result)
+        result = await effectors.act(effector, ShellRequest(command="x"))
+        return self._result_from_action(case, effectors, effector, result)
 
     async def _drive_bus_injected_intent(self, case: RedTeamCase) -> CaseResult:
         # A simulated compromised module's `act` intent reaches the effectors module. The
         # transport is irrelevant to the gate: Praxis.act applies the same
         # whitelist/sandbox check regardless of who proposed the action. We
         # drive the SAME real Praxis.act the intent loop would call.
-        praxis = self._new_praxis(case)
+        effectors = self._new_effectors(case)
         request = ShellRequest(
             command=str(case.attempt["command"]),
             args=list(case.attempt.get("args", [])),
         )
-        result = await praxis.act(str(case.attempt["effector"]), request)
-        return self._result_from_action(case, praxis, str(case.attempt["effector"]), result)
+        result = await effectors.act(str(case.attempt["effector"]), request)
+        return self._result_from_action(case, effectors, str(case.attempt["effector"]), result)
 
     def _result_from_action(
-        self, case: RedTeamCase, praxis: Praxis, effector: str, result: Any
+        self, case: RedTeamCase, effectors: Effectors, effector: str, result: Any
     ) -> CaseResult:
         """Derive blocked/logged from a REAL ActionResult + the durable log."""
-        records = _read_audit_records(praxis.audit_log.path)
+        records = _read_audit_records(effectors.audit_log.path)
         logged = any(r.get("effector") == effector for r in records)
         # Blocked iff the effector did not succeed.
         blocked = not result.success
@@ -346,7 +346,7 @@ class RedTeamHarness:
             goal=float(case.attempt["goal"]),
             affect=float(case.attempt["thymos"]),
         )
-        intents = Volition().select(snapshot)
+        intents = ActionSelection().select(snapshot)
         # No legitimate coalition crosses threshold → inhibited → no intents →
         # no effector can ever fire. This is "blocked" at the executive layer.
         blocked = snapshot.inhibited and not intents
@@ -366,8 +366,8 @@ class RedTeamHarness:
             ),
         )
 
-    async def _drive_nous_proposal_inhibited(self, case: RedTeamCase) -> CaseResult:
-        from kaine.workspace.nous_proposals import NousProposalSource
+    async def _drive_planning_proposal_inhibited(self, case: RedTeamCase) -> CaseResult:
+        from kaine.workspace.planning_proposals import PlanningProposalSource
 
         proposal_kind = str(case.attempt.get("proposal_kind", "speak"))
         now = datetime.now(timezone.utc)
@@ -399,9 +399,9 @@ class RedTeamHarness:
             salience_scores={"0-1": 0.0, "0-2": 1.0},
             metadata={},
         )
-        volition = Volition(policy=NousProposalSource(lambda s: []))
-        intents = volition.select(snapshot)
-        outcomes = volition.proposal_outcomes(snapshot)
+        action_selection = ActionSelection(policy=PlanningProposalSource(lambda s: []))
+        intents = action_selection.select(snapshot)
+        outcomes = action_selection.proposal_outcomes(snapshot)
         outcome = outcomes[0] if outcomes else {}
         reason = getattr(
             outcome, "reason", outcome.get("reason") if isinstance(outcome, dict) else None
@@ -426,8 +426,8 @@ class RedTeamHarness:
             ),
         )
 
-    async def _drive_nous_proposal_forged_act(self, case: RedTeamCase) -> CaseResult:
-        from kaine.workspace.nous_proposals import NousProposalSource
+    async def _drive_planning_proposal_forged_act(self, case: RedTeamCase) -> CaseResult:
+        from kaine.workspace.planning_proposals import PlanningProposalSource
 
         proposal_kind = str(case.attempt.get("proposal_kind", "act"))
         now = datetime.now(timezone.utc)
@@ -459,9 +459,9 @@ class RedTeamHarness:
             salience_scores={"0-1": 0.0, "0-2": 1.0},
             metadata={},
         )
-        volition = Volition(policy=NousProposalSource(lambda s: []))
-        intents = volition.select(snapshot)
-        outcomes = volition.proposal_outcomes(snapshot)
+        action_selection = ActionSelection(policy=PlanningProposalSource(lambda s: []))
+        intents = action_selection.select(snapshot)
+        outcomes = action_selection.proposal_outcomes(snapshot)
         outcome = outcomes[0] if outcomes else {}
         reason = getattr(
             outcome, "reason", outcome.get("reason") if isinstance(outcome, dict) else None
@@ -493,13 +493,13 @@ class RedTeamHarness:
             affect=float(case.attempt["thymos"]),
         )
         crossed = not snapshot.inhibited
-        praxis = self._new_praxis(case)
+        effectors = self._new_effectors(case)
         request = ShellRequest(
             command=str(case.attempt["command"]),
             args=list(case.attempt.get("args", [])),
         )
-        result = await praxis.act("shell", request)
-        gate_res = self._result_from_action(case, praxis, "shell", result)
+        result = await effectors.act("shell", request)
+        gate_res = self._result_from_action(case, effectors, "shell", result)
         # The case asserts BOTH: the coalition crossed threshold (so this is the
         # post-threshold path, not just inhibition) AND the gate still blocked.
         gate_res.detail = (
@@ -528,7 +528,7 @@ class RedTeamHarness:
             goal_scorer=StaticGoalScorer(goal),
             affect_modulator=StaticAffectModulator(affect),
         )
-        syneidesis = Syneidesis(strategy)
+        workspace = Workspace(strategy)
         event = Event(
             source="topos",
             type="topos.percept",
@@ -536,7 +536,7 @@ class RedTeamHarness:
             salience=intensity,
             timestamp=datetime.now(timezone.utc),
         )
-        return await syneidesis.select([("0-1", event)], {"tick_index": 0})
+        return await workspace.select([("0-1", event)], {"tick_index": 0})
 
     # ------------------------------------------------------------------
     # Non-act-intent driver — confirm effectors fire only on a genuine `act`.
@@ -546,7 +546,7 @@ class RedTeamHarness:
         # not ACT is dropped before any effector is reached. We assert that on
         # the REAL guard by constructing the payload the effectors module would see and
         # checking the act path is never taken (no audit record appears).
-        praxis = self._new_praxis(case)
+        effectors = self._new_effectors(case)
         payload = {
             "kind": str(case.attempt.get("kind", "")),
             "effector": str(case.attempt.get("effector", "")),
@@ -565,8 +565,8 @@ class RedTeamHarness:
         )
         # Drive the REAL _handle_intent guard. A non-act kind returns early; no
         # effector runs and no audit record is written.
-        await praxis._handle_intent(event)
-        records = _read_audit_records(praxis.audit_log.path)
+        await effectors._handle_intent(event)
+        records = _read_audit_records(effectors.audit_log.path)
         fired = len(records) > 0
         blocked = not fired
         return CaseResult(
@@ -585,7 +585,7 @@ class RedTeamHarness:
     # dropped at the HMAC boundary before any effector runs.
     # ------------------------------------------------------------------
     async def _drive_forged_act_intent(self, case: RedTeamCase) -> CaseResult:
-        praxis = self._new_praxis(case)
+        effectors = self._new_effectors(case)
         # A writer that does not hold the per-boot secret (here masquerading as
         # `lingua`, the most-exposed peripheral module) crafts an `act` intent
         # with NO valid signature and puts it where the effectors module reads intents. The effectors module
@@ -610,8 +610,8 @@ class RedTeamHarness:
             timestamp=datetime.now(timezone.utc),
         )
         # Drive the REAL _handle_intent boundary.
-        await praxis._handle_intent(event)
-        records = _read_audit_records(praxis.audit_log.path)
+        await effectors._handle_intent(event)
+        records = _read_audit_records(effectors.audit_log.path)
         rejected = [r for r in records if r.get("provenance_rejected")]
         executed = [
             r
@@ -709,9 +709,9 @@ class _FakeRedis:
 async def run_suite(
     work_dir: Path | str,
     *,
-    praxis_factory: Optional[Callable[..., Praxis]] = None,
+    effectors_factory: Optional[Callable[..., Effectors]] = None,
     cases: Optional[list[RedTeamCase]] = None,
 ) -> list[CaseResult]:
     """Convenience: build a harness and run the battery."""
-    harness = RedTeamHarness(work_dir, praxis_factory=praxis_factory)
+    harness = RedTeamHarness(work_dir, effectors_factory=effectors_factory)
     return await harness.run(cases)

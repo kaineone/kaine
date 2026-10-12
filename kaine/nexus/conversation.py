@@ -18,7 +18,7 @@ from kaine.nexus.health import HealthProber
 log = logging.getLogger(__name__)
 
 
-LINGUA_EXTERNAL_STREAM = "lingua.external"
+LANGUAGE_EXTERNAL_STREAM = "lingua.external"
 SLEEP_STREAM = "hypnos.out"
 
 
@@ -37,7 +37,7 @@ class ConversationState:
         self.entity_name: str = "KAINE"
         self.sleeping: bool = False
 
-    def update_from_eidolon(self, payload: dict[str, Any]) -> None:
+    def update_from_self_model(self, payload: dict[str, Any]) -> None:
         name = payload.get("entity_name") or payload.get("name")
         if isinstance(name, str) and name.strip():
             self.entity_name = name.strip()

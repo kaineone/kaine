@@ -58,14 +58,14 @@ from kaine.setup.wizard_steps import (
     cl1_substrate_step,
     custom_modules_step,
     encryption_step,
-    lingua_model_step,
+    language_model_step,
     module_preset_step,
     orientation_step,
     research_opt_in_step,
     research_recipient_step,
     tier_step,
     trainer_provisioning_step,
-    vox_voice_step,
+    vocal_voice_step,
 )
 
 
@@ -300,14 +300,14 @@ def run_wizard(
 
     # --- Model / voice / STT ------------------------------------------------
     run_step(
-        lingua_model_step(),
+        language_model_step(),
         ctx,
         input_fn=input_fn,
         out=out,
         defaults=defaults,
     )
     run_step(
-        vox_voice_step(),
+        vocal_voice_step(),
         ctx,
         input_fn=input_fn,
         out=out,

@@ -30,9 +30,9 @@ from kaine.workspace import (
     RuleBasedSalience,
     StaticAffectModulator,
     StaticGoalScorer,
-    Syneidesis,
+    Workspace,
 )
-from kaine.workspace.volition import Volition
+from kaine.workspace.action_selection import ActionSelection
 from tests._fakes import FakeClock
 
 # ---------------------------------------------------------------------------
@@ -152,7 +152,7 @@ class StreamRegistry:
 
 
 def _make_cycle(bus: ScriptedBus) -> CognitiveCycle:
-    syneidesis = Syneidesis(
+    workspace = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=32),
             goal_scorer=StaticGoalScorer(),
@@ -164,9 +164,9 @@ def _make_cycle(bus: ScriptedBus) -> CognitiveCycle:
     clock = FakeClock()
     return CognitiveCycle(
         bus=bus,
-        syneidesis=syneidesis,
+        workspace=workspace,
         registry=StreamRegistry(sorted(_scripted_streams().keys())),
-        volition=Volition(),
+        action_selection=ActionSelection(),
         clock=clock,
         sleep=FakeClock().sleep,
         deterministic=True,
@@ -563,21 +563,21 @@ async def test_engine_observer_exception_does_not_break_tick() -> None:
     cycle = _make_cycle(bus)
     inner = AsyncMock()
     inner.on_broadcast.side_effect = RuntimeError("observer boom")
-    volition_runs: list[Any] = []
-    real_run_volition = cycle._run_volition
+    action_selection_runs: list[Any] = []
+    real_run_action_selection = cycle._run_action_selection
 
-    async def _recording_run_volition(snapshot: Any) -> None:
-        volition_runs.append(snapshot)
-        await real_run_volition(snapshot)
+    async def _recording_run_action_selection(snapshot: Any) -> None:
+        action_selection_runs.append(snapshot)
+        await real_run_action_selection(snapshot)
 
-    cycle._run_volition = _recording_run_volition  # type: ignore[method-assign]
+    cycle._run_action_selection = _recording_run_action_selection  # type: ignore[method-assign]
 
     calls = await _run_one_broadcast(cycle, bus, inner)
     assert len(calls) == 1
     assert inner.on_broadcast.call_count == 1
     assert len(bus.workspace_broadcasts) == 1
     # The broadcast still counts as successful: executive selection runs.
-    assert len(volition_runs) == 1
+    assert len(action_selection_runs) == 1
 
 
 @pytest.mark.asyncio

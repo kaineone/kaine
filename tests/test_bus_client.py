@@ -143,13 +143,13 @@ async def test_read_entries_reports_last_scanned_for_all_poison_batch(
 
 
 @pytest.mark.asyncio
-async def test_workspace_stream_reserved_for_syneidesis(fake_async_bus: AsyncBus):
+async def test_workspace_stream_reserved_for_workspace(fake_async_bus: AsyncBus):
     with pytest.raises(ReservedStreamError):
         await fake_async_bus.publish_workspace({"x": 1}, source="soma")
 
 
 @pytest.mark.asyncio
-async def test_syneidesis_publish_workspace(fake_async_bus: AsyncBus):
+async def test_workspace_publish_workspace(fake_async_bus: AsyncBus):
     entry_id = await fake_async_bus.publish_workspace({"focus": "soma", "k": 5})
     assert entry_id
     length = await fake_async_bus.length(WORKSPACE_STREAM)

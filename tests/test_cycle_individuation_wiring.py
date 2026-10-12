@@ -17,7 +17,7 @@ def test_individuation_refusal_disabled_by_default():
     assert reason is None
 
 
-def test_individuation_refusal_missing_eidolon():
+def test_individuation_refusal_missing_self_model():
     cfg, reason = _individuation_refusal(
         {"individuation": {"enabled": True}, "modules": {"lingua": True}}
     )
@@ -115,7 +115,7 @@ async def test_run_individuation_runs_until_stop():
 
 
 def test_openai_chat_client_applies_lora():
-    from kaine.modules.lingua.client import OpenAIChatClient
+    from kaine.modules.language.client import OpenAIChatClient
 
     client = OpenAIChatClient(base_url="http://127.0.0.1:1/v1")
     assert client.applies_lora is False

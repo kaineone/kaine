@@ -25,7 +25,7 @@ The registry treats each canonical module as one `<module>.out` stream. The list
 - The curated list leaves out `vox.out` (raw audio) and `lingua.out` (the language organ's text) so that the research log stays content-free. The raw archive keeps every produced stream.
 - `diagnostics_streams()` leaves out the low-signal operational streams `volition.out`, `mundus.out`, `perception.out`, `welfare.out`, `preservation.out` and `individuation.out`, and appends `workspace.broadcast`. It includes `cycle.out`, which carries the cycle's `cycle.tick`, `cycle.rates` and `cycle.time_scale` events.
 
-The language module (`kaine/modules/lingua/module.py`) publishes on `lingua.external` and `lingua.internal` and mirrors every utterance to `lingua.out`, which the raw archive and the dashboard diagnostics tail follow.
+The language module (`kaine/modules/language/module.py`) publishes on `lingua.external` and `lingua.internal` and mirrors every utterance to `lingua.out`, which the raw archive and the dashboard diagnostics tail follow.
 
 ## Drift tests
 

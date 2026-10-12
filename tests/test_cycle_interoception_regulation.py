@@ -24,7 +24,7 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.bus.schema import validate_event
 from kaine.cycle import CognitiveCycle
-from tests._fakes import FakeClock, FakeRegistry, FakeSyneidesis
+from tests._fakes import FakeClock, FakeRegistry, FakeWorkspace
 
 
 class SheddableRegistry(FakeRegistry):
@@ -44,11 +44,11 @@ async def cycle_with_fakes():
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
     clock = FakeClock()
-    syn = FakeSyneidesis()
+    syn = FakeWorkspace()
     reg = SheddableRegistry([])
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=syn,
+        workspace=syn,
         registry=reg,
         processing_rate_hz=5.0,
         experiential_rate_hz=5.0,

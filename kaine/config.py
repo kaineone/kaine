@@ -321,9 +321,9 @@ def validate_config_shape(config: dict[str, Any]) -> None:
                     f"modules.{key} expected bool, got {type(value).__name__}"
                 )
 
-    empatheia = config.get("empatheia")
-    if isinstance(empatheia, dict):
-        operator_sources = empatheia.get("operator_sources")
+    social_cognition = config.get("empatheia")
+    if isinstance(social_cognition, dict):
+        operator_sources = social_cognition.get("operator_sources")
         if operator_sources is not None:
             if not isinstance(operator_sources, list):
                 raise ConfigShapeError(

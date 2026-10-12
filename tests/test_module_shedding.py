@@ -24,7 +24,7 @@ from kaine.workspace import (
     RuleBasedSalience,
     StaticAffectModulator,
     StaticGoalScorer,
-    Syneidesis,
+    Workspace,
 )
 from tests._module_shedding import (
     CANONICAL_MODULE_NAMES,
@@ -36,7 +36,7 @@ async def _make_stack(names):
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
-    syneidesis = Syneidesis(
+    workspace = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
@@ -52,7 +52,7 @@ async def _make_stack(names):
         await module.initialize()
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=syneidesis,
+        workspace=workspace,
         registry=registry,
         processing_rate_hz=20.0,
         experiential_rate_hz=20.0,
@@ -98,7 +98,7 @@ async def test_full_stack_degrades_gracefully():
 
 
 @pytest.mark.asyncio
-async def test_no_lingua_combination():
+async def test_no_language_combination():
     names = [n for n in CANONICAL_MODULE_NAMES if n != "lingua"]
     await _run(names)
 
@@ -138,7 +138,7 @@ async def test_empty_registry_runs_clean():
 
 
 @pytest.mark.asyncio
-async def test_syneidesis_never_selects_unregistered_source():
+async def test_workspace_never_selects_unregistered_source():
     names = ["nous", "mnemos", "eidolon"]
     bus, cycle, registry, modules = await _make_stack(names)
     try:

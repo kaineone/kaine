@@ -32,10 +32,10 @@ from kaine.workspace import (
     RuleBasedSalience,
     StaticAffectModulator,
     StaticGoalScorer,
-    Syneidesis,
+    Workspace,
 )
 from kaine.workspace.coherence import CoherenceScorer
-from tests._fakes import FakeClock, FakeRegistry, FakeSyneidesis
+from tests._fakes import FakeClock, FakeRegistry, FakeWorkspace
 
 fakeredis = pytest.importorskip("fakeredis.aioredis")
 
@@ -68,12 +68,12 @@ def _vision_event(salience=0.1):
     )
 
 
-def _make_cycle(syneidesis, registry_streams, client):
+def _make_cycle(workspace, registry_streams, client):
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
     clock = FakeClock()
     return CognitiveCycle(
         bus=bus,
-        syneidesis=syneidesis,
+        workspace=workspace,
         registry=FakeRegistry(registry_streams),
         processing_rate_hz=10.0,
         experiential_rate_hz=10.0,
@@ -96,7 +96,7 @@ async def test_scores_from_two_streams_with_one_entry_id_both_survive(arm, arm_s
     kwargs = {"arm": arm}
     if arm_seed is not None:
         kwargs["arm_seed"] = arm_seed
-    syn = Syneidesis(
+    syn = Workspace(
         strategy=_strategy(),
         top_k=5,
         publication_threshold=0.35,
@@ -130,7 +130,7 @@ async def test_scores_from_two_streams_with_one_entry_id_both_survive(arm, arm_s
 @pytest.mark.asyncio
 async def test_broadcast_context_reads_each_members_own_score():
     client = fakeredis.FakeRedis(decode_responses=True)
-    syn = Syneidesis(
+    syn = Workspace(
         strategy=_strategy(),
         top_k=5,
         publication_threshold=0.35,
@@ -176,7 +176,7 @@ async def test_broadcast_context_reads_each_members_own_score():
 @pytest.mark.asyncio
 async def test_candidates_are_ordered_by_source_first():
     client = fakeredis.FakeRedis(decode_responses=True)
-    syn = FakeSyneidesis()
+    syn = FakeWorkspace()
     cycle, bus = _make_cycle(syn, ["topos.out", "soma.out"], client)
     try:
         vision_event = Event(
@@ -219,7 +219,7 @@ async def test_candidates_are_ordered_by_source_first():
 @pytest.mark.asyncio
 async def test_entry_id_orders_before_stream():
     client = fakeredis.FakeRedis(decode_responses=True)
-    syn = FakeSyneidesis()
+    syn = FakeWorkspace()
     cycle, bus = _make_cycle(syn, ["a.out", "b.out"], client)
     try:
         a_event = Event(
@@ -257,7 +257,7 @@ async def test_duplicate_candidate_ids_are_refused(arm):
     kwargs = {"arm": arm}
     if arm == "matched":
         kwargs["arm_seed"] = 1
-    syn = Syneidesis(
+    syn = Workspace(
         strategy=_strategy(),
         top_k=5,
         publication_threshold=0.35,
@@ -299,7 +299,7 @@ async def test_select_dual_refuses_duplicate_candidate_ids():
         "is_experiential": True,
         "phases": {"soma": 0.0, "topos": 1.0},
     }
-    syne = Syneidesis(
+    syne = Workspace(
         strategy=_strategy(),
         top_k=5,
         publication_threshold=0.35,
@@ -318,7 +318,7 @@ async def test_select_dual_keeps_one_score_per_candidate():
         "is_experiential": True,
         "phases": {"soma": 0.0, "topos": 1.0},
     }
-    syne = Syneidesis(
+    syne = Workspace(
         strategy=_strategy(),
         top_k=5,
         publication_threshold=0.35,
@@ -340,7 +340,7 @@ async def test_select_dual_keeps_one_score_per_candidate():
 @pytest.mark.asyncio
 async def test_entry_ids_order_numerically_within_a_millisecond():
     client = fakeredis.FakeRedis(decode_responses=True)
-    syn = FakeSyneidesis()
+    syn = FakeWorkspace()
     cycle, bus = _make_cycle(syn, ["soma.out"], client)
     try:
         for i in range(12):
@@ -371,12 +371,12 @@ def test_entry_id_sort_key():
 @pytest.mark.asyncio
 async def test_tone_event_is_accessed_through_the_engine_path(tmp_path):
     client = fakeredis.FakeRedis(decode_responses=True)
-    syneidesis = Syneidesis(
+    workspace = Workspace(
         strategy=_strategy(),
         top_k=5,
         publication_threshold=0.35,
     )
-    cycle, bus = _make_cycle(syneidesis, ["audition.out", "soma.out"], client)
+    cycle, bus = _make_cycle(workspace, ["audition.out", "soma.out"], client)
 
     tone_event = Event(
         source="audition",
@@ -435,7 +435,7 @@ async def test_tone_event_is_accessed_through_the_engine_path(tmp_path):
 
 async def _matched_coalitions(seed):
     client = fakeredis.FakeRedis(decode_responses=True)
-    syn = Syneidesis(
+    syn = Workspace(
         strategy=_strategy(),
         top_k=2,
         publication_threshold=0.35,
@@ -492,7 +492,7 @@ async def test_matched_draw_is_reproducible_over_the_new_order():
 @pytest.mark.asyncio
 async def test_read_cursors_stay_raw_bus_ids():
     client = fakeredis.FakeRedis(decode_responses=True)
-    syn = Syneidesis(strategy=_strategy(), arm="competitive")
+    syn = Workspace(strategy=_strategy(), arm="competitive")
     cycle, bus = _make_cycle(syn, ["soma.out", "topos.out"], client)
     try:
         await client.xadd(

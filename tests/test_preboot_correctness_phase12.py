@@ -35,8 +35,8 @@ from kaine.cycle.control_state import (
     unfreeze,
 )
 from kaine.cycle.preservation_monitor import _welfare_notify_allowed
+from kaine.workspace import action_selection as vt
 from kaine.workspace import report_policy as rp
-from kaine.workspace import volition as vt
 
 # --------------------------------------------------------------------------
 # Shared test doubles
@@ -398,13 +398,13 @@ def test_c3_guard_timeout_clears_think_in_flight_without_event():
     assert policy.think_in_flight is False
 
 
-def test_c3_volition_guard_timeout_constant_is_refractory_scaled():
+def test_c3_action_selection_guard_timeout_constant_is_refractory_scaled():
     """The speak guard timeout is ~6x the 8s report speak refractory; the
     constant lives on the action-selection policy that owns the guards."""
     assert vt.DefaultActionSelectionPolicy._GUARD_TIMEOUT_S == pytest.approx(48.0)
 
 
-def test_c3_volition_in_flight_guard_and_realization():
+def test_c3_action_selection_in_flight_guard_and_realization():
     """The action-selection policy arms one speak at a time and clears on
     the entity's own conscious external speech (the ordinary realization
     path)."""
@@ -441,13 +441,13 @@ def test_c3_realization_failed_event_is_content_free():
     ONLY — never the text, the prompt, or any payload headed for generation.
     This test intercepts the real record writer (_write_mode_record)."""
     try:
-        from kaine.modules.lingua.module import Lingua
+        from kaine.modules.language.module import Language
     except ImportError:  # the class lives directly on the package
-        from kaine.modules.lingua import Lingua
+        from kaine.modules.language import Language
 
     secret = "SECRET-PROMPT-CONTENT never to be audited"
 
-    mod = object.__new__(Lingua)  # bypass heavy __init__
+    mod = object.__new__(Language)  # bypass heavy __init__
     mod.name = "lingua"
     mod._gen_task = None  # no held generation on this bare instance
     published: list[tuple[str, str, dict]] = []
@@ -540,7 +540,7 @@ def test_h4_no_sig_expiry_means_permanent_novelty_suppression():
 # --------------------------------------------------------------------------
 
 
-def test_h4_sig_expiry_is_wired_from_volition_config():
+def test_h4_sig_expiry_is_wired_from_action_selection_config():
     """cycle __main__ threads [volition].sig_expiry_s into the report policy
     (without it the expiry defaults to never and H4 is inert on a real boot)."""
     import kaine.cycle.__main__ as cycle_main

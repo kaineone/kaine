@@ -24,7 +24,7 @@ from kaine.workspace import (
     RuleBasedSalience,
     StaticAffectModulator,
     StaticGoalScorer,
-    Syneidesis,
+    Workspace,
 )
 from kaine.workspace.coherence import CoherenceScorer
 from tests._fakes import FakeClock
@@ -110,7 +110,7 @@ async def test_coherence_metadata_present_when_enabled():
         scorer = CoherenceScorer(
             plv_window=10, coherence_floor=0.8, coherence_ceiling=1.25
         )
-        syn = Syneidesis(
+        syn = Workspace(
             strategy=_strategy(),
             top_k=5,
             publication_threshold=0.0,
@@ -118,7 +118,7 @@ async def test_coherence_metadata_present_when_enabled():
         )
         cycle = CognitiveCycle(
             bus=bus,
-            syneidesis=syn,
+            workspace=syn,
             registry=registry,
             clock=FakeClock(),
             sleep=FakeClock().sleep,
@@ -143,12 +143,12 @@ async def test_coherence_metadata_absent_when_disabled():
             modules=[_PhaseModule("soma", FakeOscillator())],
             streams=["soma.out"],
         )
-        syn = Syneidesis(
+        syn = Workspace(
             strategy=_strategy(), top_k=5, publication_threshold=0.0
         )  # coherence=None ⇒ disabled
         cycle = CognitiveCycle(
             bus=bus,
-            syneidesis=syn,
+            workspace=syn,
             registry=registry,
             clock=FakeClock(),
             sleep=FakeClock().sleep,

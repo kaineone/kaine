@@ -50,7 +50,7 @@ Operator rules this design follows:
 6. **It fails open.**
    - A sampler exception becomes `""` (`individuation.py:459-466`).
    - An empty or failed embedding becomes `[]` (`:471-477`), which `_divergence` scores as 1.0, "maximally divergent" (`:481-483`).
-   - The chat client returns `text=""` while the organ is unloaded (`kaine/modules/lingua/client.py:169-175`). That falls into the same maximal-divergence path, which tends toward "significant".
+   - The chat client returns `text=""` while the organ is unloaded (`kaine/modules/language/client.py:169-175`). That falls into the same maximal-divergence path, which tends toward "significant".
    - The client also returns chain-of-thought text when `content` is empty (`client.py:194-199`). That would be scored as an answer.
 7. **The seed is never sent.** `ChatRequest` has no seed field (`client.py:13-30`) and `_body` sends none (`:114-132`). Variance comes only from temperature, and runs cannot be replayed.
 8. **The two consumers disagree.**
@@ -67,8 +67,8 @@ Operator rules this design follows:
 Additional findings:
 
 - **10. Retention.** `AsyncJsonlSink` defaults to `retention_days=30` and deletes older files (`jsonl_sink.py:53,220-237`). Individuation evidence must use `retention_days=0`, as the incident log does.
-- **11. Missing adapter.** The existing "real" conditioned client for the A/B control builds an `OpenAIChatClient` without the LoRA resolver (`kaine/cycle/__main__.py:343-372`). A probe built that way would sample the base organ, not the entity. The probe must use the language module's own client (`kaine/modules/lingua/module.py:255`), which carries the resolver (`client.py:134-147`, `kaine/modules/sleep/organ_adapter.py:227`).
-- **12. Measurement validity.** The default external persona tells the organ to "report only what the readings actually contain … if the state is unremarkable, say so plainly" (`kaine/modules/lingua/context.py:32-40`). With `EMPTY_AWARENESS`, preference questions may get near-constant boilerplate. Whether the battery produces answers worth comparing under this persona is checked in the smoke test (section 6) before anything is enabled.
+- **11. Missing adapter.** The existing "real" conditioned client for the A/B control builds an `OpenAIChatClient` without the LoRA resolver (`kaine/cycle/__main__.py:343-372`). A probe built that way would sample the base organ, not the entity. The probe must use the language module's own client (`kaine/modules/language/module.py:255`), which carries the resolver (`client.py:134-147`, `kaine/modules/sleep/organ_adapter.py:227`).
+- **12. Measurement validity.** The default external persona tells the organ to "report only what the readings actually contain … if the state is unremarkable, say so plainly" (`kaine/modules/language/context.py:32-40`). With `EMPTY_AWARENESS`, preference questions may get near-constant boilerplate. Whether the battery produces answers worth comparing under this persona is checked in the smoke test (section 6) before anything is enabled.
 - **13. No memory heuristic.** `entity-decommission` lists "accumulated memory" as a secondary heuristic; `assess_divergence` has none. This is out of scope, noted for the spec owner.
 
 ## 2. The measurement
@@ -447,7 +447,7 @@ Defaults taken without objection:
 2. **Simulation and validation harness:** replace `individuation_runner.py`'s bundle CLI with `simulate` (section 6, offline). Record results and the pre-registered choices (statistic, combination rule, n_b, n_c, B_max) in this change. **Gate: stop if size, lifetime or power acceptance fails.**
 3. **Chat client:** `ChatRequest.seed`; body field; `ChatResponse` exposes `finish_reason` and whether text came from `content`; tests for resting and reasoning-only responses.
 4. **Storage:** `kaine/lifecycle/individuation_store.py`. Encrypted reference and ledger (atomic; k never decreases; corrupt means fail closed), reports sink (`retention_days=0`), decrypting reader with kind, schema, reference and staleness filters, conditioning-digest helper over inputs, shared lived-time accumulator factored from `gate_runner.py`. Tests with encryption on and off.
-5. **Probe seam:** `Lingua.probe_request()`. Sampler built in `kaine/cycle/__main__.py` from the language module's client and self-model, `snapshot=None`, `cache_prompt` off. Contamination tests: intent log untouched, no bus events.
+5. **Probe seam:** `Language.probe_request()`. Sampler built in `kaine/cycle/__main__.py` from the language module's client and self-model, `snapshot=None`, `cache_prompt` off. Contamination tests: intent log untouched, no bus events.
 6. **Producer:** `kaine/cycle/individuation_producer.py`. Maturation hook and legacy capture, look scheduling (sleep-completed trigger, digest change, rate limit, warm-up, organ, sleep and pause checks), `lingua_idle` yielding, deadline, fail-closed runs, report and ledger write, `individuation.out` publish, in-memory `IndividuationState`. Tests with a fake organ, including every failure path.
 7. **Shared verdict:** the single decision function in `kaine/lifecycle/divergence.py`; `assess_divergence(individuation=...)`; latch; STALE, INCONCLUSIVE and capture summaries; `DivergenceMonitor` simplified (no secondary-arm veto, no per-boot warm-up, persisted rising edge); config moves to `[individuation]` and old keys are rejected. Parity tests: one fixture matrix, both consumers agree on every row.
 8. **Preservation, revive and decommission backup** carry `state/individuation/`; research boot gate checks the producer and ledger. Tests.

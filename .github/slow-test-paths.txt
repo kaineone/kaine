@@ -4,7 +4,7 @@
 # tests/test_slow_lane.py checks that every slow-marked test file is listed.
 ^tests/test_active_inference_benchmark\.py$
 ^kaine/evaluation/benchmarks/active_inference/
-^kaine/modules/nous/
+^kaine/modules/planning/
 ^pyproject\.toml$
 ^\.github/slow-test-paths\.txt$
 ^\.github/workflows/tests\.yml$

@@ -190,7 +190,7 @@ class Cl1Plugin:
                     ", ".join(oscillators) if oscillators else "none",
                 )
             if "nous" in converted:
-                if overlay.nous_mode == "drive":
+                if overlay.planning_mode == "drive":
                     log.warning(
                         "CL1 Nous runs in DRIVE mode: the substrate's policy proposal chooses "
                         "Nous's action; beliefs and expected free energy stay on silicon"

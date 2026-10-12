@@ -24,10 +24,10 @@ def _specs(monkeypatch, *, redis_env=None, audition_cfg=None):
         qdrant_cfg={},
         qdrant_secret_key=None,
         redis_password=None,
-        lingua_cfg={},
+        language_cfg={},
         audition_cfg=audition_cfg or {},
-        vox_cfg={},
-        nous_cfg={},
+        vocal_cfg={},
+        planning_cfg={},
         state_encryption_cfg=None,
     )
 
@@ -91,10 +91,10 @@ class TestRedisUrlOverride:
             qdrant_cfg={},
             qdrant_secret_key=None,
             redis_password="fallback-pw",
-            lingua_cfg={},
+            language_cfg={},
             audition_cfg={},
-            vox_cfg={},
-            nous_cfg={},
+            vocal_cfg={},
+            planning_cfg={},
         )
         captured, _ = _capture_redis_probe(_spec_named(specs, "Redis"))
         assert captured["password"] == "urlpw"

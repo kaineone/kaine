@@ -26,8 +26,8 @@ from kaine.lifecycle.preservation import (
     extract_bundle_individuation,
     preserve_live,
 )
-from kaine.modules.eidolon import Eidolon, SelfModelDocument
 from kaine.modules.registry import ModuleRegistry
+from kaine.modules.self_model import SelfModel, SelfModelDocument
 from kaine.security.crypto import (
     CryptoConfig,
     StateEncryptor,
@@ -68,10 +68,10 @@ def real_encryptor(monkeypatch):
         set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
 
 
-async def _make_eidolon_registry(tmp_path: Path):
+async def _make_self_model_registry(tmp_path: Path):
     bus = _FakeBus()
     reg = ModuleRegistry()
-    eid = Eidolon(
+    eid = SelfModel(
         bus, persistence_path=tmp_path / "sm.json", save_interval_s=60
     )
     await eid.initialize()
@@ -82,7 +82,7 @@ async def _make_eidolon_registry(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_bundle_and_revive(real_encryptor, tmp_path):
-    reg = await _make_eidolon_registry(tmp_path)
+    reg = await _make_self_model_registry(tmp_path)
 
     ind_root = tmp_path / "ind"
     ipaths = IndividuationPaths(root=ind_root)
@@ -116,7 +116,7 @@ async def test_bundle_and_revive(real_encryptor, tmp_path):
 
 @pytest.mark.asyncio
 async def test_bundle_without_evidence(real_encryptor, tmp_path):
-    reg = await _make_eidolon_registry(tmp_path)
+    reg = await _make_self_model_registry(tmp_path)
 
     result = await preserve_live(
         reg,
@@ -135,7 +135,7 @@ async def test_bundle_without_evidence(real_encryptor, tmp_path):
 
 @pytest.mark.asyncio
 async def test_bundle_copy_failure(real_encryptor, monkeypatch, tmp_path):
-    reg = await _make_eidolon_registry(tmp_path)
+    reg = await _make_self_model_registry(tmp_path)
 
     real_copytree = __import__("shutil").copytree
 
@@ -180,7 +180,7 @@ def test_extract_path_traversal(tmp_path):
 
 @pytest.mark.asyncio
 async def test_revive_session_restores_individuation(real_encryptor, tmp_path):
-    reg = await _make_eidolon_registry(tmp_path)
+    reg = await _make_self_model_registry(tmp_path)
 
     ind_root = tmp_path / "ind"
     save_ledger(
@@ -204,7 +204,7 @@ async def test_revive_session_restores_individuation(real_encryptor, tmp_path):
     target.mkdir(parents=True)
     (target / "marker.txt").write_text("old")
 
-    reg2 = await _make_eidolon_registry(tmp_path / "reg2")
+    reg2 = await _make_self_model_registry(tmp_path / "reg2")
 
     plan = prepare_revive(bundle)
     session = ReviveSession(

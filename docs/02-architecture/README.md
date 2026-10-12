@@ -24,11 +24,11 @@ graph TD
     end
 
     subgraph Cognition["Cognition group (held)"]
-        Nous["Nous\n(active inference)"]
+        Planning["Planning\n(active inference)"]
         EpisodicMemory["EpisodicMemory\n(memory)"]
-        Eidolon["Eidolon\n(self-model)"]
+        SelfModel["SelfModel\n(self-model)"]
         WorldModel["WorldModel\n(world model)"]
-        Empatheia["Empatheia\n(social cognition)"]
+        SocialCognition["SocialCognition\n(social cognition)"]
     end
 
     subgraph Motivation["Motivation group"]
@@ -36,9 +36,9 @@ graph TD
     end
 
     subgraph Expression["Expression group"]
-        Lingua["Lingua\n(language organ)"]
-        Vox["Vox\n(voice, held)"]
-        Praxis["Praxis\n(effectors, held)"]
+        Language["Language\n(language organ)"]
+        Vocal["Vocal\n(voice, held)"]
+        Effectors["Effectors\n(effectors, held)"]
     end
 
     subgraph Maintenance["Maintenance group"]
@@ -51,8 +51,8 @@ graph TD
     end
 
     Bus["Redis Streams\nevent bus"]
-    Syneidesis["Syneidesis\n(global workspace)\nscore, coalition, access"]
-    Volition["Volition\n(action selection)"]
+    Workspace["Workspace\n(global workspace)\nscore, coalition, access"]
+    ActionSelection["ActionSelection\n(action selection)"]
     OscillatorLayer["Oscillatory layer\n(optional, off)"]
 
     Interoception -->|"soma.out"| Bus
@@ -60,35 +60,35 @@ graph TD
     Vision -->|"topos.out"| Bus
     Audition -->|"audition.out"| Bus
     Affect -->|"thymos.out"| Bus
-    Lingua -->|"lingua.out"| Bus
+    Language -->|"lingua.out"| Bus
     Sleep -->|"hypnos.out"| Bus
-    Nous -->|"nous.out"| Bus
+    Planning -->|"nous.out"| Bus
     EpisodicMemory -->|"mnemos.out"| Bus
-    Eidolon -->|"eidolon.out"| Bus
+    SelfModel -->|"eidolon.out"| Bus
     WorldModel -->|"phantasia.out"| Bus
-    Empatheia -->|"empatheia.out"| Bus
-    Vox -->|"vox.out"| Bus
-    Praxis -->|"praxis.out"| Bus
+    SocialCognition -->|"empatheia.out"| Bus
+    Vocal -->|"vox.out"| Bus
+    Effectors -->|"praxis.out"| Bus
 
-    Bus --> Syneidesis
-    OscillatorLayer -.->|"phase per module"| Syneidesis
-    Syneidesis -->|"workspace.broadcast"| Bus
-    Syneidesis --> Volition
-    Volition -->|"intent.speak / think / act / rest\nvia volition.out"| Bus
+    Bus --> Workspace
+    OscillatorLayer -.->|"phase per module"| Workspace
+    Workspace -->|"workspace.broadcast"| Bus
+    Workspace --> ActionSelection
+    ActionSelection -->|"intent.speak / think / act / rest\nvia volition.out"| Bus
     Bus -->|"accessed content as context"| Vision
     Bus -->|"accessed content as context"| Audition
     Bus -->|"accessed content as context"| Interoception
     Bus -->|"every broadcast as input"| Sequence
     Bus -->|"every broadcast, appraised"| Affect
-    Bus -->|"accessed content"| Lingua
+    Bus -->|"accessed content"| Language
 
-    Lingua -.->|"text to speak"| Vox
+    Language -.->|"text to speak"| Vocal
     PerceptionLocus -.->|"physical XOR virtual gate"| Vision
     PerceptionLocus -.->|"physical XOR virtual gate"| Audition
     Mundus -.->|"mundus.*"| Bus
 
     classDef inactive stroke-dasharray: 5 5,opacity:0.6;
-    class Nous,EpisodicMemory,Eidolon,WorldModel,Empatheia,Vox,Praxis,PerceptionLocus,Mundus inactive;
+    class Planning,EpisodicMemory,SelfModel,WorldModel,SocialCognition,Vocal,Effectors,PerceptionLocus,Mundus inactive;
 ```
 
 ## Module roster
@@ -101,15 +101,15 @@ graph TD
 | 2 | **Sequence** | Prediction | Active | `kaine/modules/sequence/` | NumPy CfC reservoir (32 units) by default; ncps/torch optional; predicts the next broadcast's features |
 | 3 | **Vision** | Prediction | Active | `kaine/modules/vision/` | Frozen InternVideo-Next clip encoder; DINOv2 fallback; online forward model with foveation |
 | 4 | **Audition** | Prediction | Active | `kaine/modules/audition/` | NumPy log-spectral acoustic encoder by default; emotion2vec+ tone classifier; optional speaches distil-Whisper and sherpa-onnx Moonshine speech-to-text backends (off in the base thesis) |
-| 5 | **Planning** | Cognition | Held | `kaine/modules/nous/` | Active inference (belief updating and expected-free-energy policy selection). The code default in `kaine/boot/factories/nous.py` is `"pymdp"` (JAX) because `config/kaine.toml` leaves `[nous].backend` commented out; only `tier0.toml` and `tier1.toml` select the NumPy engine |
+| 5 | **Planning** | Cognition | Held | `kaine/modules/planning/` | Active inference (belief updating and expected-free-energy policy selection). The code default in `kaine/boot/factories/planning.py` is `"pymdp"` (JAX) because `config/kaine.toml` leaves `[nous].backend` commented out; only `tier0.toml` and `tier1.toml` select the NumPy engine |
 | 6 | **Episodic memory** | Cognition | Held | `kaine/modules/episodic_memory/` | Qdrant; shared all-MiniLM-L6-v2 embedder (384-dim, CPU); episodic, semantic and procedural stores |
-| 7 | **Self-model** | Cognition | Held | `kaine/modules/eidolon/` | JSON-persisted self-model; KL-drift detector; launch-name assignment |
+| 7 | **Self-model** | Cognition | Held | `kaine/modules/self_model/` | JSON-persisted self-model; KL-drift detector; launch-name assignment |
 | 8 | **World model** | Cognition | Held | `kaine/modules/world_model/` | DreamerV3 RSSM (`[phantasia].backend = "dreamerv3"`, `engine = "jax"` by default, NumPy engine optional); `persist_weights = true` and `training_enabled = true` |
-| 9 | **Social cognition** | Cognition | Held | `kaine/modules/empatheia/` | Qdrant-backed agent models; familiarity-driven affect coupling |
+| 9 | **Social cognition** | Cognition | Held | `kaine/modules/social_cognition/` | Qdrant-backed agent models; familiarity-driven affect coupling |
 | 10 | **Affect** | Motivation | Active | `kaine/modules/affect/` | Sequential appraisal; arousal as global gain; drive accumulators with hysteresis; affect coupling consumer |
-| 11 | **Language** | Expression | Active | `kaine/modules/lingua/` | `kaineone/Qwen3.5-4B-abliterated-GGUF` served by an OpenAI-compatible server; context assembler; publishes `lingua.internal` and `lingua.external` as well as `lingua.out` |
-| 12 | **Vocal** | Expression | Held | `kaine/modules/vox/` | Chatterbox TTS and sherpa-onnx Kokoro; prosody modulated by the affect module; prosodic mirroring |
-| 13 | **Effectors** | Expression | Held | `kaine/modules/praxis/` | File-write, notify and shell effectors (empty whitelist by default) |
+| 11 | **Language** | Expression | Active | `kaine/modules/language/` | `kaineone/Qwen3.5-4B-abliterated-GGUF` served by an OpenAI-compatible server; context assembler; publishes `lingua.internal` and `lingua.external` as well as `lingua.out` |
+| 12 | **Vocal** | Expression | Held | `kaine/modules/vocal/` | Chatterbox TTS and sherpa-onnx Kokoro; prosody modulated by the affect module; prosodic mirroring |
+| 13 | **Effectors** | Expression | Held | `kaine/modules/effectors/` | File-write, notify and shell effectors (empty whitelist by default) |
 | 14 | **Sleep** | Maintenance | Active | `kaine/modules/sleep/` | Fatigue-triggered sleep with a five-phase consolidation pipeline and the affective reset; DPO + LoRA voice alignment (bf16 by default, 4-bit optional; Unsloth), off in the base thesis |
 | 15 | **Perception** | Embodiment | Held | `kaine/modules/perception/` | Physical-XOR-virtual perceptual-locus arbiter; policy-gated entity self-switch |
 | 16 | **Embodiment** | Embodiment | Held | `kaine/modules/mundus/` | Body-agnostic embodiment control surface that routes perception and action to a body through a pluggable adapter. Nothing drives its per-tick loop yet, only the `stub` adapter ships, and activation is double-gated (config and an operator environment variable) |
@@ -157,8 +157,8 @@ The run loop first drains `cycle.control` for `cycle.set_rates` events and `soma
 2. Sorts the events by `(source, type, entry_id)`.
 3. Refreshes the affect snapshot the scorer reads.
 4. Updates the access rate and decides whether this is a broadcast tick.
-5. Calls `Syneidesis.select()` to score the candidates and form the coalition.
-6. On a broadcast tick, publishes the snapshot to `workspace.broadcast`, then calls `Volition.select()` and publishes its intents to `volition.out`.
+5. Calls `Workspace.select()` to score the candidates and form the coalition.
+6. On a broadcast tick, publishes the snapshot to `workspace.broadcast`, then calls `ActionSelection.select()` and publishes its intents to `volition.out`.
 7. Publishes telemetry to `cycle.out`.
 
 The cycle can be **frozen** through `state/cycle/control.json`, a stack of per-source freeze entries (`operator`, `spot`, `welfare`, `gestation`, `programme_end`, `preserve`). Each recovery pops only its own entry, so a welfare pause survives a supervisor recovery, and the cycle resumes only when the stack is empty. A freeze stops the entity clock while operators repair infrastructure; it is not a shutdown.
@@ -167,7 +167,7 @@ See [The cognitive cycle](../08-cognitive-cycle/README.md) for the full tick seq
 
 ### Workspace, the global workspace
 
-`kaine/workspace/syneidesis.py`, `Syneidesis`.
+`kaine/workspace/core.py`, `Workspace`.
 
 On each processing tick the workspace:
 
@@ -190,15 +190,15 @@ The layer ships disabled (`[oscillator].enabled = false`). When disabled the mul
 
 ### Action selection
 
-`kaine/workspace/volition.py`, `Volition`.
+`kaine/workspace/action_selection.py`, `ActionSelection`.
 
-The action selection module is the only path from the workspace to an output. After each successful broadcast the cycle calls `Volition.select(snapshot)`. If `snapshot.inhibited` is true, `select` returns no intents. For an accessed broadcast, the configured policy decides:
+The action selection module is the only path from the workspace to an output. After each successful broadcast the cycle calls `ActionSelection.select(snapshot)`. If `snapshot.inhibited` is true, `select` returns no intents. For an accessed broadcast, the configured policy decides:
 
 - The base-thesis policy, `SelfInitiatedReportPolicy`, emits `speak` when the best score in the coalition (leaving out the language organ's own output) clears the speak bar, and `think` when it clears the lower think bar, with refractory intervals, a novelty check on the leading member's `(source, type)` and a one-in-flight guard per kind.
 - `DefaultActionSelectionPolicy` answers an `audition.transcription` event with non-empty text. It never forms a speak intent about the entity's own external speech, and its one-in-flight guard clears when the entity's own `external_speech` appears in a later coalition or after 48 s of wall time without it.
 - `DriveBiasedActionSelectionPolicy` adds intents from drive crossings in the coalition.
 
-Every policy keeps the 48 s guard timeout, so a failed realization cannot mute the entity. Intents are published to `volition.out` as `intent.speak`, `intent.think`, `intent.act` or `intent.rest`. When the planning module is enabled, `NousProposalSource` wraps the chosen policy and may turn an accessed `nous.proposal` into an `intent.think`, `intent.speak` or `intent.rest`, subject to the same guards.
+Every policy keeps the 48 s guard timeout, so a failed realization cannot mute the entity. Intents are published to `volition.out` as `intent.speak`, `intent.think`, `intent.act` or `intent.rest`. When the planning module is enabled, `PlanningProposalSource` wraps the chosen policy and may turn an accessed `nous.proposal` into an `intent.think`, `intent.speak` or `intent.rest`, subject to the same guards.
 
 **Interruptible speech.** The language module runs each generation as a cancellable task. When `[volition].interrupt_threshold` is set above the speak bar, a coalition that crosses it with a different signature while a `speak` is in flight emits an interrupt-marked `speak` that cancels the generation in flight and redirects it. The unspoken remainder is dropped and only a content-free preemption note is kept. There is one language organ and one token stream, so the entity can change what it is saying mid-stream but cannot produce inner and outer speech at the same time.
 
@@ -257,7 +257,7 @@ See [Day-to-day operation](../06-operation/README.md), [Preservation and the saf
 
 Two held modules can use JAX, and each has a NumPy engine for hosts without it:
 
-- **Planning** (`kaine/modules/nous/`): pymdp under `[nous].backend = "pymdp"`, or a pure-NumPy engine under `"numpy"`.
+- **Planning** (`kaine/modules/planning/`): pymdp under `[nous].backend = "pymdp"`, or a pure-NumPy engine under `"numpy"`.
 - **World model** (`kaine/modules/world_model/`): the DreamerV3 RSSM world model; `[phantasia].engine` selects `"jax"` or `"numpy"`.
 
 Both use CPU-only JAX when JAX is selected. GPU acceleration is operator-configured.

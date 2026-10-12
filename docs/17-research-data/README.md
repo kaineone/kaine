@@ -16,12 +16,12 @@ flowchart TD
     subgraph Sidecar["Evaluation Sidecar (read-only)"]
         CO["CoherenceObserver\nworkspace.broadcast → PLV JSONL"]
         RO["ReplayObserver\nmnemos.out + phantasia.out → memory ID JSONL"]
-        EO["EmpatheiaObserver\nempatheia.out + audition.out → accuracy JSONL"]
+        EO["SocialCognitionObserver\nempatheia.out + audition.out → accuracy JSONL"]
         VAO["VoiceAlignmentDivergenceObserver\nhypnos.out → DPO/sleep JSONL"]
         FO["FatigueObserver\nsoma.out → fatigue JSONL"]
         PEO["PredictionErrorObserver\n5 streams → mean/p95/p99 JSONL"]
         WO["WelfareObserver\n4 streams → Gray-Zone counts"]
-        NPO["NousPolicyObserver\nnous.out → EFE + action JSONL"]
+        NPO["PlanningPolicyObserver\nnous.out → EFE + action JSONL"]
     end
 
     subgraph Standalone["Standalone Instruments"]
@@ -102,7 +102,7 @@ When the oscillatory layer is disabled or `metadata['coherence']` is absent the 
 
 A composite observer running one sub-observer per stream. It logs memory IDs from `mnemos.replay` events and scenario descriptors from `phantasia.scenario` events. When `replay_redact_content = true` (the default), the `text` field is dropped and the memory IDs and metadata (affect, timestamps, scenario descriptors) are kept. When it is `false`, the memory text is logged too, so content logging needs an explicit opt-in by the operator or Guardian.
 
-### `EmpatheiaObserver`
+### `SocialCognitionObserver`
 
 - **Streams:** `empatheia.out` (`empatheia.agent_model` predictions) and `audition.out` (`audition.emotion` / `audition.transcription` for agent-model pairing)
 - **Toggle:** `[evaluation.observers].empatheia`
@@ -166,7 +166,7 @@ Every advisory is written to the rollup as well, and no payload carries anything
 
 A sensor fault is a fault of the entity's input, not distress of the entity, so these advisories are not gray-zone events. The welfare-protective monitor reads only `welfare.gray_zone` from `welfare.out` and takes no action on them. The curated research log records all four types, and the dashboard entity-care panel lists the processors that are blind or silent now.
 
-### `NousPolicyObserver`
+### `PlanningPolicyObserver`
 
 - **Stream:** `nous.out` (event type `nous.policy`)
 - **Toggle:** `[evaluation.observers].nous_policy`
@@ -254,9 +254,9 @@ Samples a fraction of external-speech events (`ab_sample_rate`, default `1.0`), 
 
 Runs ground-truth memory-recall probes that compare the full cognitive stack against a bare language model. See [Memory probe ground-truth controls](#memory-probe-ground-truth-controls).
 
-### `EidolonAccuracyRunner`
+### `SelfModelAccuracyRunner`
 
-`kaine/evaluation/eidolon_accuracy.py`
+`kaine/evaluation/self_model_accuracy.py`
 
 - **Toggle:** `[evaluation].eidolon_accuracy`
 - **Schedule:** every `eidolon_accuracy_interval_hours` (default 24)
@@ -443,12 +443,12 @@ idle_poll_s = 1.0
 | `kaine/evaluation/_base.py` | `BaseObserver`, `StreamSubscriberObserver`, `WorkspaceSubscriberObserver` |
 | `kaine/evaluation/observers/coherence_observer.py` | PLV coherence logger |
 | `kaine/evaluation/observers/replay_observer.py` | Episodic memory replay logger |
-| `kaine/evaluation/observers/empatheia_observer.py` | Agent-model accuracy logger |
+| `kaine/evaluation/observers/social_cognition_observer.py` | Agent-model accuracy logger |
 | `kaine/evaluation/observers/voice_alignment_divergence_observer.py` | Per-sleep voice-alignment outcome and training metrics |
 | `kaine/evaluation/observers/fatigue_observer.py` | Fatigue history logger |
 | `kaine/evaluation/observers/prediction_error_observer.py` | Sliding-window PE statistics |
 | `kaine/evaluation/observers/welfare_observer.py` | Gray-zone event detector |
-| `kaine/evaluation/observers/nous_policy_observer.py` | EFE + action logger |
+| `kaine/evaluation/observers/planning_policy_observer.py` | EFE + action logger |
 | `kaine/evaluation/observers/ablation_observer.py` | Oscillatory-ablation observer |
 | `kaine/evaluation/trajectory.py` | `TrajectoryRecorder`: workspace broadcast logger |
 | `kaine/evaluation/attribution.py` | `AttributionRecorder`: module coalition-win histogram |
@@ -457,7 +457,7 @@ idle_poll_s = 1.0
 | `kaine/evaluation/voice_tracking.py` | `VoiceTrackingObserver`: per-sleep voice-alignment stats |
 | `kaine/evaluation/affect_correlation.py` | `AffectCorrelationRecorder`: affect/output correlation logger |
 | `kaine/evaluation/memory_probes.py` | `MemoryProbeRunner`: memory ground-truth probes |
-| `kaine/evaluation/eidolon_accuracy.py` | `EidolonAccuracyRunner`: Self-model prediction accuracy |
+| `kaine/evaluation/self_model_accuracy.py` | `SelfModelAccuracyRunner`: Self-model prediction accuracy |
 | `kaine/evaluation/ab_divergence.py` | A/B divergence test (bare inference + cosine) |
 | `kaine/evaluation/sink.py` | `AsyncJsonlSink`: daily-rotated JSONL writer |
 | `kaine/evaluation/registry.py` | `SidecarRegistry`: constructs and starts observers |

@@ -92,7 +92,7 @@ def _audition_sherpa(config: dict) -> bool:
     return backend == "sherpa_onnx" and bool(section.get("transcription_enabled", False))
 
 
-def _vox_sherpa(config: dict) -> bool:
+def _vocal_sherpa(config: dict) -> bool:
     section = config.get("vox") or {}
     backend = str(section.get("backend") or "chatterbox").strip().lower()
     return backend == "sherpa_onnx"
@@ -109,7 +109,7 @@ def _episodic_memory_sqlite_vec(config: dict) -> bool:
     }
 
 
-def _empatheia_qdrant(config: dict) -> bool:
+def _social_cognition_qdrant(config: dict) -> bool:
     return (config.get("empatheia") or {}).get("backend", "qdrant") == "qdrant"
 
 
@@ -138,7 +138,7 @@ def _sequence_torch_needed(config: dict) -> bool:
     return (config.get("chronos") or {}).get("cfc_backend", "numpy") == "torch"
 
 
-def _nous_pymdp_backend(config: dict) -> bool:
+def _planning_pymdp_backend(config: dict) -> bool:
     return (config.get("nous") or {}).get("backend", "pymdp") == "pymdp"
 
 
@@ -162,11 +162,11 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
         Requirement("sqlite_vec", "memory-edge", predicate=_episodic_memory_sqlite_vec),
     ),
     "empatheia": (
-        Requirement("qdrant_client", "memory", predicate=_empatheia_qdrant),
+        Requirement("qdrant_client", "memory", predicate=_social_cognition_qdrant),
         Requirement(
             "sentence_transformers",
             "memory",
-            predicate=lambda c: _empatheia_qdrant(c) and _embedding_torch_backend(c),
+            predicate=lambda c: _social_cognition_qdrant(c) and _embedding_torch_backend(c),
         ),
     ),
     "hypnos": (
@@ -190,11 +190,11 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
         Requirement("sherpa_onnx", "speech-edge", predicate=_audition_sherpa),
     ),
     "vox": (
-        Requirement("sherpa_onnx", "speech-edge", predicate=_vox_sherpa),
+        Requirement("sherpa_onnx", "speech-edge", predicate=_vocal_sherpa),
     ),
     "nous": (
-        Requirement("pymdp", "reasoning", predicate=_nous_pymdp_backend),
-        Requirement("jax", "reasoning", predicate=_nous_pymdp_backend),
+        Requirement("pymdp", "reasoning", predicate=_planning_pymdp_backend),
+        Requirement("jax", "reasoning", predicate=_planning_pymdp_backend),
     ),
     "phantasia": (
         Requirement("jax", "worldmodel", predicate=_world_model_jax_engine),

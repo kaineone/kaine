@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from kaine.modules.lingua.client import ChatResponse
+from kaine.modules.language.client import ChatResponse
 from kaine.modules.sleep.capability_eval import (
     AbliterationProbeScorer,
     EmptyAbliterationProbeSetError,

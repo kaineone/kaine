@@ -9,7 +9,7 @@ from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle import CognitiveCycle
-from tests._fakes import FailingReadBus, FakeClock, FakeRegistry, FakeSyneidesis
+from tests._fakes import FailingReadBus, FakeClock, FakeRegistry, FakeWorkspace
 
 
 def _ev(source: str, value: int) -> Event:
@@ -30,7 +30,7 @@ async def test_quiet_module_skipped_silently():
     try:
         cycle = CognitiveCycle(
             bus=bus,
-            syneidesis=FakeSyneidesis(),
+            workspace=FakeWorkspace(),
             registry=FakeRegistry(["chronos.out", "soma.out"]),
             clock=FakeClock(),
             sleep=FakeClock().sleep,
@@ -51,10 +51,10 @@ async def test_events_from_module_collected_and_cursor_advances():
     try:
         for i in range(3):
             await bus.publish(_ev("chronos", i))
-        syn = FakeSyneidesis()
+        syn = FakeWorkspace()
         cycle = CognitiveCycle(
             bus=bus,
-            syneidesis=syn,
+            workspace=syn,
             registry=FakeRegistry(["chronos.out"]),
             clock=FakeClock(),
             sleep=FakeClock().sleep,
@@ -79,7 +79,7 @@ async def test_erroring_read_does_not_stop_cycle():
         wrapped = FailingReadBus(real, fail_stream="chronos.out")
         cycle = CognitiveCycle(
             bus=wrapped,  # type: ignore[arg-type]
-            syneidesis=FakeSyneidesis(),
+            workspace=FakeWorkspace(),
             registry=FakeRegistry(["soma.out", "chronos.out"]),
             clock=FakeClock(),
             sleep=FakeClock().sleep,
@@ -94,15 +94,15 @@ async def test_erroring_read_does_not_stop_cycle():
 
 
 @pytest.mark.asyncio
-async def test_syneidesis_error_recorded_but_cycle_continues():
+async def test_workspace_error_recorded_but_cycle_continues():
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
     try:
-        syn = FakeSyneidesis(raise_on_tick=0)
+        syn = FakeWorkspace(raise_on_tick=0)
         cycle = CognitiveCycle(
             bus=bus,
-            syneidesis=syn,
+            workspace=syn,
             registry=FakeRegistry([]),
             clock=FakeClock(),
             sleep=FakeClock().sleep,
@@ -124,7 +124,7 @@ async def test_workspace_broadcast_only_on_experiential_ticks():
     try:
         cycle = CognitiveCycle(
             bus=bus,
-            syneidesis=FakeSyneidesis(),
+            workspace=FakeWorkspace(),
             registry=FakeRegistry([]),
             processing_rate_hz=10.0,
             experiential_rate_hz=2.0,
@@ -150,7 +150,7 @@ async def test_dynamic_module_addition_picked_up_next_tick():
         registry = FakeRegistry([])
         cycle = CognitiveCycle(
             bus=bus,
-            syneidesis=FakeSyneidesis(),
+            workspace=FakeWorkspace(),
             registry=registry,
             clock=FakeClock(),
             sleep=FakeClock().sleep,

@@ -17,7 +17,7 @@ import pytest
     "importer",
     [
         "kaine.modules.audition.sherpa_stt",
-        "kaine.modules.vox.sherpa_tts",
+        "kaine.modules.vocal.sherpa_tts",
         "kaine.nexus.health.probes",
     ],
 )

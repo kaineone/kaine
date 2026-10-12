@@ -51,7 +51,7 @@ class FakeChatClient:
         return Resp()
 
 
-class FakeLingua:
+class FakeLanguage:
     def __init__(self) -> None:
         self.chat_client = FakeChatClient()
         self.probe_temperature: float | None = None
@@ -135,12 +135,12 @@ def build(tmp_path: Path, **over: Any):
     config = IndividuationConfig.from_dict(over.pop("config", None))
     bus = FakeBus()
     ef = FakeEnsureFact()
-    lingua = FakeLingua()
+    language = FakeLanguage()
     embedder = over.pop("embedder", FakeEmbedder())
     kwargs: dict[str, Any] = {
         "config": config,
         "battery": ["q1", "q2"],
-        "lingua": lingua,
+        "lingua": language,
         "ensure_fact": ef,
         "embedder": embedder,
         "adapter_output_dir": None,
@@ -172,9 +172,9 @@ def test_config_defaults():
 
 
 def test_build_runtime_sets_the_probe_temperature(tmp_path):
-    lingua = FakeLingua()
-    build(tmp_path, config={"probe_temperature": 0.25}, lingua=lingua)
-    assert lingua.probe_temperature == 0.25
+    language = FakeLanguage()
+    build(tmp_path, config={"probe_temperature": 0.25}, language=language)
+    assert language.probe_temperature == 0.25
 
 
 def test_config_validation():
@@ -371,13 +371,13 @@ async def test_run_returns_on_stop(tmp_path: Path):
     await asyncio.wait_for(runtime.run(stop), 5)
 
 
-class UndisclosedLingua(FakeLingua):
+class UndisclosedLanguage(FakeLanguage):
     def probe_self_model(self) -> dict:
         return {"values": ["val"], "behavioral_norms": ["norm"], "situation_facts": []}
 
 
 async def test_probe_requires_the_disclosure(tmp_path: Path):
-    runtime = build(tmp_path, lingua=UndisclosedLingua())
+    runtime = build(tmp_path, language=UndisclosedLanguage())
     result = await runtime.core._sampler("q1", 1)
     assert isinstance(result, ProbeFailure)
     assert result.reason == "disclosure_not_ready"

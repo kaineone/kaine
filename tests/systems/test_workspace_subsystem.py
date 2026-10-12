@@ -14,7 +14,7 @@ from kaine.workspace import (
     RuleBasedSalience,
     StaticAffectModulator,
     StaticGoalScorer,
-    Syneidesis,
+    Workspace,
 )
 
 
@@ -29,8 +29,8 @@ def _ev(source, salience):
 
 
 @pytest.mark.asyncio
-async def test_syneidesis_selects_top_k():
-    syn = Syneidesis(
+async def test_workspace_selects_top_k():
+    syn = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
@@ -52,8 +52,8 @@ async def test_syneidesis_selects_top_k():
 
 
 @pytest.mark.asyncio
-async def test_syneidesis_inhibits_below_threshold():
-    syn = Syneidesis(
+async def test_workspace_inhibits_below_threshold():
+    syn = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
@@ -68,8 +68,8 @@ async def test_syneidesis_inhibits_below_threshold():
 
 
 @pytest.mark.asyncio
-async def test_syneidesis_empty_candidate_set():
-    syn = Syneidesis(
+async def test_workspace_empty_candidate_set():
+    syn = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),

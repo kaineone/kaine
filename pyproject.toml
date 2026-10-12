@@ -183,7 +183,7 @@ include = ["kaine*"]
 ]
 "kaine.modules.sleep" = ["eval_probes/*.jsonl"]
 "kaine.setup.web" = ["templates/*.html", "static/*.css"]
-"kaine.modules.eidolon" = ["surnames.txt"]
+"kaine.modules.self_model" = ["surnames.txt"]
 
 # ---------------------------------------------------------------------------
 # Ruff lint/format configuration.
@@ -328,7 +328,7 @@ unmatched_ignore_imports_alerting = "none"
 
 # Modules are domain organs; they may depend on the pure data/contract module
 # kaine.cycle.types (WorkspaceSnapshot) — directly or transitively through
-# neutral collaborators like kaine.faithful / kaine.workspace.volition — but
+# neutral collaborators like kaine.faithful / kaine.workspace.action_selection — but
 # NOT on the cycle RUNTIME (the engine/loop, registry, preflight, boot,
 # __main__, supervisor, monitors, etc.). The whole kaine.cycle package is forbidden,
 # so every runtime submodule, present and future, is covered; the one declared

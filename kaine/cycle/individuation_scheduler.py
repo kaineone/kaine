@@ -122,7 +122,7 @@ class IndividuationScheduler:
         organ_unloaded: Callable[[], bool],
         paused: Callable[[], bool],
         embedder_ready: Callable[[], bool],
-        lingua_idle: Callable[[], bool],
+        language_idle: Callable[[], bool],
         alert: Callable[[dict], Awaitable[None]],
         adapter_verifiable: Callable[[], bool] | None = None,
         on_capture_kind_change: Callable[[str | None], None] | None = None,
@@ -138,7 +138,7 @@ class IndividuationScheduler:
         self._organ_unloaded = organ_unloaded
         self._paused = paused
         self._embedder_ready = embedder_ready
-        self._lingua_idle = lingua_idle
+        self._language_idle = language_idle
         self._alert = alert
         self._adapter_verifiable = adapter_verifiable
         self._monotonic = monotonic
@@ -206,7 +206,7 @@ class IndividuationScheduler:
                 reason = self.abort_reason()
                 if reason is not None:
                     return ProbeFailure(reason)
-                if self._safe(self._lingua_idle, False):
+                if self._safe(self._language_idle, False):
                     break
                 await self._sleep(self._settings.idle_poll_s)
             return await sampler(prompt, seed)

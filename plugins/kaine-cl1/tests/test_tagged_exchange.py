@@ -14,7 +14,7 @@ import types  # noqa: E402
 
 import cl.sim as clsim  # noqa: E402
 import pytest  # noqa: E402
-from kaine_cl1.backends.nous import WetwarePolicyEngine  # noqa: E402
+from kaine_cl1.backends.planning import WetwarePolicyEngine  # noqa: E402
 from kaine_cl1.substrate.broker import SubstrateBroker  # noqa: E402
 from kaine_cl1.substrate.codec import StimRequest  # noqa: E402
 from kaine_cl1.substrate.session import SubstrateConfig, SubstrateSession  # noqa: E402
@@ -169,7 +169,7 @@ def test_real_time_response_is_the_window_after_delivery():
         clsim.clear_simulator_data_source()
 
 
-def test_nous_scores_the_answer_against_the_encoded_choice():
+def test_planning_scores_the_answer_against_the_encoded_choice():
     """The wetware policy engine scores the substrate answer against the silicon choice."""
     @dataclasses.dataclass(frozen=True)
     class Result:

@@ -30,8 +30,8 @@ from kaine.lifecycle.individuation_store import (
     save_ledger,
     save_reference,
 )
-from kaine.modules.eidolon.module import Eidolon
-from kaine.modules.lingua.client import ChatRequest, LlamaCppChatClient, OpenAIChatClient
+from kaine.modules.language.client import ChatRequest, LlamaCppChatClient, OpenAIChatClient
+from kaine.modules.self_model.module import SelfModel
 from kaine.security.crypto import get_state_encryptor
 from kaine.storage import set_data_root
 
@@ -210,12 +210,12 @@ async def test_ensure_situation_fact_publishes_and_persists(
 
 
 async def _check_situation_fact(bus: AsyncBus) -> None:
-    eidolon = Eidolon(bus)
+    self_model = SelfModel(bus)
     fact = "You are periodically assessed for your own protection."
 
-    assert await eidolon.ensure_situation_fact(fact) is True
+    assert await self_model.ensure_situation_fact(fact) is True
 
-    stream = getattr(eidolon, "out", "eidolon.out")
+    stream = getattr(self_model, "out", "eidolon.out")
     records = await bus.client.xrevrange(stream, max="+", min="-", count=1)
     assert records
     _id, fields = records[0]
@@ -228,13 +228,13 @@ async def _check_situation_fact(bus: AsyncBus) -> None:
     )
     assert fact in payload["situation_facts"]
 
-    raw = eidolon._persistence_path.read_bytes()
+    raw = self_model._persistence_path.read_bytes()
     text = get_state_encryptor().maybe_decrypt(raw).decode("utf-8")
     data = json.loads(text)
     assert fact in data["situation_facts"]
 
     before = await bus.client.xlen(stream)
-    assert await eidolon.ensure_situation_fact(fact) is False
+    assert await self_model.ensure_situation_fact(fact) is False
     assert await bus.client.xlen(stream) == before
 
 

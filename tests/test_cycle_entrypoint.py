@@ -352,7 +352,7 @@ def test_qdrant_key_absent_everywhere_injects_nothing(tmp_path: Path):
     secrets = _write(tmp_path / "secrets.toml", "[redis]\npassword = \"x\"\n")
     cfg = cycle_main._load_kaine_config(path=kaine, secrets_path=secrets, env={})
     # No empty key injected -> each module surfaces its own explicit error
-    # (covered by tests/test_episodic_memory_module.py / test_empatheia_module.py).
+    # (covered by tests/test_episodic_memory_module.py / test_social_cognition_module.py).
     assert "api_key" not in cfg["mnemos"]["qdrant"]
     assert "api_key" not in cfg["empatheia"]["qdrant"]
 
@@ -373,7 +373,7 @@ def test_existing_kaine_toml_qdrant_key_left_intact(tmp_path: Path):
     assert cfg["empatheia"]["qdrant"]["api_key"] == "from-env"
 
 
-def test_empatheia_only_qdrant_consumer_still_gets_key(tmp_path: Path):
+def test_social_cognition_only_qdrant_consumer_still_gets_key(tmp_path: Path):
     # The social cognition module enabled without the episodic memory module: the merge must still reach it.
     kaine = _write(
         tmp_path / "kaine.toml",

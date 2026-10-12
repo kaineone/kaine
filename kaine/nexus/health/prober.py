@@ -266,7 +266,7 @@ class HealthProber:
     async def _model_server_block(self) -> dict[str, Any]:
         return await blocks.model_server_block(
             self.model_server_cfg,
-            lingua_enabled=self._module_enabled("lingua"),
+            language_enabled=self._module_enabled("lingua"),
         )
 
     def _gpu_preflight_block(self) -> dict[str, Any]:

@@ -26,10 +26,6 @@ from kaine.evaluation.affect_correlation import (
     pearson,
 )
 from kaine.evaluation.attribution import AttributionRecorder
-from kaine.evaluation.eidolon_accuracy import (
-    EidolonAccuracyRunner,
-    parse_claims,
-)
 from kaine.evaluation.embeddings import HashEmbedder
 from kaine.evaluation.memory_probes import (
     NON_RECALL_MARKER,
@@ -37,6 +33,10 @@ from kaine.evaluation.memory_probes import (
     score_async,
 )
 from kaine.evaluation.proactive_audit import ProactiveAuditObserver
+from kaine.evaluation.self_model_accuracy import (
+    SelfModelAccuracyRunner,
+    parse_claims,
+)
 from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.evaluation.sleep_snapshots import SleepSnapshotRecorder
 from kaine.evaluation.trajectory import TrajectoryRecorder
@@ -799,7 +799,7 @@ async def test_score_async_credits_non_recall_sentinel_as_zero():
     assert score == 0.0
 
 
-# ---------- EidolonAccuracyRunner ----------
+# ---------- SelfModelAccuracyRunner ----------
 
 
 def test_parse_claims_extracts_keywords():
@@ -811,9 +811,9 @@ def test_parse_claims_extracts_keywords():
 
 
 @pytest.mark.asyncio
-async def test_eidolon_accuracy_runs_once_and_logs(tmp_path):
+async def test_self_model_accuracy_runs_once_and_logs(tmp_path):
     sink = AsyncJsonlSink(tmp_path, name="eidolon_accuracy", flush_interval_s=0.05)
-    runner = EidolonAccuracyRunner(
+    runner = SelfModelAccuracyRunner(
         sink,
         cognitive_client=FakeCognitive("I'm curious"),
         evaluation_logs_dir=tmp_path,

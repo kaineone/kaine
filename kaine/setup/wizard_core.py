@@ -224,13 +224,13 @@ def implied_extras(modules: dict[str, bool], shipped: dict[str, Any]) -> list[st
 
     audition_backend = str(audition_cfg.get("backend", "speaches")).strip().lower()
     transcription_on = bool(audition_cfg.get("transcription_enabled", False))
-    vox_cfg = shipped.get("vox") or {}
-    vox_backend = str(vox_cfg.get("backend", "chatterbox")).strip().lower()
-    nous_backend = str((shipped.get("nous") or {}).get("backend", "pymdp")).strip().lower()
+    vocal_cfg = shipped.get("vox") or {}
+    vocal_backend = str(vocal_cfg.get("backend", "chatterbox")).strip().lower()
+    planning_backend = str((shipped.get("nous") or {}).get("backend", "pymdp")).strip().lower()
     world_model_backend = str(world_model_cfg.get("backend", "dreamerv3")).strip().lower()
     world_model_engine = str(world_model_cfg.get("engine", "jax")).strip().lower()
 
-    if modules.get("nous") and nous_backend == "pymdp":
+    if modules.get("nous") and planning_backend == "pymdp":
         extras.append("reasoning")
     if modules.get("audition") and bool(audition_cfg.get("capture_enabled")):
         extras.append("audio")
@@ -250,7 +250,7 @@ def implied_extras(modules: dict[str, bool], shipped: dict[str, Any]) -> list[st
         modules.get("audition")
         and audition_backend == "sherpa_onnx"
         and transcription_on
-    ) or (modules.get("vox") and vox_backend == "sherpa_onnx"):
+    ) or (modules.get("vox") and vocal_backend == "sherpa_onnx"):
         extras.append("speech-edge")
     # Perception-feed deps: playlist decodes media; live opens devices. Both
     # surfaces (video + audio) are driven from the one [perception_feed] source,

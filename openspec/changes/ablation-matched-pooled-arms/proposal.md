@@ -69,11 +69,11 @@ competitive selection today, so neither control can be run.
 
 ## Impact
 
-- `kaine/workspace/syneidesis.py`, `kaine/modules/context.py`,
+- `kaine/workspace/core.py`, `kaine/modules/context.py`,
   `kaine/evaluation/observers/research_event_observer.py`,
   `kaine/cycle/__main__.py`, `kaine/research/ignition_study/overlay.py`,
   `kaine/research/ignition_study/runner.py`, `kaine/boot/wiring.py`,
-  `kaine/config.py`, `kaine/modules/lingua/module.py`,
+  `kaine/config.py`, `kaine/modules/language/module.py`,
   `kaine/cycle/individuation_runtime.py`, `kaine/experiment/run_context.py`,
   `config/kaine.toml`,
   `config/profiles/thesis_test.toml`, `config/studies/`, docs, tests.

@@ -398,7 +398,7 @@ async def test_perceptual_surprise_arouses_scaled_by_normalised_error(bus: Async
 
 
 @pytest.mark.asyncio
-async def test_empatheia_agent_model_updates_familiarity_cache(bus: AsyncBus):
+async def test_social_cognition_agent_model_updates_familiarity_cache(bus: AsyncBus):
     """empatheia.agent_model events update the per-agent familiarity cache."""
     cfg = CouplingConfig(enabled=True)
     affect = Affect(bus, coupling=cfg, publish_interval_s=999.0)

@@ -2,7 +2,7 @@
 
 Voice training exists so that the entity individuates away from its language organ's original training data and develops a voice of its own. It should converse the way people do, not recite workspace statistics, and not sound like a stock LLM without KAINE's modules (operator, 2026-10-05). The 2026-10-05 voice research (three reports plus a synthesis, `kaine-voice-research-2026-10-05`) found the code works against that goal at several levels:
 
-- **The persona forbids a voice.** The default persona orders the organ to "put the system's current internal state — the module readings given below — into plain words … Report only what the readings actually contain … do not invent feelings" (`kaine/modules/lingua/context.py`). Drive-initiated speech is prompted with literal strings such as `social_drive (value=0.83)` (`kaine/workspace/drive_policy.py`).
+- **The persona forbids a voice.** The default persona orders the organ to "put the system's current internal state — the module readings given below — into plain words … Report only what the readings actually contain … do not invent feelings" (`kaine/modules/language/context.py`). Drive-initiated speech is prompted with literal strings such as `social_drive (value=0.83)` (`kaine/workspace/drive_policy.py`).
 - **Training rewards telemetry.** The DPO "chosen" text is the templated faithful rendering, for example "The interoception module reports wellness 0.83, no alerts" (`kaine/modules/sleep/voice_alignment.py`). Every sleep would push the voice toward the template. The sleep module's spec requires this, as a defence against model collapse.
 - **Training never builds on itself.**
   - Each sleep attaches a fresh LoRA to the base model, so the reference is always the stock organ.

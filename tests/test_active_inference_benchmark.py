@@ -333,9 +333,9 @@ def test_aif_adapter_only_imports_engine_not_module():
     from kaine.evaluation.benchmarks.active_inference import aif_agent
 
     src = inspect.getsource(aif_agent)
-    assert "from kaine.modules.nous.engine import" in src
-    assert "from kaine.modules.nous.generative_model import" in src
-    assert "kaine.modules.nous.module" not in src
+    assert "from kaine.modules.planning.engine import" in src
+    assert "from kaine.modules.planning.generative_model import" in src
+    assert "kaine.modules.planning.module" not in src
 
 
 # ---------------------------------------------------------------------------
@@ -361,7 +361,7 @@ pytestmark_real = pytest.mark.skipif(
 @pytestmark_real
 def test_aif_agent_reuses_live_pymdp_engine():
     from kaine.evaluation.benchmarks.active_inference.aif_agent import AIFAgent
-    from kaine.modules.nous.engine import PymdpEngine
+    from kaine.modules.planning.engine import PymdpEngine
 
     task = ExploitationPOMDP()
     agent = AIFAgent(task)

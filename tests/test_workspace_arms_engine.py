@@ -18,7 +18,7 @@ from kaine.workspace import (
     RuleBasedSalience,
     StaticAffectModulator,
     StaticGoalScorer,
-    Syneidesis,
+    Workspace,
 )
 from tests._fakes import FakeClock, FakeRegistry
 
@@ -41,7 +41,7 @@ async def _publish_three_events(bus, tick):
 @pytest.mark.asyncio
 async def test_matched_draws_only_on_broadcast_ticks():
     client = fakeredis.FakeRedis(decode_responses=True)
-    syn = Syneidesis(
+    syn = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=64),
             goal_scorer=StaticGoalScorer(),
@@ -58,7 +58,7 @@ async def test_matched_draws_only_on_broadcast_ticks():
     clock = FakeClock()
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=syn,
+        workspace=syn,
         registry=FakeRegistry(["soma.out"]),
         processing_rate_hz=10.0,
         experiential_rate_hz=10.0 / 3.0,
@@ -83,7 +83,7 @@ async def test_matched_draws_only_on_broadcast_ticks():
 @pytest.mark.asyncio
 async def test_pooled_publishes_only_broadcast_ticks():
     client = fakeredis.FakeRedis(decode_responses=True)
-    syn = Syneidesis(
+    syn = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=64),
             goal_scorer=StaticGoalScorer(),
@@ -96,7 +96,7 @@ async def test_pooled_publishes_only_broadcast_ticks():
     clock = FakeClock()
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=syn,
+        workspace=syn,
         registry=FakeRegistry(["soma.out"]),
         processing_rate_hz=10.0,
         experiential_rate_hz=10.0 / 3.0,
@@ -127,7 +127,7 @@ async def test_pooled_publishes_only_broadcast_ticks():
 @pytest.mark.asyncio
 async def test_competitive_default_publishes_coalition_of_top_k():
     client = fakeredis.FakeRedis(decode_responses=True)
-    syn = Syneidesis(
+    syn = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=64),
             goal_scorer=StaticGoalScorer(),
@@ -139,7 +139,7 @@ async def test_competitive_default_publishes_coalition_of_top_k():
     clock = FakeClock()
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=syn,
+        workspace=syn,
         registry=FakeRegistry(["soma.out"]),
         processing_rate_hz=10.0,
         experiential_rate_hz=10.0 / 3.0,

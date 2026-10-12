@@ -23,7 +23,7 @@ The codebase has several related wiring and quality problems: the language modul
 
 ## Impact
 
-- `kaine/modules/lingua/module.py`, `kaine/bus/schema.py`, `kaine/cycle/engine.py`, `kaine/modules/registry.py`.
+- `kaine/modules/language/module.py`, `kaine/bus/schema.py`, `kaine/cycle/engine.py`, `kaine/modules/registry.py`.
 - `kaine/evaluation/stream_registry.py`, `kaine/evaluation/observers/*.py`.
 - `kaine/nexus/conversation.py` and other consumers of stream literals.
 - `config/kaine.toml` stream references.

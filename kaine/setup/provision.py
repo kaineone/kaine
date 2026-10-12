@@ -157,8 +157,8 @@ def aux_models(config: Optional[dict[str, Any]] = None) -> tuple[AuxModel, ...]:
     )
     models.append(AuxModel(emb_repo, emb_label))
 
-    vox = cfg.get("vox") or {}
-    if str(vox.get("backend", "chatterbox")).strip().lower() == "chatterbox":
+    vocal = cfg.get("vox") or {}
+    if str(vocal.get("backend", "chatterbox")).strip().lower() == "chatterbox":
         models.append(AuxModel(DEFAULT_TTS_REPO, "text-to-speech (Chatterbox)"))
 
     return tuple(models)

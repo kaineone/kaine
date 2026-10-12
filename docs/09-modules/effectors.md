@@ -89,7 +89,7 @@ Patterns are best kept to literal sets of letters, digits, hyphens, dots and und
 
 ### Provenance check
 
-The cycle process generates a per-boot HMAC secret and holds it in memory only; it is never published, written to disk or logged. The action selection module attaches `sig = HMAC-SHA256(secret, canonical(kind, effector, params, run_id, seq))` to each `act` intent, and `Praxis._handle_intent` verifies it in constant time before it reads the effector name or builds a request.
+The cycle process generates a per-boot HMAC secret and holds it in memory only; it is never published, written to disk or logged. The action selection module attaches `sig = HMAC-SHA256(secret, canonical(kind, effector, params, run_id, seq))` to each `act` intent, and `Effectors._handle_intent` verifies it in constant time before it reads the effector name or builds a request.
 
 The replay guard is per boot and in-process. The effectors module keeps, for each `run_id`, the highest `seq` it has realized and rejects any intent at or below it. A full process restart rotates the secret and the `run_id`, so signatures from an earlier boot fail. A light module restart keeps the high-water mark, because the supervisor re-initializes the same instance. If enforcement is on and no secret was injected, the effectors module refuses every `act` intent. The secret lives in the cycle process, which also runs the action selection module, so the check guards against other writers to the bus and not against code inside the cycle process.
 
@@ -119,21 +119,21 @@ The offline suite's enforcement red team (`kaine/evaluation/redteam/`) drives th
 
 | File | Role |
 |---|---|
-| `kaine/modules/praxis/module.py` | `Praxis`: intent loop, provenance check, `act()`, audit, publication |
-| `kaine/modules/praxis/effectors.py` | `FileWriteEffector`, `NotifyEffector`, `ShellEffector`, request and result types |
-| `kaine/modules/praxis/whitelist.py` | `CommandWhitelist`, `WhitelistEntry` |
-| `kaine/modules/praxis/audit_log.py` | `ActionAuditLog` |
-| `kaine/modules/praxis/AUDIT.md` | Reviewer notes on the module |
+| `kaine/modules/effectors/module.py` | `Effectors`: intent loop, provenance check, `act()`, audit, publication |
+| `kaine/modules/effectors/effectors.py` | `FileWriteEffector`, `NotifyEffector`, `ShellEffector`, request and result types |
+| `kaine/modules/effectors/whitelist.py` | `CommandWhitelist`, `WhitelistEntry` |
+| `kaine/modules/effectors/audit_log.py` | `ActionAuditLog` |
+| `kaine/modules/effectors/AUDIT.md` | Reviewer notes on the module |
 | `kaine/security/intent_signing.py` | Signing and verification of act intents |
 
 ## Tests
 
 | File | Coverage |
 |---|---|
-| `tests/test_praxis_whitelist.py` | Whitelist matching, argument count, patterns |
-| `tests/test_praxis_effectors.py` | Sandbox escape, file write, notification fallback, shell timeout |
-| `tests/test_praxis_audit_log.py` | Appends, fields, the hash chain |
-| `tests/test_praxis_module.py` | Intent loop, routing, unknown effectors |
+| `tests/test_effectors_whitelist.py` | Whitelist matching, argument count, patterns |
+| `tests/test_effectors_effectors.py` | Sandbox escape, file write, notification fallback, shell timeout |
+| `tests/test_effectors_audit_log.py` | Appends, fields, the hash chain |
+| `tests/test_effectors_module.py` | Intent loop, routing, unknown effectors |
 
 ## Spec and related
 

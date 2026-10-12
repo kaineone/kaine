@@ -712,7 +712,7 @@ async def test_health_disabled_module_is_not_configured():
 
     prober = _prober(
         {"vox": False},
-        [DependencySpec(name="Chatterbox", role="Vox", module="vox", probe=should_not_run)],
+        [DependencySpec(name="Chatterbox", role="Vocal", module="vox", probe=should_not_run)],
     )
     snap = await prober.snapshot(force=True)
     dep = snap["dependencies"][0]
@@ -747,7 +747,7 @@ async def test_health_timeout_does_not_block_other_probes():
     prober = _prober(
         {"nous": True, "mnemos": True},
         [
-            DependencySpec(name="ONA", role="Nous", module="nous", probe=hangs),
+            DependencySpec(name="ONA", role="Planning", module="nous", probe=hangs),
             DependencySpec(name="Qdrant", role="EpisodicMemory", module="mnemos", probe=quick),
         ],
         probe_timeout_s=0.05,

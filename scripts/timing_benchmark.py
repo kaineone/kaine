@@ -58,7 +58,7 @@ from kaine.workspace import (
     RuleBasedSalience,
     StaticGoalScorer,
     StaticAffectModulator,
-    Syneidesis,
+    Workspace,
 )
 
 # Workspace-tick band the conscious-access literature makes defensible
@@ -153,7 +153,7 @@ async def _benchmark_tick(cfg: dict[str, Any], ticks: int) -> dict[str, Any]:
 
         syn_cfg = bench_cfg.get("syneidesis") or {}
         coherence = make_coherence_scorer(bench_cfg)
-        syneidesis = Syneidesis(
+        workspace = Workspace(
             strategy=RuleBasedSalience(
                 novelty=NoveltyTracker(window=int(syn_cfg.get("novelty_window", 32))),
                 goal_scorer=StaticGoalScorer(),
@@ -166,12 +166,12 @@ async def _benchmark_tick(cfg: dict[str, Any], ticks: int) -> dict[str, Any]:
         cycle_cfg = bench_cfg.get("cycle") or {}
         cycle = CognitiveCycle(
             bus=bus,
-            syneidesis=syneidesis,
+            workspace=workspace,
             registry=registry,
             processing_rate_hz=float(cycle_cfg.get("processing_rate_hz", 3.333)),
             experiential_rate_hz=float(cycle_cfg.get("experiential_rate_hz", 3.333)),
             # NO action selection module: the tick can never select/publish an effector intent.
-            volition=None,
+            action_selection=None,
             collect_phases=coherence is not None,
             entity_clock=registry.entity_clock,
             deterministic=True,

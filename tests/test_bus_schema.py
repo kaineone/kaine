@@ -7,7 +7,7 @@ import pytest
 
 from kaine.bus import Event, EventValidationError, ReservedStreamError, module_stream
 from kaine.bus.schema import (
-    SYNEIDESIS_SOURCE,
+    WORKSPACE_SOURCE,
     WORKSPACE_STREAM,
     ensure_writable,
     validate_event,
@@ -87,13 +87,13 @@ def test_whitespace_in_source_rejected():
 def test_module_stream_naming():
     assert module_stream("soma") == "soma.out"
     assert module_stream("chronos") == "chronos.out"
-    assert module_stream(SYNEIDESIS_SOURCE) == WORKSPACE_STREAM
+    assert module_stream(WORKSPACE_SOURCE) == WORKSPACE_STREAM
 
 
 def test_workspace_stream_reserved():
     with pytest.raises(ReservedStreamError):
         ensure_writable(WORKSPACE_STREAM, "soma")
-    ensure_writable(WORKSPACE_STREAM, SYNEIDESIS_SOURCE)
+    ensure_writable(WORKSPACE_STREAM, WORKSPACE_SOURCE)
 
 
 def test_event_is_immutable():

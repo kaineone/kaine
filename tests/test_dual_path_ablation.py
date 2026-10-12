@@ -26,10 +26,10 @@ from kaine.workspace import (
     RuleBasedSalience,
     StaticAffectModulator,
     StaticGoalScorer,
-    Syneidesis,
+    Workspace,
 )
 from kaine.workspace.coherence import CoherenceScorer
-from kaine.workspace.syneidesis import selection_delta
+from kaine.workspace.core import selection_delta
 
 
 def _ev(intensity: float, eid: str, source: str) -> tuple[str, Event]:
@@ -81,10 +81,10 @@ async def test_primary_is_identical_to_coherence_on_select():
     """The primary arm equals what a coherence-ON select() produces, so enabling
     the ablation does not change the entity's behaviour."""
     events, ctx = _batch()
-    dual = Syneidesis(
+    dual = Workspace(
         strategy=_strategy(), top_k=3, publication_threshold=0.35, coherence=_scorer()
     )
-    ref_on = Syneidesis(
+    ref_on = Workspace(
         strategy=_strategy(), top_k=3, publication_threshold=0.35, coherence=_scorer()
     )
 
@@ -103,10 +103,10 @@ async def test_counterfactual_is_the_coherence_off_baseline():
     """The counterfactual arm equals a coherence-OFF select() over the same
     events — so the two arms differ by the layer alone."""
     events, ctx = _batch()
-    dual = Syneidesis(
+    dual = Workspace(
         strategy=_strategy(), top_k=3, publication_threshold=0.35, coherence=_scorer()
     )
-    ref_off = Syneidesis(
+    ref_off = Workspace(
         strategy=_strategy(), top_k=3, publication_threshold=0.35, coherence=None
     )
 
@@ -124,10 +124,10 @@ async def test_counterfactual_is_the_coherence_off_baseline():
 @pytest.mark.asyncio
 async def test_layer_off_yields_no_counterfactual():
     events, ctx = _batch()
-    syn = Syneidesis(
+    syn = Workspace(
         strategy=_strategy(), top_k=3, publication_threshold=0.35, coherence=None
     )
-    ref = Syneidesis(
+    ref = Workspace(
         strategy=_strategy(), top_k=3, publication_threshold=0.35, coherence=None
     )
 
@@ -140,7 +140,7 @@ async def test_layer_off_yields_no_counterfactual():
 
 @pytest.mark.asyncio
 async def test_empty_events_gives_two_empty_inhibited_snapshots():
-    syn = Syneidesis(
+    syn = Workspace(
         strategy=_strategy(), top_k=3, publication_threshold=0.35, coherence=_scorer()
     )
     primary, counterfactual = await syn.select_dual(
@@ -163,7 +163,7 @@ async def test_phases_observed_exactly_once_per_dual_tick():
         return real_observe(phases)
 
     scorer.observe = counting_observe  # type: ignore[method-assign]
-    syn = Syneidesis(
+    syn = Workspace(
         strategy=_strategy(), top_k=3, publication_threshold=0.35, coherence=scorer
     )
     events, ctx = _batch()
@@ -289,7 +289,7 @@ def _coherence_registry_and_syn():
         modules=[_PhaseModule("soma", osc_interoception), _PhaseModule("chronos", osc_sequence)],
         streams=["soma.out", "chronos.out"],
     )
-    syn = Syneidesis(
+    syn = Workspace(
         strategy=_strategy(), top_k=5, publication_threshold=0.0, coherence=_scorer()
     )
     return registry, syn
@@ -305,7 +305,7 @@ async def test_cycle_invokes_recorder_with_paired_snapshots():
         captured: list[tuple[WorkspaceSnapshot, WorkspaceSnapshot]] = []
         cycle = CognitiveCycle(
             bus=bus,
-            syneidesis=syn,
+            workspace=syn,
             registry=registry,
             clock=FakeClock(),
             sleep=FakeClock().sleep,
@@ -337,7 +337,7 @@ async def test_recorder_does_not_change_the_broadcast():
             kw = {"ablation_recorder": (lambda on, off: None)} if with_recorder else {}
             cycle = CognitiveCycle(
                 bus=bus,
-                syneidesis=syn,
+                workspace=syn,
                 registry=registry,
                 clock=FakeClock(),
                 sleep=FakeClock().sleep,
@@ -374,7 +374,7 @@ async def test_set_ablation_recorder_attaches_after_construction():
         captured: list[tuple[WorkspaceSnapshot, WorkspaceSnapshot]] = []
         cycle = CognitiveCycle(
             bus=bus,
-            syneidesis=syn,
+            workspace=syn,
             registry=registry,
             clock=FakeClock(),
             sleep=FakeClock().sleep,

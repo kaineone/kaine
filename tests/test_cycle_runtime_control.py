@@ -10,7 +10,7 @@ from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle import CognitiveCycle
-from tests._fakes import FakeClock, FakeRegistry, FakeSyneidesis
+from tests._fakes import FakeClock, FakeRegistry, FakeWorkspace
 
 
 @pytest.fixture
@@ -21,7 +21,7 @@ async def cycle_with_fakes():
     clock = FakeClock()
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=FakeSyneidesis(),
+        workspace=FakeWorkspace(),
         registry=FakeRegistry([]),
         processing_rate_hz=5.0,
         experiential_rate_hz=5.0,

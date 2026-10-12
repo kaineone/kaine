@@ -149,11 +149,11 @@ def _make_registry(
     )
     mundus.activate = AsyncMock(return_value=mundus_enabled and mundus_approved)
 
-    vox = MagicMock()
-    vox.set_dormant = MagicMock()
+    vocal = MagicMock()
+    vocal.set_dormant = MagicMock()
 
     # The sleep module is present so the gate applies the sleep and consolidation floors.
-    modules = {"hypnos": MagicMock(), "phantasia": world_model, "mundus": mundus, "vox": vox}
+    modules = {"hypnos": MagicMock(), "phantasia": world_model, "mundus": mundus, "vox": vocal}
 
     def _get(name: str):
         return modules[name]

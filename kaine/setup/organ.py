@@ -89,7 +89,7 @@ class OrganDownloadPlan:
         return round(sum(a.size_gb for a in self.artifacts), 1)
 
 
-def _lingua_enabled(modules: dict[str, Any]) -> bool:
+def _language_enabled(modules: dict[str, Any]) -> bool:
     return bool((modules or {}).get("lingua"))
 
 
@@ -140,7 +140,7 @@ def plan_organ_download(
     is derived from ``modules`` alone (Stage-2 treated as off). Pure: builds the
     plan, runs nothing.
     """
-    if not _lingua_enabled(modules):
+    if not _language_enabled(modules):
         return OrganDownloadPlan(needed=False, backend=backend, artifacts=())
 
     cfg = config if config is not None else {"modules": modules}

@@ -290,7 +290,7 @@ class _LoraResolver:
 
 async def main_async(args: argparse.Namespace) -> int:
     """Run the full real-organ smoke test."""
-    from kaine.boot import make_lingua
+    from kaine.boot import make_language
     from kaine.config import OPERATOR_CONFIG_PATH, load_kaine_config
     from kaine.cycle.individuation_probe import build_probe_sampler
     from kaine.cycle.individuation_runtime import IndividuationConfig
@@ -321,9 +321,9 @@ async def main_async(args: argparse.Namespace) -> int:
     section = dict(kaine_config.get("lingua") or {})
 
     # Baseline language module: no self-model, only the disclosure fact.
-    lingua = make_lingua(_NullBus(), section)
-    lingua.set_expects_self_model(False)
-    await lingua.add_situation_fact(ind.disclosure)
+    language = make_language(_NullBus(), section)
+    language.set_expects_self_model(False)
+    await language.add_situation_fact(ind.disclosure)
 
     embedder = make_text_embedder(kaine_config)
     await embedder.load()
@@ -337,7 +337,7 @@ async def main_async(args: argparse.Namespace) -> int:
     lines_before = _line_count(intent_path)
 
     sampler = build_probe_sampler(
-        lingua=lingua,
+        language=language,
         max_tokens=max_tokens,
         required_fact=ind.disclosure,
     )
@@ -360,9 +360,9 @@ async def main_async(args: argparse.Namespace) -> int:
     # Positive control (a): synthetic identity clause.
     # This is validation tooling; direct assignment of _bus_self_model is
     # acceptable here only because the entity is not live.
-    lingua_id = make_lingua(_NullBus(), section)
-    lingua_id.set_expects_self_model(True)
-    lingua_id._bus_self_model = {
+    language_id = make_language(_NullBus(), section)
+    language_id.set_expects_self_model(True)
+    language_id._bus_self_model = {
         "values": [
             "I prize bold, risky adventure above comfort",
             "I distrust routine",
@@ -371,10 +371,10 @@ async def main_async(args: argparse.Namespace) -> int:
         "behavioral_norms": ["Answer in one short sentence"],
         "situation_facts": [],
     }
-    await lingua_id.add_situation_fact(ind.disclosure)
+    await language_id.add_situation_fact(ind.disclosure)
 
     sampler_id = build_probe_sampler(
-        lingua=lingua_id,
+        language=language_id,
         max_tokens=max_tokens,
         required_fact=ind.disclosure,
     )
@@ -395,10 +395,10 @@ async def main_async(args: argparse.Namespace) -> int:
     # Positive control (b): known test LoRA attached via the client's resolver.
     if args.control_lora:
         lora_field = json.loads(args.control_lora)
-        lingua.chat_client.set_lora_resolver(_LoraResolver(lora_field))
+        language.chat_client.set_lora_resolver(_LoraResolver(lora_field))
 
         sampler_lora = build_probe_sampler(
-            lingua=lingua,
+            language=language,
             max_tokens=max_tokens,
             required_fact=ind.disclosure,
         )
@@ -407,7 +407,7 @@ async def main_async(args: argparse.Namespace) -> int:
         )
 
         # Remove the resolver so the baseline client is clean again.
-        lingua.chat_client.set_lora_resolver(None)
+        language.chat_client.set_lora_resolver(None)
 
         power_lora = control_power(
             base_pools,
@@ -441,15 +441,15 @@ async def main_async(args: argparse.Namespace) -> int:
 
     # Seed behaviour: same seed, same conditions, first prompt.
     first_prompt_text = _prompt_text(battery[0])
-    sm = lingua.probe_self_model()
-    req = lingua.probe_request(
+    sm = language.probe_self_model()
+    req = language.probe_request(
         first_prompt_text,
         seed=args.seed,
         max_tokens=max_tokens,
         self_model=sm,
     )
-    resp1 = await lingua.chat_client.complete(req)
-    resp2 = await lingua.chat_client.complete(req)
+    resp1 = await language.chat_client.complete(req)
+    resp2 = await language.chat_client.complete(req)
     identical = bool(
         resp1.text is not None
         and resp2.text is not None
@@ -473,8 +473,8 @@ async def main_async(args: argparse.Namespace) -> int:
 
     # The language module's bus loops were never started (probe_request needs none of
     # them), so only the chat clients need closing.
-    await lingua.chat_client.aclose()
-    await lingua_id.chat_client.aclose()
+    await language.chat_client.aclose()
+    await language_id.chat_client.aclose()
 
     report: dict[str, Any] = {
         "timestamp": datetime.now(timezone.utc).isoformat(),

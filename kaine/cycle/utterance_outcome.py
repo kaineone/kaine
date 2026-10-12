@@ -37,16 +37,16 @@ def _warn_outcome_reply_window(value: object) -> None:
     )
 
 
-def reply_window_from_lingua(lingua_section: object) -> float:
+def reply_window_from_language(language_section: object) -> float:
     """Return a safe reply-window from the ``lingua`` config table.
 
     Falls back to :data:`DEFAULT_REPLY_WINDOW_S` and logs a single warning
     for any invalid value.  The observer is content-free and must never raise.
     """
-    if not isinstance(lingua_section, dict):
+    if not isinstance(language_section, dict):
         return DEFAULT_REPLY_WINDOW_S
 
-    value = lingua_section.get("outcome_reply_window_s", DEFAULT_REPLY_WINDOW_S)
+    value = language_section.get("outcome_reply_window_s", DEFAULT_REPLY_WINDOW_S)
     if isinstance(value, bool):
         _warn_outcome_reply_window(value)
         return DEFAULT_REPLY_WINDOW_S
@@ -72,12 +72,12 @@ def reply_window_from_lingua(lingua_section: object) -> float:
 
 
 # Produced by the language module: each external_speech event opens one outcome record.
-LINGUA_EXTERNAL = "lingua.external"
+LANGUAGE_EXTERNAL = "lingua.external"
 AUDITION_OUT = module_stream("audition")
-EMPATHEIA_OUT = module_stream("empatheia")
+SOCIAL_COGNITION_OUT = module_stream("empatheia")
 AFFECT_OUT = module_stream("thymos")
 
-STREAMS = (LINGUA_EXTERNAL, AUDITION_OUT, EMPATHEIA_OUT, AFFECT_OUT)
+STREAMS = (LANGUAGE_EXTERNAL, AUDITION_OUT, SOCIAL_COGNITION_OUT, AFFECT_OUT)
 
 
 @dataclass
@@ -86,14 +86,14 @@ class _OpenRecord:
     start_ts: float
     baseline_social_drive: Optional[float]
     latest_social_drive: Optional[float]
-    max_empatheia_deviation: Optional[float]
+    max_social_cognition_deviation: Optional[float]
 
 
 async def start_utterance_outcome_observer(
     bus,
     *,
     path: Path,
-    lingua_section: object = None,
+    language_section: object = None,
     **kwargs: Any,
 ) -> UtteranceOutcomeObserver | None:
     """Construct and start the observer, returning None if it cannot boot.
@@ -103,7 +103,7 @@ async def start_utterance_outcome_observer(
     """
     try:
         if "reply_window_s" not in kwargs:
-            kwargs["reply_window_s"] = reply_window_from_lingua(lingua_section)
+            kwargs["reply_window_s"] = reply_window_from_language(language_section)
         observer = UtteranceOutcomeObserver(bus, path=path, **kwargs)
         await observer.start()
     except Exception as exc:
@@ -218,7 +218,7 @@ class UtteranceOutcomeObserver:
 
     async def _handle_event(self, stream: str, event: Event) -> None:
         ts = event.timestamp.timestamp()
-        if stream == LINGUA_EXTERNAL and event.type == "external_speech":
+        if stream == LANGUAGE_EXTERNAL and event.type == "external_speech":
             record_id = event.payload.get("record_id")
             if (
                 isinstance(record_id, str)
@@ -233,8 +233,8 @@ class UtteranceOutcomeObserver:
                 )
         elif stream == AUDITION_OUT and event.type == "audition.transcription":
             await self._maybe_reply(event, ts)
-        elif stream == EMPATHEIA_OUT and event.type == "empatheia.social_error":
-            await self._maybe_empatheia(event, ts)
+        elif stream == SOCIAL_COGNITION_OUT and event.type == "empatheia.social_error":
+            await self._maybe_social_cognition(event, ts)
         elif stream == AFFECT_OUT and event.type == "thymos.state":
             await self._maybe_affect(event, ts)
 
@@ -252,7 +252,7 @@ class UtteranceOutcomeObserver:
             start_ts=ts,
             baseline_social_drive=self._latest_social_drive,
             latest_social_drive=self._latest_social_drive,
-            max_empatheia_deviation=None,
+            max_social_cognition_deviation=None,
         )
 
     async def _maybe_reply(self, event: Event, ts: float) -> None:
@@ -272,7 +272,7 @@ class UtteranceOutcomeObserver:
             preempted=False, replied=True, reply_latency_s=latency
         )
 
-    async def _maybe_empatheia(self, event: Event, ts: float) -> None:
+    async def _maybe_social_cognition(self, event: Event, ts: float) -> None:
         if self._open_record is None:
             return
         magnitude = event.payload.get("deviation_magnitude")
@@ -280,9 +280,9 @@ class UtteranceOutcomeObserver:
             return
         if ts - self._open_record.start_ts > self._reply_window_s:
             return
-        current = self._open_record.max_empatheia_deviation
+        current = self._open_record.max_social_cognition_deviation
         if current is None or magnitude > current:
-            self._open_record.max_empatheia_deviation = float(magnitude)
+            self._open_record.max_social_cognition_deviation = float(magnitude)
 
     async def _maybe_affect(self, event: Event, ts: float) -> None:
         drives = event.payload.get("drives") or {}
@@ -324,7 +324,7 @@ class UtteranceOutcomeObserver:
             "record_id": rec.record_id,
             "replied": replied,
             "reply_latency_s": reply_latency_s,
-            "empatheia_deviation": rec.max_empatheia_deviation,
+            "empatheia_deviation": rec.max_social_cognition_deviation,
             "social_drive_delta": delta,
             "preempted": preempted,
         }

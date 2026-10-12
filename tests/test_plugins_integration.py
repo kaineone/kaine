@@ -152,7 +152,7 @@ class _EngineResult:
         self.efe = 0.0
 
 
-class _FakeNousEngine:
+class _FakePlanningEngine:
     def __init__(self, call_id: int):
         self.call_id = call_id
         self.actions = ["no_op"]
@@ -164,7 +164,7 @@ class _FakeNousEngine:
         pass
 
 
-class _NousEnginePlugin:
+class _PlanningEnginePlugin:
     def __init__(self):
         self.calls = 0
 
@@ -174,7 +174,7 @@ class _NousEnginePlugin:
     def injections(self, module, config):
         if module == "nous":
             self.calls += 1
-            return {"engine": _FakeNousEngine(self.calls)}
+            return {"engine": _FakePlanningEngine(self.calls)}
         return {}
 
 
@@ -183,7 +183,7 @@ class _CallCountingOscillator:
         self.call_id = call_id
 
 
-class _FreshNousOscillatorPlugin:
+class _FreshPlanningOscillatorPlugin:
     def __init__(self):
         self.calls = 0
 
@@ -438,9 +438,9 @@ async def test_none_injection_fails_closed(module, key, bus):
 
 
 @pytest.mark.asyncio
-async def test_nous_falsy_injected_engine_held_not_default(monkeypatch, bus):
+async def test_planning_falsy_injected_engine_held_not_default(monkeypatch, bus):
     """An injected engine that is falsy is still the engine the planning module uses."""
-    monkeypatch.setattr("kaine.modules.nous.engine.PymdpEngine", _BoomPymdpEngine)
+    monkeypatch.setattr("kaine.modules.planning.engine.PymdpEngine", _BoomPymdpEngine)
 
     class FalsyEngine:
         def __len__(self):
@@ -456,10 +456,10 @@ async def test_nous_falsy_injected_engine_held_not_default(monkeypatch, bus):
     engine = FalsyEngine()
     assert not engine
 
-    from kaine.boot import make_nous
+    from kaine.boot import make_planning
 
-    nous = make_nous(bus, {}, injections={"engine": engine})
-    assert nous.engine is engine
+    planning = make_planning(bus, {}, injections={"engine": engine})
+    assert planning.engine is engine
 
 
 def _spot(registry, config, bus):
@@ -476,14 +476,14 @@ def _spot(registry, config, bus):
 
 
 @pytest.mark.asyncio
-async def test_spot_nous_heavy_restart_refreshes_engine_keeps_oscillator(monkeypatch, bus):
+async def test_spot_planning_heavy_restart_refreshes_engine_keeps_oscillator(monkeypatch, bus):
     """Two real supervisor heavy restarts of the planning module each request a fresh engine from the
     plugin (tasks 4.5 / 4.10), while the plugin oscillator is requested once at
     boot and carried over unchanged (oscillator-continuity-on-restart)."""
     monkeypatch.setattr("kaine.oscillator.snntorch_available", lambda: False)
 
-    engine_plugin = _NousEnginePlugin()
-    osc_plugin = _FreshNousOscillatorPlugin()
+    engine_plugin = _PlanningEnginePlugin()
+    osc_plugin = _FreshPlanningOscillatorPlugin()
     config = {
         "modules": {"nous": True},
         "oscillator": {"enabled": True},
@@ -499,11 +499,11 @@ async def test_spot_nous_heavy_restart_refreshes_engine_keeps_oscillator(monkeyp
     )
 
     registry = build_registry(bus, config, plugins=loaded)
-    nous = registry.get("nous")
+    planning = registry.get("nous")
     assert engine_plugin.calls == 1
-    assert nous.engine.call_id == 1
-    assert nous._oscillator is not None and nous._oscillator.call_id == 1
-    boot_oscillator = nous._oscillator
+    assert planning.engine.call_id == 1
+    assert planning._oscillator is not None and planning._oscillator.call_id == 1
+    boot_oscillator = planning._oscillator
 
     spot = _spot(registry, config, bus)
     first = await spot._restart_module("nous")
@@ -511,13 +511,13 @@ async def test_spot_nous_heavy_restart_refreshes_engine_keeps_oscillator(monkeyp
     assert first.ok and first.path == "heavy"
     assert second.ok and second.path == "heavy"
 
-    nous = registry.get("nous")
+    planning = registry.get("nous")
     assert engine_plugin.calls == 3
-    assert nous.engine.call_id == 3
+    assert planning.engine.call_id == 3
     assert osc_plugin.calls == 1
-    assert nous._oscillator is boot_oscillator
+    assert planning._oscillator is boot_oscillator
 
-    await _close_module(nous)
+    await _close_module(planning)
 
 
 @pytest.mark.asyncio

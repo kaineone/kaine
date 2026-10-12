@@ -15,12 +15,12 @@ speech SHALL publish a `lingua.internal` event to its
 `lingua.external` and SHALL NEVER be sent to TTS by any KAINE module.
 
 #### Scenario: speak publishes only to external stream
-- **WHEN** `Lingua.speak("hello")` is awaited
+- **WHEN** `Language.speak("hello")` is awaited
 - **THEN** exactly one event appears on `lingua.external` and zero
   events appear on `lingua.internal`
 
 #### Scenario: think publishes only to internal stream
-- **WHEN** `Lingua.think("inner monologue")` is awaited
+- **WHEN** `Language.think("inner monologue")` is awaited
 - **THEN** exactly one event appears on `lingua.internal` and zero
   events appear on `lingua.external`
 
@@ -35,7 +35,7 @@ same snapshot via `kaine.faithful.FaithfulRenderer`. The
 the sleep module will build in Phase 6.
 
 #### Scenario: speak with snapshot logs faithful rendering
-- **WHEN** `Lingua.speak("hello", snapshot=snap)` is awaited with a
+- **WHEN** `Language.speak("hello", snapshot=snap)` is awaited with a
   non-empty snapshot
 - **THEN** the intent-expression log gains one JSONL record whose
   `faithful_rendering` equals `FaithfulRenderer().render_snapshot(snap)`
@@ -142,12 +142,12 @@ SHALL match what those consumers filter on.
 
 #### Scenario: speak publishes an external_speech event
 
-- **WHEN** `Lingua.speak(...)` is awaited
+- **WHEN** `Language.speak(...)` is awaited
 - **THEN** the published event on `lingua.external` has type `external_speech`
 
 #### Scenario: think publishes an internal_speech event
 
-- **WHEN** `Lingua.think(...)` is awaited
+- **WHEN** `Language.think(...)` is awaited
 - **THEN** the published event on `lingua.internal` has type `internal_speech`
 
 #### Scenario: conversation and observers receive the speech

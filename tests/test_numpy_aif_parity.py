@@ -14,9 +14,9 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from kaine.modules.nous.numpy_aif import NumpyAgent, dirichlet_expected_value
+from kaine.modules.planning.numpy_aif import NumpyAgent, dirichlet_expected_value
 
-FIXTURE_DIR = pathlib.Path(__file__).resolve().parent / "fixtures" / "nous_golden"
+FIXTURE_DIR = pathlib.Path(__file__).resolve().parent / "fixtures" / "planning_golden"
 
 
 def _load_fixture(name: str) -> dict:
@@ -288,9 +288,9 @@ def test_no_jax_import():
         import pathlib
         import numpy as np
 
-        from kaine.modules.nous.numpy_aif import NumpyAgent
+        from kaine.modules.planning.numpy_aif import NumpyAgent
 
-        fx_path = pathlib.Path("tests/fixtures/nous_golden/live_learning.json")
+        fx_path = pathlib.Path("tests/fixtures/planning_golden/live_learning.json")
         with open(fx_path, "r") as f:
             fx = json.load(f)
 

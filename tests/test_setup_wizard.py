@@ -234,7 +234,7 @@ def test_full_run_multi_gpu_produces_config():
     assert tomllib.loads(tomlwriter.dumps(cfg)) == cfg
 
 
-def test_vox_enabled_with_blank_voice_id_stays_on():
+def test_vocal_enabled_with_blank_voice_id_stays_on():
     answers = [ACK_PHRASE, "", "", "y", "c"]
     for m in MODULE_ORDER:
         answers.append("y" if m in ("lingua", "vox") else "n")
@@ -261,7 +261,7 @@ def test_vox_enabled_with_blank_voice_id_stays_on():
     )
 
 
-def test_vox_enabled_records_given_voice_id():
+def test_vocal_enabled_records_given_voice_id():
     answers = [ACK_PHRASE, "", "", "y", "c"]
     for m in MODULE_ORDER:
         answers.append("y" if m in ("lingua", "vox") else "n")
@@ -528,7 +528,7 @@ def test_provision_organ_declined_prints_guide():
     assert f"huggingface.co/{organ_mod.ORGAN_GGUF_REPO}" in text
 
 
-def test_provision_organ_skipped_when_lingua_disabled():
+def test_provision_organ_skipped_when_language_disabled():
     from kaine.setup.__main__ import _provision_organ
 
     out: list[str] = []

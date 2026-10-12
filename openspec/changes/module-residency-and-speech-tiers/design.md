@@ -31,7 +31,7 @@ Existing code the design reuses rather than rebuilds:
 | Lazy engine load | the sherpa clients' idempotent `warm_up()` |
 | Consent-gated model acquisition | `kaine/setup/speech_models.py` (`MANIFEST`, `describe()`, `fetch`) and `kaine/setup/provision.py` |
 | Stopping and starting an external model server | `OrganServerController` in `kaine/modules/sleep/organ_window.py` and `kaine/setup/model_server.py` (`cmd_start`, `cmd_stop`, `health_check`) |
-| Consumers that defer while the organ is absent | `kaine/organ_window_state.py` and the `organ_resting` path in `kaine/modules/lingua/client.py` |
+| Consumers that defer while the organ is absent | `kaine/organ_window_state.py` and the `organ_resting` path in `kaine/modules/language/client.py` |
 | Accounting what an LLM server holds | `GET /v1/models`, as `kaine/cycle/preflight.py` already does |
 
 What is new: a budget from available memory with a reserve; resident-footprint measurements; reversible unload on engine clients; the manager, planner and lanes; residency events; the llama-swap template and unload calls; the `Residency fit` pre-boot row; and the wizard's fit report.

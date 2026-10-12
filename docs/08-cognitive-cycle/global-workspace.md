@@ -6,7 +6,7 @@ Related: [The cognitive cycle](README.md) · [Architecture](../02-architecture/R
 
 ## Selection pipeline
 
-Every processing tick the cycle reads the events published since its previous read of each active module stream, sorts them by source, type and bus entry id (compared as the number pair milliseconds, sequence, which is arrival order within a stream; the stream breaks any remaining tie) so that a seeded run reproduces, names each candidate `<stream>:<entry_id>`, refreshes the affect snapshot the scorer reads, updates the access rate, and passes the list to `Syneidesis.select`. A bus entry id is unique only within its stream, and two streams can issue the same id in the same millisecond, so the stream-qualified name is what keeps one score per candidate in the score table. Selection runs on every processing tick. Only on a broadcast tick (the code's `is_experiential`) is the result published; on other ticks the candidates are scored and then discarded.
+Every processing tick the cycle reads the events published since its previous read of each active module stream, sorts them by source, type and bus entry id (compared as the number pair milliseconds, sequence, which is arrival order within a stream; the stream breaks any remaining tie) so that a seeded run reproduces, names each candidate `<stream>:<entry_id>`, refreshes the affect snapshot the scorer reads, updates the access rate, and passes the list to `Workspace.select`. A bus entry id is unique only within its stream, and two streams can issue the same id in the same millisecond, so the stream-qualified name is what keeps one score per candidate in the score table. Selection runs on every processing tick. Only on a broadcast tick (the code's `is_experiential`) is the result published; on other ticks the candidates are scored and then discarded.
 
 ```mermaid
 flowchart TD
@@ -21,7 +21,7 @@ flowchart TD
     K --> L["inhibited = best score < threshold\nmetadata.access_threshold = threshold"]
     L --> M{Broadcast tick?}
     M -- no --> N["Discarded"]
-    M -- yes --> O["Published on workspace.broadcast\nthen Volition runs"]
+    M -- yes --> O["Published on workspace.broadcast\nthen ActionSelection runs"]
     C --> M
 ```
 
@@ -90,7 +90,7 @@ Both live factors read affect and drives through an `AffectStateProvider` (`kain
 
 ## Coalition and access
 
-`kaine/workspace/syneidesis.py` · `Syneidesis._compose`
+`kaine/workspace/core.py` · `Workspace._compose`
 
 The workspace sorts the candidates by score in decreasing order. The sort is stable, so equal scores keep the canonical order by source, type and bus entry id. The first `[syneidesis].top_k` candidates (default 5) form the coalition. Then:
 
@@ -215,9 +215,9 @@ Two tests keep the toggle honest. With the layer disabled, an instance driven th
 
 ## Action selection and the report rule
 
-`kaine/workspace/volition.py` · `kaine/workspace/report_policy.py`
+`kaine/workspace/action_selection.py` · `kaine/workspace/report_policy.py`
 
-The cycle calls `Volition.select(snapshot)` after each successful publication. The action selection module checks `inhibited` first and returns no intents for an inhibited broadcast. It is the only path from the workspace to an output; the cycle publishes the returned intents on `volition.out` and never calls an effector itself.
+The cycle calls `ActionSelection.select(snapshot)` after each successful publication. The action selection module checks `inhibited` first and returns no intents for an inhibited broadcast. It is the only path from the workspace to an output; the cycle publishes the returned intents on `volition.out` and never calls an effector itself.
 
 The policy is chosen by `[volition].policy` and `[volition].drive_initiative`:
 
@@ -227,7 +227,7 @@ The policy is chosen by `[volition].policy` and `[volition].drive_initiative`:
 | no `policy`, `drive_initiative = true` (the code default) | `DriveBiasedActionSelectionPolicy` |
 | no `policy`, `drive_initiative = false` | `DefaultActionSelectionPolicy` |
 
-When the planning module is enabled, the composition root wraps whichever policy was chosen in `NousProposalSource` (`kaine/workspace/nous_proposals.py`), and the cycle publishes `volition.proposal_outcome` events on `volition_feedback.out` after the intents, including for inhibited broadcasts so that the planning module critic receives feedback. The `thesis_test` profile sets the self-initiated report policy with `drive_initiative = false`, and the planning module is off in that profile.
+When the planning module is enabled, the composition root wraps whichever policy was chosen in `PlanningProposalSource` (`kaine/workspace/planning_proposals.py`), and the cycle publishes `volition.proposal_outcome` events on `volition_feedback.out` after the intents, including for inhibited broadcasts so that the planning module critic receives feedback. The `thesis_test` profile sets the self-initiated report policy with `drive_initiative = false`, and the planning module is off in that profile.
 
 ### The self-initiated report policy
 
@@ -250,7 +250,7 @@ The bars are a heuristic stand-in for the report-or-act decision of the predicti
 
 ## Act intents and provenance
 
-`kaine/security/intent_signing.py` · `kaine/modules/praxis/module.py`
+`kaine/security/intent_signing.py` · `kaine/modules/effectors/module.py`
 
 All modules of a single-process instance share one bus credential, so the bus alone cannot prove which module published an event. For `act` intents, the only kind that can reach an effector, the composition root generates a per-boot secret (`generate_intent_secret()`, 32 random bytes held in process memory, never persisted or logged) and gives it to the action selection module and the effectors module.
 
@@ -308,7 +308,7 @@ The level-gain floor and ceiling (0.2 and 1.0) are constructor defaults of `Stat
 
 | File | Role |
 |------|------|
-| `kaine/workspace/syneidesis.py` | `Syneidesis`: scoring loop, coalition, access threshold |
+| `kaine/workspace/core.py` | `Workspace`: scoring loop, coalition, access threshold |
 | `kaine/workspace/salience.py` | `RuleBasedSalience`, `arousal_contrast` |
 | `kaine/workspace/novelty.py` | `NoveltyTracker`, the event fingerprint |
 | `kaine/workspace/strategies.py` | `GoalScorer` and `AffectModulator` protocols, static factors, `DriveRelevanceGoalScorer` |
@@ -316,10 +316,10 @@ The level-gain floor and ceiling (0.2 and 1.0) are constructor defaults of `Stat
 | `kaine/modules/intensity.py` | `graded_intensity`, shared by the predictive processors |
 | `kaine/modules/context.py` | `BroadcastContext`, the context featurization and null context |
 | `kaine/workspace/coherence.py` | `CoherenceScorer`, `phase_locking_value`, `mean_pairwise_plv` |
-| `kaine/workspace/volition.py` | `Volition`, `DefaultActionSelectionPolicy`, `Intent` |
+| `kaine/workspace/action_selection.py` | `ActionSelection`, `DefaultActionSelectionPolicy`, `Intent` |
 | `kaine/workspace/report_policy.py` | `SelfInitiatedReportPolicy` |
 | `kaine/workspace/drive_policy.py` | `DriveBiasedActionSelectionPolicy` |
-| `kaine/workspace/nous_proposals.py` | `NousProposalSource`, used when Planning is enabled |
+| `kaine/workspace/planning_proposals.py` | `PlanningProposalSource`, used when Planning is enabled |
 | `kaine/security/intent_signing.py` | `IntentSigner`, `generate_intent_secret`, `verify_intent_signature` |
 | `kaine/cycle/types.py` | `WorkspaceSnapshot` |
 | `kaine/cycle/affect_state.py` | `AffectStateProvider` |

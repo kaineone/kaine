@@ -98,7 +98,7 @@ Four components have two implementations each: one ships, and the other is the r
 |---|---|---|---|---|
 | CfC reservoir (interoception, sequence) | NumPy | `ncps` on torch | `[soma].cfc_backend`, `[chronos].cfc_backend` | `tests/test_numpy_cfc.py` |
 | Text embedder | NumPy MiniLM | `sentence-transformers` | `[embedding].backend` | `tests/test_text_embedding_numpy.py` |
-| Active inference (planning) | pymdp on JAX | NumPy engine | `[nous].backend` | `tests/test_numpy_aif_parity.py`, `tests/test_numpy_nous_engine.py` |
+| Active inference (planning) | pymdp on JAX | NumPy engine | `[nous].backend` | `tests/test_numpy_aif_parity.py`, `tests/test_numpy_planning_engine.py` |
 | World model | JAX RSSM | NumPy RSSM | `[phantasia].engine` | `tests/test_rssm_numpy_parity.py` |
 
 The base-thesis run uses the NumPy side for the CfC reservoirs and the embedder. The planning and world model modules are off in the base thesis. For them the JAX side is the default, and the NumPy side exists for hosts without JAX, such as Termux.

@@ -214,7 +214,7 @@ def test_request_timeout_does_not_scale():
     """A network request timeout (here: the language-organ chat client) is real
     wall-clock seconds — it must not dilate, or a dilated mind would change how
     long it waits on an external service."""
-    from kaine.modules.lingua.client import OpenAIChatClient
+    from kaine.modules.language.client import OpenAIChatClient
 
     client = OpenAIChatClient(base_url="http://localhost:1234/v1", timeout_s=12.0)
     # The configured timeout is a plain real-seconds value, unaffected by any

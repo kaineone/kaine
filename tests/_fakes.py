@@ -17,7 +17,7 @@ from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 
 
-class FakeSyneidesis:
+class FakeWorkspace:
     def __init__(self, *, raise_on_tick: int | None = None) -> None:
         self.calls: list[dict[str, Any]] = []
         self.raise_on_tick = raise_on_tick

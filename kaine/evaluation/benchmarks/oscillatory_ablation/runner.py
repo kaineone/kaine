@@ -83,10 +83,10 @@ from kaine.workspace import (
     RuleBasedSalience,
     StaticAffectModulator,
     StaticGoalScorer,
-    Syneidesis,
+    Workspace,
 )
+from kaine.workspace.action_selection import ActionSelection
 from kaine.workspace.coherence import CoherenceScorer
-from kaine.workspace.volition import Volition
 
 
 class _MonotonicClock:
@@ -159,10 +159,10 @@ class AblationConfig:
         }
 
 
-def _build_syneidesis(
+def _build_workspace(
     config: AblationConfig, coherence: Optional[CoherenceScorer]
-) -> Syneidesis:
-    return Syneidesis(
+) -> Workspace:
+    return Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=32),
             goal_scorer=StaticGoalScorer(),
@@ -200,9 +200,9 @@ async def _run_arm(
     )
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=_build_syneidesis(config, scorer),
+        workspace=_build_workspace(config, scorer),
         registry=stimulus.registry(),
-        volition=Volition(),
+        action_selection=ActionSelection(),
         clock=_MonotonicClock(),
         sleep=_async_noop,
         collect_phases=enabled,

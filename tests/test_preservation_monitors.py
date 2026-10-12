@@ -42,8 +42,8 @@ from kaine.lifecycle.welfare_signal import (
     SustainedThresholdTracker,
     WindowedEventCounter,
 )
-from kaine.modules.eidolon import Eidolon, SelfModelDocument
 from kaine.modules.registry import ModuleRegistry
+from kaine.modules.self_model import SelfModel, SelfModelDocument
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
 # ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ def _control_to_tmp(tmp_path, monkeypatch):
 
 async def _entity(bus: AsyncBus, tmp_path: Path, *, name="Aria"):
     reg = ModuleRegistry()
-    eid = Eidolon(bus, persistence_path=tmp_path / "sm.json", save_interval_s=60)
+    eid = SelfModel(bus, persistence_path=tmp_path / "sm.json", save_interval_s=60)
     await eid.initialize()
     eid._model = SelfModelDocument(name=name, values=["honesty"])
     reg.register(eid)

@@ -312,7 +312,7 @@ async def test_deadline_exceeded_while_look_running(tmp_path: Path):
     assert len(core.looks) == 1
 
 
-async def test_gate_waits_for_lingua_idle_and_aborts(tmp_path: Path):
+async def test_gate_waits_for_language_idle_and_aborts(tmp_path: Path):
     calls = 0
 
     async def counting_sleep(s: float) -> None:
@@ -322,7 +322,7 @@ async def test_gate_waits_for_lingua_idle_and_aborts(tmp_path: Path):
         if calls >= 2:
             sched.notify_sleep_started()
 
-    sched, core, clock = make(tmp_path, lingua_idle=lambda: False, sleep=counting_sleep)
+    sched, core, clock = make(tmp_path, language_idle=lambda: False, sleep=counting_sleep)
     sampler_calls = 0
 
     async def fake_sampler(prompt: str, seed: int) -> str:

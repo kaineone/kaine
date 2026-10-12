@@ -8,11 +8,11 @@ and degrades to a clean no-op when its source stream is absent.  None
 publish to the bus; all write daily-rotated JSONL.
 """
 from kaine.evaluation.observers.coherence_observer import CoherenceObserver
-from kaine.evaluation.observers.empatheia_observer import EmpatheiaObserver
 from kaine.evaluation.observers.fatigue_observer import FatigueObserver
-from kaine.evaluation.observers.nous_policy_observer import NousPolicyObserver
+from kaine.evaluation.observers.planning_policy_observer import PlanningPolicyObserver
 from kaine.evaluation.observers.prediction_error_observer import PredictionErrorObserver
 from kaine.evaluation.observers.replay_observer import ReplayObserver
+from kaine.evaluation.observers.social_cognition_observer import SocialCognitionObserver
 from kaine.evaluation.observers.voice_alignment_divergence_observer import (
     VoiceAlignmentDivergenceObserver,
 )
@@ -20,9 +20,9 @@ from kaine.evaluation.observers.welfare_observer import WelfareObserver
 
 __all__ = [
     "CoherenceObserver",
-    "EmpatheiaObserver",
+    "SocialCognitionObserver",
     "FatigueObserver",
-    "NousPolicyObserver",
+    "PlanningPolicyObserver",
     "PredictionErrorObserver",
     "ReplayObserver",
     "VoiceAlignmentDivergenceObserver",

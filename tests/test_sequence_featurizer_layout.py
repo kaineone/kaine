@@ -77,7 +77,7 @@ def test_layout2_audition_slot23_not_overflow():
     assert vec[11] == pytest.approx(0.0)
 
 
-def test_praxis_overflow_unchanged_across_layouts():
+def test_effectors_overflow_unchanged_across_layouts():
     for layout in (1, 2):
         feat = SnapshotFeaturizer(clock=lambda: 0.0, layout=layout)
         snap = _snapshot([_event("praxis", 0.6)])

@@ -326,7 +326,7 @@ def test_preservation_js_reads_only_allowlisted_payload_fields():
         assert f"p.{f}" not in block, f"preservation handler reads content field {f!r}"
 
 
-def test_eidolon_self_model_text_is_scrubbed():
+def test_self_model_self_model_text_is_scrubbed():
     base_payload = {
         "name": "kaine",
         "values": ["curiosity"],

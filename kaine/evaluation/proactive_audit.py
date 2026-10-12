@@ -17,13 +17,13 @@ from kaine.evaluation.sink import AsyncJsonlSink
 log = logging.getLogger(__name__)
 
 
-LINGUA_EXTERNAL_STREAM = "lingua.external"
+LANGUAGE_EXTERNAL_STREAM = "lingua.external"
 USER_INPUT_STREAMS = frozenset({"audition.out"})
 
 
 class ProactiveAuditObserver(StreamSubscriberObserver):
     name = "proactive_audit"
-    streams = (LINGUA_EXTERNAL_STREAM,)
+    streams = (LANGUAGE_EXTERNAL_STREAM,)
 
     def __init__(
         self,

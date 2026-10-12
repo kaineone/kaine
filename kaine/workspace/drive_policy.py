@@ -4,7 +4,7 @@
 """Drive-biased executive action selection.
 
 The keystone ``executive-action-intent`` change gave KAINE an inhibition-gated
-action layer (:mod:`kaine.workspace.volition`) whose default policy only
+action layer (:mod:`kaine.workspace.action_selection`) whose default policy only
 *responds* to a user utterance. The affect module already publishes ``thymos.drive``
 threshold-crossing events for its four drives (curiosity, boredom,
 social_drive, restlessness) — but until now nothing consumed them. The entity
@@ -45,7 +45,7 @@ from typing import Callable, Iterable, Optional
 
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.faithful.templates import felt_drive_phrase
-from kaine.workspace.volition import (
+from kaine.workspace.action_selection import (
     OWN_EXTERNAL_SPEECH_SOURCE,
     OWN_EXTERNAL_SPEECH_TYPE,
     OWN_INTERNAL_SPEECH_TYPE,

@@ -18,7 +18,7 @@ import json
 import pathlib
 import threading
 
-from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
+from kaine.modules.language.client import ChatRequest, OpenAIChatClient
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 SCANNED_ROOTS = ("kaine", "scripts")
@@ -172,7 +172,7 @@ def test_guard_refuses_hidden_import_forms(tmp_path):
     ]
 
 
-def test_lingua_client_reaches_a_local_server_with_a_proxy_set(monkeypatch):
+def test_language_client_reaches_a_local_server_with_a_proxy_set(monkeypatch):
     class _Handler(http.server.BaseHTTPRequestHandler):
         def do_POST(self):  # noqa: N802 - http.server's method name
             if self.path != "/v1/chat/completions":

@@ -68,7 +68,7 @@ def adapter_expected_from(adapter_output_dir: Path | None) -> Callable[[], bool]
 
 def build_probe_sampler(
     *,
-    lingua: Any,
+    language: Any,
     max_tokens: int = 160,
     adapter_check: Callable[[], Awaitable[bool]] | None = None,
     required_fact: str | None = None,
@@ -83,7 +83,7 @@ def build_probe_sampler(
             if not check_result:
                 return ProbeFailure("adapter_not_applied")
 
-        sm = lingua.probe_self_model()
+        sm = language.probe_self_model()
         if sm is None:
             return ProbeFailure("self_model_not_ready")
         if required_fact is not None and required_fact not in (
@@ -92,10 +92,10 @@ def build_probe_sampler(
             return ProbeFailure("disclosure_not_ready")
 
         try:
-            req = lingua.probe_request(
+            req = language.probe_request(
                 prompt, seed=seed, max_tokens=max_tokens, self_model=sm
             )
-            resp = await lingua.chat_client.complete(req)
+            resp = await language.chat_client.complete(req)
         except asyncio.CancelledError:
             raise
         except Exception:

@@ -49,8 +49,8 @@ class BootContext:
     affect_provider: Any = None  # set by _phase_workspace
     access_rate: Any = None  # set by _phase_workspace
     affect_observer: Any = None  # set by _phase_workspace
-    syneidesis: Any = None  # set by _phase_workspace
-    volition: Any = None  # set by _phase_volition
+    workspace: Any = None  # set by _phase_workspace
+    action_selection: Any = None  # set by _phase_volition
     cycle: Any = None  # set by _phase_cycle
     spot_cfg: Any = None  # set by _phase_supervision
     fork_manager: Any = None  # set by _phase_supervision

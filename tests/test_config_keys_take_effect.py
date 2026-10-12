@@ -66,7 +66,7 @@ def test_make_sleep_rejects_non_positive_requested_rest_interval_s(
         make_sleep(bus, {"requested_rest_min_interval_s": 0})
 
 
-def test_resolve_job_queue_trainer_reads_lingua_api_key_from_config(
+def test_resolve_job_queue_trainer_reads_language_api_key_from_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("KAINE_MODEL_SERVER_API_KEY", raising=False)

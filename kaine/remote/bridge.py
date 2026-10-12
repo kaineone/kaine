@@ -60,7 +60,7 @@ from kaine.bus.schema import Event
 
 log = logging.getLogger(__name__)
 
-LINGUA_EXTERNAL_STREAM = "lingua.external"
+LANGUAGE_EXTERNAL_STREAM = "lingua.external"
 AUDITION_STREAM = "audition.out"
 # The affect module publishes via BaseModule.publish (source="thymos"), so both the
 # `thymos.state` heartbeat and the `thymos.emotion` change events land on the
@@ -316,13 +316,13 @@ class RemoteBridge:
         bus: AsyncBus,
         vision: Any = None,
         audition: Any = None,
-        vox: Any = None,
+        vocal: Any = None,
     ) -> None:
         self._cfg = config
         self._bus = bus
         self._vision = vision
         self._audition = audition
-        self._vox = vox
+        self._vocal = vocal
         self._server: Any = None
         self._tasks: list[asyncio.Task[None]] = []
         self._claims = _SenseClaim(config.claim_senses)
@@ -369,8 +369,8 @@ class RemoteBridge:
                     )
                     raise RuntimeError("non-loopback remote bridge requires a token")
 
-        if self._vox is not None and hasattr(self._vox, "add_playback_tap"):
-            self._vox.add_playback_tap(self._speech_tap)
+        if self._vocal is not None and hasattr(self._vocal, "add_playback_tap"):
+            self._vocal.add_playback_tap(self._speech_tap)
         if self._audition is not None:
             await self._start_network_mic()
         self._tasks.append(
@@ -396,7 +396,7 @@ class RemoteBridge:
             list(self._cfg.allowed_origins),
             "topos" if self._vision is not None else "absent",
             "audition" if self._audition is not None else "absent",
-            self._vox is not None,
+            self._vocal is not None,
         )
 
     def _build_ssl_context(self) -> Optional[ssl.SSLContext]:
@@ -643,7 +643,7 @@ class RemoteBridge:
     async def _transcript_loop(self) -> None:
         """Forward entity speech + heard transcriptions to transcript clients."""
         cursors: dict[str, str] = {}
-        for stream in (LINGUA_EXTERNAL_STREAM, AUDITION_STREAM):
+        for stream in (LANGUAGE_EXTERNAL_STREAM, AUDITION_STREAM):
             try:
                 latest = await self._bus.client.xrevrange(stream, count=1)
             except Exception:
@@ -658,7 +658,7 @@ class RemoteBridge:
         try:
             while True:
                 progressed = False
-                for stream in (LINGUA_EXTERNAL_STREAM, AUDITION_STREAM):
+                for stream in (LANGUAGE_EXTERNAL_STREAM, AUDITION_STREAM):
                     try:
                         entries, last_scanned = await self._bus.read_entries(
                             stream,
@@ -683,7 +683,7 @@ class RemoteBridge:
     @staticmethod
     def _transcript_line(stream: str, event: Event) -> Optional[str]:
         payload = event.payload or {}
-        if stream == LINGUA_EXTERNAL_STREAM and event.type == "external_speech":
+        if stream == LANGUAGE_EXTERNAL_STREAM and event.type == "external_speech":
             role, text = "entity", str(payload.get("text", ""))
         elif stream == AUDITION_STREAM and event.type == "audition.transcription":
             role, text = "heard", str(payload.get("text", ""))
@@ -842,8 +842,8 @@ def build_remote_bridge(
 
     vision = _get("topos")
     audition = _get("audition")
-    vox = _get("vox")
-    if vision is None and audition is None and vox is None:
+    vocal = _get("vox")
+    if vision is None and audition is None and vocal is None:
         log.warning("remote bridge enabled but none of topos/audition/vox are — not starting")
         return None
-    return RemoteBridge(cfg, bus=bus, vision=vision, audition=audition, vox=vox)
+    return RemoteBridge(cfg, bus=bus, vision=vision, audition=audition, vocal=vocal)

@@ -30,7 +30,7 @@ from kaine import perception_state as ps
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
-from kaine.workspace.volition import VOLITION_STREAM
+from kaine.workspace.action_selection import ACTION_SELECTION_STREAM
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class PerceptionLocus(BaseModule):
         *,
         allow_self_switch: bool = False,
         min_dwell_s: float = 30.0,
-        intent_stream: str = VOLITION_STREAM,
+        intent_stream: str = ACTION_SELECTION_STREAM,
         desired_path: Optional[Path | str] = None,
         # Shared subjective clock (injected at boot). The minimum-dwell timer is
         # the entity's attentional dwell — a cognitive interval — so it runs in

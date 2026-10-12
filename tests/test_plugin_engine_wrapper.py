@@ -7,10 +7,10 @@ import inspect
 
 import pytest
 
-from kaine.boot import ConfigurationError, make_nous
+from kaine.boot import ConfigurationError, make_planning
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
-from kaine.modules.nous import FakeEngine
+from kaine.modules.planning import FakeEngine
 from kaine.plugins import PluginError, load_plugins
 
 
@@ -20,8 +20,8 @@ def _bus() -> AsyncBus:
     return AsyncBus(BusConfig(password="x", audit_required=False), client=client)
 
 
-def _engine_of(nous):
-    return getattr(nous, "engine", getattr(nous, "_engine", None))
+def _engine_of(planning):
+    return getattr(planning, "engine", getattr(planning, "_engine", None))
 
 
 def _close_if_present(obj):
@@ -68,7 +68,7 @@ class _Plugin:
 
 def test_wrapper_receives_the_default_engine_built_from_config():
     pytest.importorskip("pymdp")
-    from kaine.modules.nous.engine import PymdpEngine
+    from kaine.modules.planning.engine import PymdpEngine
 
     seen = []
 
@@ -78,10 +78,10 @@ def test_wrapper_receives_the_default_engine_built_from_config():
 
     bus = _bus()
     try:
-        nous = make_nous(bus, {"planning_horizon": 2}, injections={"engine_wrapper": wrap})
+        planning = make_planning(bus, {"planning_horizon": 2}, injections={"engine_wrapper": wrap})
         assert len(seen) == 1
         assert isinstance(seen[0], PymdpEngine)
-        assert isinstance(_engine_of(nous), FakeEngine)
+        assert isinstance(_engine_of(planning), FakeEngine)
     finally:
         for eng in seen:
             _close_if_present(eng)
@@ -104,7 +104,7 @@ def test_wrapper_returning_a_non_engine_fails_naming_the_plugin():
     bus = _bus()
     try:
         with pytest.raises(ConfigurationError, match="wrapper_plugin"):
-            make_nous(bus, {}, injections=inj)
+            make_planning(bus, {}, injections=inj)
     finally:
         asyncio.run(bus.close())
 
@@ -129,7 +129,7 @@ def test_wrapper_exception_becomes_plugin_error():
     bus = _bus()
     try:
         with pytest.raises(PluginError, match="boom_plugin"):
-            make_nous(bus, {}, injections=inj)
+            make_planning(bus, {}, injections=inj)
     finally:
         asyncio.run(bus.close())
 
@@ -167,11 +167,11 @@ def test_engine_and_wrapper_together_rejected_at_load():
     assert "wrapper" in msg
 
 
-def test_make_nous_rejects_both_injections():
+def test_make_planning_rejects_both_injections():
     bus = _bus()
     try:
         with pytest.raises(ConfigurationError, match="both"):
-            make_nous(
+            make_planning(
                 bus,
                 {},
                 injections={
@@ -187,8 +187,8 @@ def test_replacement_path_unchanged():
     bus = _bus()
     fe = FakeEngine()
     try:
-        nous = make_nous(bus, {}, injections={"engine": fe})
-        assert _engine_of(nous) is fe
+        planning = make_planning(bus, {}, injections={"engine": fe})
+        assert _engine_of(planning) is fe
     finally:
         asyncio.run(bus.close())
 
@@ -204,8 +204,8 @@ def test_wrapper_called_again_on_rebuild():
     injections = {"engine_wrapper": wrap}
     bus = _bus()
     try:
-        first = make_nous(bus, {}, injections=injections)
-        second = make_nous(bus, {}, injections=injections)
+        first = make_planning(bus, {}, injections=injections)
+        second = make_planning(bus, {}, injections=injections)
         assert len(count) == 2
         assert count[0] is not count[1]
         assert isinstance(_engine_of(first), FakeEngine)

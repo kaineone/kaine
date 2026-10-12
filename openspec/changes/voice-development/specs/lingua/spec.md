@@ -4,7 +4,7 @@
 Every successful `speak` or `think` SHALL append one JSONL record to the configured intent-expression log. Each record SHALL contain at minimum `timestamp`, `mode` (`"external"` or `"internal"`), `prompt`, `generated_text`, `model`, `record_id`, `intent_entry_id`, `intent_origin`, `sleep_index`, `system_digest` and `seed`, and (when a snapshot was provided) `faithful_rendering`, the deterministic rendering of the same snapshot via `kaine.faithful.FaithfulRenderer`. No record SHALL contain heard speech: every heard-speech line of the rendering and any heard input in the prompt SHALL be written as the placeholder `[heard speech]`. The log is rotated per sleep into an accumulating corpus.
 
 #### Scenario: speak with snapshot logs faithful rendering
-- **WHEN** `Lingua.speak("hello", snapshot=snap)` is awaited with a non-empty snapshot that holds no heard speech
+- **WHEN** `Language.speak("hello", snapshot=snap)` is awaited with a non-empty snapshot that holds no heard speech
 - **THEN** the intent-expression log gains one JSONL record whose `faithful_rendering` equals `FaithfulRenderer().render_snapshot(snap)`
 
 #### Scenario: log record carries mode and model

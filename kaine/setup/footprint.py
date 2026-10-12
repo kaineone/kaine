@@ -397,10 +397,10 @@ def _select_components(
                 )
 
     if _is_enabled(modules, "vox"):
-        vox = config.get("vox", {})
-        backend = vox.get("backend", "chatterbox")
+        vocal = config.get("vox", {})
+        backend = vocal.get("backend", "chatterbox")
         if backend == "chatterbox":
-            url = vox.get("chatterbox_url", "http://127.0.0.1:8883")
+            url = vocal.get("chatterbox_url", "http://127.0.0.1:8883")
             if not _is_loopback_url(url):
                 components.append(
                     ComponentInfo(
@@ -424,8 +424,8 @@ def _select_components(
                     )
                 )
         elif backend == "sherpa_onnx":
-            model_id = vox.get("sherpa_model_id") or default_tts
-            model_dir = vox.get("sherpa_model_dir")
+            model_id = vocal.get("sherpa_model_id") or default_tts
+            model_dir = vocal.get("sherpa_model_dir")
             if _sherpa_present(model_id, model_dir):
                 components.append(
                     ComponentInfo(
@@ -433,7 +433,7 @@ def _select_components(
                         kind="in_process",
                         backend="sherpa_onnx",
                         model_id=model_id,
-                        config_section=vox,
+                        config_section=vocal,
                     )
                 )
             else:
@@ -673,12 +673,12 @@ def _target_audition_stt(task: _ChildTask) -> dict[str, Any]:
     return {}
 
 
-def _target_vox_tts(task: _ChildTask) -> dict[str, Any]:
+def _target_vocal_tts(task: _ChildTask) -> dict[str, Any]:
     _set_offline_env()
     from pathlib import Path
 
-    from kaine.modules.vox.client import TTSRequest
-    from kaine.modules.vox.sherpa_tts import SherpaKokoroTTS
+    from kaine.modules.vocal.client import TTSRequest
+    from kaine.modules.vocal.sherpa_tts import SherpaKokoroTTS
 
     client = SherpaKokoroTTS(
         Path(task.model_dir),
@@ -796,7 +796,7 @@ def _run_component_target(task: _ChildTask) -> dict[str, Any]:
     if task.component == "audition.stt":
         return _target_audition_stt(task)
     if task.component == "vox.tts":
-        return _target_vox_tts(task)
+        return _target_vocal_tts(task)
     if task.component == "embedding":
         return _target_embedding(task)
     if task.component == "topos.encoder":

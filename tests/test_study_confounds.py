@@ -15,15 +15,15 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
-from kaine.modules.empatheia.agent import EMOTION_CATEGORIES
-from kaine.modules.empatheia.module import Empatheia
-from kaine.modules.empatheia.store import InMemoryAgentStore
-from kaine.modules.vox import FakePlayer, FakeTTSClient, Vox
-from kaine.workspace.drive_policy import DriveBiasedActionSelectionPolicy
-from kaine.workspace.volition import (
+from kaine.modules.social_cognition.agent import EMOTION_CATEGORIES
+from kaine.modules.social_cognition.module import SocialCognition
+from kaine.modules.social_cognition.store import InMemoryAgentStore
+from kaine.modules.vocal import FakePlayer, FakeTTSClient, Vocal
+from kaine.workspace.action_selection import (
     SPEAK,
     DefaultActionSelectionPolicy,
 )
+from kaine.workspace.drive_policy import DriveBiasedActionSelectionPolicy
 from tests._fakes import FakeClock
 
 _MISSING = object()
@@ -105,9 +105,9 @@ def _snapshot(*selected_events: tuple[str, Event]) -> WorkspaceSnapshot:
     )
 
 
-def _vox_and_player(bus: AsyncBus, tmp_path: Path, **overrides) -> tuple[Vox, FakePlayer]:
+def _vocal_and_player(bus: AsyncBus, tmp_path: Path, **overrides) -> tuple[Vocal, FakePlayer]:
     player = FakePlayer()
-    vox = Vox(
+    vocal = Vocal(
         bus,
         tts_client=FakeTTSClient(canned_audio=b"WAV-FAKE-DATA-1234"),
         player=player,
@@ -115,7 +115,7 @@ def _vox_and_player(bus: AsyncBus, tmp_path: Path, **overrides) -> tuple[Vox, Fa
         predefined_voice_id="default_sample.wav",
         **overrides,
     )
-    return vox, player
+    return vocal, player
 
 
 # ---------------------------------------------------------------------------
@@ -186,8 +186,8 @@ async def test_make_audition_sets_source_label_per_feed(bus, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_empatheia_operator_channels_map_to_speaker(bus):
-    emp = Empatheia(bus, store=InMemoryAgentStore())
+async def test_social_cognition_operator_channels_map_to_speaker(bus):
+    emp = SocialCognition(bus, store=InMemoryAgentStore())
     await emp.initialize()
     try:
         await emp._handle_emotion(_emotion_event(source_label="live_mic"))
@@ -204,8 +204,8 @@ async def test_empatheia_operator_channels_map_to_speaker(bus):
 
 
 @pytest.mark.asyncio
-async def test_empatheia_media_channel_maps_to_media_agent(bus):
-    emp = Empatheia(bus, store=InMemoryAgentStore())
+async def test_social_cognition_media_channel_maps_to_media_agent(bus):
+    emp = SocialCognition(bus, store=InMemoryAgentStore())
     await emp.initialize()
     try:
         await emp._handle_emotion(_emotion_event(source_label="playlist"))
@@ -219,8 +219,8 @@ async def test_empatheia_media_channel_maps_to_media_agent(bus):
 
 
 @pytest.mark.asyncio
-async def test_empatheia_missing_source_label_maps_to_speaker(bus):
-    emp = Empatheia(bus, store=InMemoryAgentStore())
+async def test_social_cognition_missing_source_label_maps_to_speaker(bus):
+    emp = SocialCognition(bus, store=InMemoryAgentStore())
     await emp.initialize()
     try:
         await emp._handle_emotion(_emotion_event(source_label=_MISSING))
@@ -234,8 +234,8 @@ async def test_empatheia_missing_source_label_maps_to_speaker(bus):
 
 
 @pytest.mark.asyncio
-async def test_empatheia_custom_operator_sources(bus):
-    emp = Empatheia(
+async def test_social_cognition_custom_operator_sources(bus):
+    emp = SocialCognition(
         bus,
         store=InMemoryAgentStore(),
         operator_sources=["remote"],
@@ -258,7 +258,7 @@ async def test_empatheia_custom_operator_sources(bus):
 # ---------------------------------------------------------------------------
 
 
-def test_volition_answers_operator_channel():
+def test_action_selection_answers_operator_channel():
     policy = DefaultActionSelectionPolicy(clock=FakeClock())
     event = _transcription_event(source_label="live_mic")
     intents = policy(_snapshot(("e1", event)))
@@ -267,14 +267,14 @@ def test_volition_answers_operator_channel():
     assert intents[0].about == "hello world"
 
 
-def test_volition_ignores_playlist_channel():
+def test_action_selection_ignores_playlist_channel():
     policy = DefaultActionSelectionPolicy(clock=FakeClock())
     event = _transcription_event(source_label="playlist")
     intents = policy(_snapshot(("e1", event)))
     assert intents == []
 
 
-def test_volition_answers_missing_source_label():
+def test_action_selection_answers_missing_source_label():
     policy = DefaultActionSelectionPolicy(clock=FakeClock())
     event = _transcription_event(source_label=_MISSING)
     intents = policy(_snapshot(("e1", event)))
@@ -282,7 +282,7 @@ def test_volition_answers_missing_source_label():
     assert intents[0].kind == SPEAK
 
 
-def test_volition_respects_custom_operator_sources():
+def test_action_selection_respects_custom_operator_sources():
     policy = DefaultActionSelectionPolicy(
         clock=FakeClock(), operator_sources=["remote"]
     )
@@ -304,31 +304,31 @@ def test_drive_biased_policy_forwards_operator_sources():
 
 
 @pytest.mark.asyncio
-async def test_vox_dormant_suppresses_output_and_resumes(bus, tmp_path):
-    vox, player = _vox_and_player(bus, tmp_path)
-    await vox.initialize()
+async def test_vocal_dormant_suppresses_output_and_resumes(bus, tmp_path):
+    vocal, player = _vocal_and_player(bus, tmp_path)
+    await vocal.initialize()
     try:
-        assert not vox.dormant
-        vox.set_dormant(True)
-        assert vox.dormant
+        assert not vocal.dormant
+        vocal.set_dormant(True)
+        assert vocal.dormant
 
-        result = await vox.synthesize_text("hello womb")
+        result = await vocal.synthesize_text("hello womb")
         assert result.bytes_produced == 0
-        assert vox._suppressed_while_dormant == 1
+        assert vocal._suppressed_while_dormant == 1
         assert player.played == []
         assert not list((tmp_path / "vox").glob("*.wav"))
 
-        vox.set_dormant(False)
-        assert not vox.dormant
-        result = await vox.synthesize_text("hello world")
+        vocal.set_dormant(False)
+        assert not vocal.dormant
+        result = await vocal.synthesize_text("hello world")
         assert result.bytes_produced == len(b"WAV-FAKE-DATA-1234")
         assert len(player.played) == 1
-        assert vox._suppressed_while_dormant == 1  # count does not reset
+        assert vocal._suppressed_while_dormant == 1  # count does not reset
     finally:
-        await vox.shutdown()
+        await vocal.shutdown()
 
 
-def test_gestation_holds_mundus_and_vox_dormant():
+def test_gestation_holds_mundus_and_vocal_dormant():
     from kaine.cycle.__main__ import _hold_effectors_for_gestation
     from kaine.modules.registry import ModuleRegistry
 
@@ -341,12 +341,12 @@ def test_gestation_holds_mundus_and_vox_dormant():
             self.dormant = dormant
 
     registry = ModuleRegistry()
-    vox, mundus, interoception = _Effector("vox"), _Effector("mundus"), _Effector("soma")
-    for module in (vox, mundus, interoception):
+    vocal, mundus, interoception = _Effector("vox"), _Effector("mundus"), _Effector("soma")
+    for module in (vocal, mundus, interoception):
         registry.register(module)
 
     held = _hold_effectors_for_gestation(registry)
 
     assert sorted(held) == ["mundus", "vox"]
-    assert vox.dormant is True and mundus.dormant is True
+    assert vocal.dormant is True and mundus.dormant is True
     assert interoception.dormant is None

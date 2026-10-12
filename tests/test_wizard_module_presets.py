@@ -215,7 +215,7 @@ def test_defaults_with_tier_recommendation_full_entity():
     assert "Module preset: full entity" in out()
 
 
-def test_full_entity_without_a_voice_keeps_vox_on():
+def test_full_entity_without_a_voice_keeps_vocal_on():
     shipped = _shipped()
     shipped.setdefault("vox", {})["backend"] = "chatterbox"
     shipped["vox"]["predefined_voice_id"] = ""

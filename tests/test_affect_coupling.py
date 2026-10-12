@@ -240,7 +240,7 @@ async def test_disabled_coupling_identical_appraisal_and_no_state_change(bus: As
 
 
 @pytest.mark.asyncio
-async def test_no_empatheia_uses_base_weight(bus: AsyncBus):
+async def test_no_social_cognition_uses_base_weight(bus: AsyncBus):
     """With no cached familiarity, the contribution uses coupling_base."""
     fake_now = [0.0]
     coupling_base = 0.08

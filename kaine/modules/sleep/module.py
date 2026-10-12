@@ -205,7 +205,7 @@ class Sleep(BaseModule):
         # The planning and action selection modules' rest-request handling
         self._requested_rest_min_interval_s: float = requested_rest_min_interval_s
         self._entity_clock = entity_clock
-        self._volition_cursor: str = "0"
+        self._action_selection_cursor: str = "0"
         # Seed from boot time so a fresh boot or module restart cannot bypass
         # the requested-rest interval. Fatigue/regulation triggers are
         # unaffected; this only guards planning and action selection modules' rest requests.
@@ -305,9 +305,9 @@ class Sleep(BaseModule):
             entry_id = latest[0][0]
             if isinstance(entry_id, bytes):
                 entry_id = entry_id.decode()
-            self._volition_cursor = entry_id
+            self._action_selection_cursor = entry_id
         self._tasks.append(
-            asyncio.create_task(self._volition_consumer_loop(), name="hypnos-volition-consumer")
+            asyncio.create_task(self._action_selection_consumer_loop(), name="hypnos-volition-consumer")
         )
         if self._fatigue_triggered:
             # Seed cursor so we only process new interoception module events from now on.
@@ -433,7 +433,7 @@ class Sleep(BaseModule):
         except asyncio.CancelledError:
             raise
 
-    async def _volition_consumer_loop(self) -> None:
+    async def _action_selection_consumer_loop(self) -> None:
         """Background loop: watch volition.out for rest requests.
 
         The planning-module-originated ``intent.rest`` events (and any other rest intents)
@@ -446,12 +446,12 @@ class Sleep(BaseModule):
                 try:
                     entries, last_scanned = await self._bus.read_entries(
                         "volition.out",
-                        last_id=self._volition_cursor,
+                        last_id=self._action_selection_cursor,
                         count=32,
                         block_ms=0,
                     )
                     if last_scanned:
-                        self._volition_cursor = last_scanned
+                        self._action_selection_cursor = last_scanned
                     if entries:
                         for _, event in entries:
                             if event.type != "intent.rest":

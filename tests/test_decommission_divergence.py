@@ -277,7 +277,7 @@ def test_nothing_found_could_not_confirm(tmp_path):
     assert "no individuation measurement" in a.summary
 
 
-def test_fresh_nonsignificant_does_not_suppress_eidolon_drift(tmp_path):
+def test_fresh_nonsignificant_does_not_suppress_self_model_drift(tmp_path):
     state_root = tmp_path / "state"
     ref = _write_reference(state_root)
     _write_self_model(state_root, drift_count=1, identity_history=[{"at": "x"}])

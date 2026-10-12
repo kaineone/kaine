@@ -15,7 +15,7 @@ import pytest
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.lifecycle.divergence import assess_divergence
-from kaine.modules.lingua.intent_log import IntentExpressionLog
+from kaine.modules.language.intent_log import IntentExpressionLog
 from kaine.modules.sleep import FakeTrainer, Sleep, VoiceAlignmentConfig
 from kaine.modules.sleep.corpus import intent_record_paths
 from kaine.modules.sleep.voice_alignment import DPOPairBuilder
@@ -240,7 +240,7 @@ def test_atomicity(monkeypatch, tmp_path):
     assert not list(tmp_path.glob("*.tmp"))
 
 
-def test_lingua_writes_envelopes(monkeypatch, tmp_path):
+def test_language_writes_envelopes(monkeypatch, tmp_path):
     _enable(monkeypatch)
     log = IntentExpressionLog(tmp_path / "intent_expression.jsonl")
     log.append(
@@ -256,7 +256,7 @@ def test_lingua_writes_envelopes(monkeypatch, tmp_path):
     assert lines[0].record["generated_text"] == "SENTINEL-MONOLOGUE-7731"
 
 
-def test_lingua_migrates_once(monkeypatch, tmp_path):
+def test_language_migrates_once(monkeypatch, tmp_path):
     _enable(monkeypatch)
     path = tmp_path / "intent_expression.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -264,7 +264,7 @@ def test_lingua_migrates_once(monkeypatch, tmp_path):
         json.dumps({"a": 1}) + "\n" + json.dumps({"b": 2}) + "\n",
         encoding="utf-8",
     )
-    from kaine.modules.lingua.intent_log import rewrite_encrypted as original_rewrite
+    from kaine.modules.language.intent_log import rewrite_encrypted as original_rewrite
 
     calls = []
 
@@ -273,7 +273,7 @@ def test_lingua_migrates_once(monkeypatch, tmp_path):
         return original_rewrite(p)
 
     monkeypatch.setattr(
-        "kaine.modules.lingua.intent_log.rewrite_encrypted", counting_rewrite
+        "kaine.modules.language.intent_log.rewrite_encrypted", counting_rewrite
     )
     log1 = IntentExpressionLog(path)
     log1.append(mode="m", prompt="p", generated_text="g", model="m")
@@ -290,11 +290,11 @@ def test_lingua_migrates_once(monkeypatch, tmp_path):
 def test_welfare_case(monkeypatch, tmp_path):
     _enable(monkeypatch)
     root = tmp_path / "state"
-    lingua = root / "lingua"
-    lingua.mkdir(parents=True, exist_ok=True)
+    language = root / "lingua"
+    language.mkdir(parents=True, exist_ok=True)
     record = {"generated_text": "hello world"}
     envelope = encode_record(record)
-    (lingua / "intent_expression.jsonl").write_text(envelope + "\n", encoding="utf-8")
+    (language / "intent_expression.jsonl").write_text(envelope + "\n", encoding="utf-8")
     key2 = base64.b64encode(os.urandom(32)).decode("ascii")
     _set_key(monkeypatch, key2)
     result = assess_divergence(state_root=root, distinctiveness_threshold=0.5)
@@ -399,7 +399,7 @@ def test_migration_runs_when_encryption_is_enabled_after_a_plaintext_write(monke
 
 
 def test_failed_migration_is_retried_on_the_next_write(monkeypatch, tmp_path):
-    from kaine.modules.lingua.intent_log import rewrite_encrypted as real
+    from kaine.modules.language.intent_log import rewrite_encrypted as real
 
     path = tmp_path / "intent_expression.jsonl"
     path.write_text(json.dumps({"generated_text": "legacy"}) + "\n", encoding="utf-8")
@@ -412,7 +412,7 @@ def test_failed_migration_is_retried_on_the_next_write(monkeypatch, tmp_path):
             raise OSError("disk hiccup")
         return real(p)
 
-    monkeypatch.setattr("kaine.modules.lingua.intent_log.rewrite_encrypted", flaky)
+    monkeypatch.setattr("kaine.modules.language.intent_log.rewrite_encrypted", flaky)
     log = IntentExpressionLog(path)
     _append(log, "one")
     _append(log, "two")
@@ -499,7 +499,7 @@ def test_warns_when_encryption_off_and_envelopes_present(monkeypatch, tmp_path, 
     _append(log, "envelope content")
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
     log2 = IntentExpressionLog(path)
-    with caplog.at_level(logging.WARNING, logger="kaine.modules.lingua.intent_log"):
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.language.intent_log"):
         _append(log2, "first plaintext")
         _append(log2, "second plaintext")
     warnings = [r for r in caplog.records if "encryption is off" in r.message]
@@ -523,7 +523,7 @@ def test_encryption_off_envelope_check_runs_once(monkeypatch, tmp_path):
         return _real_has_envelope_line(*args, **kwargs)
 
     monkeypatch.setattr(
-        "kaine.modules.lingua.intent_log.has_envelope_line",
+        "kaine.modules.language.intent_log.has_envelope_line",
         _counting_wrapper,
     )
 

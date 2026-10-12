@@ -41,11 +41,11 @@ from kaine.organ_server.served import ORGAN_SAFETENSORS_REPO
 
 
 def _resolve(config: dict[str, Any]) -> dict[str, Any]:
-    lingua = config.get("lingua") or {}
-    api_key = lingua.get("api_key") or os.environ.get("KAINE_MODEL_SERVER_API_KEY")
+    language = config.get("lingua") or {}
+    api_key = language.get("api_key") or os.environ.get("KAINE_MODEL_SERVER_API_KEY")
     return {
-        "chat_url": str(lingua.get("chat_url", "http://127.0.0.1:11434/v1")),
-        "model_id": str(lingua.get("model_id", "")),
+        "chat_url": str(language.get("chat_url", "http://127.0.0.1:11434/v1")),
+        "model_id": str(language.get("model_id", "")),
         "api_key": api_key,
     }
 

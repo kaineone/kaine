@@ -69,9 +69,9 @@ def test_source_onehot_accumulates_salience():
     )
     vec = feat.featurize(snap)
     interoception_idx = DEFAULT_KNOWN_SOURCES.index("soma")
-    nous_idx = DEFAULT_KNOWN_SOURCES.index("nous")
+    planning_idx = DEFAULT_KNOWN_SOURCES.index("nous")
     assert vec[4 + interoception_idx] == 0.7
-    assert vec[4 + nous_idx] == 0.6
+    assert vec[4 + planning_idx] == 0.6
 
 
 def test_unknown_source_lands_in_overflow_bucket():

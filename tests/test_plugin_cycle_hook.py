@@ -12,7 +12,7 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle import CognitiveCycle
 from kaine.plugins import LoadedPlugins
-from tests._fakes import FakeClock, FakeRegistry, FakeSyneidesis
+from tests._fakes import FakeClock, FakeRegistry, FakeWorkspace
 
 
 def _loaded(**plugins):
@@ -86,7 +86,7 @@ async def test_three_ticks_call_hook_three_times():
     rec = _Recorder()
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=FakeSyneidesis(),
+        workspace=FakeWorkspace(),
         registry=FakeRegistry(["chronos.out"]),
         clock=FakeClock(),
         sleep=FakeClock().sleep,
@@ -150,7 +150,7 @@ async def test_hook_cannot_change_the_cycle_or_event():
     mut = _Mutates()
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=FakeSyneidesis(),
+        workspace=FakeWorkspace(),
         registry=FakeRegistry(["chronos.out"]),
         clock=FakeClock(),
         sleep=FakeClock().sleep,
@@ -179,7 +179,7 @@ async def test_observer_exception_never_stops_the_cycle():
 
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=FakeSyneidesis(),
+        workspace=FakeWorkspace(),
         registry=FakeRegistry(["chronos.out"]),
         clock=FakeClock(),
         sleep=FakeClock().sleep,
@@ -194,7 +194,7 @@ async def test_observer_exception_never_stops_the_cycle():
 @pytest.mark.asyncio
 async def test_no_observer_publishes_identical_events():
     fakeredis = pytest.importorskip("fakeredis.aioredis")
-    syneidesis = FakeSyneidesis()
+    workspace = FakeWorkspace()
     registry = FakeRegistry(["chronos.out"])
     clock = FakeClock()
     sleep_fn = clock.sleep
@@ -203,7 +203,7 @@ async def test_no_observer_publishes_identical_events():
     bus1 = AsyncBus(BusConfig(password="x", audit_required=False), client=client1)
     cycle1 = CognitiveCycle(
         bus=bus1,
-        syneidesis=syneidesis,
+        workspace=workspace,
         registry=registry,
         clock=clock,
         sleep=sleep_fn,
@@ -214,7 +214,7 @@ async def test_no_observer_publishes_identical_events():
     bus2 = AsyncBus(BusConfig(password="x", audit_required=False), client=client2)
     cycle2 = CognitiveCycle(
         bus=bus2,
-        syneidesis=syneidesis,
+        workspace=workspace,
         registry=registry,
         clock=FakeClock(),
         sleep=FakeClock().sleep,

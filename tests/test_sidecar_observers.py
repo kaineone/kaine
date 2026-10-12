@@ -23,11 +23,11 @@ import pytest
 
 from kaine.bus.schema import Event
 from kaine.evaluation.observers.coherence_observer import CoherenceObserver
-from kaine.evaluation.observers.empatheia_observer import EmpatheiaObserver
 from kaine.evaluation.observers.fatigue_observer import FatigueObserver
-from kaine.evaluation.observers.nous_policy_observer import NousPolicyObserver
+from kaine.evaluation.observers.planning_policy_observer import PlanningPolicyObserver
 from kaine.evaluation.observers.prediction_error_observer import PredictionErrorObserver
 from kaine.evaluation.observers.replay_observer import ReplayObserver
+from kaine.evaluation.observers.social_cognition_observer import SocialCognitionObserver
 from kaine.evaluation.observers.voice_alignment_divergence_observer import (
     VoiceAlignmentDivergenceObserver,
 )
@@ -304,11 +304,11 @@ async def test_replay_observer_noop_when_stream_absent(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_empatheia_observer_computes_accuracy(tmp_path):
+async def test_social_cognition_observer_computes_accuracy(tmp_path):
     """task 5.1 — agent model prediction paired with audition.emotion."""
     bus = FakeBus()
     sink = FakeSink()
-    obs = EmpatheiaObserver(bus, sink)
+    obs = SocialCognitionObserver(bus, sink)
     bus.push(
         "empatheia.out",
         _event(
@@ -342,11 +342,11 @@ async def test_empatheia_observer_computes_accuracy(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_empatheia_observer_noop_when_streams_absent(tmp_path):
+async def test_social_cognition_observer_noop_when_streams_absent(tmp_path):
     """task 5.2 — no social cognition module or audition module events → silent no-op."""
     bus = FakeBus()
     sink = FakeSink()
-    obs = EmpatheiaObserver(bus, sink)
+    obs = SocialCognitionObserver(bus, sink)
     await _run_observer(obs, bus, delay=0.1)
     assert sink.rows == []
     assert bus.published == []
@@ -1035,11 +1035,11 @@ async def test_welfare_observer_interoceptive_defaults_preserve_abc():
 
 
 @pytest.mark.asyncio
-async def test_nous_policy_observer_logs_efe_and_action(tmp_path):
+async def test_planning_policy_observer_logs_efe_and_action(tmp_path):
     """task 5.1 — nous.policy event → JSONL with EFE, horizon, policy."""
     bus = FakeBus()
     sink = AsyncJsonlSink(tmp_path, name="nous_policy", flush_interval_s=0.05)
-    obs = NousPolicyObserver(bus, sink)
+    obs = PlanningPolicyObserver(bus, sink)
     bus.push(
         "nous.out",
         _event(
@@ -1061,11 +1061,11 @@ async def test_nous_policy_observer_logs_efe_and_action(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_nous_policy_observer_noop_when_stream_absent(tmp_path):
+async def test_planning_policy_observer_noop_when_stream_absent(tmp_path):
     """task 5.2 — no planning module events → silent no-op."""
     bus = FakeBus()
     sink = AsyncJsonlSink(tmp_path, name="nous_policy", flush_interval_s=0.05)
-    obs = NousPolicyObserver(bus, sink)
+    obs = PlanningPolicyObserver(bus, sink)
     await sink.start()
     await _run_observer(obs, bus, delay=0.1)
     await sink.stop()
@@ -1087,12 +1087,12 @@ def test_observers_config_defaults():
     assert cfg.coherence is True
     assert cfg.replay is True
     assert cfg.replay_redact_content is True
-    assert cfg.empatheia is True
+    assert cfg.social_cognition is True
     assert cfg.voice_alignment_divergence is True
     assert cfg.fatigue is True
     assert cfg.prediction_error is True
     assert cfg.welfare is True
-    assert cfg.nous_policy is True
+    assert cfg.planning_policy is True
 
 
 def test_observers_config_from_mapping_override():
@@ -1107,7 +1107,7 @@ def test_observers_config_from_mapping_override():
     assert cfg.welfare is False
     # Others stay true.
     assert cfg.coherence is True
-    assert cfg.nous_policy is True
+    assert cfg.planning_policy is True
 
 
 def test_evaluation_config_includes_observers_section():
@@ -1118,5 +1118,5 @@ def test_evaluation_config_includes_observers_section():
         {"observers": {"coherence": False, "nous_policy": False}}
     )
     assert cfg.observers.coherence is False
-    assert cfg.observers.nous_policy is False
+    assert cfg.observers.planning_policy is False
     assert cfg.observers.replay is True  # default

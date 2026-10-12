@@ -17,7 +17,7 @@ def test_defaults_enable_everything():
     assert c.module_attribution is True
     assert c.memory_probes is True
     assert c.proactive_audit is True
-    assert c.eidolon_accuracy is True
+    assert c.self_model_accuracy is True
     assert c.sleep_snapshots is True
     assert c.paths.retention_days == 0  # 0 = keep research records
 
@@ -76,25 +76,25 @@ def test_shipped_kaine_toml_has_evaluation_block():
 # fails closed on an explicit divergent value.
 
 
-def test_eval_baseline_derives_from_lingua_when_unset():
-    c = EvaluationConfig.from_mapping({}, lingua_model_id="some-org/some-model:99b")
+def test_eval_baseline_derives_from_language_when_unset():
+    c = EvaluationConfig.from_mapping({}, language_model_id="some-org/some-model:99b")
     assert c.chat_model_id == "some-org/some-model:99b"
 
 
 def test_eval_baseline_derives_via_loader_no_file(tmp_path):
-    c = load_evaluation_config(tmp_path / "nope.toml", lingua_model_id="some-org/some-model:99b")
+    c = load_evaluation_config(tmp_path / "nope.toml", language_model_id="some-org/some-model:99b")
     assert c.chat_model_id == "some-org/some-model:99b"
 
 
 def test_eval_baseline_explicit_match_ok():
-    c = EvaluationConfig.from_mapping({"chat_model_id": "X:1"}, lingua_model_id="X:1")
+    c = EvaluationConfig.from_mapping({"chat_model_id": "X:1"}, language_model_id="X:1")
     assert c.chat_model_id == "X:1"
 
 
 def test_eval_baseline_explicit_mismatch_fails_closed():
     with pytest.raises(ValueError, match="must equal"):
         EvaluationConfig.from_mapping(
-            {"chat_model_id": "stock:latest"}, lingua_model_id="abliterated:9b"
+            {"chat_model_id": "stock:latest"}, language_model_id="abliterated:9b"
         )
 
 
@@ -104,11 +104,11 @@ def test_shipped_config_omits_eval_model_so_it_derives(tmp_path):
     from pathlib import Path
 
     config_path = Path(__file__).parent.parent / "config" / "kaine.toml"
-    c = load_evaluation_config(config_path, lingua_model_id="operators-bigger:27b")
+    c = load_evaluation_config(config_path, language_model_id="operators-bigger:27b")
     assert c.chat_model_id == "operators-bigger:27b"
 
 
-def test_shipped_lingua_organ_is_abliterated():
+def test_shipped_language_organ_is_abliterated():
     # Guard against regressing the shipped organ to a stock, refusal-conditioned
     # model — abliteration is core to the sovereignty thesis (ABLITERATION.md).
     import tomllib
@@ -207,11 +207,11 @@ def test_loaders_without_override_use_shipped(tmp_path):
     assert ev.paths.trajectory_dir == "data/wt"
 
 
-def test_chat_api_key_derives_from_lingua_and_explicit_overrides():
-    assert EvaluationConfig.from_mapping({}, lingua_api_key="sk-organ").chat_api_key == "sk-organ"
+def test_chat_api_key_derives_from_language_and_explicit_overrides():
+    assert EvaluationConfig.from_mapping({}, language_api_key="sk-organ").chat_api_key == "sk-organ"
     assert (
         EvaluationConfig.from_mapping(
-            {"chat_api_key": "sk-eval"}, lingua_api_key="sk-organ"
+            {"chat_api_key": "sk-eval"}, language_api_key="sk-organ"
         ).chat_api_key
         == "sk-eval"
     )
@@ -261,16 +261,16 @@ def test_research_event_log_config_threads_profile(tmp_path, monkeypatch):
     assert result.enabled is True
 
 
-def test_volition_interrupt_threshold_reaches_report_policy():
+def test_action_selection_interrupt_threshold_reaches_report_policy():
     # Same wiring the cycle applies (kaine/cycle/__main__.py): an absent
     # [volition].interrupt_threshold stays None (opt-in); a configured value
     # reaches the policy instance.
     from kaine.workspace.report_policy import SelfInitiatedReportPolicy
 
-    volition_cfg = {"report_threshold": 0.5, "interrupt_threshold": 0.9}
-    raw = volition_cfg.get("interrupt_threshold")
+    action_selection_cfg = {"report_threshold": 0.5, "interrupt_threshold": 0.9}
+    raw = action_selection_cfg.get("interrupt_threshold")
     policy = SelfInitiatedReportPolicy(
-        report_threshold=float(volition_cfg.get("report_threshold", 0.6)),
+        report_threshold=float(action_selection_cfg.get("report_threshold", 0.6)),
         interrupt_threshold=float(raw) if raw is not None else None,
     )
     # The policy stores the threshold privately and exposes no getter;

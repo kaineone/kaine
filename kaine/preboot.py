@@ -94,7 +94,7 @@ from kaine.config import (
 from kaine.cycle.ignition_log import IgnitionLogConfig
 from kaine.cycle.preservation_monitor import PreservationConfig
 from kaine.cycle.research_gate import research_mode_requested, run_preflight_self_check
-from kaine.defaults import lingua_section_api_key, lingua_section_chat_url
+from kaine.defaults import language_section_api_key, language_section_chat_url
 from kaine.net import port_listening
 from kaine.nexus import health
 from kaine.nexus.config import load_nexus_config
@@ -273,11 +273,11 @@ async def check_organ(config: dict[str, Any]) -> list[CheckResult]:
     except Exception:
         log.debug("organ_unloaded() check failed; probing anyway", exc_info=True)
 
-    lingua_cfg = config.get("lingua") or {}
+    language_cfg = config.get("lingua") or {}
     gate = await verify_organ_generates(
-        lingua_section_chat_url(lingua_cfg),
-        str(lingua_cfg.get("model_id") or ""),
-        api_key=lingua_section_api_key(lingua_cfg),
+        language_section_chat_url(language_cfg),
+        str(language_cfg.get("model_id") or ""),
+        api_key=language_section_api_key(language_cfg),
     )
     return [CheckResult(GROUP_ORGAN, "Organ content", PASS if gate.ok else FAIL, gate.detail)]
 
@@ -882,7 +882,7 @@ def durable_paths(config: dict[str, Any]) -> list[tuple[str, Path]]:
     voice = _table(config, "hypnos", "voice_alignment")
     lifecycle = _table(config, "lifecycle")
     incident_log = _table(config, "spot", "incident_log")
-    eidolon = _table(config, "eidolon")
+    self_model = _table(config, "eidolon")
 
     paths: list[tuple[str, Path]] = [
         ("[preboot].state_root", resolve(Path(settings["state_root"]))),
@@ -928,7 +928,7 @@ def durable_paths(config: dict[str, Any]) -> list[tuple[str, Path]]:
         (
             "[eidolon].persistence_path",
             resolve(_dir_of(
-                eidolon.get("persistence_path"), "state/eidolon/self_model.json", is_file=True
+                self_model.get("persistence_path"), "state/eidolon/self_model.json", is_file=True
             )),
         ),
     ]

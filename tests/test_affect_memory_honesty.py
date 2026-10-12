@@ -33,8 +33,6 @@ from kaine.modules.audition import (
     FakeEmotionClassifier,
     FakeSTTClient,
 )
-from kaine.modules.empatheia.module import Empatheia
-from kaine.modules.empatheia.store import InMemoryAgentStore
 from kaine.modules.episodic_memory import (
     EpisodicMemory,
     EpisodicMemoryCore,
@@ -42,6 +40,8 @@ from kaine.modules.episodic_memory import (
     InMemoryStorage,
     StorageError,
 )
+from kaine.modules.social_cognition.module import SocialCognition
+from kaine.modules.social_cognition.store import InMemoryAgentStore
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -331,10 +331,10 @@ def _emotion_event(
 
 
 @pytest.mark.asyncio
-async def test_empatheia_skips_degraded_emotion_fold(bus: AsyncBus):
+async def test_social_cognition_skips_degraded_emotion_fold(bus: AsyncBus):
     """The social cognition module must not fold interaction when emotion event is degraded."""
     store = InMemoryAgentStore()
-    emp = Empatheia(bus, store=store)
+    emp = SocialCognition(bus, store=store)
     await emp.initialize()
     try:
         # Send a degraded event — interaction_count must stay 0.
@@ -350,10 +350,10 @@ async def test_empatheia_skips_degraded_emotion_fold(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_empatheia_folds_real_emotion_event(bus: AsyncBus):
+async def test_social_cognition_folds_real_emotion_event(bus: AsyncBus):
     """The social cognition module must still fold a non-degraded emotion event."""
     store = InMemoryAgentStore()
-    emp = Empatheia(bus, store=store)
+    emp = SocialCognition(bus, store=store)
     await emp.initialize()
     try:
         real_ev = _emotion_event(category="happy", confidence=0.8, degraded=False)

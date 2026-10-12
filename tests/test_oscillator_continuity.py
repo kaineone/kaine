@@ -16,8 +16,8 @@ from tests.test_plugins_integration import (
     _eps,
     _FakeDist,
     _FakeEP,
-    _FreshNousOscillatorPlugin,
-    _NousEnginePlugin,
+    _FreshPlanningOscillatorPlugin,
+    _PlanningEnginePlugin,
     _spot,
 )
 
@@ -76,8 +76,8 @@ async def test_plugin_oscillator_not_re_requested(monkeypatch, bus):
     even after two heavy restarts of the module."""
     monkeypatch.setattr("kaine.oscillator.snntorch_available", lambda: False)
 
-    engine_plugin = _NousEnginePlugin()
-    osc_plugin = _FreshNousOscillatorPlugin()
+    engine_plugin = _PlanningEnginePlugin()
+    osc_plugin = _FreshPlanningOscillatorPlugin()
     config = {
         "modules": {"nous": True},
         "oscillator": {"enabled": True},
@@ -93,10 +93,10 @@ async def test_plugin_oscillator_not_re_requested(monkeypatch, bus):
     )
 
     registry = build_registry(bus, config, plugins=loaded)
-    original_nous = registry.get("nous")
-    original_osc = original_nous.oscillator
+    original_planning = registry.get("nous")
+    original_osc = original_planning.oscillator
     assert engine_plugin.calls == 1
-    assert original_nous.engine.call_id == 1
+    assert original_planning.engine.call_id == 1
     assert original_osc is not None and original_osc.call_id == 1
     assert osc_plugin.calls == 1
 
@@ -106,14 +106,14 @@ async def test_plugin_oscillator_not_re_requested(monkeypatch, bus):
     assert first.ok and first.path == "heavy"
     assert second.ok and second.path == "heavy"
 
-    rebuilt_nous = registry.get("nous")
+    rebuilt_planning = registry.get("nous")
     assert engine_plugin.calls == 3
-    assert rebuilt_nous.engine.call_id == 3
+    assert rebuilt_planning.engine.call_id == 3
     assert osc_plugin.calls == 1
-    assert rebuilt_nous.oscillator is original_osc
-    assert rebuilt_nous.oscillator.call_id == 1
+    assert rebuilt_planning.oscillator is original_osc
+    assert rebuilt_planning.oscillator.call_id == 1
 
-    await _close_module(rebuilt_nous)
+    await _close_module(rebuilt_planning)
 
 
 @pytest.mark.asyncio
@@ -126,7 +126,7 @@ async def test_default_oscillator_continuity(monkeypatch, bus):
     monkeypatch.setattr("kaine.oscillator.snntorch_available", lambda: True)
     monkeypatch.setattr("kaine.oscillator.make_oscillator", factory)
 
-    engine_plugin = _NousEnginePlugin()
+    engine_plugin = _PlanningEnginePlugin()
     config = {
         "modules": {"nous": True, "chronos": True},
         "oscillator": {"enabled": True},
@@ -175,7 +175,7 @@ async def test_light_restart_keeps_oscillator(monkeypatch, bus):
     monkeypatch.setattr("kaine.oscillator.snntorch_available", lambda: True)
     monkeypatch.setattr("kaine.oscillator.make_oscillator", factory)
 
-    engine_plugin = _NousEnginePlugin()
+    engine_plugin = _PlanningEnginePlugin()
     config = {
         "modules": {"nous": True, "chronos": True},
         "oscillator": {"enabled": True},
@@ -211,7 +211,7 @@ async def test_layer_disabled_no_oscillator_built(monkeypatch, bus):
     monkeypatch.setattr("kaine.oscillator.snntorch_available", lambda: True)
     monkeypatch.setattr("kaine.oscillator.make_oscillator", factory)
 
-    engine_plugin = _NousEnginePlugin()
+    engine_plugin = _PlanningEnginePlugin()
     config = {
         "modules": {"nous": True},
         "oscillator": {"enabled": False},
@@ -250,7 +250,7 @@ async def test_rewire_module_no_oscillator_build(monkeypatch, bus):
     monkeypatch.setattr("kaine.oscillator.snntorch_available", lambda: True)
     monkeypatch.setattr("kaine.oscillator.make_oscillator", boot_factory)
 
-    engine_plugin = _NousEnginePlugin()
+    engine_plugin = _PlanningEnginePlugin()
     config = {
         "modules": {"nous": True, "chronos": True},
         "oscillator": {"enabled": True},

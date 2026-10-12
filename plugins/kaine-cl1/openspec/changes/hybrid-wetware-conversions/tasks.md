@@ -15,7 +15,7 @@
 ## 3. Action selection (default-off)
 
 - [ ] 3.1 `WetwareActionSelector` closed loop: encode state → stim, decode action
-      → intent, in `kaine_cl1/backends/volition.py`.
+      → intent, in `kaine_cl1/backends/action_selection.py`.
 - [ ] 3.2 Gate: on a toy 2-choice task in the simulator, decoded action beats
       chance across seeds; otherwise stays disabled.
 - [ ] 3.3 Any decoded action still passes through KAINE's unchanged two-layer

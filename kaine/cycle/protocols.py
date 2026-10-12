@@ -11,7 +11,7 @@ from kaine.cycle.types import WorkspaceSnapshot
 
 
 @runtime_checkable
-class SyneidesisProtocol(Protocol):
+class WorkspaceProtocol(Protocol):
     async def select(
         self,
         events: list[tuple[str, Event]],

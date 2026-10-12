@@ -138,7 +138,7 @@ def test_revive_refusal_order():
     assert sorted(shutdown_records) == ["alpha", "beta"]
 
 
-def test_empatheia_operator_sources_shape():
+def test_social_cognition_operator_sources_shape():
     validate_config_shape({"empatheia": {"operator_sources": ["live_mic", "manual"]}})
     validate_config_shape({"empatheia": {}})
     with pytest.raises(ConfigShapeError) as exc_info:
@@ -155,8 +155,8 @@ def test_no_metrics_collector():
     assert "MetricsCollector" not in text
 
 
-def test_vox_registry_default_is_chatterbox():
-    import kaine.boot.factories.vox as vox_mod
+def test_vocal_registry_default_is_chatterbox():
+    import kaine.boot.factories.vocal as vocal_mod
 
-    text = Path(vox_mod.__file__).read_text(encoding="utf-8")
+    text = Path(vocal_mod.__file__).read_text(encoding="utf-8")
     assert 'BackendRegistry[TTSClient]("vox", default="chatterbox")' in text

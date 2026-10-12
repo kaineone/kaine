@@ -15,12 +15,12 @@ from kaine.bus.schema import Event, entry_id_sort_key, stream_entry_key
 from kaine.cycle.protocols import (
     CycleHook,
     ModuleRegistryProtocol,
-    SyneidesisProtocol,
+    WorkspaceProtocol,
 )
 from kaine.cycle.time_scale_controller import TimeScaleController
 from kaine.cycle.types import TickResult, WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
-from kaine.workspace.volition import Volition
+from kaine.workspace.action_selection import ActionSelection
 
 if TYPE_CHECKING:
     from kaine.cycle.access_rate import AccessRateController
@@ -82,14 +82,14 @@ class CognitiveCycle:
     def __init__(
         self,
         bus: AsyncBus,
-        syneidesis: SyneidesisProtocol,
+        workspace: WorkspaceProtocol,
         registry: ModuleRegistryProtocol,
         processing_rate_hz: float = 10.0,
         experiential_rate_hz: Optional[float] = None,
         read_count: int = 100,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Any] = asyncio.sleep,
-        volition: Optional[Volition] = None,
+        action_selection: Optional[ActionSelection] = None,
         collect_phases: bool = False,
         wall_clock: Callable[[], datetime] = _real_utc_now,
         deterministic: bool = False,
@@ -108,9 +108,9 @@ class CognitiveCycle:
         if experiential_rate_hz is not None and experiential_rate_hz <= 0:
             raise ValueError("experiential_rate_hz must be positive")
         self._bus = bus
-        self._syneidesis = syneidesis
+        self._workspace = workspace
         self._registry = registry
-        self._volition = volition
+        self._action_selection = action_selection
         self._processing_rate = float(processing_rate_hz)
         # Cached target tick period in SUBJECTIVE seconds (inverse of the
         # processing rate). The processing rate is a subjective-Hz rate, so this
@@ -621,12 +621,12 @@ class CognitiveCycle:
             # (the entity is unaffected) and the counterfactual is the coherence-off
             # twin over the same events. Otherwise select() exactly as before.
             if self._ablation_recorder is not None and is_experiential:
-                snapshot, counterfactual = await self._syneidesis.select_dual(
+                snapshot, counterfactual = await self._workspace.select_dual(
                     events,
                     context=select_context,
                 )
             else:
-                snapshot = await self._syneidesis.select(
+                snapshot = await self._workspace.select(
                     events,
                     context=select_context,
                 )
@@ -660,8 +660,8 @@ class CognitiveCycle:
             # experiential broadcast. The action selection module is the ONLY source of effector
             # activation; it returns no intents when the snapshot is inhibited,
             # structurally enforcing executive inhibition (§37/§147).
-            if broadcast_ok and self._volition is not None:
-                await self._run_volition(snapshot)
+            if broadcast_ok and self._action_selection is not None:
+                await self._run_action_selection(snapshot)
 
         # Live oscillatory ablation: hand the paired (primary, counterfactual) to
         # the recorder read-only. Present only on experiential ticks with the layer
@@ -715,7 +715,7 @@ class CognitiveCycle:
         self._tick_index += 1
         return result
 
-    async def _run_volition(self, snapshot: WorkspaceSnapshot) -> None:
+    async def _run_action_selection(self, snapshot: WorkspaceSnapshot) -> None:
         """Invoke action selection and publish produced intents.
 
         The cycle never calls effectors directly: it publishes intents to
@@ -724,15 +724,15 @@ class CognitiveCycle:
         there. Proposal outcomes always go to ``volition_feedback.out`` (when a
         planning module proposal source is wired) so the planning module can learn what happened.
         """
-        from kaine.workspace.volition import (
+        from kaine.workspace.action_selection import (
+            ACTION_SELECTION_FEEDBACK_SOURCE,
+            ACTION_SELECTION_SOURCE,
             INTENT_TYPES,
             PROPOSAL_OUTCOME_TYPE,
-            VOLITION_FEEDBACK_SOURCE,
-            VOLITION_SOURCE,
         )
 
         try:
-            intents = self._volition.select(snapshot)
+            intents = self._action_selection.select(snapshot)
         except Exception:
             log.exception("volition raised on tick %d", self._tick_index)
             return
@@ -743,7 +743,7 @@ class CognitiveCycle:
                 continue
             try:
                 event = Event(
-                    source=VOLITION_SOURCE,
+                    source=ACTION_SELECTION_SOURCE,
                     type=event_type,
                     payload=intent.to_event_payload(),
                     salience=0.5,
@@ -756,7 +756,7 @@ class CognitiveCycle:
         # Publish content-free proposal outcomes for the planning module's learning. This runs
         # even when the snapshot was inhibited (no intents above).
         try:
-            outcomes = self._volition.proposal_outcomes(snapshot)
+            outcomes = self._action_selection.proposal_outcomes(snapshot)
         except Exception:
             log.exception(
                 "volition proposal_outcomes raised on tick %d", self._tick_index
@@ -765,7 +765,7 @@ class CognitiveCycle:
         for outcome in outcomes:
             try:
                 event = Event(
-                    source=VOLITION_FEEDBACK_SOURCE,
+                    source=ACTION_SELECTION_FEEDBACK_SOURCE,
                     type=PROPOSAL_OUTCOME_TYPE,
                     payload=outcome,
                     salience=0.0,

@@ -25,7 +25,7 @@ from typing import Any
 
 from kaine.cycle.control_state import read_control
 from kaine.cycle.escalation_state import read_escalation
-from kaine.defaults import DEFAULT_ORGAN_PORT, lingua_section_chat_url
+from kaine.defaults import DEFAULT_ORGAN_PORT, language_section_chat_url
 from kaine.perception_state import read_runtime as read_perception_runtime
 
 from .probes import DOWN, NOT_CONFIGURED, UP
@@ -411,7 +411,7 @@ def perception_feed_block(
 
 
 async def model_server_block(
-    model_server_cfg: dict[str, Any], *, lingua_enabled: bool
+    model_server_cfg: dict[str, Any], *, language_enabled: bool
 ) -> dict[str, Any]:
     """Read-only model-server (language-organ) service status block.
 
@@ -426,7 +426,7 @@ async def model_server_block(
     an unreachable server reports ``down`` with a reason.
     """
     cfg = model_server_cfg or {}
-    chat_url = lingua_section_chat_url(cfg)
+    chat_url = language_section_chat_url(cfg)
     alias = cfg.get("model_id")
     api_key = cfg.get("api_key")
     port: int | None = None
@@ -438,7 +438,7 @@ async def model_server_block(
     except Exception:
         port = None
 
-    if not lingua_enabled:
+    if not language_enabled:
         return {
             "state": NOT_CONFIGURED,
             "served_alias": alias,

@@ -26,17 +26,17 @@ from kaine.boot import (
     build_registry,
     make_affect,
     make_audition,
-    make_eidolon,
-    make_empatheia,
+    make_effectors,
     make_episodic_memory,
     make_interoception,
-    make_lingua,
-    make_nous,
-    make_praxis,
+    make_language,
+    make_planning,
+    make_self_model,
     make_sequence,
     make_sleep,
+    make_social_cognition,
     make_vision,
-    make_vox,
+    make_vocal,
     make_world_model,
     rewire_module,
 )
@@ -263,11 +263,11 @@ def test_make_vision_screen_native_grab_detects_and_passes_through(monkeypatch):
     assert not any(a.startswith("scale=") for a in src.command())
 
 
-def test_make_nous_from_config():
+def test_make_planning_from_config():
     pytest.importorskip("pymdp")
     pytest.importorskip("jax")
     bus = _bus()
-    nous = make_nous(
+    planning = make_planning(
         bus,
         {
             "factors": 4,
@@ -279,15 +279,15 @@ def test_make_nous_from_config():
             "alert_salience": 0.8,
         },
     )
-    assert nous.name == "nous"
+    assert planning.name == "nous"
 
 
-def test_make_nous_rejects_oversized_envelope():
+def test_make_planning_rejects_oversized_envelope():
     from kaine.boot import ConfigurationError
 
     bus = _bus()
     with pytest.raises(ConfigurationError):
-        make_nous(
+        make_planning(
             bus,
             {
                 "factors": 16,
@@ -347,9 +347,9 @@ def test_make_episodic_memory_rejects_device():
     assert "[embedding].device" in str(exc.value)
 
 
-def test_make_eidolon_from_config(tmp_path):
+def test_make_self_model_from_config(tmp_path):
     bus = _bus()
-    eidolon = make_eidolon(
+    self_model = make_self_model(
         bus,
         {
             "persistence_path": str(tmp_path / "self_model.json"),
@@ -362,7 +362,7 @@ def test_make_eidolon_from_config(tmp_path):
             "alert_salience": 0.7,
         },
     )
-    assert eidolon.name == "eidolon"
+    assert self_model.name == "eidolon"
 
 
 def test_make_affect_from_config_builds_baseline():
@@ -430,9 +430,9 @@ def test_make_affect_rejects_truly_unknown_coupling_key():
         make_affect(bus, {"coupling": {"bogus_key": 1.0}})
 
 
-def test_make_praxis_with_empty_whitelist(tmp_path):
+def test_make_effectors_with_empty_whitelist(tmp_path):
     bus = _bus()
-    praxis = make_praxis(
+    effectors = make_effectors(
         bus,
         {
             "sandbox_path": str(tmp_path / "praxis"),
@@ -442,12 +442,12 @@ def test_make_praxis_with_empty_whitelist(tmp_path):
             "alert_salience": 0.7,
         },
     )
-    assert praxis.name == "praxis"
+    assert effectors.name == "praxis"
 
 
-def test_make_praxis_translates_shell_whitelist_entries(tmp_path):
+def test_make_effectors_translates_shell_whitelist_entries(tmp_path):
     bus = _bus()
-    praxis = make_praxis(
+    effectors = make_effectors(
         bus,
         {
             "sandbox_path": str(tmp_path / "praxis"),
@@ -461,15 +461,15 @@ def test_make_praxis_translates_shell_whitelist_entries(tmp_path):
             },
         },
     )
-    assert praxis.name == "praxis"
+    assert effectors.name == "praxis"
     # The shell effector should have a non-empty whitelist now.
-    shell = praxis._effectors["shell"]
+    shell = effectors._effectors["shell"]
     assert "echo" in shell._whitelist._entries
 
 
-def test_make_lingua_from_config(tmp_path):
+def test_make_language_from_config(tmp_path):
     bus = _bus()
-    lingua = make_lingua(
+    language = make_language(
         bus,
         {
             "chat_url": "http://127.0.0.1:11434/v1",
@@ -480,7 +480,7 @@ def test_make_lingua_from_config(tmp_path):
             "intent_log_path": str(tmp_path / "intent.jsonl"),
         },
     )
-    assert lingua.name == "lingua"
+    assert language.name == "lingua"
 
 
 def test_make_audition_from_config():
@@ -587,9 +587,9 @@ def test_make_audition_rejects_bad_feed_mode():
         )
 
 
-def test_make_vox_from_config(tmp_path):
+def test_make_vocal_from_config(tmp_path):
     bus = _bus()
-    a = make_vox(
+    a = make_vocal(
         bus,
         {
             "chatterbox_url": "http://127.0.0.1:8883",
@@ -605,9 +605,9 @@ def test_make_vox_from_config(tmp_path):
     assert a.name == "vox"
 
 
-def test_make_empatheia_from_config():
+def test_make_social_cognition_from_config():
     bus = _bus()
-    emp = make_empatheia(
+    emp = make_social_cognition(
         bus,
         {
             "backend": "inmemory",
@@ -621,12 +621,12 @@ def test_make_empatheia_from_config():
     assert emp.name == "empatheia"
 
 
-def test_make_empatheia_rejects_unknown_keys():
+def test_make_social_cognition_rejects_unknown_keys():
     bus = _bus()
     import pytest
 
     with pytest.raises(ValueError, match="unknown config keys"):
-        make_empatheia(bus, {"backend": "inmemory", "bogus_key": True})
+        make_social_cognition(bus, {"backend": "inmemory", "bogus_key": True})
 
 
 def test_make_world_model_from_config():
@@ -670,7 +670,7 @@ def test_make_sleep_without_deps(tmp_path):
     assert sleep.name == "hypnos"
 
 
-def test_make_sleep_ignores_retired_nous_step_burst(tmp_path, caplog):
+def test_make_sleep_ignores_retired_planning_step_burst(tmp_path, caplog):
     """A stale [hypnos].nous_step_burst key is ignored with a warning."""
     with caplog.at_level(logging.WARNING):
         sleep = make_sleep(
@@ -686,7 +686,7 @@ def test_make_sleep_ignores_retired_nous_step_burst(tmp_path, caplog):
             },
         )
     assert sleep.name == "hypnos"
-    assert not hasattr(sleep, "_nous_step_burst")
+    assert not hasattr(sleep, "_planning_step_burst")
     assert "[hypnos].nous_step_burst is retired" in caplog.text
 
 
@@ -814,7 +814,7 @@ def test_committed_config_ships_all_modules_disabled():
     assert len(build_registry(_bus(), {"modules": {}})) == 0
 
 
-def test_shipped_lingua_model_id_is_published_kaine_organ():
+def test_shipped_language_model_id_is_published_kaine_organ():
     """The shipped [lingua].model_id is the PUBLISHED KAINE organ's served alias.
 
     The wizard downloads, and scripts/model-server-bootstrap.sh serves, the organ
@@ -876,41 +876,41 @@ def test_shipped_config_research_submission_disabled():
     )
 
 
-def test_make_lingua_accepts_outcome_reply_window(tmp_path):
+def test_make_language_accepts_outcome_reply_window(tmp_path):
     # the language module factory should accept cycle-specific config keys it does not consume.
-    lingua = make_lingua(
+    language = make_language(
         _bus(),
         {"intent_log_path": str(tmp_path / "i.jsonl"), "outcome_reply_window_s": 45},
     )
-    assert lingua is not None
+    assert language is not None
 
 
-def test_make_lingua_api_key_from_env(monkeypatch, tmp_path):
+def test_make_language_api_key_from_env(monkeypatch, tmp_path):
     # The model-server key may come from the env (kept out of config files).
     monkeypatch.setenv("KAINE_MODEL_SERVER_API_KEY", "sk-env")
-    lingua = make_lingua(_bus(), {"intent_log_path": str(tmp_path / "i.jsonl")})
-    assert lingua._chat_client._api_key == "sk-env"
+    language = make_language(_bus(), {"intent_log_path": str(tmp_path / "i.jsonl")})
+    assert language._chat_client._api_key == "sk-env"
 
 
-def test_make_lingua_api_key_from_config_wins_over_env(monkeypatch, tmp_path):
+def test_make_language_api_key_from_config_wins_over_env(monkeypatch, tmp_path):
     monkeypatch.setenv("KAINE_MODEL_SERVER_API_KEY", "sk-env")
-    lingua = make_lingua(
+    language = make_language(
         _bus(),
         {"api_key": "sk-cfg", "intent_log_path": str(tmp_path / "i.jsonl")},
     )
-    assert lingua._chat_client._api_key == "sk-cfg"
+    assert language._chat_client._api_key == "sk-cfg"
 
 
-def test_wire_eidolon_capabilities_injects_praxis_whitelist(tmp_path):
+def test_wire_self_model_capabilities_injects_effectors_whitelist(tmp_path):
     """_wire_eidolon_capabilities feeds the effectors module's effector whitelist into
     the self-model module's self-inference engine, so the self-model's capability_map reflects
     what the entity can execute (eidolon-self-inference spec)."""
-    from kaine.boot import _wire_eidolon_capabilities
-    from kaine.modules.eidolon.document import SelfModelDocument
+    from kaine.boot import _wire_self_model_capabilities
     from kaine.modules.registry import ModuleRegistry
+    from kaine.modules.self_model.document import SelfModelDocument
 
     bus = _bus()
-    praxis = make_praxis(
+    effectors = make_effectors(
         bus,
         {
             "sandbox_path": str(tmp_path / "praxis"),
@@ -921,7 +921,7 @@ def test_wire_eidolon_capabilities_injects_praxis_whitelist(tmp_path):
             "alert_salience": 0.7,
         },
     )
-    eidolon = make_eidolon(
+    self_model = make_self_model(
         bus,
         {
             "persistence_path": str(tmp_path / "self_model.json"),
@@ -929,12 +929,12 @@ def test_wire_eidolon_capabilities_injects_praxis_whitelist(tmp_path):
         },
     )
     registry = ModuleRegistry()
-    registry.register(praxis)
-    registry.register(eidolon)
+    registry.register(effectors)
+    registry.register(self_model)
 
-    _wire_eidolon_capabilities(registry)
+    _wire_self_model_capabilities(registry)
 
-    model = eidolon.self_inference.maintenance_cycle_end(SelfModelDocument())
+    model = self_model.self_inference.maintenance_cycle_end(SelfModelDocument())
     assert model.capability_map.get("effectors") == ["file_write", "notify"]
 
 
@@ -947,10 +947,10 @@ def test_rewire_module_restores_self_hearing_gate():
     """After the supervisor rebuilds a module, rewire_module must re-inject the shared
     SpeakingGate between the vocal module and the audition module."""
     from kaine.modules.registry import ModuleRegistry
-    from kaine.modules.vox.coordination import SpeakingGate
+    from kaine.modules.vocal.coordination import SpeakingGate
 
     bus = _bus()
-    vox = make_vox(
+    vocal = make_vocal(
         bus,
         {
             "chatterbox_url": "http://127.0.0.1:8883",
@@ -961,13 +961,13 @@ def test_rewire_module_restores_self_hearing_gate():
     )
     audition = make_audition(bus, {"speaches_url": "http://127.0.0.1:8000"})
     registry = ModuleRegistry()
-    registry.register(vox)
+    registry.register(vocal)
     registry.register(audition)
 
     rewire_module(registry, "audition", {})
     original_gate = audition._speaking_gate
     assert isinstance(original_gate, SpeakingGate)
-    assert vox._speaking_gate is original_gate
+    assert vocal._speaking_gate is original_gate
 
     # Simulate the supervisor rebuilding audition with a fresh instance.
     new_audition = make_audition(bus, {"speaches_url": "http://127.0.0.1:8000"})
@@ -975,17 +975,17 @@ def test_rewire_module_restores_self_hearing_gate():
     rewire_module(registry, "audition", {})
 
     assert new_audition._speaking_gate is original_gate
-    assert vox._speaking_gate is original_gate
+    assert vocal._speaking_gate is original_gate
 
 
-def test_rewire_module_reseeds_eidolon_whitelist(tmp_path):
+def test_rewire_module_reseeds_self_model_whitelist(tmp_path):
     """After the supervisor rebuilds the self-model module, rewire_module must re-inject the effectors module's
     effector whitelist into the new self-inference engine."""
-    from kaine.modules.eidolon.document import SelfModelDocument
     from kaine.modules.registry import ModuleRegistry
+    from kaine.modules.self_model.document import SelfModelDocument
 
     bus = _bus()
-    praxis = make_praxis(
+    effectors = make_effectors(
         bus,
         {
             "sandbox_path": str(tmp_path / "praxis"),
@@ -994,7 +994,7 @@ def test_rewire_module_reseeds_eidolon_whitelist(tmp_path):
             "shell_whitelist": {},
         },
     )
-    eidolon = make_eidolon(
+    self_model = make_self_model(
         bus,
         {
             "persistence_path": str(tmp_path / "self_model.json"),
@@ -1002,25 +1002,25 @@ def test_rewire_module_reseeds_eidolon_whitelist(tmp_path):
         },
     )
     registry = ModuleRegistry()
-    registry.register(praxis)
-    registry.register(eidolon)
+    registry.register(effectors)
+    registry.register(self_model)
 
     rewire_module(registry, "eidolon", {})
-    model = eidolon.self_inference.maintenance_cycle_end(SelfModelDocument())
+    model = self_model.self_inference.maintenance_cycle_end(SelfModelDocument())
     assert model.capability_map.get("effectors") == ["file_write", "notify"]
 
     # Simulate the supervisor rebuilding the self-model module.
-    new_eidolon = make_eidolon(
+    new_self_model = make_self_model(
         bus,
         {
             "persistence_path": str(tmp_path / "self_model2.json"),
             "self_inference": {"enabled": True},
         },
     )
-    registry.replace("eidolon", new_eidolon)
+    registry.replace("eidolon", new_self_model)
     rewire_module(registry, "eidolon", {})
 
-    new_model = new_eidolon.self_inference.maintenance_cycle_end(SelfModelDocument())
+    new_model = new_self_model.self_inference.maintenance_cycle_end(SelfModelDocument())
     assert new_model.capability_map.get("effectors") == ["file_write", "notify"]
 
 

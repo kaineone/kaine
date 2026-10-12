@@ -98,16 +98,16 @@ class IgnitionAuditReport:
     input_triggered: int = 0
     drive_triggered: int = 0
     self_initiated: int = 0
-    nous_initiated: int = 0
-    unrealizable_nous_intents: int = 0
+    planning_initiated: int = 0
+    unrealizable_planning_intents: int = 0
     realization_failed_count: int = 0
-    nous_proposals_realized: int = 0
-    nous_proposals_declined: int = 0
-    nous_proposals_forwarded: int = 0
+    planning_proposals_realized: int = 0
+    planning_proposals_declined: int = 0
+    planning_proposals_forwarded: int = 0
     input_triggered_entry_ids: List[str] = field(default_factory=list)
     drive_triggered_entry_ids: List[str] = field(default_factory=list)
     self_initiated_entry_ids: List[str] = field(default_factory=list)
-    nous_initiated_entry_ids: List[str] = field(default_factory=list)
+    planning_initiated_entry_ids: List[str] = field(default_factory=list)
     event_types: List[str] = field(default_factory=list)
     saliences: List[Any] = field(default_factory=list)
 
@@ -118,16 +118,16 @@ class IgnitionAuditReport:
             "input_triggered": self.input_triggered,
             "drive_triggered": self.drive_triggered,
             "self_initiated": self.self_initiated,
-            "nous_initiated": self.nous_initiated,
-            "unrealizable_nous_intents": self.unrealizable_nous_intents,
+            "nous_initiated": self.planning_initiated,
+            "unrealizable_nous_intents": self.unrealizable_planning_intents,
             "realization_failed_count": self.realization_failed_count,
-            "nous_proposals_realized": self.nous_proposals_realized,
-            "nous_proposals_declined": self.nous_proposals_declined,
-            "nous_proposals_forwarded": self.nous_proposals_forwarded,
+            "nous_proposals_realized": self.planning_proposals_realized,
+            "nous_proposals_declined": self.planning_proposals_declined,
+            "nous_proposals_forwarded": self.planning_proposals_forwarded,
             "input_triggered_entry_ids": list(self.input_triggered_entry_ids),
             "drive_triggered_entry_ids": list(self.drive_triggered_entry_ids),
             "self_initiated_entry_ids": list(self.self_initiated_entry_ids),
-            "nous_initiated_entry_ids": list(self.nous_initiated_entry_ids),
+            "nous_initiated_entry_ids": list(self.planning_initiated_entry_ids),
             "event_types": list(self.event_types),
             "saliences": list(self.saliences),
         }
@@ -215,15 +215,15 @@ def classify_realizations(
         return "self"
 
     report = IgnitionAuditReport(sleep_index=sleep_index)
-    report.unrealizable_nous_intents = unrealizable
+    report.unrealizable_planning_intents = unrealizable
     for outcome in proposal_outcomes:
         payload = outcome.get("payload") or {}
         if payload.get("reason") == "forwarded":
-            report.nous_proposals_forwarded += 1
+            report.planning_proposals_forwarded += 1
         elif payload.get("realized") is True:
-            report.nous_proposals_realized += 1
+            report.planning_proposals_realized += 1
         else:
-            report.nous_proposals_declined += 1
+            report.planning_proposals_declined += 1
 
     for rec in realizations:
         event_type = rec.get("type", "")
@@ -281,7 +281,7 @@ def classify_realizations(
             elif category == "drive":
                 report.drive_triggered_entry_ids.append(entry_str)
             elif category == "nous":
-                report.nous_initiated_entry_ids.append(entry_str)
+                report.planning_initiated_entry_ids.append(entry_str)
             else:
                 report.self_initiated_entry_ids.append(entry_str)
         if category == "input":
@@ -289,7 +289,7 @@ def classify_realizations(
         elif category == "drive":
             report.drive_triggered += 1
         elif category == "nous":
-            report.nous_initiated += 1
+            report.planning_initiated += 1
         else:
             report.self_initiated += 1
     return report

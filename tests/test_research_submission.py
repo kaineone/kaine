@@ -46,8 +46,8 @@ def _make_eval_root(tmp_path: Path) -> Path:
 
     # --- Decoy sensitive files (must be EXCLUDED) ---
     # 1. intent_expression.jsonl (the language module — embeds user speech + monologue)
-    decoy_lingua = eval_root / "intent_expression.jsonl"
-    decoy_lingua.write_text(
+    decoy_language = eval_root / "intent_expression.jsonl"
+    decoy_language.write_text(
         '{"intent": "user said something private", "expression": "entity responded"}\n',
         encoding="utf-8",
     )
@@ -57,8 +57,8 @@ def _make_eval_root(tmp_path: Path) -> Path:
     decoy_episodic_memory.write_text('{"id": "mem1", "text": "private memory"}\n', encoding="utf-8")
 
     # 3. A self-model file
-    decoy_eidolon = eval_root / "eidolon_self_model.json"
-    decoy_eidolon.write_text('{"name": "entity identity", "values": []}', encoding="utf-8")
+    decoy_self_model = eval_root / "eidolon_self_model.json"
+    decoy_self_model.write_text('{"name": "entity identity", "values": []}', encoding="utf-8")
 
     # 4. A conversation file
     decoy_conv = eval_root / "conversation_2026-06-07.jsonl"

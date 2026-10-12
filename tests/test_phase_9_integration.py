@@ -26,7 +26,7 @@ from kaine.workspace import (
     RuleBasedSalience,
     StaticAffectModulator,
     StaticGoalScorer,
-    Syneidesis,
+    Workspace,
 )
 from tests._module_shedding import CANONICAL_MODULE_NAMES, build_fakes
 
@@ -36,7 +36,7 @@ async def test_full_stack_unbooted_runs_50_ticks_and_round_trips_snapshot(tmp_pa
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
-    syneidesis = Syneidesis(
+    workspace = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
@@ -53,7 +53,7 @@ async def test_full_stack_unbooted_runs_50_ticks_and_round_trips_snapshot(tmp_pa
 
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=syneidesis,
+        workspace=workspace,
         registry=registry,
         processing_rate_hz=20.0,
         experiential_rate_hz=20.0,
@@ -104,7 +104,7 @@ async def test_full_stack_with_nexus_co_existence(tmp_path):
 
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
-    syneidesis = Syneidesis(
+    workspace = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
@@ -121,7 +121,7 @@ async def test_full_stack_with_nexus_co_existence(tmp_path):
 
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=syneidesis,
+        workspace=workspace,
         registry=registry,
         processing_rate_hz=20.0,
         experiential_rate_hz=20.0,
