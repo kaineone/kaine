@@ -39,6 +39,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable
 
+from kaine import legacy_aliases, legacy_names
 from kaine.state_io import write_json_atomic
 
 if TYPE_CHECKING:
@@ -53,6 +54,36 @@ STAGE_PATH = DEFAULT_STAGE_PATH
 GESTATION = "gestation"
 EMBODIED = "embodied"
 STAGES = (GESTATION, EMBODIED)
+
+
+class StageValueError(Exception):
+    """A stored stage value is not one this code recognizes.
+
+    Deliberately not a ValueError: the stage reader's fail-safe for an unreadable
+    file catches ValueError, and an unrecognized value must never be swallowed into
+    a stage. The cycle refuses to boot on it.
+    """
+
+    def __init__(self, value: Any, path: Path | None = None) -> None:
+        self.value = value
+        self.path = path
+        self.value_repr = _stage_repr(value)
+        if path is not None:
+            message = (
+                f"stage file {path} holds an unrecognized stage value {self.value_repr}; "
+                "inspect it, then correct it or move it aside"
+            )
+        else:
+            message = f"unrecognized stage value {self.value_repr}"
+        super().__init__(message)
+
+
+def _stage_repr(value: Any) -> str:
+    """Return a short, safe representation of a stage value for diagnostics."""
+    r = repr(value)
+    if len(r) > 64:
+        return r[:61] + "..."
+    return r
 
 
 def _now_iso() -> str:
@@ -87,15 +118,25 @@ def has_prior_lived_history(
     free of an import cycle.
     """
     from kaine.lifecycle.identity import lived_before
+
     return lived_before(identity, state_root, bundle_roots)
 
 
 def _coerce_stage(value: Any) -> str:
-    """Coerce a persisted stage value. An UNKNOWN value is read as ``embodied``,
-    never ``gestation``: a garbled or forward-versioned file must never regress a
-    mind that has already lived into a stimulus source (the load-bearing never-regress
-    invariant fails safe toward born, not toward the stimulus source)."""
-    return value if value in STAGES else EMBODIED
+    """Coerce a persisted stage value.
+
+    An unrecognized value stops the boot instead of reading as embodied.
+    A stored ``gestation`` keeps reading as the developmental stage after the rename.
+    """
+    if not isinstance(value, str):
+        raise StageValueError(value)
+    original_value = value
+    for entry in legacy_aliases.active(legacy_names.STAGE_VALUES):
+        if value == entry["old"]:
+            value = entry["new"]
+    if value in STAGES:
+        return value
+    raise StageValueError(original_value)
 
 
 def _coerce_lived_seconds(value: Any) -> float:
@@ -205,9 +246,13 @@ class StageState:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "StageState":
-        data = dict(data or {})
+        data = legacy_aliases.map_stage_record(dict(data or {}))
+        if "stage" in data:
+            stage = _coerce_stage(data["stage"])
+        else:
+            stage = GESTATION
         return cls(
-            stage=_coerce_stage(data.get("stage", GESTATION)),
+            stage=stage,
             gestation_started_at=data.get("gestation_started_at"),
             born_at=data.get("born_at"),
             lived_seconds=_coerce_lived_seconds(data.get("lived_seconds", 0.0)),
@@ -238,8 +283,17 @@ def read_stage(path: Path | None = None) -> StageState | None:
     if not exists:
         return None
     try:
-        return StageState.from_dict(json.loads(target.read_text()))
+        data = json.loads(target.read_text())
     except (json.JSONDecodeError, OSError, ValueError, TypeError):
+        # A corrupt, malformed or unreadable stage file must fail safe toward
+        # `embodied` (never regress a possibly-lived mind into the stimulus source), not
+        # crash boot.
+        return StageState(stage=EMBODIED)
+    try:
+        return StageState.from_dict(data)
+    except StageValueError as exc:
+        raise StageValueError(exc.value, path=target) from None
+    except (ValueError, TypeError):
         # A corrupt, malformed or unreadable stage file must fail safe toward
         # `embodied` (never regress a possibly-lived mind into the stimulus source), not
         # crash boot.

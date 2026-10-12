@@ -51,8 +51,11 @@ def test_own_lived_artifacts_listing(tmp_path):
     assert OWN_LIVED_ARTIFACTS == (
         Path("lifecycle/stage.json"),
         Path("phantasia/world_model.ckpt"),
+        Path("world_model/world_model.ckpt"),
         Path("hypnos/consolidation_divergence.json"),
+        Path("sleep/consolidation_divergence.json"),
         Path("perception/desired.json"),
+        Path("perceptual_locus/desired.json"),
     )
     stage = tmp_path / "lifecycle" / "stage.json"
     stage.parent.mkdir(parents=True)
