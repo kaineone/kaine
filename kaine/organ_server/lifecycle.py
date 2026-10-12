@@ -51,7 +51,7 @@ SERVER_BIN_ENV = "KAINE_MODEL_SERVER_BIN"
 
 # Override env naming a LoRA adapter to attach at launch (the served organ's
 # `--lora <adapter>` flag). Set by the on-device voice-alignment reload bracket
-# (kaine.modules.hypnos.organ_window) when restarting the organ with an accepted
+# (kaine.modules.sleep.organ_window) when restarting the organ with an accepted
 # adapter; absent/empty = serve the base organ unchanged. A real serving flag —
 # no merge/requantize step needed.
 LORA_ADAPTER_ENV = "KAINE_MODEL_SERVER_LORA"

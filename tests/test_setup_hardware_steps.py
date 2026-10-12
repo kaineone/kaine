@@ -417,12 +417,12 @@ def test_device_step_choice_excludes_failing_device():
     )
     step = device_step(propose_device_assignments)
     fields = step.fields(ctx)
-    hypnos_field = next(
+    sleep_field = next(
         f for f in fields if f.name == "hypnos.voice_alignment.training_device"
     )
-    assert "cuda:0" not in hypnos_field.choices
-    assert "cuda:1" in hypnos_field.choices
-    assert "cpu" in hypnos_field.choices
+    assert "cuda:0" not in sleep_field.choices
+    assert "cuda:1" in sleep_field.choices
+    assert "cpu" in sleep_field.choices
 
     # Empty answer selects the "cpu" default for the failing address.
     run_step(

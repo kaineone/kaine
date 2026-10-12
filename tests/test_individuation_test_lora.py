@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from kaine.evaluation.preference_battery import DEFAULT_BATTERY
-from kaine.modules.hypnos.voice_alignment import DPOPair, TrainingResult
+from kaine.modules.sleep.voice_alignment import DPOPair, TrainingResult
 
 
 def _load_test_lora():
@@ -171,7 +171,7 @@ def test_resolve_lora_field_uses_production_resolver(monkeypatch):
 
 
 def test_voice_alignment_config_parser():
-    from kaine.boot.factories.hypnos import voice_alignment_config_from_section
+    from kaine.boot.factories.sleep import voice_alignment_config_from_section
 
     assert voice_alignment_config_from_section({}, None) is None
 

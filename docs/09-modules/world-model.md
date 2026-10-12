@@ -71,7 +71,7 @@ All keys are under `[phantasia]`. The full reference is in [`appendix-a-configur
 
 ### Observation encoder
 
-`encode_snapshot(snapshot)` in `kaine/modules/phantasia/encoder.py` maps a broadcast snapshot to a vector of `OBS_DIM = 19` floats: 15 source slots, 3 affect slots and an inhibition flag.
+`encode_snapshot(snapshot)` in `kaine/modules/world_model/encoder.py` maps a broadcast snapshot to a vector of `OBS_DIM = 19` floats: 15 source slots, 3 affect slots and an inhibition flag.
 
 | Slots | Content |
 |---|---|
@@ -85,7 +85,7 @@ All keys are under `[phantasia]`. The full reference is in [`appendix-a-configur
 
 ### World model protocol and backends
 
-`WorldModelBackend` in `kaine/modules/phantasia/world_model.py` is a runtime-checkable protocol with four methods:
+`WorldModelBackend` in `kaine/modules/world_model/world_model.py` is a runtime-checkable protocol with four methods:
 
 ```python
 def observe(obs: list[float]) -> float: ...
@@ -98,7 +98,7 @@ def reset_state() -> None: ...
 
 `DreamerV3WorldModel` (JAX engine) wraps `external/dreamerv3/rssm.py`, a clean-room JAX implementation of the DreamerV3 recurrent state-space core attributed to danijar/dreamerv3 (MIT; the pinned commit is in `external/dreamerv3/UPSTREAM`). It implements the encoder MLP, the GRU deterministic state, a categorical or Gaussian stochastic latent, the decoder MLP, and prior-only imagination. It has no actor, critic, return head or reward head and does not use the upstream disk-serialization hooks.
 
-`NumpyDreamerV3WorldModel` (NumPy engine) implements the same core in `kaine/modules/phantasia/rssm_numpy.py` and trains it with hand-written backpropagation through time. Golden fixtures in `tests/fixtures/phantasia_golden/*.npz`, recorded by `scripts/record_phantasia_golden.py`, check it against the JAX core: the forward pass, the loss, every parameter gradient and a five-step training trajectory agree within 1e-4. A second check, which needs no JAX, compares the gradients with central finite differences of a surrogate loss that fixes each stop-gradient side of the KL balancing, so its derivative equals the training gradient. A 120-step training run agrees with the JAX engine to 1e-5 in every parameter. The NumPy engine does not reproduce JAX's random number generator, so a fresh model under NumPy is a different draw than under JAX for the same seed. Imagination samples with NumPy's generator (Gumbel-max for categorical latents). The test suite holds the median NumPy `observe` step under 5 ms and one training pass over a full 512-observation buffer under 3 s.
+`NumpyDreamerV3WorldModel` (NumPy engine) implements the same core in `kaine/modules/world_model/rssm_numpy.py` and trains it with hand-written backpropagation through time. Golden fixtures in `tests/fixtures/world_model_golden/*.npz`, recorded by `scripts/record_world_model_golden.py`, check it against the JAX core: the forward pass, the loss, every parameter gradient and a five-step training trajectory agree within 1e-4. A second check, which needs no JAX, compares the gradients with central finite differences of a surrogate loss that fixes each stop-gradient side of the KL balancing, so its derivative equals the training gradient. A 120-step training run agrees with the JAX engine to 1e-5 in every parameter. The NumPy engine does not reproduce JAX's random number generator, so a fresh model under NumPy is a different draw than under JAX for the same seed. Imagination samples with NumPy's generator (Gumbel-max for categorical latents). The test suite holds the median NumPy `observe` step under 5 ms and one training pass over a full 512-observation buffer under 3 s.
 
 ```mermaid
 flowchart TD
@@ -136,16 +136,16 @@ The sleep module opens the scenario window before phase 2, whose replay publishe
 
 | Path | Purpose |
 |---|---|
-| `kaine/modules/phantasia/module.py` | `Phantasia(BaseModule)`: waking and sleep paths, training, persistence |
-| `kaine/modules/phantasia/world_model.py` | The `WorldModelBackend` protocol, `FakeWorldModel`, `DreamerV3WorldModel`, `NumpyDreamerV3WorldModel`, `TrainOutcome` |
-| `kaine/modules/phantasia/encoder.py` | `encode_snapshot()`, `observation_dim()`, `SOURCE_ORDER`, `VERSION` |
-| `kaine/modules/phantasia/rssm_numpy.py` | The NumPy core and its hand-written backpropagation |
-| `kaine/modules/phantasia/checkpoint.py` | Atomic, encryption-aware reading and writing of checkpoint bytes |
+| `kaine/modules/world_model/module.py` | `WorldModel(BaseModule)`: waking and sleep paths, training, persistence |
+| `kaine/modules/world_model/world_model.py` | The `WorldModelBackend` protocol, `FakeWorldModel`, `DreamerV3WorldModel`, `NumpyDreamerV3WorldModel`, `TrainOutcome` |
+| `kaine/modules/world_model/encoder.py` | `encode_snapshot()`, `observation_dim()`, `SOURCE_ORDER`, `VERSION` |
+| `kaine/modules/world_model/rssm_numpy.py` | The NumPy core and its hand-written backpropagation |
+| `kaine/modules/world_model/checkpoint.py` | Atomic, encryption-aware reading and writing of checkpoint bytes |
 | `external/dreamerv3/rssm.py` | Clean-room JAX core (danijar/dreamerv3, MIT) |
 | `external/dreamerv3/UPSTREAM` | Upstream URL, pinned commit and licence |
-| `kaine/boot/factories/phantasia.py` | `make_phantasia()`: backend and engine selection |
-| `scripts/record_phantasia_golden.py` | Records the JAX golden fixtures |
-| `tests/fixtures/phantasia_golden/*.npz` | Golden fixtures for forward, loss, gradient and training parity |
+| `kaine/boot/factories/world_model.py` | `make_phantasia()`: backend and engine selection |
+| `scripts/record_world_model_golden.py` | Records the JAX golden fixtures |
+| `tests/fixtures/world_model_golden/*.npz` | Golden fixtures for forward, loss, gradient and training parity |
 
 ## Enabling
 
@@ -156,7 +156,7 @@ The sleep module opens the scenario window before phase 2, whose replay publishe
 The world model module needs no external service. To force a scenario in a test without a full sleep:
 
 ```python
-phantasia.open_scenario_window()  # normally opened by Hypnos before phase 2
+phantasia.open_scenario_window()  # normally opened by Sleep before phase 2
 await phantasia.generate_scenario(seed_memory_id="test")
 ```
 
@@ -193,15 +193,15 @@ Fork snapshots store module artifacts in `<snapshot root>/<id>/artifacts/<module
 
 | File | Coverage |
 |---|---|
-| `tests/test_phantasia_world_model.py` | `FakeWorldModel` observe, imagine, train and the NaN guard; no actor or critic in `DreamerV3WorldModel` |
-| `tests/test_phantasia_encoder.py` | Vector shape, source slots, affect, the inhibition flag |
-| `tests/test_phantasia_module.py` | Waking tick to `phantasia.world_error`; sleep cue to `phantasia.scenario`; the window guard, including a cue handled after the window closed |
-| `tests/test_phantasia_zero_persistence.py` | The buffer is not serialized; training writes nothing |
-| `tests/test_phantasia_persistence.py` | Checkpoint round trip; fail-closed mismatch and stub guards; encryption at rest; decommission inclusion |
+| `tests/test_world_model_world_model.py` | `FakeWorldModel` observe, imagine, train and the NaN guard; no actor or critic in `DreamerV3WorldModel` |
+| `tests/test_world_model_encoder.py` | Vector shape, source slots, affect, the inhibition flag |
+| `tests/test_world_model_module.py` | Waking tick to `phantasia.world_error`; sleep cue to `phantasia.scenario`; the window guard, including a cue handled after the window closed |
+| `tests/test_world_model_zero_persistence.py` | The buffer is not serialized; training writes nothing |
+| `tests/test_world_model_persistence.py` | Checkpoint round trip; fail-closed mismatch and stub guards; encryption at rest; decommission inclusion |
 | `tests/test_world_model_identity.py` | World-model artifact identity and source tracking across forks and merges |
 | `tests/test_rssm_numpy_parity.py` | The NumPy core against the JAX fixtures; finite-difference gradient check; free bits and clipping; non-finite guards; sampling; runs with JAX blocked |
-| `tests/test_phantasia_numpy_engine.py` | The NumPy engine learns without JAX; 120-step parity with JAX; checkpoint interchange both ways; engine selection and `make_phantasia()` checks; latency bounds; runs with JAX blocked |
-| `tests/test_phantasia_faithful_renderer.py` | Faithful-renderer templates for `world_error` and `scenario` |
+| `tests/test_world_model_numpy_engine.py` | The NumPy engine learns without JAX; 120-step parity with JAX; checkpoint interchange both ways; engine selection and `make_phantasia()` checks; latency bounds; runs with JAX blocked |
+| `tests/test_world_model_faithful_renderer.py` | Faithful-renderer templates for `world_error` and `scenario` |
 
 ## Spec and related
 

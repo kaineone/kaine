@@ -152,7 +152,7 @@ async def test_sleeps_before_first_tick_are_ignored(
 
 
 @pytest.mark.asyncio
-async def test_only_hypnos_completed_events_count(
+async def test_only_sleep_completed_events_count(
     fake_async_bus: Any, stage_path: Path
 ) -> None:
     runner = _runner(fake_async_bus, _make_clock([0.0]), StageState(stage=GESTATION), stage_path)

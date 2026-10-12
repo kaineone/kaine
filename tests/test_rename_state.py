@@ -737,10 +737,10 @@ def test_migrate_refuses_symlinked_src_outside_root(tmp_path):
     target.mkdir(parents=True, exist_ok=True)
     (target / "keep.txt").write_text("out")
 
-    hypnos = root / "hypnos"
-    if hypnos.exists():
-        shutil.rmtree(hypnos)
-    hypnos.symlink_to(target, target_is_directory=True)
+    sleep = root / "hypnos"
+    if sleep.exists():
+        shutil.rmtree(sleep)
+    sleep.symlink_to(target, target_is_directory=True)
 
     manifest_path = root / ".rename_state" / "manifest.json"
     before = _attack_snapshot(root, manifest_path, outside)

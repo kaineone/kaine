@@ -37,7 +37,7 @@ async def _measure_rate(target_hz: float, n_ticks: int) -> float:
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
-            thymos_modulator=StaticThymosModulator(),
+            affect_modulator=StaticThymosModulator(),
         ),
         top_k=5,
         publication_threshold=0.0,

@@ -424,7 +424,7 @@ async def test_observer_extreme_vad_pauses_during_freeze():
         unfrozen_clock=_unfrozen_clock(u),
     )
 
-    await obs._handle_thymos(
+    await obs._handle_affect(
         "1-0", _event("thymos", "thymos.state", {"state": {"valence": -0.9, "arousal": 0.9}})
     )
     control_state.freeze(reason="test", source="operator")

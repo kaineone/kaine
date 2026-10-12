@@ -27,6 +27,6 @@ Two wiring faults found in the documentation sweep.
 
 ## Impact
 
-- `kaine/modules/empatheia/module.py`, `kaine/modules/thymos/module.py`,
+- `kaine/modules/empatheia/module.py`, `kaine/modules/affect/module.py`,
   `kaine/boot/factories/lingua.py`, tests. Both modules involved in the first
   fix are held in the base-thesis profile.

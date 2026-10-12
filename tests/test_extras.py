@@ -65,7 +65,7 @@ def test_check_respects_module_toggles(monkeypatch):
     ]
 
 
-def test_mnemos_qdrant_backend_needs_memory(monkeypatch):
+def test_episodic_memory_qdrant_backend_needs_memory(monkeypatch):
     monkeypatch.setattr(
         importlib.util, "find_spec", _make_find_spec(set())
     )
@@ -81,7 +81,7 @@ def test_mnemos_qdrant_backend_needs_memory(monkeypatch):
     assert not any(m.import_name == "sentence_transformers" for m in missing)
 
 
-def test_mnemos_sqlite_vec_backend_needs_memory_edge(monkeypatch):
+def test_episodic_memory_sqlite_vec_backend_needs_memory_edge(monkeypatch):
     monkeypatch.setattr(
         importlib.util, "find_spec", _make_find_spec(set())
     )
@@ -97,7 +97,7 @@ def test_mnemos_sqlite_vec_backend_needs_memory_edge(monkeypatch):
     assert not any(m.import_name == "sentence_transformers" for m in missing)
 
 
-def test_mnemos_inmemory_backend_needs_nothing_by_default(monkeypatch):
+def test_episodic_memory_inmemory_backend_needs_nothing_by_default(monkeypatch):
     monkeypatch.setattr(
         importlib.util, "find_spec", _make_find_spec(set())
     )
@@ -106,7 +106,7 @@ def test_mnemos_inmemory_backend_needs_nothing_by_default(monkeypatch):
     assert not missing
 
 
-def test_mnemos_sentence_transformers_backend_needs_memory(monkeypatch):
+def test_episodic_memory_sentence_transformers_backend_needs_memory(monkeypatch):
     monkeypatch.setattr(
         importlib.util, "find_spec", _make_find_spec(set())
     )
@@ -142,7 +142,7 @@ def test_empatheia_qdrant_sentence_transformers_backend_needs_memory(monkeypatch
     )
 
 
-def test_hypnos_warns_sentence_transformers_when_embedding_backend_torch(monkeypatch):
+def test_sleep_warns_sentence_transformers_when_embedding_backend_torch(monkeypatch):
     monkeypatch.setattr(
         importlib.util, "find_spec", _make_find_spec(set())
     )
@@ -329,14 +329,14 @@ def test_nous_needs_reasoning(monkeypatch):
     assert any(m.import_name == "jax" and m.extra == "reasoning" for m in missing)
 
 
-def test_phantasia_dreamerv3_needs_worldmodel(monkeypatch):
+def test_world_model_dreamerv3_needs_worldmodel(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
     config = {"modules": {"phantasia": True}, "phantasia": {"backend": "dreamerv3"}}
     missing = check(config)
     assert any(m.import_name == "jax" and m.extra == "worldmodel" for m in missing)
 
 
-def test_phantasia_numpy_engine_needs_nothing(monkeypatch):
+def test_world_model_numpy_engine_needs_nothing(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
     config = {
         "modules": {"phantasia": True},
@@ -346,7 +346,7 @@ def test_phantasia_numpy_engine_needs_nothing(monkeypatch):
     assert not missing
 
 
-def test_phantasia_fake_backend_needs_nothing(monkeypatch):
+def test_world_model_fake_backend_needs_nothing(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
     config = {"modules": {"phantasia": True}, "phantasia": {"backend": "fake"}}
     missing = check(config)

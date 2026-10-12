@@ -15,7 +15,7 @@ from kaine.bus.config import BusConfig
 from kaine.research.submission import DENY_PATTERNS
 from tests.test_voice_corpus_protection import (
     DPOPairBuilder,
-    _make_hypnos,
+    _make_sleep,
     _plaintext_encryptor,  # noqa: F401
     _voice_alignment_opt_in,  # noqa: F401
     intent_record_paths,
@@ -129,9 +129,9 @@ def test_within_single_file_last_lines_are_scanned_first(tmp_path: Path) -> None
 
 
 @pytest.mark.asyncio
-async def test_hypnos_emission_uses_intent_record_paths(bus, tmp_path: Path) -> None:
+async def test_sleep_emission_uses_intent_record_paths(bus, tmp_path: Path) -> None:
     """The divergence emission reaches corpus files when the live log is absent."""
-    h = _make_hypnos(bus, tmp_path, intent_records=None)
+    h = _make_sleep(bus, tmp_path, intent_records=None)
     corpus_dir = h._voice_config.intent_log_path.parent / "intent_log"
     corpus_dir.mkdir()
     corpus_file = corpus_dir / "sleep-1.jsonl"

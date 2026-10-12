@@ -117,7 +117,7 @@ def test_h6_merge_no_refusal_when_neither_parent_has_adapters(tmp_path):
 
 
 def _make_voice_config(tmp_path: Path, enabled: bool = True):
-    from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
+    from kaine.modules.sleep.voice_alignment import VoiceAlignmentConfig
 
     return VoiceAlignmentConfig(
         enabled=enabled,
@@ -454,10 +454,10 @@ def test_l4_get_collections_failure_records_error_and_skips_delete(tmp_path):
 def test_l4_get_collections_success_deletes_normally(tmp_path):
     """Positive control: when get_collections() succeeds, matching collections
     are deleted and no spurious error is recorded."""
-    from kaine.lifecycle.decommission import _mnemos_collection_names, delete_entity_state
+    from kaine.lifecycle.decommission import _episodic_memory_collection_names, delete_entity_state
 
     deleted: list[str] = []
-    expected_collections = _mnemos_collection_names(None)
+    expected_collections = _episodic_memory_collection_names(None)
 
     class SuccessQdrantClient:
         class _Coll:

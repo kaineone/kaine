@@ -228,7 +228,7 @@ def _t_nous_policy(payload: dict[str, Any]) -> str:
     return f"[Nous] policy={policy} EFE={efe:.3f}"
 
 
-def _t_mnemos_recall(payload: dict[str, Any]) -> str:
+def _t_episodic_memory_recall(payload: dict[str, Any]) -> str:
     count = payload.get("count", 0)
     collection = payload.get("collection", "unknown")
     affect = payload.get("max_affect_intensity")
@@ -240,18 +240,18 @@ def _t_mnemos_recall(payload: dict[str, Any]) -> str:
     return msg + "."
 
 
-def _t_thymos_emotion(payload: dict[str, Any]) -> str:
+def _t_affect_emotion(payload: dict[str, Any]) -> str:
     emotion = payload.get("emotion", "unknown")
     return f"Thymos categorical emotion is {_fmt(emotion)}."
 
 
-def _t_thymos_drive(payload: dict[str, Any]) -> str:
+def _t_affect_drive(payload: dict[str, Any]) -> str:
     drive = payload.get("drive", "unknown")
     value = payload.get("value")
     return f"Thymos drive {_fmt(drive)} crossed threshold at {_fmt(value)}."
 
 
-def _t_thymos_state(payload: dict[str, Any]) -> str:
+def _t_affect_state(payload: dict[str, Any]) -> str:
     state = payload.get("state") or {}
     drives = payload.get("drives") or {}
     state_str = ", ".join(f"{k} {_fmt(v)}" for k, v in sorted(state.items()))
@@ -263,7 +263,7 @@ def _t_thymos_state(payload: dict[str, Any]) -> str:
     )
 
 
-def _t_thymos_goal(payload: dict[str, Any]) -> str:
+def _t_affect_goal(payload: dict[str, Any]) -> str:
     action = payload.get("action", "updated")
     desc = payload.get("description", "<unnamed>")
     return f"Thymos goal {desc} was {action}."
@@ -338,7 +338,7 @@ def _t_empatheia_social_error(payload: dict[str, Any]) -> str:
     )
 
 
-def _t_phantasia_world_error(payload: dict[str, Any]) -> str:
+def _t_world_model_world_error(payload: dict[str, Any]) -> str:
     try:
         error = float(payload.get("world_error", 0.0))
     except (TypeError, ValueError):
@@ -352,7 +352,7 @@ def _t_phantasia_world_error(payload: dict[str, Any]) -> str:
     )
 
 
-def _t_phantasia_scenario(payload: dict[str, Any]) -> str:
+def _t_world_model_scenario(payload: dict[str, Any]) -> str:
     horizon = payload.get("horizon", 0)
     drift = payload.get("trajectory_drift")
     seed = payload.get("seed_memory_id") or "unseeded"
@@ -410,7 +410,7 @@ def _t_vox_synthesized(payload: dict[str, Any]) -> str:
     return ", ".join(parts) + "."
 
 
-def _t_mnemos_replay(payload: dict[str, Any]) -> str:
+def _t_episodic_memory_replay(payload: dict[str, Any]) -> str:
     # Privacy: render memory ID and numeric affect only — never the text field.
     memory_id = payload.get("memory_id", "<unknown>")
     affect_intensity = payload.get("affect_intensity")
@@ -424,14 +424,14 @@ def _t_mnemos_replay(payload: dict[str, Any]) -> str:
     return ", ".join(parts) + "."
 
 
-def _t_hypnos_sleep_started(payload: dict[str, Any]) -> str:
+def _t_sleep_sleep_started(payload: dict[str, Any]) -> str:
     started_at = payload.get("started_at")
     if started_at is not None:
         return f"Hypnos maintenance window started (wall time {_fmt(started_at)})."
     return "Hypnos maintenance window started."
 
 
-def _t_hypnos_sleep_completed(payload: dict[str, Any]) -> str:
+def _t_sleep_sleep_completed(payload: dict[str, Any]) -> str:
     elapsed = payload.get("total_elapsed_ms")
     phases = payload.get("phases") or []
     n_phases = len(phases)
@@ -445,7 +445,7 @@ def _t_hypnos_sleep_completed(payload: dict[str, Any]) -> str:
     return ", ".join(parts) + "."
 
 
-def _t_hypnos_association(payload: dict[str, Any]) -> str:
+def _t_sleep_association(payload: dict[str, Any]) -> str:
     # Payload is a compact scenario descriptor; zero raw sense data.
     horizon = payload.get("horizon", 0)
     seed_id = payload.get("seed_memory_id") or "unseeded"
@@ -463,7 +463,7 @@ def _t_nous_proposal(payload: dict[str, Any]) -> str:
     return "Nous proposes an action."
 
 
-def _t_hypnos_rest_request(payload: dict[str, Any]) -> str:
+def _t_sleep_rest_request(payload: dict[str, Any]) -> str:
     if payload.get("accepted"):
         return "Rest request accepted."
     reason = payload.get("reason")
@@ -494,11 +494,11 @@ TEMPLATES: dict[tuple[str, str], TemplateFn] = {
     ("topos", "topos.report"): _t_vision_report,
     ("nous", "nous.belief"): _t_nous_belief,
     ("nous", "nous.policy"): _t_nous_policy,
-    ("mnemos", "mnemos.recall"): _t_mnemos_recall,
-    ("thymos", "thymos.emotion"): _t_thymos_emotion,
-    ("thymos", "thymos.drive"): _t_thymos_drive,
-    ("thymos", "thymos.state"): _t_thymos_state,
-    ("thymos", "thymos.goal"): _t_thymos_goal,
+    ("mnemos", "mnemos.recall"): _t_episodic_memory_recall,
+    ("thymos", "thymos.emotion"): _t_affect_emotion,
+    ("thymos", "thymos.drive"): _t_affect_drive,
+    ("thymos", "thymos.state"): _t_affect_state,
+    ("thymos", "thymos.goal"): _t_affect_goal,
     ("eidolon", "eidolon.drift"): _t_eidolon_drift,
     ("cycle", "cycle.tick"): _t_cycle_tick,
     ("audition", "audition.transcription"): _t_audition_transcription,
@@ -507,17 +507,17 @@ TEMPLATES: dict[tuple[str, str], TemplateFn] = {
     ("soma", "soma.regulation"): _t_interoception_regulation,
     ("empatheia", "empatheia.agent_model"): _t_empatheia_agent_model,
     ("empatheia", "empatheia.social_error"): _t_empatheia_social_error,
-    ("phantasia", "phantasia.world_error"): _t_phantasia_world_error,
-    ("phantasia", "phantasia.scenario"): _t_phantasia_scenario,
+    ("phantasia", "phantasia.world_error"): _t_world_model_world_error,
+    ("phantasia", "phantasia.scenario"): _t_world_model_scenario,
     ("nous", "nous.timeout"): _t_nous_timeout,
     ("nous", "nous.proposal"): _t_nous_proposal,
     ("audition", "audition.prosody"): _t_audition_prosody,
     ("vox", "vox.synthesized"): _t_vox_synthesized,
-    ("mnemos", "mnemos.replay"): _t_mnemos_replay,
-    ("hypnos", "hypnos.sleep.started"): _t_hypnos_sleep_started,
-    ("hypnos", "hypnos.sleep.completed"): _t_hypnos_sleep_completed,
-    ("hypnos", "hypnos.association"): _t_hypnos_association,
-    ("hypnos", "hypnos.rest_request"): _t_hypnos_rest_request,
+    ("mnemos", "mnemos.replay"): _t_episodic_memory_replay,
+    ("hypnos", "hypnos.sleep.started"): _t_sleep_sleep_started,
+    ("hypnos", "hypnos.sleep.completed"): _t_sleep_sleep_completed,
+    ("hypnos", "hypnos.association"): _t_sleep_association,
+    ("hypnos", "hypnos.rest_request"): _t_sleep_rest_request,
     ("eidolon", "eidolon.self_model"): _t_eidolon_self_model,
 }
 

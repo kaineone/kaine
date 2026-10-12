@@ -218,7 +218,7 @@ graph TD
     ChangeD --> Report
     Habituator --> Report
 
-    HypnosOut["hypnos.out"] -->|sleep.started / completed| FwdModel
+    SleepOut["hypnos.out"] -->|sleep.started / completed| FwdModel
 ```
 
 ### InternVideo-Next encoder

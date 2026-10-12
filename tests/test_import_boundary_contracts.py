@@ -99,6 +99,6 @@ def test_external_train_script_not_imported_by_kaine():
         if "import hypnos_external_train" in text or "from hypnos_external_train" in text:
             offenders.append(str(py_file.relative_to(REPO_ROOT)))
     assert not offenders, (
-        "scripts/hypnos_external_train.py must never be imported by kaine "
+        "scripts/sleep_external_train.py must never be imported by kaine "
         f"(it runs in the external trainer env). Offenders: {offenders}"
     )

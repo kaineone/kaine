@@ -45,7 +45,7 @@ async def test_matched_draws_only_on_broadcast_ticks():
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=64),
             goal_scorer=StaticGoalScorer(),
-            thymos_modulator=StaticThymosModulator(),
+            affect_modulator=StaticThymosModulator(),
         ),
         top_k=2,
         arm="matched",
@@ -87,7 +87,7 @@ async def test_pooled_publishes_only_broadcast_ticks():
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=64),
             goal_scorer=StaticGoalScorer(),
-            thymos_modulator=StaticThymosModulator(),
+            affect_modulator=StaticThymosModulator(),
         ),
         top_k=2,
         arm="pooled",
@@ -131,7 +131,7 @@ async def test_competitive_default_publishes_coalition_of_top_k():
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=64),
             goal_scorer=StaticGoalScorer(),
-            thymos_modulator=StaticThymosModulator(),
+            affect_modulator=StaticThymosModulator(),
         ),
         top_k=2,
     )

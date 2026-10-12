@@ -21,12 +21,12 @@ from kaine.evaluation.sink import AsyncJsonlSink
 log = logging.getLogger(__name__)
 
 
-HYPNOS_STREAM = "hypnos.out"
+SLEEP_STREAM = "hypnos.out"
 
 
 class SleepSnapshotRecorder(StreamSubscriberObserver):
     name = "sleep_snapshots"
-    streams = (HYPNOS_STREAM,)
+    streams = (SLEEP_STREAM,)
 
     def __init__(
         self,

@@ -9,7 +9,7 @@ from typing import Any, Sequence
 
 from kaine.bus.schema import Event
 from kaine.workspace.novelty import NoveltyTracker
-from kaine.workspace.strategies import GoalScorer, ThymosModulator
+from kaine.workspace.strategies import AffectModulator, GoalScorer
 
 log = logging.getLogger(__name__)
 
@@ -70,13 +70,13 @@ class RuleBasedSalience:
         self,
         novelty: NoveltyTracker,
         goal_scorer: GoalScorer,
-        thymos_modulator: ThymosModulator,
+        affect_modulator: AffectModulator,
         *,
         downgraded_factors: Sequence[str] = (),
     ) -> None:
         self._novelty = novelty
         self._goal = goal_scorer
-        self._thymos = thymos_modulator
+        self._affect = affect_modulator
 
         # Announce a deliberate downgrade (a factor that ships REAL by default but
         # was set to the static negative control) so it is visible in operator
@@ -96,11 +96,11 @@ class RuleBasedSalience:
         intensity = _clamp(event.salience)
         novelty = _clamp(self._novelty.observe(event))
         goal = _clamp(await self._goal.relevance(event))
-        thymos = _clamp(await self._thymos.modulate(event))
+        affect = _clamp(await self._affect.modulate(event))
 
         priority = _clamp(intensity * novelty * goal)
 
-        getter = getattr(self._thymos, "contrast_gain", None)
+        getter = getattr(self._affect, "contrast_gain", None)
         gain = float(getter()) if callable(getter) else 0.0
 
-        return _clamp(thymos * arousal_contrast(priority, gain))
+        return _clamp(affect * arousal_contrast(priority, gain))

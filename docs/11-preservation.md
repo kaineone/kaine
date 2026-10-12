@@ -187,7 +187,7 @@ The episodic memory module marks its trace-strength record `import_pending` befo
 The fix is to run the same revive again from its bundle, which clears the mark. When the bundle is gone, or you decide to keep the store exactly as it stands, stop the cycle and run:
 
 ```bash
-python -m kaine.lifecycle.mnemos_recover --confirm-keep-current-store
+python -m kaine.lifecycle.episodic_memory_recover --confirm-keep-current-store
 ```
 
 It refuses without the flag (exit `2`), refuses while a cycle is running (exit `3`), and exits `1` when no interrupted import is recorded. Otherwise it re-scans the store's size and total strength, clears the mark and both counts, and exits `0`. The strengths of the traces the interrupted import wrote are relative to the store's earlier log gain, so they may be off; a re-run revive is always the better repair.

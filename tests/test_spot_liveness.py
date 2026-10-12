@@ -119,12 +119,12 @@ async def test_sleep_gate_suppresses_hung(bus):
     try:
         mod._last_heartbeat -= 1000.0
 
-        class _Hypnos(BaseModule):
+        class _Sleep(BaseModule):
             name = "hypnos"
             is_sleeping = True
 
         registry = ModuleRegistry()
-        registry.register(mod if mod.name == "hypnos" else _Hypnos(bus))
+        registry.register(mod if mod.name == "hypnos" else _Sleep(bus))
         spot = _make_spot(registry, lambda: 0.0)
         # hypnos.is_sleeping True -> hang suppressed.
         assert spot.assess(mod).state == "alive"

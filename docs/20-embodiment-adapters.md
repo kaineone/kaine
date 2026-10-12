@@ -263,7 +263,7 @@ class RobotAdapter:
             transitional=False,
             # feed kind -> (bus event, baseline salience). Use names that the
             # current consumers already understand: the research observer reads
-            # mundus.proprio / mundus.scene / mundus.notice, and Hypnos reads mundus.chat.
+            # mundus.proprio / mundus.scene / mundus.notice, and Sleep reads mundus.chat.
             feed_events={
                 "proprio": ("mundus.proprio", 0.3),
                 "frame": ("mundus.visual.raw", 0.1),

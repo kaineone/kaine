@@ -11,7 +11,7 @@ import pytest
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
-from kaine.modules.thymos.state import DimensionalState
+from kaine.modules.affect.state import DimensionalState
 from kaine.modules.vox import (
     FakePlayer,
     FakeTTSClient,
@@ -197,7 +197,7 @@ async def test_lingua_external_event_triggers_synthesis(bus: AsyncBus, tmp_path:
 
 
 @pytest.mark.asyncio
-async def test_thymos_state_updates_affect_used(bus: AsyncBus, tmp_path: Path):
+async def test_affect_state_updates_affect_used(bus: AsyncBus, tmp_path: Path):
     vox = _make_vox(bus, tmp_path)
     await vox.initialize()
     try:
@@ -391,7 +391,7 @@ async def test_no_prosody_before_synthesis_uses_affect_only(bus: AsyncBus, tmp_p
     await vox.initialize()
     try:
         # Synthesize immediately without any prosody event.
-        from kaine.modules.thymos.state import DimensionalState
+        from kaine.modules.affect.state import DimensionalState
         from kaine.modules.vox.mapping import affect_to_chatterbox
         expected = affect_to_chatterbox(
             DimensionalState(),

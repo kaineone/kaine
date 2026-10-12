@@ -13,7 +13,7 @@ from kaine.lifecycle.divergence import (
     default_voice_paths,
     voice_paths_for,
 )
-from kaine.modules.hypnos.voice_measures import FUNCTION_WORDS, style_profile
+from kaine.modules.sleep.voice_measures import FUNCTION_WORDS, style_profile
 
 
 def _state(tmp_path):
@@ -46,9 +46,9 @@ def test_silent_being_not_diverged_abstains(tmp_path):
 
 def test_silent_being_with_consolidation_over_threshold_is_diverged(tmp_path):
     root = _state(tmp_path)
-    hypnos = root / "hypnos"
-    hypnos.mkdir(parents=True, exist_ok=True)
-    (hypnos / "consolidation_divergence.json").write_text(
+    sleep = root / "hypnos"
+    sleep.mkdir(parents=True, exist_ok=True)
+    (sleep / "consolidation_divergence.json").write_text(
         json.dumps({"divergence_rate": 0.9, "divergence_magnitude": 0.0}),
         encoding="utf-8",
     )
@@ -192,7 +192,7 @@ def test_config_threshold_reader_never_silences_the_arm(bad):
 @pytest.mark.parametrize("bad", ["nan", "inf", -1.0, "lots"])
 def test_boot_refuses_a_threshold_that_is_not_finite_and_non_negative(bad):
     from kaine.boot.errors import VoiceAlignmentConfigError
-    from kaine.boot.factories.hypnos import voice_alignment_config_from_section
+    from kaine.boot.factories.sleep import voice_alignment_config_from_section
 
     with pytest.raises(VoiceAlignmentConfigError, match="distinctiveness_threshold"):
         voice_alignment_config_from_section({"distinctiveness_threshold": bad})
@@ -200,7 +200,7 @@ def test_boot_refuses_a_threshold_that_is_not_finite_and_non_negative(bad):
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), -0.5])
 def test_voice_config_refuses_a_threshold_that_is_not_finite_and_non_negative(tmp_path, bad):
-    from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
+    from kaine.modules.sleep.voice_alignment import VoiceAlignmentConfig
 
     with pytest.raises(ValueError, match="distinctiveness_threshold"):
         VoiceAlignmentConfig(

@@ -184,7 +184,7 @@ class OpenAIChatClient:
 
         # Organ-absent graceful degradation: during the sleep-cycle voice-
         # alignment training window the served organ is unloaded to free the GPU
-        # (kaine.modules.hypnos.organ_window). The window falls inside SLEEP, when
+        # (kaine.modules.sleep.organ_window). The window falls inside SLEEP, when
         # the entity is not expected to speak, so a generation request DEFERS to a
         # resting no-op rather than hammering the dead endpoint and raising.
         # Consumers resume automatically on reload (the state file flips to idle).

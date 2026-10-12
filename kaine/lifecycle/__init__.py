@@ -8,11 +8,11 @@ from kaine.lifecycle.manager import (
 )
 from kaine.lifecycle.snapshot import ForkSnapshot
 from kaine.lifecycle.strategies import (
+    AffectMergeStrategy,
     EidolonMergeStrategy,
+    EpisodicMemoryMergeStrategy,
     MergeStrategy,
-    MnemosMergeStrategy,
     NousMergeStrategy,
-    ThymosMergeStrategy,
     UnionMergeStrategy,
     default_strategies,
 )
@@ -24,9 +24,9 @@ __all__ = [
     "ForkManager",
     "ForkSnapshot",
     "MergeStrategy",
-    "MnemosMergeStrategy",
+    "EpisodicMemoryMergeStrategy",
     "NousMergeStrategy",
-    "ThymosMergeStrategy",
+    "AffectMergeStrategy",
     "UnionMergeStrategy",
     "default_strategies",
 ]

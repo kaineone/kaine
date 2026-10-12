@@ -64,7 +64,7 @@ log = logging.getLogger(__name__)
 class Audition(BaseModule):
     name: ClassVar[str] = "audition"
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom", "social_drive"})
-    _HYPNOS_STREAM: ClassVar[str] = "hypnos.out"
+    _SLEEP_STREAM: ClassVar[str] = "hypnos.out"
 
     def holds_external_resources(self) -> bool:
         return True
@@ -226,8 +226,8 @@ class Audition(BaseModule):
         self._arousal_provider: Optional[Callable[[], float]] = None
 
         # sleep suspension state.
-        self._in_hypnos: bool = False
-        self._hypnos_cursor: str = "$"
+        self._in_sleep: bool = False
+        self._sleep_cursor: str = "$"
         self._clock = entity_clock or EntityClock()
         self._context = BroadcastContext(self._clock.now)
         # Latest broadcast tick and context age when the pending prediction was formed (paper A.8).
@@ -316,7 +316,7 @@ class Audition(BaseModule):
         null_prediction_error: Optional[float] = None
         mean_prediction_error: Optional[float] = None
         # Pause adaptation during sleep, mirroring the vision module.
-        self._acoustic_forward_model.suspended = self._in_hypnos
+        self._acoustic_forward_model.suspended = self._in_sleep
         ctx = null = None
         scored_stamp = self._prediction_stamp
         if getattr(self._acoustic_forward_model, "context_dim", 0) > 0:
@@ -424,7 +424,7 @@ class Audition(BaseModule):
             # report falls after T_learn, measured in entity time from the start of
             # the run (paper Appendix A.8).
             "entity_time_s": entity_time_s,
-            "awake": not self._in_hypnos,
+            "awake": not self._in_sleep,
             "encoder_model_id": self._acoustic_encoder.model_id,
             "attended_window": window,
             "attended_seconds": attended_seconds,
@@ -461,29 +461,29 @@ class Audition(BaseModule):
             return None
         return getattr(stream, "delivered_position", None)
 
-    async def _hypnos_loop(self) -> None:
+    async def _sleep_loop(self) -> None:
         """Subscribe to hypnos.out to gate adaptation during sleep."""
         try:
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
-                        self._HYPNOS_STREAM,
-                        last_id=self._hypnos_cursor,
+                        self._SLEEP_STREAM,
+                        last_id=self._sleep_cursor,
                         count=64,
                         block_ms=0,
                     )
                     if last_scanned is not None:
-                        self._hypnos_cursor = last_scanned
+                        self._sleep_cursor = last_scanned
                         for _, event in entries:
                             if event.type == "hypnos.sleep.started":
-                                self._in_hypnos = True
+                                self._in_sleep = True
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = True
                                 if self._acoustic_forward_model is not None:
                                     self._acoustic_forward_model.suspended = True
                                 log.debug("audition: adaptation suspended (hypnos sleep started)")
                             elif event.type == "hypnos.sleep.completed":
-                                self._in_hypnos = False
+                                self._in_sleep = False
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = False
                                 if self._acoustic_forward_model is not None:
@@ -618,9 +618,9 @@ class Audition(BaseModule):
         await super().initialize()
         # Seed the sleep module's cursor from the stream tail before starting the loop,
         # otherwise a literal "$" under a non-blocking XREAD never advances.
-        self._hypnos_cursor = await self._bus.last_entry_id(self._HYPNOS_STREAM)
+        self._sleep_cursor = await self._bus.last_entry_id(self._SLEEP_STREAM)
         self._tasks.append(
-            asyncio.create_task(self._hypnos_loop(), name=f"{self.name}-hypnos-consumer")
+            asyncio.create_task(self._sleep_loop(), name=f"{self.name}-hypnos-consumer")
         )
         if self._live_mic is not None:
             try:
@@ -773,7 +773,7 @@ class Audition(BaseModule):
         )
 
         # Pause adaptation during sleep, mirroring the vision module.
-        self._forward_model.suspended = self._in_hypnos
+        self._forward_model.suspended = self._in_sleep
         if getattr(self._forward_model, "context_dim", 0) > 0:
             ctx = self._context.vector()
             prediction_error = self._forward_model.step(feature_vec, ctx)

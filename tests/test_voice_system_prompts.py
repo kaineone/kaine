@@ -12,15 +12,15 @@ from pathlib import Path
 import pytest
 
 from kaine.boot.errors import VoiceAlignmentConfigError
-from kaine.boot.factories.hypnos import voice_alignment_config_from_section
+from kaine.boot.factories.sleep import voice_alignment_config_from_section
 from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
-from kaine.modules.hypnos import Hypnos, TrainingResult
-from kaine.modules.hypnos.subprocess_trainer import SubprocessTrainerError, write_job_spec
-from kaine.modules.hypnos.voice_alignment import DPOPair, VoiceAlignmentConfig
 from kaine.modules.lingua import EXTERNAL_STREAM, FakeChatClient, IntentExpressionLog, Lingua
+from kaine.modules.sleep import Sleep, TrainingResult
+from kaine.modules.sleep.subprocess_trainer import SubprocessTrainerError, write_job_spec
+from kaine.modules.sleep.voice_alignment import DPOPair, VoiceAlignmentConfig
 from kaine.persistence.system_prompts import (
     digest_of,
     read_system_prompt,
@@ -181,7 +181,7 @@ class _RecordingTrainer:
         )
 
 
-def _make_hypnos(
+def _make_sleep(
     bus: AsyncBus,
     tmp_path: Path,
     *,
@@ -195,10 +195,10 @@ def _make_hypnos(
         adapter_output_dir=tmp_path / "adapters",
         enabled=True,
     )
-    return Hypnos(
+    return Sleep(
         bus,
-        mnemos=_FakeMnemos(),
-        thymos=_FakeThymos(),
+        episodic_memory=_FakeMnemos(),
+        affect=_FakeThymos(),
         sequence_resetters=[_FakeResetter()],
         trainer=trainer or _RejectingTrainer(),
         voice_alignment_config=config,
@@ -319,7 +319,7 @@ async def test_attach_system_prompts_keeps_verified_drops_bad(bus: AsyncBus, tmp
         get_state_encryptor().encrypt((bad[:-1]).encode("utf-8"))
     )
 
-    h = _make_hypnos(bus, tmp_path, intent_log_path=log_path)
+    h = _make_sleep(bus, tmp_path, intent_log_path=log_path)
     pairs = [
         DPOPair("p1", "c1", "r1", metadata={"system_digest": good_digest}),
         DPOPair("p2", "c2", "r2", metadata={"system_digest": "missing"}),
@@ -334,7 +334,7 @@ async def test_attach_system_prompts_keeps_verified_drops_bad(bus: AsyncBus, tmp
 
 @pytest.mark.asyncio
 async def test_train_on_pairs_no_verified_pairs(bus: AsyncBus, tmp_path: Path):
-    h = _make_hypnos(bus, tmp_path, trainer=_RecordingTrainer())
+    h = _make_sleep(bus, tmp_path, trainer=_RecordingTrainer())
     pairs = [DPOPair("p", "c", "r", metadata={"system_digest": "missing"})]
     start_ms = time.monotonic() * 1000.0
 
@@ -457,7 +457,7 @@ async def test_subprocess_job_inputs_are_private_and_scrubbed(tmp_path, monkeypa
     adapter are owner-only while the trainer runs and gone once it returns."""
     import stat
 
-    from kaine.modules.hypnos.subprocess_trainer import SubprocessVoiceTrainer
+    from kaine.modules.sleep.subprocess_trainer import SubprocessVoiceTrainer
 
     adapters = tmp_path / "adapters"
     prev = adapters / "20260101T000000"
@@ -495,7 +495,7 @@ async def test_subprocess_job_inputs_are_private_and_scrubbed(tmp_path, monkeypa
 
 
 def test_trainer_env_withholds_secrets_and_forces_offline():
-    from kaine.modules.hypnos.subprocess_trainer import trainer_env
+    from kaine.modules.sleep.subprocess_trainer import trainer_env
 
     env = trainer_env(
         {
@@ -516,7 +516,7 @@ def test_trainer_env_withholds_secrets_and_forces_offline():
 async def test_reported_adapter_outside_the_output_dir_is_refused(tmp_path, monkeypatch):
     import subprocess as sp
 
-    from kaine.modules.hypnos.subprocess_trainer import (
+    from kaine.modules.sleep.subprocess_trainer import (
         SubprocessTrainerError,
         SubprocessVoiceTrainer,
     )
@@ -544,7 +544,7 @@ async def test_reported_adapter_outside_the_output_dir_is_refused(tmp_path, monk
         )
         return sp.CompletedProcess(argv, 0, "", "")
 
-    monkeypatch.setattr("kaine.modules.hypnos.subprocess_trainer.subprocess.run", fake_run)
+    monkeypatch.setattr("kaine.modules.sleep.subprocess_trainer.subprocess.run", fake_run)
     monkeypatch.setenv("KAINE_STATE_KEY", "secret")
     script = tmp_path / "entry.py"
     script.write_text("")

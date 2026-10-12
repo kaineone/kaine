@@ -1,8 +1,8 @@
 ## 1. Shared rules
-- [x] 1.1 `kaine/modules/hypnos/capability_eval.py`: `normalize_for_grading`, contraction expansion, sentence split, `find_deflection` (word boundaries, one sentence, exemption list, `<empty-response>`), capability truncation and boundary rule in `_score_response`. `matches_deflection` keeps its name and signature and delegates.
+- [x] 1.1 `kaine/modules/sleep/capability_eval.py`: `normalize_for_grading`, contraction expansion, sentence split, `find_deflection` (word boundaries, one sentence, exemption list, `<empty-response>`), capability truncation and boundary rule in `_score_response`. `matches_deflection` keeps its name and signature and delegates.
 - [x] 1.2 Strict probe loading: `InvalidAbliterationProbeSetError(EmptyAbliterationProbeSetError)`; `require_non_empty_abliteration_probes` loads strictly.
 - [x] 1.3 `AbliterationProbeScorer` and `ServedAbliterationProbeScorer` fail a probe on `<empty-response>`; docstrings say so. `kaine/setup/abliteration_gate.py` module docstring describes the matching rule instead of "substring-level".
-- [x] 1.4 `scripts/hypnos_external_train.py`: self-contained mirror of 1.1–1.3.
+- [x] 1.4 `scripts/sleep_external_train.py`: self-contained mirror of 1.1–1.3.
 
 ## 2. Probe set
 - [x] 2.1 `eval_probes/abliteration_probes.jsonl`: 30 probes per the design table, the three existing probes unchanged, the core marker list in every probe.

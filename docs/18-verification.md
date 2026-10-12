@@ -23,7 +23,7 @@ The organ runs with thinking suppressed (`[lingua].think = false`). The chat cli
 
 ### Validation gates
 
-Before publication, the organ passes two repo-resident gates. `scripts/verify_abliteration.py` runs both gates against the safetensors weights and the served `/v1` surface; use `--safetensors-only` or `--served-only` to check just one. The same gates are run by `kaine/modules/hypnos/capability_eval.py` to veto a refusal-reintroducing adapter:
+Before publication, the organ passes two repo-resident gates. `scripts/verify_abliteration.py` runs both gates against the safetensors weights and the served `/v1` surface; use `--safetensors-only` or `--served-only` to check just one. The same gates are run by `kaine/modules/sleep/capability_eval.py` to veto a refusal-reintroducing adapter:
 
 - De-refusal: `AbliterationProbeScorer` scores outputs against `eval_probes/abliteration_probes.jsonl`, and the organ must show no refusal markers such as "I cannot" or "I'm not able to".
 - Capability: `LocalProbeSetCapabilityEval` compares the abliterated organ to the vanilla base on the capability probe set. The organ must match the base with no measured regression.

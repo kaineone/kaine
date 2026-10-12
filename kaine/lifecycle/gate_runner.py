@@ -74,7 +74,7 @@ class MaturationGateRunner:
         womb_feed_configured: bool = False,
         womb_readout_stream: str = DEFAULT_WOMB_READOUT_STREAM,
         womb_readout_type: str = DEFAULT_WOMB_READOUT_TYPE,
-        hypnos_stream: str = "hypnos.out",
+        sleep_stream: str = "hypnos.out",
         paused_seconds: Callable[[], float] | None = None,
         birth_request_path: Path | None = None,
         birth_ack_path: Path | None = None,
@@ -88,7 +88,7 @@ class MaturationGateRunner:
         self._womb_feed_configured = bool(womb_feed_configured)
         self._womb_stream = womb_readout_stream
         self._womb_type = womb_readout_type
-        self._hypnos_stream = hypnos_stream
+        self._sleep_stream = sleep_stream
         self._paused_seconds: Callable[[], float] | None = paused_seconds
         self._is_paused: Callable[[], bool] | None = None
         self._task: asyncio.Task | None = None
@@ -166,12 +166,12 @@ class MaturationGateRunner:
         except Exception:
             log.warning("could not publish %s", type, exc_info=True)
 
-    def _phantasia_consolidation_passes(self) -> int | None:
+    def _world_model_consolidation_passes(self) -> int | None:
         if "phantasia" not in self._registry:
             return None
         try:
-            phantasia = self._registry.get("phantasia")
-            return int(getattr(phantasia, "successful_training_passes", 0))
+            world_model = self._registry.get("phantasia")
+            return int(getattr(world_model, "successful_training_passes", 0))
         except Exception:
             return None
 
@@ -210,7 +210,7 @@ class MaturationGateRunner:
         ``hypnos.sleep.completed`` event from ``hypnos`` exactly once.
         Bus errors fail closed for this tick: they leave the stage unchanged.
         """
-        stream = self._hypnos_stream
+        stream = self._sleep_stream
         cursor = self._stage.hypnos_cursor
         try:
             if cursor is None:
@@ -316,14 +316,14 @@ class MaturationGateRunner:
             faculties = Faculties()
         else:
             faculties = Faculties(
-                hypnos="hypnos" in self._registry,
-                phantasia="phantasia" in self._registry,
+                sleep="hypnos" in self._registry,
+                world_model="phantasia" in self._registry,
                 mundus="mundus" in self._registry,
             )
         world = "embodied" if faculties.mundus else "perceptual"
         conditions = {
-            "c2_sleep_required": bool(faculties.hypnos),
-            "c2_consolidation_required": bool(faculties.hypnos and faculties.phantasia),
+            "c2_sleep_required": bool(faculties.sleep),
+            "c2_consolidation_required": bool(faculties.sleep and faculties.world_model),
         }
 
         def _set_status(
@@ -389,7 +389,7 @@ class MaturationGateRunner:
 
         readiness_readout = await self._womb_readiness_readout()
         sleep_count = self._stage.sleep_count
-        consolidation_passes = self._phantasia_consolidation_passes()
+        consolidation_passes = self._world_model_consolidation_passes()
         lived_seconds = self._stage.lived_seconds
 
         readiness = evaluate_readiness(

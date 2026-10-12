@@ -260,7 +260,7 @@ async def test_replay_observer_redact_false_includes_text(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_replay_observer_logs_phantasia_scenario(tmp_path):
+async def test_replay_observer_logs_world_model_scenario(tmp_path):
     """task 5.1 — phantasia.scenario events are also captured."""
     bus = FakeBus()
     sink = AsyncJsonlSink(tmp_path, name="replay", flush_interval_s=0.05)

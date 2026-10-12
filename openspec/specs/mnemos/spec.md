@@ -38,7 +38,7 @@ names: `short_term` (in-process buffer, not persisted), `episodic`,
 prefix `mnemos_` SHALL be configurable.
 
 #### Scenario: Four collections exist after initialize
-- **WHEN** `Mnemos.initialize` completes against a fresh Qdrant
+- **WHEN** `EpisodicMemory.initialize` completes against a fresh Qdrant
 - **THEN** the three Qdrant collections `mnemos_episodic`,
   `mnemos_semantic`, `mnemos_procedural` exist and accept points
 
@@ -163,7 +163,7 @@ Storing the snapshot each experiential tick SHALL continue unchanged.
 ### Requirement: Episodic memory recall does not fabricate empty success on storage failure
 
 `QdrantStorage.search()` SHALL raise `StorageError` (not return `[]`) when
-the Qdrant backend operation fails.  `Mnemos.recall()` SHALL catch
+the Qdrant backend operation fails.  `EpisodicMemory.recall()` SHALL catch
 `StorageError`, log it at `error` level, and publish a `mnemos.recall` event
 carrying `"error": true` and `"error_detail"` — never a fake `count=0` result
 that looks like a successful empty search.
@@ -179,7 +179,7 @@ normally (that is a valid empty result, not a storage failure).
 
 #### Scenario: Episodic memory recall on StorageError
 
-- **WHEN** `Mnemos.recall()` encounters a `StorageError`
+- **WHEN** `EpisodicMemory.recall()` encounters a `StorageError`
 - **THEN** it logs the error at `logging.ERROR` level
 - **AND** publishes `mnemos.recall` with `"error": true`
 - **AND** returns `[]` to the caller (graceful empty, not a fake success)
@@ -187,7 +187,7 @@ normally (that is a valid empty result, not a storage failure).
 
 #### Scenario: Successful recall
 
-- **WHEN** `Mnemos.recall()` completes without error
+- **WHEN** `EpisodicMemory.recall()` completes without error
 - **THEN** `mnemos.recall` is published with real `count` and no `"error"` key
 
 ### Requirement: One shared text embedder with a torch-free default

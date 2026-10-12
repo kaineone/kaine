@@ -195,8 +195,8 @@ class Faculties:
     for callers that do not pass a faculties snapshot.
     """
 
-    hypnos: bool = True
-    phantasia: bool = True
+    sleep: bool = True
+    world_model: bool = True
     mundus: bool = True
 
 
@@ -294,8 +294,8 @@ def _evaluate_c2(
     Fail-closed on a missing required signal; the detail always names what was
     required. When neither sleep nor consolidation is required, C2 is met as
     not applicable."""
-    sleep_required = faculties.hypnos
-    consolidation_required = faculties.hypnos and faculties.phantasia
+    sleep_required = faculties.sleep
+    consolidation_required = faculties.sleep and faculties.world_model
 
     if not sleep_required and not consolidation_required:
         return ConditionResult(
@@ -480,7 +480,7 @@ def birth_payload(
         "lived_seconds": lived_seconds,
         "world": "embodied" if faculties.mundus else "perceptual",
         "conditions": {
-            "c2_sleep_required": bool(faculties.hypnos),
-            "c2_consolidation_required": bool(faculties.hypnos and faculties.phantasia),
+            "c2_sleep_required": bool(faculties.sleep),
+            "c2_consolidation_required": bool(faculties.sleep and faculties.world_model),
         },
     }

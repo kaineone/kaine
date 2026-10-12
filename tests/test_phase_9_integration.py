@@ -40,7 +40,7 @@ async def test_full_stack_unbooted_runs_50_ticks_and_round_trips_snapshot(tmp_pa
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
-            thymos_modulator=StaticThymosModulator(),
+            affect_modulator=StaticThymosModulator(),
         ),
         top_k=20,
         publication_threshold=0.0,
@@ -108,7 +108,7 @@ async def test_full_stack_with_nexus_co_existence(tmp_path):
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
-            thymos_modulator=StaticThymosModulator(),
+            affect_modulator=StaticThymosModulator(),
         ),
         top_k=10,
         publication_threshold=0.0,

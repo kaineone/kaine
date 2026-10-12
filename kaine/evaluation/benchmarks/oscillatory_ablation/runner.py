@@ -166,7 +166,7 @@ def _build_syneidesis(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=32),
             goal_scorer=StaticGoalScorer(),
-            thymos_modulator=StaticThymosModulator(),
+            affect_modulator=StaticThymosModulator(),
         ),
         top_k=config.top_k,
         publication_threshold=config.publication_threshold,

@@ -76,7 +76,7 @@ The window size SHALL be configurable.
   first
 
 ### Requirement: Defaults that let the system run without Affect and goals
-`Syneidesis` SHALL accept `GoalScorer` and `ThymosModulator` collaborators
+`Syneidesis` SHALL accept `GoalScorer` and `AffectModulator` collaborators
 with static defaults returning 1.0, so the product-form score works before
 Phase 4 lands the real affect module and goal representation. The system SHALL
 produce nonzero salience scores without either module present.

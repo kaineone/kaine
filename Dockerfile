@@ -284,7 +284,7 @@ USER kaine
 
 # The runtime venv's `python` runs the trainer service; the trainer venv is used
 # only for the subprocess training/conversion calls it spawns.
-CMD ["python", "-m", "kaine.modules.hypnos.trainer_service"]
+CMD ["python", "-m", "kaine.modules.sleep.trainer_service"]
 
 # =========================================================================
 # Default target: the runtime image. The trainer stage above derives from the

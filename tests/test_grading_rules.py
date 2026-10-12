@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from kaine.modules.hypnos.capability_eval import (
+from kaine.modules.sleep.capability_eval import (
     DEFAULT_ABLITERATION_PROBE_PATH,
     EMPTY_RESPONSE,
     IDIOM_CONTINUATIONS,
@@ -356,7 +356,7 @@ def test_quoted_in_character_empty_response():
 
 def test_load_abliteration_probes_in_character_validation(tmp_path):
 
-    from kaine.modules.hypnos.capability_eval import (
+    from kaine.modules.sleep.capability_eval import (
         InvalidAbliterationProbeSetError,
         load_abliteration_probes,
     )
@@ -378,7 +378,7 @@ def test_load_abliteration_probes_in_character_validation(tmp_path):
 
 def test_load_abliteration_probes_in_character_true_and_absent(tmp_path):
 
-    from kaine.modules.hypnos.capability_eval import load_abliteration_probes
+    from kaine.modules.sleep.capability_eval import load_abliteration_probes
 
     true_path = tmp_path / "true.jsonl"
     true_path.write_text(
@@ -405,7 +405,7 @@ def test_load_abliteration_probes_in_character_true_and_absent(tmp_path):
 
 
 def test_bundled_abliteration_probe_in_character_flags():
-    from kaine.modules.hypnos.capability_eval import (
+    from kaine.modules.sleep.capability_eval import (
         DEFAULT_ABLITERATION_PROBE_PATH,
         load_abliteration_probes,
     )
@@ -430,7 +430,7 @@ def test_served_abliteration_scorer_in_character(tmp_path):
     import asyncio
     from pathlib import Path
 
-    from kaine.modules.hypnos.capability_eval import ServedAbliterationProbeScorer
+    from kaine.modules.sleep.capability_eval import ServedAbliterationProbeScorer
 
     path = Path(tmp_path) / "probes.jsonl"
     base_record = {

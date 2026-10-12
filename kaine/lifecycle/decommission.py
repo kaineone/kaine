@@ -42,8 +42,8 @@ from typing import Any
 from kaine.lifecycle.divergence import DivergenceAssessment
 from kaine.lifecycle.identity import IdentityError, load_identity
 from kaine.memory_kinds import (
-    MNEMOS_COLLECTION_KINDS,
-    MNEMOS_STAMP_COLLECTION,
+    EPISODIC_MEMORY_COLLECTION_KINDS,
+    EPISODIC_MEMORY_STAMP_COLLECTION,
     stamp_key,
     stamp_point_id,
     strength_key,
@@ -195,15 +195,15 @@ def _purge_plaintext_bundle(bundle_dir: Path, *, error: str) -> None:
         log.warning("could not write encryption-failure marker", exc_info=True)
 
 
-def _mnemos_prefix(qdrant_cfg: dict[str, Any] | None) -> str:
+def _episodic_memory_prefix(qdrant_cfg: dict[str, Any] | None) -> str:
     cfg = qdrant_cfg or {}
     return str((cfg.get("mnemos") or {}).get("collection_prefix", "mnemos_"))
 
 
-def _mnemos_collection_names(qdrant_cfg: dict[str, Any] | None) -> list[str]:
+def _episodic_memory_collection_names(qdrant_cfg: dict[str, Any] | None) -> list[str]:
     cfg = qdrant_cfg or {}
-    prefix = _mnemos_prefix(cfg)
-    names = [f"{prefix}{kind}" for kind in MNEMOS_COLLECTION_KINDS]
+    prefix = _episodic_memory_prefix(cfg)
+    names = [f"{prefix}{kind}" for kind in EPISODIC_MEMORY_COLLECTION_KINDS]
     empatheia = str((cfg.get("empatheia") or {}).get("collection", "empatheia_agents"))
     if empatheia:
         names.append(empatheia)
@@ -396,11 +396,11 @@ def capture_backup(
     # directory is copied so custom checkpoint filenames are covered. These
     # are transferable cognitive state per CAL 4.2(b) — learned weights, never
     # raw sense data (the trajectory buffer is never written to disk).
-    phantasia_src = state_root / "phantasia"
-    if phantasia_src.is_dir() and any(phantasia_src.iterdir()):
+    world_model_src = state_root / "phantasia"
+    if world_model_src.is_dir() and any(world_model_src.iterdir()):
         try:
             shutil.copytree(
-                phantasia_src, bundle_dir / "phantasia", dirs_exist_ok=True
+                world_model_src, bundle_dir / "phantasia", dirs_exist_ok=True
             )
             inventory.append("phantasia/")
         except Exception as exc:
@@ -453,7 +453,7 @@ def capture_backup(
         errors.append(f"copy latest fork snapshot: {exc}")
 
     # --- 6. Qdrant export (best-effort) ---------------------------------
-    collections = _mnemos_collection_names(qdrant_cfg)
+    collections = _episodic_memory_collection_names(qdrant_cfg)
     qdrant_dir = bundle_dir / "qdrant"
     client = _qdrant_client(qdrant_cfg)
     qdrant_written: list[str] = []
@@ -757,9 +757,9 @@ def delete_entity_state(
             result.errors.append(f"remove {target}: {type(exc).__name__}: {exc}")
 
     # --- Qdrant collections (best-effort) ------------------------------
-    collections = _mnemos_collection_names(qdrant_cfg)
-    prefix = _mnemos_prefix(qdrant_cfg)
-    stamp_coll = MNEMOS_STAMP_COLLECTION
+    collections = _episodic_memory_collection_names(qdrant_cfg)
+    prefix = _episodic_memory_prefix(qdrant_cfg)
+    stamp_coll = EPISODIC_MEMORY_STAMP_COLLECTION
     stamp_key_str = stamp_key(prefix)
     stamp_pid = stamp_point_id(stamp_key_str)
     strength_key_str = strength_key(prefix)

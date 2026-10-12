@@ -17,13 +17,13 @@ import pytest
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
-from kaine.modules.hypnos import (
-    Hypnos,
+from kaine.modules.sleep import (
+    Sleep,
     Trainer,
     TrainingResult,
     VoiceAlignmentConfig,
 )
-from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV
+from kaine.modules.sleep.voice_alignment import OPERATOR_APPROVED_ENV
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ class RecordingTrainer:
         )
 
 
-def _hypnos(bus, tmp_path: Path, *, enabled: bool, trainer: Trainer | None = None):
+def _sleep(bus, tmp_path: Path, *, enabled: bool, trainer: Trainer | None = None):
     log_path = tmp_path / "intent.jsonl"
     log_path.write_text(
         json.dumps({"prompt": "p", "faithful_rendering": "t", "generated_text": "g"})
@@ -62,7 +62,7 @@ def _hypnos(bus, tmp_path: Path, *, enabled: bool, trainer: Trainer | None = Non
         adapter_output_dir=tmp_path / "adapters",
         enabled=enabled,
     )
-    return Hypnos(
+    return Sleep(
         bus,
         trainer=trainer or RecordingTrainer(),
         voice_alignment_config=config,
@@ -73,8 +73,8 @@ def _hypnos(bus, tmp_path: Path, *, enabled: bool, trainer: Trainer | None = Non
 async def test_disabled_config_skips_without_calling_trainer(bus, tmp_path, monkeypatch):
     monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")  # env on, config off
     trainer = RecordingTrainer()
-    hypnos = _hypnos(bus, tmp_path, enabled=False, trainer=trainer)
-    summary = await hypnos.enter_sleep()
+    sleep = _sleep(bus, tmp_path, enabled=False, trainer=trainer)
+    summary = await sleep.enter_sleep()
     assert trainer.calls == []
     voice = summary["voice_alignment"]
     assert "config disabled" in voice["reason"]
@@ -88,8 +88,8 @@ async def test_disabled_config_skips_without_calling_trainer(bus, tmp_path, monk
 async def test_missing_env_var_skips_without_calling_trainer(bus, tmp_path, monkeypatch):
     monkeypatch.delenv(OPERATOR_APPROVED_ENV, raising=False)
     trainer = RecordingTrainer()
-    hypnos = _hypnos(bus, tmp_path, enabled=True, trainer=trainer)
-    summary = await hypnos.enter_sleep()
+    sleep = _sleep(bus, tmp_path, enabled=True, trainer=trainer)
+    summary = await sleep.enter_sleep()
     assert trainer.calls == []
     voice = summary["voice_alignment"]
     assert "operator approval not granted" in voice["reason"]
@@ -100,8 +100,8 @@ async def test_missing_env_var_skips_without_calling_trainer(bus, tmp_path, monk
 async def test_both_gates_open_without_preference_source_never_trains(bus, tmp_path, monkeypatch):
     monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
     trainer = RecordingTrainer()
-    hypnos = _hypnos(bus, tmp_path, enabled=True, trainer=trainer)
-    summary = await hypnos.enter_sleep()
+    sleep = _sleep(bus, tmp_path, enabled=True, trainer=trainer)
+    summary = await sleep.enter_sleep()
     assert trainer.calls == []
     voice = summary["voice_alignment"]
     assert "no validated preference source" in voice["reason"]
@@ -116,7 +116,7 @@ async def test_both_gates_open_without_preference_source_never_trains(bus, tmp_p
 async def test_env_var_must_be_exactly_one(bus, tmp_path, monkeypatch):
     monkeypatch.setenv(OPERATOR_APPROVED_ENV, "true")  # truthy but not "1"
     trainer = RecordingTrainer()
-    hypnos = _hypnos(bus, tmp_path, enabled=True, trainer=trainer)
-    summary = await hypnos.enter_sleep()
+    sleep = _sleep(bus, tmp_path, enabled=True, trainer=trainer)
+    summary = await sleep.enter_sleep()
     assert trainer.calls == []
     assert "operator approval not granted" in summary["voice_alignment"]["reason"]

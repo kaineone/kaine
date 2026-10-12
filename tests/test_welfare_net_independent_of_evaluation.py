@@ -518,7 +518,7 @@ async def test_cancel_during_emit_leaves_detector_state_consistent(bus, tmp_path
 
     async def _feed():
         for i in range(4):
-            await observer._handle_mnemos(f"{i}-0", _replay(i))
+            await observer._handle_episodic_memory(f"{i}-0", _replay(i))
 
     task = asyncio.create_task(_feed())
     await asyncio.wait_for(blocked.wait(), timeout=2.0)

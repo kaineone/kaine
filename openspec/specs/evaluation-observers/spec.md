@@ -186,7 +186,7 @@ keywords against currently derived signals, not predicted-vs-actual next state).
 
 The memory coherence probe SHALL be validated against a planted ground-truth: a
 unique fabricated marker the bare language model provably cannot know is stored
-into a REAL memory backend (`MnemosCore` over `InMemoryStorage`), and a cognitive
+into a REAL memory backend (`EpisodicMemoryCore` over `InMemoryStorage`), and a cognitive
 query client that actually `recall`s from that memory and derives its answer from
 the retrieved text SHALL be shown to repeat the marker (high `real_accuracy`)
 while a bare client with no memory SHALL NOT (low `bare_accuracy`). The control
@@ -199,7 +199,7 @@ protocol.
 
 #### Scenario: Full system retrieves a planted fact the bare model cannot
 
-- **WHEN** a unique fabricated marker is stored into a real `MnemosCore` and the
+- **WHEN** a unique fabricated marker is stored into a real `EpisodicMemoryCore` and the
   probe runs the memory-augmented cognitive client against the bare client
 - **THEN** the cognitive client `recall`s the marker and its answer contains it,
   yielding `real_accuracy` above a high floor
@@ -209,7 +209,7 @@ protocol.
 
 #### Scenario: The advantage is retrieval, not a hard-coded answer
 
-- **WHEN** the SAME cognitive client is pointed at an EMPTY `MnemosCore` and asked
+- **WHEN** the SAME cognitive client is pointed at an EMPTY `EpisodicMemoryCore` and asked
   the same question
 - **THEN** it no longer repeats the planted marker (its answer is derived from
   what memory returns, which is now nothing)

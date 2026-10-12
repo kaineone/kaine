@@ -29,7 +29,7 @@ class GoalScorer(Protocol):
 
 
 @runtime_checkable
-class ThymosModulator(Protocol):
+class AffectModulator(Protocol):
     async def modulate(self, event: Event) -> float:
         ...
 
@@ -57,7 +57,7 @@ class StaticThymosModulator:
     """Dev-only fallback / negative-control affect modulator.
 
     Returns a constant, bypassing affect-weighting. NOT the live default — the
-    real :class:`kaine.modules.thymos.modulator.StateModulator` is wired in by
+    real :class:`kaine.modules.affect.modulator.StateModulator` is wired in by
     default (``[syneidesis].salience_thymos_factor``); this stays as the runnable
     unweighted negative control and a fixed-value seam for crafted tests.
     """

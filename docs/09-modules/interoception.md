@@ -173,7 +173,7 @@ Section `[soma]` in `config/kaine.toml`. See [Module configuration](../appendix-
 graph TD
     SysMetrics["SystemMetricsReader\n(psutil + pynvml)"] -->|"read_metrics()"| InteroceptionTick["Interoception.tick_once()"]
     CycleOut["cycle.out / cycle.tick\n(wall_duration_ms)"] -->|rolling average| SysMetrics
-    HypnosOut["hypnos.out"] -->|sleep.started / completed| InteroceptionTick
+    SleepOut["hypnos.out"] -->|sleep.started / completed| InteroceptionTick
     WS["workspace broadcast"] -->|accessed members| Ctx["BroadcastContext\n24 components"]
 
     InteroceptionTick --> WellnessCalc["compute_wellness()"]
@@ -245,7 +245,7 @@ The interoception module needs no external service. GPU metrics appear when `pyn
 | `tests/test_interoception_detector.py` | `ThresholdAnomalyDetector` and wildcard matching |
 | `tests/test_interoception_wellness.py` | `compute_wellness()` weighting and curves |
 | `tests/test_interoception_system_reader.py` | `SystemMetricsReader` without `pynvml` |
-| `tests/test_interoception_hypnos_flag.py` | Sleep flag and suspension of learning |
+| `tests/test_interoception_sleep_flag.py` | Sleep flag and suspension of learning |
 | `tests/test_interoception_warmup.py` | Developmental warm-up |
 | `tests/test_interoception_self_rhythm.py` | Self-rhythm integration |
 | `tests/test_interoception_self_rhythm_boot.py` | Boot wiring of the self-rhythm loop |

@@ -28,18 +28,18 @@ import random
 from pathlib import Path
 from typing import Any
 
-from kaine.boot.factories.hypnos import (
+from kaine.boot.factories.sleep import (
     _resolve_job_queue_trainer,
     voice_alignment_config_from_section,
 )
 from kaine.config import OPERATOR_CONFIG_PATH, load_kaine_config
 from kaine.defaults import lingua_section_api_key
-from kaine.modules.hypnos.organ_adapter import (
+from kaine.modules.sleep.organ_adapter import (
     OrganAdapterResolver,
     organ_root_url,
     read_manifest,
 )
-from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV, DPOPair, operator_approved
+from kaine.modules.sleep.voice_alignment import OPERATOR_APPROVED_ENV, DPOPair, operator_approved
 
 PAIRS_TEXT: list[tuple[str, str]] = [
     (

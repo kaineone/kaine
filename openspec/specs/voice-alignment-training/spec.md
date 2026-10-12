@@ -114,7 +114,7 @@ pre-boot disk-free rows, not by deletion.
 ### Requirement: Capability-eval harness is pluggable
 The trainer SHALL accept a `capability_eval: CapabilityEval`
 collaborator via `__init__`. The default `LocalProbeSetCapabilityEval`
-SHALL read `kaine/modules/hypnos/eval_probes/default.jsonl` and
+SHALL read `kaine/modules/sleep/eval_probes/default.jsonl` and
 compute `correct / total` against the model. The operator MAY
 substitute their own evaluator by passing one explicitly or by
 overriding the probe-set path via
@@ -193,7 +193,7 @@ real.
   and `mean_similarity_after` fields
 
 ### Requirement: VOICE_ALIGNMENT.md document ships alongside code
-The repository SHALL ship `kaine/modules/hypnos/VOICE_ALIGNMENT.md`
+The repository SHALL ship `kaine/modules/sleep/VOICE_ALIGNMENT.md`
 covering: what voice alignment changes about the language module's behavior, the
 opt-in procedure, the capability-loss veto, the three hot-swap
 modes and how to switch between them, and the rollback procedure
@@ -201,7 +201,7 @@ modes and how to switch between them, and the rollback procedure
 
 #### Scenario: Document exists
 - **WHEN** an operator checks out the change
-- **THEN** `kaine/modules/hypnos/VOICE_ALIGNMENT.md` is present
+- **THEN** `kaine/modules/sleep/VOICE_ALIGNMENT.md` is present
   and references both the config gate and the env-var gate
 
 ### Requirement: Boot fails closed when voice-alignment is enabled, operator-approved, and training extras are missing
@@ -231,7 +231,7 @@ The following paths remain unchanged:
 - **AND** the `[training]` extras are not installed
 - **THEN** `_resolve_trainer` raises `VoiceAlignmentConfigError` with a message
   naming the missing extras and the install command
-- **AND** `Hypnos` is not constructed with a `FakeTrainer`
+- **AND** `Sleep` is not constructed with a `FakeTrainer`
 
 #### Scenario: Disabled path returns None honestly
 

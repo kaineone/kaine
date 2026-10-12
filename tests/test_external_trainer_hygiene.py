@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCRIPT = REPO_ROOT / "scripts" / "hypnos_external_train.py"
+SCRIPT = REPO_ROOT / "scripts" / "sleep_external_train.py"
 
 
 @pytest.fixture
@@ -178,7 +178,7 @@ def test_main_no_system_prompts_rejects_without_training(mod, tmp_path, monkeypa
         pairs,
     )
 
-    assert mod.main(["hypnos_external_train.py", str(job_dir)]) == 0
+    assert mod.main(["sleep_external_train.py", str(job_dir)]) == 0
     assert not calls
 
     result = json.loads((job_dir / "result.json").read_text(encoding="utf-8"))
@@ -211,7 +211,7 @@ def test_main_missing_previous_adapter_rejects_without_training(
         pairs,
     )
 
-    assert mod.main(["hypnos_external_train.py", str(job_dir)]) == 0
+    assert mod.main(["sleep_external_train.py", str(job_dir)]) == 0
 
     result = json.loads((job_dir / "result.json").read_text(encoding="utf-8"))
     assert result["ok"] is False
@@ -238,7 +238,7 @@ def test_main_unknown_precision_rejects_without_training(
         pairs,
     )
 
-    assert mod.main(["hypnos_external_train.py", str(job_dir)]) == 0
+    assert mod.main(["sleep_external_train.py", str(job_dir)]) == 0
 
     result = json.loads((job_dir / "result.json").read_text(encoding="utf-8"))
     assert result["ok"] is False
@@ -285,7 +285,7 @@ def test_main_refuses_an_empty_abliteration_set_before_training(mod, tmp_path, m
     job_dir = _write_job_dir(
         tmp_path, job, [{"prompt": "p", "chosen": "c", "rejected": "r", "system": "s"}]
     )
-    assert mod.main(["hypnos_external_train.py", str(job_dir)]) == 0
+    assert mod.main(["sleep_external_train.py", str(job_dir)]) == 0
     result_path = job_dir / "result.json"
     result = json.loads(result_path.read_text(encoding="utf-8"))
     assert result["accepted"] is False

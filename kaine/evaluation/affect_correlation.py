@@ -121,11 +121,11 @@ class AffectCorrelationRecorder(StreamSubscriberObserver):
         bus: BusReader,
         sink: AsyncJsonlSink,
         *,
-        thymos_state_provider=None,
+        affect_state_provider=None,
     ) -> None:
         super().__init__(bus, poll_interval_s=0.5)
         self._sink = sink
-        self._thymos = thymos_state_provider
+        self._affect = affect_state_provider
 
     async def handle(self, stream: str, entry_id: str, event: Event) -> None:
         if event.type != "external_speech":
@@ -134,17 +134,17 @@ class AffectCorrelationRecorder(StreamSubscriberObserver):
         text = str(payload.get("text") or "")
         latency_ms = payload.get("latency_ms")
         chars = output_characteristics(text, latency_ms=latency_ms)
-        thymos_state = None
-        if self._thymos is not None:
+        affect_state = None
+        if self._affect is not None:
             try:
-                thymos_state = self._thymos()
+                affect_state = self._affect()
             except Exception:
-                thymos_state = None
+                affect_state = None
         await self._sink.write(
             {
                 "entry_id": entry_id,
                 "ts": datetime.now(timezone.utc).isoformat(),
-                "thymos_state": thymos_state,
+                "thymos_state": affect_state,
                 "characteristics": chars,
             }
         )
@@ -167,22 +167,22 @@ def correlate_from_log(log_path: Path) -> dict[str, dict[str, float]]:
             if not isinstance(entry, dict):
                 continue
             entry = legacy_aliases.map_record(entry)
-            thymos = entry.get("thymos_state") or {}
+            affect = entry.get("thymos_state") or {}
             chars = entry.get("characteristics") or {}
-            if not isinstance(thymos, dict) or not chars:
+            if not isinstance(affect, dict) or not chars:
                 continue
             paired.append(
                 (
-                    {k: float(v) for k, v in thymos.items() if isinstance(v, (int, float))},
+                    {k: float(v) for k, v in affect.items() if isinstance(v, (int, float))},
                     {k: float(v) for k, v in chars.items() if isinstance(v, (int, float))},
                 )
             )
     if not paired:
         return {}
-    thymos_keys = sorted({k for t, _ in paired for k in t})
+    affect_keys = sorted({k for t, _ in paired for k in t})
     char_keys = sorted({k for _, c in paired for k in c})
     matrix: dict[str, dict[str, float]] = {}
-    for tk in thymos_keys:
+    for tk in affect_keys:
         matrix[tk] = {}
         xs = [t.get(tk, 0.0) for t, _ in paired]
         for ck in char_keys:

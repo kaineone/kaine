@@ -53,8 +53,8 @@ def _make_eval_root(tmp_path: Path) -> Path:
     )
 
     # 2. An episodic memory file
-    decoy_mnemos = eval_root / "mnemos_short_term.jsonl"
-    decoy_mnemos.write_text('{"id": "mem1", "text": "private memory"}\n', encoding="utf-8")
+    decoy_episodic_memory = eval_root / "mnemos_short_term.jsonl"
+    decoy_episodic_memory.write_text('{"id": "mem1", "text": "private memory"}\n', encoding="utf-8")
 
     # 3. A self-model file
     decoy_eidolon = eval_root / "eidolon_self_model.json"

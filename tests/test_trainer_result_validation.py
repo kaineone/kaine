@@ -18,13 +18,13 @@ from typing import Any
 
 import pytest
 
-from kaine.modules.hypnos.job_queue_trainer import JobQueueVoiceTrainer
-from kaine.modules.hypnos.subprocess_trainer import (
+from kaine.modules.sleep.job_queue_trainer import JobQueueVoiceTrainer
+from kaine.modules.sleep.subprocess_trainer import (
     SCHEMA_VERSION,
     SubprocessTrainerError,
     validate_trainer_result,
 )
-from kaine.modules.hypnos.voice_alignment import DPOPair, VoiceAlignmentConfig
+from kaine.modules.sleep.voice_alignment import DPOPair, VoiceAlignmentConfig
 
 
 def _pair() -> DPOPair:
@@ -218,7 +218,7 @@ async def test_job_queue_rejects_bad_result_and_does_not_promote(
         return {"mode": kwargs.get("mode"), "ok": True}
 
     monkeypatch.setattr(
-        "kaine.modules.hypnos.job_queue_trainer.hot_swap.dispatch",
+        "kaine.modules.sleep.job_queue_trainer.hot_swap.dispatch",
         fake_dispatch,
     )
 
@@ -285,7 +285,7 @@ async def test_job_queue_appends_abliteration_verdict(tmp_path, monkeypatch):
         return {"mode": kwargs.get("mode"), "ok": True}
 
     monkeypatch.setattr(
-        "kaine.modules.hypnos.job_queue_trainer.hot_swap.dispatch",
+        "kaine.modules.sleep.job_queue_trainer.hot_swap.dispatch",
         fake_dispatch,
     )
 
@@ -325,7 +325,7 @@ async def test_job_queue_appends_abliteration_verdict(tmp_path, monkeypatch):
 
     assert result.accepted is False
 
-    from kaine.modules.hypnos.voice_audit import voice_audit_path
+    from kaine.modules.sleep.voice_audit import voice_audit_path
 
     audit_file = voice_audit_path(cfg.adapter_output_dir)
     lines = audit_file.read_text(encoding="utf-8").splitlines()
@@ -359,7 +359,7 @@ async def test_job_queue_retention_evicts_after_promotion(tmp_path, monkeypatch)
         return {"mode": kwargs.get("mode"), "ok": True}
 
     monkeypatch.setattr(
-        "kaine.modules.hypnos.job_queue_trainer.hot_swap.dispatch",
+        "kaine.modules.sleep.job_queue_trainer.hot_swap.dispatch",
         fake_dispatch,
     )
 
@@ -432,7 +432,7 @@ def test_accepted_adapter_without_adapter_config_rejected(tmp_path):
 
 
 def test_sweep_skips_symlinked_job_dirs(tmp_path):
-    from kaine.modules.hypnos.subprocess_trainer import (
+    from kaine.modules.sleep.subprocess_trainer import (
         _sweep_stale_workdir,
         scrub_job_inputs,
     )

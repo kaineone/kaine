@@ -22,11 +22,11 @@ from kaine.cycle.preservation_monitor import (
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.experiment.run_context import RunContext, set_run_context
 from kaine.modules.eidolon import Eidolon, SelfModelDocument
-from kaine.modules.hypnos.module import Hypnos
-from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
 from kaine.modules.registry import ModuleRegistry
 from kaine.modules.sequence.featurizer import SnapshotFeaturizer
 from kaine.modules.sequence.module import Sequence
+from kaine.modules.sleep.module import Sleep
+from kaine.modules.sleep.voice_alignment import VoiceAlignmentConfig
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
 # ---------------------------------------------------------------------------
@@ -281,16 +281,16 @@ async def test_welfare_gray_zone_cursor_advances_to_end_after_one_drain(
 
 
 @pytest.mark.asyncio
-async def test_hypnos_audit_drain_continues_past_undecodable_entries(bus, tmp_path):
+async def test_sleep_audit_drain_continues_past_undecodable_entries(bus, tmp_path):
     config = VoiceAlignmentConfig(
         intent_log_path=tmp_path / "intent.jsonl",
         adapter_output_dir=tmp_path / "adapters",
         enabled=False,
     )
-    hypnos = Hypnos(
+    sleep = Sleep(
         bus,
-        mnemos=_FakeMnemos(),
-        thymos=_FakeThymos(),
+        episodic_memory=_FakeMnemos(),
+        affect=_FakeThymos(),
         trainer=_FakeTrainer(),
         voice_alignment_config=config,
     )
@@ -310,7 +310,7 @@ async def test_hypnos_audit_drain_continues_past_undecodable_entries(bus, tmp_pa
         },
     )
 
-    events = await hypnos._drain_audit_stream("volition.out")
+    events = await sleep._drain_audit_stream("volition.out")
     assert len(events) == 1
     assert events[0][1].type == "volition.choice"
 

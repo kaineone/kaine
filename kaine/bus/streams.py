@@ -37,17 +37,17 @@ SEQUENCE_STREAM = module_stream("chronos")
 ECHO_STREAM = module_stream("echo")
 EIDOLON_STREAM = module_stream("eidolon")
 EMPATHEIA_STREAM = module_stream("empatheia")
-HYPNOS_STREAM = module_stream("hypnos")
+SLEEP_STREAM = module_stream("hypnos")
 #: The language module's aggregate stream: a copy of every utterance on either channel.
 LINGUA_STREAM = module_stream("lingua")
-MNEMOS_STREAM = module_stream("mnemos")
+EPISODIC_MEMORY_STREAM = module_stream("mnemos")
 MUNDUS_STREAM = module_stream("mundus")
 NOUS_STREAM = module_stream("nous")
 PERCEPTION_STREAM = module_stream("perception")
-PHANTASIA_STREAM = module_stream("phantasia")
+WORLD_MODEL_STREAM = module_stream("phantasia")
 PRAXIS_STREAM = module_stream("praxis")
 INTEROCEPTION_STREAM = module_stream("soma")
-THYMOS_STREAM = module_stream("thymos")
+AFFECT_STREAM = module_stream("thymos")
 VISION_STREAM = module_stream("topos")
 VOX_STREAM = module_stream("vox")
 
@@ -73,16 +73,16 @@ MODULE_STREAMS: frozenset[str] = frozenset(
         ECHO_STREAM,
         EIDOLON_STREAM,
         EMPATHEIA_STREAM,
-        HYPNOS_STREAM,
+        SLEEP_STREAM,
         LINGUA_STREAM,
-        MNEMOS_STREAM,
+        EPISODIC_MEMORY_STREAM,
         MUNDUS_STREAM,
         NOUS_STREAM,
         PERCEPTION_STREAM,
-        PHANTASIA_STREAM,
+        WORLD_MODEL_STREAM,
         PRAXIS_STREAM,
         INTEROCEPTION_STREAM,
-        THYMOS_STREAM,
+        AFFECT_STREAM,
         VISION_STREAM,
         VOX_STREAM,
     }
@@ -113,24 +113,24 @@ __all__ = [
     "EIDOLON_STREAM",
     "EMPATHEIA_STREAM",
     "GESTATION_STREAM",
-    "HYPNOS_STREAM",
+    "SLEEP_STREAM",
     "INDIVIDUATION_STREAM",
     "KNOWN_STREAMS",
     "LIFECYCLE_STREAM",
     "LINGUA_EXTERNAL_STREAM",
     "LINGUA_INTERNAL_STREAM",
     "LINGUA_STREAM",
-    "MNEMOS_STREAM",
+    "EPISODIC_MEMORY_STREAM",
     "MODULE_STREAMS",
     "MUNDUS_STREAM",
     "NOUS_STREAM",
     "PERCEPTION_STREAM",
-    "PHANTASIA_STREAM",
+    "WORLD_MODEL_STREAM",
     "PRAXIS_STREAM",
     "PRESERVATION_STREAM",
     "INTEROCEPTION_STREAM",
     "SPOT_STREAM",
-    "THYMOS_STREAM",
+    "AFFECT_STREAM",
     "VISION_STREAM",
     "VOLITION_FEEDBACK_STREAM",
     "VOLITION_STREAM",

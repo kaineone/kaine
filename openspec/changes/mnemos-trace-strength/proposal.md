@@ -10,7 +10,7 @@ PR #29 adds the pruning rule and an operator storage budget $B$ in bytes.
 
 The code does not follow it.
 
-1. `Mnemos.downscale_activations` multiplies stored vectors by a fixed 0.9, and
+1. `EpisodicMemory.downscale_activations` multiplies stored vectors by a fixed 0.9, and
    only on the in-memory backend. Every backend ranks by cosine and Qdrant
    normalizes on upload, so the scaling changes no recall result anywhere.
 2. Replay draws on `last_consolidated`, which holds only the traces left in
@@ -40,7 +40,7 @@ The code does not follow it.
   backends implement them.
 - Phase 2 replays from the whole wake just ended: every persisted trace with
   `born_sleep == n`, plus any short-term entry. Recency runs on `entity_time`.
-  `MnemosCore.downscale(protect)` then counts $N_{\rm new}$, writes the new
+  `EpisodicMemoryCore.downscale(protect)` then counts $N_{\rm new}$, writes the new
   meta first, gives each replayed trace back its strength, and then prunes:
   every trace below $h_{\min}$, then, while the stores' size $S$ exceeds $B$,
   the weakest trace outside the replayed set, the oldest first among equal
@@ -88,8 +88,8 @@ The code does not follow it.
 
 - The episodic memory module is held, so the base-thesis form is unaffected: with the episodic memory module absent
   phase 2 is skipped as before.
-- Affected code: `kaine/modules/mnemos/{storage,memory,module,replay}.py`,
-  `kaine/modules/hypnos/{phases,module}.py`, `kaine/boot/factories/{mnemos,hypnos}.py`,
+- Affected code: `kaine/modules/episodic_memory/{storage,memory,module,replay}.py`,
+  `kaine/modules/sleep/{phases,module}.py`, `kaine/boot/factories/{mnemos,hypnos}.py`,
   `kaine/memory_kinds.py`, `kaine/lifecycle/decommission.py`,
   `config/kaine.toml`, `pyproject.toml`, docs.
 - Known gaps. Phase 3's period buckets and `recent_points` keep the

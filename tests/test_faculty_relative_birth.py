@@ -55,7 +55,7 @@ def _make_bus(
     sleep_count: int = 0,
     boot_ms: int = 1_000_000,
     womb_stream: str = DEFAULT_WOMB_READOUT_STREAM,
-    hypnos_stream: str = "hypnos.out",
+    sleep_stream: str = "hypnos.out",
 ) -> Any:
     """Return a minimal async bus double with the new cursor API surface."""
     bus = MagicMock()
@@ -117,7 +117,7 @@ def _make_bus(
     async def _read_entries(
         stream: str, last_id: str = "0", count: int = 100, block_ms: int = 0
     ) -> tuple[list[tuple[str, Event]], str | None]:
-        if stream != hypnos_stream:
+        if stream != sleep_stream:
             return [], None
 
         start: tuple[int, int]
@@ -169,8 +169,8 @@ def _make_registry(
 ) -> Any:
     registry = MagicMock()
 
-    phantasia = MagicMock()
-    phantasia.successful_training_passes = consolidation_passes
+    world_model = MagicMock()
+    world_model.successful_training_passes = consolidation_passes
     mundus = MagicMock()
     mundus.enabled_by_config = mundus_enabled
     mundus.probe_available = AsyncMock(
@@ -179,7 +179,7 @@ def _make_registry(
     mundus.activate = AsyncMock(return_value=mundus_enabled and mundus_approved)
 
     def _get(name: str):
-        return {"phantasia": phantasia, "mundus": mundus}[name]
+        return {"phantasia": world_model, "mundus": mundus}[name]
 
     registry.get.side_effect = _get
     registry.__contains__.return_value = True
@@ -216,7 +216,7 @@ def _make_ready() -> Readiness:
 
 
 @pytest.mark.parametrize(
-    "hypnos,phantasia,sleep_count,consolidation_passes,expected_met,expected_detail",
+    "sleep,world_model,sleep_count,consolidation_passes,expected_met,expected_detail",
     [
         # Neither faculty present: C2 not applicable.
         (False, False, 0, 0, True, "not applicable"),
@@ -231,15 +231,15 @@ def _make_ready() -> Readiness:
     ],
 )
 def test_c2_faculty_relative_truth_table(
-    hypnos: bool,
-    phantasia: bool,
+    sleep: bool,
+    world_model: bool,
     sleep_count: int,
     consolidation_passes: int,
     expected_met: bool,
     expected_detail: str,
 ) -> None:
     cfg = MaturationConfig(min_sleep_cycles=5, min_consolidation_passes=3)
-    faculties = Faculties(hypnos=hypnos, phantasia=phantasia, mundus=False)
+    faculties = Faculties(sleep=sleep, world_model=world_model, mundus=False)
     result = _evaluate_c2(
         sleep_count, consolidation_passes, cfg, faculties=faculties
     )
@@ -252,7 +252,7 @@ def test_c2_not_applicable_not_reported_as_passed() -> None:
     """A not-applicable C2 must not appear in passed_markers but must appear in
     not_applicable, while readiness stays ready."""
     cfg = MaturationConfig(min_lived_seconds=0)
-    faculties = Faculties(hypnos=False, phantasia=False, mundus=False)
+    faculties = Faculties(sleep=False, world_model=False, mundus=False)
     readiness = evaluate_readiness(
         readiness_readout={
             "endogenous_self_sustain": True,
@@ -340,7 +340,7 @@ def test_birth_payload_records_world_and_conditions() -> None:
         readiness=ready,
         sleep_count=5,
         lived_seconds=100.0,
-        faculties=Faculties(hypnos=True, phantasia=True, mundus=True),
+        faculties=Faculties(sleep=True, world_model=True, mundus=True),
     )
     assert payload["stage"] == "embodied"
     assert payload["world"] == "embodied"
@@ -356,7 +356,7 @@ def test_birth_payload_perceptual_world() -> None:
         readiness=ready,
         sleep_count=None,
         lived_seconds=100.0,
-        faculties=Faculties(hypnos=False, phantasia=False, mundus=False),
+        faculties=Faculties(sleep=False, world_model=False, mundus=False),
     )
     assert payload["world"] == "perceptual"
     assert payload["conditions"] == {

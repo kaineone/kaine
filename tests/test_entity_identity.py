@@ -371,9 +371,9 @@ def test_resolve_spawn_identity_legacy_from_directory_artifact(tmp_path):
     assert second == identity
 
     # Add a new own artifact after the identity was persisted.
-    hypnos = tmp_path / "hypnos" / "consolidation_divergence.json"
-    hypnos.parent.mkdir(parents=True)
-    hypnos.write_text("{}")
+    sleep = tmp_path / "hypnos" / "consolidation_divergence.json"
+    sleep.parent.mkdir(parents=True)
+    sleep.write_text("{}")
     third = resolve_spawn_identity(tmp_path, now=lambda: 3.0)
     assert third == identity
 

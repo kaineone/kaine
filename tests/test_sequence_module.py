@@ -302,7 +302,7 @@ async def test_forward_prediction_disabled_behavior_unchanged(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_adaptation_suspended_during_hypnos(bus: AsyncBus):
+async def test_adaptation_suspended_during_sleep(bus: AsyncBus):
     """When _in_hypnos=True, adapt() is not called on the head."""
     network = FakeNetwork(units=4)
     head = ConstantPredictionHead(pred_value=0.0, input_size=24)
@@ -313,7 +313,7 @@ async def test_adaptation_suspended_during_hypnos(bus: AsyncBus):
         forward_prediction=True,
     )
     sequence._pred_head = head
-    sequence._in_hypnos = True
+    sequence._in_sleep = True
     head.suspended = True
 
     # First tick to seed last_hidden

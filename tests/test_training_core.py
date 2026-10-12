@@ -3,7 +3,7 @@
 
 """Core training-path tests ported from the retired UnslothDPOTrainer suite.
 
-Every backend now runs ``scripts/hypnos_external_train.py``; these tests
+Every backend now runs ``scripts/sleep_external_train.py``; these tests
 exercise that path in-process against the fake training stack.
 """
 from __future__ import annotations
@@ -16,11 +16,11 @@ import time
 import pytest
 import torch
 
-from kaine.modules.hypnos.subprocess_trainer import (
+from kaine.modules.sleep.subprocess_trainer import (
     SubprocessTrainerError,
     SubprocessVoiceTrainer,
 )
-from kaine.modules.hypnos.voice_alignment import DPOPair, VoiceAlignmentConfig
+from kaine.modules.sleep.voice_alignment import DPOPair, VoiceAlignmentConfig
 from tests.fake_training_stack import run_inprocess
 
 

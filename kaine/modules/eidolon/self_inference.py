@@ -244,7 +244,7 @@ class SelfInferenceEngine:
         if event_type in _INTERNAL_SPEECH_TYPES:
             self._speech_type_counts[event_type] += 1
 
-    def observe_thymos_state(self, payload: dict[str, Any]) -> None:
+    def observe_affect_state(self, payload: dict[str, Any]) -> None:
         """Record one thymos.state or thymos.report event (VAD sample)."""
         if not self._enabled:
             return
@@ -259,7 +259,7 @@ class SelfInferenceEngine:
         # maintenance_cycle_end() so this inter-cycle period is represented.
         self._last_vad = (v, a, d)
 
-    def observe_thymos_drive(self, payload: dict[str, Any]) -> None:
+    def observe_affect_drive(self, payload: dict[str, Any]) -> None:
         """Record one thymos.drive crossing event."""
         if not self._enabled:
             return

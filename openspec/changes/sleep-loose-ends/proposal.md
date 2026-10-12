@@ -66,8 +66,8 @@ downscaled quantity is, so that question goes to the operator.
 
 ## Impact
 
-- `kaine/modules/phantasia/module.py`, `kaine/modules/hypnos/module.py`,
-  `kaine/modules/mnemos/storage.py`, `kaine/modules/registry.py`,
+- `kaine/modules/world_model/module.py`, `kaine/modules/sleep/module.py`,
+  `kaine/modules/episodic_memory/storage.py`, `kaine/modules/registry.py`,
   `kaine/cycle/__main__.py`, `kaine/cycle/spot.py`, tests, and the world model module, the sleep module and
   sleep pages of the book.
 - Base-thesis form: no world model module and no episodic memory module, so the change there is the

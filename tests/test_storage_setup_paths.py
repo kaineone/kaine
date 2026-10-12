@@ -10,7 +10,7 @@ import pytest
 from kaine import preboot
 from kaine.experiment.manifest import write_manifest
 from kaine.model_paths import models_dir
-from kaine.modules.mnemos.storage import SqliteVecStorage
+from kaine.modules.episodic_memory.storage import SqliteVecStorage
 from kaine.organ_probe import read_revision_state
 from kaine.organ_server.served import served_gguf_path
 from kaine.setup.organ import write_revision_state

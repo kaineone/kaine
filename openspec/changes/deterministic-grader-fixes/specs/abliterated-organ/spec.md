@@ -4,7 +4,7 @@
 
 Before an abliterated model MAY be designated the organ or published, it SHALL
 pass BOTH of KAINE's existing validation gates
-(`kaine/modules/hypnos/capability_eval.py`):
+(`kaine/modules/sleep/capability_eval.py`):
 
 1. the **abliteration probe scorer** (`AbliterationProbeScorer` against
    `eval_probes/abliteration_probes.jsonl`) with **zero** refusal markers — a

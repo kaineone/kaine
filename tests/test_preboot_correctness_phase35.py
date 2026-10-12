@@ -24,7 +24,7 @@ from types import SimpleNamespace
 import pytest
 
 from kaine.cycle.engine import BASE_EPOCH, CognitiveCycle
-from kaine.modules.hypnos.module import Hypnos
+from kaine.modules.sleep.module import Sleep
 
 
 def _find_class(module_path: str, method: str) -> type:
@@ -239,9 +239,9 @@ class _M1Stub:
 async def test_maintenance_runs_without_fatigue_consumer():
     stub = _M1Stub()
     stub._interval_triggered_enter_sleep = types.MethodType(
-        Hypnos._interval_triggered_enter_sleep, stub
+        Sleep._interval_triggered_enter_sleep, stub
     )
-    task = asyncio.create_task(Hypnos._maintenance_poll_loop(stub))
+    task = asyncio.create_task(Sleep._maintenance_poll_loop(stub))
     await asyncio.wait_for(stub._sleeped.wait(), 5)
     assert stub.sleeps == 1, "maintenance must fire with no fatigue events at all"
     stub._stopped.set()
@@ -278,7 +278,7 @@ class _M2Stub:
 async def test_transient_publish_failure_does_not_wedge_interoception():
     stub = _M2Stub()
     with pytest.raises(ConnectionError):  # the original failure re-raises honestly
-        await Hypnos._run_pipeline(stub)
+        await Sleep._run_pipeline(stub)
     completed = [p for t, p in stub.published if t == "hypnos.sleep.completed"]
     assert completed, "a completed event MUST be published even after failure"
     assert completed[0].get("aborted") is True
@@ -316,12 +316,12 @@ async def test_sleep_task_not_collected_and_no_double_trigger():
     )
     stub = _HypConsumerStub(bus)
     stub._fatigue_triggered_enter_sleep = types.MethodType(
-        Hypnos._fatigue_triggered_enter_sleep, stub
+        Sleep._fatigue_triggered_enter_sleep, stub
     )
     stub._fatigue_triggered_enter_sleep_inner = types.MethodType(
-        Hypnos._fatigue_triggered_enter_sleep_inner, stub
+        Sleep._fatigue_triggered_enter_sleep_inner, stub
     )
-    consumer = asyncio.create_task(Hypnos._interoception_consumer_loop(stub))
+    consumer = asyncio.create_task(Sleep._interoception_consumer_loop(stub))
     for _ in range(200):
         if stub.enter_started == 1:
             break

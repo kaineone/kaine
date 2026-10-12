@@ -260,7 +260,7 @@ async def test_research_log_off_when_only_evaluation_on(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_thymos_state_record_has_vad_no_affect_reason():
+async def test_affect_state_record_has_vad_no_affect_reason():
     """6.3 — thymos.state → VAD/emotion kept, affect_reason stripped."""
     bus = FakeBus()
     sink = FakeSink()
@@ -290,7 +290,7 @@ async def test_thymos_state_record_has_vad_no_affect_reason():
 
 
 @pytest.mark.asyncio
-async def test_mnemos_replay_text_redacted():
+async def test_episodic_memory_replay_text_redacted():
     """6.4 — mnemos.replay → memory ids + affect kept, text dropped."""
     bus = FakeBus()
     sink = FakeSink()
@@ -1252,14 +1252,14 @@ def test_workspace_selected_events_key_no_longer_used():
     assert "entries" not in record
 
 
-def test_hypnos_sleep_started_started_at():
-    # Real producer payload (kaine/modules/hypnos/module.py).
+def test_sleep_sleep_started_started_at():
+    # Real producer payload (kaine/modules/sleep/module.py).
     record = _taxonomy_record("hypnos.sleep.started", {"started_at": 1717.5})
     assert record["started_at"] == 1717.5
 
 
-def test_thymos_emotion_emotion_field_retained():
-    # Real producer payload (kaine/modules/thymos/module.py).
+def test_affect_emotion_emotion_field_retained():
+    # Real producer payload (kaine/modules/affect/module.py).
     payload = {
         "emotion": "curiosity",
         "scores": {"curiosity": 0.8, "distress": 0.1},

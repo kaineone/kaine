@@ -519,7 +519,7 @@ def gpu_preflight_block(gpu_preflight_path: Path) -> dict[str, Any]:
     }
 
 
-def mnemos_store_block(health_path: Path, mnemos_enabled: bool) -> dict[str, Any]:
+def episodic_memory_store_block(health_path: Path, episodic_memory_enabled: bool) -> dict[str, Any]:
     """Read-only episodic memory module store health from the shared health file.
 
     Reads ``state/mnemos/store_health.json`` (written by the episodic memory module). Never raises;
@@ -527,7 +527,7 @@ def mnemos_store_block(health_path: Path, mnemos_enabled: bool) -> dict[str, Any
     Surfaces only non-content operational state: import status, blocked sleep
     count, persist refusals, store size and budget.
     """
-    if not mnemos_enabled:
+    if not episodic_memory_enabled:
         return {"state": "disabled", "message": "Mnemos is not enabled"}
     try:
         with health_path.open("r", encoding="utf-8") as fh:
@@ -543,7 +543,7 @@ def mnemos_store_block(health_path: Path, mnemos_enabled: bool) -> dict[str, Any
         state = "critical"
         message = (
             "an interrupted import is blocking sleep; re-run the revive or run "
-            "python -m kaine.lifecycle.mnemos_recover"
+            "python -m kaine.lifecycle.episodic_memory_recover"
         )
     elif refusals > 0:
         state = "warning"

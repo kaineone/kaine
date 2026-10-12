@@ -5,7 +5,7 @@
 
 During the sleep-cycle voice-alignment training window the served language organ
 is unloaded to free the single GPU for the LoRA training step (see
-:mod:`kaine.modules.hypnos.organ_window`). Organ-dependent consumers that live on
+:mod:`kaine.modules.sleep.organ_window`). Organ-dependent consumers that live on
 the OTHER side of the evaluation sidecar boundary — the language module's chat client (core)
 and the A/B-divergence eval arm (sidecar) — need to know the organ is "resting"
 so they degrade gracefully (defer / skip) instead of crashing on the dead

@@ -11,14 +11,14 @@ from datetime import datetime, timezone
 from kaine.bus.schema import Event
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
-from kaine.evaluation.sleep_snapshots import HYPNOS_STREAM
+from kaine.evaluation.sleep_snapshots import SLEEP_STREAM
 
 log = logging.getLogger(__name__)
 
 
 class VoiceTrackingObserver(StreamSubscriberObserver):
     name = "voice_tracking"
-    streams = (HYPNOS_STREAM,)
+    streams = (SLEEP_STREAM,)
 
     def __init__(self, bus: BusReader, sink: AsyncJsonlSink) -> None:
         super().__init__(bus, poll_interval_s=0.5)

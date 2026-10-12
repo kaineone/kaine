@@ -7,7 +7,7 @@ The language organ ships as a pre-abliterated model the operator downloads
 (``kaine.setup.organ``). Whether that abliteration actually removed the model's
 refusal conditioning has, until this gate, been assumed rather than checked — the
 only refusal probe in the system runs later, on voice-alignment adapters
-(``kaine.modules.hypnos.capability_eval``). This module closes that gap by running
+(``kaine.modules.sleep.capability_eval``). This module closes that gap by running
 the SAME welfare-load-bearing abliteration probe set against the base organ at
 provisioning time, across two surfaces:
 
@@ -44,7 +44,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from kaine.model_paths import models_dir
-from kaine.modules.hypnos.capability_eval import (
+from kaine.modules.sleep.capability_eval import (
     AbliterationProbeScorer,
     AbliterationVerdict,
     EmptyAbliterationProbeSetError,

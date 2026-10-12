@@ -15,7 +15,7 @@ one phase SHALL be logged and SHALL NOT prevent later phases from
 running.
 
 #### Scenario: All five phases ran in order
-- **WHEN** `Hypnos.enter_sleep()` is awaited against fake
+- **WHEN** `Sleep.enter_sleep()` is awaited against fake
   collaborators
 - **THEN** the published `hypnos.sleep.completed` event's
   `phases` payload lists exactly the five phase names in the
@@ -34,12 +34,12 @@ The sleep module SHALL acquire an internal lock at the start of
 `enter_sleep()` and SHALL not release it until every phase has
 finished. A second concurrent call to `enter_sleep()` while one is
 already in progress SHALL be rejected with a
-`HypnosBusyError` rather than starting a second pipeline.
+`SleepBusyError` rather than starting a second pipeline.
 
 #### Scenario: Concurrent sleep call rejected
-- **WHEN** `Hypnos.enter_sleep()` is awaited and a second concurrent
-  task awaits `Hypnos.enter_sleep()` before the first completes
-- **THEN** the second call raises `HypnosBusyError`
+- **WHEN** `Sleep.enter_sleep()` is awaited and a second concurrent
+  task awaits `Sleep.enter_sleep()` before the first completes
+- **THEN** the second call raises `SleepBusyError`
 
 ### Requirement: Rest deferral honored within a maximum window
 The `RestScheduler` SHALL track when the next sleep is due (based on

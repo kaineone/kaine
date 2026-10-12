@@ -75,9 +75,9 @@ def reply_window_from_lingua(lingua_section: object) -> float:
 LINGUA_EXTERNAL = "lingua.external"
 AUDITION_OUT = module_stream("audition")
 EMPATHEIA_OUT = module_stream("empatheia")
-THYMOS_OUT = module_stream("thymos")
+AFFECT_OUT = module_stream("thymos")
 
-STREAMS = (LINGUA_EXTERNAL, AUDITION_OUT, EMPATHEIA_OUT, THYMOS_OUT)
+STREAMS = (LINGUA_EXTERNAL, AUDITION_OUT, EMPATHEIA_OUT, AFFECT_OUT)
 
 
 @dataclass
@@ -235,8 +235,8 @@ class UtteranceOutcomeObserver:
             await self._maybe_reply(event, ts)
         elif stream == EMPATHEIA_OUT and event.type == "empatheia.social_error":
             await self._maybe_empatheia(event, ts)
-        elif stream == THYMOS_OUT and event.type == "thymos.state":
-            await self._maybe_thymos(event, ts)
+        elif stream == AFFECT_OUT and event.type == "thymos.state":
+            await self._maybe_affect(event, ts)
 
     async def _open_record_if_new(self, record_id: str, ts: float) -> None:
         if self._open_record is not None:
@@ -284,7 +284,7 @@ class UtteranceOutcomeObserver:
         if current is None or magnitude > current:
             self._open_record.max_empatheia_deviation = float(magnitude)
 
-    async def _maybe_thymos(self, event: Event, ts: float) -> None:
+    async def _maybe_affect(self, event: Event, ts: float) -> None:
         drives = event.payload.get("drives") or {}
         value = drives.get("social_drive")
         if not isinstance(value, (int, float)) or not math.isfinite(value):

@@ -41,7 +41,7 @@ from kaine.evaluation.sink import AsyncJsonlSink
 
 log = logging.getLogger(__name__)
 
-_HYPNOS_STREAM = "hypnos.out"
+_SLEEP_STREAM = "hypnos.out"
 
 
 def outcome_category(accepted: object, reason: object, samples_used: object) -> str:
@@ -62,7 +62,7 @@ class VoiceAlignmentDivergenceObserver(StreamSubscriberObserver):
     """Captures per-sleep voice-alignment divergence metrics."""
 
     name = "voice_alignment_divergence"
-    streams = (_HYPNOS_STREAM,)
+    streams = (_SLEEP_STREAM,)
 
     def __init__(self, bus: BusReader, sink: AsyncJsonlSink) -> None:
         super().__init__(bus, poll_interval_s=0.5)

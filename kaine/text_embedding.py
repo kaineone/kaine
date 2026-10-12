@@ -19,7 +19,7 @@ evaluation sidecar (``embed`` / ``cosine_similarity``), the sleep module's
 consolidation-divergence, and the memory/social modules (episodic memory, social cognition,
 which need ``encode`` / ``encode_batch`` / ``latent_dim`` / ``model_id`` /
 ``shutdown``) all share ONE wrapper here, so every subsystem embeds on the
-same model and the same cosine scale. ``kaine.modules.mnemos.embeddings``
+same model and the same cosine scale. ``kaine.modules.episodic_memory.embeddings``
 re-exports these names for back-compat without a second implementation.
 """
 
@@ -368,7 +368,7 @@ class SharedEmbedder:
 
     ``load()`` is serialised with an ``asyncio.Lock`` so the inner embedder
     loads exactly once, even across concurrent callers or a supervisor rebuild.
-    ``shutdown()`` is intentionally a no-op: MnemosCore shuts its embedder
+    ``shutdown()`` is intentionally a no-op: EpisodicMemoryCore shuts its embedder
     down when it stops, and a supervisor restart of one module must not unload
     the model underneath the other modules that still hold a reference to it.
     ``unload()`` is the residency path and delegates to the inner embedder.

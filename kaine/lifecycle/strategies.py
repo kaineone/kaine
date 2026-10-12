@@ -115,7 +115,7 @@ def _one_sided(state_a, state_b) -> Optional[dict[str, Any]]:
     return None
 
 
-class MnemosMergeStrategy:
+class EpisodicMemoryMergeStrategy:
     """The episodic memory module: sum short_term_size, tag retrieved memories on next read."""
 
     def merge(self, state_a, state_b):
@@ -232,7 +232,7 @@ class EidolonMergeStrategy:
         return out
 
 
-class ThymosMergeStrategy:
+class AffectMergeStrategy:
     """The affect module: average dimensional baseline, max drives, union goals."""
 
     def merge(self, state_a, state_b):
@@ -429,9 +429,9 @@ def _merge_profiles(
 def default_strategies() -> dict[str, MergeStrategy]:
     """Map of module-name → strategy for KAINE's stock modules."""
     return {
-        "mnemos": MnemosMergeStrategy(),
+        "mnemos": EpisodicMemoryMergeStrategy(),
         "nous": NousMergeStrategy(),
         "eidolon": EidolonMergeStrategy(),
-        "thymos": ThymosMergeStrategy(),
+        "thymos": AffectMergeStrategy(),
         "empatheia": EmpatheiaMergeStrategy(),
     }

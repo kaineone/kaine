@@ -67,7 +67,7 @@ Operator rules this design follows:
 Additional findings:
 
 - **10. Retention.** `AsyncJsonlSink` defaults to `retention_days=30` and deletes older files (`jsonl_sink.py:53,220-237`). Individuation evidence must use `retention_days=0`, as the incident log does.
-- **11. Missing adapter.** The existing "real" conditioned client for the A/B control builds an `OpenAIChatClient` without the LoRA resolver (`kaine/cycle/__main__.py:343-372`). A probe built that way would sample the base organ, not the entity. The probe must use the language module's own client (`kaine/modules/lingua/module.py:255`), which carries the resolver (`client.py:134-147`, `kaine/modules/hypnos/organ_adapter.py:227`).
+- **11. Missing adapter.** The existing "real" conditioned client for the A/B control builds an `OpenAIChatClient` without the LoRA resolver (`kaine/cycle/__main__.py:343-372`). A probe built that way would sample the base organ, not the entity. The probe must use the language module's own client (`kaine/modules/lingua/module.py:255`), which carries the resolver (`client.py:134-147`, `kaine/modules/sleep/organ_adapter.py:227`).
 - **12. Measurement validity.** The default external persona tells the organ to "report only what the readings actually contain … if the state is unremarkable, say so plainly" (`kaine/modules/lingua/context.py:32-40`). With `EMPTY_AWARENESS`, preference questions may get near-constant boilerplate. Whether the battery produces answers worth comparing under this persona is checked in the smoke test (section 6) before anything is enabled.
 - **13. No memory heuristic.** `entity-decommission` lists "accumulated memory" as a secondary heuristic; `assess_divergence` has none. This is out of scope, noted for the spec owner.
 
@@ -249,7 +249,7 @@ Statistically the floors are no longer needed: the test is valid at any time, an
 **Schedule**
 
 1. Maturation capture (2.2), or capture of a legacy reference (section 5).
-2. A look is attempted 120 s after `hypnos.sleep.completed` (published at `kaine/modules/hypnos/module.py:742`, after Phase 5 voice alignment, the only phase that changes adapters). A daily timer covers identity-clause changes made outside sleep.
+2. A look is attempted 120 s after `hypnos.sleep.completed` (published at `kaine/modules/sleep/module.py:742`, after Phase 5 voice alignment, the only phase that changes adapters). A daily timer covers identity-clause changes made outside sleep.
 3. Preconditions, all checked before any request; any failure means "skip" (logged, no report):
    - a reference exists and the ledger is readable
    - warm-up met

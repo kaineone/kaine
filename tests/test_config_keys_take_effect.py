@@ -12,11 +12,11 @@ from typing import Any
 
 import pytest
 
-from kaine.boot import _resolve_job_queue_trainer, make_hypnos, make_mundus, make_vision
+from kaine.boot import _resolve_job_queue_trainer, make_mundus, make_sleep, make_vision
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.__main__ import _apply_log_level
-from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
+from kaine.modules.sleep.voice_alignment import VoiceAlignmentConfig
 from kaine.modules.vision.internvideo_next_loader import PINNED_REVISION
 
 
@@ -54,16 +54,16 @@ def _voice_cfg(tmp_path: Path, **over: Any) -> VoiceAlignmentConfig:
     return VoiceAlignmentConfig(**base)
 
 
-def test_make_hypnos_honours_requested_rest_min_interval_s(bus: AsyncBus) -> None:
-    hypnos = make_hypnos(bus, {"requested_rest_min_interval_s": 600})
-    assert hypnos._requested_rest_min_interval_s == 600.0
+def test_make_sleep_honours_requested_rest_min_interval_s(bus: AsyncBus) -> None:
+    sleep = make_sleep(bus, {"requested_rest_min_interval_s": 600})
+    assert sleep._requested_rest_min_interval_s == 600.0
 
 
-def test_make_hypnos_rejects_non_positive_requested_rest_interval_s(
+def test_make_sleep_rejects_non_positive_requested_rest_interval_s(
     bus: AsyncBus,
 ) -> None:
     with pytest.raises(ValueError, match="must be a number greater than 0"):
-        make_hypnos(bus, {"requested_rest_min_interval_s": 0})
+        make_sleep(bus, {"requested_rest_min_interval_s": 0})
 
 
 def test_resolve_job_queue_trainer_reads_lingua_api_key_from_config(
@@ -147,8 +147,8 @@ def test_make_mundus_rejects_unknown_expose_key(bus: AsyncBus) -> None:
 
 
 @pytest.mark.parametrize("bad", [float("nan"), True, "600", -5])
-def test_make_hypnos_rejects_non_numeric_or_non_finite_interval(
+def test_make_sleep_rejects_non_numeric_or_non_finite_interval(
     bus: AsyncBus, bad: Any
 ) -> None:
     with pytest.raises(ValueError, match="must be a number greater than 0"):
-        make_hypnos(bus, {"requested_rest_min_interval_s": bad})
+        make_sleep(bus, {"requested_rest_min_interval_s": bad})

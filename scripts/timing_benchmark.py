@@ -157,7 +157,7 @@ async def _benchmark_tick(cfg: dict[str, Any], ticks: int) -> dict[str, Any]:
             strategy=RuleBasedSalience(
                 novelty=NoveltyTracker(window=int(syn_cfg.get("novelty_window", 32))),
                 goal_scorer=StaticGoalScorer(),
-                thymos_modulator=StaticThymosModulator(),
+                affect_modulator=StaticThymosModulator(),
             ),
             top_k=int(syn_cfg.get("top_k", 5)),
             publication_threshold=float(syn_cfg.get("publication_threshold", 0.35)),

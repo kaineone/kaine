@@ -204,7 +204,7 @@ class BaseModule(ABC):
         attached oscillator; a true no-op when no oscillator is attached, so
         the sleep module can invoke it unconditionally without error regardless of
         oscillatory-layer deployment status. No-op correctness is exercised by
-        ``tests/test_hypnos_oscillator_hook.py``.
+        ``tests/test_sleep_oscillator_hook.py``.
 
         Args:
             scale: Multiplicative frequency scaling factor.

@@ -76,7 +76,7 @@ With `trainer_backend = "job_queue"`, the voice-alignment phase SHALL write the 
 
 The job's adapter output directory SHALL be inside the job directory, so the trainer service sees only the jobs volume and never the entity's state. The phase SHALL apply the same validation as the subprocess backend: success status, a non-empty adapter directory inside the job directory, and the unchanged capability and abliteration gates. On success, the phase SHALL promote the vetted adapter, together with its GGUF form, into the entity's configured `adapter_output_dir` through the existing atomic promotion. Whatever the outcome, it SHALL delete the job's preference pairs, which are entity language, once the job ends. A timeout, a failed result or a missing adapter SHALL fail loud and SHALL NEVER report a fake or no-op success.
 
-The trainer service (`python -m kaine.modules.hypnos.trainer_service`) SHALL:
+The trainer service (`python -m kaine.modules.sleep.trainer_service`) SHALL:
 - run each ready job with the existing external training entry point;
 - convert a promoted adapter to a GGUF LoRA with llama.cpp's converter pinned to the organ's build, and write it beside the adapter;
 - write `result.json`;

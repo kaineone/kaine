@@ -164,7 +164,7 @@ graph TD
     TPE --> Report
     UserIn["audition.out"] -->|operator speech| IdleTime["time_since_last_interaction_s"]
     IdleTime --> Report
-    HypnosOut["hypnos.out"] -->|sleep.started / completed| Head
+    SleepOut["hypnos.out"] -->|sleep.started / completed| Head
 ```
 
 ## Key files

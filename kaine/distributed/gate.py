@@ -254,7 +254,7 @@ def promote_if_verified(
     """Run the gate and, ONLY on a pass, call the existing atomic ``promote``.
 
     ``promote`` is the trusted-host atomic promotion already used in-house (e.g.
-    ``kaine.modules.hypnos.adapter_store.promote``). A rejected artifact is
+    ``kaine.modules.sleep.adapter_store.promote``). A rejected artifact is
     returned as a non-promotable :class:`GateResult` and ``promote`` is never
     called — the failing artifact is not promoted and its rejection is surfaced.
     """

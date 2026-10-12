@@ -104,9 +104,9 @@ from kaine.lifecycle.welfare_signal import (  # noqa: F401  (re-export)
 log = logging.getLogger(__name__)
 
 _INTEROCEPTION_STREAM = "soma.out"
-_HYPNOS_STREAM = "hypnos.out"
-_THYMOS_STREAM = "thymos.out"
-_MNEMOS_STREAM = "mnemos.out"
+_SLEEP_STREAM = "hypnos.out"
+_AFFECT_STREAM = "thymos.out"
+_EPISODIC_MEMORY_STREAM = "mnemos.out"
 _VISION_STREAM = "topos.out"
 _AUDITION_STREAM = "audition.out"
 
@@ -136,9 +136,9 @@ class WelfareObserver(StreamSubscriberObserver):
     name = "welfare"
     streams = (
         _INTEROCEPTION_STREAM,
-        _HYPNOS_STREAM,
-        _THYMOS_STREAM,
-        _MNEMOS_STREAM,
+        _SLEEP_STREAM,
+        _AFFECT_STREAM,
+        _EPISODIC_MEMORY_STREAM,
         _VISION_STREAM,
         _AUDITION_STREAM,
     )
@@ -323,9 +323,9 @@ class WelfareObserver(StreamSubscriberObserver):
     def _stream_handlers(self) -> dict[str, Any]:
         return {
             _INTEROCEPTION_STREAM: self._handle_interoception,
-            _HYPNOS_STREAM: self._handle_hypnos,
-            _THYMOS_STREAM: self._handle_thymos,
-            _MNEMOS_STREAM: self._handle_mnemos,
+            _SLEEP_STREAM: self._handle_sleep,
+            _AFFECT_STREAM: self._handle_affect,
+            _EPISODIC_MEMORY_STREAM: self._handle_episodic_memory,
         }
 
     @staticmethod
@@ -594,7 +594,7 @@ class WelfareObserver(StreamSubscriberObserver):
                     self._interoceptive_distress.last_fire_elapsed
                 )
 
-    async def _handle_hypnos(self, entry_id: str, event: Event) -> None:
+    async def _handle_sleep(self, entry_id: str, event: Event) -> None:
         if event.type != "hypnos.sleep.completed":
             return
         # Maintenance completed — clear the pending fatigue alarm.
@@ -604,7 +604,7 @@ class WelfareObserver(StreamSubscriberObserver):
             entry_id,
         )
 
-    async def _handle_thymos(self, entry_id: str, event: Event) -> None:
+    async def _handle_affect(self, entry_id: str, event: Event) -> None:
         if event.type != "thymos.state":
             return
         payload = event.payload or {}
@@ -622,7 +622,7 @@ class WelfareObserver(StreamSubscriberObserver):
         else:
             self._extreme_vad_since = None
 
-    async def _handle_mnemos(self, entry_id: str, event: Event) -> None:
+    async def _handle_episodic_memory(self, entry_id: str, event: Event) -> None:
         if event.type != "mnemos.replay":
             return
         now = time.monotonic()

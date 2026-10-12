@@ -37,25 +37,25 @@ The sleep lock stops a second sleep from starting while one runs. It blocks noth
 
 ## RestScheduler
 
-`RestScheduler` (`kaine/modules/hypnos/scheduler.py`) keeps the backstop deadline on the entity clock. `is_due()` is true once the effective deadline has passed, or once the original deadline plus `max_deferral_seconds` (600 s) has passed. `try_defer()` moves the effective deadline back by `per_defer_seconds` (60 s) and returns false once the deferral budget is spent; nothing in the running system calls it outside tests. Each completed sleep schedules the next deadline `interval_seconds` ahead. A snapshot stores the time remaining, and a restore starts from it.
+`RestScheduler` (`kaine/modules/sleep/scheduler.py`) keeps the backstop deadline on the entity clock. `is_due()` is true once the effective deadline has passed, or once the original deadline plus `max_deferral_seconds` (600 s) has passed. `try_defer()` moves the effective deadline back by `per_defer_seconds` (60 s) and returns false once the deferral budget is spent; nothing in the running system calls it outside tests. Each completed sleep schedules the next deadline `interval_seconds` ahead. A snapshot stores the time remaining, and a restore starts from it.
 
 ## The five phases
 
 ```mermaid
 sequenceDiagram
-    participant Hypnos
+    participant Sleep
     participant Bus
     participant Interoception
 
-    Hypnos->>Bus: hypnos.sleep.started
-    Note over Hypnos: Phase 1: set_frequency(0.5); mnemos.consolidate_now()
-    Note over Hypnos: Locus off and playlist paused for the whole sleep
-    Note over Hypnos: Phase 2: replay in Mnemos's replay window; downscale; prune
-    Note over Hypnos: Phase 3: cross-period traces, Phantasia, hypnos.association
-    Note over Hypnos: Phase 4: consolidation divergence; voice-alignment gates; intent-log rotation, voice measures
-    Note over Hypnos: Phase 5: thymos.affective_reset()
-    Note over Hypnos: Intent audit
-    Hypnos->>Bus: hypnos.sleep.completed
+    Sleep->>Bus: hypnos.sleep.started
+    Note over Sleep: Phase 1: set_frequency(0.5); mnemos.consolidate_now()
+    Note over Sleep: Locus off and playlist paused for the whole sleep
+    Note over Sleep: Phase 2: replay in EpisodicMemory's replay window; downscale; prune
+    Note over Sleep: Phase 3: cross-period traces, WorldModel, hypnos.association
+    Note over Sleep: Phase 4: consolidation divergence; voice-alignment gates; intent-log rotation, voice measures
+    Note over Sleep: Phase 5: thymos.affective_reset()
+    Note over Sleep: Intent audit
+    Sleep->>Bus: hypnos.sleep.completed
     Bus->>Interoception: reset fatigue and regulation
 ```
 
@@ -114,11 +114,11 @@ The `[hypnos]`, `[hypnos.consolidation]` and `[hypnos.voice_alignment]` tables a
 
 | File | Role |
 |---|---|
-| `kaine/modules/hypnos/module.py` | `Hypnos`: triggers, pipeline, perception suspension, phase 4 |
-| `kaine/modules/hypnos/phases.py` | Phases 1 to 4 |
-| `kaine/modules/hypnos/scheduler.py` | `RestScheduler` |
-| `kaine/modules/hypnos/corpus.py` | Intent-log rotation and the corpus ceiling check |
-| `kaine/modules/hypnos/ignition_audit.py` | Sleep-time intent audit |
+| `kaine/modules/sleep/module.py` | `Sleep`: triggers, pipeline, perception suspension, phase 4 |
+| `kaine/modules/sleep/phases.py` | Phases 1 to 4 |
+| `kaine/modules/sleep/scheduler.py` | `RestScheduler` |
+| `kaine/modules/sleep/corpus.py` | Intent-log rotation and the corpus ceiling check |
+| `kaine/modules/sleep/ignition_audit.py` | Sleep-time intent audit |
 | `kaine/modules/interoception/module.py` | Faster fatigue decay during sleep; fatigue and regulation reset on completion |
-| `kaine/modules/thymos/module.py` | Affective reset |
+| `kaine/modules/affect/module.py` | Affective reset |
 | `kaine/modules/vision/module.py`, `kaine/modules/audition/module.py`, `kaine/modules/sequence/module.py` | Adaptation suspended between `hypnos.sleep.started` and `hypnos.sleep.completed` |

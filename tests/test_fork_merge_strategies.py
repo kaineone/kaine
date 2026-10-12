@@ -4,10 +4,10 @@
 import pytest
 
 from kaine.lifecycle.strategies import (
+    AffectMergeStrategy,
     EidolonMergeStrategy,
-    MnemosMergeStrategy,
+    EpisodicMemoryMergeStrategy,
     NousMergeStrategy,
-    ThymosMergeStrategy,
     UnionMergeStrategy,
     default_strategies,
 )
@@ -45,8 +45,8 @@ def test_union_concatenates_lists_dedup_preserving_order():
 # ---- Episodic memory ----
 
 
-def test_mnemos_sums_short_term_and_preserves_matching_prefix():
-    s = MnemosMergeStrategy()
+def test_episodic_memory_sums_short_term_and_preserves_matching_prefix():
+    s = EpisodicMemoryMergeStrategy()
     space = {"model_id": "minilm", "dim": 384, "pooling": "mean", "normalized": True}
     out = s.merge(
         {"short_term_size": 4, "collection_prefix": "mnemos_",
@@ -61,8 +61,8 @@ def test_mnemos_sums_short_term_and_preserves_matching_prefix():
     assert out["pending_source_tag"] == ["fork-a", "fork-b"]
 
 
-def test_mnemos_flags_prefix_mismatch():
-    s = MnemosMergeStrategy()
+def test_episodic_memory_flags_prefix_mismatch():
+    s = EpisodicMemoryMergeStrategy()
     out = s.merge(
         {"short_term_size": 1, "collection_prefix": "a_"},
         {"short_term_size": 2, "collection_prefix": "b_"},
@@ -71,8 +71,8 @@ def test_mnemos_flags_prefix_mismatch():
     assert set(out["metadata"]["parent_prefixes"]) == {"a_", "b_"}
 
 
-def test_mnemos_flags_embedding_space_mismatch():
-    s = MnemosMergeStrategy()
+def test_episodic_memory_flags_embedding_space_mismatch():
+    s = EpisodicMemoryMergeStrategy()
     out = s.merge(
         {"short_term_size": 1, "collection_prefix": "mnemos_",
          "embedding_space": {"model_id": "a", "dim": 384, "pooling": "mean", "normalized": True}},
@@ -83,8 +83,8 @@ def test_mnemos_flags_embedding_space_mismatch():
     assert out["embedding_space"]["model_id"] == "a"
 
 
-def test_mnemos_one_parent_missing():
-    s = MnemosMergeStrategy()
+def test_episodic_memory_one_parent_missing():
+    s = EpisodicMemoryMergeStrategy()
     out = s.merge({"short_term_size": 3, "collection_prefix": "mnemos_"}, None)
     assert out == {"short_term_size": 3, "collection_prefix": "mnemos_"}
 
@@ -184,8 +184,8 @@ def test_eidolon_baseline_one_sided():
 # ---- Affect ----
 
 
-def test_thymos_averages_dim_max_drives_unions_goals():
-    s = ThymosMergeStrategy()
+def test_affect_averages_dim_max_drives_unions_goals():
+    s = AffectMergeStrategy()
     out = s.merge(
         {
             "dimensional": {"valence": 0.4, "arousal": 0.2},

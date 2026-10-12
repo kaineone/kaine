@@ -64,7 +64,7 @@ class SidecarRegistry:
         bus,
         config: EvaluationConfig,
         research_event_log_config: Optional[ResearchEventLogConfig] = None,
-        thymos_state_provider: Optional[Callable[[], dict[str, Any]]] = None,
+        affect_state_provider: Optional[Callable[[], dict[str, Any]]] = None,
         last_user_input_provider=None,
         sleep_state_provider: Optional[Callable[[], dict[str, Any]]] = None,
         memory_source: Optional[MemorySource] = None,
@@ -78,7 +78,7 @@ class SidecarRegistry:
         # Independent of `config.enabled` — the curated research event log and
         # the local-only raw archive are each gated on their own flags.
         self._research_cfg = research_event_log_config or ResearchEventLogConfig()
-        self._thymos_provider = thymos_state_provider
+        self._affect_provider = affect_state_provider
         self._last_input_provider = last_user_input_provider
         self._sleep_state_provider = sleep_state_provider
         self._memory_source = memory_source
@@ -274,7 +274,7 @@ class SidecarRegistry:
                 ProactiveAuditObserver(
                     self._bus,
                     sink,
-                    thymos_state_provider=self._thymos_provider,
+                    affect_state_provider=self._affect_provider,
                     last_user_input_provider=self._last_input_provider,
                 )
             )
@@ -297,7 +297,7 @@ class SidecarRegistry:
             sink = self._make_sink("affect_correlation", "affect_correlation")
             self._observers.append(
                 AffectCorrelationRecorder(
-                    self._bus, sink, thymos_state_provider=self._thymos_provider
+                    self._bus, sink, affect_state_provider=self._affect_provider
                 )
             )
         if config.ab_divergence:
@@ -349,8 +349,8 @@ class SidecarRegistry:
             replay_wrapper = ReplayObserver(
                 self._bus, sink, redact_content=obs_cfg.replay_redact_content
             )
-            self._observers.append(replay_wrapper._mnemos)
-            self._observers.append(replay_wrapper._phantasia)
+            self._observers.append(replay_wrapper._episodic_memory)
+            self._observers.append(replay_wrapper._world_model)
         if obs_cfg.empatheia:
             sink = self._make_sink("empatheia", "empatheia")
             self._observers.append(EmpatheiaObserver(self._bus, sink))

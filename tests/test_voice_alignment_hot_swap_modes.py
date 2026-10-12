@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for kaine.modules.hypnos.hot_swap dispatcher modes."""
+"""Tests for kaine.modules.sleep.hot_swap dispatcher modes."""
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 
-from kaine.modules.hypnos.hot_swap import MANUAL_MARKER, VALID_MODES, dispatch
+from kaine.modules.sleep.hot_swap import MANUAL_MARKER, VALID_MODES, dispatch
 
 
 @pytest.mark.asyncio

@@ -31,7 +31,7 @@ Two distinct "divergences" exist in the codebase; this uses the right one:
   rate or magnitude crosses a configured threshold it marks organ-level
   divergence — a graded signal alongside the permutation test and the self-model module's drift.
   drift. We read it from the written record (no ``kaine.evaluation`` /
-  ``kaine.modules.hypnos`` import — the boundary-neutral seam).
+  ``kaine.modules.sleep`` import — the boundary-neutral seam).
 
 Secondary identity heuristics raise confidence and catch entities that were
 never individuation-tested: the self-model module's ``drift_count > 0`` with a non-empty
@@ -185,7 +185,7 @@ def voice_paths_for(config: dict | None, state_root: Path) -> VoicePaths:
     try:
         cfg = config or {}
         lingua_value = (cfg.get("lingua") or {}).get("intent_log_path")
-        hypnos_value = (
+        sleep_value = (
             ((cfg.get("hypnos") or {}).get("voice_alignment") or {})
             .get("intent_log_path")
         )
@@ -199,14 +199,14 @@ def voice_paths_for(config: dict | None, state_root: Path) -> VoicePaths:
             return resolve(Path(value))
 
         lingua_path = _resolve_path(lingua_value)
-        hypnos_path = _resolve_path(hypnos_value)
+        sleep_path = _resolve_path(sleep_value)
 
         logs: list[Path] = [lingua_path]
-        if hypnos_path not in logs:
-            logs.append(hypnos_path)
+        if sleep_path not in logs:
+            logs.append(sleep_path)
         return VoicePaths(
             intent_logs=tuple(logs),
-            measures_latest=hypnos_path.parent / "voice_measures_latest.json",
+            measures_latest=sleep_path.parent / "voice_measures_latest.json",
         )
     except Exception as exc:
         log.warning(

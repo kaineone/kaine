@@ -265,7 +265,7 @@ async def test_interoception_report_carries_the_paired_evaluations(bus: AsyncBus
     )
     await interoception.tick_once()
 
-    thymos_entry = (
+    affect_entry = (
         "2-0",
         Event(
             source="thymos",
@@ -278,9 +278,9 @@ async def test_interoception_report_carries_the_paired_evaluations(bus: AsyncBus
     await interoception.on_workspace(
         WorkspaceSnapshot(
             tick_index=2,
-            selected_events=[thymos_entry],
+            selected_events=[affect_entry],
             inhibited=False,
-            salience_scores={thymos_entry[0]: 0.75},
+            salience_scores={affect_entry[0]: 0.75},
             metadata={"access_threshold": 0.35},
         )
     )

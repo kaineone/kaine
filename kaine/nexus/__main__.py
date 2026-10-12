@@ -168,7 +168,7 @@ def _build_fork_manager(
         adapter_merge_section = lifecycle_cfg.get("adapter_merge") or {}
 
         def _merge_checks_factory():
-            from kaine.modules.hypnos.capability_eval import (
+            from kaine.modules.sleep.capability_eval import (
                 AbliterationProbeScorer,
                 LocalProbeSetCapabilityEval,
             )

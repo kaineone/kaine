@@ -101,7 +101,7 @@ The cooldown runs on entity time, so it stretches and shrinks with `time_scale`.
 The episodic memory module uses the shared text embedder from `[embedding]`. One instance loads once and serves the episodic memory, social cognition, sleep modules and the evaluation sidecar.
 
 - The NumPy backend (the default) is `NumpyMiniLMEmbedder` in `kaine/text_embedding_numpy.py`. It runs the `all-MiniLM-L6-v2` encoder from the model's `model.safetensors`, `config.json` and `vocab.txt` with a built-in WordPiece tokenizer, mean pooling and L2 normalisation. It needs only NumPy (SciPy, when present, supplies `erf`). Its 384-dimensional vectors match the sentence-transformers backend within 1e-5 on the same token ids.
-- The torch backend is `SentenceTransformerTextEmbedder` in `kaine/text_embedding.py`. `kaine/modules/mnemos/embeddings.py` re-exports it as `SentenceTransformerEmbedder` for older imports.
+- The torch backend is `SentenceTransformerTextEmbedder` in `kaine/text_embedding.py`. `kaine/modules/episodic_memory/embeddings.py` re-exports it as `SentenceTransformerEmbedder` for older imports.
 
 Tests use `FakeEmbedder`, which maps text to a deterministic 32-dimensional vector from a blake2b digest.
 
@@ -123,7 +123,7 @@ The sleep module prunes the stores (paper A.10). A trace whose strength falls be
 
 Recall from a persisted collection returns the requested number of traces with cosine similarity above 0, ranked by strength times similarity. It widens its search until the k-th product is at least the smallest cosine it has fetched, which bounds every trace it has not fetched, since no strength exceeds 1. The widening stops at the 4096 nearest traces; beyond that the order is approximate, and the episodic memory module logs it once for that recall. Each result reports `similarity`, `strength` and `score`, the product. Short-term traces have strength 1 and rank by similarity alone. On sqlite-vec the vector table has `collection` as a partition key, so the index filters by collection itself, and search pages past the extension's limit of 4096 rows with its distance constraint. An older vector table is rebuilt once when the store opens.
 
-At initialize the episodic memory module gives every trace from before trace strengths a strength of 1 and `born_sleep = -1`, and a store whose meta record is missing while its traces carry `log_base` is refused. A preservation capture carries the meta record under `strength`; a bundle without it is backfilled the same way, unless its traces already carry `log_base`, which is refused. A preservation copies the stores as they stand at capture, so a later pruning deletes nothing from a preserved entity. An import marks the meta record as pending before it replaces any collection and clears the mark when it finishes; after an interrupted import, initialize logs an error and every sleep is blocked (no downscaling, no pruning; the sleep summary records `memory_downscale_blocked = "import_pending"` and the count of consecutive blocked sleeps `memory_blocked_sleeps`) until the revive is run again. While the mark is set and the stores exceed twice the budget, the episodic memory module refuses to store new traces, logs each refusal as an error and counts it (`memory_persist_refusals`); this bounds the disk and is not a welfare event. The episodic memory module writes this state to `state/mnemos/store_health.json`, which the Dashboard health board shows as the **Memory store** panel, red while the mark is set. The recovery when the bundle is gone is `python -m kaine.lifecycle.mnemos_recover --confirm-keep-current-store` (see [Preservation](../11-preservation.md#an-interrupted-memory-import)). Decommission keeps the meta record when a collection drop fails. Decommission deletes the meta record with the stamp.
+At initialize the episodic memory module gives every trace from before trace strengths a strength of 1 and `born_sleep = -1`, and a store whose meta record is missing while its traces carry `log_base` is refused. A preservation capture carries the meta record under `strength`; a bundle without it is backfilled the same way, unless its traces already carry `log_base`, which is refused. A preservation copies the stores as they stand at capture, so a later pruning deletes nothing from a preserved entity. An import marks the meta record as pending before it replaces any collection and clears the mark when it finishes; after an interrupted import, initialize logs an error and every sleep is blocked (no downscaling, no pruning; the sleep summary records `memory_downscale_blocked = "import_pending"` and the count of consecutive blocked sleeps `memory_blocked_sleeps`) until the revive is run again. While the mark is set and the stores exceed twice the budget, the episodic memory module refuses to store new traces, logs each refusal as an error and counts it (`memory_persist_refusals`); this bounds the disk and is not a welfare event. The episodic memory module writes this state to `state/mnemos/store_health.json`, which the Dashboard health board shows as the **Memory store** panel, red while the mark is set. The recovery when the bundle is gone is `python -m kaine.lifecycle.episodic_memory_recover --confirm-keep-current-store` (see [Preservation](../11-preservation.md#an-interrupted-memory-import)). Decommission keeps the meta record when a collection drop fails. Decommission deletes the meta record with the stamp.
 
 ### Sleep: consolidation, replay, downscaling and pruning
 
@@ -143,14 +143,14 @@ The downscaling ends the wake, so a sleep never replays an earlier sleep's trace
 
 | Path | Purpose |
 |---|---|
-| `kaine/modules/mnemos/module.py` | `Mnemos(BaseModule)`: broadcast handling, affect consumer, replay, preservation |
-| `kaine/modules/mnemos/memory.py` | `MnemosCore` (store, recall, consolidate, downscale and prune), `StoredMemory`, `RecallSummary`, `EmotionalRetriggerHook` |
-| `kaine/modules/mnemos/storage.py` | `MemoryStorage` protocol, `QdrantStorage`, `InMemoryStorage`, `SqliteVecStorage`, `RecalledMemory` |
+| `kaine/modules/episodic_memory/module.py` | `EpisodicMemory(BaseModule)`: broadcast handling, affect consumer, replay, preservation |
+| `kaine/modules/episodic_memory/memory.py` | `EpisodicMemoryCore` (store, recall, consolidate, downscale and prune), `StoredMemory`, `RecallSummary`, `EmotionalRetriggerHook` |
+| `kaine/modules/episodic_memory/storage.py` | `MemoryStorage` protocol, `QdrantStorage`, `InMemoryStorage`, `SqliteVecStorage`, `RecalledMemory` |
 | `kaine/text_embedding.py` | `Embedder` protocol, `SharedEmbedder`, `make_text_embedder`, `SentenceTransformerTextEmbedder`, `FakeEmbedder` |
 | `kaine/text_embedding_numpy.py` | `NumpyMiniLMEmbedder` |
-| `kaine/modules/mnemos/embeddings.py` | Re-export of `kaine.text_embedding` names for older imports |
-| `kaine/modules/mnemos/replay.py` | `ReplayEngine`, `ReplayEntry`, `ReplayEvent`, `select_traces`, `build_replay_events` |
-| `kaine/boot/factories/mnemos.py` | `make_mnemos()`: backend and replay sub-table |
+| `kaine/modules/episodic_memory/embeddings.py` | Re-export of `kaine.text_embedding` names for older imports |
+| `kaine/modules/episodic_memory/replay.py` | `ReplayEngine`, `ReplayEntry`, `ReplayEvent`, `select_traces`, `build_replay_events` |
+| `kaine/boot/factories/episodic_memory.py` | `make_mnemos()`: backend and replay sub-table |
 
 ## Enabling
 
@@ -171,23 +171,23 @@ mnemos.replay_engine.close_window()
 
 The stored `text` is a content view of the snapshot. It starts with `active` or `inhibited`, then lists `{source}:{type}={payload}` for each coalition member. Every payload passes through `kaine.privacy_filter.strip_vectors` first, which removes named vector fields and any numeric list of 16 or more items. The payloads of `audition.transcription` and `mundus.visual.raw` are replaced by `<raw-perceptual omitted>`. A `mnemos.replay` member is recorded as `<replay of {memory_id}>` without the replayed text, so a trace stored during sleep never contains the trace it replayed. The tick index is kept in the stored payload, with the inhibited flag and the coalition size, and is not repeated in the text; bus entry ids are left out because they lose meaning once the stream is trimmed. Affect tags are plain numbers.
 
-`Mnemos.serialize()` emits `short_term_size`, `collection_prefix` and `embedding_space`, and no memory content. `export_preservation_state()` captures the full store, short-term buffer included, and fails loudly if the backend cannot be read; see [Preservation and the safety net](../11-preservation.md).
+`EpisodicMemory.serialize()` emits `short_term_size`, `collection_prefix` and `embedding_space`, and no memory content. `export_preservation_state()` captures the full store, short-term buffer included, and fails loudly if the backend cannot be read; see [Preservation and the safety net](../11-preservation.md).
 
 ## Tests
 
 | File | Coverage |
 |---|---|
-| `tests/test_mnemos_memory.py` | `MnemosCore` store, recall and consolidation with `FakeEmbedder` and `InMemoryStorage` |
-| `tests/test_mnemos_recall_cosine.py` | Cosine recall over the short-term buffer |
-| `tests/test_mnemos_storage.py` | `InMemoryStorage` search; `QdrantStorage` with a mocked client |
-| `tests/test_mnemos_embeddings.py` | `FakeEmbedder` determinism; lazy loading of `SentenceTransformerEmbedder` |
+| `tests/test_episodic_memory_memory.py` | `EpisodicMemoryCore` store, recall and consolidation with `FakeEmbedder` and `InMemoryStorage` |
+| `tests/test_episodic_memory_recall_cosine.py` | Cosine recall over the short-term buffer |
+| `tests/test_episodic_memory_storage.py` | `InMemoryStorage` search; `QdrantStorage` with a mocked client |
+| `tests/test_episodic_memory_embeddings.py` | `FakeEmbedder` determinism; lazy loading of `SentenceTransformerEmbedder` |
 | `tests/test_text_embedding_numpy.py` | NumPy embedder: safetensors reader, WordPiece tokenizer, parity with sentence-transformers |
 | `tests/test_shared_embedder.py` | One `SharedEmbedder` load across modules and the supervisor rebuilds |
-| `tests/test_mnemos_replay.py` | Replay scoring, the window guard, `ReplayWindowError` |
-| `tests/test_mnemos_replay_redact.py` | `redact_content` in observer payloads |
-| `tests/test_mnemos_module.py` | Module tick, affect caching, recall cooldown, recall before store |
-| `tests/test_mnemos_trace_strength.py` | Trace strength on all three backends: persist keys, downscaling factor and protection, recall by strength times similarity against brute force, sqlite-vec paging past 4096 rows, migration, preservation, numerics over many sleeps |
-| `tests/systems/test_mnemos_subsystem.py` | End-to-end subsystem test |
+| `tests/test_episodic_memory_replay.py` | Replay scoring, the window guard, `ReplayWindowError` |
+| `tests/test_episodic_memory_replay_redact.py` | `redact_content` in observer payloads |
+| `tests/test_episodic_memory_module.py` | Module tick, affect caching, recall cooldown, recall before store |
+| `tests/test_episodic_memory_trace_strength.py` | Trace strength on all three backends: persist keys, downscaling factor and protection, recall by strength times similarity against brute force, sqlite-vec paging past 4096 rows, migration, preservation, numerics over many sleeps |
+| `tests/systems/test_episodic_memory_subsystem.py` | End-to-end subsystem test |
 
 The offline suite's memory-coherence battery (`kaine/evaluation/benchmarks/instrument_runners/memory_coherence_runner.py`) exercises the episodic memory module offline.
 

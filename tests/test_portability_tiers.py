@@ -711,24 +711,24 @@ async def test_null_emotion_classifier_is_disabled_but_transcribes():
 # --------------------------------------------------------------------------
 
 
-def test_mnemos_sqlite_vec_backend_constructs_storage():
-    from kaine.modules.mnemos.storage import SqliteVecStorage
+def test_episodic_memory_sqlite_vec_backend_constructs_storage():
+    from kaine.modules.episodic_memory.storage import SqliteVecStorage
 
     store = SqliteVecStorage(latent_dim=8)
     assert store.latent_dim == 8
 
 
-def test_mnemos_backend_selects_sqlite_vec_without_qdrant_key():
+def test_episodic_memory_backend_selects_sqlite_vec_without_qdrant_key():
     """backend='sqlite_vec' needs no Qdrant api_key (in-process, no server)."""
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     from kaine.bus.client import AsyncBus
     from kaine.bus.config import BusConfig
-    from kaine.modules.mnemos.module import Mnemos
-    from kaine.modules.mnemos.storage import SqliteVecStorage
+    from kaine.modules.episodic_memory.module import EpisodicMemory
+    from kaine.modules.episodic_memory.storage import SqliteVecStorage
 
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
-    m = Mnemos(bus, backend="sqlite_vec")
+    m = EpisodicMemory(bus, backend="sqlite_vec")
     assert isinstance(m.core.storage, SqliteVecStorage)
 
 

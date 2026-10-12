@@ -13,8 +13,8 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.faithful.templates import HEARD_SPEECH_PLACEHOLDER, redact_heard_speech
+from kaine.modules.episodic_memory.module import _serialize_snapshot
 from kaine.modules.lingua import EXTERNAL_STREAM, FakeChatClient, IntentExpressionLog, Lingua
-from kaine.modules.mnemos.module import _serialize_snapshot
 from kaine.workspace.report_policy import SelfInitiatedReportPolicy
 from kaine.workspace.volition import SPEAK
 
@@ -350,10 +350,10 @@ def test_redact_heard_speech_external_types_and_nesting():
 
 def test_external_input_types_single_source():
     import kaine.faithful.external_input
-    import kaine.modules.hypnos.ignition_audit
+    import kaine.modules.sleep.ignition_audit
 
     assert (
-        kaine.modules.hypnos.ignition_audit.EXTERNAL_INPUT_TYPES
+        kaine.modules.sleep.ignition_audit.EXTERNAL_INPUT_TYPES
         is kaine.faithful.external_input.EXTERNAL_INPUT_TYPES
     )
 

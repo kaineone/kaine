@@ -13,8 +13,8 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.__main__ import _shutdown_modules
 from kaine.cycle.spot import Spot
-from kaine.modules.hypnos import FakeTrainer, Hypnos, VoiceAlignmentConfig
 from kaine.modules.registry import shutdown_order
+from kaine.modules.sleep import FakeTrainer, Sleep, VoiceAlignmentConfig
 
 
 @pytest.fixture
@@ -84,11 +84,11 @@ class RecordingMnemos:
         return {}
 
 
-def _make_hypnos(bus, tmp_path, *, mnemos, thymos, associative=False):
-    return Hypnos(
+def _make_sleep(bus, tmp_path, *, episodic_memory, affect, associative=False):
+    return Sleep(
         bus,
-        mnemos=mnemos,
-        thymos=thymos,
+        episodic_memory=episodic_memory,
+        affect=affect,
         trainer=FakeTrainer(),
         voice_alignment_config=VoiceAlignmentConfig(
             intent_log_path=tmp_path / "intent.jsonl",
@@ -100,30 +100,30 @@ def _make_hypnos(bus, tmp_path, *, mnemos, thymos, associative=False):
     )
 
 
-def test_shutdown_order_puts_hypnos_first():
+def test_shutdown_order_puts_sleep_first():
     a = types.SimpleNamespace(name="a")
-    hypnos = types.SimpleNamespace(name="hypnos")
+    sleep = types.SimpleNamespace(name="hypnos")
     b = types.SimpleNamespace(name="b")
-    assert shutdown_order([a, hypnos, b]) == [hypnos, a, b]
+    assert shutdown_order([a, sleep, b]) == [sleep, a, b]
     assert shutdown_order([a, b]) == [a, b]
 
 
-async def test_cycle_shuts_hypnos_down_while_thymos_is_up(bus, tmp_path):
+async def test_cycle_shuts_sleep_down_while_affect_is_up(bus, tmp_path):
     """The sleep module's shutdown calls affective_reset while the affect module is still up."""
     calls: list[str] = []
-    mnemos = RecordingMnemos(calls, hang_in="replay")
-    thymos = FakeThymos()
-    hypnos = _make_hypnos(bus, tmp_path, mnemos=mnemos, thymos=thymos)
-    await hypnos.initialize()
-    hypnos._sleep_pending = True
-    hypnos._sleep_task = asyncio.create_task(hypnos._interval_triggered_enter_sleep())
-    await asyncio.wait_for(mnemos.entered.wait(), timeout=10)
-    await asyncio.wait_for(_shutdown_modules([thymos, hypnos]), timeout=10)
-    assert thymos.reset_while_up is True
-    assert thymos.down is True
+    episodic_memory = RecordingMnemos(calls, hang_in="replay")
+    affect = FakeThymos()
+    sleep = _make_sleep(bus, tmp_path, episodic_memory=episodic_memory, affect=affect)
+    await sleep.initialize()
+    sleep._sleep_pending = True
+    sleep._sleep_task = asyncio.create_task(sleep._interval_triggered_enter_sleep())
+    await asyncio.wait_for(episodic_memory.entered.wait(), timeout=10)
+    await asyncio.wait_for(_shutdown_modules([affect, sleep]), timeout=10)
+    assert affect.reset_while_up is True
+    assert affect.down is True
 
 
-async def test_spot_shutdown_all_shuts_hypnos_down_first():
+async def test_spot_shutdown_all_shuts_sleep_down_first():
     """The supervisor shuts the sleep module down before the other modules."""
     order: list[str] = []
 
@@ -132,7 +132,7 @@ async def test_spot_shutdown_all_shuts_hypnos_down_first():
 
     a = types.SimpleNamespace(name="a", shutdown=lambda: record_shutdown("a"))
     b = types.SimpleNamespace(name="b", shutdown=lambda: record_shutdown("b"))
-    hypnos = types.SimpleNamespace(name="hypnos", shutdown=lambda: record_shutdown("hypnos"))
-    registry = types.SimpleNamespace(all_modules=lambda: [a, b, hypnos])
+    sleep = types.SimpleNamespace(name="hypnos", shutdown=lambda: record_shutdown("hypnos"))
+    registry = types.SimpleNamespace(all_modules=lambda: [a, b, sleep])
     await Spot._shutdown_all(types.SimpleNamespace(_registry=registry))
     assert order == ["hypnos", "a", "b"]

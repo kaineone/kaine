@@ -146,11 +146,11 @@ async def test_sequence_suspends_forward_head_during_sleep(bus):
 
         await bus.publish(_sleep_event("hypnos.sleep.started"))
         await _poll_for(lambda: sequence._pred_head.suspended)
-        assert sequence._in_hypnos
+        assert sequence._in_sleep
 
         await bus.publish(_sleep_event("hypnos.sleep.completed"))
         await _poll_for(lambda: not sequence._pred_head.suspended)
-        assert not sequence._in_hypnos
+        assert not sequence._in_sleep
     finally:
         await _close_module(sequence)
 
@@ -167,7 +167,7 @@ async def test_sequence_sees_sleep_on_an_empty_stream_too(bus):
     )
     await sequence.initialize()
     try:
-        assert sequence._hypnos_cursor == "0-0"
+        assert sequence._sleep_cursor == "0-0"
 
         await bus.publish(_sleep_event("hypnos.sleep.started"))
         await _poll_for(lambda: sequence._pred_head.suspended)
@@ -194,7 +194,7 @@ async def test_sequence_ignores_sleep_published_before_boot(bus):
     try:
         await asyncio.sleep(0.3)
         assert not sequence._pred_head.suspended
-        assert not sequence._in_hypnos
+        assert not sequence._in_sleep
 
         # A fresh sleep event after boot must still be seen.
         await bus.publish(_sleep_event("hypnos.sleep.started"))
@@ -212,11 +212,11 @@ async def test_vision_suspends_forward_model_during_sleep(bus):
 
         await bus.publish(_sleep_event("hypnos.sleep.started"))
         await _poll_for(lambda: vision._forward_model.suspended)
-        assert vision._in_hypnos
+        assert vision._in_sleep
 
         await bus.publish(_sleep_event("hypnos.sleep.completed"))
         await _poll_for(lambda: not vision._forward_model.suspended)
-        assert not vision._in_hypnos
+        assert not vision._in_sleep
     finally:
         await _close_module(vision)
 
@@ -235,13 +235,13 @@ async def test_audition_still_suspends_during_sleep(bus):
             lambda: audition._forward_model.suspended
             and audition._acoustic_forward_model.suspended
         )
-        assert audition._in_hypnos
+        assert audition._in_sleep
 
         await bus.publish(_sleep_event("hypnos.sleep.completed"))
         await _poll_for(
             lambda: not audition._forward_model.suspended
             and not audition._acoustic_forward_model.suspended
         )
-        assert not audition._in_hypnos
+        assert not audition._in_sleep
     finally:
         await _close_module(audition)

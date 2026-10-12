@@ -214,7 +214,7 @@ async def test_start_gestating_on_birth(tmp_path: Path):
 
 
 async def test_start_asleep(tmp_path: Path):
-    runtime = build(tmp_path, hypnos_sleeping=lambda: True)
+    runtime = build(tmp_path, sleep_sleeping=lambda: True)
     await runtime.start()
     assert runtime.scheduler.abort_reason() == "asleep"
 
@@ -315,7 +315,7 @@ async def test_alert_and_notify(tmp_path: Path):
         await runtime2.alert({"inconclusive_since": "2026-01-02", "days": 1.0})
 
 
-async def test_watch_hypnos(tmp_path: Path):
+async def test_watch_sleep(tmp_path: Path):
     runtime = build(tmp_path)
     now = datetime.now(timezone.utc)
     start_ev = Event(
@@ -334,7 +334,7 @@ async def test_watch_hypnos(tmp_path: Path):
     )
     runtime.bus.queue(("1-0", start_ev))
     stop = asyncio.Event()
-    task = asyncio.create_task(runtime._watch_hypnos(stop))
+    task = asyncio.create_task(runtime._watch_sleep(stop))
     await asyncio.sleep(0.05)
     assert runtime.scheduler._asleep is True
     runtime.bus.queue(("2-0", end_ev))

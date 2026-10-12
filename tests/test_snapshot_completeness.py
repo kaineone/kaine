@@ -17,11 +17,11 @@ import pytest
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
-from kaine.modules.hypnos import FakeTrainer, Hypnos, RestScheduler, VoiceAlignmentConfig
+from kaine.modules.affect import Affect
+from kaine.modules.affect.goals import GoalLedger, GoalState
 from kaine.modules.nous import Nous
 from kaine.modules.nous.engine import FakeEngine, PymdpEngine
-from kaine.modules.thymos import Thymos
-from kaine.modules.thymos.goals import GoalLedger, GoalState
+from kaine.modules.sleep import FakeTrainer, RestScheduler, Sleep, VoiceAlignmentConfig
 
 
 @pytest.fixture
@@ -47,7 +47,7 @@ def _snap():
     return _Snap([_Ev("soma", {}, 0.9)])
 
 
-def _make_hypnos(bus: AsyncBus, tmp_path: Path, *, scheduler: RestScheduler | None = None):
+def _make_sleep(bus: AsyncBus, tmp_path: Path, *, scheduler: RestScheduler | None = None):
     log_path = tmp_path / "intent.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     config = VoiceAlignmentConfig(
@@ -55,9 +55,9 @@ def _make_hypnos(bus: AsyncBus, tmp_path: Path, *, scheduler: RestScheduler | No
         adapter_output_dir=tmp_path / "adapters",
         enabled=False,
     )
-    return Hypnos(
+    return Sleep(
         bus,
-        mnemos=None,
+        episodic_memory=None,
         scheduler=scheduler,
         trainer=FakeTrainer(),
         voice_alignment_config=config,
@@ -115,7 +115,7 @@ def test_goal_ledger_from_dict_drops_invalid_entries(caplog):
             },
         ]
     }
-    with caplog.at_level(logging.WARNING, logger="kaine.modules.thymos.goals"):
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.affect.goals"):
         restored = GoalLedger.from_dict(data)
 
     assert len(restored) == 1
@@ -147,7 +147,7 @@ def test_goal_ledger_load_dict_drops_unparsable_created_at(caplog):
             },
         ]
     }
-    with caplog.at_level(logging.WARNING, logger="kaine.modules.thymos.goals"):
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.affect.goals"):
         ledger.load_dict(data)
 
     assert len(ledger) == 1
@@ -190,7 +190,7 @@ def test_goal_ledger_load_dict_drops_non_finite_fields(caplog):
         ]
     }
     ledger = GoalLedger()
-    with caplog.at_level(logging.WARNING, logger="kaine.modules.thymos.goals"):
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.affect.goals"):
         ledger.load_dict(data)
 
     assert len(ledger) == 1
@@ -201,7 +201,7 @@ def test_goal_ledger_load_dict_non_list_goals_leaves_existing(caplog):
     ledger = GoalLedger()
     g = ledger.add("keep me", priority=0.5)
 
-    with caplog.at_level(logging.WARNING, logger="kaine.modules.thymos.goals"):
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.affect.goals"):
         ledger.load_dict({"goals": "not a list"})
 
     assert len(ledger) == 1
@@ -213,7 +213,7 @@ def test_goal_ledger_load_dict_non_dict_data_leaves_existing(caplog):
     ledger = GoalLedger()
     g = ledger.add("keep me", priority=0.5)
 
-    with caplog.at_level(logging.WARNING, logger="kaine.modules.thymos.goals"):
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.affect.goals"):
         ledger.load_dict("not a dict")
 
     assert len(ledger) == 1
@@ -227,75 +227,75 @@ def test_goal_ledger_load_dict_non_dict_data_leaves_existing(caplog):
 
 
 @pytest.mark.asyncio
-async def test_thymos_serializes_and_restores_goals(bus: AsyncBus):
-    thymos = Thymos(bus, publish_interval_s=999.0)
-    g_active = thymos.goals.add("explore perimeter", priority=0.8)
-    g_done = thymos.goals.add("finish puzzle", priority=0.6)
-    g_abandoned = thymos.goals.add("climb ladder", priority=0.4)
-    thymos.goals.complete(g_done.id)
-    thymos.goals.abandon(g_abandoned.id)
+async def test_affect_serializes_and_restores_goals(bus: AsyncBus):
+    affect = Affect(bus, publish_interval_s=999.0)
+    g_active = affect.goals.add("explore perimeter", priority=0.8)
+    g_done = affect.goals.add("finish puzzle", priority=0.6)
+    g_abandoned = affect.goals.add("climb ladder", priority=0.4)
+    affect.goals.complete(g_done.id)
+    affect.goals.abandon(g_abandoned.id)
 
-    snapshot = thymos.serialize()
+    snapshot = affect.serialize()
     assert "goals" in snapshot
     assert len(snapshot["goals"]["goals"]) == 3
 
-    thymos2 = Thymos(bus, publish_interval_s=999.0)
-    thymos2.deserialize(snapshot)
+    affect2 = Affect(bus, publish_interval_s=999.0)
+    affect2.deserialize(snapshot)
 
-    assert len(thymos2.goals) == 3
-    assert thymos2.goals.get(g_active.id).state == GoalState.ACTIVE
-    assert thymos2.goals.get(g_done.id).state == GoalState.COMPLETED
-    assert thymos2.goals.get(g_abandoned.id).state == GoalState.ABANDONED
-    assert thymos2.goals.relevance("explore perimeter") > 0.0
-    assert thymos2.goals.relevance("finish puzzle") == 0.0
+    assert len(affect2.goals) == 3
+    assert affect2.goals.get(g_active.id).state == GoalState.ACTIVE
+    assert affect2.goals.get(g_done.id).state == GoalState.COMPLETED
+    assert affect2.goals.get(g_abandoned.id).state == GoalState.ABANDONED
+    assert affect2.goals.relevance("explore perimeter") > 0.0
+    assert affect2.goals.relevance("finish puzzle") == 0.0
 
 
 @pytest.mark.asyncio
-async def test_thymos_deserialize_without_goals_leaves_ledger(bus: AsyncBus):
-    thymos = Thymos(bus, publish_interval_s=999.0)
-    thymos.goals.add("owner goal", priority=0.3)
-    snapshot = thymos.serialize()
+async def test_affect_deserialize_without_goals_leaves_ledger(bus: AsyncBus):
+    affect = Affect(bus, publish_interval_s=999.0)
+    affect.goals.add("owner goal", priority=0.3)
+    snapshot = affect.serialize()
     snapshot.pop("goals")
 
-    thymos2 = Thymos(bus, publish_interval_s=999.0)
-    local = thymos2.goals.add("local goal", priority=0.5)
-    before_ledger = thymos2.goals
-    thymos2.deserialize(snapshot)
+    affect2 = Affect(bus, publish_interval_s=999.0)
+    local = affect2.goals.add("local goal", priority=0.5)
+    before_ledger = affect2.goals
+    affect2.deserialize(snapshot)
 
-    assert thymos2.goals is before_ledger
-    assert len(thymos2.goals) == 1
-    assert thymos2.goals.get(local.id).description == "local goal"
-
-
-@pytest.mark.asyncio
-async def test_thymos_deserialize_with_goals_keeps_ledger_identity(bus: AsyncBus):
-    thymos = Thymos(bus, publish_interval_s=999.0)
-    thymos.goals.add("explore perimeter", priority=0.8)
-    snapshot = thymos.serialize()
-
-    thymos2 = Thymos(bus, publish_interval_s=999.0)
-    before = thymos2.goals
-    thymos2.deserialize(snapshot)
-
-    assert thymos2.goals is before
-    assert len(thymos2.goals) == 1
+    assert affect2.goals is before_ledger
+    assert len(affect2.goals) == 1
+    assert affect2.goals.get(local.id).description == "local goal"
 
 
 @pytest.mark.asyncio
-async def test_thymos_restore_does_not_publish_goal_events(bus: AsyncBus):
-    thymos = Thymos(bus, publish_interval_s=999.0)
-    thymos.goals.add("a goal", priority=0.5)
-    snapshot = thymos.serialize()
+async def test_affect_deserialize_with_goals_keeps_ledger_identity(bus: AsyncBus):
+    affect = Affect(bus, publish_interval_s=999.0)
+    affect.goals.add("explore perimeter", priority=0.8)
+    snapshot = affect.serialize()
 
-    thymos2 = Thymos(bus, publish_interval_s=999.0)
+    affect2 = Affect(bus, publish_interval_s=999.0)
+    before = affect2.goals
+    affect2.deserialize(snapshot)
+
+    assert affect2.goals is before
+    assert len(affect2.goals) == 1
+
+
+@pytest.mark.asyncio
+async def test_affect_restore_does_not_publish_goal_events(bus: AsyncBus):
+    affect = Affect(bus, publish_interval_s=999.0)
+    affect.goals.add("a goal", priority=0.5)
+    snapshot = affect.serialize()
+
+    affect2 = Affect(bus, publish_interval_s=999.0)
 
     published: list[tuple[str, dict, float]] = []
 
     async def fake_publish(stream: str, payload: dict, *, salience: float = 0.0) -> None:
         published.append((stream, payload, salience))
 
-    thymos2.publish = fake_publish  # type: ignore[method-assign]
-    thymos2.deserialize(snapshot)
+    affect2.publish = fake_publish  # type: ignore[method-assign]
+    affect2.deserialize(snapshot)
 
     goal_events = [e for e in published if e[0].startswith("thymos.goal")]
     assert goal_events == []
@@ -404,75 +404,75 @@ def test_scheduler_restore_rejects_negative_deferral():
 
 
 @pytest.mark.asyncio
-async def test_hypnos_serializes_schedule(bus: AsyncBus, tmp_path: Path):
+async def test_sleep_serializes_schedule(bus: AsyncBus, tmp_path: Path):
     now = [1000.0]
     scheduler = RestScheduler(
         interval_seconds=600.0, max_deferral_seconds=0.0, clock=lambda: now[0]
     )
-    hypnos = _make_hypnos(bus, tmp_path, scheduler=scheduler)
-    snapshot = hypnos.serialize()
+    sleep = _make_sleep(bus, tmp_path, scheduler=scheduler)
+    snapshot = sleep.serialize()
     assert "schedule" in snapshot
     assert snapshot["schedule"]["original_due_in"] == pytest.approx(600.0)
     assert snapshot["schedule"]["effective_due_in"] == pytest.approx(600.0)
 
 
 @pytest.mark.asyncio
-async def test_hypnos_deserialize_restores_remaining_time(bus: AsyncBus, tmp_path: Path):
+async def test_sleep_deserialize_restores_remaining_time(bus: AsyncBus, tmp_path: Path):
     now1 = [1000.0]
     scheduler1 = RestScheduler(
         interval_seconds=600.0, max_deferral_seconds=0.0, clock=lambda: now1[0]
     )
-    hypnos1 = _make_hypnos(bus, tmp_path, scheduler=scheduler1)
-    snapshot = hypnos1.serialize()
+    sleep1 = _make_sleep(bus, tmp_path, scheduler=scheduler1)
+    snapshot = sleep1.serialize()
 
     now2 = [5_000_000.0]
     scheduler2 = RestScheduler(
         interval_seconds=600.0, max_deferral_seconds=0.0, clock=lambda: now2[0]
     )
-    hypnos2 = _make_hypnos(bus, tmp_path, scheduler=scheduler2)
-    hypnos2.deserialize(snapshot)
+    sleep2 = _make_sleep(bus, tmp_path, scheduler=scheduler2)
+    sleep2.deserialize(snapshot)
 
     now2[0] = 5_000_599.0
-    assert hypnos2._scheduler.is_due() is False
+    assert sleep2._scheduler.is_due() is False
     now2[0] = 5_000_601.0
-    assert hypnos2._scheduler.is_due() is True
+    assert sleep2._scheduler.is_due() is True
 
 
 @pytest.mark.asyncio
-async def test_hypnos_old_snapshot_starts_fresh(bus: AsyncBus, tmp_path: Path, caplog):
+async def test_sleep_old_snapshot_starts_fresh(bus: AsyncBus, tmp_path: Path, caplog):
     now1 = [1000.0]
     scheduler1 = RestScheduler(
         interval_seconds=600.0, max_deferral_seconds=0.0, clock=lambda: now1[0]
     )
-    hypnos1 = _make_hypnos(bus, tmp_path, scheduler=scheduler1)
-    snapshot = hypnos1.serialize()
+    sleep1 = _make_sleep(bus, tmp_path, scheduler=scheduler1)
+    snapshot = sleep1.serialize()
     snapshot.pop("schedule")
 
     now2 = [5_000_000.0]
     scheduler2 = RestScheduler(
         interval_seconds=600.0, max_deferral_seconds=0.0, clock=lambda: now2[0]
     )
-    hypnos2 = _make_hypnos(bus, tmp_path, scheduler=scheduler2)
-    with caplog.at_level(logging.INFO, logger="kaine.modules.hypnos"):
-        hypnos2.deserialize(snapshot)
+    sleep2 = _make_sleep(bus, tmp_path, scheduler=scheduler2)
+    with caplog.at_level(logging.INFO, logger="kaine.modules.sleep"):
+        sleep2.deserialize(snapshot)
 
-    assert hypnos2._scheduler.effective_due_at == pytest.approx(5_000_600.0)
+    assert sleep2._scheduler.effective_due_at == pytest.approx(5_000_600.0)
     assert "snapshot has no schedule; starting a fresh interval" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_hypnos_malformed_schedule_logs_warning_and_stays_fresh(
+async def test_sleep_malformed_schedule_logs_warning_and_stays_fresh(
     bus: AsyncBus, tmp_path: Path, caplog
 ):
     now2 = [5_000_000.0]
     scheduler2 = RestScheduler(
         interval_seconds=600.0, max_deferral_seconds=0.0, clock=lambda: now2[0]
     )
-    hypnos2 = _make_hypnos(bus, tmp_path, scheduler=scheduler2)
-    with caplog.at_level(logging.WARNING, logger="kaine.modules.hypnos"):
-        hypnos2.deserialize({"schedule": {"original_due_in": "bad"}})
+    sleep2 = _make_sleep(bus, tmp_path, scheduler=scheduler2)
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.sleep"):
+        sleep2.deserialize({"schedule": {"original_due_in": "bad"}})
 
-    assert hypnos2._scheduler.effective_due_at == pytest.approx(5_000_600.0)
+    assert sleep2._scheduler.effective_due_at == pytest.approx(5_000_600.0)
     assert "malformed schedule" in caplog.text
 
 

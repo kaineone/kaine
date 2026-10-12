@@ -11,32 +11,32 @@ if TYPE_CHECKING:
     pass
 from kaine.boot.common import ModuleFactory, shared_embedder
 from kaine.boot.errors import ConfigurationError
+from kaine.boot.factories.affect import make_affect
 from kaine.boot.factories.audition import make_audition
 from kaine.boot.factories.eidolon import make_eidolon
 from kaine.boot.factories.empatheia import make_empatheia
-from kaine.boot.factories.hypnos import make_hypnos
+from kaine.boot.factories.episodic_memory import make_episodic_memory
 from kaine.boot.factories.interoception import make_interoception
 from kaine.boot.factories.lingua import make_lingua
-from kaine.boot.factories.mnemos import make_mnemos
 from kaine.boot.factories.mundus import make_mundus
 from kaine.boot.factories.nous import make_nous
 from kaine.boot.factories.perception import make_perception
-from kaine.boot.factories.phantasia import make_phantasia
 from kaine.boot.factories.praxis import make_praxis
 from kaine.boot.factories.sequence import make_sequence
-from kaine.boot.factories.thymos import make_thymos
+from kaine.boot.factories.sleep import make_sleep
 from kaine.boot.factories.vision import make_vision
 from kaine.boot.factories.vox import make_vox
+from kaine.boot.factories.world_model import make_world_model
 from kaine.boot.metrics import _log_device_assignments
 from kaine.boot.perception_feed import _install_shared_womb_clock, _install_womb_world_transition
 from kaine.boot.security import install_state_encryption
 from kaine.boot.wiring import (
+    _wire_affect_drive_relevance,
     _wire_eidolon_capabilities,
     _wire_lingua_organ_adapter,
     _wire_lingua_self_model,
     _wire_oscillators,
     _wire_self_hearing_gate,
-    _wire_thymos_drive_relevance,
 )
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
@@ -51,9 +51,9 @@ SIMPLE_FACTORIES: dict[str, ModuleFactory] = {
     "chronos": make_sequence,
     "topos": make_vision,
     "nous": make_nous,
-    "mnemos": make_mnemos,
+    "mnemos": make_episodic_memory,
     "eidolon": make_eidolon,
-    "thymos": make_thymos,
+    "thymos": make_affect,
     "praxis": make_praxis,
     "lingua": make_lingua,
     "audition": make_audition,
@@ -61,7 +61,7 @@ SIMPLE_FACTORIES: dict[str, ModuleFactory] = {
     "mundus": make_mundus,
     "perception": make_perception,
     "empatheia": make_empatheia,
-    "phantasia": make_phantasia,
+    "phantasia": make_world_model,
 }
 
 
@@ -267,20 +267,20 @@ def build_registry(
 
     if bool(toggles.get("hypnos", False)):
         # construct_module hands the sleep module its sibling modules from the registry.
-        hypnos = construct_module(
+        sleep = construct_module(
             "hypnos",
             bus,
             kaine_config,
             registry=registry,
             entity_clock=entity_clock,
         )
-        registry.register(hypnos)
+        registry.register(sleep)
         log.info("registered module hypnos")
     _wire_self_hearing_gate(registry)
     _wire_lingua_self_model(registry)
     _wire_lingua_organ_adapter(registry, kaine_config)
     _wire_eidolon_capabilities(registry)
-    _wire_thymos_drive_relevance(registry)
+    _wire_affect_drive_relevance(registry)
     _log_device_assignments(registry, kaine_config)
     _wire_oscillators(registry, kaine_config)
     return registry
@@ -324,15 +324,15 @@ def construct_module(
         section["_embedder"] = shared_embedder(registry, kaine_config)
 
     if name == "hypnos":
-        mnemos = registry.get("mnemos") if "mnemos" in registry else None
-        thymos = registry.get("thymos") if "thymos" in registry else None
-        phantasia = registry.get("phantasia") if "phantasia" in registry else None
-        return make_hypnos(
+        episodic_memory = registry.get("mnemos") if "mnemos" in registry else None
+        affect = registry.get("thymos") if "thymos" in registry else None
+        world_model = registry.get("phantasia") if "phantasia" in registry else None
+        return make_sleep(
             bus,
             section,
-            mnemos=mnemos,
-            thymos=thymos,
-            phantasia=phantasia,
+            episodic_memory=episodic_memory,
+            affect=affect,
+            world_model=world_model,
             kaine_config=kaine_config,
             entity_clock=entity_clock,
             embedder=shared_embedder(registry, kaine_config),
@@ -371,4 +371,4 @@ def rewire_module(registry: ModuleRegistry, name: str, kaine_config: dict[str, A
     _wire_lingua_self_model(registry)
     _wire_lingua_organ_adapter(registry, kaine_config)
     _wire_eidolon_capabilities(registry)
-    _wire_thymos_drive_relevance(registry)
+    _wire_affect_drive_relevance(registry)

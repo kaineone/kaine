@@ -10,8 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from kaine.modules.hypnos import hot_swap
-from kaine.modules.hypnos.organ_adapter import (
+from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
+from kaine.modules.sleep import hot_swap
+from kaine.modules.sleep.organ_adapter import (
     GENERATION,
     MANIFEST,
     OrganAdapterResolver,
@@ -21,7 +22,6 @@ from kaine.modules.hypnos.organ_adapter import (
     sha256_file,
     wait_ready,
 )
-from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
 
 
 @pytest.fixture(autouse=True)
@@ -513,8 +513,8 @@ async def test_dispatch_organ_adapter_missing_dir(tmp_path):
 
 
 class _FakeRegistry:
-    def __init__(self, lingua, hypnos):
-        self._mods = {"lingua": lingua, "hypnos": hypnos}
+    def __init__(self, lingua, sleep):
+        self._mods = {"lingua": lingua, "hypnos": sleep}
 
     def __contains__(self, key):
         return key in self._mods

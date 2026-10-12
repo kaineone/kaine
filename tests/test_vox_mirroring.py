@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from kaine.modules.thymos.state import DimensionalState
+from kaine.modules.affect.state import DimensionalState
 from kaine.modules.vox.mapping import ChatterboxParams, affect_to_chatterbox
 from kaine.modules.vox.mirroring import blend_prosody, decayed_strength
 

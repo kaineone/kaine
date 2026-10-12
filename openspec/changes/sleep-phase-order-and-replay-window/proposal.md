@@ -52,7 +52,7 @@ differs in three ways that #460 left for this change.
   `ReplayEngine.replay()` is unchanged, so a replay outside that bracket still
   raises `ReplayWindowError`.
 - `select_cross_period_traces()` draws on the short-term buffer, the traces
-  phase 1 consolidated (`MnemosCore.last_consolidated`), and the persisted
+  phase 1 consolidated (`EpisodicMemoryCore.last_consolidated`), and the persisted
   newest `[mnemos.replay].cross_period_candidates` (default 128, matching
   `short_term_capacity`) points of the episodic collection, read through a
   new `MemoryStorage.recent_points()` that returns id, text, payload and
@@ -79,10 +79,10 @@ differs in three ways that #460 left for this change.
 
 ## Impact
 
-- `kaine/modules/hypnos/phases.py`, `kaine/modules/hypnos/module.py`,
-  `kaine/modules/mnemos/module.py`, `kaine/modules/mnemos/storage.py`,
-  `kaine/boot/factories/mnemos.py`, `config/kaine.toml`
-  (`[mnemos.replay].cross_period_candidates`), `kaine/modules/mnemos/replay.py`
+- `kaine/modules/sleep/phases.py`, `kaine/modules/sleep/module.py`,
+  `kaine/modules/episodic_memory/module.py`, `kaine/modules/episodic_memory/storage.py`,
+  `kaine/boot/factories/episodic_memory.py`, `config/kaine.toml`
+  (`[mnemos.replay].cross_period_candidates`), `kaine/modules/episodic_memory/replay.py`
   (docstrings), tests, and the sleep module, episodic memory module and sleep pages of the book.
 - Behaviour with the episodic memory module enabled: phase 2 no longer fails when phase 1 is
   quick. The base-thesis form has no episodic memory module, so there the change is the phase

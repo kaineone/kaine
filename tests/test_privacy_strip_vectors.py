@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from kaine.bus import Event
 from kaine.cycle.types import WorkspaceSnapshot
-from kaine.modules.mnemos import module as mnemos_module
+from kaine.modules.episodic_memory import module as episodic_memory_module
 from kaine.privacy_filter import strip_vectors
 
 
@@ -51,7 +51,7 @@ def test_serialize_snapshot_strips_vision_vectors_and_omits_tick_and_entry_ids()
         selected_events=[event],
         inhibited=False,
     )
-    text = mnemos_module._serialize_snapshot(snapshot)
+    text = episodic_memory_module._serialize_snapshot(snapshot)
     assert "tick=" not in text
     assert "@" not in text
     assert "topos:topos.report=" in text

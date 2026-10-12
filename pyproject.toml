@@ -181,7 +181,7 @@ include = ["kaine*"]
     "static/vendor/*.css",
     "static/vendor/vendor/*.js",
 ]
-"kaine.modules.hypnos" = ["eval_probes/*.jsonl"]
+"kaine.modules.sleep" = ["eval_probes/*.jsonl"]
 "kaine.setup.web" = ["templates/*.html", "static/*.css"]
 "kaine.modules.eidolon" = ["surnames.txt"]
 
@@ -422,7 +422,7 @@ forbidden_modules = [
 # StateModulator / feeds an AffectStateProvider and injects them — so the
 # workspace layer stays free of `kaine.modules`. No ignore_imports: the DI seam
 # means workspace never legitimately needs to import a module, so any such import
-# (e.g. `from kaine.modules.thymos... import StateModulator` inside
+# (e.g. `from kaine.modules.affect... import StateModulator` inside
 # kaine/workspace/) is a boundary violation and must break this contract.
 [[tool.importlinter.contracts]]
 name = "Workspace must not import the cognitive modules (dependency injection only)"

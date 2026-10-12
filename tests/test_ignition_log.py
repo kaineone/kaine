@@ -156,7 +156,7 @@ def _make_cycle(bus: ScriptedBus) -> CognitiveCycle:
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=32),
             goal_scorer=StaticGoalScorer(),
-            thymos_modulator=StaticThymosModulator(),
+            affect_modulator=StaticThymosModulator(),
         ),
         top_k=5,
         publication_threshold=0.35,

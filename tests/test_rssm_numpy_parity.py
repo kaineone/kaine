@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import kaine.modules.phantasia.rssm_numpy as rssm
+import kaine.modules.world_model.rssm_numpy as rssm
 
 CASES = [
     "cat_small_t1",
@@ -34,7 +34,7 @@ def _fixture_path(name: str) -> Path:
     return (
         Path(__file__).resolve().parent
         / "fixtures"
-        / "phantasia_golden"
+        / "world_model_golden"
         / f"{name}.npz"
     )
 
@@ -379,9 +379,9 @@ sys.meta_path.insert(0, _JaxBlocker())
 
 import json
 import numpy as np
-import kaine.modules.phantasia.rssm_numpy as rssm
+import kaine.modules.world_model.rssm_numpy as rssm
 
-npz = np.load("tests/fixtures/phantasia_golden/cat_small_t16.npz", allow_pickle=False)
+npz = np.load("tests/fixtures/world_model_golden/cat_small_t16.npz", allow_pickle=False)
 header = json.loads(npz["__header__"].item())
 cfg = rssm.RSSMConfig(**header["config"])
 

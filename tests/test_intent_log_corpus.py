@@ -5,7 +5,7 @@ import datetime
 import json
 from pathlib import Path
 
-from kaine.modules.hypnos.corpus import (
+from kaine.modules.sleep.corpus import (
     check_corpus_ceiling,
     corpus_size_bytes,
     rotate_intent_log,
@@ -177,7 +177,7 @@ def test_rotate_without_hard_links_falls_back_to_rename_and_never_overwrites(
     def no_links(_src, _dst):
         raise OSError("hard links not supported")
 
-    monkeypatch.setattr("kaine.modules.hypnos.corpus.os.link", no_links)
+    monkeypatch.setattr("kaine.modules.sleep.corpus.os.link", no_links)
     log_path = tmp_path / "intent.jsonl"
     corpus_dir = tmp_path / "intent_log"
     corpus_dir.mkdir()

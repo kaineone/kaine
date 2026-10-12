@@ -97,7 +97,7 @@ jobs:
           docker run --rm kaine:${{ matrix.flavor }} \
             test -s /app/eval_probes/abliteration_probes.jsonl
           docker run --rm -w /tmp kaine:${{ matrix.flavor }} \
-            python -c "import kaine.modules.hypnos.trainer_service; print('trainer_service imports')"
+            python -c "import kaine.modules.sleep.trainer_service; print('trainer_service imports')"
 
       - name: No model weights baked into any layer
         run: |

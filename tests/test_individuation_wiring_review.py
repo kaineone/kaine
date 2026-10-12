@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from kaine.lifecycle.individuation_store import adapter_sha_of
-from kaine.modules.hypnos import organ_adapter
+from kaine.modules.sleep import organ_adapter
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 from tests.test_individuation_runtime import (
     _make_reference,

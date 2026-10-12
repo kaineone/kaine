@@ -93,19 +93,19 @@ async def _make_client(
     return client, app
 
 
-def test_conversation_sleep_state_follows_hypnos_lifecycle():
+def test_conversation_sleep_state_follows_sleep_lifecycle():
     """The sleep badge must react to the canonical sleep module's lifecycle event types
     (hypnos.sleep.started/completed), not the old began_rest/ended_rest variants
     The sleep module never emits."""
     state = ConversationState()
     assert state.sleeping is False
-    state.update_from_hypnos("hypnos.sleep.started")
+    state.update_from_sleep("hypnos.sleep.started")
     assert state.sleeping is True
-    state.update_from_hypnos("hypnos.sleep.completed")
+    state.update_from_sleep("hypnos.sleep.completed")
     assert state.sleeping is False
     # The old, wrong type must NOT toggle the badge (guards against regression).
-    state.update_from_hypnos("hypnos.sleep.started")
-    state.update_from_hypnos("hypnos.began_rest")
+    state.update_from_sleep("hypnos.sleep.started")
+    state.update_from_sleep("hypnos.began_rest")
     assert state.sleeping is True
 
 
@@ -333,7 +333,7 @@ class _InteroceptionOnlyRegistry:
 
 
 @pytest.mark.asyncio
-async def test_post_merge_two_phantasia_world_models_requires_choice(tmp_path):
+async def test_post_merge_two_world_model_world_models_requires_choice(tmp_path):
     """When both parents carry a world model and no choice is given,
     the merge endpoint surfaces a 409 pointing at world_model_from."""
     fm = ForkManager(tmp_path)
@@ -358,7 +358,7 @@ async def test_post_merge_two_phantasia_world_models_requires_choice(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_post_merge_two_phantasia_world_models_choice_b(tmp_path):
+async def test_post_merge_two_world_model_world_models_choice_b(tmp_path):
     """Passing world_model_from='b' succeeds and carries b's world model."""
     fm = ForkManager(tmp_path)
     snap_a = fm.snapshot(_InteroceptionOnlyRegistry(), label="a")
@@ -568,7 +568,7 @@ async def test_health_endpoint_shape():
 
     prober = _prober(
         {"mnemos": True},
-        [DependencySpec(name="Qdrant", role="Mnemos", module="mnemos", probe=up_probe)],
+        [DependencySpec(name="Qdrant", role="EpisodicMemory", module="mnemos", probe=up_probe)],
     )
     client, app = await _make_client(health_prober=prober)
     async with client:
@@ -606,7 +606,7 @@ async def test_push_snapshots_periodically_pushes_combined_snapshot():
 
     prober = _prober(
         {"mnemos": True},
-        [DependencySpec(name="Qdrant", role="Mnemos", module="mnemos", probe=up_probe)],
+        [DependencySpec(name="Qdrant", role="EpisodicMemory", module="mnemos", probe=up_probe)],
     )
     bridge = BusBridge(FakeBus(), PrivacyFilter(), streams=[])
     client = bridge.add_client("diagnostics")
@@ -748,7 +748,7 @@ async def test_health_timeout_does_not_block_other_probes():
         {"nous": True, "mnemos": True},
         [
             DependencySpec(name="ONA", role="Nous", module="nous", probe=hangs),
-            DependencySpec(name="Qdrant", role="Mnemos", module="mnemos", probe=quick),
+            DependencySpec(name="Qdrant", role="EpisodicMemory", module="mnemos", probe=quick),
         ],
         probe_timeout_s=0.05,
     )
@@ -769,7 +769,7 @@ async def test_health_results_cached_within_ttl():
 
     prober = _prober(
         {"mnemos": True},
-        [DependencySpec(name="Qdrant", role="Mnemos", module="mnemos", probe=counting)],
+        [DependencySpec(name="Qdrant", role="EpisodicMemory", module="mnemos", probe=counting)],
         cache_ttl_s=60.0,
     )
     await prober.snapshot()
@@ -912,7 +912,7 @@ async def test_module_states_from_runtime_and_perception(tmp_path):
     prober = HealthProber(
         modules_enabled={"mnemos": True, "nous": True, "praxis": False},
         dependencies=[
-            DependencySpec(name="Qdrant", role="Mnemos", module="mnemos", probe=up_probe)
+            DependencySpec(name="Qdrant", role="EpisodicMemory", module="mnemos", probe=up_probe)
         ],
         cache_ttl_s=0.0,
         cycle_runtime_path=runtime,

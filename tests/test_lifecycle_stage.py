@@ -114,7 +114,7 @@ def test_has_prior_lived_history_true_for_preservation_manifest(tmp_path: Path) 
     assert st.has_prior_lived_history(identity, state_root=tmp_path) is True
 
 
-def test_has_prior_lived_history_true_for_phantasia_checkpoint(tmp_path: Path) -> None:
+def test_has_prior_lived_history_true_for_world_model_checkpoint(tmp_path: Path) -> None:
     identity = mint_identity()
     (tmp_path / "phantasia").mkdir(parents=True)
     (tmp_path / "phantasia" / "world_model.ckpt").write_text("data")

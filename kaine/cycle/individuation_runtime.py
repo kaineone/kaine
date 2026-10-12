@@ -235,7 +235,7 @@ class IndividuationRuntime:
         notify: Callable[[str], Awaitable[Any]] | None,
         ensure_fact: Callable[[str], Awaitable[bool]],
         is_gestating: Callable[[], bool],
-        hypnos_sleeping: Callable[[], bool] | None,
+        sleep_sleeping: Callable[[], bool] | None,
     ) -> None:
         self.config = config
         self.paths = paths
@@ -245,7 +245,7 @@ class IndividuationRuntime:
         self.notify = notify
         self.ensure_fact = ensure_fact
         self.is_gestating = is_gestating
-        self.hypnos_sleeping = hypnos_sleeping
+        self.sleep_sleeping = sleep_sleeping
 
     async def publish_divergence(self, payload: dict) -> None:
         await self.bus.publish(
@@ -298,9 +298,9 @@ class IndividuationRuntime:
     async def start(self) -> None:
         await self.ensure_fact(self.config.disclosure)
 
-        if self.hypnos_sleeping is not None:
+        if self.sleep_sleeping is not None:
             try:
-                if self.hypnos_sleeping():
+                if self.sleep_sleeping():
                     self.scheduler.notify_sleep_started()
             except Exception:
                 log.debug("hypnos_sleeping predicate failed, treating as awake")
@@ -333,7 +333,7 @@ class IndividuationRuntime:
             await stop_event.wait()
             self.scheduler.stop()
 
-        watch_task = asyncio.create_task(self._watch_hypnos(stop_event))
+        watch_task = asyncio.create_task(self._watch_sleep(stop_event))
         sched_task = asyncio.create_task(self.scheduler.run())
         stop_task = asyncio.create_task(wait_stop())
 
@@ -350,7 +350,7 @@ class IndividuationRuntime:
                 watch_task, sched_task, stop_task, return_exceptions=True
             )
 
-    async def _watch_hypnos(self, stop_event: asyncio.Event) -> None:
+    async def _watch_sleep(self, stop_event: asyncio.Event) -> None:
         while True:
             try:
                 cursor = await self.bus.last_entry_id("hypnos.out")
@@ -410,7 +410,7 @@ def build_runtime(
     tick_index: Callable[[], int | None],
     is_paused: Callable[[], bool],
     organ_unloaded: Callable[[], bool],
-    hypnos_sleeping: Callable[[], bool] | None,
+    sleep_sleeping: Callable[[], bool] | None,
     born_at: Callable[[], str | None],
     is_gestating: Callable[[], bool],
     bus: Any,
@@ -445,7 +445,7 @@ def build_runtime(
         notify=notify,
         ensure_fact=ensure_fact,
         is_gestating=is_gestating,
-        hypnos_sleeping=hypnos_sleeping,
+        sleep_sleeping=sleep_sleeping,
     )
 
     adapter_verifiable: Callable[[], bool] | None = None
@@ -519,7 +519,7 @@ def build_runtime(
 def _birth_adapter_file(adapter_output_dir: Path | None) -> Path | None:
     if adapter_output_dir is None:
         return None
-    from kaine.modules.hypnos.adapter_store import current_path
+    from kaine.modules.sleep.adapter_store import current_path
 
     current = current_path(adapter_output_dir)
     if current is None:

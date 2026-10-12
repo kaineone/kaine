@@ -9,7 +9,7 @@ off, so the seeded feed keeps running through every sleep.
 
 ## What Changes
 
-- `Hypnos.enter_sleep` suspends perception when the sleep starts and restores
+- `Sleep.enter_sleep` suspends perception when the sleep starts and restores
   it in a `finally` when the sleep ends, so the feed pauses for the whole sleep
   whatever modules are active, and is restored on failure or cancellation.
 - Phase 2 no longer suspends and restores perception itself.
@@ -27,7 +27,7 @@ off, so the seeded feed keeps running through every sleep.
 
 ## Impact
 
-- `kaine/modules/hypnos/module.py`, tests.
+- `kaine/modules/sleep/module.py`, tests.
 - Behaviour: on profiles without the episodic memory module the seeded or playlist feed now pauses
   during sleep, and the seeded stimulus restarts from its first frame after
   each sleep, as it already did on profiles with the episodic memory module.

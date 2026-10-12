@@ -4,7 +4,7 @@
 """Mechanistic check on the organ's abliteration via the Jacobian lens.
 
 The behavioral gate (``scripts/verify_abliteration.py`` /
-``kaine.modules.hypnos.capability_eval``) confirms the organ does not *emit*
+``kaine.modules.sleep.capability_eval``) confirms the organ does not *emit*
 refusals on a probe set. But refusal is multi-dimensional and category-structured
 (Wollschläger et al. 2025; Joad et al. 2026), so a model can pass a bounded
 behavioral battery while a refusal *disposition* survives internally. This tool

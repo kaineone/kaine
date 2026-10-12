@@ -252,7 +252,7 @@ auto_time_scale_floor = 0.1
 enabled = true
 salience_floor = 0.5
 phasic_decay_s = 1.0
-# baseline_arousal is accepted; when absent it defaults to Thymos's baseline_arousal.
+# baseline_arousal is accepted; when absent it defaults to Affect's baseline_arousal.
 
 [oscillator]
 enabled = false

@@ -84,7 +84,7 @@ def test_unknown_locus_when_unlocked_resolves_to_physical(desired_path: Path) ->
     assert state.locus == "physical"
 
 
-def test_hypnos_restore_path_does_not_move_gestation_lock(desired_path: Path) -> None:
+def test_sleep_restore_path_does_not_move_gestation_lock(desired_path: Path) -> None:
     write_desired_locus("virtual", locked=True, locked_by="gestation", path=desired_path)
 
     # The sleep module records the pre-sleep locus as raw string (physical, virtual, off)

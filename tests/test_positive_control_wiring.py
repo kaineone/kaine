@@ -704,7 +704,7 @@ async def test_vision_report_carries_entity_time_and_awake() -> None:
         assert reports[0]["entity_time_s"] == clock.now()
         assert reports[0]["awake"] is True
 
-        vision._in_hypnos = True
+        vision._in_sleep = True
         await vision.process_frame(None)
         reports = await _reports(bus, "topos.out")
         assert reports[-1]["awake"] is False

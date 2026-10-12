@@ -62,7 +62,7 @@ def _finite_or_none(vector: Any) -> Optional[list[float]]:
     return vector
 
 
-_HYPNOS_STREAM: str = "hypnos.out"
+_SLEEP_STREAM: str = "hypnos.out"
 
 
 class Vision(BaseModule):
@@ -244,9 +244,9 @@ class Vision(BaseModule):
         # change/habituation/salience while the fovea is sized by arousal.
 
         # sleep flag — suspend forward-model adaptation during sleep.
-        self._in_hypnos: bool = False
+        self._in_sleep: bool = False
         # Initialize resolves this to the current stream tail via last_entry_id().
-        self._hypnos_cursor: str = "$"
+        self._sleep_cursor: str = "$"
 
         # Attention-driven foveation state (topos-foveation). All memory-only.
         self._foveation_enabled: bool = bool(foveation_enabled)
@@ -304,11 +304,11 @@ class Vision(BaseModule):
 
         # Seed the sleep module's cursor from the stream tail before starting the loop,
         # otherwise a literal "$" under a non-blocking XREAD never advances.
-        self._hypnos_cursor = await self._bus.last_entry_id(_HYPNOS_STREAM)
+        self._sleep_cursor = await self._bus.last_entry_id(_SLEEP_STREAM)
 
         await super().initialize()
         self._tasks.append(
-            asyncio.create_task(self._hypnos_loop(), name=f"{self.name}-hypnos-consumer")
+            asyncio.create_task(self._sleep_loop(), name=f"{self.name}-hypnos-consumer")
         )
         if self._live_camera is not None:
             try:
@@ -583,7 +583,7 @@ class Vision(BaseModule):
         normalised_error: float = 0.0  # exposed on the report for the affect coupling
         scored_stamp: tuple[Optional[int], Optional[float]] = (None, None)
         if self._forward_prediction and self._forward_model is not None:
-            self._forward_model.suspended = self._in_hypnos
+            self._forward_model.suspended = self._in_sleep
             ctx = null = None
             scored_stamp = self._prediction_stamp
             # Offload the MLP forward/backward step to a thread so the event loop
@@ -709,7 +709,7 @@ class Vision(BaseModule):
             # report falls after T_learn, measured in entity time from the start of
             # the run (paper Appendix A.8).
             "entity_time_s": entity_time_s,
-            "awake": not self._in_hypnos,
+            "awake": not self._in_sleep,
             # Whether this report crossed alert level (perception-drives-salience):
             # lets the dashboard perception panel and off-bus analysis count stimulus-
             # driven perceptual events without re-deriving the salience decision.
@@ -859,27 +859,27 @@ class Vision(BaseModule):
         # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).
         self._context.observe(snapshot)
 
-    async def _hypnos_loop(self) -> None:
+    async def _sleep_loop(self) -> None:
         """Subscribe to hypnos.out to gate adaptation during sleep."""
         try:
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
-                        _HYPNOS_STREAM,
-                        last_id=self._hypnos_cursor,
+                        _SLEEP_STREAM,
+                        last_id=self._sleep_cursor,
                         count=64,
                         block_ms=0,
                     )
                     if last_scanned is not None:
-                        self._hypnos_cursor = last_scanned
+                        self._sleep_cursor = last_scanned
                         for _, event in entries:
                             if event.type == "hypnos.sleep.started":
-                                self._in_hypnos = True
+                                self._in_sleep = True
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = True
                                 log.debug("topos: adaptation suspended (hypnos sleep started)")
                             elif event.type == "hypnos.sleep.completed":
-                                self._in_hypnos = False
+                                self._in_sleep = False
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = False
                                 log.debug("topos: adaptation resumed (hypnos sleep completed)")
