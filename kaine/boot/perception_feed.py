@@ -769,8 +769,7 @@ def gather_perception_feed_descriptor(
             surprise_strength=float(audio.get("surprise_strength", 1.0)),
         ).as_descriptor()
     elif mode == "womb":
-        import dataclasses
-
+        from kaine.lifecycle.stored_field_names import stimulus_source_params_record
         from kaine.modules.audition.feed import StimulusSourceAudioSchedule
         from kaine.modules.vision.feed import StimulusSourceSchedule
 
@@ -779,7 +778,7 @@ def gather_perception_feed_descriptor(
         descriptor["seed"] = seed
         try:
             params = _stimulus_source_params(feed)
-            descriptor["womb"] = dataclasses.asdict(params)
+            descriptor["womb"] = stimulus_source_params_record(params)
         except Exception:
             # The stimulus source parameters are validated for real at boot time; the
             # covariate must not crash the run if they can't be read here.

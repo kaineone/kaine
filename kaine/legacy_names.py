@@ -855,6 +855,8 @@ EXCLUDED_GLOBS = (
     # The deprecated dashboard command shim keeps its old package name on purpose.
     "kaine/nexus/__init__.py",
     "kaine/nexus/__main__.py",
+    # Stored field names stay byte-identical for good.
+    "kaine/lifecycle/stored_field_names.py",
     "tests/fixtures/rename_modules/",
     # These documents record the rename itself and must keep the old names.
     "openspec/changes/functional-module-names/",

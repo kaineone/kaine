@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable
 
 from kaine import legacy_aliases, legacy_names
+from kaine.lifecycle.stored_field_names import stimulus_source_params_record
 from kaine.state_io import write_json_atomic
 
 if TYPE_CHECKING:
@@ -392,7 +393,10 @@ def womb_params_digest(params: object) -> str:
     """Return a stable sha256 hex digest of a stimulus source parameters object.
 
     ``params`` must be a dataclass instance (e.g. ``StimulusSourceParams``); its fields are
-    serialised as a compact sorted JSON object before hashing.
+    serialised under their stored names (see :mod:`kaine.lifecycle.stored_field_names`) as a
+    compact sorted JSON object before hashing.
     """
-    payload = json.dumps(asdict(params), sort_keys=True, separators=(",", ":"))
+    payload = json.dumps(
+        stimulus_source_params_record(params), sort_keys=True, separators=(",", ":")
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
