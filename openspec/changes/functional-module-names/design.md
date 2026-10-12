@@ -524,6 +524,23 @@ are the ones the sections above leave open; each follows from those sections.
   `kaine/modules/topos/internvideo_next_loader.py`, which moved to
   `kaine/modules/vision/`. The codemod excludes `external/`, but these are our own
   pointer comments, so the close-out fixes them by hand.
+- **Found in PR 5b.** Four more codemod rules, each with a fixture case: a Python
+  identifier equal to a `PERSISTED_EXACT` key (a dataclass field written by
+  `asdict`, such as the stage file's `hypnos_cursor`, now listed in
+  `PERSISTED_EXACT` and `STAGE_FIELDS`) takes the persisted scope, including its
+  attribute accesses, so it never diverges from the key it is read back by; a file
+  name ending in `.html`, `.js`, `.css`, `.jinja` or `.j2` follows the file it
+  names; a `/` chain in a statement that uses `__file__` is a source path; and a
+  repository path in free text inside a Python string follows that path's move
+  scope. Path overrides send the world model's backend module to `backend.py` (the
+  key override already rewrites the import path that way) and keep four test file
+  names from stuttering. The codemod leaves excluded data files where they are, so
+  the sleep module's capability probes were moved with `git mv` by hand; PR 5d's
+  modules carry no such files. `python -m kaine.lifecycle.mnemos_recover` stays as a
+  deprecation shim (listed in `PACKAGING`, dropped by
+  `functional-module-names-drop-aliases`), and `tests/test_persisted_names_pinned.py`
+  pins the collection names and state paths to the table until the persisted scope
+  is done.
 - **Local data.** `tests/test_legacy_local_data.py` runs only when
   `KAINE_LOCAL_DATA_ROOT` is set. It copies `backups/` and `state/forks/` to a
   temporary directory, reads everything from the copy with every read-map on,
