@@ -2,14 +2,20 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """Pins for names that must stay byte-identical until the persisted rename step."""
 
+import dataclasses
 import inspect
 from pathlib import Path
 
 import kaine.lifecycle.divergence as _divergence_mod
+import kaine.lifecycle.maturation_ack as _maturation_ack
+import kaine.lifecycle.preservation as _preservation
 import kaine.memory_kinds as _memory_kinds
 import kaine.modules.self_model.module as _self_model_module
 import kaine.organ_window_state as _organ_window_state
+import kaine.perception_state as _perception_state
 from kaine import legacy_names
+from kaine.lifecycle import stage as _stage
+from kaine.lifecycle.individuation_store import IndividuationPaths
 from kaine.modules.effectors.module import Effectors
 from kaine.modules.episodic_memory.memory import EpisodicMemoryCore, recover_interrupted_import
 from kaine.modules.episodic_memory.module import EpisodicMemory
@@ -165,3 +171,47 @@ def test_self_model_persistence_path_pinned():
     assert _self_model_module.DEFAULT_PERSISTENCE_PATH == Path(
         _state_path("eidolon/self_model.json")
     )
+
+
+def test_perception_state_paths_pinned():
+    """The perception runtime/desired paths must follow the legacy table."""
+    assert (
+        _perception_state.RUNTIME_PATH == Path(_state_path("perception/runtime.json"))
+        and _perception_state.DESIRED_PATH == Path(_state_path("perception/desired.json"))
+    )
+
+
+def test_maturation_request_and_ack_paths_pinned():
+    """The maturation request/ack paths must follow the legacy table."""
+    assert (
+        _maturation_ack.MATURATION_REQUEST_PATH == Path(_state_path("lifecycle/birth_request.json"))
+        and _maturation_ack.MATURATION_ACK_PATH == Path(_state_path("lifecycle/birth_ack.json"))
+    )
+
+
+def test_development_state_files_pinned():
+    """The bundled/development state file names must follow the legacy table."""
+    assert (
+        _preservation.BUNDLED_DEVELOPMENT_FILES
+        == tuple(Path(_state_path(rel)).name for rel in ("lifecycle/gestation_progress.json", "lifecycle/gestation_readout.json"))
+        and _preservation.DEVELOPMENT_STATE_FILES
+        == _preservation.BUNDLED_DEVELOPMENT_FILES + (Path(_state_path("lifecycle/gestation_viability.json")).name,)
+    )
+
+
+def test_maturation_adapter_file_name_pinned(tmp_path):
+    """The maturation adapter file name must follow the legacy table."""
+    assert (
+        IndividuationPaths(root=tmp_path).maturation_adapter.name
+        == Path(_state_path("individuation/birth_adapter.gguf")).name
+    )
+
+
+def test_stage_fields_and_value_pinned():
+    """Stage state field names and the development constant must follow the legacy table."""
+    for entry in legacy_names.STAGE_FIELDS:
+        expected = entry["new"] if PERSISTED_DONE else entry["old"]
+        assert expected in {f.name for f in dataclasses.fields(_stage.StageState)}
+    for entry in legacy_names.STAGE_VALUES:
+        if entry["old"] == "gestation":
+            assert _stage.DEVELOPMENT == (entry["new"] if PERSISTED_DONE else entry["old"])

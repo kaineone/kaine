@@ -9,6 +9,8 @@ from __future__ import annotations
 import pathlib
 import tomllib
 
+from kaine import legacy_names
+
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
 _KAINE_DIR = _ROOT / "kaine"
 _PYPROJECT = _ROOT / "pyproject.toml"
@@ -21,6 +23,12 @@ NEUTRAL_CONTRACT_NAME = (
 EXEMPT: dict[str, str] = {
     "evaluation": "the forbidden evaluation sidecar is the target of contract 1, not a source",
 }
+
+for _shim in legacy_names.PACKAGING:
+    if _shim["kind"] == "module_shim" and _shim["old"].count(".") == 1:
+        EXEMPT[_shim["old"].split(".")[1]] = (
+            "deprecated command shim; it only runs " + _shim["new"] + ".__main__"
+        )
 
 
 def _top_level_kaine_names() -> list[str]:
