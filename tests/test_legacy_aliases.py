@@ -439,8 +439,10 @@ def test_lived_artifact_paths() -> None:
     assert len(paths) == len(set(paths))
 
 
-@pytest.mark.parametrize("old", ["topos", "soma", "chronos"])
-def test_renamed_layer_5a_modules_read_old_names(monkeypatch, caplog, old) -> None:
+@pytest.mark.parametrize(
+    "old", ["topos", "soma", "chronos", "thymos", "hypnos", "mnemos", "phantasia"]
+)
+def test_renamed_modules_read_old_names(monkeypatch, caplog, old) -> None:
     _set_scope(monkeypatch, "keys")
     new = legacy_names.MODULES[old]["new_key"]
     assert legacy_aliases.normalize_config_layer(
