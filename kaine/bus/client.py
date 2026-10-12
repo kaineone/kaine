@@ -17,7 +17,7 @@ from redis.exceptions import ResponseError
 from kaine.bus.config import BusConfig, load_bus_config, maxlen_for
 from kaine.bus.errors import BusSecurityError, ReservedStreamError
 from kaine.bus.schema import (
-    SYNEIDESIS_SOURCE,
+    WORKSPACE_SOURCE,
     WORKSPACE_STREAM,
     Event,
     ensure_writable,
@@ -120,7 +120,7 @@ def _decode_workspace_event(fields: dict[str, Any]) -> Event:
     salience = max(0.0, min(1.0, salience))
 
     return Event(
-        source=SYNEIDESIS_SOURCE,
+        source=WORKSPACE_SOURCE,
         type=WORKSPACE_STREAM,
         payload=snapshot,
         salience=salience,
@@ -309,9 +309,9 @@ class AsyncBus:
         )
 
     async def publish_workspace(
-        self, snapshot: dict[str, Any], source: str = SYNEIDESIS_SOURCE
+        self, snapshot: dict[str, Any], source: str = WORKSPACE_SOURCE
     ) -> str:
-        if source != SYNEIDESIS_SOURCE:
+        if source != WORKSPACE_SOURCE:
             raise ReservedStreamError(
                 f"only the syneidesis module may publish to {WORKSPACE_STREAM}"
             )
@@ -320,7 +320,7 @@ class AsyncBus:
             {
                 "snapshot": json.dumps(snapshot, separators=(",", ":")),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "source": SYNEIDESIS_SOURCE,
+                "source": WORKSPACE_SOURCE,
             },
             maxlen=maxlen_for(self._config, WORKSPACE_STREAM),
             approximate=True,

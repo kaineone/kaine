@@ -35,10 +35,6 @@ from kaine.bus.config import BusConfig
 from kaine.experiment.run_context import RunContext, set_run_context
 from kaine.lifecycle.manager import ForkManager
 from kaine.lifecycle.preservation import PreservationError, ReviveError
-from kaine.modules.eidolon import Eidolon, SelfModelDocument
-from kaine.modules.empatheia.agent import AgentModel
-from kaine.modules.empatheia.module import Empatheia
-from kaine.modules.empatheia.store import QdrantAgentStore
 from kaine.modules.episodic_memory import (
     EpisodicMemory,
     EpisodicMemoryCore,
@@ -47,6 +43,10 @@ from kaine.modules.episodic_memory import (
 )
 from kaine.modules.episodic_memory.storage import QdrantStorage, StorageError
 from kaine.modules.registry import ModuleRegistry
+from kaine.modules.self_model import SelfModel, SelfModelDocument
+from kaine.modules.social_cognition.agent import AgentModel
+from kaine.modules.social_cognition.module import SocialCognition
+from kaine.modules.social_cognition.store import QdrantAgentStore
 from kaine.modules.world_model.backend import (
     CheckpointMismatchError,
     FakeWorldModel,
@@ -142,13 +142,13 @@ async def _build_synthetic_entity(
     reg = ModuleRegistry()
 
     # The self-model module with concrete identity + values.
-    eidolon = Eidolon(
+    self_model = SelfModel(
         bus, persistence_path=tmp_path / "self_model.json", save_interval_s=60
     )
-    await eidolon.initialize()
-    eidolon._model = SelfModelDocument(name="Aria", values=["honesty", "curiosity"])
-    eidolon._drift_count = 3
-    reg.register(eidolon)
+    await self_model.initialize()
+    self_model._model = SelfModelDocument(name="Aria", values=["honesty", "curiosity"])
+    self_model._drift_count = 3
+    reg.register(self_model)
 
     # The episodic memory module with planted memories (short-term + persisted episodic).
     episodic_memory = await _build_episodic_memory(bus)
@@ -345,7 +345,7 @@ async def test_preserve_live_then_revive_same_individual(bus: AsyncBus, tmp_path
 
     # --- Revive into a FRESH registry ----------------------------------
     reg2 = ModuleRegistry()
-    eid2 = Eidolon(
+    eid2 = SelfModel(
         bus, persistence_path=tmp_path / "self_model2.json", save_interval_s=60
     )
     await eid2.initialize()
@@ -389,17 +389,17 @@ async def test_preserve_live_then_revive_same_individual(bus: AsyncBus, tmp_path
 
 
 @pytest.mark.asyncio
-async def test_preserve_live_then_revive_scopes_memory_and_restores_empatheia(
+async def test_preserve_live_then_revive_scopes_memory_and_restores_social_cognition(
     bus: AsyncBus, tmp_path: Path
 ):
     reg, ckpt = await _build_synthetic_entity(bus, tmp_path, persist_world_model=False)
 
-    empatheia = Empatheia(bus, backend="inmemory")
-    await empatheia.initialize()
-    await empatheia.store.put(
+    social_cognition = SocialCognition(bus, backend="inmemory")
+    await social_cognition.initialize()
+    await social_cognition.store.put(
         AgentModel(id="operator", label="operator", interaction_count=3)
     )
-    reg.register(empatheia)
+    reg.register(social_cognition)
 
     fm = ForkManager(tmp_path / "forks")
     result = await fm.preserve_live(
@@ -415,7 +415,7 @@ async def test_preserve_live_then_revive_scopes_memory_and_restores_empatheia(
 
     # Revive into a fresh registry with a differently-prefixed episodic memory module.
     reg2 = ModuleRegistry()
-    eid2 = Eidolon(
+    eid2 = SelfModel(
         bus, persistence_path=tmp_path / "self_model2.json", save_interval_s=60
     )
     await eid2.initialize()
@@ -442,9 +442,9 @@ async def test_preserve_live_then_revive_scopes_memory_and_restores_empatheia(
     await ph2.initialize()
     reg2.register(ph2)
 
-    empatheia2 = Empatheia(bus, backend="inmemory")
-    await empatheia2.initialize()
-    reg2.register(empatheia2)
+    social_cognition2 = SocialCognition(bus, backend="inmemory")
+    await social_cognition2.initialize()
+    reg2.register(social_cognition2)
 
     await fm.revive(bundle, reg2)
 
@@ -458,7 +458,7 @@ async def test_preserve_live_then_revive_scopes_memory_and_restores_empatheia(
     assert await storage2.export(["mnemos_episodic", "mnemos_semantic"]) == {}
 
     # The social cognition module's profile is restored.
-    restored = await empatheia2.store.get("operator")
+    restored = await social_cognition2.store.get("operator")
     assert restored is not None
     assert restored.label == "operator"
     assert restored.interaction_count == 3
@@ -467,7 +467,7 @@ async def test_preserve_live_then_revive_scopes_memory_and_restores_empatheia(
         await eid2.shutdown()
         await episodic_memory2.shutdown()
         await ph2.shutdown()
-        await empatheia2.shutdown()
+        await social_cognition2.shutdown()
     finally:
         for m in reg.all_modules():
             await m.shutdown()
@@ -479,12 +479,12 @@ async def test_revive_routes_async_importer_by_state_key_and_fallback_to_deseria
 ):
     reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_world_model=False)
 
-    empatheia = Empatheia(bus, backend="inmemory")
-    await empatheia.initialize()
-    await empatheia.store.put(
+    social_cognition = SocialCognition(bus, backend="inmemory")
+    await social_cognition.initialize()
+    await social_cognition.store.put(
         AgentModel(id="operator", label="operator", interaction_count=3)
     )
-    reg.register(empatheia)
+    reg.register(social_cognition)
 
     fm = ForkManager(tmp_path / "forks")
     result = await fm.preserve_live(
@@ -499,7 +499,7 @@ async def test_revive_routes_async_importer_by_state_key_and_fallback_to_deseria
     bundle = tmp_path / "backups" / f"preservation_{result.preservation_id}_aria"
 
     reg2 = ModuleRegistry()
-    eid2 = Eidolon(
+    eid2 = SelfModel(
         bus, persistence_path=tmp_path / "self_model2.json", save_interval_s=60
     )
     await eid2.initialize()
@@ -538,18 +538,18 @@ async def test_revive_routes_async_importer_by_state_key_and_fallback_to_deseria
     await ph2.initialize()
     reg2.register(ph2)
 
-    empatheia2 = Empatheia(bus, backend="inmemory")
-    await empatheia2.initialize()
+    social_cognition2 = SocialCognition(bus, backend="inmemory")
+    await social_cognition2.initialize()
 
     imported_states: list[dict[str, Any]] = []
-    original_import = empatheia2.import_preservation_state
+    original_import = social_cognition2.import_preservation_state
 
     async def _import_spy(state: dict[str, Any]) -> int:
         imported_states.append(copy.deepcopy(state))
         return await original_import(state)
 
-    empatheia2.import_preservation_state = _import_spy
-    reg2.register(empatheia2)
+    social_cognition2.import_preservation_state = _import_spy
+    reg2.register(social_cognition2)
 
     await fm.revive(bundle, reg2)
 
@@ -564,7 +564,7 @@ async def test_revive_routes_async_importer_by_state_key_and_fallback_to_deseria
     assert len(deserialized_states) >= 1
     assert all("memory_state" not in s for s in deserialized_states)
 
-    restored = await empatheia2.store.get("operator")
+    restored = await social_cognition2.store.get("operator")
     assert restored is not None
     assert restored.label == "operator"
 
@@ -572,14 +572,14 @@ async def test_revive_routes_async_importer_by_state_key_and_fallback_to_deseria
         await eid2.shutdown()
         await episodic_memory2.shutdown()
         await ph2.shutdown()
-        await empatheia2.shutdown()
+        await social_cognition2.shutdown()
     finally:
         for m in reg.all_modules():
             await m.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_preserve_live_then_revive_empatheia_qdrant_replaces_stale(
+async def test_preserve_live_then_revive_social_cognition_qdrant_replaces_stale(
     bus: AsyncBus, tmp_path: Path
 ):
     pytest.importorskip("qdrant_client")
@@ -700,7 +700,7 @@ async def test_preserve_live_then_revive_empatheia_qdrant_replaces_stale(
         embedder=embedder,
     )
     src_store._client = client
-    src_emp = Empatheia(bus, store=src_store)
+    src_emp = SocialCognition(bus, store=src_store)
     await src_emp.initialize()
     operator_model = AgentModel(
         id="operator", label="operator", interaction_count=3, reliability=0.9
@@ -721,7 +721,7 @@ async def test_preserve_live_then_revive_empatheia_qdrant_replaces_stale(
     bundle = tmp_path / "backups" / f"preservation_{result.preservation_id}_aria"
 
     reg2 = ModuleRegistry()
-    eid2 = Eidolon(
+    eid2 = SelfModel(
         bus, persistence_path=tmp_path / "self_model2.json", save_interval_s=60
     )
     await eid2.initialize()
@@ -758,7 +758,7 @@ async def test_preserve_live_then_revive_empatheia_qdrant_replaces_stale(
         embedder=embedder,
     )
     dst_store._client = client
-    dst_emp = Empatheia(bus, store=dst_store)
+    dst_emp = SocialCognition(bus, store=dst_store)
     await dst_emp.initialize()
     stale_model = AgentModel(id="stale", label="stale", interaction_count=1)
     await dst_emp.store.put(stale_model)
@@ -861,7 +861,7 @@ async def test_preserve_live_bundle_encrypted_at_rest(
 
         # Revive still works (encryption-aware reader).
         reg2 = ModuleRegistry()
-        eid2 = Eidolon(
+        eid2 = SelfModel(
             bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60
         )
         await eid2.initialize()
@@ -917,11 +917,11 @@ async def test_preserve_live_fails_loud_when_memory_uncapturable(
     bundle that looks complete."""
     pytest.importorskip("qdrant_client")
     reg = ModuleRegistry()
-    eidolon = Eidolon(
+    self_model = SelfModel(
         bus, persistence_path=tmp_path / "sm.json", save_interval_s=60
     )
-    await eidolon.initialize()
-    reg.register(eidolon)
+    await self_model.initialize()
+    reg.register(self_model)
 
     emb = FakeEmbedder(latent_dim=4)
     await emb.load()
@@ -946,7 +946,7 @@ async def test_preserve_live_fails_loud_when_memory_uncapturable(
     assert not (tmp_path / "backups").exists() or not list(
         (tmp_path / "backups").iterdir()
     )
-    await eidolon.shutdown()
+    await self_model.shutdown()
 
 
 @pytest.mark.asyncio
@@ -989,7 +989,7 @@ async def test_revive_fails_loud_when_module_missing(bus: AsyncBus, tmp_path: Pa
 
         # Target registry missing the episodic memory module (a captured module) → fail loud.
         reg2 = ModuleRegistry()
-        eid2 = Eidolon(
+        eid2 = SelfModel(
             bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60
         )
         await eid2.initialize()
@@ -1042,7 +1042,7 @@ async def test_revive_fails_loud_when_captured_weights_absent_from_bundle(
             assert not any(n.startswith("phantasia/") for n in tf.getnames())
 
         reg2 = ModuleRegistry()
-        eid2 = Eidolon(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
+        eid2 = SelfModel(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
         await eid2.initialize()
         reg2.register(eid2)
         m2 = await _build_episodic_memory(bus)
@@ -1084,9 +1084,9 @@ async def test_preserve_live_fails_loud_when_module_serialize_raises(
             pass
 
     reg = ModuleRegistry()
-    eidolon = Eidolon(bus, persistence_path=tmp_path / "sm.json", save_interval_s=60)
-    await eidolon.initialize()
-    reg.register(eidolon)
+    self_model = SelfModel(bus, persistence_path=tmp_path / "sm.json", save_interval_s=60)
+    await self_model.initialize()
+    reg.register(self_model)
     reg.register(_ExplodingModule())
 
     fm = ForkManager(tmp_path / "forks")
@@ -1101,7 +1101,7 @@ async def test_preserve_live_fails_loud_when_module_serialize_raises(
             (tmp_path / "backups").iterdir()
         )
     finally:
-        await eidolon.shutdown()
+        await self_model.shutdown()
 
 
 @pytest.mark.asyncio
@@ -1119,7 +1119,7 @@ async def test_revive_fails_loud_on_corrupt_bundle(bus: AsyncBus, tmp_path: Path
         (bundle / "bundle.tar").write_bytes(b"\x00\x01\x02 not a tar at all \xff\xfe")
 
         reg2 = ModuleRegistry()
-        eid2 = Eidolon(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
+        eid2 = SelfModel(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
         await eid2.initialize()
         reg2.register(eid2)
         m2 = await _build_episodic_memory(bus)

@@ -204,9 +204,9 @@ def _episodic_memory_collection_names(qdrant_cfg: dict[str, Any] | None) -> list
     cfg = qdrant_cfg or {}
     prefix = _episodic_memory_prefix(cfg)
     names = [f"{prefix}{kind}" for kind in EPISODIC_MEMORY_COLLECTION_KINDS]
-    empatheia = str((cfg.get("empatheia") or {}).get("collection", "empatheia_agents"))
-    if empatheia:
-        names.append(empatheia)
+    social_cognition = str((cfg.get("empatheia") or {}).get("collection", "empatheia_agents"))
+    if social_cognition:
+        names.append(social_cognition)
     return names
 
 

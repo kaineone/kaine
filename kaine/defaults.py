@@ -15,23 +15,23 @@ DEFAULT_REDIS_PORT = 6479  # the KAINE-owned Redis container's host port (compos
 DEFAULT_QDRANT_PORT = 6533  # the KAINE-owned Qdrant container's host port (compose/qdrant.yml), not upstream's 6333
 
 
-def lingua_chat_url(config: Mapping[str, Any] | None) -> str:
+def language_chat_url(config: Mapping[str, Any] | None) -> str:
     """[lingua].chat_url, else DEFAULT_CHAT_URL."""
     section = (config or {}).get("lingua") or {}
-    return lingua_section_chat_url(section)
+    return language_section_chat_url(section)
 
 
-def lingua_section_chat_url(section: Mapping[str, Any] | None) -> str:
+def language_section_chat_url(section: Mapping[str, Any] | None) -> str:
     """[lingua] section chat_url, else DEFAULT_CHAT_URL."""
     chat_url = (section or {}).get("chat_url")
     return str(chat_url) if chat_url else DEFAULT_CHAT_URL
 
 
-def lingua_section_api_key(section: Mapping[str, Any] | None) -> str | None:
+def language_section_api_key(section: Mapping[str, Any] | None) -> str | None:
     """[lingua].api_key when set and non-empty, else the environment variable, else None."""
     return (section or {}).get("api_key") or os.environ.get(MODEL_SERVER_API_KEY_ENV) or None
 
 
 def model_server_api_key(config: Mapping[str, Any] | None) -> str | None:
     """[lingua].api_key when set and non-empty, else the environment variable, else None."""
-    return lingua_section_api_key((config or {}).get("lingua") or {})
+    return language_section_api_key((config or {}).get("lingua") or {})

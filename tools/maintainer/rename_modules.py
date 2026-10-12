@@ -1639,7 +1639,8 @@ def _div_chain_strings(tokens: list[dict], start: int) -> list[str]:
 
 def _names_python_symbol(tokens: list[dict], start: int) -> bool:
     """True when the string at ``start`` is a parametrize argnames string or the
-    attribute-name argument of getattr, hasattr, setattr or delattr."""
+    attribute-name argument of getattr, hasattr, setattr or delattr,
+    or an entry in an ``__all__`` list/tuple."""
     if not tokens:
         return False
     skip = {tokenize.NL, tokenize.NEWLINE, tokenize.COMMENT}
@@ -1691,12 +1692,37 @@ def _names_python_symbol(tokens: list[dict], start: int) -> bool:
                                 in {"getattr", "hasattr", "setattr", "delattr"}
                             ):
                                 return True
-                        return False
+                        break
                     depth -= 1
                 elif depth == 0 and tstring == ",":
                     comma_count += 1
-        return False
 
+    # An __all__ entry names a Python symbol.
+    depth = 0
+    for j in range(containing - 1, -1, -1):
+        ttype = tokens[j]["type"]
+        tstring = tokens[j]["string"]
+        if ttype == tokenize.OP:
+            if tstring in (")", "]", "}"):
+                depth += 1
+            elif tstring in ("(", "[", "{"):
+                if depth == 0:
+                    if tstring in ("(", "["):
+                        before = _prev_sig(j)
+                        if (
+                            before is not None
+                            and tokens[before]["type"] == tokenize.OP
+                            and tokens[before]["string"] in ("=", "+=")
+                        ):
+                            before2 = _prev_sig(before)
+                            if (
+                                before2 is not None
+                                and tokens[before2]["type"] == tokenize.NAME
+                                and tokens[before2]["string"] == "__all__"
+                            ):
+                                return True
+                    return False
+                depth -= 1
     return False
 
 

@@ -33,7 +33,7 @@ from kaine.boot.factories.sleep import (
     voice_alignment_config_from_section,
 )
 from kaine.config import OPERATOR_CONFIG_PATH, load_kaine_config
-from kaine.defaults import lingua_section_api_key
+from kaine.defaults import language_section_api_key
 from kaine.modules.sleep.organ_adapter import (
     OrganAdapterResolver,
     organ_root_url,
@@ -336,7 +336,7 @@ async def resolve_lora_field(
         adapter_output_dir=Path(cfg.adapter_output_dir),
         volume=Path(cfg.organ_adapters_dir),
         organ_url=organ_root_url(organ_url),
-        api_key=lingua_section_api_key(kaine_config.get("lingua") or {}),
+        api_key=language_section_api_key(kaine_config.get("lingua") or {}),
     )
 
     return await resolver.lora_field()

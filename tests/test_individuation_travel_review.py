@@ -18,7 +18,7 @@ from kaine.lifecycle.preservation import (
     preserve_live,
 )
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
-from tests.test_individuation_travels import _make_eidolon_registry
+from tests.test_individuation_travels import _make_self_model_registry
 
 
 @pytest.fixture
@@ -49,7 +49,7 @@ def test_shipped_config_has_no_state_dir():
 
 @pytest.mark.asyncio
 async def test_failed_extraction_leaves_evidence(real_encryptor, monkeypatch, tmp_path):
-    reg = await _make_eidolon_registry(tmp_path)
+    reg = await _make_self_model_registry(tmp_path)
 
     result = await preserve_live(
         reg,
@@ -93,7 +93,7 @@ async def test_failed_extraction_leaves_evidence(real_encryptor, monkeypatch, tm
 
 @pytest.mark.asyncio
 async def test_failed_swap_rolls_back(real_encryptor, monkeypatch, tmp_path):
-    reg = await _make_eidolon_registry(tmp_path)
+    reg = await _make_self_model_registry(tmp_path)
 
     ind_root = tmp_path / "ind"
     save_ledger(
@@ -141,7 +141,7 @@ async def test_failed_swap_rolls_back(real_encryptor, monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_bundle_without_evidence_moves_aside(real_encryptor, tmp_path):
-    reg = await _make_eidolon_registry(tmp_path)
+    reg = await _make_self_model_registry(tmp_path)
 
     result = await preserve_live(
         reg,
@@ -207,7 +207,7 @@ async def test_decommission_failed_evidence_copy(real_encryptor, monkeypatch, tm
 
 @pytest.mark.asyncio
 async def test_preservation_plaintext_not_removed(real_encryptor, monkeypatch, tmp_path):
-    reg = await _make_eidolon_registry(tmp_path)
+    reg = await _make_self_model_registry(tmp_path)
 
     ind_root = tmp_path / "ind"
     ind_root.mkdir(parents=True)

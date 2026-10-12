@@ -52,7 +52,7 @@ async def verify_organ_generates(
     a remediation ``detail`` so the caller owns the boot policy. ``client`` is an
     optional injected chat client (duck-typed ``complete`` / ``aclose``) for tests.
     """
-    from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
+    from kaine.modules.language.client import ChatRequest, OpenAIChatClient
 
     own_client = client is None
     if own_client:

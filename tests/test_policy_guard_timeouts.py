@@ -8,14 +8,14 @@ from datetime import datetime, timezone
 
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
-from kaine.workspace.nous_proposals import NousProposalSource
-from kaine.workspace.report_policy import SelfInitiatedReportPolicy
-from kaine.workspace.volition import (
+from kaine.workspace.action_selection import (
     SPEAK,
     THINK,
+    ActionSelection,
     DefaultActionSelectionPolicy,
-    Volition,
 )
+from kaine.workspace.planning_proposals import PlanningProposalSource
+from kaine.workspace.report_policy import SelfInitiatedReportPolicy
 
 
 def _event(
@@ -179,7 +179,7 @@ def test_default_policy_does_not_clear_speak_guard_on_internal_speech():
     assert p.speak_in_flight is False
 
 
-def test_nous_think_guard_timeout_through_report_policy():
+def test_planning_think_guard_timeout_through_report_policy():
     clock = _Clock()
     inner = SelfInitiatedReportPolicy(
         report_threshold=0.6,
@@ -187,8 +187,8 @@ def test_nous_think_guard_timeout_through_report_policy():
         clock=clock,
         guard_clock=clock,
     )
-    source = NousProposalSource(inner, clock=clock)
-    v = Volition(policy=source)
+    source = PlanningProposalSource(inner, clock=clock)
+    v = ActionSelection(policy=source)
 
     # Non-proposal salience stays below the inner policy's think bar so the
     # report policy itself stays silent; the planning module's think proposals drive action.

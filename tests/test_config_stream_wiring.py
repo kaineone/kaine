@@ -41,13 +41,13 @@ def _configured_stream_refs() -> list[tuple[str, str]]:
     for key in ("soma_stream", "chronos_stream", "mnemos_stream"):
         if key in affect:
             refs.append((f"thymos.{key}", affect[key]))
-    eidolon = _CONFIG.get("eidolon", {})
-    if "internal_speech_stream" in eidolon:
-        refs.append(("eidolon.internal_speech_stream", eidolon["internal_speech_stream"]))
-    vox = _CONFIG.get("vox", {})
+    self_model = _CONFIG.get("eidolon", {})
+    if "internal_speech_stream" in self_model:
+        refs.append(("eidolon.internal_speech_stream", self_model["internal_speech_stream"]))
+    vocal = _CONFIG.get("vox", {})
     for key in ("lingua_external_stream", "thymos_state_stream"):
-        if key in vox:
-            refs.append((f"vox.{key}", vox[key]))
+        if key in vocal:
+            refs.append((f"vox.{key}", vocal[key]))
     interoception = _CONFIG.get("soma", {})
     if "cycle_stream" in interoception:
         refs.append(("soma.cycle_stream", interoception["cycle_stream"]))

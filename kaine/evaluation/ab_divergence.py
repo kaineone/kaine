@@ -20,7 +20,7 @@ import httpx
 from kaine.bus.schema import Event
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.embeddings import TextEmbedder, cosine_similarity
-from kaine.evaluation.proactive_audit import LINGUA_EXTERNAL_STREAM
+from kaine.evaluation.proactive_audit import LANGUAGE_EXTERNAL_STREAM
 from kaine.evaluation.sink import AsyncJsonlSink
 
 log = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ class BareInferenceClient(Protocol):
 # Chat-template kwarg the local OpenAI-compatible server (Unsloth Studio /
 # llama.cpp) forwards to turn off hybrid-thinking generation — the portable
 # replacement for Ollama's native `think` flag. Mirrors
-# kaine.modules.lingua.client so the bare baseline suppresses reasoning exactly
+# kaine.modules.language.client so the bare baseline suppresses reasoning exactly
 # as the organ does; the eval layer keeps its own copy because it must not import
 # kaine.modules.* (the sidecar import boundary).
 _ENABLE_THINKING_KWARG = "enable_thinking"
@@ -241,7 +241,7 @@ class AssemblerConditionedClient:
 
 class ABDivergenceObserver(StreamSubscriberObserver):
     name = "ab_divergence"
-    streams = (LINGUA_EXTERNAL_STREAM,)
+    streams = (LANGUAGE_EXTERNAL_STREAM,)
 
     def __init__(
         self,

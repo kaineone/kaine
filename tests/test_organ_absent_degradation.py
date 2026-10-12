@@ -19,7 +19,7 @@ from kaine.bus.schema import Event
 from kaine.evaluation.ab_divergence import ABDivergenceObserver
 from kaine.evaluation.embeddings import HashEmbedder
 from kaine.evaluation.sink import AsyncJsonlSink
-from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
+from kaine.modules.language.client import ChatRequest, OpenAIChatClient
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
 
@@ -42,7 +42,7 @@ def _set_window(tmp_path, phase):
 
 
 @pytest.mark.asyncio
-async def test_lingua_client_defers_while_organ_unloaded(tmp_path, monkeypatch):
+async def test_language_client_defers_while_organ_unloaded(tmp_path, monkeypatch):
     path = _set_window(tmp_path, ows.PHASE_TRAINING)
     monkeypatch.setattr(ows, "ORGAN_WINDOW_STATE", path)
 
@@ -55,7 +55,7 @@ async def test_lingua_client_defers_while_organ_unloaded(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_lingua_client_does_not_defer_when_window_idle(tmp_path, monkeypatch):
+async def test_language_client_does_not_defer_when_window_idle(tmp_path, monkeypatch):
     path = _set_window(tmp_path, ows.PHASE_IDLE)
     monkeypatch.setattr(ows, "ORGAN_WINDOW_STATE", path)
 

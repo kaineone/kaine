@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-import kaine.modules.vox.module as _vox_module
+import kaine.modules.vocal.module as _vocal_module
 from kaine.boot import construct_module
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
@@ -23,7 +23,7 @@ from kaine.modules.affect.state import DimensionalState
 from kaine.modules.interoception.module import Interoception
 from kaine.modules.sequence.featurizer import SnapshotFeaturizer
 from kaine.modules.sequence.module import Sequence
-from kaine.modules.vox import FakePlayer, FakeTTSClient, Vox
+from kaine.modules.vocal import FakePlayer, FakeTTSClient, Vocal
 
 
 class Ticker:
@@ -124,12 +124,12 @@ def test_sequence_explicit_clock_wins_over_entity_clock():
 
 
 @pytest.mark.parametrize("scale, expected_elapsed", [(1.0, 2.0), (0.5, 1.0)])
-def test_vox_mirroring_decay_follows_entity_clock(scale, expected_elapsed, tmp_path):
+def test_vocal_mirroring_decay_follows_entity_clock(scale, expected_elapsed, tmp_path):
     ticker = Ticker()
     clock = EntityClock(scale=scale, monotonic=ticker)
     bus = _bus()
     try:
-        vox = Vox(
+        vocal = Vocal(
             bus,
             tts_client=FakeTTSClient(canned_audio=b"WAV-FAKE-DATA-1234"),
             player=FakePlayer(),
@@ -142,23 +142,23 @@ def test_vox_mirroring_decay_follows_entity_clock(scale, expected_elapsed, tmp_p
         )
 
         # Record a prosody sample as if an audition.prosody event just arrived.
-        vox._latest_prosody = {"f0_mean_hz": 110.0}
-        vox._latest_prosody_ts = vox._clock.now()
+        vocal._latest_prosody = {"f0_mean_hz": 110.0}
+        vocal._latest_prosody_ts = vocal._clock.now()
 
         ticker.advance(2.0)
 
         captured: list[float] = []
-        original_blend = _vox_module.blend_prosody
+        original_blend = _vocal_module.blend_prosody
 
         def fake_blend(params: Any, prosody: Any, strength: float) -> Any:
             captured.append(strength)
             return params
 
-        _vox_module.blend_prosody = fake_blend
+        _vocal_module.blend_prosody = fake_blend
         try:
-            vox._params_for(DimensionalState())
+            vocal._params_for(DimensionalState())
         finally:
-            _vox_module.blend_prosody = original_blend
+            _vocal_module.blend_prosody = original_blend
 
         # Linear decay over the 10 s window (see mirroring.decayed_strength).
         expected_strength = 0.3 * (1.0 - expected_elapsed / 10.0)
@@ -183,16 +183,16 @@ def test_interoception_cycle_latency_scaled_to_subjective_time(scale, expected_l
         asyncio.run(bus.close())
 
 
-def test_boot_passes_registry_entity_clock_to_sequence_and_vox():
+def test_boot_passes_registry_entity_clock_to_sequence_and_vocal():
     bus = _bus()
     try:
         ticker = Ticker()
         clock = EntityClock(scale=0.5, monotonic=ticker)
 
-        original_build_player = _vox_module.build_player
-        original_chatterbox_client = _vox_module.ChatterboxClient
-        _vox_module.build_player = lambda **kw: FakePlayer()
-        _vox_module.ChatterboxClient = lambda **kw: FakeTTSClient()
+        original_build_player = _vocal_module.build_player
+        original_chatterbox_client = _vocal_module.ChatterboxClient
+        _vocal_module.build_player = lambda **kw: FakePlayer()
+        _vocal_module.ChatterboxClient = lambda **kw: FakeTTSClient()
 
         try:
             sequence = construct_module(
@@ -206,16 +206,16 @@ def test_boot_passes_registry_entity_clock_to_sequence_and_vox():
             assert sequence._clock.__self__ is clock
             assert sequence._featurizer._clock() == clock.now()
 
-            vox = construct_module(
+            vocal = construct_module(
                 "vox",
                 bus,
                 {"vox": {}},
                 registry={},
                 entity_clock=clock,
             )
-            assert vox._clock is clock
+            assert vocal._clock is clock
         finally:
-            _vox_module.build_player = original_build_player
-            _vox_module.ChatterboxClient = original_chatterbox_client
+            _vocal_module.build_player = original_build_player
+            _vocal_module.ChatterboxClient = original_chatterbox_client
     finally:
         asyncio.run(bus.close())

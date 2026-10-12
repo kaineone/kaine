@@ -522,7 +522,7 @@ def test_nothing_measured_writes_no_file(capsys, tmp_path, monkeypatch):
     assert not cat.exists()
 
 
-def test_lingua_external_service_inspected(capsys, tmp_path, monkeypatch):
+def test_language_external_service_inspected(capsys, tmp_path, monkeypatch):
     _hermetic_selection(monkeypatch)
     svc, svc_calls = _fake_service({"http://localhost:1234": 100 << 20})
     config = {
@@ -554,7 +554,7 @@ def test_lingua_external_service_inspected(capsys, tmp_path, monkeypatch):
     assert entry.mapped is False
 
 
-def test_lingua_llama_cpp_not_measured(capsys, tmp_path):
+def test_language_llama_cpp_not_measured(capsys, tmp_path):
     config = {
         "modules": {"lingua": True},
         "lingua": {"backend": "llama_cpp", "model_id": "qwen2.5-3b"},

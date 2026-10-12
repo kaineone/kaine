@@ -15,5 +15,5 @@ The language module SHALL publish an aggregate `lingua.out` event in addition to
 The language module SHALL publish to `EXTERNAL_STREAM`, `INTERNAL_STREAM`, and the aggregate `lingua.out` using module-level constants everywhere, never re-hardcoding the literal strings.
 
 #### Scenario: Internal publish uses constant
-- **WHEN** `kaine/modules/lingua/module.py` is inspected
+- **WHEN** `kaine/modules/language/module.py` is inspected
 - **THEN** all `bus.publish` calls use `EXTERNAL_STREAM`, `INTERNAL_STREAM`, or an aggregate-stream constant

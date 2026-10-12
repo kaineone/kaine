@@ -178,14 +178,14 @@ async def _async_self_check(
     than passing a configuration that would refuse to preserve at runtime.
     """
     from kaine.lifecycle.manager import ForkManager
-    from kaine.modules.eidolon import Eidolon, SelfModelDocument
     from kaine.modules.registry import ModuleRegistry
+    from kaine.modules.self_model import SelfModel, SelfModelDocument
 
     bus = _NullBus()
     with tempfile.TemporaryDirectory(prefix="kaine-preflight-") as tmp:
         tmp_path = Path(tmp)
         reg = ModuleRegistry()
-        eid = Eidolon(
+        eid = SelfModel(
             bus, persistence_path=tmp_path / "sm.json", save_interval_s=60
         )
         await eid.initialize()
@@ -216,7 +216,7 @@ async def _async_self_check(
 
         # Revive into a FRESH registry and assert continuity.
         reg2 = ModuleRegistry()
-        eid2 = Eidolon(
+        eid2 = SelfModel(
             bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60
         )
         await eid2.initialize()

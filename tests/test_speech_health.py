@@ -44,16 +44,16 @@ def _restore_module_constants():
     probes_mod.SHERPA_PROBE_CHILD_TIMEOUT_S = original_timeout
 
 
-def _specs(audition_cfg=None, vox_cfg=None):
+def _specs(audition_cfg=None, vocal_cfg=None):
     return build_dependency_specs(
         redis_cfg={"host": "127.0.0.1", "port": 6379},
         qdrant_cfg={},
         qdrant_secret_key=None,
         redis_password=None,
-        lingua_cfg={},
+        language_cfg={},
         audition_cfg=audition_cfg or {},
-        vox_cfg=vox_cfg or {},
-        nous_cfg={},
+        vocal_cfg=vocal_cfg or {},
+        planning_cfg={},
         state_encryption_cfg=None,
     )
 
@@ -463,21 +463,21 @@ def test_dependency_specs_default_audition_row(_patch_speech_models):
     assert "sherpa-onnx (Moonshine)" not in names
 
 
-def test_dependency_specs_sherpa_onnx_vox_row(_patch_speech_models):
-    specs = _specs(vox_cfg={"backend": "sherpa_onnx"})
+def test_dependency_specs_sherpa_onnx_vocal_row(_patch_speech_models):
+    specs = _specs(vocal_cfg={"backend": "sherpa_onnx"})
     names = {s.name for s in specs}
     assert "sherpa-onnx (Kokoro)" in names
     assert "Chatterbox (TTS)" not in names
 
 
-def test_dependency_specs_empty_vox_backend_default(_patch_speech_models):
-    specs = _specs(vox_cfg={"backend": ""})
+def test_dependency_specs_empty_vocal_backend_default(_patch_speech_models):
+    specs = _specs(vocal_cfg={"backend": ""})
     names = {s.name for s in specs}
     assert "Chatterbox (TTS)" in names
     assert "sherpa-onnx (Kokoro)" not in names
 
 
-def test_dependency_specs_default_vox_row(_patch_speech_models):
+def test_dependency_specs_default_vocal_row(_patch_speech_models):
     specs = _specs()
     names = {s.name for s in specs}
     assert "Chatterbox (TTS)" in names
@@ -492,8 +492,8 @@ def test_dependency_specs_unknown_audition_backend(_patch_speech_models):
     assert "unknown [audition].backend" in detail
 
 
-def test_dependency_specs_unknown_vox_backend(_patch_speech_models):
-    specs = _specs(vox_cfg={"backend": "whisper"})
+def test_dependency_specs_unknown_vocal_backend(_patch_speech_models):
+    specs = _specs(vocal_cfg={"backend": "whisper"})
     row = _spec_named(specs, "Vox backend 'whisper'")
     status, detail = asyncio.run(row.probe())
     assert status == probes_mod.DEGRADED

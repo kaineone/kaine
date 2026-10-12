@@ -22,7 +22,7 @@ from kaine.boot.errors import (
     _warn_retired_keys,
 )
 from kaine.bus.client import AsyncBus
-from kaine.defaults import lingua_section_api_key, lingua_section_chat_url
+from kaine.defaults import language_section_api_key, language_section_chat_url
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 from kaine.storage import resolve
@@ -512,9 +512,9 @@ def _resolve_job_queue_trainer(
             f"{timeout_s!r}."
         )
 
-    lingua = (kaine_config or {}).get("lingua") or {}
-    chat_url = lingua_section_chat_url(lingua)
-    api_key = lingua_section_api_key(lingua) or ""
+    language = (kaine_config or {}).get("lingua") or {}
+    chat_url = language_section_chat_url(language)
+    api_key = language_section_api_key(language) or ""
 
     return JobQueueVoiceTrainer(
         jobs_dir=voice_config.trainer_jobs_dir,
@@ -558,8 +558,8 @@ def _make_organ_window_runner(
         gpu_cfg = GpuPreflightConfig.from_section(config.get("gpu_preflight") or {})
         if not gpu_cfg.enabled:
             return True
-        lingua = config.get("lingua") or {}
-        keep = [m for m in [lingua.get("model_id")] if m]
+        language = config.get("lingua") or {}
+        keep = [m for m in [language.get("model_id")] if m]
         return bool(
             run_preflight(
                 gpu_cfg,

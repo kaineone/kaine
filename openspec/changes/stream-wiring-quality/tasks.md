@@ -1,6 +1,6 @@
 ## 1. Language stream wiring
 
-- [x] 1.1 Add an aggregate `lingua.out` publish in `kaine/modules/lingua/module.py` using `self.publish` with a lightweight event containing `mode`, `text`, and metadata; verify `tests/test_lingua_module.py` still passes.
+- [x] 1.1 Add an aggregate `lingua.out` publish in `kaine/modules/language/module.py` using `self.publish` with a lightweight event containing `mode`, `text`, and metadata; verify `tests/test_language_module.py` still passes.
 - [x] 1.2 Replace the literal `"lingua.internal"` at line ~394 with the `INTERNAL_STREAM` constant and verify no hard-coded language module stream literals remain in the module.
 - [x] 1.3 Update `tests/test_config_stream_wiring.py` to include `mundus`, `perception`, `empatheia` and to treat the language module's aggregate `lingua.out` as a real producer.
 
@@ -20,7 +20,7 @@
 ## 4. Ruff enforcement
 
 - [x] 4.1 Add a `[tool.ruff]` section to `pyproject.toml` targeting `kaine/` and `tests/` with E/W/F rules plus the currently violated rules (F821, F841, E402, E702, E741, F541).
-- [x] 4.2 Fix the ~25 outstanding ruff errors, including the missing `Callable` import in `kaine/workspace/drive_policy.py`, unused `source_map` in `prediction_error_observer.py`, unread `progressed` in `empatheia_observer.py`, and swallowed exception in `kaine/lifecycle/adapter_merge.py`.
+- [x] 4.2 Fix the ~25 outstanding ruff errors, including the missing `Callable` import in `kaine/workspace/drive_policy.py`, unused `source_map` in `prediction_error_observer.py`, unread `progressed` in `social_cognition_observer.py`, and swallowed exception in `kaine/lifecycle/adapter_merge.py`.
 - [x] 4.3 Add the `ruff` pre-commit hook to `.pre-commit-config.yaml`.
 - [x] 4.4 Add a `ruff` CI job to `.github/workflows/` and verify it runs green.
 
@@ -28,7 +28,7 @@
 
 - [x] 5.1 Generalize `StreamSubscriberObserver` in `kaine/evaluation/_base.py` to accept `streams: tuple[str, ...]` and implement per-stream cursor tracking.
 - [x] 5.2 Add unit tests for the base class covering single-stream and multi-stream polling.
-- [x] 5.3 Remove bespoke `_run` methods from `prediction_error_observer.py`, `empatheia_observer.py`, `research_event_observer.py`, and `welfare_observer.py` and verify their tests still pass.
+- [x] 5.3 Remove bespoke `_run` methods from `prediction_error_observer.py`, `social_cognition_observer.py`, `research_event_observer.py`, and `welfare_observer.py` and verify their tests still pass.
 
 ## 6. Validation
 

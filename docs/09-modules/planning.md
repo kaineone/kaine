@@ -31,7 +31,7 @@ The planning module proposes and the action selection module decides. The action
 | Action selection | `volition_feedback.out` | `volition.proposal_outcome` | Whether each proposal was realized |
 | Sleep | `hypnos.out` | `hypnos.rest_request` | Whether a rest proposal was accepted |
 
-The encoder in `kaine/modules/nous/generative_model.py` takes the coalition member with the largest reported intensity for the salience band and the event cluster, and an affect module member, if one is present, for the affect quadrant.
+The encoder in `kaine/modules/planning/generative_model.py` takes the coalition member with the largest reported intensity for the salience band and the event cluster, and an affect module member, if one is present, for the affect quadrant.
 
 ## Outputs
 
@@ -45,7 +45,7 @@ All events are published on `nous.out`.
 | `nous.timeout` | `elapsed_ms`, `num_factors`, `num_actions` | `timeout_salience` (0.3) |
 | `nous.error` | `error_reason`, `elapsed_ms`, `num_factors`, `num_actions` | `timeout_salience` (0.3) |
 
-The planning module never publishes `intent.act`. The action selection module's `NousProposalSource` wraps the configured action-selection policy. It considers proposals only on an accessed broadcast (one whose best score reaches the access threshold), and only proposals that are members of that broadcast's coalition; the proposal's own score is not checked against the threshold. On an inhibited broadcast every proposal is recorded as `inhibited`. The first proposal in coalition order is the candidate, and the rest are `superseded`. For every proposal it sees, the action selection module publishes a content-free `volition.proposal_outcome` on `volition_feedback.out` with the reason `realized`, `inhibited`, `in_flight`, `refractory`, `superseded`, `self_response`, `disabled`, or `forwarded` (a rest intent handed to [the sleep module](./sleep.md)). At most one proposal-derived intent is emitted per snapshot, and it never displaces an intent of the same kind from the wrapped policy (`superseded`). The wrapped policy decides on the coalition with every proposal removed, so its decision is the same whether `drive_actions` is on or off.
+The planning module never publishes `intent.act`. The action selection module's `PlanningProposalSource` wraps the configured action-selection policy. It considers proposals only on an accessed broadcast (one whose best score reaches the access threshold), and only proposals that are members of that broadcast's coalition; the proposal's own score is not checked against the threshold. On an inhibited broadcast every proposal is recorded as `inhibited`. The first proposal in coalition order is the candidate, and the rest are `superseded`. For every proposal it sees, the action selection module publishes a content-free `volition.proposal_outcome` on `volition_feedback.out` with the reason `realized`, `inhibited`, `in_flight`, `refractory`, `superseded`, `self_response`, `disabled`, or `forwarded` (a rest intent handed to [the sleep module](./sleep.md)). At most one proposal-derived intent is emitted per snapshot, and it never displaces an intent of the same kind from the wrapped policy (`superseded`). The wrapped policy decides on the coalition with every proposal removed, so its decision is the same whether `drive_actions` is on or off.
 
 Before each step, the planning module reads those outcomes and records the action taken since the previous step: a realized think or speak from the action selection module's outcome, and a rest from the sleep module's acceptance in `hypnos.rest_request`. An action realized while a step failed or timed out stays pending until a step commits. Outcome ids that the planning module does not recognize are counted in `unknown_outcomes`. The wrapped policy shares one guard state with the planning module through `note_external_intent`, and the refractory durations come from `[volition].speak_refractory_s` and `[volition].think_refractory_s`.
 
@@ -71,13 +71,13 @@ All keys are under `[nous]` in `config/kaine.toml`. See the [modules configurati
 | `timeout_salience` | float | `0.3` | Intensity of `nous.timeout` and `nous.error` |
 | `drive_actions` | bool | `true` | When `true`, the action selection module may realize proposals. When `false`, the planning module only observes: every proposal gets the outcome `disabled` and is learned as `no_op`. |
 
-The three `transition_*` keys are commented out in the shipped file; the values above are the factory defaults. `make_nous` in `kaine/boot/factories/nous.py` checks the complexity envelope: `factors × max_states_per_factor × actions × planning_horizon` may not exceed 4096, and the defaults give 64. `make_nous` also exposes the plugin seams `engine` and `engine_wrapper` from `kaine/plugins.py`. An injected engine is used as given, and the backend and extra checks are skipped.
+The three `transition_*` keys are commented out in the shipped file; the values above are the factory defaults. `make_nous` in `kaine/boot/factories/planning.py` checks the complexity envelope: `factors × max_states_per_factor × actions × planning_horizon` may not exceed 4096, and the defaults give 64. `make_nous` also exposes the plugin seams `engine` and `engine_wrapper` from `kaine/plugins.py`. An injected engine is used as given, and the backend and extra checks are skipped.
 
 ## How it works
 
 ### Generative model
 
-`build_generative_model()` in `kaine/modules/nous/generative_model.py` builds a model with four factors and four observation modalities once at boot.
+`build_generative_model()` in `kaine/modules/planning/generative_model.py` builds a model with four factors and four observation modalities once at boot.
 
 | Factor index | Name | States | Notes |
 |---|---|---|---|
@@ -94,7 +94,7 @@ Belief carries over from step to step. Each step's prior is the previous posteri
 
 ### Inference cycle
 
-`kaine/modules/nous/engine.py` holds `_EngineBase`, `PymdpEngine`, `FakeEngine`, the `ActiveInferenceEngine` protocol, `EngineResult` and `normalised_entropy`. `kaine/modules/nous/numpy_engine.py` holds `NumpyActiveInferenceEngine`, which delegates to `NumpyAgent` in `kaine/modules/nous/numpy_aif.py`.
+`kaine/modules/planning/engine.py` holds `_EngineBase`, `PymdpEngine`, `FakeEngine`, the `ActiveInferenceEngine` protocol, `EngineResult` and `normalised_entropy`. `kaine/modules/planning/numpy_engine.py` holds `NumpyActiveInferenceEngine`, which delegates to `NumpyAgent` in `kaine/modules/planning/numpy_aif.py`.
 
 Both backends implement the same model and mathematics: fixed-point state inference, full policy enumeration, expected free energy with utility, state information gain and transition-parameter information gain, Dirichlet transition learning, the carried prior, the evidence cap and the fixed action factor. They share `_EngineBase` behaviour: the `efe_timeout_ms` guard, per-action aggregation of expected free energy, learning bookkeeping, the generation counter, `record_taken_action`, and `learned_state()` / `load_learned_state()`. A learned state saved by one engine loads into the other.
 
@@ -139,13 +139,13 @@ The payload keeps the shape of the earlier symbolic reasoner:
 
 | Path | Purpose |
 |---|---|
-| `kaine/modules/nous/module.py` | `Nous(BaseModule)`: step driver, publication, outcome reading |
-| `kaine/modules/nous/engine.py` | `_EngineBase`, `PymdpEngine`, `FakeEngine`, the engine protocol, `EngineResult`, `normalised_entropy` |
-| `kaine/modules/nous/numpy_engine.py` | `NumpyActiveInferenceEngine` |
-| `kaine/modules/nous/numpy_aif.py` | `NumpyAgent`: NumPy state inference, expected free energy, Dirichlet learning |
-| `kaine/modules/nous/generative_model.py` | `build_generative_model()`, `encode_snapshot()`, the A, B, C and D arrays, `ACTION_SPACE` |
-| `kaine/workspace/nous_proposals.py` | `NousProposalSource`, the action selection module's handling of proposals |
-| `kaine/boot/factories/nous.py` | `make_nous()`: envelope check, engine construction, plugin seams |
+| `kaine/modules/planning/module.py` | `Planning(BaseModule)`: step driver, publication, outcome reading |
+| `kaine/modules/planning/engine.py` | `_EngineBase`, `PymdpEngine`, `FakeEngine`, the engine protocol, `EngineResult`, `normalised_entropy` |
+| `kaine/modules/planning/numpy_engine.py` | `NumpyActiveInferenceEngine` |
+| `kaine/modules/planning/numpy_aif.py` | `NumpyAgent`: NumPy state inference, expected free energy, Dirichlet learning |
+| `kaine/modules/planning/generative_model.py` | `build_generative_model()`, `encode_snapshot()`, the A, B, C and D arrays, `ACTION_SPACE` |
+| `kaine/workspace/planning_proposals.py` | `PlanningProposalSource`, the action selection module's handling of proposals |
+| `kaine/boot/factories/planning.py` | `make_nous()`: envelope check, engine construction, plugin seams |
 | `kaine/plugins.py` | The `engine` and `engine_wrapper` plugin seams |
 
 ## Enabling
@@ -156,15 +156,15 @@ The payload keeps the shape of the earlier symbolic reasoner:
 The planning module needs no external service. In tests, inject a `FakeEngine`:
 
 ```python
-from kaine.modules.nous.engine import FakeEngine
-from kaine.modules.nous.module import Nous
+from kaine.modules.planning.engine import FakeEngine
+from kaine.modules.planning.module import Planning
 
-module = Nous(bus, engine=FakeEngine())
+module = Planning(bus, engine=FakeEngine())
 ```
 
 ## Serialization and learned state
 
-`Nous.serialize()` includes a `learned` object holding the Dirichlet transition parameters and the carried posterior of every factor. It is preserved with the entity and restored on the next boot, so each viewing resumes from the previous posterior. A snapshot without the learned block starts from the prior and logs that it did. The serialized posteriors also let `NousMergeStrategy` keep the more certain fork (lower mean normalised entropy) in a [fork and merge](../12-forks-and-merges.md). The planning module writes no event content, workspace data or text to disk; its state is numeric.
+`Planning.serialize()` includes a `learned` object holding the Dirichlet transition parameters and the carried posterior of every factor. It is preserved with the entity and restored on the next boot, so each viewing resumes from the previous posterior. A snapshot without the learned block starts from the prior and logs that it did. The serialized posteriors also let `PlanningMergeStrategy` keep the more certain fork (lower mean normalised entropy) in a [fork and merge](../12-forks-and-merges.md). The planning module writes no event content, workspace data or text to disk; its state is numeric.
 
 ## Evaluation
 
@@ -174,20 +174,20 @@ The offline suite's active-inference benchmark compares the planning module's ex
 
 | File | Coverage |
 |---|---|
-| `tests/test_nous_engine.py` | `PymdpEngine` timeout guard, `FakeEngine` scripted steps, `normalised_entropy` |
-| `tests/test_nous_generative_model.py` | Shapes of A, B, C and D; `encode_snapshot` cases; `register_event_cluster` |
-| `tests/test_nous_module.py` | Module tick with `FakeEngine`; belief, policy and proposal publication; no `intent.act`; the timeout path |
-| `tests/test_nous_health_probe.py` | The complexity envelope in `make_nous` |
+| `tests/test_planning_engine.py` | `PymdpEngine` timeout guard, `FakeEngine` scripted steps, `normalised_entropy` |
+| `tests/test_planning_generative_model.py` | Shapes of A, B, C and D; `encode_snapshot` cases; `register_event_cluster` |
+| `tests/test_planning_module.py` | Module tick with `FakeEngine`; belief, policy and proposal publication; no `intent.act`; the timeout path |
+| `tests/test_planning_health_probe.py` | The complexity envelope in `make_nous` |
 | `tests/test_numpy_aif_parity.py` | `NumpyAgent` reproduces golden pymdp actions and per-action expected free energy to 1e-4 |
-| `tests/test_numpy_nous_engine.py` | The NumPy engine replays the golden learning trajectory; learned-state interchange with `PymdpEngine`; timeout, generation and load guards; runs with JAX blocked; step latency |
-| `tests/test_nous_health_probe_backend.py` | The dashboard health probe checks the configured backend; the NumPy probe runs with JAX blocked |
-| `tests/test_nous_proposals.py` | Proposal payloads, `no_op` suppression, intensity, learning from outcomes |
-| `tests/test_nous_proposal_source.py` | The action selection module's `NousProposalSource`: gating, guards, outcome publication |
-| `tests/test_nous_action_e2e.py` | On a real bus, a think proposal in an accessed broadcast becomes an `intent.think` that [the language module](./language.md) realizes as internal speech; an inhibited one publishes nothing to `volition.out` |
-| `tests/systems/test_nous_subsystem.py` | End-to-end subsystem test |
+| `tests/test_numpy_planning_engine.py` | The NumPy engine replays the golden learning trajectory; learned-state interchange with `PymdpEngine`; timeout, generation and load guards; runs with JAX blocked; step latency |
+| `tests/test_planning_health_probe_backend.py` | The dashboard health probe checks the configured backend; the NumPy probe runs with JAX blocked |
+| `tests/test_planning_proposals.py` | Proposal payloads, `no_op` suppression, intensity, learning from outcomes |
+| `tests/test_planning_proposal_source.py` | The action selection module's `PlanningProposalSource`: gating, guards, outcome publication |
+| `tests/test_planning_action_e2e.py` | On a real bus, a think proposal in an accessed broadcast becomes an `intent.think` that [the language module](./language.md) realizes as internal speech; an inhibited one publishes nothing to `volition.out` |
+| `tests/systems/test_planning_subsystem.py` | End-to-end subsystem test |
 
 ## Spec and related
 
 - Primary spec: `openspec/specs/nous-active-inference/spec.md`
-- Archived changes: `openspec/changes/archive/2026-06-07-nous-pymdp-swap/` (the move to pymdp) and `openspec/changes/archive/2026-05-20-nous/` (the original symbolic integration)
+- Archived changes: `openspec/changes/archive/2026-06-07-nous-pymdp-swap/` (the move to pymdp) and `openspec/changes/archive/2026-05-20-planning/` (the original symbolic integration)
 - Related modules: [Affect](./affect.md) supplies the affect quadrant; [Self-model](./self-model.md) reads `nous.policy` for its capability map; [Sleep](./sleep.md) decides on forwarded rest requests; [Language](./language.md) realizes think and speak intents; [Effectors](./effectors.md) receives no planning module action.

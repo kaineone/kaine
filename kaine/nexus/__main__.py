@@ -35,7 +35,7 @@ from kaine.lifecycle.manager import ForkManager, merger_from_name
 from kaine.nexus.app import create_app, make_default_privacy_filter
 from kaine.nexus.bridge import BusBridge
 from kaine.nexus.config import NexusConfigError, load_nexus_config
-from kaine.nexus.conversation import LINGUA_EXTERNAL_STREAM
+from kaine.nexus.conversation import LANGUAGE_EXTERNAL_STREAM
 from kaine.nexus.health import load_health_prober
 from kaine.storage import install_data_root, resolve
 
@@ -231,7 +231,7 @@ async def _build():
 
     async def history_loader(n: int) -> list[tuple[str, Event]]:
         try:
-            return await bus.read(LINGUA_EXTERNAL_STREAM, last_id="0", count=n, block_ms=0)
+            return await bus.read(LANGUAGE_EXTERNAL_STREAM, last_id="0", count=n, block_ms=0)
         except Exception:
             logging.exception("conversation history backfill failed")
             return []

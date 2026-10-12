@@ -110,7 +110,7 @@ async def test_smoke_services_maps_up_not_configured_down_degraded(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-async def test_smoke_organ_skipped_when_lingua_disabled():
+async def test_smoke_organ_skipped_when_language_disabled():
     config = _enabled_config(modules={"lingua": False})
     results = await preboot.check_organ(config)
     assert results[0].status == preboot.SKIP

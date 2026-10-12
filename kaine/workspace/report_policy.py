@@ -38,7 +38,7 @@ import time
 from typing import Callable, Optional
 
 from kaine.cycle.types import WorkspaceSnapshot
-from kaine.workspace.volition import (
+from kaine.workspace.action_selection import (
     OWN_EXTERNAL_SPEECH_SOURCE,
     OWN_EXTERNAL_SPEECH_TYPE,
     OWN_INTERNAL_SPEECH_TYPE,

@@ -77,6 +77,12 @@ def test_full_repo_dry_run_deterministic(codemod, table, tmp_path: pathlib.Path)
         assert not codemod.is_excluded(old, table), old
         assert not codemod.is_excluded(new, table), new
 
+    for old, new, _scope in plan1.moves:
+        new_name = pathlib.PurePosixPath(new).name
+        for module in table.MODULES.values():
+            k = module["new_key"]
+            assert f"{k}_{k}" not in new_name, f"stutter planned: {old} -> {new}"
+
     for path in plan1.results:
         assert not codemod.is_excluded(path, table), path
 
@@ -88,3 +94,20 @@ def test_full_repo_dry_run_deterministic(codemod, table, tmp_path: pathlib.Path)
         check=True,
     )
     assert status.stdout == ""
+
+
+def test_no_tracked_file_name_stutters(table):
+    root = pathlib.Path(__file__).resolve().parents[1]
+    tracked = subprocess.run(
+        ["git", "-C", str(root), "ls-files"],
+        capture_output=True,
+        text=True,
+    )
+    if tracked.returncode != 0:
+        pytest.skip("not a git worktree")
+
+    for line in tracked.stdout.splitlines():
+        name = pathlib.PurePosixPath(line).name
+        for module in table.MODULES.values():
+            k = module["new_key"]
+            assert f"{k}_{k}" not in name, f"tracked file name stutters: {line!r} ({k!r})"

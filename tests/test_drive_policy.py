@@ -4,7 +4,7 @@
 """Unit tests for the drive-biased action-selection policy.
 
 Validates the `drives-to-behavior` change with fakes only (no live boot):
-WorkspaceSnapshot objects are built directly, mirroring tests/test_volition.py.
+WorkspaceSnapshot objects are built directly, mirroring tests/test_action_selection.py.
 Covers: social_drive → speak; curiosity/boredom/restlessness → think;
 inhibited → none (via Volition.select, proving the gate still holds);
 user utterance outranks social-drive speak; in-flight guards prevent stacking
@@ -19,13 +19,13 @@ import pytest
 
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
-from kaine.workspace.drive_policy import DriveBiasedActionSelectionPolicy
-from kaine.workspace.volition import (
+from kaine.workspace.action_selection import (
     SPEAK,
     THINK,
+    ActionSelection,
     DefaultActionSelectionPolicy,
-    Volition,
 )
+from kaine.workspace.drive_policy import DriveBiasedActionSelectionPolicy
 
 
 def _event(source: str, type_: str, payload=None, salience: float = 0.5) -> Event:
@@ -133,8 +133,8 @@ def test_drive_intensity_selects_strong_or_moderate_phrase(name, strong, moderat
 # --- 3.3 inhibited snapshot → no intent (via the action selection gate) ----------------
 
 
-def test_inhibited_snapshot_produces_no_intent_via_volition():
-    v = Volition(policy=DriveBiasedActionSelectionPolicy())
+def test_inhibited_snapshot_produces_no_intent_via_action_selection():
+    v = ActionSelection(policy=DriveBiasedActionSelectionPolicy())
     snap = _snapshot(
         [_drive("social_drive"), _drive("curiosity"), _transcription("hi")],
         inhibited=True,
@@ -147,7 +147,7 @@ def test_inhibited_gate_does_not_arm_guards():
     # policy, so the in-flight guards stay clear and a later non-inhibited
     # snapshot still acts.
     policy = DriveBiasedActionSelectionPolicy()
-    v = Volition(policy=policy)
+    v = ActionSelection(policy=policy)
     assert v.select(_snapshot([_drive("social_drive")], inhibited=True)) == []
     assert policy.speak_in_flight is False
     assert policy.think_in_flight is False

@@ -124,7 +124,7 @@ def test_episodic_memory_sentence_transformers_backend_needs_memory(monkeypatch)
     )
 
 
-def test_empatheia_qdrant_sentence_transformers_backend_needs_memory(monkeypatch):
+def test_social_cognition_qdrant_sentence_transformers_backend_needs_memory(monkeypatch):
     monkeypatch.setattr(
         importlib.util, "find_spec", _make_find_spec(set())
     )
@@ -246,7 +246,7 @@ def test_audition_default_requires_no_sherpa_onnx(monkeypatch):
     assert not any(m.import_name == "sherpa_onnx" for m in missing)
 
 
-def test_vox_sherpa_onnx_requires_speech_edge(monkeypatch):
+def test_vocal_sherpa_onnx_requires_speech_edge(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
     config = {
         "modules": {"vox": True},
@@ -258,7 +258,7 @@ def test_vox_sherpa_onnx_requires_speech_edge(monkeypatch):
     )
 
 
-def test_vox_default_requires_no_sherpa_onnx(monkeypatch):
+def test_vocal_default_requires_no_sherpa_onnx(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
     config = {
         "modules": {"vox": True},
@@ -321,7 +321,7 @@ def test_audition_live_capture_requires_sounddevice_and_webrtcvad(monkeypatch):
     assert any(m.import_name == "webrtcvad" for m in missing)
 
 
-def test_nous_needs_reasoning(monkeypatch):
+def test_planning_needs_reasoning(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
     config = {"modules": {"nous": True}}
     missing = check(config)

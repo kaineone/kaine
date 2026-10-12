@@ -61,7 +61,7 @@ All keys are under `[empatheia]` and `[empatheia.qdrant]`. The full reference is
 
 ### The agent model
 
-`kaine/modules/empatheia/agent.py` defines `AgentModel`:
+`kaine/modules/social_cognition/agent.py` defines `AgentModel`:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -135,7 +135,7 @@ An event with no `source_label` is attributed to the operator agent.
 
 ### Fork and merge
 
-`EmpatheiaMergeStrategy` in `kaine/lifecycle/strategies.py`, registered by `default_strategies()` under `empatheia`, merges two branches' profiles:
+`SocialCognitionMergeStrategy` in `kaine/lifecycle/strategies.py`, registered by `default_strategies()` under `empatheia`, merges two branches' profiles:
 
 - `interaction_count` is summed, since both branches heard real interactions.
 - `emotion_histogram`, `behavioral_summary` and `reliability` are averaged, weighted by interaction count. A `behavioral_summary` entry missing or null on one branch, such as the `mean_prediction_error` of an agent that never had a defined error, is absent rather than 0, so the merged entry takes the other branch's value; an entry held by neither branch stays absent.
@@ -159,11 +159,11 @@ Each `empatheia.agent_model` carries the `source_label` of the audio event that 
 
 | Path | Purpose |
 |---|---|
-| `kaine/modules/empatheia/module.py` | `Empatheia(BaseModule)`: Audition consumer, dispatch, publication |
-| `kaine/modules/empatheia/agent.py` | `AgentModel`: histogram, updates, `familiarity()`, deviation |
-| `kaine/modules/empatheia/store.py` | `AgentStore` protocol, `InMemoryAgentStore`, `QdrantAgentStore` |
-| `kaine/lifecycle/strategies.py` | `EmpatheiaMergeStrategy` |
-| `kaine/boot/factories/empatheia.py` | `make_empatheia()` and the Qdrant sub-table |
+| `kaine/modules/social_cognition/module.py` | `SocialCognition(BaseModule)`: Audition consumer, dispatch, publication |
+| `kaine/modules/social_cognition/agent.py` | `AgentModel`: histogram, updates, `familiarity()`, deviation |
+| `kaine/modules/social_cognition/store.py` | `AgentStore` protocol, `InMemoryAgentStore`, `QdrantAgentStore` |
+| `kaine/lifecycle/strategies.py` | `SocialCognitionMergeStrategy` |
+| `kaine/boot/factories/social_cognition.py` | `make_empatheia()` and the Qdrant sub-table |
 
 ## Enabling
 
@@ -174,8 +174,8 @@ Each `empatheia.agent_model` carries the `source_label` of the audio event that 
 To try the agent model by hand:
 
 ```python
-from kaine.modules.empatheia.agent import AgentModel
-from kaine.modules.empatheia.store import InMemoryAgentStore
+from kaine.modules.social_cognition.agent import AgentModel
+from kaine.modules.social_cognition.store import InMemoryAgentStore
 
 store = InMemoryAgentStore()
 await store.initialize()
@@ -195,11 +195,11 @@ print(model.familiarity())  # about 0.072 after one interaction
 
 | File | Coverage |
 |---|---|
-| `tests/test_empatheia_agent.py` | Updates, deviation, familiarity growth, weighted averages |
-| `tests/test_empatheia_store.py` | `InMemoryAgentStore` operations; `QdrantAgentStore` with a mocked client |
-| `tests/test_empatheia_merge.py` | Weighted merge, count sum, edge cases |
-| `tests/test_empatheia_merge_wired.py` | `ForkManager.merge` uses the social cognition module's strategy by default |
-| `tests/test_empatheia_module.py` | Module tick; emotion to agent model; transcription without text; the social-error threshold |
+| `tests/test_social_cognition_agent.py` | Updates, deviation, familiarity growth, weighted averages |
+| `tests/test_social_cognition_store.py` | `InMemoryAgentStore` operations; `QdrantAgentStore` with a mocked client |
+| `tests/test_social_cognition_merge.py` | Weighted merge, count sum, edge cases |
+| `tests/test_social_cognition_merge_wired.py` | `ForkManager.merge` uses the social cognition module's strategy by default |
+| `tests/test_social_cognition_module.py` | Module tick; emotion to agent model; transcription without text; the social-error threshold |
 
 ## Spec and related
 

@@ -26,7 +26,7 @@ from kaine.cycle.engine import CognitiveCycle
 from kaine.evaluation.benchmarks.oscillatory_ablation.runner import (
     AblationConfig,
     _async_noop,
-    _build_syneidesis,
+    _build_workspace,
     _classify,
     _MonotonicClock,
     _normalize_broadcast,
@@ -44,7 +44,7 @@ from kaine.evaluation.benchmarks.oscillatory_ablation.stimulus import (
 )
 from kaine.experiment.seeding import set_global_seed
 from kaine.experiment.verdict import Outcome
-from kaine.workspace.volition import Volition
+from kaine.workspace.action_selection import ActionSelection
 
 # --------------------------------------------------------------------------
 # Reproducibility: same seed → same verdict + metrics
@@ -135,9 +135,9 @@ async def _layer_absent_baseline(cfg: AblationConfig) -> list[dict]:
     bus = ScriptedBus(scripted_streams(cfg.ticks))
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=_build_syneidesis(cfg, None),
+        workspace=_build_workspace(cfg, None),
         registry=ScriptedPhaseRegistry(),
-        volition=Volition(),
+        action_selection=ActionSelection(),
         clock=_MonotonicClock(),
         sleep=_async_noop,
         collect_phases=False,
@@ -214,9 +214,9 @@ async def test_neutral_disabled_arm_is_bit_for_bit_layer_absent_baseline():
     bus = ScriptedBus(NEUTRAL_STIMULUS.streams(cfg.ticks))
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=_build_syneidesis(cfg, None),
+        workspace=_build_workspace(cfg, None),
         registry=NEUTRAL_STIMULUS.registry(),
-        volition=Volition(),
+        action_selection=ActionSelection(),
         clock=_MonotonicClock(),
         sleep=_async_noop,
         collect_phases=False,

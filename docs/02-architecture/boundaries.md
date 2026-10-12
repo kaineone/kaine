@@ -45,7 +45,7 @@ The import contracts document and enforce the project's real layering. Violation
 
 The domain organs in `kaine/modules/` are leaf components driven by the cycle. They must not import the cycle runtime: the engine/loop, registry, preflight, boot, `__main__`, the supervisor, or the preservation/research monitors. See [The modules](../09-modules/README.md) for what each module does.
 
-The one allowed dependency is the pure data module `kaine.cycle.types` (`WorkspaceSnapshot`). That import is permitted directly and transitively, for example through `kaine.faithful` and `kaine.workspace.volition`, and it is the single declared exception to the rule that modules stay independent of the cycle.
+The one allowed dependency is the pure data module `kaine.cycle.types` (`WorkspaceSnapshot`). That import is permitted directly and transitively, for example through `kaine.faithful` and `kaine.workspace.action_selection`, and it is the single declared exception to the rule that modules stay independent of the cycle.
 
 ### Workspace and cognitive modules
 

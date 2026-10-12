@@ -542,9 +542,9 @@ class MaturationGateRunner:
         # is actually available when the entity becomes embodied.
         # The vocal module is activated before the embodiment module so the voice is available at maturation.
         if "vox" in self._registry:
-            vox = self._registry.get("vox")
-            if hasattr(vox, "set_dormant"):
-                vox.set_dormant(False)
+            vocal = self._registry.get("vox")
+            if hasattr(vocal, "set_dormant"):
+                vocal.set_dormant(False)
                 log.info("birth: vox activated")
         if "mundus" in self._registry:
             mundus = self._registry.get("mundus")

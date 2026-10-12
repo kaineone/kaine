@@ -22,7 +22,7 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle import CognitiveCycle
 from kaine.cycle.types import WorkspaceSnapshot
-from tests._fakes import FakeClock, FakeRegistry, FakeSyneidesis
+from tests._fakes import FakeClock, FakeRegistry, FakeWorkspace
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ async def make_cycle():
         clock = FakeClock()
         cycle = CognitiveCycle(
             bus=bus,
-            syneidesis=FakeSyneidesis(),
+            workspace=FakeWorkspace(),
             registry=FakeRegistry([]),
             processing_rate_hz=processing_rate_hz,
             experiential_rate_hz=processing_rate_hz,
@@ -72,7 +72,7 @@ async def test_sustainable_rate_is_not_overrunning(make_cycle):
         clock.advance(0.001)
         return WorkspaceSnapshot(tick_index=context["tick_index"])
 
-    cycle._syneidesis.select = cheap_select  # type: ignore[assignment]
+    cycle._workspace.select = cheap_select  # type: ignore[assignment]
     for _ in range(10):
         await cycle.tick()
 
@@ -95,7 +95,7 @@ async def test_unsustainable_target_surfaces_shortfall_not_silently_capped(make_
         clock.advance(0.500)  # 500 ms — 2.5x over the 200 ms budget
         return WorkspaceSnapshot(tick_index=context["tick_index"])
 
-    cycle._syneidesis.select = slow_select  # type: ignore[assignment]
+    cycle._workspace.select = slow_select  # type: ignore[assignment]
     for _ in range(8):
         await cycle.tick()
 
@@ -122,7 +122,7 @@ async def test_time_scale_gt1_raises_target_and_overrun_is_visible(make_cycle):
         clock.advance(0.300)
         return WorkspaceSnapshot(tick_index=context["tick_index"])
 
-    cycle._syneidesis.select = slow_select  # type: ignore[assignment]
+    cycle._workspace.select = slow_select  # type: ignore[assignment]
     for _ in range(6):
         await cycle.tick()
 

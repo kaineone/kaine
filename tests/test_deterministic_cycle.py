@@ -38,9 +38,9 @@ from kaine.workspace import (
     RuleBasedSalience,
     StaticAffectModulator,
     StaticGoalScorer,
-    Syneidesis,
+    Workspace,
 )
-from kaine.workspace.volition import Volition
+from kaine.workspace.action_selection import ActionSelection
 from tests._fakes import FakeClock
 
 SEED = 1234
@@ -162,7 +162,7 @@ def _scripted_streams() -> dict[str, list[tuple[str, Event]]]:
 
 
 def _build_cycle(bus: ScriptedBus, *, deterministic: bool, clock=None) -> CognitiveCycle:
-    syneidesis = Syneidesis(
+    workspace = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=32),
             goal_scorer=StaticGoalScorer(),
@@ -173,9 +173,9 @@ def _build_cycle(bus: ScriptedBus, *, deterministic: bool, clock=None) -> Cognit
     )
     return CognitiveCycle(
         bus=bus,
-        syneidesis=syneidesis,
+        workspace=workspace,
         registry=StreamRegistry(sorted(_scripted_streams().keys())),
-        volition=Volition(),
+        action_selection=ActionSelection(),
         clock=clock if clock is not None else FakeClock(),
         sleep=FakeClock().sleep,
         deterministic=deterministic,
@@ -377,7 +377,7 @@ async def test_normal_mode_uses_injected_wall_clock():
 
     set_global_seed(SEED)
     bus = ScriptedBus(_scripted_streams())
-    syneidesis = Syneidesis(
+    workspace = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=32),
             goal_scorer=StaticGoalScorer(),
@@ -388,9 +388,9 @@ async def test_normal_mode_uses_injected_wall_clock():
     )
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=syneidesis,
+        workspace=workspace,
         registry=StreamRegistry(sorted(_scripted_streams().keys())),
-        volition=Volition(),
+        action_selection=ActionSelection(),
         clock=FakeClock(),
         sleep=FakeClock().sleep,
         wall_clock=fake_wall_clock,
@@ -441,7 +441,7 @@ async def test_canonical_ordering_stable_tiebreak_regardless_of_arrival():
         set_global_seed(SEED)
         streams = equal_salience_streams()
         bus = ScriptedBus(streams)
-        syneidesis = Syneidesis(
+        workspace = Workspace(
             strategy=RuleBasedSalience(
                 novelty=NoveltyTracker(window=32),
                 goal_scorer=StaticGoalScorer(),
@@ -452,9 +452,9 @@ async def test_canonical_ordering_stable_tiebreak_regardless_of_arrival():
         )
         cycle = CognitiveCycle(
             bus=bus,
-            syneidesis=syneidesis,
+            workspace=workspace,
             registry=StreamRegistry(order),
-            volition=None,
+            action_selection=None,
             clock=FakeClock(),
             sleep=FakeClock().sleep,
             deterministic=True,
@@ -479,7 +479,7 @@ async def test_canonical_ordering_stable_tiebreak_regardless_of_arrival():
 @pytest.mark.asyncio
 async def test_default_off_engine_constructs_with_real_defaults():
     bus = ScriptedBus(_scripted_streams())
-    syneidesis = Syneidesis(
+    workspace = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=32),
             goal_scorer=StaticGoalScorer(),
@@ -491,9 +491,9 @@ async def test_default_off_engine_constructs_with_real_defaults():
     # No deterministic / wall_clock args at all → defaults.
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=syneidesis,
+        workspace=workspace,
         registry=StreamRegistry(sorted(_scripted_streams().keys())),
-        volition=Volition(),
+        action_selection=ActionSelection(),
         clock=FakeClock(),
         sleep=FakeClock().sleep,
     )

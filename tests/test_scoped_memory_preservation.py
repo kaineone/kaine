@@ -19,10 +19,10 @@ import pytest
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
-from kaine.modules.empatheia.agent import AgentModel
-from kaine.modules.empatheia.store import _AGENT_ID_NAMESPACE, QdrantAgentStore, _point_id
 from kaine.modules.episodic_memory import EpisodicMemoryCore
 from kaine.modules.episodic_memory.storage import InMemoryStorage, QdrantStorage, StorageError
+from kaine.modules.social_cognition.agent import AgentModel
+from kaine.modules.social_cognition.store import _AGENT_ID_NAMESPACE, QdrantAgentStore, _point_id
 from kaine.text_embedding import FakeEmbedder
 
 
@@ -447,7 +447,7 @@ async def test_replace_semantics_and_validation_failure():
 
 
 @pytest.mark.asyncio
-async def test_empatheia_qdrant_all_profiles_includes_collection():
+async def test_social_cognition_qdrant_all_profiles_includes_collection():
     pytest.importorskip("qdrant_client")
     client = _FakeAsyncQdrant()
     model = AgentModel(id="remote", label="remote")
@@ -475,7 +475,7 @@ async def test_empatheia_qdrant_all_profiles_includes_collection():
 
 
 @pytest.mark.asyncio
-async def test_empatheia_qdrant_replace_all_re_embeds():
+async def test_social_cognition_qdrant_replace_all_re_embeds():
     pytest.importorskip("qdrant_client")
     client = _FakeAsyncQdrant()
 
@@ -519,7 +519,7 @@ async def test_empatheia_qdrant_replace_all_re_embeds():
 
 
 @pytest.mark.asyncio
-async def test_empatheia_qdrant_all_profiles_fails_loud_on_scroll_error():
+async def test_social_cognition_qdrant_all_profiles_fails_loud_on_scroll_error():
     pytest.importorskip("qdrant_client")
 
     class _Broken:
@@ -539,7 +539,7 @@ async def test_empatheia_qdrant_all_profiles_fails_loud_on_scroll_error():
 
 
 @pytest.mark.asyncio
-async def test_empatheia_put_stores_profile_when_embedder_fails():
+async def test_social_cognition_put_stores_profile_when_embedder_fails():
     pytest.importorskip("qdrant_client")
     client = _FakeAsyncQdrant()
 
@@ -576,7 +576,7 @@ async def test_empatheia_put_stores_profile_when_embedder_fails():
 
 
 @pytest.mark.asyncio
-async def test_empatheia_all_profiles_raises_without_client():
+async def test_social_cognition_all_profiles_raises_without_client():
     pytest.importorskip("qdrant_client")
     store = QdrantAgentStore(
         api_key="k",
@@ -841,7 +841,7 @@ async def test_sqlite_vec_replace_collection_only_named_rows(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_empatheia_put_generates_stable_valid_point_id():
+async def test_social_cognition_put_generates_stable_valid_point_id():
     pytest.importorskip("qdrant_client")
     client = _FakeAsyncQdrant()
     store = QdrantAgentStore(

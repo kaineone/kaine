@@ -25,7 +25,7 @@ from kaine.workspace import (
     RuleBasedSalience,
     StaticAffectModulator,
     StaticGoalScorer,
-    Syneidesis,
+    Workspace,
 )
 
 
@@ -33,7 +33,7 @@ async def _measure_rate(target_hz: float, n_ticks: int) -> float:
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
-    syn = Syneidesis(
+    syn = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
@@ -45,7 +45,7 @@ async def _measure_rate(target_hz: float, n_ticks: int) -> float:
     registry = ModuleRegistry()
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=syn,
+        workspace=syn,
         registry=registry,
         processing_rate_hz=target_hz,
         experiential_rate_hz=target_hz,

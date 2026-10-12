@@ -65,8 +65,8 @@ from kaine.cycle.spot import Spot, SpotConfig
 from kaine.cycle.utterance_outcome import start_utterance_outcome_observer
 from kaine.cycle.womb_watch import GESTATION_FREEZE_SOURCE
 from kaine.defaults import (
-    lingua_section_api_key,
-    lingua_section_chat_url,
+    language_section_api_key,
+    language_section_chat_url,
     model_server_api_key,
 )
 from kaine.evaluation import SidecarRegistry, load_evaluation_config
@@ -109,10 +109,10 @@ from kaine.workspace import (
     DriveRelevanceGoalScorer,
     NoveltyTracker,
     RuleBasedSalience,
-    Syneidesis,
+    Workspace,
 )
+from kaine.workspace.action_selection import ActionSelection
 from kaine.workspace.drive_policy import DriveBiasedActionSelectionPolicy
-from kaine.workspace.volition import Volition
 
 if TYPE_CHECKING:
     from kaine.cycle.revive_boot import ReviveSession
@@ -250,7 +250,7 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
     from kaine.cycle.individuation_runtime import ServedOrganIdentity, build_runtime
     from kaine.defaults import (
         DEFAULT_CHAT_URL,
-        lingua_section_api_key,
+        language_section_api_key,
         model_server_api_key,
     )
     from kaine.evaluation.preference_battery import load_battery, validate_battery
@@ -260,11 +260,11 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
     battery = load_battery(cfg.battery_path or None)
     validate_battery(battery)
 
-    lingua = registry.get("lingua")
-    eidolon = registry.get("eidolon") if "eidolon" in registry else None
-    lingua.set_expects_self_model(eidolon is not None)
+    language = registry.get("lingua")
+    self_model = registry.get("eidolon") if "eidolon" in registry else None
+    language.set_expects_self_model(self_model is not None)
     ensure_fact = (
-        eidolon.ensure_situation_fact if eidolon is not None else lingua.add_situation_fact
+        self_model.ensure_situation_fact if self_model is not None else language.add_situation_fact
     )
     sleep = registry.get("hypnos") if "hypnos" in registry else None
 
@@ -274,24 +274,24 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
     per_request_adapter = (
         _effective_hot_swap_mode(voice_cfg.get("hot_swap_mode", "manual"), kaine_config)
         == "organ_adapter"
-        and bool(getattr(lingua.chat_client, "applies_lora", False))
+        and bool(getattr(language.chat_client, "applies_lora", False))
     )
 
     entity_clock = getattr(registry, "entity_clock", None)
 
     from kaine.lifecycle.individuation_store import DEFAULT_ROOT
 
-    lingua_section = kaine_config.get("lingua") or {}
+    language_section = kaine_config.get("lingua") or {}
     served_identity = ServedOrganIdentity(
-        chat_url=lingua_section.get("chat_url") or DEFAULT_CHAT_URL,
-        api_key=lingua_section_api_key(lingua_section) or model_server_api_key(None),
+        chat_url=language_section.get("chat_url") or DEFAULT_CHAT_URL,
+        api_key=language_section_api_key(language_section) or model_server_api_key(None),
         revision_reader=read_revision_state,
     )
 
     return build_runtime(
         config=cfg,
         battery=battery,
-        lingua=lingua,
+        language=language,
         ensure_fact=ensure_fact,
         embedder=shared_embedder(registry, kaine_config),
         adapter_output_dir=adapter_output_dir,
@@ -459,7 +459,7 @@ def _cognitive_query_client_factory(registry, eval_cfg):
     """
     if "mnemos" not in registry:
         return None
-    from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
+    from kaine.modules.language.client import ChatRequest, OpenAIChatClient
 
     episodic_memory = registry.get("mnemos")
     client = OpenAIChatClient(base_url=eval_cfg.chat_url, timeout_s=eval_cfg.chat_timeout_s)
@@ -513,8 +513,8 @@ def build_ab_divergence_control_client(eval_cfg, *, assembler=None):
     production conditioning path, not a parallel reimplementation.
     """
     from kaine.evaluation.ab_divergence import AssemblerConditionedClient
-    from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
-    from kaine.modules.lingua.context import ContextAssembler
+    from kaine.modules.language.client import ChatRequest, OpenAIChatClient
+    from kaine.modules.language.context import ContextAssembler
 
     assembler = assembler or ContextAssembler()
     client = OpenAIChatClient(
@@ -926,8 +926,8 @@ def _gather_model_ids(config: dict[str, Any], *, eval_chat_model_id: str | None)
         if isinstance(value, str) and value:
             out[key] = value
 
-    lingua_model_id = (config.get("lingua") or {}).get("model_id")
-    _put("lingua", lingua_model_id)
+    language_model_id = (config.get("lingua") or {}).get("model_id")
+    _put("lingua", language_model_id)
     _put("evaluation_chat", eval_chat_model_id)
     _put("topos_encoder", (config.get("topos") or {}).get("encoder_model_id"))
     from kaine.text_embedding import resolve_embedding_config
@@ -947,8 +947,8 @@ def _gather_model_ids(config: dict[str, Any], *, eval_chat_model_id: str | None)
         from kaine.organ_probe import read_revision_state
 
         revisions = read_revision_state()
-        if isinstance(lingua_model_id, str) and lingua_model_id in revisions:
-            _put("lingua_revision", revisions[lingua_model_id])
+        if isinstance(language_model_id, str) and language_model_id in revisions:
+            _put("lingua_revision", revisions[language_model_id])
     except Exception:
         log.debug("organ revision provenance unavailable", exc_info=True)
     return out
@@ -966,7 +966,7 @@ def _resolve_seed(config: dict[str, Any]) -> int:
     return secrets.randbits(32)
 
 
-def _syneidesis_arm_kwargs(syn_cfg: dict[str, Any], run_ctx: Any) -> dict[str, Any]:
+def _workspace_arm_kwargs(syn_cfg: dict[str, Any], run_ctx: Any) -> dict[str, Any]:
     """The workspace arm from ``[syneidesis].arm`` (paper §6.3) and the run seed
     the matched arm's draw is seeded from (``None`` before a run context exists)."""
     arm = str(syn_cfg.get("arm", "competitive")).strip().lower()
@@ -1481,15 +1481,15 @@ async def _phase_preconditions(ctx: BootContext) -> int | None:
     # modules, runtime.json) — so a mismatched A/B baseline fails closed cleanly
     # with no half-booted entity and no stale runtime state. The baseline model
     # DERIVES from [lingua].model_id and refuses an explicit divergent value.
-    lingua_model_id = (ctx.kaine_config.get("lingua") or {}).get("model_id")
+    language_model_id = (ctx.kaine_config.get("lingua") or {}).get("model_id")
     # The A/B baseline talks to the SAME model server as the organ, so it needs
     # the same bearer key (keyed server like Unsloth Studio). Resolve it the same
     # way make_lingua does — [lingua].api_key, else the env var — and derive the
     # eval key from it so organ and baseline authenticate identically.
-    lingua_api_key = model_server_api_key(ctx.kaine_config)
+    language_api_key = model_server_api_key(ctx.kaine_config)
     try:
         ctx.eval_cfg = load_evaluation_config(
-            lingua_model_id=lingua_model_id, lingua_api_key=lingua_api_key
+            language_model_id=language_model_id, language_api_key=language_api_key
         )
     except ValueError as exc:
         sys.stderr.write(f"Refusing to boot KAINE cycle: {exc}\n")
@@ -1636,11 +1636,11 @@ async def _phase_gates(ctx: BootContext) -> int | None:
         else:
             from kaine.organ_probe import verify_organ_generates
 
-            lingua_cfg = ctx.kaine_config.get("lingua") or {}
+            language_cfg = ctx.kaine_config.get("lingua") or {}
             gate = await verify_organ_generates(
-                lingua_section_chat_url(lingua_cfg),
-                str(lingua_cfg.get("model_id") or ""),
-                api_key=lingua_section_api_key(lingua_cfg),
+                language_section_chat_url(language_cfg),
+                str(language_cfg.get("model_id") or ""),
+                api_key=language_section_api_key(language_cfg),
             )
             log.info("organ-gate: %s", gate.detail)
             if not gate.ok:
@@ -1867,7 +1867,7 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
         or ctx.access_rate is not None
     )
     ctx.affect_observer = ctx.affect_provider.observe if reads_affect else None
-    ctx.syneidesis = Syneidesis(
+    ctx.workspace = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=int(syn_cfg.get("novelty_window", 32))),
             goal_scorer=goal_scorer,
@@ -1877,15 +1877,15 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
         top_k=int(syn_cfg.get("top_k", 5)),
         publication_threshold=float(syn_cfg.get("publication_threshold", 0.35)),
         coherence=ctx.coherence_scorer,
-        **_syneidesis_arm_kwargs(syn_cfg, ctx.run_ctx),
+        **_workspace_arm_kwargs(syn_cfg, ctx.run_ctx),
     )
-    if ctx.syneidesis.arm != "competitive":
+    if ctx.workspace.arm != "competitive":
         log.warning(
-            "workspace runs the %s control arm of the planned ablation", ctx.syneidesis.arm
+            "workspace runs the %s control arm of the planned ablation", ctx.workspace.arm
         )
 
 
-async def _phase_volition(ctx: BootContext) -> int | None:
+async def _phase_action_selection(ctx: BootContext) -> int | None:
     """Select and build the action selection policy."""
     # Executive action selection. By default the drive-biased policy is
     # injected (`drives-to-behavior`): it subsumes the conservative default
@@ -1896,14 +1896,14 @@ async def _phase_volition(ctx: BootContext) -> int | None:
     # Inhibition still gates everything (the action selection module checks `inhibited` first).
     # An operator can disable drive initiative — falling back to the plain
     # default policy — via `[volition].drive_initiative = false`.
-    volition_cfg = ctx.kaine_config.get("volition") or {}
-    policy_name = str(volition_cfg.get("policy", "")).strip().lower()
-    drive_initiative = bool(volition_cfg.get("drive_initiative", True))
+    action_selection_cfg = ctx.kaine_config.get("volition") or {}
+    policy_name = str(action_selection_cfg.get("policy", "")).strip().lower()
+    drive_initiative = bool(action_selection_cfg.get("drive_initiative", True))
     # Operator-channel set is shared between social cognition attribution and the action selection module
     # user-utterance detection. A single [empatheia].operator_sources key
     # configures both.
-    empatheia_cfg = ctx.kaine_config.get("empatheia") or {}
-    _operator_sources_raw = empatheia_cfg.get("operator_sources")
+    social_cognition_cfg = ctx.kaine_config.get("empatheia") or {}
+    _operator_sources_raw = social_cognition_cfg.get("operator_sources")
     operator_sources = None
     if _operator_sources_raw is not None:
         if not isinstance(_operator_sources_raw, list) or not all(
@@ -1920,19 +1920,19 @@ async def _phase_volition(ctx: BootContext) -> int | None:
     # enabled. [nous].drive_actions (default true) disables the source for
     # ablation runs while still recording proposal outcomes.
     modules_cfg = ctx.kaine_config.get("modules") or {}
-    nous_cfg = ctx.kaine_config.get("nous") or {}
-    nous_enabled = bool(modules_cfg.get("nous", True))
+    planning_cfg = ctx.kaine_config.get("nous") or {}
+    planning_enabled = bool(modules_cfg.get("nous", True))
 
     def _wrap_policy(policy):
-        if not nous_enabled:
+        if not planning_enabled:
             return policy
-        from kaine.workspace.nous_proposals import NousProposalSource
+        from kaine.workspace.planning_proposals import PlanningProposalSource
 
-        return NousProposalSource(
+        return PlanningProposalSource(
             policy,
-            drive_actions=bool(nous_cfg.get("drive_actions", True)),
-            speak_refractory_s=float(volition_cfg.get("speak_refractory_s", 8.0)),
-            think_refractory_s=float(volition_cfg.get("think_refractory_s", 3.0)),
+            drive_actions=bool(planning_cfg.get("drive_actions", True)),
+            speak_refractory_s=float(action_selection_cfg.get("speak_refractory_s", 8.0)),
+            think_refractory_s=float(action_selection_cfg.get("think_refractory_s", 3.0)),
             rest_min_interval_s=float(
                 (ctx.kaine_config.get("hypnos") or {}).get(
                     "requested_rest_min_interval_s", 1800.0
@@ -1956,20 +1956,20 @@ async def _phase_volition(ctx: BootContext) -> int | None:
         # [volition].interrupt_threshold keeps await-to-completion; a set
         # value must sit strictly above the report bar (enforced by the
         # policy itself).
-        _interrupt_raw = volition_cfg.get("interrupt_threshold")
+        _interrupt_raw = action_selection_cfg.get("interrupt_threshold")
         # H4 — without an expiry the coarse (source, type) novelty signature
         # suppresses same-signature reports FOREVER; on a stable stimulus the
         # top coalition rarely changes signature, so external speech trends to
         # zero over a multi-day run. None (unset) preserves never-expire.
-        _sig_expiry_raw = volition_cfg.get("sig_expiry_s")
-        ctx.volition = Volition(
+        _sig_expiry_raw = action_selection_cfg.get("sig_expiry_s")
+        ctx.action_selection = ActionSelection(
             policy=_wrap_policy(
                 SelfInitiatedReportPolicy(
-                    report_threshold=float(volition_cfg.get("report_threshold", 0.6)),
-                    think_threshold=float(volition_cfg.get("think_threshold", 0.45)),
+                    report_threshold=float(action_selection_cfg.get("report_threshold", 0.6)),
+                    think_threshold=float(action_selection_cfg.get("think_threshold", 0.45)),
                     interrupt_threshold=(float(_interrupt_raw) if _interrupt_raw is not None else None),
-                    speak_refractory_s=float(volition_cfg.get("speak_refractory_s", 8.0)),
-                    think_refractory_s=float(volition_cfg.get("think_refractory_s", 3.0)),
+                    speak_refractory_s=float(action_selection_cfg.get("speak_refractory_s", 8.0)),
+                    think_refractory_s=float(action_selection_cfg.get("think_refractory_s", 3.0)),
                     sig_expiry_s=(float(_sig_expiry_raw) if _sig_expiry_raw is not None else None),
                     clock=_report_clock,
                     guard_clock=ctx.registry.entity_clock.wall if ctx.registry.entity_clock is not None else None,
@@ -1979,7 +1979,7 @@ async def _phase_volition(ctx: BootContext) -> int | None:
             operator_sources=operator_sources,
         )
     elif drive_initiative:
-        ctx.volition = Volition(
+        ctx.action_selection = ActionSelection(
             policy=_wrap_policy(
                 DriveBiasedActionSelectionPolicy(operator_sources=operator_sources)
             ),
@@ -1987,9 +1987,9 @@ async def _phase_volition(ctx: BootContext) -> int | None:
             operator_sources=operator_sources,
         )
     else:
-        from kaine.workspace.volition import DefaultActionSelectionPolicy
+        from kaine.workspace.action_selection import DefaultActionSelectionPolicy
 
-        ctx.volition = Volition(
+        ctx.action_selection = ActionSelection(
             policy=_wrap_policy(
                 DefaultActionSelectionPolicy(operator_sources=operator_sources)
             ),
@@ -2009,7 +2009,7 @@ async def _phase_cycle(ctx: BootContext) -> int | None:
     """Build the cognitive cycle and its metrics collector."""
     ctx.cycle = CognitiveCycle(
         bus=ctx.bus,
-        syneidesis=ctx.syneidesis,
+        workspace=ctx.workspace,
         registry=ctx.registry,
         processing_rate_hz=float(ctx.cycle_cfg.get("processing_rate_hz", 10.0)),
         # Resting access rate; held below processing so the senses outrun access.
@@ -2017,7 +2017,7 @@ async def _phase_cycle(ctx: BootContext) -> int | None:
         # here toward the processing rate with arousal and salient reports; this
         # value stays the resting rate.
         experiential_rate_hz=float(ctx.cycle_cfg.get("experiential_rate_hz", 3.333)),
-        volition=ctx.volition,
+        action_selection=ctx.action_selection,
         collect_phases=ctx.coherence_scorer is not None,
         # H3: tail-seed all cursors so a restarted live entity never replays
         # pre-boot bus events (tests keep the historical read-from-start).
@@ -2534,7 +2534,7 @@ async def _start_utterance_outcome(ctx: BootContext) -> None:
         ctx.utterance_outcome = await start_utterance_outcome_observer(
             ctx.bus,
             path=resolve(Path("state/lingua/utterance_outcomes.jsonl")),
-            lingua_section=ctx.kaine_config.get("lingua"),
+            language_section=ctx.kaine_config.get("lingua"),
         )
 
 
@@ -2567,7 +2567,7 @@ _BOOT_PHASES = (
     _phase_registry,
     _phase_maturation_gate,
     _phase_workspace,
-    _phase_volition,
+    _phase_action_selection,
     _phase_cycle,
     _phase_supervision,
     _phase_runtime_state,

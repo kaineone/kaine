@@ -14,7 +14,7 @@ import os
 
 import pytest
 
-from kaine.modules.eidolon.document import SelfModelDocument, load, save_atomic
+from kaine.modules.self_model.document import SelfModelDocument, load, save_atomic
 from kaine.security.crypto import (
     CryptoConfig,
     StateEncryptor,

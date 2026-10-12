@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from kaine.bus.errors import EventValidationError, ReservedStreamError
 
 WORKSPACE_STREAM = "workspace.broadcast"
-SYNEIDESIS_SOURCE = "syneidesis"
+WORKSPACE_SOURCE = "syneidesis"
 # Audio channels whose voices are the operator's (shared by the action selection, social cognition and sequence modules).
 OPERATOR_SOURCES: tuple[str, ...] = ("live_mic", "microphone", "remote")
 
@@ -51,7 +51,7 @@ def validate_event(**fields: Any) -> Event:
 def module_stream(module_name: str) -> str:
     if not module_name or any(ch.isspace() for ch in module_name):
         raise ValueError("module name must be non-empty and whitespace-free")
-    if module_name == SYNEIDESIS_SOURCE:
+    if module_name == WORKSPACE_SOURCE:
         return WORKSPACE_STREAM
     return f"{module_name}.out"
 
@@ -91,7 +91,7 @@ def entry_id_sort_key(entry_id: str) -> tuple[int, int, int, str]:
 
 
 def ensure_writable(stream: str, source: str) -> None:
-    if stream == WORKSPACE_STREAM and source != SYNEIDESIS_SOURCE:
+    if stream == WORKSPACE_STREAM and source != WORKSPACE_SOURCE:
         raise ReservedStreamError(
             f"only the syneidesis module may publish to {WORKSPACE_STREAM}"
         )

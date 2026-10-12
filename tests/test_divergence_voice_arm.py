@@ -21,17 +21,17 @@ def _state(tmp_path):
 
 
 def _write_intent(root, filename, text):
-    lingua = root / "lingua"
-    lingua.mkdir(parents=True, exist_ok=True)
-    (lingua / filename).write_text(
+    language = root / "lingua"
+    language.mkdir(parents=True, exist_ok=True)
+    (language / filename).write_text(
         json.dumps({"generated_text": text}) + "\n", encoding="utf-8"
     )
 
 
 def _write_measures(root, measures):
-    lingua = root / "lingua"
-    lingua.mkdir(parents=True, exist_ok=True)
-    (lingua / "voice_measures_latest.json").write_text(
+    language = root / "lingua"
+    language.mkdir(parents=True, exist_ok=True)
+    (language / "voice_measures_latest.json").write_text(
         json.dumps(measures), encoding="utf-8"
     )
 
@@ -254,9 +254,9 @@ def test_configured_voice_paths_find_speech_outside_default(tmp_path):
 
 def test_unparseable_intent_line_counts_as_spoken(tmp_path):
     root = _state(tmp_path)
-    lingua = root / "lingua"
-    lingua.mkdir(parents=True, exist_ok=True)
-    (lingua / "intent_expression.jsonl").write_text(
+    language = root / "lingua"
+    language.mkdir(parents=True, exist_ok=True)
+    (language / "intent_expression.jsonl").write_text(
         "not json at all\n", encoding="utf-8"
     )
     result = assess_divergence(state_root=root)

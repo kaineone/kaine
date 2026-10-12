@@ -310,7 +310,7 @@ The interoception module. The compute substrate stands in for the body: a frozen
 
 ### Workspace
 
-The workspace (`kaine/workspace/syneidesis.py`). On each processing tick it orders the candidates deterministically and [scores](#score) them; on broadcast ticks the top-ranked candidates form the [coalition](#coalition), which is broadcast with every candidate's score, the inhibition flag and the access threshold. It selects and grants access and never directs a module. See [The global workspace](08-cognitive-cycle/global-workspace.md).
+The workspace (`kaine/workspace/core.py`). On each processing tick it orders the candidates deterministically and [scores](#score) them; on broadcast ticks the top-ranked candidates form the [coalition](#coalition), which is broadcast with every candidate's score, the inhibition flag and the access threshold. It selects and grants access and never directs a module. See [The global workspace](08-cognitive-cycle/global-workspace.md).
 
 ---
 
@@ -338,7 +338,7 @@ A pattern requiring two independent conditions before a sensitive operation runs
 
 ### Action selection
 
-The action layer and the only path from the workspace to output. After each broadcast the cycle calls the action selection module, which derives no intent from an inhibited broadcast and applies the [report rule](#self-initiated-report-policy) to an accessed one. Intents (speak, think, act, rest) are published as events; the action selection module signs every act intent so that the effectors module can verify where it came from. See `kaine/workspace/volition.py`.
+The action layer and the only path from the workspace to output. After each broadcast the cycle calls the action selection module, which derives no intent from an inhibited broadcast and applies the [report rule](#self-initiated-report-policy) to an accessed one. Intents (speak, think, act, rest) are published as events; the action selection module signs every act intent so that the effectors module can verify where it came from. See `kaine/workspace/action_selection.py`.
 
 ### Vocal
 

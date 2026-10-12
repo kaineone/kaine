@@ -20,13 +20,13 @@ sherpa_onnx = pytest.importorskip(
     "sherpa_onnx", reason="speech-edge extra not installed"
 )
 
-from kaine.boot import make_audition, make_vox  # noqa: E402
+from kaine.boot import make_audition, make_vocal  # noqa: E402
 from kaine.bus.client import AsyncBus  # noqa: E402
 from kaine.bus.config import BusConfig  # noqa: E402
 from kaine.modules.audition.sherpa_stt import SherpaMoonshineSTT  # noqa: E402
-from kaine.modules.vox.client import TTSRequest  # noqa: E402
-from kaine.modules.vox.playback import FakePlayer  # noqa: E402
-from kaine.modules.vox.sherpa_tts import SherpaKokoroTTS  # noqa: E402
+from kaine.modules.vocal.client import TTSRequest  # noqa: E402
+from kaine.modules.vocal.playback import FakePlayer  # noqa: E402
+from kaine.modules.vocal.sherpa_tts import SherpaKokoroTTS  # noqa: E402
 from kaine.nexus.health.probes import (  # noqa: E402
     UP,
     clear_sherpa_probe_memo,
@@ -128,15 +128,15 @@ async def test_engine_round_trip():
 async def test_module_round_trip_with_disclosure(bus):
     _require_models()
 
-    vox = make_vox(
+    vocal = make_vocal(
         bus,
         {
             "backend": "sherpa_onnx",
             "playback_enabled": True,
         },
     )
-    assert vox is not None
-    vox._player = FakePlayer()
+    assert vocal is not None
+    vocal._player = FakePlayer()
 
     audition = make_audition(
         bus,
@@ -149,30 +149,30 @@ async def test_module_round_trip_with_disclosure(bus):
     assert audition is not None
 
     try:
-        await vox.initialize()
+        await vocal.initialize()
         await audition.initialize()
 
-        await vox.synthesize_text("Hello from the edge.")
+        await vocal.synthesize_text("Hello from the edge.")
 
-        assert vox._player.played
-        wav = vox._player.played[0]
+        assert vocal._player.played
+        wav = vocal._player.played[0]
         sample_rate = _wav_sample_rate(wav)
 
         await audition.process_audio(
             wav, sample_rate, source_label="test"
         )
 
-        vox_entries = await bus.read("vox.out", last_id="0", count=50)
-        vox_payload = None
-        for _id, event in vox_entries:
+        vocal_entries = await bus.read("vox.out", last_id="0", count=50)
+        vocal_payload = None
+        for _id, event in vocal_entries:
             if event.type == "vox.synthesized":
-                vox_payload = _decode_payload(event.payload)
+                vocal_payload = _decode_payload(event.payload)
                 break
-        assert vox_payload is not None
+        assert vocal_payload is not None
 
-        assert vox_payload["backend"] == "sherpa_onnx"
-        assert vox_payload["prosody_applied"] == ["speed_factor"]
-        assert vox_payload["voice"] == "kokoro-en speaker 0"
+        assert vocal_payload["backend"] == "sherpa_onnx"
+        assert vocal_payload["prosody_applied"] == ["speed_factor"]
+        assert vocal_payload["voice"] == "kokoro-en speaker 0"
 
         audition_entries = await bus.read("audition.out", last_id="0", count=50)
         transcription_payload = None
@@ -186,7 +186,7 @@ async def test_module_round_trip_with_disclosure(bus):
         assert "error" not in transcription_payload
         assert "hello" in transcription_payload.get("text", "").lower()
     finally:
-        await vox.shutdown()
+        await vocal.shutdown()
         await audition.shutdown()
 
 

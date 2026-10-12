@@ -210,7 +210,7 @@ def _t_vision_report(payload: dict[str, Any]) -> str:
     )
 
 
-def _t_nous_belief(payload: dict[str, Any]) -> str:
+def _t_planning_belief(payload: dict[str, Any]) -> str:
     statement = payload.get("statement", "<unknown>")
     try:
         conf = float(payload.get("confidence", 0.0))
@@ -219,7 +219,7 @@ def _t_nous_belief(payload: dict[str, Any]) -> str:
     return f"[Nous] {statement} (certainty {conf:.0%})"
 
 
-def _t_nous_policy(payload: dict[str, Any]) -> str:
+def _t_planning_policy(payload: dict[str, Any]) -> str:
     policy = payload.get("policy", "<unknown>")
     try:
         efe = float(payload.get("expected_free_energy", 0.0))
@@ -269,7 +269,7 @@ def _t_affect_goal(payload: dict[str, Any]) -> str:
     return f"Thymos goal {desc} was {action}."
 
 
-def _t_eidolon_drift(payload: dict[str, Any]) -> str:
+def _t_self_model_drift(payload: dict[str, Any]) -> str:
     score = payload.get("score")
     sources = payload.get("top_drifted_sources") or []
     msg = f"Eidolon drift score {_fmt(score)}"
@@ -322,13 +322,13 @@ def _t_interoception_regulation(payload: dict[str, Any]) -> str:
     return msg + "."
 
 
-def _t_empatheia_agent_model(payload: dict[str, Any]) -> str:
+def _t_social_cognition_agent_model(payload: dict[str, Any]) -> str:
     agent_label = payload.get("agent_label") or payload.get("agent_id", "unknown")
     familiarity = float(payload.get("familiarity", 0.0))
     return f"[Empatheia] {agent_label} familiarity={familiarity:.0%}"
 
 
-def _t_empatheia_social_error(payload: dict[str, Any]) -> str:
+def _t_social_cognition_social_error(payload: dict[str, Any]) -> str:
     agent_label = payload.get("agent_label") or payload.get("agent_id", "unknown")
     deviation_magnitude = float(payload.get("deviation_magnitude", 0.0))
     salience = float(payload.get("salience", 0.0))
@@ -365,7 +365,7 @@ def _t_world_model_scenario(payload: dict[str, Any]) -> str:
     return msg + "."
 
 
-def _t_nous_timeout(payload: dict[str, Any]) -> str:
+def _t_planning_timeout(payload: dict[str, Any]) -> str:
     elapsed = payload.get("elapsed_ms")
     num_factors = payload.get("num_factors")
     num_actions = payload.get("num_actions")
@@ -391,7 +391,7 @@ def _t_audition_prosody(payload: dict[str, Any]) -> str:
     return ", ".join(parts) + "."
 
 
-def _t_vox_synthesized(payload: dict[str, Any]) -> str:
+def _t_vocal_synthesized(payload: dict[str, Any]) -> str:
     voice = payload.get("voice", "(default)")
     text_len = payload.get("text_length", 0)
     latency = payload.get("latency_ms")
@@ -456,7 +456,7 @@ def _t_sleep_association(payload: dict[str, Any]) -> str:
     return ", ".join(parts) + "."
 
 
-def _t_nous_proposal(payload: dict[str, Any]) -> str:
+def _t_planning_proposal(payload: dict[str, Any]) -> str:
     kind = payload.get("kind")
     if kind:
         return f"Nous proposes to {kind}."
@@ -472,7 +472,7 @@ def _t_sleep_rest_request(payload: dict[str, Any]) -> str:
     return "Rest request declined."
 
 
-def _t_eidolon_self_model(payload: dict[str, Any]) -> str:
+def _t_self_model_self_model(payload: dict[str, Any]) -> str:
     # Privacy: render counts and labels only — no raw text/transcript.
     values = payload.get("values") or []
     norms = payload.get("behavioral_norms") or []
@@ -492,33 +492,33 @@ TEMPLATES: dict[tuple[str, str], TemplateFn] = {
     ("soma", "soma.report"): _t_interoception_report,
     ("chronos", "chronos.report"): _t_sequence_report,
     ("topos", "topos.report"): _t_vision_report,
-    ("nous", "nous.belief"): _t_nous_belief,
-    ("nous", "nous.policy"): _t_nous_policy,
+    ("nous", "nous.belief"): _t_planning_belief,
+    ("nous", "nous.policy"): _t_planning_policy,
     ("mnemos", "mnemos.recall"): _t_episodic_memory_recall,
     ("thymos", "thymos.emotion"): _t_affect_emotion,
     ("thymos", "thymos.drive"): _t_affect_drive,
     ("thymos", "thymos.state"): _t_affect_state,
     ("thymos", "thymos.goal"): _t_affect_goal,
-    ("eidolon", "eidolon.drift"): _t_eidolon_drift,
+    ("eidolon", "eidolon.drift"): _t_self_model_drift,
     ("cycle", "cycle.tick"): _t_cycle_tick,
     ("audition", "audition.transcription"): _t_audition_transcription,
     ("audition", "audition.emotion"): _t_audition_emotion,
     ("soma", "soma.fatigue"): _t_interoception_fatigue,
     ("soma", "soma.regulation"): _t_interoception_regulation,
-    ("empatheia", "empatheia.agent_model"): _t_empatheia_agent_model,
-    ("empatheia", "empatheia.social_error"): _t_empatheia_social_error,
+    ("empatheia", "empatheia.agent_model"): _t_social_cognition_agent_model,
+    ("empatheia", "empatheia.social_error"): _t_social_cognition_social_error,
     ("phantasia", "phantasia.world_error"): _t_world_model_world_error,
     ("phantasia", "phantasia.scenario"): _t_world_model_scenario,
-    ("nous", "nous.timeout"): _t_nous_timeout,
-    ("nous", "nous.proposal"): _t_nous_proposal,
+    ("nous", "nous.timeout"): _t_planning_timeout,
+    ("nous", "nous.proposal"): _t_planning_proposal,
     ("audition", "audition.prosody"): _t_audition_prosody,
-    ("vox", "vox.synthesized"): _t_vox_synthesized,
+    ("vox", "vox.synthesized"): _t_vocal_synthesized,
     ("mnemos", "mnemos.replay"): _t_episodic_memory_replay,
     ("hypnos", "hypnos.sleep.started"): _t_sleep_sleep_started,
     ("hypnos", "hypnos.sleep.completed"): _t_sleep_sleep_completed,
     ("hypnos", "hypnos.association"): _t_sleep_association,
     ("hypnos", "hypnos.rest_request"): _t_sleep_rest_request,
-    ("eidolon", "eidolon.self_model"): _t_eidolon_self_model,
+    ("eidolon", "eidolon.self_model"): _t_self_model_self_model,
 }
 
 

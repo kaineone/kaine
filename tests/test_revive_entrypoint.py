@@ -26,8 +26,8 @@ from kaine.cycle.revive_boot import ReviveRefused, ReviveSession, prepare_revive
 from kaine.lifecycle import stage
 from kaine.lifecycle.manager import ForkManager
 from kaine.lifecycle.preservation import bundle_dir_for
-from kaine.modules.eidolon import Eidolon, SelfModelDocument
 from kaine.modules.registry import ModuleRegistry
+from kaine.modules.self_model import SelfModel, SelfModelDocument
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SHIPPED_CONFIG = _REPO_ROOT / "config" / "kaine.toml"
@@ -59,8 +59,8 @@ async def bus():
 
 
 @pytest_asyncio.fixture
-async def eidolon(tmp_path, bus):
-    eid = Eidolon(bus, persistence_path=tmp_path / "sm.json", save_interval_s=60)
+async def self_model(tmp_path, bus):
+    eid = SelfModel(bus, persistence_path=tmp_path / "sm.json", save_interval_s=60)
     await eid.initialize()
     eid._model = SelfModelDocument(name="revive-entrypoint-test", values=["continuity"])
     yield eid
@@ -72,14 +72,14 @@ async def eidolon(tmp_path, bus):
 
 async def _make_bundle(
     tmp_path: Path,
-    eidolon: Eidolon,
+    self_model: SelfModel,
     *,
     stage_state: stage.StageState | None = None,
     registry: ModuleRegistry | None = None,
 ) -> Path:
     reg = registry or ModuleRegistry()
     if registry is None:
-        reg.register(eidolon)
+        reg.register(self_model)
     if stage_state is not None:
         stage.write_stage(stage_state)
     fork_root = tmp_path / "forks"
@@ -116,7 +116,7 @@ def test_main_missing_revive_bundle_returns_seven_no_boot(tmp_path, monkeypatch)
     assert not (tmp_path / "state" / "lifecycle" / "stage.json").exists()
 
 
-def test_main_revive_stage_untouched_on_boot_failure(tmp_path, eidolon, monkeypatch):
+def test_main_revive_stage_untouched_on_boot_failure(tmp_path, self_model, monkeypatch):
     _hermetic_cwd(tmp_path, monkeypatch)
     monkeypatch.setenv("KAINE_CYCLE_OPERATOR_PRESENT", "1")
 
@@ -127,7 +127,7 @@ def test_main_revive_stage_untouched_on_boot_failure(tmp_path, eidolon, monkeypa
     bundle = asyncio.run(
         _make_bundle(
             tmp_path,
-            eidolon,
+            self_model,
             stage_state=stage.StageState(stage="gestation", lived_seconds=0.0),
         )
     )
@@ -158,7 +158,7 @@ def test_main_revive_stage_untouched_on_boot_failure(tmp_path, eidolon, monkeypa
 
 
 def test_main_revive_stage_untouched_when_boot_returns_zero(
-    tmp_path, eidolon, monkeypatch
+    tmp_path, self_model, monkeypatch
 ):
     _hermetic_cwd(tmp_path, monkeypatch)
     monkeypatch.setenv("KAINE_CYCLE_OPERATOR_PRESENT", "1")
@@ -170,7 +170,7 @@ def test_main_revive_stage_untouched_when_boot_returns_zero(
     bundle = asyncio.run(
         _make_bundle(
             tmp_path,
-            eidolon,
+            self_model,
             stage_state=stage.StageState(stage="gestation", lived_seconds=0.0),
         )
     )
@@ -193,7 +193,7 @@ def test_main_revive_stage_untouched_when_boot_returns_zero(
 
 
 def test_main_revive_invalid_stage_returns_seven_and_leaves_stage(
-    tmp_path, eidolon, monkeypatch
+    tmp_path, self_model, monkeypatch
 ):
     _hermetic_cwd(tmp_path, monkeypatch)
     monkeypatch.setenv("KAINE_CYCLE_OPERATOR_PRESENT", "1")
@@ -205,7 +205,7 @@ def test_main_revive_invalid_stage_returns_seven_and_leaves_stage(
     bundle = asyncio.run(
         _make_bundle(
             tmp_path,
-            eidolon,
+            self_model,
             stage_state=stage.StageState(stage="gestation", lived_seconds=0.0),
         )
     )
@@ -236,7 +236,7 @@ def test_main_revive_invalid_stage_returns_seven_and_leaves_stage(
 
 @pytest.mark.asyncio
 async def test_revive_session_revive_writes_stage_and_lands(
-    tmp_path, eidolon, bus, monkeypatch
+    tmp_path, self_model, bus, monkeypatch
 ):
     monkeypatch.chdir(tmp_path)
     stage_path = tmp_path / "stage.json"
@@ -244,12 +244,12 @@ async def test_revive_session_revive_writes_stage_and_lands(
 
     bundle = await _make_bundle(
         tmp_path,
-        eidolon,
+        self_model,
         stage_state=stage.StageState(stage="gestation", lived_seconds=0.0),
     )
     plan = prepare_revive(bundle)
 
-    eid2 = Eidolon(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
+    eid2 = SelfModel(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
     await eid2.initialize()
     reg = ModuleRegistry()
     reg.register(eid2)
@@ -270,24 +270,24 @@ async def test_revive_session_revive_writes_stage_and_lands(
 
 @pytest.mark.asyncio
 async def test_revive_session_revive_refuses_missing_module_and_leaves_stage(
-    tmp_path, eidolon, bus, monkeypatch
+    tmp_path, self_model, bus, monkeypatch
 ):
     monkeypatch.chdir(tmp_path)
     stage_path = tmp_path / "stage.json"
     monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
 
     reg1 = ModuleRegistry()
-    reg1.register(eidolon)
+    reg1.register(self_model)
     reg1.register(_ExtraModule())
 
     bundle = await _make_bundle(
         tmp_path,
-        eidolon,
+        self_model,
         registry=reg1,
         stage_state=stage.StageState(stage="embodied"),
     )
 
-    eid2 = Eidolon(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
+    eid2 = SelfModel(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
     await eid2.initialize()
     reg2 = ModuleRegistry()
     reg2.register(eid2)
@@ -312,7 +312,7 @@ async def test_revive_session_revive_refuses_missing_module_and_leaves_stage(
 
 @pytest.mark.asyncio
 async def test_revive_session_revive_refuses_when_stage_write_fails(
-    tmp_path, eidolon, bus, monkeypatch
+    tmp_path, self_model, bus, monkeypatch
 ):
     monkeypatch.chdir(tmp_path)
     stage_path = tmp_path / "stage.json"
@@ -320,12 +320,12 @@ async def test_revive_session_revive_refuses_when_stage_write_fails(
 
     bundle = await _make_bundle(
         tmp_path,
-        eidolon,
+        self_model,
         stage_state=stage.StageState(stage="gestation", lived_seconds=0.0),
     )
     plan = prepare_revive(bundle)
 
-    eid2 = Eidolon(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
+    eid2 = SelfModel(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
     await eid2.initialize()
     reg = ModuleRegistry()
     reg.register(eid2)
@@ -415,7 +415,7 @@ async def test_revive_or_refuse_exits_7_on_missing_captured_module(
     stage_path = tmp_path / "stage.json"
     monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
 
-    eid1 = Eidolon(bus, persistence_path=tmp_path / "sm1.json", save_interval_s=60)
+    eid1 = SelfModel(bus, persistence_path=tmp_path / "sm1.json", save_interval_s=60)
     await eid1.initialize()
     reg1 = ModuleRegistry()
     reg1.register(eid1)
@@ -425,7 +425,7 @@ async def test_revive_or_refuse_exits_7_on_missing_captured_module(
         tmp_path, eid1, registry=reg1, stage_state=stage.StageState(stage="embodied")
     )
 
-    eid2 = Eidolon(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
+    eid2 = SelfModel(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
     await eid2.initialize()
     reg2 = ModuleRegistry()
     reg2.register(eid2)
@@ -450,16 +450,16 @@ async def test_revive_or_refuse_exits_7_on_missing_captured_module(
 
 
 @pytest.mark.asyncio
-async def test_revive_or_refuse_none_when_modules_match(tmp_path, eidolon, bus, monkeypatch):
+async def test_revive_or_refuse_none_when_modules_match(tmp_path, self_model, bus, monkeypatch):
     monkeypatch.chdir(tmp_path)
     stage_path = tmp_path / "stage.json"
     monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
 
     bundle = await _make_bundle(
-        tmp_path, eidolon, stage_state=stage.StageState(stage="embodied")
+        tmp_path, self_model, stage_state=stage.StageState(stage="embodied")
     )
 
-    eid2 = Eidolon(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
+    eid2 = SelfModel(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
     await eid2.initialize()
     reg2 = ModuleRegistry()
     reg2.register(eid2)

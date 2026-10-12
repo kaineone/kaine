@@ -336,12 +336,12 @@ class ObserversConfig:
     coherence: bool = True
     replay: bool = True
     replay_redact_content: bool = True  # privacy default: IDs only
-    empatheia: bool = True
+    social_cognition: bool = True
     voice_alignment_divergence: bool = True
     fatigue: bool = True
     prediction_error: bool = True
     welfare: bool = True
-    nous_policy: bool = True
+    planning_policy: bool = True
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any] | None) -> "ObserversConfig":
@@ -352,14 +352,14 @@ class ObserversConfig:
             replay_redact_content=bool(
                 data.get("replay_redact_content", cls.replay_redact_content)
             ),
-            empatheia=bool(data.get("empatheia", cls.empatheia)),
+            social_cognition=bool(data.get("empatheia", cls.social_cognition)),
             voice_alignment_divergence=bool(
                 data.get("voice_alignment_divergence", cls.voice_alignment_divergence)
             ),
             fatigue=bool(data.get("fatigue", cls.fatigue)),
             prediction_error=bool(data.get("prediction_error", cls.prediction_error)),
             welfare=bool(data.get("welfare", cls.welfare)),
-            nous_policy=bool(data.get("nous_policy", cls.nous_policy)),
+            planning_policy=bool(data.get("nous_policy", cls.planning_policy)),
         )
 
 
@@ -440,8 +440,8 @@ class EvaluationConfig:
     memory_probes: bool = True
     memory_probe_interval_minutes: int = 60
     proactive_audit: bool = True
-    eidolon_accuracy: bool = True
-    eidolon_accuracy_interval_hours: int = 24
+    self_model_accuracy: bool = True
+    self_model_accuracy_interval_hours: int = 24
     sleep_snapshots: bool = True
     # Live oscillatory ablation (concurrent dual-path). Off by default: it scores
     # each experiential tick twice to record the coherence-off counterfactual, a
@@ -485,8 +485,8 @@ class EvaluationConfig:
         cls,
         data: dict[str, Any] | None,
         *,
-        lingua_model_id: str | None = None,
-        lingua_api_key: str | None = None,
+        language_model_id: str | None = None,
+        language_api_key: str | None = None,
     ) -> "EvaluationConfig":
         data = dict(data or {})
         if "individuation" in data:
@@ -501,18 +501,18 @@ class EvaluationConfig:
         explicit_model = data.get("chat_model_id")
         if (
             explicit_model is not None
-            and lingua_model_id is not None
-            and str(explicit_model) != str(lingua_model_id)
+            and language_model_id is not None
+            and str(explicit_model) != str(language_model_id)
         ):
             raise ValueError(
                 f"evaluation.chat_model_id ({explicit_model!r}) must equal the "
-                f"language organ's [lingua].model_id ({lingua_model_id!r}): the "
+                f"language organ's [lingua].model_id ({language_model_id!r}): the "
                 "A/B-divergence baseline must run the SAME model as Lingua, or the "
                 "divergence measures a model difference instead of the architecture. "
                 "Remove evaluation.chat_model_id (it derives from lingua) or set "
                 "them equal."
             )
-        chat_model_id = str(explicit_model or lingua_model_id or cls.chat_model_id)
+        chat_model_id = str(explicit_model or language_model_id or cls.chat_model_id)
         return cls(
             enabled=bool(data.get("enabled", cls.enabled)),
             workspace_trajectory=bool(data.get("workspace_trajectory", cls.workspace_trajectory)),
@@ -527,11 +527,11 @@ class EvaluationConfig:
                 data.get("memory_probe_interval_minutes", cls.memory_probe_interval_minutes)
             ),
             proactive_audit=bool(data.get("proactive_audit", cls.proactive_audit)),
-            eidolon_accuracy=bool(data.get("eidolon_accuracy", cls.eidolon_accuracy)),
-            eidolon_accuracy_interval_hours=int(
+            self_model_accuracy=bool(data.get("eidolon_accuracy", cls.self_model_accuracy)),
+            self_model_accuracy_interval_hours=int(
                 data.get(
                     "eidolon_accuracy_interval_hours",
-                    cls.eidolon_accuracy_interval_hours,
+                    cls.self_model_accuracy_interval_hours,
                 )
             ),
             sleep_snapshots=bool(data.get("sleep_snapshots", cls.sleep_snapshots)),
@@ -546,7 +546,7 @@ class EvaluationConfig:
             ),
             # Same server as the organ → same key; derive from the language module, allow an
             # explicit override. None for a keyless server.
-            chat_api_key=(data.get("chat_api_key") or lingua_api_key),
+            chat_api_key=(data.get("chat_api_key") or language_api_key),
             llm_context_window_seconds=int(
                 data.get("llm_context_window_seconds", cls.llm_context_window_seconds)
             ),
@@ -562,8 +562,8 @@ class EvaluationConfig:
 def load_evaluation_config(
     path: str | os.PathLike[str] | None = None,
     *,
-    lingua_model_id: str | None = None,
-    lingua_api_key: str | None = None,
+    language_model_id: str | None = None,
+    language_api_key: str | None = None,
     operator_path: str | os.PathLike[str] = OPERATOR_CONFIG_PATH,
     profile: str | None = None,
 ) -> EvaluationConfig:
@@ -574,15 +574,15 @@ def load_evaluation_config(
     target = Path(path or SHIPPED_CONFIG_PATH)
     if not target.exists():
         return EvaluationConfig.from_mapping(
-            None, lingua_model_id=lingua_model_id, lingua_api_key=lingua_api_key
+            None, language_model_id=language_model_id, language_api_key=language_api_key
         )
     # profile threads the SAME tier-profile selection the cycle uses, so an
     # [evaluation] block in a profile applies identically to the gate.
     merged = load_kaine_config(target, operator_path, profile=profile)
     return EvaluationConfig.from_mapping(
         merged.get("evaluation"),
-        lingua_model_id=lingua_model_id,
-        lingua_api_key=lingua_api_key,
+        language_model_id=language_model_id,
+        language_api_key=language_api_key,
     )
 
 

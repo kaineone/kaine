@@ -156,7 +156,7 @@ class _FakeCognitiveClient:
 
 
 @pytest.mark.asyncio
-async def test_registry_builds_memory_and_eidolon_with_providers(tmp_path):
+async def test_registry_builds_memory_and_self_model_with_providers(tmp_path):
     """With a memory_source + cognitive_query_client supplied, the memory-probe
     and self-model-accuracy observers instantiate (the 7-of-9 → 9 fix)."""
     cfg = _config(tmp_path)

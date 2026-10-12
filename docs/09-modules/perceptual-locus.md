@@ -52,7 +52,7 @@ If any gate fails, `PerceptionLocus` publishes `perception.locus.denied` with a 
 
 | Bus stream | Event or handler | Purpose |
 |---|---|---|
-| Action selection stream (`VOLITION_STREAM` in `kaine.workspace.volition`, `"volition.out"`) | `intent.perception.switch` | Entity request `{"locus": "physical" \| "virtual" \| "off"}` |
+| Action selection stream (`ACTION_SELECTION_STREAM` in `kaine.workspace.action_selection`, `"volition.out"`) | `intent.perception.switch` | Entity request `{"locus": "physical" \| "virtual" \| "off"}` |
 | `workspace.broadcast` | `on_workspace(snapshot)` | Tracks `snapshot.inhibited` for the gate |
 
 At `initialize()` the module moves its cursor to the newest event on the intent stream, so it does not act on intents older than its start.
@@ -76,7 +76,7 @@ On a successful switch, `perception_state.write_desired_locus(requested)` writes
 |---|---|---|---|---|
 | `allow_self_switch` | `[perception].allow_self_switch` | bool | `false` | Whether the entity may switch its locus at all |
 | `min_dwell_s` | `[perception].min_dwell_s` | float | `30.0` | Minimum entity-time seconds between self-initiated switches |
-| `intent_stream` | none | string | `VOLITION_STREAM` | Stream carrying `intent.perception.switch` |
+| `intent_stream` | none | string | `ACTION_SELECTION_STREAM` | Stream carrying `intent.perception.switch` |
 | `desired_path` | none | path | `None`, meaning `state/perception/desired.json` | Override of the desired-state file (mostly for tests) |
 | `entity_clock` | none | clock | `None`, meaning a new `EntityClock()` | Shared entity clock; the dwell timer runs on entity time, so it stretches and shrinks with `time_scale` |
 
@@ -86,7 +86,7 @@ The operator can always set the locus through `POST /diagnostics/perception/locu
 
 ```mermaid
 graph TD
-    VStream["Volition stream\nintent.perception.switch"] -->|_intent_loop| HandleSwitch["_handle_switch(event)"]
+    VStream["ActionSelection stream\nintent.perception.switch"] -->|_intent_loop| HandleSwitch["_handle_switch(event)"]
     WS["workspace.broadcast\ninhibited flag"] -->|on_workspace| PerceptionLocus["PerceptionLocus._inhibited"]
     PerceptionLocus --> HandleSwitch
     HandleSwitch --> ReadDesired["read_desired()"]

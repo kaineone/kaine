@@ -33,34 +33,34 @@ def test_shipped_arm_is_competitive():
 
 
 def test_arm_kwargs_default_and_seed():
-    assert cyc._syneidesis_arm_kwargs({}, types.SimpleNamespace(seed=42)) == {
+    assert cyc._workspace_arm_kwargs({}, types.SimpleNamespace(seed=42)) == {
         "arm": "competitive",
         "arm_seed": 42,
     }
-    assert cyc._syneidesis_arm_kwargs(
+    assert cyc._workspace_arm_kwargs(
         {"arm": " Matched "}, types.SimpleNamespace(seed=7)
     ) == {"arm": "matched", "arm_seed": 7}
-    assert cyc._syneidesis_arm_kwargs({"arm": "pooled"}, None) == {
+    assert cyc._workspace_arm_kwargs({"arm": "pooled"}, None) == {
         "arm": "pooled",
         "arm_seed": None,
     }
 
 
-def test_shipped_config_passes_the_syneidesis_key_guard():
+def test_shipped_config_passes_the_workspace_key_guard():
     make_salience_factors(
         load_kaine_config(profile="thesis_test", operator_path=_MISSING),
         AffectStateProvider(),
     )
 
 
-def test_each_arm_passes_the_syneidesis_key_guard():
+def test_each_arm_passes_the_workspace_key_guard():
     for arm in ("competitive", "matched", "pooled"):
         make_salience_factors(
             {"syneidesis": {"arm": arm}}, AffectStateProvider()
         )
 
 
-def test_study_overlay_passes_the_syneidesis_key_guard(monkeypatch, tmp_path):
+def test_study_overlay_passes_the_workspace_key_guard(monkeypatch, tmp_path):
     plan = {
         "study_id": "s",
         "repo_root": str(_REPO),
@@ -125,7 +125,7 @@ async def test_boot_path_builds_the_workspace_for_every_study(monkeypatch):
             if study is None
             else study.removeprefix("workspace_mediation_")
         )
-        assert ctx.syneidesis.arm == expected
+        assert ctx.workspace.arm == expected
         assert cfg["lingua"]["temperature"] == (0.7 if study is None else 0.0)
 
 

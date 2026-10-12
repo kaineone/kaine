@@ -66,7 +66,7 @@ class Affect(BaseModule):
         interoception_stream: str = "soma.out",
         sequence_stream: str = "chronos.out",
         episodic_memory_stream: str = "mnemos.out",
-        volition_stream: str = "volition.out",
+        action_selection_stream: str = "volition.out",
         fast_time_constant_s: float = 10.0,
         slow_time_constant_s: float = 100.0,
         learning_progress_floor: float = 0.05,
@@ -130,7 +130,7 @@ class Affect(BaseModule):
         self._interoception_stream = interoception_stream
         self._sequence_stream = sequence_stream
         self._episodic_memory_stream = episodic_memory_stream
-        self._volition_stream = volition_stream
+        self._action_selection_stream = action_selection_stream
         self._fast_time_constant_s = float(fast_time_constant_s)
         self._slow_time_constant_s = float(slow_time_constant_s)
         self._learning_progress_floor = float(learning_progress_floor)
@@ -184,7 +184,7 @@ class Affect(BaseModule):
         ] = None
         # Streams for coupling inputs (populated in initialize).
         self._audition_emotion_stream = "audition.out"
-        self._empatheia_agent_model_stream = "empatheia.out"
+        self._social_cognition_agent_model_stream = "empatheia.out"
         # Perception→arousal coupling: perceptual surprise (the vision module's scene dynamics,
         # audition acoustic onsets) arouses the entity, scaled by the normalised
         # prediction error, mirroring the interoception module's alert→arousal path.
@@ -286,14 +286,14 @@ class Affect(BaseModule):
             self._interoception_stream,
             self._sequence_stream,
             self._episodic_memory_stream,
-            self._volition_stream,
+            self._action_selection_stream,
         ]
         # Perception→arousal streams are read unconditionally (topos.out always;
         # audition.out carries both perception and, when coupling is on, emotion).
         peer_streams.append(self._vision_stream)
         peer_streams.append(self._audition_emotion_stream)
         if self._coupling.enabled:
-            peer_streams.append(self._empatheia_agent_model_stream)
+            peer_streams.append(self._social_cognition_agent_model_stream)
         for stream in peer_streams:
             try:
                 latest = await self._bus.client.xrevrange(stream, count=1)
@@ -602,12 +602,12 @@ class Affect(BaseModule):
                     self._interoception_stream,
                     self._sequence_stream,
                     self._episodic_memory_stream,
-                    self._volition_stream,
+                    self._action_selection_stream,
                     self._vision_stream,              # perception→arousal (always)
                     self._audition_emotion_stream,   # perception + emotion (always)
                 ]
                 if self._coupling.enabled:
-                    peer_streams.append(self._empatheia_agent_model_stream)
+                    peer_streams.append(self._social_cognition_agent_model_stream)
                 for stream in peer_streams:
                     try:
                         entries, last_scanned = await self._bus.read_entries(
@@ -718,7 +718,7 @@ class Affect(BaseModule):
         ):
             self._record_perceived_emotion(event)
         elif (
-            stream == self._empatheia_agent_model_stream
+            stream == self._social_cognition_agent_model_stream
             and event.type == "empatheia.agent_model"
         ):
             agent_id = event.payload.get("agent_id")
@@ -733,7 +733,7 @@ class Affect(BaseModule):
             ):
                 self._familiarity_cache[str(source_label)] = float(familiarity)
         elif (
-            stream == self._volition_stream
+            stream == self._action_selection_stream
             and event.type.startswith("intent.")
             and event.type != "intent.rest"
         ):

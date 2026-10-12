@@ -19,8 +19,8 @@ from kaine.lifecycle.preservation import (
     read_bundle_stage,
     set_aside_gestation_files,
 )
-from kaine.modules.eidolon import Eidolon, SelfModelDocument
 from kaine.modules.registry import ModuleRegistry
+from kaine.modules.self_model import SelfModel, SelfModelDocument
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
 
@@ -50,9 +50,9 @@ def _restore_stage_path(monkeypatch):
 
 
 @pytest_asyncio.fixture
-async def eidolon(tmp_path):
+async def self_model(tmp_path):
     bus = _FakeBus()
-    eid = Eidolon(bus, persistence_path=tmp_path / "sm.json", save_interval_s=60)
+    eid = SelfModel(bus, persistence_path=tmp_path / "sm.json", save_interval_s=60)
     await eid.initialize()
     eid._model = SelfModelDocument(name="stage-test", values=["continuity"])
     yield eid
@@ -62,11 +62,11 @@ async def eidolon(tmp_path):
         print(f"eidolon teardown ignored: {exc!r}")
 
 
-async def _preserve_bundle(tmp_path, eidolon, *, monkeypatch_stage: Path | None = None):
+async def _preserve_bundle(tmp_path, self_model, *, monkeypatch_stage: Path | None = None):
     if monkeypatch_stage is not None:
         stage.STAGE_PATH = monkeypatch_stage
     reg = ModuleRegistry()
-    reg.register(eidolon)
+    reg.register(self_model)
     fork_root = tmp_path / "forks"
     out_root = tmp_path / "backups"
     fm = ForkManager(fork_root)
@@ -83,7 +83,7 @@ async def _preserve_bundle(tmp_path, eidolon, *, monkeypatch_stage: Path | None 
 
 
 @pytest.mark.asyncio
-async def test_read_bundle_stage_returns_stage(tmp_path, eidolon):
+async def test_read_bundle_stage_returns_stage(tmp_path, self_model):
     stage_path = tmp_path / "stage.json"
     stage_path.write_text(
         json.dumps(
@@ -95,7 +95,7 @@ async def test_read_bundle_stage_returns_stage(tmp_path, eidolon):
             }
         )
     )
-    bundle, _ = await _preserve_bundle(tmp_path, eidolon, monkeypatch_stage=stage_path)
+    bundle, _ = await _preserve_bundle(tmp_path, self_model, monkeypatch_stage=stage_path)
     stage_dict = read_bundle_stage(bundle)
     assert stage_dict is not None
     assert stage_dict["stage"] == "gestation"
@@ -105,14 +105,14 @@ async def test_read_bundle_stage_returns_stage(tmp_path, eidolon):
 
 
 @pytest.mark.asyncio
-async def test_read_bundle_stage_returns_none_without_stage(tmp_path, eidolon):
+async def test_read_bundle_stage_returns_none_without_stage(tmp_path, self_model):
     stage.STAGE_PATH = tmp_path / "no-stage.json"
-    bundle, _ = await _preserve_bundle(tmp_path, eidolon)
+    bundle, _ = await _preserve_bundle(tmp_path, self_model)
     assert read_bundle_stage(bundle) is None
 
 
 @pytest.mark.asyncio
-async def test_read_bundle_stage_with_encryption(tmp_path, eidolon, monkeypatch):
+async def test_read_bundle_stage_with_encryption(tmp_path, self_model, monkeypatch):
     # The key comes from the environment, as in production; no skip: an
     # encrypted bundle must carry and return the stage.
     monkeypatch.setenv(
@@ -122,7 +122,7 @@ async def test_read_bundle_stage_with_encryption(tmp_path, eidolon, monkeypatch)
 
     stage_path = tmp_path / "stage.json"
     stage_path.write_text(json.dumps({"stage": "embodied", "born_at": "2026-02-01T00:00:00+00:00"}))
-    bundle, _ = await _preserve_bundle(tmp_path, eidolon, monkeypatch_stage=stage_path)
+    bundle, _ = await _preserve_bundle(tmp_path, self_model, monkeypatch_stage=stage_path)
 
     try:
         stage_dict = read_bundle_stage(bundle)
@@ -138,7 +138,7 @@ async def test_read_bundle_stage_with_encryption(tmp_path, eidolon, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_bundle_carries_gestation_progress_not_verdict(tmp_path, eidolon):
+async def test_bundle_carries_gestation_progress_not_verdict(tmp_path, self_model):
     lifecycle_dir = tmp_path / "lifecycle"
     lifecycle_dir.mkdir()
     progress = {"k": {"awake_seconds": 120.0}}
@@ -151,7 +151,7 @@ async def test_bundle_carries_gestation_progress_not_verdict(tmp_path, eidolon):
     (lifecycle_dir / "gestation_viability.json").write_text(json.dumps(viability))
 
     stage_path = lifecycle_dir / "stage.json"
-    bundle, _ = await _preserve_bundle(tmp_path, eidolon, monkeypatch_stage=stage_path)
+    bundle, _ = await _preserve_bundle(tmp_path, self_model, monkeypatch_stage=stage_path)
 
     restored = extract_bundle_gestation(bundle, tmp_path / "revived")
     assert restored == ["gestation_progress.json", "gestation_readout.json"]
@@ -168,19 +168,19 @@ async def test_bundle_carries_gestation_progress_not_verdict(tmp_path, eidolon):
 
 
 @pytest.mark.asyncio
-async def test_bundle_without_gestation_files_restores_nothing(tmp_path, eidolon):
+async def test_bundle_without_gestation_files_restores_nothing(tmp_path, self_model):
     lifecycle_dir = tmp_path / "lifecycle"
     lifecycle_dir.mkdir()
     (lifecycle_dir / "stage.json").write_text(json.dumps({"stage": "embodied"}))
 
     bundle, _ = await _preserve_bundle(
-        tmp_path, eidolon, monkeypatch_stage=lifecycle_dir / "stage.json"
+        tmp_path, self_model, monkeypatch_stage=lifecycle_dir / "stage.json"
     )
     assert extract_bundle_gestation(bundle, tmp_path / "revived") == []
 
 
 @pytest.mark.asyncio
-async def test_gestation_files_travel_encrypted(tmp_path, eidolon, monkeypatch):
+async def test_gestation_files_travel_encrypted(tmp_path, self_model, monkeypatch):
     # The key comes from the environment, as in production; no skip: an
     # encrypted bundle must carry and return the developmental progress.
     monkeypatch.setenv(
@@ -196,7 +196,7 @@ async def test_gestation_files_travel_encrypted(tmp_path, eidolon, monkeypatch):
 
     try:
         bundle, _ = await _preserve_bundle(
-            tmp_path, eidolon, monkeypatch_stage=lifecycle_dir / "stage.json"
+            tmp_path, self_model, monkeypatch_stage=lifecycle_dir / "stage.json"
         )
         restored = extract_bundle_gestation(bundle, tmp_path / "revived")
     finally:

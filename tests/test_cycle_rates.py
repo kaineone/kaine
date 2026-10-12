@@ -7,7 +7,7 @@ import pytest
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle import CognitiveCycle
-from tests._fakes import FakeClock, FakeRegistry, FakeSyneidesis
+from tests._fakes import FakeClock, FakeRegistry, FakeWorkspace
 
 
 @pytest.fixture
@@ -16,11 +16,11 @@ async def cycle_with_fakes():
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
     clock = FakeClock()
-    syn = FakeSyneidesis()
+    syn = FakeWorkspace()
     reg = FakeRegistry([])
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=syn,
+        workspace=syn,
         registry=reg,
         processing_rate_hz=5.0,
         experiential_rate_hz=5.0,
@@ -35,13 +35,13 @@ async def cycle_with_fakes():
 async def test_tick_records_target_and_wall_durations(cycle_with_fakes):
     cycle, _bus, clock, _syn, _reg = cycle_with_fakes
 
-    # Each FakeSyneidesis.select call costs 1 ms of fake time.
+    # Each FakeWorkspace.select call costs 1 ms of fake time.
     async def select_with_cost(events, context):
         clock.advance(0.001)
         from kaine.cycle.types import WorkspaceSnapshot
         return WorkspaceSnapshot(tick_index=context["tick_index"])
 
-    cycle._syneidesis.select = select_with_cost  # type: ignore[assignment]
+    cycle._workspace.select = select_with_cost  # type: ignore[assignment]
     result = await cycle.tick()
     assert result.target_duration_ms == pytest.approx(200.0, rel=1e-3)
     assert result.wall_duration_ms == pytest.approx(1.0, rel=1e-3)
@@ -58,7 +58,7 @@ async def test_slip_recorded_when_tick_overruns(cycle_with_fakes):
         from kaine.cycle.types import WorkspaceSnapshot
         return WorkspaceSnapshot(tick_index=context["tick_index"])
 
-    cycle._syneidesis.select = slow_select  # type: ignore[assignment]
+    cycle._workspace.select = slow_select  # type: ignore[assignment]
     result = await cycle.tick()
     assert result.wall_duration_ms >= 350.0
     assert result.slip_ms >= 150.0

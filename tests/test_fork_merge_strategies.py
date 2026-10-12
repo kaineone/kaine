@@ -5,9 +5,9 @@ import pytest
 
 from kaine.lifecycle.strategies import (
     AffectMergeStrategy,
-    EidolonMergeStrategy,
     EpisodicMemoryMergeStrategy,
-    NousMergeStrategy,
+    PlanningMergeStrategy,
+    SelfModelMergeStrategy,
     UnionMergeStrategy,
     default_strategies,
 )
@@ -92,8 +92,8 @@ def test_episodic_memory_one_parent_missing():
 # ---- Planning ----
 
 
-def test_nous_one_sided_selection_keeps_lower_entropy():
-    s = NousMergeStrategy()
+def test_planning_one_sided_selection_keeps_lower_entropy():
+    s = PlanningMergeStrategy()
     # Fork A: a near point-mass posterior (low entropy / high certainty).
     certain = {
         "last_action": "request_think",
@@ -110,32 +110,32 @@ def test_nous_one_sided_selection_keeps_lower_entropy():
     assert out["selected_fork_entropy"] < out["discarded_fork_entropy"]
 
 
-def test_nous_merge_warning_set_when_forks_diverge():
-    s = NousMergeStrategy(warning_threshold=0.2)
+def test_planning_merge_warning_set_when_forks_diverge():
+    s = PlanningMergeStrategy(warning_threshold=0.2)
     certain = {"posterior": [[0.98, 0.02]]}
     uncertain = {"posterior": [[0.5, 0.5]]}  # entropy 1.0 vs ~0.14
     out = s.merge(certain, uncertain)
     assert out.get("nous.merge_warning") is True
 
 
-def test_nous_merge_no_warning_when_forks_agree():
-    s = NousMergeStrategy(warning_threshold=0.2)
+def test_planning_merge_no_warning_when_forks_agree():
+    s = PlanningMergeStrategy(warning_threshold=0.2)
     a = {"posterior": [[0.9, 0.1]]}
     b = {"posterior": [[0.88, 0.12]]}
     out = s.merge(a, b)
     assert "nous.merge_warning" not in out
 
 
-def test_nous_no_restart_or_pending_fields():
+def test_planning_no_restart_or_pending_fields():
     # NARS-era fields are gone.
-    s = NousMergeStrategy()
+    s = PlanningMergeStrategy()
     out = s.merge({"posterior": [[1.0, 0.0]]}, {"posterior": [[0.5, 0.5]]})
     assert "restart_count" not in out
     assert "pending_revision" not in out
 
 
-def test_nous_one_parent_missing():
-    s = NousMergeStrategy()
+def test_planning_one_parent_missing():
+    s = PlanningMergeStrategy()
     out = s.merge({"posterior": [[1.0, 0.0]]}, None)
     assert out == {"posterior": [[1.0, 0.0]]}
 
@@ -143,8 +143,8 @@ def test_nous_one_parent_missing():
 # ---- Self-model ----
 
 
-def test_eidolon_dedups_values_orders_history_and_sums_drift():
-    s = EidolonMergeStrategy()
+def test_self_model_dedups_values_orders_history_and_sums_drift():
+    s = SelfModelMergeStrategy()
     out = s.merge(
         {
             "values": ["honesty", "curiosity"],
@@ -172,8 +172,8 @@ def test_eidolon_dedups_values_orders_history_and_sums_drift():
     assert out["identity_history"][1]["source"] == "fork-b"
 
 
-def test_eidolon_baseline_one_sided():
-    s = EidolonMergeStrategy()
+def test_self_model_baseline_one_sided():
+    s = SelfModelMergeStrategy()
     out = s.merge(
         {"values": [], "personality_baseline": {"x": 0.9}},
         {"values": []},

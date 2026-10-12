@@ -13,7 +13,7 @@ from kaine.workspace import (
     RuleBasedSalience,
     StaticAffectModulator,
     StaticGoalScorer,
-    Syneidesis,
+    Workspace,
 )
 from kaine.workspace.coherence import CoherenceScorer
 
@@ -45,8 +45,8 @@ def _syn(
     top_k: int = 5,
     threshold: float = 0.35,
     coherence: CoherenceScorer | None = None,
-) -> Syneidesis:
-    return Syneidesis(
+) -> Workspace:
+    return Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=64),
             goal_scorer=StaticGoalScorer(),
@@ -190,7 +190,7 @@ async def test_pooled_admits_every_candidate_without_scoring():
         async def score(self, event, context):
             raise AssertionError("pooled arm must not score")
 
-    syn = Syneidesis(
+    syn = Workspace(
         strategy=NoScoreStrategy(),
         top_k=5,
         publication_threshold=0.35,

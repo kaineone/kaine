@@ -1,0 +1,385 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
+"""Executive action selection ("Volition").
+
+KAINE's global workspace decides *what is accessed* and flags
+executive inhibition (`WorkspaceSnapshot.inhibited`) when the winning coalition
+fails to clear the publication threshold. Per the paper (§37, §147) a winning
+coalition must clear that threshold *before reaching the action layer* - "the
+system can consider speaking and decide that silence is the better choice."
+
+This module is that action layer. Each experiential tick the cognitive cycle
+hands ``Volition.select`` the broadcast ``WorkspaceSnapshot`` and the action selection module
+returns zero or more :class:`Intent` objects describing what the entity has
+decided to DO. The cycle publishes those intents to the ``volition.out`` stream;
+effectors (the language and effectors modules) realize them. Effectors never self-trigger off the
+raw broadcast — the only path to action is an intent, and intents only exist
+when the snapshot is *not* inhibited.
+
+The core safeguard lives here and is checked first: when ``snapshot.inhibited``
+is true, ``select`` returns ``[]`` — no intent, so no effector acts, for every
+effector at once.
+
+The decision policy is injectable (:class:`ActionSelectionPolicy`) so later
+changes (`drives-to-behavior`, `spontaneous-recall`) can supply a richer policy
+that biases the decision with motivational state / recalled context without
+touching the cycle wiring or the intent transport.
+"""
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field, replace
+from typing import Any, Iterable, Optional, Protocol, runtime_checkable
+
+from kaine.bus.schema import OPERATOR_SOURCES
+from kaine.cycle.types import WorkspaceSnapshot
+from kaine.security.intent_signing import IntentSigner
+
+log = logging.getLogger(__name__)
+
+# Intent kinds.
+SPEAK = "speak"
+THINK = "think"
+ACT = "act"
+REST = "rest"
+
+# Bus transport for intents.
+ACTION_SELECTION_SOURCE = "volition"
+ACTION_SELECTION_STREAM = "volition.out"
+# Proposal outcomes are published under their own source so they land on
+# their own stream (the bus maps a source to "<source>.out"). No effector
+# reads it, so an inhibited snapshot still publishes nothing to volition.out.
+ACTION_SELECTION_FEEDBACK_SOURCE = "volition_feedback"
+ACTION_SELECTION_FEEDBACK_STREAM = "volition_feedback.out"
+
+# Event types used when an intent is published to the bus.
+INTENT_TYPES: dict[str, str] = {
+    SPEAK: "intent.speak",
+    THINK: "intent.think",
+    ACT: "intent.act",
+    REST: "intent.rest",
+}
+
+# Event type used for the planning module's proposal outcomes on volition_feedback.out.
+PROPOSAL_OUTCOME_TYPE = "volition.proposal_outcome"
+
+# The source/type of a user-communication event the default policy is disposed
+# to answer (a transcribed utterance heard by the ears).
+USER_COMMUNICATION_SOURCE = "audition"
+USER_COMMUNICATION_TYPE = "audition.transcription"
+
+# The entity's own speech — never something to "respond" to. Both external
+# (TTS-bound) and internal (private monologue) speech carry source "lingua";
+# the event type distinguishes the channel a given output was realized on.
+OWN_EXTERNAL_SPEECH_SOURCE = "lingua"
+OWN_EXTERNAL_SPEECH_TYPE = "external_speech"
+OWN_INTERNAL_SPEECH_TYPE = "internal_speech"
+
+# Channels whose voices are treated as the operator. Audio from any other
+# channel is modelled as "media:<channel>" and is not answered as a user
+# utterance. The list is shared with the social cognition module's attribution.
+DEFAULT_OPERATOR_SOURCES = OPERATOR_SOURCES
+
+
+@dataclass(frozen=True)
+class Intent:
+    """An explicit decision to act, produced by action selection.
+
+    ``kind`` is one of ``speak`` / ``think`` / ``act``. ``about`` references the
+    accessed content the intent concerns: a short textual summary the realizing
+    effector can use as a prompt. ``entry_id`` carries the broadcast entry id of
+    the referenced coalition member when there is one (for audit/traceability).
+    For ``act`` intents, ``effector`` names the effectors module's effector and ``params``
+    carries its request fields.
+
+    ``run_id`` / ``seq`` / ``sig`` are the provenance envelope attached to
+    ``act`` intents by :meth:`Volition.select` when a signer is wired (see
+    ``kaine.security.intent_signing``). They are absent (``None``) for unsigned
+    intents and for non-``act`` kinds. ``sig`` is an HMAC over
+    ``canonical(kind, effector, params, run_id, seq)`` that the effectors module verifies
+    before running any effector; ``(run_id, seq)`` is the replay guard.
+
+    ``interrupt`` marks a ``speak`` intent as *urgent redirect*: a sufficiently
+    surprising new coalition that should preempt an in-flight utterance rather
+    than wait behind it (see ``interruptible-utterance``). Only ``speak`` intents
+    carry it; the language module honors it by cancelling the in-flight generation and
+    starting this one. Default ``False`` — the flag is emitted on the wire only
+    when set, so non-language consumers (the effectors module) simply never see an unknown field.
+
+    ``about_kind`` classifies the ``about`` field for the language module's redaction logic:
+    ``"heard"`` for heard speech, ``"felt"`` for a drive's felt-state phrase,
+    or ``"event"`` for another coalition event summary. ``None`` is treated as
+    ``"heard"`` (fail-closed), so unmarked intents are redacted in the log.
+    """
+
+    kind: str
+    about: str = ""
+    entry_id: Optional[str] = None
+    effector: Optional[str] = None
+    params: dict[str, Any] = field(default_factory=dict)
+    run_id: Optional[str] = None
+    seq: Optional[int] = None
+    sig: Optional[str] = None
+    interrupt: bool = False
+    origin: Optional[str] = None
+    proposal_id: Optional[str] = None
+    about_kind: Optional[str] = None
+
+    def to_event_payload(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {"kind": self.kind, "about": self.about}
+        if self.origin is not None:
+            payload["origin"] = self.origin
+        if self.about_kind is not None:
+            payload["about_kind"] = self.about_kind
+        if self.proposal_id is not None:
+            payload["proposal_id"] = self.proposal_id
+        if self.entry_id is not None:
+            payload["entry_id"] = self.entry_id
+        # Emitted only when set so the wire payload stays minimal and non-language-module
+        # consumers never encounter the field on ordinary intents.
+        if self.interrupt:
+            payload["interrupt"] = True
+        if self.effector is not None:
+            payload["effector"] = self.effector
+        if self.params:
+            payload["params"] = dict(self.params)
+        # Provenance envelope — emitted only when the intent was signed. seq may
+        # legitimately be 0 (the first intent of a run), so guard on `is not
+        # None`, never on truthiness.
+        if self.run_id is not None:
+            payload["run_id"] = self.run_id
+        if self.seq is not None:
+            payload["seq"] = self.seq
+        if self.sig is not None:
+            payload["sig"] = self.sig
+        return payload
+
+
+@runtime_checkable
+class ActionSelectionPolicy(Protocol):
+    """Maps a *non-inhibited* snapshot to zero or more intents.
+
+    Implementations MUST NOT be called when the snapshot is inhibited — the action selection module
+    enforces the inhibition gate before delegating. A policy may be stateful (the
+    default one keeps a one-in-flight guard).
+    """
+
+    def __call__(self, snapshot: WorkspaceSnapshot) -> list[Intent]:
+        ...
+
+
+class DefaultActionSelectionPolicy:
+    """Minimal but real v1 policy.
+
+    Given a non-inhibited coalition, emit a single ``speak`` intent when the
+    coalition contains a user-communication event (a non-empty transcribed
+    utterance) the entity is communicatively disposed to answer.
+
+    Safeguards (per the action-selection spec):
+    - Never forms a ``speak`` intent about the entity's OWN prior external
+      speech (no self-response feedback loop).
+    - One-in-flight guard: does not emit a new ``speak`` intent while a prior one
+      is still being realized. The guard is armed when a ``speak`` intent is
+      emitted and persists across subsequent decision ticks; it is cleared by
+      :meth:`mark_realized` once the prior utterance's realization is observed
+      (the entity's own ``lingua.external`` output appears in a later coalition).
+
+    Injectable so `drives-to-behavior` can supply a drive-biased policy without
+    touching the action selection module's plumbing.
+    """
+
+    # C3: refractory-scaled guard timeout (6x the report speak refractory of
+    # 8s ~= 48s) - a speak guard armed this long without the entity's own
+    # output being accessed is cleared, so a failed realization cannot
+    # permanently mute the entity.
+    _GUARD_TIMEOUT_S = 48.0
+
+    def __init__(
+        self,
+        *,
+        clock: Optional[Any] = None,
+        operator_sources: Iterable[str] | None = None,
+    ) -> None:
+        import time
+
+        self._speak_in_flight = False
+        self._speak_armed_at = float("-inf")
+        # wall clock: the speak guard times real audio playback; a lost
+        # "done speaking" must unstick after real seconds.
+        self._clock = clock or time.monotonic
+        self._operator_sources = set(
+            operator_sources if operator_sources is not None else DEFAULT_OPERATOR_SOURCES
+        )
+
+    @property
+    def speak_in_flight(self) -> bool:
+        return self._speak_in_flight
+
+    def mark_realized(self) -> None:
+        """Clear the one-in-flight guard (a prior speak intent has completed)."""
+        self._speak_in_flight = False
+
+    def note_external_intent(self, kind: str, when: float | None = None) -> None:
+        """Arm this policy's own in-flight guard for ``kind`` as if it emitted it.
+
+        Only ``speak`` is guarded by the default policy; other kinds are no-ops.
+        """
+        if kind != SPEAK:
+            return
+        self._speak_in_flight = True
+        self._speak_armed_at = when if when is not None else self._clock()
+
+    @staticmethod
+    def _is_own_speech(event: Any) -> bool:
+        """True for the entity's own (external or internal) speech output."""
+        return event.source == OWN_EXTERNAL_SPEECH_SOURCE
+
+    def _user_utterance(self, event: Any) -> Optional[str]:
+        """Return the non-empty user-utterance text on this event, else None.
+
+        Recognizes a transcribed utterance heard by the ears (source
+        ``audition``, type ``audition.transcription``) with non-empty text, but
+        only when the audio came from an operator channel (or carries no
+        channel for backward compatibility). Shared with
+        :class:`DriveBiasedActionSelectionPolicy`.
+        """
+        if (
+            event.source != USER_COMMUNICATION_SOURCE
+            or event.type != USER_COMMUNICATION_TYPE
+        ):
+            return None
+        source_label = event.payload.get("source_label")
+        if source_label is not None and source_label not in self._operator_sources:
+            return None
+        text = str(event.payload.get("text") or "").strip()
+        if text:
+            return text
+        return None
+
+    def _user_response_intent(self, snapshot: WorkspaceSnapshot) -> Optional[Intent]:
+        """The single ``speak`` intent answering a present user utterance, if any.
+
+        Skips the entity's own speech (no self-response loop). Does NOT touch
+        the in-flight guard — callers decide whether to arm it.
+        """
+        for entry_id, event in snapshot.selected_events:
+            if self._is_own_speech(event):
+                continue
+            text = self._user_utterance(event)
+            if text is not None:
+                return Intent(
+                    kind=SPEAK, about=text, entry_id=entry_id or None, about_kind="heard"
+                )
+        return None
+
+    def __call__(self, snapshot: WorkspaceSnapshot) -> list[Intent]:
+        # Only the entity's own EXTERNAL speech clears the speak guard; inner
+        # monologue (internal_speech) is on a different channel and must not
+        # disarm it.
+        for _, event in snapshot.selected_events:
+            if (
+                event.source == OWN_EXTERNAL_SPEECH_SOURCE
+                and event.type == OWN_EXTERNAL_SPEECH_TYPE
+            ):
+                self._speak_in_flight = False
+                self._speak_armed_at = float("-inf")
+                break
+        # C3 belt-and-suspenders: a guard armed longer than the timeout window
+        # without the entity's own output being accessed is cleared, so a
+        # failed realization (LLM error, dead organ) can never permanently
+        # mute the entity. Uses the injected clock (subjective time in tests).
+        if (
+            self._speak_in_flight
+            and (self._clock() - self._speak_armed_at) >= self._GUARD_TIMEOUT_S
+        ):
+            self._speak_in_flight = False
+            self._speak_armed_at = float("-inf")
+        if self._speak_in_flight:
+            # A prior speak intent is still being realized; do not stack.
+            return []
+        intent = self._user_response_intent(snapshot)
+        if intent is not None:
+            self._speak_in_flight = True
+            self._speak_armed_at = self._clock()
+            return [intent]
+        return []
+
+
+class ActionSelection:
+    """The executive action-selection step.
+
+    Pure transform: ``select(snapshot) -> list[Intent]``. The inhibition gate is
+    the first thing checked — an inhibited snapshot yields no intents, so no
+    effector ever acts while the entity is inhibited. A non-inhibited snapshot is
+    delegated to the injected :class:`ActionSelectionPolicy`.
+
+    The action selection module never re-decides salience or inhibition; it *consumes* the workspace's
+    verdict. It does not touch the bus — the cycle publishes the returned intents.
+
+    When an :class:`~kaine.security.intent_signing.IntentSigner` is injected (the
+    composition root wires one holding the per-boot secret), every ``act`` intent
+    the action selection module returns carries a provenance signature over its
+    ``(kind, effector, params, run_id, seq)`` so the effectors module can prove the intent came
+    from this action-selection step and reject forged or replayed intents. Only
+    ``act`` intents are signed — they are the only kind the effectors module realizes into
+    real-world effects; ``speak``/``think`` are unchanged.
+    """
+
+    def __init__(
+        self,
+        policy: Optional[ActionSelectionPolicy] = None,
+        *,
+        signer: Optional[IntentSigner] = None,
+        operator_sources: Iterable[str] | None = None,
+    ) -> None:
+        self._policy: ActionSelectionPolicy = (
+            policy
+            if policy is not None
+            else DefaultActionSelectionPolicy(operator_sources=operator_sources)
+        )
+        self._signer = signer
+
+    @property
+    def policy(self) -> ActionSelectionPolicy:
+        return self._policy
+
+    @property
+    def signer(self) -> Optional[IntentSigner]:
+        return self._signer
+
+    def select(self, snapshot: WorkspaceSnapshot) -> list[Intent]:
+        # Core safeguard (§37/§147): inhibited → silence, for every effector.
+        if snapshot.inhibited:
+            observe = getattr(self._policy, "observe_inhibited", None)
+            if observe is not None:
+                try:
+                    observe(snapshot)
+                except Exception:
+                    log.warning("proposal outcome recording failed on inhibited snapshot", exc_info=True)
+            return []
+        try:
+            intents = list(self._policy(snapshot))
+        except Exception:
+            log.exception("action-selection policy raised; producing no intents")
+            return []
+        return [self._sign(intent) for intent in intents]
+
+    def proposal_outcomes(self, snapshot: WorkspaceSnapshot) -> list[dict]:
+        """Content-free outcomes for any planning module proposals seen on the last select."""
+        if hasattr(self._policy, "proposal_outcomes"):
+            return self._policy.proposal_outcomes(snapshot)
+        return []
+
+    def _sign(self, intent: Intent) -> Intent:
+        """Attach the provenance envelope to an ``act`` intent when signing is
+        wired. Non-``act`` intents and the unsigned (no-signer) path pass through
+        unchanged."""
+        if self._signer is None or intent.kind != ACT:
+            return intent
+        run_id, seq, sig = self._signer.sign(
+            kind=intent.kind,
+            effector=intent.effector or "",
+            params=dict(intent.params or {}),
+        )
+        return replace(intent, run_id=run_id, seq=seq, sig=sig)

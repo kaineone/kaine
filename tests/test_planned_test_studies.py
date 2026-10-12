@@ -14,7 +14,7 @@ from kaine.config import SHIPPED_CONFIG_PATH, load_kaine_config, load_runtime_co
 from kaine.cycle.boot_context import BootContext
 from kaine.evaluation.observers.research_event_observer import _workspace_metadata_record
 from kaine.experiment.planned_test_settings import planned_test_refusal
-from kaine.workspace.syneidesis import Syneidesis
+from kaine.workspace.core import Workspace
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 STUDIES_DIR = REPO_ROOT / "config" / "studies"
@@ -121,7 +121,7 @@ async def test_boot_refuses_live_arm_without_settings_record(
 
 @pytest.mark.asyncio
 async def test_competitive_snapshot_carries_coalition_capacity():
-    syn = Syneidesis(_StubStrategy(), arm="competitive")
+    syn = Workspace(_StubStrategy(), arm="competitive")
     events = [("e1", _StubEvent("e1", 0.9)), ("e2", _StubEvent("e2", 0.8))]
     snapshot = await syn.select(events, {"tick_index": 1, "is_experiential": True})
     assert snapshot.metadata["coalition_capacity"] == syn._top_k
@@ -129,14 +129,14 @@ async def test_competitive_snapshot_carries_coalition_capacity():
 
 @pytest.mark.asyncio
 async def test_competitive_empty_snapshot_carries_coalition_capacity():
-    syn = Syneidesis(_StubStrategy(), arm="competitive")
+    syn = Workspace(_StubStrategy(), arm="competitive")
     snapshot = await syn.select([], {"tick_index": 1, "is_experiential": True})
     assert snapshot.metadata["coalition_capacity"] == syn._top_k
 
 
 @pytest.mark.asyncio
 async def test_matched_snapshot_carries_coalition_capacity():
-    syn = Syneidesis(_StubStrategy(), arm="matched", arm_seed=123)
+    syn = Workspace(_StubStrategy(), arm="matched", arm_seed=123)
     events = [("e1", _StubEvent("e1", 0.9)), ("e2", _StubEvent("e2", 0.8))]
     snapshot = await syn.select(events, {"tick_index": 1, "is_experiential": True})
     assert snapshot.metadata["coalition_capacity"] == syn._top_k

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
+from kaine.modules.language.client import ChatRequest, OpenAIChatClient
 from kaine.modules.sleep import hot_swap
 from kaine.modules.sleep.organ_adapter import (
     GENERATION,
@@ -513,8 +513,8 @@ async def test_dispatch_organ_adapter_missing_dir(tmp_path):
 
 
 class _FakeRegistry:
-    def __init__(self, lingua, sleep):
-        self._mods = {"lingua": lingua, "hypnos": sleep}
+    def __init__(self, language, sleep):
+        self._mods = {"lingua": language, "hypnos": sleep}
 
     def __contains__(self, key):
         return key in self._mods
@@ -523,7 +523,7 @@ class _FakeRegistry:
         return self._mods[key]
 
 
-class _FakeLingua:
+class _FakeLanguage:
     def __init__(self):
         self.calls = []
 
@@ -549,41 +549,41 @@ def _make_wiring_config(tmp_path, mode, shared=False):
     return cfg
 
 
-def test_wire_lingua_organ_adapter_sets_resolver(tmp_path):
-    from kaine.boot import _wire_lingua_organ_adapter
+def test_wire_language_organ_adapter_sets_resolver(tmp_path):
+    from kaine.boot import _wire_language_organ_adapter
 
-    lingua = _FakeLingua()
-    reg = _FakeRegistry(lingua, object())
+    language = _FakeLanguage()
+    reg = _FakeRegistry(language, object())
     cfg = _make_wiring_config(tmp_path, "organ_adapter")
 
-    _wire_lingua_organ_adapter(reg, cfg)
+    _wire_language_organ_adapter(reg, cfg)
 
-    assert len(lingua.calls) == 1
-    assert isinstance(lingua.calls[0], OrganAdapterResolver)
+    assert len(language.calls) == 1
+    assert isinstance(language.calls[0], OrganAdapterResolver)
 
 
-def test_wire_lingua_organ_adapter_manual_mode_no_resolver(tmp_path):
-    from kaine.boot import _wire_lingua_organ_adapter
+def test_wire_language_organ_adapter_manual_mode_no_resolver(tmp_path):
+    from kaine.boot import _wire_language_organ_adapter
 
-    lingua = _FakeLingua()
-    reg = _FakeRegistry(lingua, object())
+    language = _FakeLanguage()
+    reg = _FakeRegistry(language, object())
     cfg = _make_wiring_config(tmp_path, "manual")
 
-    _wire_lingua_organ_adapter(reg, cfg)
+    _wire_language_organ_adapter(reg, cfg)
 
-    assert len(lingua.calls) == 0
+    assert len(language.calls) == 0
 
 
-def test_wire_lingua_organ_adapter_shared_model_server_no_resolver(tmp_path):
-    from kaine.boot import _wire_lingua_organ_adapter
+def test_wire_language_organ_adapter_shared_model_server_no_resolver(tmp_path):
+    from kaine.boot import _wire_language_organ_adapter
 
-    lingua = _FakeLingua()
-    reg = _FakeRegistry(lingua, object())
+    language = _FakeLanguage()
+    reg = _FakeRegistry(language, object())
     cfg = _make_wiring_config(tmp_path, "organ_adapter", shared=True)
 
-    _wire_lingua_organ_adapter(reg, cfg)
+    _wire_language_organ_adapter(reg, cfg)
 
-    assert len(lingua.calls) == 0
+    assert len(language.calls) == 0
 
 
 def test_organ_root_url():

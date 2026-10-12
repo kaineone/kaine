@@ -684,8 +684,8 @@ def test_shipped_profiles_are_voice_free():
         raw = (REPO_ROOT / PROFILES_DIR / f"{name}.toml").read_text()
         assert "predefined_voice_id" not in raw, f"{name} embeds a voice id"
         parsed = tomllib.loads(raw)
-        vox = parsed.get("vox", {})
-        assert "predefined_voice_id" not in vox
+        vocal = parsed.get("vox", {})
+        assert "predefined_voice_id" not in vocal
 
 
 # --------------------------------------------------------------------------
@@ -746,28 +746,28 @@ def _bus():
     return AsyncBus(BusConfig(password="x", audit_required=False), client=client)
 
 
-def test_lingua_default_backend_builds_http_client_unchanged():
+def test_language_default_backend_builds_http_client_unchanged():
     """No backend key → the language module constructs its own OpenAIChatClient, as today."""
-    from kaine.boot import make_lingua
-    from kaine.modules.lingua.client import OpenAIChatClient
+    from kaine.boot import make_language
+    from kaine.modules.language.client import OpenAIChatClient
 
-    lingua = make_lingua(_bus(), {"chat_url": "http://127.0.0.1:11434/v1"})
-    assert isinstance(lingua.chat_client, OpenAIChatClient)
+    language = make_language(_bus(), {"chat_url": "http://127.0.0.1:11434/v1"})
+    assert isinstance(language.chat_client, OpenAIChatClient)
     # No backend was selected, so nothing was recorded as failed.
     assert backend_failures() == []
 
 
-def test_lingua_llama_cpp_backend_degrades_to_http_when_dep_absent():
+def test_language_llama_cpp_backend_degrades_to_http_when_dep_absent():
     """backend='llama_cpp' with no llama-cpp-python wheel degrades to the HTTP
     client (its declared fallback) and surfaces the reason — never crashes boot."""
-    from kaine.boot import make_lingua
+    from kaine.boot import make_language
 
-    lingua = make_lingua(
+    language = make_language(
         _bus(),
         {"chat_url": "http://127.0.0.1:11434/v1", "backend": "llama_cpp"},
     )
     # The organ still exists and can speak over HTTP.
-    assert lingua.chat_client is not None
+    assert language.chat_client is not None
     failures = backend_failures()
     assert any(f.module == "lingua" and f.backend == "llama_cpp" for f in failures)
 

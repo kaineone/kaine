@@ -14,9 +14,9 @@ from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.faithful.templates import HEARD_SPEECH_PLACEHOLDER, redact_heard_speech
 from kaine.modules.episodic_memory.module import _serialize_snapshot
-from kaine.modules.lingua import EXTERNAL_STREAM, FakeChatClient, IntentExpressionLog, Lingua
+from kaine.modules.language import EXTERNAL_STREAM, FakeChatClient, IntentExpressionLog, Language
+from kaine.workspace.action_selection import SPEAK
 from kaine.workspace.report_policy import SelfInitiatedReportPolicy
-from kaine.workspace.volition import SPEAK
 
 
 async def _wait_for_entries(bus: AsyncBus, stream: str, *, timeout_s: float = 2.0):
@@ -55,8 +55,8 @@ async def bus():
     await bus.close()
 
 
-def _make_lingua(bus: AsyncBus, tmp_path: Path, responses=None) -> Lingua:
-    return Lingua(
+def _make_language(bus: AsyncBus, tmp_path: Path, responses=None) -> Language:
+    return Language(
         bus,
         chat_client=FakeChatClient(responses=responses),
         intent_log=IntentExpressionLog(tmp_path / "intent.jsonl"),
@@ -68,9 +68,9 @@ def _snapshot(events=None) -> WorkspaceSnapshot:
     return WorkspaceSnapshot(tick_index=0, selected_events=events or [], inhibited=False)
 
 
-async def _say(lingua, *, about, snapshot, about_kind):
+async def _say(language, *, about, snapshot, about_kind):
     """Run one external utterance to completion, as the dispatcher would."""
-    return await lingua._produce_inner(
+    return await language._produce_inner(
         about=about,
         snapshot=snapshot,
         mode="external",
@@ -90,15 +90,15 @@ def _event(source, type_, payload, salience=0.6):
 
 
 @pytest.mark.asyncio
-async def test_heard_sentinel_never_leaves_lingua(bus: AsyncBus, tmp_path: Path):
+async def test_heard_sentinel_never_leaves_language(bus: AsyncBus, tmp_path: Path):
     """Heard speech never reaches the bus or the log, including through
     the language module's own earlier external_speech event coming back in a coalition."""
     sentinel = "PURPLE-HERON-4471 said this"
-    lingua = _make_lingua(bus, tmp_path, responses=["First reply.", "Second reply."])
-    await lingua.initialize()
+    language = _make_language(bus, tmp_path, responses=["First reply.", "Second reply."])
+    await language.initialize()
     try:
         heard = _snapshot([("t1", _event("audition", "audition.transcription", {"text": sentinel}, 0.9))])
-        await _say(lingua, about=sentinel, snapshot=heard, about_kind="heard")
+        await _say(language, about=sentinel, snapshot=heard, about_kind="heard")
         first_payload = _payloads(await bus.client.xrange(EXTERNAL_STREAM))[-1]
 
         # A later coalition holds that earlier event. Before the fix its
@@ -107,23 +107,23 @@ async def test_heard_sentinel_never_leaves_lingua(bus: AsyncBus, tmp_path: Path)
         echo["user_input"] = sentinel  # a legacy event that still carries it
         later = _snapshot([("l1", _event("lingua", "external_speech", echo))])
         await _say(
-            lingua, about="reflecting on what just happened", snapshot=later, about_kind="event"
+            language, about="reflecting on what just happened", snapshot=later, about_kind="event"
         )
 
         for payload in _payloads(await bus.client.xrange(EXTERNAL_STREAM)):
             assert sentinel not in json.dumps(payload)
-        lingua_out = await bus.client.xrange("lingua.out")
-        assert lingua_out
-        assert sentinel not in json.dumps(lingua_out)
-        records = _records(lingua.intent_log.path)
+        language_out = await bus.client.xrange("lingua.out")
+        assert language_out
+        assert sentinel not in json.dumps(language_out)
+        records = _records(language.intent_log.path)
         assert len(records) == 2
-        assert sentinel not in lingua.intent_log.path.read_text()
+        assert sentinel not in language.intent_log.path.read_text()
         assert HEARD_SPEECH_PLACEHOLDER in records[1]["faithful_rendering"]
 
         snapshot = _snapshot(_events_from_entries(await bus.client.xrange(EXTERNAL_STREAM)))
         assert sentinel not in _serialize_snapshot(snapshot)
     finally:
-        await lingua.shutdown()
+        await language.shutdown()
 
 
 def test_redact_heard_speech_by_field():
@@ -143,41 +143,41 @@ def test_redact_heard_speech_by_field():
 
 @pytest.mark.asyncio
 async def test_payload_user_input_follows_the_trigger(bus: AsyncBus, tmp_path: Path):
-    lingua = _make_lingua(bus, tmp_path, responses=["felt reply", "heard reply"])
-    await lingua.initialize()
+    language = _make_language(bus, tmp_path, responses=["felt reply", "heard reply"])
+    await language.initialize()
     try:
         felt = "a pull towards company"
-        await _say(lingua, about=felt, snapshot=_snapshot(), about_kind="felt")
+        await _say(language, about=felt, snapshot=_snapshot(), about_kind="felt")
         felt_payload = _payloads(await bus.client.xrange(EXTERNAL_STREAM))[-1]
         assert felt_payload["user_input"] == felt
 
         sentinel = "PURPLE-HERON-4471 said this"
         heard = _snapshot([("t1", _event("audition", "audition.transcription", {"text": sentinel}, 0.9))])
-        await _say(lingua, about=sentinel, snapshot=heard, about_kind="heard")
+        await _say(language, about=sentinel, snapshot=heard, about_kind="heard")
         heard_payload = _payloads(await bus.client.xrange(EXTERNAL_STREAM))[-1]
         assert "user_input" not in heard_payload
     finally:
-        await lingua.shutdown()
+        await language.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_felt_phrase_echoed_by_lingua_stays_felt(bus: AsyncBus, tmp_path: Path):
+async def test_felt_phrase_echoed_by_language_stays_felt(bus: AsyncBus, tmp_path: Path):
     """The language module's own earlier event carries a felt phrase as user_input. The same
     phrase driving the next utterance is still felt, not heard."""
-    lingua = _make_lingua(bus, tmp_path, responses=["one", "two"])
-    await lingua.initialize()
+    language = _make_language(bus, tmp_path, responses=["one", "two"])
+    await language.initialize()
     try:
         felt = "a pull towards company"
-        await _say(lingua, about=felt, snapshot=_snapshot(), about_kind="felt")
+        await _say(language, about=felt, snapshot=_snapshot(), about_kind="felt")
         first_payload = _payloads(await bus.client.xrange(EXTERNAL_STREAM))[-1]
         later = _snapshot([("l1", _event("lingua", "external_speech", first_payload))])
-        await _say(lingua, about=felt, snapshot=later, about_kind="felt")
+        await _say(language, about=felt, snapshot=later, about_kind="felt")
         second_payload = _payloads(await bus.client.xrange(EXTERNAL_STREAM))[-1]
         assert second_payload["user_input"] == felt
-        prompt = _records(lingua.intent_log.path)[-1]["prompt"]
+        prompt = _records(language.intent_log.path)[-1]["prompt"]
         assert "## What was just said to me" not in prompt
     finally:
-        await lingua.shutdown()
+        await language.shutdown()
 
 
 @pytest.mark.asyncio
@@ -196,17 +196,17 @@ async def test_default_report_policy_intents_are_events(bus: AsyncBus, tmp_path:
         assert intent.about_kind == "event"
 
     speak_intent = next(i for i in intents if i.kind == SPEAK)
-    lingua = _make_lingua(bus, tmp_path, responses=["report reply"])
-    await lingua.initialize()
+    language = _make_language(bus, tmp_path, responses=["report reply"])
+    await language.initialize()
     try:
         await _say(
-            lingua, about=speak_intent.about, snapshot=snapshot, about_kind=speak_intent.about_kind
+            language, about=speak_intent.about, snapshot=snapshot, about_kind=speak_intent.about_kind
         )
-        prompt = _records(lingua.intent_log.path)[0]["prompt"]
+        prompt = _records(language.intent_log.path)[0]["prompt"]
         assert "## What was just said to me" not in prompt
         assert "## What moves me to speak" in prompt
     finally:
-        await lingua.shutdown()
+        await language.shutdown()
 
 
 def test_every_report_policy_branch_tags_its_intent_as_an_event():
@@ -242,19 +242,19 @@ def test_every_report_policy_branch_tags_its_intent_as_an_event():
 
 
 @pytest.mark.asyncio
-async def test_mundus_chat_never_leaves_lingua(bus: AsyncBus, tmp_path: Path):
+async def test_mundus_chat_never_leaves_language(bus: AsyncBus, tmp_path: Path):
     """Other avatars' chat and their identifiers are redacted like heard
     speech and never reach the bus or the log."""
     sentinel = "PURPLE-HERON-4471 said this"
     sender = "Avatar Two"
-    lingua = _make_lingua(bus, tmp_path, responses=["First reply.", "Second reply."])
-    await lingua.initialize()
+    language = _make_language(bus, tmp_path, responses=["First reply.", "Second reply."])
+    await language.initialize()
     try:
         chat = _snapshot(
             [("t1", _event("mundus", "mundus.chat", {"message": sentinel, "sender": sender}, 0.9))]
         )
-        await _say(lingua, about="chat event", snapshot=chat, about_kind="event")
-        await _say(lingua, about=sentinel, snapshot=_snapshot(), about_kind="heard")
+        await _say(language, about="chat event", snapshot=chat, about_kind="event")
+        await _say(language, about=sentinel, snapshot=_snapshot(), about_kind="heard")
 
         for key in await bus.client.keys("*"):
             try:
@@ -266,9 +266,9 @@ async def test_mundus_chat_never_leaves_lingua(bus: AsyncBus, tmp_path: Path):
                 assert sentinel not in body
                 assert sender not in body
 
-        records = _records(lingua.intent_log.path)
+        records = _records(language.intent_log.path)
         assert len(records) == 2
-        log_text = lingua.intent_log.path.read_text()
+        log_text = language.intent_log.path.read_text()
         assert sentinel not in log_text
         assert sender not in log_text
         assert HEARD_SPEECH_PLACEHOLDER in records[0]["faithful_rendering"]
@@ -278,15 +278,15 @@ async def test_mundus_chat_never_leaves_lingua(bus: AsyncBus, tmp_path: Path):
         assert sentinel not in serialized
         assert sender not in serialized
     finally:
-        await lingua.shutdown()
+        await language.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_nested_heard_field_never_leaves_lingua(bus: AsyncBus, tmp_path: Path):
+async def test_nested_heard_field_never_leaves_language(bus: AsyncBus, tmp_path: Path):
     """Heard-speech payload fields are redacted at any nesting depth."""
     sentinel = "PURPLE-HERON-4471 nested"
-    lingua = _make_lingua(bus, tmp_path, responses=["reply"])
-    await lingua.initialize()
+    language = _make_language(bus, tmp_path, responses=["reply"])
+    await language.initialize()
     try:
         note = _snapshot(
             [
@@ -301,7 +301,7 @@ async def test_nested_heard_field_never_leaves_lingua(bus: AsyncBus, tmp_path: P
                 )
             ]
         )
-        await _say(lingua, about="note", snapshot=note, about_kind="event")
+        await _say(language, about="note", snapshot=note, about_kind="event")
 
         for key in await bus.client.keys("*"):
             try:
@@ -311,12 +311,12 @@ async def test_nested_heard_field_never_leaves_lingua(bus: AsyncBus, tmp_path: P
             for payload in _payloads(entries):
                 assert sentinel not in json.dumps(payload)
 
-        assert sentinel not in lingua.intent_log.path.read_text()
+        assert sentinel not in language.intent_log.path.read_text()
 
         snapshot = _snapshot(_events_from_entries(await bus.client.xrange(EXTERNAL_STREAM)))
         assert sentinel not in _serialize_snapshot(snapshot)
     finally:
-        await lingua.shutdown()
+        await language.shutdown()
 
 
 def test_redact_heard_speech_external_types_and_nesting():
@@ -358,7 +358,7 @@ def test_external_input_types_single_source():
     )
 
 
-async def _assert_sentinel_nowhere(bus: AsyncBus, lingua, sentinel: str) -> None:
+async def _assert_sentinel_nowhere(bus: AsyncBus, language, sentinel: str) -> None:
     for key in await bus.client.keys("*"):
         try:
             entries = await bus.client.xrange(key)
@@ -366,7 +366,7 @@ async def _assert_sentinel_nowhere(bus: AsyncBus, lingua, sentinel: str) -> None
             continue
         for payload in _payloads(entries):
             assert sentinel not in json.dumps(payload)
-    assert sentinel not in lingua.intent_log.path.read_text()
+    assert sentinel not in language.intent_log.path.read_text()
 
 
 @pytest.mark.asyncio
@@ -376,16 +376,16 @@ async def test_nested_external_input_text_makes_an_event_about_heard(
     """An about that repeats text nested anywhere in an external-input event is
     heard speech, even when the trigger is tagged as an event."""
     sentinel = "PURPLE-HERON-4471 nested chat"
-    lingua = _make_lingua(bus, tmp_path, responses=["reply"])
-    await lingua.initialize()
+    language = _make_language(bus, tmp_path, responses=["reply"])
+    await language.initialize()
     try:
         chat = _snapshot(
             [("c1", _event("mundus", "mundus.chat", {"message": {"text": sentinel}}, 0.9))]
         )
-        await _say(lingua, about=sentinel, snapshot=chat, about_kind="event")
-        await _assert_sentinel_nowhere(bus, lingua, sentinel)
+        await _say(language, about=sentinel, snapshot=chat, about_kind="event")
+        await _assert_sentinel_nowhere(bus, language, sentinel)
     finally:
-        await lingua.shutdown()
+        await language.shutdown()
 
 
 @pytest.mark.asyncio
@@ -395,16 +395,16 @@ async def test_nested_heard_field_value_is_scrubbed_from_an_event_about(
     """A heard-speech field nested in any coalition event is scrubbed from the
     logged prompt even when an event-tagged about repeats it."""
     sentinel = "PURPLE-HERON-4471 nested field"
-    lingua = _make_lingua(bus, tmp_path, responses=["reply"])
-    await lingua.initialize()
+    language = _make_language(bus, tmp_path, responses=["reply"])
+    await language.initialize()
     try:
         note = _snapshot(
             [("n1", _event("nexus", "nexus.note", {"x": {"user_input": sentinel}}, 0.9))]
         )
-        await _say(lingua, about=sentinel, snapshot=note, about_kind="event")
-        assert sentinel not in lingua.intent_log.path.read_text()
+        await _say(language, about=sentinel, snapshot=note, about_kind="event")
+        assert sentinel not in language.intent_log.path.read_text()
     finally:
-        await lingua.shutdown()
+        await language.shutdown()
 
 
 def _events_from_entries(entries):
@@ -472,10 +472,10 @@ def test_redact_heard_speech_list_and_dict_fields():
 
 
 @pytest.mark.asyncio
-async def test_heard_list_payload_never_leaves_lingua(bus: AsyncBus, tmp_path: Path):
+async def test_heard_list_payload_never_leaves_language(bus: AsyncBus, tmp_path: Path):
     sentinel = "PURPLE-HERON-LIST-4471"
-    lingua = _make_lingua(bus, tmp_path, responses=["reply"])
-    await lingua.initialize()
+    language = _make_language(bus, tmp_path, responses=["reply"])
+    await language.initialize()
     try:
         event = _event(
             "nexus",
@@ -484,14 +484,14 @@ async def test_heard_list_payload_never_leaves_lingua(bus: AsyncBus, tmp_path: P
             0.9,
         )
         await _say(
-            lingua, about="reflecting", snapshot=_snapshot([("n1", event)]), about_kind="event"
+            language, about="reflecting", snapshot=_snapshot([("n1", event)]), about_kind="event"
         )
-        await _assert_sentinel_nowhere(bus, lingua, sentinel)
-        records = _records(lingua.intent_log.path)
+        await _assert_sentinel_nowhere(bus, language, sentinel)
+        records = _records(language.intent_log.path)
         assert records
         assert HEARD_SPEECH_PLACEHOLDER in records[-1]["faithful_rendering"]
     finally:
-        await lingua.shutdown()
+        await language.shutdown()
 
 
 @pytest.mark.asyncio
@@ -499,8 +499,8 @@ async def test_about_matching_list_field_value_is_scrubbed(
     bus: AsyncBus, tmp_path: Path
 ):
     sentinel = "PURPLE-HERON-LIST-4471"
-    lingua = _make_lingua(bus, tmp_path, responses=["reply"])
-    await lingua.initialize()
+    language = _make_language(bus, tmp_path, responses=["reply"])
+    await language.initialize()
     try:
         event = _event(
             "nexus",
@@ -509,8 +509,8 @@ async def test_about_matching_list_field_value_is_scrubbed(
             0.9,
         )
         await _say(
-            lingua, about=sentinel, snapshot=_snapshot([("n1", event)]), about_kind="event"
+            language, about=sentinel, snapshot=_snapshot([("n1", event)]), about_kind="event"
         )
-        await _assert_sentinel_nowhere(bus, lingua, sentinel)
+        await _assert_sentinel_nowhere(bus, language, sentinel)
     finally:
-        await lingua.shutdown()
+        await language.shutdown()

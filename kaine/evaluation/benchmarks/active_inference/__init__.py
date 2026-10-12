@@ -15,6 +15,6 @@ and a NEGATIVE result (underperforms) are both first-class, reportable outcomes.
 
 Everything here is OFFLINE: synthetic discrete POMDPs, no bus, no intents, no
 entity boot, no cognitive cycle. The active-inference agent reuses the *same*
-pymdp engine core (:meth:`kaine.modules.nous.engine.PymdpEngine.infer`) the live
+pymdp engine core (:meth:`kaine.modules.planning.engine.PymdpEngine.infer`) the live
 planning module drives, so the benchmarked engine IS the live engine.
 """

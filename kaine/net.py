@@ -18,7 +18,7 @@ stays import-legal from both the cycle runtime and the setup tooling.
 NOTE: the intentionally import-light standalone probes in ``scripts/`` and
 ``kaine.setup.__main__.probe_services`` are deliberate standalone
 reimplementations and are left untouched. Per-module user-overridable
-URL/port config defaults (e.g. ``kaine.modules.lingua.client``) are legitimate
+URL/port config defaults (e.g. ``kaine.modules.language.client``) are legitimate
 separate config, not part of this registry.
 """
 from __future__ import annotations

@@ -57,7 +57,7 @@ from kaine.workspace import (
     RuleBasedSalience,
     StaticAffectModulator,
     StaticGoalScorer,
-    Syneidesis,
+    Workspace,
 )
 
 ARMS: tuple[str, ...] = ("workspace_on", "pooled")
@@ -121,8 +121,8 @@ class MediationConfig:
         }
 
 
-def _build_syneidesis(config: MediationConfig) -> Syneidesis:
-    return Syneidesis(
+def _build_workspace(config: MediationConfig) -> Workspace:
+    return Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=32),
             goal_scorer=StaticGoalScorer(),
@@ -206,7 +206,7 @@ async def _run_arm(
         context_dim=CONTEXT_DIM,
     )
 
-    syn = _build_syneidesis(config) if arm == "workspace_on" else None
+    syn = _build_workspace(config) if arm == "workspace_on" else None
 
     interoception_gains: list[Optional[float]] = []
     vision_gains: list[Optional[float]] = []

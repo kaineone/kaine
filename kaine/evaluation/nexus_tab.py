@@ -248,10 +248,10 @@ def _aggregate_coherence(
     }
 
 
-def _aggregate_nous_policy(logs_root: Path) -> dict[str, Any]:
+def _aggregate_planning_policy(logs_root: Path) -> dict[str, Any]:
     """Aggregate the nous_policy rollup (active-inference policy logs).
 
-    The NousPolicyObserver records ``expected_free_energy`` (EFE), ``horizon``,
+    The PlanningPolicyObserver records ``expected_free_energy`` (EFE), ``horizon``,
     and the selected ``policy`` (action id string) to
     ``<evaluation_logs>/nous_policy/nous_policy-*.jsonl`` — numeric/string
     metadata only, no raw content. Returns the recent EFE series, the latest
@@ -433,11 +433,11 @@ def _aggregate(
     sleep_dir = logs_root / "sleep_snapshots"
     sleep_entries = _latest_lines(sleep_dir, name="sleep_snapshots", limit=20)
 
-    eidolon_dir = logs_root / "eidolon_accuracy"
-    eidolon_entries = _latest_lines(eidolon_dir, name="eidolon_accuracy", limit=60)
-    eidolon_series = [
+    self_model_dir = logs_root / "eidolon_accuracy"
+    self_model_entries = _latest_lines(self_model_dir, name="eidolon_accuracy", limit=60)
+    self_model_series = [
         {"ts": e.get("ts"), "aggregate": e.get("aggregate_accuracy")}
-        for e in eidolon_entries
+        for e in self_model_entries
     ]
 
     affect_dir = logs_root / "affect_correlation"
@@ -478,7 +478,7 @@ def _aggregate(
     welfare = _aggregate_welfare(logs_root, registry)
     prediction_error = _aggregate_prediction_error(logs_root, registry)
     coherence = _aggregate_coherence(logs_root)
-    nous_policy = _aggregate_nous_policy(logs_root)
+    planning_policy = _aggregate_planning_policy(logs_root)
     individuation = _aggregate_individuation(config)
 
     return {
@@ -486,7 +486,7 @@ def _aggregate(
         "voice_tracking": voice_series,
         "proactive_triggers": proactive_triggers,
         "sleep_snapshots": sleep_entries,
-        "eidolon_accuracy": eidolon_series,
+        "eidolon_accuracy": self_model_series,
         "affect_correlation": correlation_matrix,
         "attribution_total": attribution_total,
         "attribution_hour": attribution_hour,
@@ -495,6 +495,6 @@ def _aggregate(
         "welfare": welfare,
         "prediction_error": prediction_error,
         "coherence": coherence,
-        "nous_policy": nous_policy,
+        "nous_policy": planning_policy,
         "individuation": individuation,
     }

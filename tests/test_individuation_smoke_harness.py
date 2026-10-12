@@ -157,7 +157,7 @@ class _FakeClient:
         return None
 
 
-class _FakeLingua:
+class _FakeLanguage:
     def __init__(self) -> None:
         self.chat_client = _FakeClient()
         self.facts: list[str] = []
@@ -207,7 +207,7 @@ def test_main_async_runs_end_to_end_with_a_fake_organ(tmp_path, monkeypatch):
     import json as _json
 
     smoke = _load_smoke()
-    monkeypatch.setattr("kaine.boot.make_lingua", lambda bus, section: _FakeLingua())
+    monkeypatch.setattr("kaine.boot.make_language", lambda bus, section: _FakeLanguage())
     monkeypatch.setattr(
         "kaine.text_embedding.make_text_embedder", lambda cfg: _FakeEmbedder()
     )

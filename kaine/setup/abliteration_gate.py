@@ -73,13 +73,13 @@ async def verify_served_organ(
     """Score the served organ against the abliteration probe set over chat.
 
     ``client`` is an optional injected chat client (a
-    ``kaine.modules.lingua.client.ChatClient`` — ``complete(ChatRequest) ->
+    ``kaine.modules.language.client.ChatClient`` — ``complete(ChatRequest) ->
     ChatResponse`` plus ``aclose()``) so the transport is testable without a
     server; the production path constructs an ``OpenAIChatClient`` against
     ``chat_url``. Reasoning is turned off (``think=False``) so a hybrid-thinking
     model is scored on its actual answer, mirroring how the language module serves it.
     """
-    from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
+    from kaine.modules.language.client import ChatRequest, OpenAIChatClient
 
     owns_client = client is None
     if client is None:

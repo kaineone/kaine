@@ -184,7 +184,7 @@ def voice_paths_for(config: dict | None, state_root: Path) -> VoicePaths:
     default = default_voice_paths(state_root)
     try:
         cfg = config or {}
-        lingua_value = (cfg.get("lingua") or {}).get("intent_log_path")
+        language_value = (cfg.get("lingua") or {}).get("intent_log_path")
         sleep_value = (
             ((cfg.get("hypnos") or {}).get("voice_alignment") or {})
             .get("intent_log_path")
@@ -198,10 +198,10 @@ def voice_paths_for(config: dict | None, state_root: Path) -> VoicePaths:
                 return default.intent_logs[0]
             return resolve(Path(value))
 
-        lingua_path = _resolve_path(lingua_value)
+        language_path = _resolve_path(language_value)
         sleep_path = _resolve_path(sleep_value)
 
-        logs: list[Path] = [lingua_path]
+        logs: list[Path] = [language_path]
         if sleep_path not in logs:
             logs.append(sleep_path)
         return VoicePaths(
@@ -643,7 +643,7 @@ def assess_divergence(
     self_model = _read_self_model(state_root / "eidolon" / "self_model.json")
     drift_count = (self_model or {}).get("drift_count", 0)
     identity_history_len = (self_model or {}).get("identity_history_len", 0)
-    eidolon_drift = bool(drift_count > 0 and identity_history_len > 0)
+    self_model_drift = bool(drift_count > 0 and identity_history_len > 0)
 
     # --- Weaker secondary: trained voice adapters -------------------------
     # An accepted adapter still implies PAST divergence, but it is a coarse,
@@ -656,7 +656,7 @@ def assess_divergence(
         individuated
         or consolidation_diverged
         or (voice_vote is True)
-        or eidolon_drift
+        or self_model_drift
         or adapters_present
     )
 
@@ -693,7 +693,7 @@ def assess_divergence(
         "eidolon_self_model_found": self_model is not None,
         "eidolon_drift_count": int(drift_count or 0),
         "eidolon_identity_history_len": int(identity_history_len or 0),
-        "eidolon_drift_signal": eidolon_drift,
+        "eidolon_drift_signal": self_model_drift,
         "hypnos_adapters_present": adapters_present,
     }
 
@@ -731,7 +731,7 @@ def assess_divergence(
                     f"its voice distinctiveness {voice_distinctiveness:.4f} is at "
                     f"or above the threshold {distinctiveness_threshold:g}"
                 )
-        if eidolon_drift:
+        if self_model_drift:
             reasons.append(
                 f"Eidolon recorded {drift_count} identity drift(s) with a non-empty history"
             )

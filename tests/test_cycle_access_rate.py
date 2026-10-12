@@ -11,7 +11,7 @@ from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
 from kaine.cycle import CognitiveCycle
 from kaine.cycle.access_rate import AccessRateConfig, AccessRateController
-from tests._fakes import FakeClock, FakeRegistry, FakeSyneidesis
+from tests._fakes import FakeClock, FakeRegistry, FakeWorkspace
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ async def adaptive_cycle():
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
     clock = FakeClock()
-    syn = FakeSyneidesis()
+    syn = FakeWorkspace()
     reg = FakeRegistry([])
 
     _arousal = [0.3]
@@ -34,7 +34,7 @@ async def adaptive_cycle():
     access_rate = AccessRateController(AccessRateConfig())
     cycle = CognitiveCycle(
         bus=bus,
-        syneidesis=syn,
+        workspace=syn,
         registry=reg,
         processing_rate_hz=10.0,
         experiential_rate_hz=3.333,
@@ -171,7 +171,7 @@ async def test_two_cycles_are_deterministic():
         client = fakeredis.FakeRedis(decode_responses=True)
         bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
         clock = FakeClock()
-        syn = FakeSyneidesis()
+        syn = FakeWorkspace()
         reg = FakeRegistry([])
         idx = [0]
 
@@ -183,7 +183,7 @@ async def test_two_cycles_are_deterministic():
         access_rate = AccessRateController(AccessRateConfig())
         cycle = CognitiveCycle(
             bus=bus,
-            syneidesis=syn,
+            workspace=syn,
             registry=reg,
             processing_rate_hz=10.0,
             experiential_rate_hz=3.333,

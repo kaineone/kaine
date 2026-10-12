@@ -21,7 +21,6 @@ from kaine.evaluation.ab_divergence import (
 from kaine.evaluation.affect_correlation import AffectCorrelationRecorder
 from kaine.evaluation.attribution import AttributionRecorder
 from kaine.evaluation.config import EvaluationConfig, ResearchEventLogConfig
-from kaine.evaluation.eidolon_accuracy import EidolonAccuracyRunner
 from kaine.evaluation.embeddings import (
     HashEmbedder,
     TextEmbedder,
@@ -33,20 +32,21 @@ from kaine.evaluation.memory_probes import (
 )
 from kaine.evaluation.observers.ablation_observer import AblationObserver
 from kaine.evaluation.observers.coherence_observer import CoherenceObserver
-from kaine.evaluation.observers.empatheia_observer import EmpatheiaObserver
 from kaine.evaluation.observers.external_utterance_log import ExternalUtteranceLog
 from kaine.evaluation.observers.fatigue_observer import FatigueObserver
 from kaine.evaluation.observers.nexus_record import NexusRecord
-from kaine.evaluation.observers.nous_policy_observer import NousPolicyObserver
+from kaine.evaluation.observers.planning_policy_observer import PlanningPolicyObserver
 from kaine.evaluation.observers.prediction_error_observer import PredictionErrorObserver
 from kaine.evaluation.observers.raw_bus_archive_consumer import RawBusArchiveConsumer
 from kaine.evaluation.observers.replay_observer import ReplayObserver
 from kaine.evaluation.observers.research_event_observer import ResearchEventObserver
+from kaine.evaluation.observers.social_cognition_observer import SocialCognitionObserver
 from kaine.evaluation.observers.voice_alignment_divergence_observer import (
     VoiceAlignmentDivergenceObserver,
 )
 from kaine.evaluation.observers.welfare_observer import WelfareObserver, build_welfare_producer
 from kaine.evaluation.proactive_audit import ProactiveAuditObserver
+from kaine.evaluation.self_model_accuracy import SelfModelAccuracyRunner
 from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.evaluation.sleep_snapshots import SleepSnapshotRecorder
 from kaine.evaluation.trajectory import TrajectoryRecorder
@@ -325,14 +325,14 @@ class SidecarRegistry:
                     context_window_seconds=config.llm_context_window_seconds,
                 )
             )
-        if config.eidolon_accuracy and self._cognitive_client:
+        if config.self_model_accuracy and self._cognitive_client:
             sink = self._make_sink("eidolon_accuracy", "eidolon_accuracy")
             self._observers.append(
-                EidolonAccuracyRunner(
+                SelfModelAccuracyRunner(
                     sink,
                     cognitive_client=self._cognitive_client,
                     evaluation_logs_dir=resolve(config.paths.evaluation_logs),
-                    interval_seconds=config.eidolon_accuracy_interval_hours * 3600.0,
+                    interval_seconds=config.self_model_accuracy_interval_hours * 3600.0,
                 )
             )
 
@@ -351,9 +351,9 @@ class SidecarRegistry:
             )
             self._observers.append(replay_wrapper._episodic_memory)
             self._observers.append(replay_wrapper._world_model)
-        if obs_cfg.empatheia:
+        if obs_cfg.social_cognition:
             sink = self._make_sink("empatheia", "empatheia")
-            self._observers.append(EmpatheiaObserver(self._bus, sink))
+            self._observers.append(SocialCognitionObserver(self._bus, sink))
         if obs_cfg.voice_alignment_divergence:
             sink = self._make_sink(
                 "voice_alignment_divergence", "voice_alignment_divergence"
@@ -374,9 +374,9 @@ class SidecarRegistry:
             self._sinks.append(sink)
             self._observers.append(observer)
             self._welfare_observer = observer
-        if obs_cfg.nous_policy:
+        if obs_cfg.planning_policy:
             sink = self._make_sink("nous_policy", "nous_policy")
-            self._observers.append(NousPolicyObserver(self._bus, sink))
+            self._observers.append(PlanningPolicyObserver(self._bus, sink))
 
     async def start(self) -> None:
         # Start when the evaluation sidecar OR any research-event-log component

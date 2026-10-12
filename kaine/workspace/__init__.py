@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
+from kaine.workspace.core import Workspace
 from kaine.workspace.novelty import NoveltyTracker, fingerprint
 from kaine.workspace.salience import RuleBasedSalience
 from kaine.workspace.strategies import (
@@ -12,7 +13,6 @@ from kaine.workspace.strategies import (
     StaticGoalScorer,
     dominant_drive,
 )
-from kaine.workspace.syneidesis import Syneidesis
 
 __all__ = [
     "DriveRelevanceGoalScorer",
@@ -22,7 +22,7 @@ __all__ = [
     "SalienceStrategy",
     "StaticGoalScorer",
     "StaticAffectModulator",
-    "Syneidesis",
+    "Workspace",
     "AffectModulator",
     "dominant_drive",
     "fingerprint",

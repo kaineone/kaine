@@ -23,7 +23,7 @@ The language module's utterances are recorded and observed, and they are not a m
 
 ## Context and persona
 
-`ContextAssembler` (`kaine/modules/lingua/context.py`) builds each request's `(system, prompt)` pair from a first-person persona, a rendering of the cached coalition, and the intent's `about`.
+`ContextAssembler` (`kaine/modules/language/context.py`) builds each request's `(system, prompt)` pair from a first-person persona, a rendering of the cached coalition, and the intent's `about`.
 
 The language module caches the coalition of the latest accessed broadcast as it arrives on `workspace.broadcast`. An inhibited broadcast leaves the previous one in place, and before the first accessed broadcast the awareness block reads *"Nothing in particular stands out to me right now."* The `FaithfulRenderer` renders at most `context_max_events` coalition members, chosen by score and kept within `context_char_budget` characters, then put back in coalition order. Drive crossings reach the organ as fixed descriptive phrases, never as numbers.
 
@@ -31,7 +31,7 @@ The language module caches the coalition of the latest accessed broadcast as it 
 system
   = "My name is …" (when persona_name or the self-model gives a name)
   + persona_external or persona_internal
-  + "I value …", "I hold to: …" (when Eidolon's self-model has values or norms)
+  + "I value …", "I hold to: …" (when SelfModel's self-model has values or norms)
   + "Facts about my situation: …" (when any are recorded)
   + awareness guard
 
@@ -109,7 +109,7 @@ The utterance-outcome observer reads `[lingua].outcome_reply_window_s` (30 s by 
 
 ### Client
 
-`OpenAIChatClient` (`kaine/modules/lingua/client.py`) posts to `/chat/completions`. When `think` is set, the request carries `chat_template_kwargs: {"enable_thinking": <think>}` and `reasoning_effort` (`"none"` for `false`, `"high"` for `true`). If the server answers HTTP 400 and names the template keyword, the client retries once without those fields. If thinking slips through and the visible content comes back empty, the client falls back to the reasoning field.
+`OpenAIChatClient` (`kaine/modules/language/client.py`) posts to `/chat/completions`. When `think` is set, the request carries `chat_template_kwargs: {"enable_thinking": <think>}` and `reasoning_effort` (`"none"` for `false`, `"high"` for `true`). If the server answers HTTP 400 and names the template keyword, the client retries once without those fields. If thinking slips through and the visible content comes back empty, the client falls back to the reasoning field.
 
 When an organ adapter is active, the client asks its LoRA resolver for the per-entity adapter and sends `lora` and `cache_prompt: false` with the request. The resolver returns an adapter only when its hash matches this entity's own promoted adapter.
 
@@ -179,26 +179,26 @@ The window closes at the first reply, at the entity's next utterance, or after t
 
 | File | Role |
 |---|---|
-| [`kaine/modules/lingua/module.py`](../../kaine/modules/lingua/module.py) | `Lingua`: intent loop, coalition cache, `speak()`, `think()` |
-| [`kaine/modules/lingua/context.py`](../../kaine/modules/lingua/context.py) | `ContextAssembler` and the default personas |
-| [`kaine/modules/lingua/client.py`](../../kaine/modules/lingua/client.py) | `OpenAIChatClient`, the in-process backend, per-request LoRA |
-| [`kaine/modules/lingua/intent_log.py`](../../kaine/modules/lingua/intent_log.py) | `IntentExpressionLog` |
-| `kaine/boot/factories/lingua.py` | Config keys and backend selection |
+| [`kaine/modules/language/module.py`](../../kaine/modules/language/module.py) | `Language`: intent loop, coalition cache, `speak()`, `think()` |
+| [`kaine/modules/language/context.py`](../../kaine/modules/language/context.py) | `ContextAssembler` and the default personas |
+| [`kaine/modules/language/client.py`](../../kaine/modules/language/client.py) | `OpenAIChatClient`, the in-process backend, per-request LoRA |
+| [`kaine/modules/language/intent_log.py`](../../kaine/modules/language/intent_log.py) | `IntentExpressionLog` |
+| `kaine/boot/factories/language.py` | Config keys and backend selection |
 | `kaine/workspace/report_policy.py` | `SelfInitiatedReportPolicy`, which issues the base form's intents |
 
 ## Tests
 
 | File | Coverage |
 |---|---|
-| `tests/test_lingua_client.py` | Request shaping, thinking suppression, HTTP 400 retry |
-| `tests/test_lingua_context.py` | System and prompt construction, awareness guard |
-| `tests/test_lingua_intent_log.py` | Log records and fields |
-| `tests/test_lingua_module.py` | Intent loop, coalition cache, speak and think routing, stream separation |
-| `tests/test_lingua_bus_self_model.py` | Persona from the self-model module's bus snapshot |
-| `tests/test_lingua_conditioning_boot.py` | Prompt conditioning at boot |
-| `tests/test_lingua_reasoning_effort.py` | `reasoning_effort` field |
-| `tests/test_lingua_backend_names.py` | `openai`, `ollama` and unset all resolve to the HTTP client |
-| `tests/test_lingua_client_probe_fields.py` | Seed on the wire, and whether an answer came from the content field or a fallback |
+| `tests/test_language_client.py` | Request shaping, thinking suppression, HTTP 400 retry |
+| `tests/test_language_context.py` | System and prompt construction, awareness guard |
+| `tests/test_language_intent_log.py` | Log records and fields |
+| `tests/test_language_module.py` | Intent loop, coalition cache, speak and think routing, stream separation |
+| `tests/test_language_bus_self_model.py` | Persona from the self-model module's bus snapshot |
+| `tests/test_language_conditioning_boot.py` | Prompt conditioning at boot |
+| `tests/test_language_reasoning_effort.py` | `reasoning_effort` field |
+| `tests/test_language_backend_names.py` | `openai`, `ollama` and unset all resolve to the HTTP client |
+| `tests/test_language_client_probe_fields.py` | Seed on the wire, and whether an answer came from the content field or a fallback |
 | `tests/test_utterance_outcome.py` | Utterance-outcome observer |
 
 ## Spec and related pages

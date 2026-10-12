@@ -25,12 +25,16 @@ from kaine.evaluation.ab_divergence import (
     FakeBareInferenceClient,
 )
 from kaine.evaluation.config import EvaluationConfig
-from kaine.evaluation.eidolon_accuracy import CLAIM_KEYWORDS, EidolonAccuracyRunner, parse_claims
 from kaine.evaluation.embeddings import HashEmbedder, SentenceTransformerTextEmbedder
 from kaine.evaluation.memory_probes import MemoryProbeRunner
-from kaine.evaluation.observers.empatheia_observer import EmpatheiaObserver
+from kaine.evaluation.observers.social_cognition_observer import SocialCognitionObserver
 from kaine.evaluation.registry import SidecarRegistry
-from kaine.nexus.health import DEGRADED, DOWN, UP, nous_health_probe
+from kaine.evaluation.self_model_accuracy import (
+    CLAIM_KEYWORDS,
+    SelfModelAccuracyRunner,
+    parse_claims,
+)
+from kaine.nexus.health import DEGRADED, DOWN, UP, planning_health_probe
 
 # ---------------------------------------------------------------------------
 # Shared test helpers
@@ -391,7 +395,7 @@ def test_claim_keywords_curiosity_maps_to_proxy():
 
 
 @pytest.mark.asyncio
-async def test_eidolon_accuracy_curiosity_proxy_used_field(tmp_path):
+async def test_self_model_accuracy_curiosity_proxy_used_field(tmp_path):
     """When the entity self-describes as curious and the proactive_audit file
     exists, the output record must carry curiosity_proxy_used=True."""
     # Create a proactive_audit log with content.
@@ -403,7 +407,7 @@ async def test_eidolon_accuracy_curiosity_proxy_used_field(tmp_path):
 
     sink = _CaptureSink()
     client = _FakeCognitiveClient("I am curious and engaged.")
-    obs = EidolonAccuracyRunner(
+    obs = SelfModelAccuracyRunner(
         sink,
         cognitive_client=client,
         evaluation_logs_dir=tmp_path / "eval",
@@ -415,11 +419,11 @@ async def test_eidolon_accuracy_curiosity_proxy_used_field(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_eidolon_accuracy_curiosity_proxy_used_false_when_no_audit_file(tmp_path):
+async def test_self_model_accuracy_curiosity_proxy_used_false_when_no_audit_file(tmp_path):
     """When no proactive_audit file exists, curiosity_proxy_used is False."""
     sink = _CaptureSink()
     client = _FakeCognitiveClient("I am curious.")
-    obs = EidolonAccuracyRunner(
+    obs = SelfModelAccuracyRunner(
         sink,
         cognitive_client=client,
         evaluation_logs_dir=tmp_path / "eval",
@@ -436,11 +440,11 @@ async def test_eidolon_accuracy_curiosity_proxy_used_false_when_no_audit_file(tm
 
 
 @pytest.mark.asyncio
-async def test_empatheia_observer_skips_missing_confidence(tmp_path):
+async def test_social_cognition_observer_skips_missing_confidence(tmp_path):
     """When audition.emotion event has no 'confidence' key, no record is written."""
     bus = FakeBus()
     sink = _CaptureSink()
-    obs = EmpatheiaObserver(bus, sink, poll_interval_s=0.05)
+    obs = SocialCognitionObserver(bus, sink, poll_interval_s=0.05)
 
     # Push a prediction.
     bus.push(
@@ -469,11 +473,11 @@ async def test_empatheia_observer_skips_missing_confidence(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_empatheia_observer_scores_present_confidence(tmp_path):
+async def test_social_cognition_observer_scores_present_confidence(tmp_path):
     """When audition.emotion has 'confidence', the record is written with confidence_present=True."""
     bus = FakeBus()
     sink = _CaptureSink()
-    obs = EmpatheiaObserver(bus, sink, poll_interval_s=0.05)
+    obs = SocialCognitionObserver(bus, sink, poll_interval_s=0.05)
 
     bus.push(
         "empatheia.out",
@@ -506,23 +510,23 @@ async def test_empatheia_observer_scores_present_confidence(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_nous_probe_up_includes_generative_model_built():
+async def test_planning_probe_up_includes_generative_model_built():
     """When pymdp+jax are importable, probe only returns UP if the
     generative model can be built."""
     pytest.importorskip("pymdp")
     pytest.importorskip("jax")
-    status, detail = await nous_health_probe()
+    status, detail = await planning_health_probe()
     assert status == UP
     assert "generative model built" in detail
 
 
 @pytest.mark.asyncio
-async def test_nous_probe_degraded_when_build_fails(monkeypatch):
+async def test_planning_probe_degraded_when_build_fails(monkeypatch):
     """When imports succeed but build_generative_model raises, probe returns DEGRADED."""
     pytest.importorskip("pymdp")
     pytest.importorskip("jax")
 
-    import kaine.modules.nous.generative_model as gm_mod
+    import kaine.modules.planning.generative_model as gm_mod
     monkeypatch.setattr(
         gm_mod,
         "build_generative_model",
@@ -533,13 +537,13 @@ async def test_nous_probe_degraded_when_build_fails(monkeypatch):
         raise RuntimeError("build exploded")
 
     monkeypatch.setattr(gm_mod, "build_generative_model", _broken)
-    status, detail = await nous_health_probe()
+    status, detail = await planning_health_probe()
     assert status == DEGRADED
     assert "build failed" in detail
 
 
 @pytest.mark.asyncio
-async def test_nous_probe_down_when_import_fails(monkeypatch):
+async def test_planning_probe_down_when_import_fails(monkeypatch):
     """Import failure still returns DOWN."""
     real_import = builtins.__import__
 
@@ -549,6 +553,6 @@ async def test_nous_probe_down_when_import_fails(monkeypatch):
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
-    status, detail = await nous_health_probe()
+    status, detail = await planning_health_probe()
     assert status == DOWN
     assert "import failed" in detail

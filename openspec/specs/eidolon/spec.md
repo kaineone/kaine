@@ -91,7 +91,7 @@ seconds (default 30) while running. `shutdown()` SHALL force a final
 save regardless of how recently the periodic save fired.
 
 #### Scenario: Shutdown forces a final save
-- **WHEN** `Eidolon.shutdown()` is awaited
+- **WHEN** `SelfModel.shutdown()` is awaited
 - **THEN** the on-disk file reflects the current in-memory SelfModelDocument
 
 ### Requirement: Default Self-model config and disabled-by-default

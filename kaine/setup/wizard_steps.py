@@ -347,7 +347,7 @@ def custom_modules_step() -> Step:
 # -----------------------------------------------------------------------------
 
 
-def lingua_model_step() -> Step:
+def language_model_step() -> Step:
     def applies(ctx: StepContext) -> bool:
         return bool((ctx.config.get("modules") or {}).get("lingua"))
 
@@ -389,12 +389,12 @@ def lingua_model_step() -> Step:
     )
 
 
-def _vox_backend(ctx: StepContext) -> str:
+def _vocal_backend(ctx: StepContext) -> str:
     shipped = ctx.extra.get("shipped_config") or {}
     return str((shipped.get("vox") or {}).get("backend", "chatterbox")).strip().lower()
 
 
-def vox_voice_step() -> Step:
+def vocal_voice_step() -> Step:
     # Applies whenever the vocal module is on. The Chatterbox backend asks for a voice id,
     # but an empty answer leaves the choice to the vocal module; any other backend asks
     # nothing and says so, as the terminal wizard does.
@@ -402,7 +402,7 @@ def vox_voice_step() -> Step:
         return bool((ctx.config.get("modules") or {}).get("vox"))
 
     def explanation(ctx: StepContext) -> list[str]:
-        if _vox_backend(ctx) != "chatterbox":
+        if _vocal_backend(ctx) != "chatterbox":
             return [
                 "  Vox speaks through sherpa-onnx Kokoro (preset speaker "
                 "[vox].sherpa_speaker_id); no Chatterbox voice needed."
@@ -418,7 +418,7 @@ def vox_voice_step() -> Step:
         return lines
 
     def fields(ctx: StepContext) -> tuple[Field, ...]:
-        if _vox_backend(ctx) != "chatterbox":
+        if _vocal_backend(ctx) != "chatterbox":
             return ()
         existing = ctx.extra.get("existing_config") or {}
         shipped = ctx.extra.get("shipped_config") or {}
@@ -442,7 +442,7 @@ def vox_voice_step() -> Step:
         )
 
     def apply(ctx: StepContext, answers: dict[str, Any]) -> None:
-        if _vox_backend(ctx) != "chatterbox":
+        if _vocal_backend(ctx) != "chatterbox":
             return
         voice_id = answers.get("voice_id", "")
         if voice_id:
@@ -589,8 +589,8 @@ def setup_steps(include_storage: bool) -> list[Step]:
             accel_mismatch_step(),
             module_preset_step(),
             custom_modules_step(),
-            lingua_model_step(),
-            vox_voice_step(),
+            language_model_step(),
+            vocal_voice_step(),
             audition_stt_step(),
             trainer_provisioning_step(),
             research_opt_in_step(),

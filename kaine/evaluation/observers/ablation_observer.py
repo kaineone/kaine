@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.evaluation.sink import AsyncJsonlSink
-from kaine.workspace.syneidesis import selection_delta
+from kaine.workspace.core import selection_delta
 
 log = logging.getLogger(__name__)
 

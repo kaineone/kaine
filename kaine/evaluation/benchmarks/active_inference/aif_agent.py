@@ -4,9 +4,9 @@
 """Active-inference agent adapter — drives the *live* planning module's pymdp engine.
 
 This adapter is the head-to-head subject under test. It does NOT re-implement
-active inference: it constructs a :class:`kaine.modules.nous.generative_model.
+active inference: it constructs a :class:`kaine.modules.planning.generative_model.
 GenerativeModel` from an env's ``A``/``B``/``C``/``D`` tensors and runs it
-through :class:`kaine.modules.nous.engine.PymdpEngine` — the *same* pymdp 1.0
+through :class:`kaine.modules.planning.engine.PymdpEngine` — the *same* pymdp 1.0
 ``Agent`` + belief-update + EFE policy-selection core the live cognitive loop
 drives (``PymdpEngine.infer``). So the benchmarked engine IS the live engine;
 only the observations and the generative model are the task's rather than the
@@ -33,8 +33,8 @@ from typing import Any
 import numpy as np
 
 from kaine.evaluation.benchmarks.active_inference.envs import DiscretePOMDP
-from kaine.modules.nous.engine import PymdpEngine
-from kaine.modules.nous.generative_model import GenerativeModel
+from kaine.modules.planning.engine import PymdpEngine
+from kaine.modules.planning.generative_model import GenerativeModel
 
 
 def build_model_for_env(task: DiscretePOMDP) -> GenerativeModel:

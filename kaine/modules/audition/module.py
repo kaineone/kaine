@@ -23,7 +23,7 @@ from kaine.modules.positive_control import (
 )
 
 if TYPE_CHECKING:
-    from kaine.modules.vox.coordination import SpeakingGate
+    from kaine.modules.vocal.coordination import SpeakingGate
 from kaine.modules.audition.acoustic import (
     AcousticEncoder,
     SpectralAcousticEncoder,

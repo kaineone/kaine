@@ -548,6 +548,28 @@ are the ones the sections above leave open; each follows from those sections.
   word; the seven modules renamed so far were re-run for the leftovers. A
   `__file__`-relative path takes the move scope of the path it resolves to, and
   the template and asset file-name rule sits below the quadlet and compose check.
+- **Found in PR 5c.** One more codemod rule, with a fixture case: every element of
+  an `__all__` list or tuple, assigned with `=` or extended with `+=`, is an
+  identifier, where before only the first element was. Two key overrides send
+  `workspace.syneidesis` and `workspace/syneidesis` to `workspace.core` and
+  `workspace/core`, because the workspace module already lives in the
+  `kaine.workspace` package and the plain rule would give
+  `kaine.workspace.workspace`. Two more path overrides keep test names from
+  stuttering (`tests/test_effectors.py`, `tests/test_workspace_core.py`), and the
+  repository dry-run test now fails on any planned move, or any tracked file, whose
+  name repeats a new module key. Fourteen collisions are accepted in
+  `ACCEPTED_COLLISIONS` after a check by hand. One was a real clash: in
+  `kaine/boot/wiring.py` the effectors module and the list of its effector names
+  shared a local name, so the list is now `effector_names`. Strings that name a
+  renamed Python symbol are outside the identifier rule and were fixed by hand: a
+  test's keyword dict for the individuation scheduler (`language_idle`) and runtime
+  (`language`), the boot phase list (`_phase_action_selection`), two source-text
+  assertions on `action_selection_cfg`, and the red-team case kinds, which select a
+  driver method by name and are now `planning_proposal_*`. The case ids, which
+  reports carry, keep their old text. A guard test checks that every red-team case
+  kind has a driver. Comments and docstrings that name a renamed function (such as
+  `make_lingua` or `_phase_volition`) keep the old name, as in 5a and 5b, because
+  comments take the prose rules; the close-out sweeps them.
 - **Local data.** `tests/test_legacy_local_data.py` runs only when
   `KAINE_LOCAL_DATA_ROOT` is set. It copies `backups/` and `state/forks/` to a
   temporary directory, reads everything from the copy with every read-map on,

@@ -17,8 +17,8 @@ from kaine.cycle.revive_boot import (
     revive_into,
 )
 from kaine.lifecycle.manager import ForkManager
-from kaine.modules.eidolon import Eidolon, SelfModelDocument
 from kaine.modules.registry import ModuleRegistry
+from kaine.modules.self_model import SelfModel, SelfModelDocument
 
 
 class _ExtraModule:
@@ -40,8 +40,8 @@ async def bus():
 
 
 @pytest_asyncio.fixture
-async def eidolon(tmp_path, bus):
-    eid = Eidolon(bus, persistence_path=tmp_path / "sm.json", save_interval_s=60)
+async def self_model(tmp_path, bus):
+    eid = SelfModel(bus, persistence_path=tmp_path / "sm.json", save_interval_s=60)
     await eid.initialize()
     eid._model = SelfModelDocument(name="revive-boot-test", values=["continuity"])
     yield eid
@@ -66,8 +66,8 @@ async def test_prepare_revive_refuses_directory_without_snapshot(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_prepare_revive_reads_preservation_id(tmp_path, eidolon):
-    bundle = await _make_bundle(tmp_path, eidolon)
+async def test_prepare_revive_reads_preservation_id(tmp_path, self_model):
+    bundle = await _make_bundle(tmp_path, self_model)
     plan = prepare_revive(bundle)
     manifest_path = bundle / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
@@ -80,13 +80,13 @@ async def test_prepare_revive_reads_preservation_id(tmp_path, eidolon):
 
 
 @pytest.mark.asyncio
-async def test_revive_into_restores_eidolon_and_reports_new_faculty(
-    tmp_path, bus, eidolon
+async def test_revive_into_restores_self_model_and_reports_new_faculty(
+    tmp_path, bus, self_model
 ):
-    bundle = await _make_bundle(tmp_path, eidolon)
+    bundle = await _make_bundle(tmp_path, self_model)
 
     reg2 = ModuleRegistry()
-    eid2 = Eidolon(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
+    eid2 = SelfModel(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
     await eid2.initialize()
     reg2.register(eid2)
     reg2.register(_ExtraModule())
@@ -99,14 +99,14 @@ async def test_revive_into_restores_eidolon_and_reports_new_faculty(
 
 
 @pytest.mark.asyncio
-async def test_revive_into_refuses_missing_captured_module(tmp_path, bus, eidolon):
+async def test_revive_into_refuses_missing_captured_module(tmp_path, bus, self_model):
     reg = ModuleRegistry()
-    reg.register(eidolon)
+    reg.register(self_model)
     reg.register(_ExtraModule())
-    bundle = await _make_bundle(tmp_path, eidolon, registry=reg)
+    bundle = await _make_bundle(tmp_path, self_model, registry=reg)
 
     reg2 = ModuleRegistry()
-    eid2 = Eidolon(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
+    eid2 = SelfModel(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
     await eid2.initialize()
     reg2.register(eid2)
 
@@ -116,11 +116,11 @@ async def test_revive_into_refuses_missing_captured_module(tmp_path, bus, eidolo
 
 
 async def _make_bundle(
-    tmp_path, eidolon, *, registry: ModuleRegistry | None = None
+    tmp_path, self_model, *, registry: ModuleRegistry | None = None
 ) -> Path:
     reg = registry or ModuleRegistry()
     if registry is None:
-        reg.register(eidolon)
+        reg.register(self_model)
     fork_root = tmp_path / "forks"
     out_root = tmp_path / "backups"
     fm = ForkManager(fork_root)

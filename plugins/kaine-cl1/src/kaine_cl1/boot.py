@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from kaine_cl1.backends.interoception import WetwareInteroceptiveModel
-from kaine_cl1.backends.nous import WetwarePolicyEngine
+from kaine_cl1.backends.planning import WetwarePolicyEngine
 from kaine_cl1.backends.sequence import WetwareTimingModel
 from kaine_cl1.substrate.broker import ChannelTerritory, SubstrateBroker
 
@@ -45,7 +45,7 @@ class WetwareBackendSpec:
     inject_kwarg: str
 
 
-def _nous_wrapper(
+def _planning_wrapper(
     broker: SubstrateBroker, territory: ChannelTerritory, *, mode: str = "shadow", seed: int = 0
 ) -> Callable[[Any], WetwarePolicyEngine]:
     """Return kaine's ``engine_wrapper``: wrap the engine kaine built in a policy proposer on
@@ -68,7 +68,7 @@ WETWARE_BACKENDS: dict[str, WetwareBackendSpec] = {
         inject_kwarg="forward_model",
     ),
     "nous": WetwareBackendSpec(
-        make=_nous_wrapper,
+        make=_planning_wrapper,
         inject_kwarg="engine_wrapper",
     ),
 }

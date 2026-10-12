@@ -23,10 +23,10 @@ same interval.
 
 #### Scenario: Custom strategy substitutes cleanly
 - **WHEN** the caller passes a custom `SalienceStrategy` that always returns 0.9
-- **THEN** `Syneidesis.select` uses that strategy without modification
+- **THEN** `Workspace.select` uses that strategy without modification
 
 ### Requirement: Top-k coalition selection
-`Syneidesis.select` SHALL return a `WorkspaceSnapshot` whose
+`Workspace.select` SHALL return a `WorkspaceSnapshot` whose
 `selected_events` is the top `top_k` events by salience, ordered
 descending. The default `top_k` SHALL be 5 and SHALL be configurable at
 construction time and adjustable at runtime via `set_top_k`.
@@ -41,7 +41,7 @@ construction time and adjustable at runtime via `set_top_k`.
 - **THEN** the snapshot contains both events without padding
 
 ### Requirement: Executive inhibition flag
-`Syneidesis.select` SHALL set `WorkspaceSnapshot.inhibited` to `True`
+`Workspace.select` SHALL set `WorkspaceSnapshot.inhibited` to `True`
 when the top-1 salience score is strictly less than
 `publication_threshold`, and `False` otherwise. The cycle continues to
 broadcast inhibited snapshots; action modules SHALL check the flag.
@@ -76,7 +76,7 @@ The window size SHALL be configurable.
   first
 
 ### Requirement: Defaults that let the system run without Affect and goals
-`Syneidesis` SHALL accept `GoalScorer` and `AffectModulator` collaborators
+`Workspace` SHALL accept `GoalScorer` and `AffectModulator` collaborators
 with static defaults returning 1.0, so the product-form score works before
 Phase 4 lands the real affect module and goal representation. The system SHALL
 produce nonzero salience scores without either module present.

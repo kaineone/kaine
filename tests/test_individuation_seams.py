@@ -18,52 +18,52 @@ from kaine.lifecycle.individuation_store import (
     adapter_sha_of,
     conditioning_from_snapshot,
 )
-from kaine.modules.lingua.module import Lingua
+from kaine.modules.language.module import Language
 from tests.test_individuation_scheduler import FakeCore, make
 
 
-def test_lingua_is_idle(tmp_path: Path):
-    lingua = Lingua(
+def test_language_is_idle(tmp_path: Path):
+    language = Language(
         MagicMock(), chat_client=MagicMock(), intent_log=MagicMock()
     )
-    assert lingua.is_idle(10) is True
-    lingua._produce_in_flight = 1
-    assert lingua.is_idle(10) is False
-    lingua._produce_in_flight = 0
-    lingua._last_produce_end = time.monotonic()
-    assert lingua.is_idle(10) is False
+    assert language.is_idle(10) is True
+    language._produce_in_flight = 1
+    assert language.is_idle(10) is False
+    language._produce_in_flight = 0
+    language._last_produce_end = time.monotonic()
+    assert language.is_idle(10) is False
     time.sleep(0.01)
-    assert lingua.is_idle(0.0001) is True
+    assert language.is_idle(0.0001) is True
 
 
-async def test_lingua_produce_bookkeeping(tmp_path: Path):
-    lingua = Lingua(
+async def test_language_produce_bookkeeping(tmp_path: Path):
+    language = Language(
         MagicMock(), chat_client=MagicMock(), intent_log=MagicMock()
     )
     recorded: list[int] = []
 
     async def inner(*args, **kwargs) -> str:
-        recorded.append(lingua._produce_in_flight)
+        recorded.append(language._produce_in_flight)
         raise RuntimeError("boom")
 
-    lingua._produce_inner = inner
+    language._produce_inner = inner
     with pytest.raises(RuntimeError, match="boom"):
-        await lingua._produce(
+        await language._produce(
             about="a", snapshot=None, mode="external", stream="s"
         )
     assert recorded == [1]
-    assert lingua._produce_in_flight == 0
-    assert lingua._last_produce_end is not None
+    assert language._produce_in_flight == 0
+    assert language._last_produce_end is not None
 
 
-def test_lingua_probe_conditions(tmp_path: Path):
-    l1 = Lingua(
+def test_language_probe_conditions(tmp_path: Path):
+    l1 = Language(
         MagicMock(),
         chat_client=MagicMock(),
         intent_log=MagicMock(),
         persona_external="alpha",
     )
-    l2 = Lingua(
+    l2 = Language(
         MagicMock(),
         chat_client=MagicMock(),
         intent_log=MagicMock(),
@@ -133,13 +133,13 @@ async def test_scheduler_capture_regenerate(tmp_path: Path):
     ]
 
 
-async def test_lingua_not_idle_while_a_generation_task_runs():
-    lingua = Lingua(MagicMock(), chat_client=MagicMock(), intent_log=MagicMock())
+async def test_language_not_idle_while_a_generation_task_runs():
+    language = Language(MagicMock(), chat_client=MagicMock(), intent_log=MagicMock())
     gate = asyncio.Event()
-    lingua._gen_task = asyncio.create_task(gate.wait())
+    language._gen_task = asyncio.create_task(gate.wait())
     try:
-        assert lingua.is_idle(0.0001) is False
+        assert language.is_idle(0.0001) is False
     finally:
         gate.set()
-        await lingua._gen_task
-    assert lingua.is_idle(0.0001) is True
+        await language._gen_task
+    assert language.is_idle(0.0001) is True

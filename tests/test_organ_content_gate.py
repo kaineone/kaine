@@ -10,7 +10,7 @@ live model server is required.
 """
 from __future__ import annotations
 
-from kaine.modules.lingua.client import FakeChatClient
+from kaine.modules.language.client import FakeChatClient
 from kaine.organ_probe import verify_organ_generates
 
 

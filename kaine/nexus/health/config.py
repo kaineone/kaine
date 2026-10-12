@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from kaine import model_paths
-from kaine.defaults import lingua_section_api_key, lingua_section_chat_url
+from kaine.defaults import language_section_api_key, language_section_chat_url
 from kaine.storage import resolve
 
 from .prober import DependencySpec, HealthProber
@@ -22,7 +22,7 @@ from .probes import (
     DEFAULT_PROBE_TIMEOUT_S,
     DEGRADED,
     NOT_CONFIGURED,
-    nous_health_probe,
+    planning_health_probe,
     probe_chat_llm,
     probe_chatterbox,
     probe_qdrant,
@@ -52,10 +52,10 @@ def build_dependency_specs(
     qdrant_cfg: dict[str, Any],
     qdrant_secret_key: str | None,
     redis_password: str | None,
-    lingua_cfg: dict[str, Any],
+    language_cfg: dict[str, Any],
     audition_cfg: dict[str, Any],
-    vox_cfg: dict[str, Any],
-    nous_cfg: dict[str, Any],
+    vocal_cfg: dict[str, Any],
+    planning_cfg: dict[str, Any],
     state_encryption_cfg: dict[str, Any] | None = None,
 ) -> list[DependencySpec]:
     redis_host = str(redis_cfg.get("host", "127.0.0.1"))
@@ -77,16 +77,16 @@ def build_dependency_specs(
     qdrant_host = str(qdrant_cfg.get("host", "127.0.0.1"))
     qdrant_port = int(qdrant_cfg.get("port", 6333))
 
-    chat_url = lingua_section_chat_url(lingua_cfg)
-    model_id = lingua_cfg.get("model_id")
-    chat_api_key = lingua_section_api_key(lingua_cfg)
+    chat_url = language_section_chat_url(language_cfg)
+    model_id = language_cfg.get("model_id")
+    chat_api_key = language_section_api_key(language_cfg)
 
     speaches_url = str(audition_cfg.get("speaches_url", "http://127.0.0.1:8000"))
     transcription_enabled = bool(audition_cfg.get("transcription_enabled", True))
-    chatterbox_url = str(vox_cfg.get("chatterbox_url", "http://127.0.0.1:8883"))
+    chatterbox_url = str(vocal_cfg.get("chatterbox_url", "http://127.0.0.1:8883"))
 
     audition_backend = str(audition_cfg.get("backend") or "speaches").strip().lower()
-    vox_backend = str(vox_cfg.get("backend") or "chatterbox").strip().lower()
+    vocal_backend = str(vocal_cfg.get("backend") or "chatterbox").strip().lower()
 
     def _audition_sherpa_model_dir() -> str:
         d = audition_cfg.get("sherpa_model_dir")
@@ -98,26 +98,26 @@ def build_dependency_specs(
             )
         )
 
-    def _vox_sherpa_model_dir() -> str:
-        d = vox_cfg.get("sherpa_model_dir")
+    def _vocal_sherpa_model_dir() -> str:
+        d = vocal_cfg.get("sherpa_model_dir")
         if d:
             return str(d)
         return str(
             model_paths.speech_model_dir(
-                vox_cfg.get("sherpa_model_id") or model_paths.DEFAULT_TTS
+                vocal_cfg.get("sherpa_model_id") or model_paths.DEFAULT_TTS
             )
         )
 
     audition_sherpa_model_id = (
         audition_cfg.get("sherpa_model_id") or model_paths.DEFAULT_STT
     )
-    vox_sherpa_model_id = vox_cfg.get("sherpa_model_id") or model_paths.DEFAULT_TTS
+    vocal_sherpa_model_id = vocal_cfg.get("sherpa_model_id") or model_paths.DEFAULT_TTS
     audition_sherpa_num_threads = int(audition_cfg.get("sherpa_num_threads", 2))
-    vox_sherpa_num_threads = int(vox_cfg.get("sherpa_num_threads", 2))
-    vox_sherpa_speaker_id = int(vox_cfg.get("sherpa_speaker_id", 0))
+    vocal_sherpa_num_threads = int(vocal_cfg.get("sherpa_num_threads", 2))
+    vocal_sherpa_speaker_id = int(vocal_cfg.get("sherpa_speaker_id", 0))
 
     # The planning module probe needs the configured backend so it checks the right engine.
-    nous_backend = str(nous_cfg.get("backend", "pymdp"))
+    planning_backend = str(planning_cfg.get("backend", "pymdp"))
 
     speech_rows: list[DependencySpec] = []
     if audition_backend == "speaches":
@@ -168,26 +168,26 @@ def build_dependency_specs(
             )
         )
 
-    if vox_backend == "chatterbox":
+    if vocal_backend == "chatterbox":
         speech_rows.append(
             DependencySpec(
                 name="Chatterbox (TTS)",
-                role="Vox",
+                role="Vocal",
                 module="vox",
                 probe=lambda: probe_chatterbox(base_url=chatterbox_url),
             )
         )
-    elif vox_backend == "sherpa_onnx":
+    elif vocal_backend == "sherpa_onnx":
         speech_rows.append(
             DependencySpec(
                 name="sherpa-onnx (Kokoro)",
-                role="Vox",
+                role="Vocal",
                 module="vox",
                 probe=(
-                    lambda _mdir=_vox_sherpa_model_dir(),
-                    _mid=vox_sherpa_model_id,
-                    _sid=vox_sherpa_speaker_id,
-                    _nt=vox_sherpa_num_threads: probe_sherpa_tts(
+                    lambda _mdir=_vocal_sherpa_model_dir(),
+                    _mid=vocal_sherpa_model_id,
+                    _sid=vocal_sherpa_speaker_id,
+                    _nt=vocal_sherpa_num_threads: probe_sherpa_tts(
                         model_dir=_mdir,
                         model_id=_mid,
                         speaker_id=_sid,
@@ -199,11 +199,11 @@ def build_dependency_specs(
     else:
         speech_rows.append(
             DependencySpec(
-                name=f"Vox backend {vox_backend!r}",
-                role="Vox",
+                name=f"Vox backend {vocal_backend!r}",
+                role="Vocal",
                 module="vox",
                 probe=lambda: _async_degraded(
-                    f"unknown [vox].backend {vox_backend!r}; expected \"chatterbox\" or \"sherpa_onnx\""
+                    f"unknown [vox].backend {vocal_backend!r}; expected \"chatterbox\" or \"sherpa_onnx\""
                 ),
             )
         )
@@ -237,14 +237,14 @@ def build_dependency_specs(
         DependencySpec(
             name=(
                 "pymdp + JAX"
-                if nous_backend == "pymdp"
+                if planning_backend == "pymdp"
                 else "NumPy active inference"
-                if nous_backend == "numpy"
-                else f"Nous backend {nous_backend!r}"
+                if planning_backend == "numpy"
+                else f"Nous backend {planning_backend!r}"
             ),
             role="Nous (active inference)",
             module="nous",
-            probe=lambda: nous_health_probe(backend=nous_backend),
+            probe=lambda: planning_health_probe(backend=planning_backend),
         ),
         DependencySpec(
             name="State encryption",
@@ -305,10 +305,10 @@ def load_health_prober(
         qdrant_cfg=(cfg.get("mnemos") or {}).get("qdrant") or {},
         qdrant_secret_key=qdrant_key,
         redis_password=redis_password,
-        lingua_cfg=cfg.get("lingua") or {},
+        language_cfg=cfg.get("lingua") or {},
         audition_cfg=cfg.get("audition") or {},
-        vox_cfg=cfg.get("vox") or {},
-        nous_cfg=cfg.get("nous") or {},
+        vocal_cfg=cfg.get("vox") or {},
+        planning_cfg=cfg.get("nous") or {},
         state_encryption_cfg=state_enc_cfg,
     )
 
@@ -329,11 +329,11 @@ def load_health_prober(
 
     # Model-server (language-organ) surface: chat_url + served alias + bearer key
     # (presence only — the key is never logged). Same resolution as the cycle.
-    lingua_cfg = cfg.get("lingua") or {}
+    language_cfg = cfg.get("lingua") or {}
     model_server_cfg = {
-        "chat_url": lingua_section_chat_url(lingua_cfg),
-        "model_id": lingua_cfg.get("model_id"),
-        "api_key": lingua_section_api_key(lingua_cfg),
+        "chat_url": language_section_chat_url(language_cfg),
+        "model_id": language_cfg.get("model_id"),
+        "api_key": language_section_api_key(language_cfg),
     }
 
     # Graded consolidation-divergence thresholds for the entity-care divergence

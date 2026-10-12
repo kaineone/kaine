@@ -23,7 +23,7 @@ import pytest
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
-from kaine.modules.vox.playback import FakePlayer, TeePlayer
+from kaine.modules.vocal.playback import FakePlayer, TeePlayer
 from kaine.remote.bridge import (
     NetworkAudioStream,
     RemoteBridge,
@@ -249,7 +249,7 @@ async def test_pcm_utterance_reaches_audition_with_remote_label(bus):
 
 @pytest.mark.asyncio
 async def test_speech_tap_broadcasts_to_client(bus):
-    bridge = RemoteBridge(_config(), bus=bus, vox=None)
+    bridge = RemoteBridge(_config(), bus=bus, vocal=None)
     url = await _started(bridge)
     try:
         async with websockets.connect(f"{url}/speech") as ws:
@@ -281,16 +281,16 @@ async def test_tee_player_mirrors_and_survives_tap_failure():
 
 
 @pytest.mark.asyncio
-async def test_vox_add_playback_tap_composes(bus):
-    from kaine.modules.vox.module import Vox
+async def test_vocal_add_playback_tap_composes(bus):
+    from kaine.modules.vocal.module import Vocal
 
     primary = FakePlayer()
-    vox = Vox(bus, player=primary)
+    vocal = Vocal(bus, player=primary)
     tap = SpeechTapPlayer()
     q = tap.subscribe()
-    vox.add_playback_tap(tap)
-    assert isinstance(vox._player, TeePlayer)
-    await vox._player.play(b"RIFFclip")
+    vocal.add_playback_tap(tap)
+    assert isinstance(vocal._player, TeePlayer)
+    await vocal._player.play(b"RIFFclip")
     assert primary.played == [b"RIFFclip"]  # local playback unchanged
     assert q.get_nowait() == b"RIFFclip"
 

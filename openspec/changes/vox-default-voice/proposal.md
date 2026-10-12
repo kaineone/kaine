@@ -28,7 +28,7 @@ Both speech engines ship voices of their own. The Chatterbox TTS server ships a 
 
 ## Impact
 
-- `kaine/modules/vox/voices.py` (new), `kaine/modules/vox/client.py`, `kaine/modules/vox/module.py`, `kaine/boot/factories/vox.py`, `kaine/speech_manifest.py`, `kaine/setup/__main__.py`, `kaine/setup/wizard_steps.py`.
+- `kaine/modules/vocal/voices.py` (new), `kaine/modules/vocal/client.py`, `kaine/modules/vocal/module.py`, `kaine/boot/factories/vocal.py`, `kaine/speech_manifest.py`, `kaine/setup/__main__.py`, `kaine/setup/wizard_steps.py`.
 - `config/kaine.toml` (`[vox]` comments and the two keys), `docs/09-modules/vocal.md`, `docs/appendix-a-configuration/modules.md`.
 - Tests with fake servers and fake model metadata.
 - No voice files enter the repository. The research configuration is unchanged.

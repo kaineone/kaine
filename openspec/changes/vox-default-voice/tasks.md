@@ -5,7 +5,7 @@
 
 ## 2. Selection
 
-- [x] 2.1 `kaine/modules/vox/voices.py`: the gender values, the Kokoro name-to-gender rule, the parser for the Chatterbox voice list, and the deterministic selection for both engines with one-line errors
+- [x] 2.1 `kaine/modules/vocal/voices.py`: the gender values, the Kokoro name-to-gender rule, the parser for the Chatterbox voice list, and the deterministic selection for both engines with one-line errors
 - [x] 2.2 `SpeechModel.speakers` in the speech manifest, filled for `kokoro-en` from the sherpa-onnx speaker map
 - [x] 2.3 `ChatterboxClient.list_voices()` reads `GET /get_predefined_voices`
 - [x] 2.4 The vocal module resolves a Chatterbox voice in `initialize()` when none is configured, logs it once, and on failure records a backend failure and stays silent

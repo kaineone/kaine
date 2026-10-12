@@ -1,6 +1,6 @@
 ## Context
 
-The vocal module has two speech backends. `chatterbox` posts to the `/tts` endpoint of the Chatterbox TTS server (devnen/Chatterbox-TTS-Server, the API `kaine/modules/vox/client.py` is written against: `voice_mode`, `predefined_voice_id`, `split_text`). `sherpa_onnx` runs Kokoro English in-process through sherpa-onnx and picks a preset speaker by integer id (`[vox].sherpa_speaker_id`, default 0).
+The vocal module has two speech backends. `chatterbox` posts to the `/tts` endpoint of the Chatterbox TTS server (devnen/Chatterbox-TTS-Server, the API `kaine/modules/vocal/client.py` is written against: `voice_mode`, `predefined_voice_id`, `split_text`). `sherpa_onnx` runs Kokoro English in-process through sherpa-onnx and picks a preset speaker by integer id (`[vox].sherpa_speaker_id`, default 0).
 
 The shipped configuration leaves `predefined_voice_id` unset because a voice filename is operator-local. With the Chatterbox backend the module then cannot speak. The operator asked for the module to pick a voice the engine itself ships, with an optional gender preference, and never to add voice files to the repository.
 
@@ -67,7 +67,7 @@ The candidates are the engine's list, keeping only the voices whose gender match
 - Kokoro sorts by speaker name; the gender of a name is the second letter of a two-letter prefix that stands alone or is followed by `_` (`af`, `am_adam`). Names that do not follow the scheme have no gender and are left out when a gender is requested. For the pinned model, `"any"` and `"female"` give `af` (id 0, today's default), and `"male"` gives `am_adam` (id 5).
 - `default_voice` matches a Chatterbox filename exactly, or else a filename, file stem or display name ignoring case; a Kokoro speaker name ignoring case.
 
-The rule lives in one pure module, `kaine/modules/vox/voices.py`, so both backends and the tests share it.
+The rule lives in one pure module, `kaine/modules/vocal/voices.py`, so both backends and the tests share it.
 
 ### D4. Where the engine's list comes from
 

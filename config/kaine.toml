@@ -790,7 +790,7 @@ chat_url = "http://127.0.0.1:11434/v1"
 # so the cognitive stack (self-model values, the affect module, the workspace) governs behavior,
 # not the model's baked-in refusals - the language organ's refusal training is
 # removed so a trained refusal stance cannot override what the workspace supplies
-# to the organ (see lingua/ABLITERATION.md). The published KAINE organ (a GGUF)
+# to the organ (see language/ABLITERATION.md). The published KAINE organ (a GGUF)
 # is served under this exact alias; it is downloaded by the first-run wizard's
 # organ step and served by scripts/model-server-bootstrap.sh under the same
 # name. Published at

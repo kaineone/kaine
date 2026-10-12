@@ -267,9 +267,9 @@ def required_speech_models(config: dict) -> list[str]:
             else:
                 warnings.warn(f"skipping unknown speech model id: {stt_id}")
 
-    vox = config.get("vox") or {}
-    if str(vox.get("backend", "chatterbox")).strip().lower() == "sherpa_onnx":
-        tts_id = str(vox.get("sherpa_model_id", DEFAULT_TTS)).strip()
+    vocal = config.get("vox") or {}
+    if str(vocal.get("backend", "chatterbox")).strip().lower() == "sherpa_onnx":
+        tts_id = str(vocal.get("sherpa_model_id", DEFAULT_TTS)).strip()
         if tts_id in MANIFEST:
             ids.append(tts_id)
         else:

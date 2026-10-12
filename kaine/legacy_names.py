@@ -636,6 +636,10 @@ RESOLUTIONS = [
 KEY_OVERRIDES = (
     ("eidolon.self_model", "self_model.document"),
     ("phantasia.world_model", "world_model.backend"),
+    # kaine/workspace/syneidesis.py moves to kaine/workspace/core.py (PATH_OVERRIDES),
+    # so its dotted import path and its path in text follow the same name.
+    ("workspace.syneidesis", "workspace.core"),
+    ("workspace/syneidesis", "workspace/core"),
     ("fork_being", "fork_entity"),
     ("PerceptionLocus", "PerceptualLocus"),
     ("perception.locus.", "perceptual_locus."),
@@ -672,12 +676,14 @@ PATH_OVERRIDES = {
     # holds WorldModelBackend moves to backend.py to match it.
     "kaine/modules/phantasia/world_model.py": "kaine/modules/world_model/backend.py",
 
-    # Test files whose old name already said "sleep" or "world_model" would otherwise
-    # stutter (test_sleep_sleep_pause.py).
+    # Test files whose old name already said "sleep", "world_model", "effectors" or
+    # "workspace" would otherwise stutter (test_sleep_sleep_pause.py).
     "tests/test_hypnos_sleep_cancellation.py": "tests/test_sleep_cancellation.py",
     "tests/test_hypnos_sleep_pause.py": "tests/test_sleep_pause.py",
     "tests/test_hypnos_sleep_replay_window.py": "tests/test_sleep_replay_window.py",
     "tests/test_phantasia_world_model.py": "tests/test_world_model_backend.py",
+    "tests/test_praxis_effectors.py": "tests/test_effectors.py",
+    "tests/test_workspace_syneidesis.py": "tests/test_workspace_core.py",
     # Keys ending in "/" are directory prefixes.
     "openspec/specs/spot-supervisor/": "openspec/specs/supervisor/",
     "docs/08-cognitive-cycle/perception-locus.md": "docs/08-cognitive-cycle/perceptual-locus.md",
@@ -804,6 +810,27 @@ ACCEPTED_COLLISIONS = [
     ("tests/test_voice_alignment_organ_adapter.py", "sleep"),
     ("tests/test_voice_system_prompts.py", "sleep"),
     ("tests/test_world_model_identity.py", "world_model"),
+
+    # Step 5c (language, vocal, planning, action selection, effectors, self-model,
+    # social cognition, workspace). Each was checked by hand: the new name meets an
+    # import path segment (kaine.workspace..., the effectors submodule), a keyword
+    # argument of another call, an attribute of another object, or a test-local
+    # variable; ruff reports no redefinition after the run.
+
+    ("kaine/boot/wiring.py", "effectors"),
+    ("kaine/cycle/__main__.py", "workspace"),
+    ("kaine/evaluation/observers/ablation_observer.py", "workspace"),
+    ("kaine/evaluation/redteam/harness.py", "effectors"),
+    ("kaine/evaluation/redteam/harness.py", "workspace"),
+    ("kaine/modules/praxis/__init__.py", "effectors"),
+    ("kaine/modules/praxis/module.py", "effectors"),
+    ("kaine/workspace/__init__.py", "workspace"),
+    ("tests/test_dual_path_ablation.py", "workspace"),
+    ("tests/test_individuation_probe_request.py", "self_model"),
+    ("tests/test_planned_test_studies.py", "workspace"),
+    ("tests/test_praxis_effectors.py", "effectors"),
+    ("tests/test_praxis_module.py", "effectors"),
+    ("tests/test_salience_factor_wiring.py", "workspace"),
 ]
 
 SURVEY_EXTRA = (

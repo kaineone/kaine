@@ -14,14 +14,14 @@ from kaine.cycle.individuation_probe import (
     build_probe_sampler,
 )
 from kaine.lifecycle.individuation_store import ProbeSample
-from kaine.modules.lingua import (
+from kaine.modules.language import (
     EXTERNAL_STREAM,
     INTERNAL_STREAM,
     FakeChatClient,
     IntentExpressionLog,
-    Lingua,
+    Language,
 )
-from kaine.modules.lingua.client import ChatResponse
+from kaine.modules.language.client import ChatResponse
 
 
 @pytest.fixture
@@ -51,21 +51,21 @@ class _ConfigurableFakeChatClient:
         return self.response
 
 
-def _make_lingua(bus: AsyncBus, tmp_path: Path, responses=None, chat_client=None) -> Lingua:
+def _make_language(bus: AsyncBus, tmp_path: Path, responses=None, chat_client=None) -> Language:
     if chat_client is None:
         chat_client = FakeChatClient(responses=responses)
-    lingua = Lingua(
+    language = Language(
         bus,
         chat_client=chat_client,
         intent_log=IntentExpressionLog(tmp_path / "intent.jsonl"),
         model_id="fake-model",
     )
-    lingua._bus_self_model = {
+    language._bus_self_model = {
         "values": [],
         "behavioral_norms": [],
         "situation_facts": [],
     }
-    return lingua
+    return language
 
 
 @pytest.mark.asyncio
@@ -78,8 +78,8 @@ async def test_sample_returns_probe_sample(bus: AsyncBus, tmp_path: Path):
         from_content=True,
     )
     fake = _ConfigurableFakeChatClient(response)
-    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
-    sampler = build_probe_sampler(lingua=lingua)
+    language = _make_language(bus, tmp_path, chat_client=fake)
+    sampler = build_probe_sampler(language=language)
 
     result = await sampler("what is in the cup?", 5)
 
@@ -99,8 +99,8 @@ async def test_sample_returns_probe_sample(bus: AsyncBus, tmp_path: Path):
 @pytest.mark.asyncio
 async def test_sample_request_failed(bus: AsyncBus, tmp_path: Path):
     fake = _ConfigurableFakeChatClient(RuntimeError("boom"))
-    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
-    sampler = build_probe_sampler(lingua=lingua)
+    language = _make_language(bus, tmp_path, chat_client=fake)
+    sampler = build_probe_sampler(language=language)
 
     result = await sampler("hello", 1)
     assert isinstance(result, ProbeFailure)
@@ -116,8 +116,8 @@ async def test_sample_organ_resting(bus: AsyncBus, tmp_path: Path):
         raw={"organ_resting": True},
     )
     fake = _ConfigurableFakeChatClient(response)
-    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
-    sampler = build_probe_sampler(lingua=lingua)
+    language = _make_language(bus, tmp_path, chat_client=fake)
+    sampler = build_probe_sampler(language=language)
 
     result = await sampler("hello", 1)
     assert isinstance(result, ProbeFailure)
@@ -128,8 +128,8 @@ async def test_sample_organ_resting(bus: AsyncBus, tmp_path: Path):
 async def test_sample_no_content_from_content_false(bus: AsyncBus, tmp_path: Path):
     response = ChatResponse(text="thinking...", model="m", from_content=False)
     fake = _ConfigurableFakeChatClient(response)
-    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
-    sampler = build_probe_sampler(lingua=lingua)
+    language = _make_language(bus, tmp_path, chat_client=fake)
+    sampler = build_probe_sampler(language=language)
 
     result = await sampler("hello", 1)
     assert isinstance(result, ProbeFailure)
@@ -140,8 +140,8 @@ async def test_sample_no_content_from_content_false(bus: AsyncBus, tmp_path: Pat
 async def test_sample_no_content_whitespace(bus: AsyncBus, tmp_path: Path):
     response = ChatResponse(text="   ", model="m", from_content=True)
     fake = _ConfigurableFakeChatClient(response)
-    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
-    sampler = build_probe_sampler(lingua=lingua)
+    language = _make_language(bus, tmp_path, chat_client=fake)
+    sampler = build_probe_sampler(language=language)
 
     result = await sampler("hello", 1)
     assert isinstance(result, ProbeFailure)
@@ -152,11 +152,11 @@ async def test_sample_no_content_whitespace(bus: AsyncBus, tmp_path: Path):
 async def test_sample_adapter_not_applied(bus: AsyncBus, tmp_path: Path):
     response = ChatResponse(text="ok", model="m", from_content=True)
     fake = _ConfigurableFakeChatClient(response)
-    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
+    language = _make_language(bus, tmp_path, chat_client=fake)
     async def _not_applied() -> bool:
         return False
 
-    sampler = build_probe_sampler(lingua=lingua, adapter_check=_not_applied)
+    sampler = build_probe_sampler(language=language, adapter_check=_not_applied)
 
     result = await sampler("hello", 1)
     assert isinstance(result, ProbeFailure)
@@ -168,9 +168,9 @@ async def test_sample_adapter_not_applied(bus: AsyncBus, tmp_path: Path):
 async def test_sample_self_model_not_ready(bus: AsyncBus, tmp_path: Path):
     response = ChatResponse(text="ok", model="m", from_content=True)
     fake = _ConfigurableFakeChatClient(response)
-    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
-    lingua._bus_self_model = None
-    sampler = build_probe_sampler(lingua=lingua)
+    language = _make_language(bus, tmp_path, chat_client=fake)
+    language._bus_self_model = None
+    sampler = build_probe_sampler(language=language)
 
     result = await sampler("hello", 1)
     assert isinstance(result, ProbeFailure)
@@ -182,8 +182,8 @@ async def test_sample_self_model_not_ready(bus: AsyncBus, tmp_path: Path):
 async def test_sample_disclosure_not_ready(bus: AsyncBus, tmp_path: Path):
     response = ChatResponse(text="ok", model="m", from_content=True)
     fake = _ConfigurableFakeChatClient(response)
-    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
-    sampler = build_probe_sampler(lingua=lingua, required_fact="F")
+    language = _make_language(bus, tmp_path, chat_client=fake)
+    sampler = build_probe_sampler(language=language, required_fact="F")
 
     result = await sampler("hello", 1)
     assert isinstance(result, ProbeFailure)
@@ -197,9 +197,9 @@ async def test_sample_adapter_expected_not_applied(bus: AsyncBus, tmp_path: Path
         text="ok", model="m", from_content=True, lora_applied=False
     )
     fake = _ConfigurableFakeChatClient(response)
-    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
+    language = _make_language(bus, tmp_path, chat_client=fake)
     sampler = build_probe_sampler(
-        lingua=lingua, adapter_expected=lambda: True
+        language=language, adapter_expected=lambda: True
     )
 
     result = await sampler("hello", 1)
@@ -213,9 +213,9 @@ async def test_sample_adapter_expected_applied(bus: AsyncBus, tmp_path: Path):
         text="ok", model="m", from_content=True, lora_applied=True
     )
     fake = _ConfigurableFakeChatClient(response)
-    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
+    language = _make_language(bus, tmp_path, chat_client=fake)
     sampler = build_probe_sampler(
-        lingua=lingua, adapter_expected=lambda: True
+        language=language, adapter_expected=lambda: True
     )
 
     result = await sampler("hello", 1)
@@ -227,11 +227,11 @@ async def test_sample_adapter_expected_applied(bus: AsyncBus, tmp_path: Path):
 async def test_sample_adapter_check_raises(bus: AsyncBus, tmp_path: Path):
     response = ChatResponse(text="ok", model="m", from_content=True)
     fake = _ConfigurableFakeChatClient(response)
-    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
+    language = _make_language(bus, tmp_path, chat_client=fake)
     async def _raises() -> bool:
         raise RuntimeError("nope")
 
-    sampler = build_probe_sampler(lingua=lingua, adapter_check=_raises)
+    sampler = build_probe_sampler(language=language, adapter_check=_raises)
 
     result = await sampler("hello", 1)
     assert isinstance(result, ProbeFailure)
@@ -243,12 +243,12 @@ async def test_sample_adapter_check_raises(bus: AsyncBus, tmp_path: Path):
 async def test_sample_probe_request_raises(bus: AsyncBus, tmp_path: Path):
     response = ChatResponse(text="ok", model="m", from_content=True)
     fake = _ConfigurableFakeChatClient(response)
-    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
-    lingua.probe_request = lambda *args, **kwargs: (_ for _ in ()).throw(
+    language = _make_language(bus, tmp_path, chat_client=fake)
+    language.probe_request = lambda *args, **kwargs: (_ for _ in ()).throw(
         RuntimeError("boom")
     )
 
-    sampler = build_probe_sampler(lingua=lingua)
+    sampler = build_probe_sampler(language=language)
 
     result = await sampler("hello", 1)
     assert isinstance(result, ProbeFailure)
@@ -262,9 +262,9 @@ async def test_sample_adapter_expected_raises(bus: AsyncBus, tmp_path: Path):
         text="ok", model="m", from_content=True, lora_applied=True
     )
     fake = _ConfigurableFakeChatClient(response)
-    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
+    language = _make_language(bus, tmp_path, chat_client=fake)
     sampler = build_probe_sampler(
-        lingua=lingua, adapter_expected=lambda: (_ for _ in ()).throw(
+        language=language, adapter_expected=lambda: (_ for _ in ()).throw(
             RuntimeError("nope")
         )
     )
@@ -380,10 +380,10 @@ async def test_probe_run_does_not_contaminate(bus: AsyncBus, tmp_path: Path):
         from_content=True,
     )
     fake = _ConfigurableFakeChatClient(response)
-    lingua = _make_lingua(bus, tmp_path, chat_client=fake)
-    sampler = build_probe_sampler(lingua=lingua)
+    language = _make_language(bus, tmp_path, chat_client=fake)
+    sampler = build_probe_sampler(language=language)
 
-    intent_path = Path(getattr(lingua.intent_log, "path", lingua.intent_log._path))
+    intent_path = Path(getattr(language.intent_log, "path", language.intent_log._path))
     size_before = intent_path.stat().st_size if intent_path.exists() else 0
     out_before = await bus.client.xlen("lingua.out")
     ext_before = await bus.client.xlen(EXTERNAL_STREAM)

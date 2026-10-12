@@ -7,6 +7,6 @@
 
 ## 2. Social cognition merge
 
-- [x] 2.1 `EmpatheiaMergeStrategy` treats a missing or null `behavioral_summary` entry as absent and averages only the defined ones
+- [x] 2.1 `SocialCognitionMergeStrategy` treats a missing or null `behavioral_summary` entry as absent and averages only the defined ones
 - [x] 2.2 Tests: one side missing, one side null (both orders), both missing, both defined, and a defined side with no interactions
 - [x] 2.3 Docs (`docs/12-forks-and-merges.md`, `docs/09-modules/social-cognition.md`)

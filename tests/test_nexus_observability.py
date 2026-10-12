@@ -28,7 +28,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
-def test_diagnostics_streams_include_empatheia_world_model_workspace():
+def test_diagnostics_streams_include_social_cognition_world_model_workspace():
     from kaine.nexus.__main__ import DEFAULT_DIAGNOSTICS_STREAMS
 
     assert "empatheia.out" in DEFAULT_DIAGNOSTICS_STREAMS
@@ -117,7 +117,7 @@ def test_episodic_memory_replay_template_omits_raw_text():
     assert "short_term:7" in out
 
 
-def test_eidolon_self_model_template_omits_raw_content():
+def test_self_model_self_model_template_omits_raw_content():
     """eidolon.self_model template must output only labels/counts/numerics."""
     from kaine.faithful.templates import TEMPLATES
 
@@ -983,17 +983,17 @@ def test_new_panel_partials_render_with_representative_data():
     assert "unavailable" in templates.get_template("_gpu_preflight.html").render(gpu_preflight=None)
 
 
-def test_evaluation_html_contains_nous_policy_panel():
+def test_evaluation_html_contains_planning_policy_panel():
     base = Path(__file__).parent.parent / "kaine" / "nexus" / "templates"
     evald = (base / "_evaluation_sections.html").read_text()
     assert "Nous policy" in evald
     assert "nous_policy" in evald
 
 
-def test_nous_policy_aggregate_no_data_and_from_jsonl(tmp_path):
-    from kaine.evaluation.nexus_tab import _aggregate_nous_policy
+def test_planning_policy_aggregate_no_data_and_from_jsonl(tmp_path):
+    from kaine.evaluation.nexus_tab import _aggregate_planning_policy
 
-    assert _aggregate_nous_policy(Path(tmp_path / "nope"))["source"] == "none"
+    assert _aggregate_planning_policy(Path(tmp_path / "nope"))["source"] == "none"
 
     pol_dir = tmp_path / "nous_policy"
     pol_dir.mkdir()
@@ -1001,14 +1001,14 @@ def test_nous_policy_aggregate_no_data_and_from_jsonl(tmp_path):
         json.dumps({"ts": "2026-06-01T00:00:00Z", "expected_free_energy": 1.5, "horizon": 1, "policy": "act-3"})
         + "\n"
     )
-    out = _aggregate_nous_policy(tmp_path)
+    out = _aggregate_planning_policy(tmp_path)
     assert out["source"] == "jsonl"
     assert out["latest_policy"] == "act-3"
     assert out["mean_efe"] == pytest.approx(1.5)
 
 
 @pytest.mark.asyncio
-async def test_model_server_block_not_configured_when_lingua_off(tmp_path):
+async def test_model_server_block_not_configured_when_language_off(tmp_path):
     prober = _prober(
         tmp_path,
         modules_enabled={"lingua": False},

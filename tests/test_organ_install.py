@@ -47,7 +47,7 @@ def test_detect_backend_cpu_guide_only():
 # --- plan: format selection --------------------------------------------------
 
 
-def test_plan_nothing_when_lingua_disabled():
+def test_plan_nothing_when_language_disabled():
     plan = plan_organ_download({"lingua": False}, detect_organ_backend("cuda"))
     assert plan.needed is False
     assert plan.artifacts == ()

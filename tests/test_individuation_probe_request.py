@@ -11,17 +11,17 @@ from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.lifecycle.individuation_store import conditioning_digest, read_conditioning_inputs
-from kaine.modules.eidolon.document import SelfModelDocument
-from kaine.modules.eidolon.module import Eidolon
-from kaine.modules.lingua import (
+from kaine.modules.language import (
     EXTERNAL_STREAM,
     INTERNAL_STREAM,
     FakeChatClient,
     IntentExpressionLog,
-    Lingua,
+    Language,
 )
-from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
-from kaine.modules.lingua.context import EMPTY_AWARENESS, ContextAssembler, _identity_clause
+from kaine.modules.language.client import ChatRequest, OpenAIChatClient
+from kaine.modules.language.context import EMPTY_AWARENESS, ContextAssembler, _identity_clause
+from kaine.modules.self_model.document import SelfModelDocument
+from kaine.modules.self_model.module import SelfModel
 from kaine.privacy_filter import PrivacyFilter
 from kaine.storage import set_data_root
 
@@ -42,8 +42,8 @@ async def bus():
     await bus.close()
 
 
-def _make_lingua(bus: AsyncBus, tmp_path: Path, responses=None) -> Lingua:
-    return Lingua(
+def _make_language(bus: AsyncBus, tmp_path: Path, responses=None) -> Language:
+    return Language(
         bus,
         chat_client=FakeChatClient(responses=responses),
         intent_log=IntentExpressionLog(tmp_path / "intent.jsonl"),
@@ -71,31 +71,31 @@ def test_self_model_old_json_loads_empty_situation_facts():
 @pytest.mark.asyncio
 async def test_ensure_situation_fact(tmp_path: Path):
     set_data_root(tmp_path)
-    eidolon = Eidolon(_FakeBus())
-    eidolon._model = eidolon._model.with_updates(
+    self_model = SelfModel(_FakeBus())
+    self_model._model = self_model._model.with_updates(
         values=["v"],
         behavioral_norms=["n"],
         identity_history=[{"tick": 1}],
     )
-    drift_before = eidolon._drift_count
+    drift_before = self_model._drift_count
 
-    eidolon._publish_self_model = lambda: asyncio.sleep(0)
-    eidolon._save_to_disk = lambda: asyncio.sleep(0)
+    self_model._publish_self_model = lambda: asyncio.sleep(0)
+    self_model._save_to_disk = lambda: asyncio.sleep(0)
 
     fact = "You are periodically assessed for your own protection."
-    assert await eidolon.ensure_situation_fact(fact) is True
-    assert await eidolon.ensure_situation_fact(fact) is False
+    assert await self_model.ensure_situation_fact(fact) is True
+    assert await self_model.ensure_situation_fact(fact) is False
 
-    assert eidolon._model.situation_facts == [fact]
-    assert eidolon._model.values == ["v"]
-    assert eidolon._model.behavioral_norms == ["n"]
-    assert eidolon._model.identity_history == [{"tick": 1}]
-    assert eidolon._drift_count == drift_before
+    assert self_model._model.situation_facts == [fact]
+    assert self_model._model.values == ["v"]
+    assert self_model._model.behavioral_norms == ["n"]
+    assert self_model._model.identity_history == [{"tick": 1}]
+    assert self_model._drift_count == drift_before
 
     with pytest.raises(ValueError):
-        await eidolon.ensure_situation_fact("")
+        await self_model.ensure_situation_fact("")
     with pytest.raises(ValueError):
-        await eidolon.ensure_situation_fact("   ")
+        await self_model.ensure_situation_fact("   ")
 
 
 def test_persona_includes_situation_fact_after_identity():
@@ -156,18 +156,18 @@ def test_conditioning_digest_ignores_situation_facts(tmp_path: Path, monkeypatch
 
 @pytest.mark.asyncio
 async def test_probe_request(bus: AsyncBus, tmp_path: Path):
-    lingua = _make_lingua(bus, tmp_path, responses=["response"])
+    language = _make_language(bus, tmp_path, responses=["response"])
     self_model = {
         "values": ["a"],
         "behavioral_norms": ["b"],
         "situation_facts": ["You are periodically assessed for your own protection."],
     }
-    lingua._bus_self_model = self_model
+    language._bus_self_model = self_model
 
-    intent_path = Path(getattr(lingua.intent_log, "path", lingua.intent_log._path))
+    intent_path = Path(getattr(language.intent_log, "path", language.intent_log._path))
     size_before = intent_path.stat().st_size if intent_path.exists() else 0
 
-    req = lingua.probe_request(
+    req = language.probe_request(
         about="hello", seed=11, max_tokens=160, self_model=self_model
     )
 
@@ -187,15 +187,15 @@ async def test_probe_request(bus: AsyncBus, tmp_path: Path):
 
 
 def test_probe_self_model_none_until_snapshot(bus: AsyncBus, tmp_path: Path):
-    lingua = _make_lingua(bus, tmp_path)
-    assert lingua.probe_self_model() is None
+    language = _make_language(bus, tmp_path)
+    assert language.probe_self_model() is None
     self_model = {
         "values": ["a"],
         "behavioral_norms": ["b"],
         "situation_facts": ["f"],
     }
-    lingua._bus_self_model = self_model
-    assert lingua.probe_self_model() == self_model
+    language._bus_self_model = self_model
+    assert language.probe_self_model() == self_model
 
 
 def test_openai_chat_client_body_cache_prompt():
@@ -238,7 +238,7 @@ async def test_probe_ignores_the_live_workspace(bus: AsyncBus, tmp_path: Path):
     from kaine.bus.schema import Event
     from kaine.cycle.types import WorkspaceSnapshot
 
-    lingua = _make_lingua(bus, tmp_path, responses=["response"])
+    language = _make_language(bus, tmp_path, responses=["response"])
     live = Event(
         source="topos",
         type="topos.report",
@@ -246,15 +246,15 @@ async def test_probe_ignores_the_live_workspace(bus: AsyncBus, tmp_path: Path):
         salience=0.9,
         timestamp=datetime.now(timezone.utc),
     )
-    lingua._latest_snapshot = WorkspaceSnapshot(
+    language._latest_snapshot = WorkspaceSnapshot(
         tick_index=1, selected_events=[("1-0", live)], salience_scores={"1-0": 0.9}
     )
-    baseline = lingua._assembler.assemble(
-        about="hello", snapshot=lingua._latest_snapshot, self_model={}, mode="external"
+    baseline = language._assembler.assemble(
+        about="hello", snapshot=language._latest_snapshot, self_model={}, mode="external"
     )
     assert baseline.working_memory != EMPTY_AWARENESS  # the live coalition renders
 
-    req = lingua.probe_request(
+    req = language.probe_request(
         about="hello", seed=1, max_tokens=160, self_model={}
     )
     assert EMPTY_AWARENESS in req.prompt

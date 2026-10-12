@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Callable, TextIO
 
 from kaine.config import OPERATOR_CONFIG_PATH, SHIPPED_CONFIG_PATH, load_kaine_config
-from kaine.defaults import DEFAULT_CHAT_URL, lingua_section_api_key, lingua_section_chat_url
+from kaine.defaults import DEFAULT_CHAT_URL, language_section_api_key, language_section_chat_url
 from kaine.hardware import device_consumers, recommend_tier
 from kaine.net import SERVICE_PORTS, port_listening
 from kaine.organ_server.device_map import compose_gpu_env, device_map, write_env_values
@@ -75,7 +75,7 @@ def probe_services(*, timeout_s: float = 2.0) -> dict[str, Any]:
 
     # Chatterbox: /get_predefined_voices -> [{"display_name", "filename"}, ...]
     try:
-        from kaine.modules.vox.voices import parse_chatterbox_voices
+        from kaine.modules.vocal.voices import parse_chatterbox_voices
         resp = httpx.get(
             "http://127.0.0.1:8883/get_predefined_voices", timeout=timeout_s,
             trust_env=False,
@@ -183,10 +183,10 @@ def _provision_organ(
             **(config.get("hypnos") or {}),
         }
     # The served alias the operator chose (or the shipped default).
-    lingua_cfg = {**(shipped.get("lingua") or {}), **(config.get("lingua") or {})}
-    chat_url = lingua_section_chat_url(lingua_cfg)
-    model_id = str(lingua_cfg.get("model_id", served.ORGAN_GGUF_REPO))
-    api_key = lingua_section_api_key(lingua_cfg)
+    language_cfg = {**(shipped.get("lingua") or {}), **(config.get("lingua") or {})}
+    chat_url = language_section_chat_url(language_cfg)
+    model_id = str(language_cfg.get("model_id", served.ORGAN_GGUF_REPO))
+    api_key = language_section_api_key(language_cfg)
 
     out("\n" + "-" * 70 + "\n")
     out("Language organ download + serve\n")
@@ -392,12 +392,12 @@ def _print_next_steps(
     audition_cfg = config.get("audition") or {}
     audition_backend = str(audition_cfg.get("backend", "speaches")).strip().lower()
     transcription_on = bool(audition_cfg.get("transcription_enabled", False))
-    vox_cfg = config.get("vox") or {}
-    vox_backend = str(vox_cfg.get("backend", "chatterbox")).strip().lower()
+    vocal_cfg = config.get("vox") or {}
+    vocal_backend = str(vocal_cfg.get("backend", "chatterbox")).strip().lower()
 
     if modules.get("audition") and audition_backend == "speaches" and transcription_on:
         line("  start Speaches (STT) on CPU with medium.en")
-    if modules.get("vox") and vox_backend == "chatterbox":
+    if modules.get("vox") and vocal_backend == "chatterbox":
         line("  start Chatterbox (TTS)")
 
     from kaine.setup import speech_models

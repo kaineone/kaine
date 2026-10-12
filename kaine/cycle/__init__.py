@@ -5,7 +5,7 @@ from kaine.cycle.engine import CognitiveCycle, CycleHooks
 from kaine.cycle.protocols import (
     CycleHook,
     ModuleRegistryProtocol,
-    SyneidesisProtocol,
+    WorkspaceProtocol,
 )
 from kaine.cycle.types import TickResult, WorkspaceSnapshot
 
@@ -14,7 +14,7 @@ __all__ = [
     "CycleHook",
     "CycleHooks",
     "ModuleRegistryProtocol",
-    "SyneidesisProtocol",
+    "WorkspaceProtocol",
     "TickResult",
     "WorkspaceSnapshot",
 ]

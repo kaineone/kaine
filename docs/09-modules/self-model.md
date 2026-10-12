@@ -67,11 +67,11 @@ The factory rejects any other key in either table.
 
 ### Launch name
 
-On first boot, if the self-model has no name, `generate_launch_name()` picks `"Kaine <Surname>"` from the Second Life surname list in `kaine/modules/eidolon/surnames.txt` and saves it at once. The name is a starting point that the entity may later replace.
+On first boot, if the self-model has no name, `generate_launch_name()` picks `"Kaine <Surname>"` from the Second Life surname list in `kaine/modules/self_model/surnames.txt` and saves it at once. The name is a starting point that the entity may later replace.
 
 ### Drift detection
 
-`SourceDistributionDrift` in `kaine/modules/eidolon/drift.py` keeps the recent window as a deque of per-broadcast source counts. When a broadcast pushes the oldest batch out of the window, that batch is added to the reference counts, which keep growing for the life of the process. Both distributions are smoothed additively (epsilon 1e-3) before the divergence is computed, and the five sources that contribute most are reported as `top_drifted_sources`.
+`SourceDistributionDrift` in `kaine/modules/self_model/drift.py` keeps the recent window as a deque of per-broadcast source counts. When a broadcast pushes the oldest batch out of the window, that batch is added to the reference counts, which keep growing for the life of the process. Both distributions are smoothed additively (epsilon 1e-3) before the divergence is computed, and the five sources that contribute most are reported as `top_drifted_sources`.
 
 Each alert is recorded in `SelfModelDocument.identity_history` as part of a drift episode. An episode is one contiguous run of alerting broadcasts and stores `onset`, `end`, `peak_score`, `count`, `sources` (how often each source was among the top drifted sources) and `top_sources`; it also carries `timestamp` (the onset) and `score` (the peak) for readers of older entries. The first broadcast below the threshold closes the episode, so a sustained shift adds one entry. Self-models saved with older per-alert entries still load.
 
@@ -112,13 +112,13 @@ If `seed_path` is set, the engine reads the JSONL file once at first boot throug
 
 | Path | Purpose |
 |---|---|
-| `kaine/modules/eidolon/module.py` | `Eidolon(BaseModule)`: drift, speech loops, consumer tasks, publication |
-| `kaine/modules/eidolon/self_inference.py` | `SelfInferenceEngine` |
-| `kaine/modules/eidolon/document.py` | `SelfModelDocument`, `generate_launch_name()`, `load()`, `save_atomic()` |
-| `kaine/modules/eidolon/drift.py` | `SourceDistributionDrift`, the `DriftDetector` protocol, `DriftResult` |
-| `kaine/modules/eidolon/capability_map.py` | `CapabilityMapBuilder` |
-| `kaine/modules/eidolon/surnames.txt` | Surname list for the launch name |
-| `kaine/boot/factories/eidolon.py` | `make_eidolon()` and the self-inference sub-table |
+| `kaine/modules/self_model/module.py` | `SelfModel(BaseModule)`: drift, speech loops, consumer tasks, publication |
+| `kaine/modules/self_model/self_inference.py` | `SelfInferenceEngine` |
+| `kaine/modules/self_model/document.py` | `SelfModelDocument`, `generate_launch_name()`, `load()`, `save_atomic()` |
+| `kaine/modules/self_model/drift.py` | `SourceDistributionDrift`, the `DriftDetector` protocol, `DriftResult` |
+| `kaine/modules/self_model/capability_map.py` | `CapabilityMapBuilder` |
+| `kaine/modules/self_model/surnames.txt` | Surname list for the launch name |
+| `kaine/boot/factories/self_model.py` | `make_eidolon()` and the self-inference sub-table |
 
 ## Enabling
 
@@ -145,14 +145,14 @@ The offline suite's self-model accuracy battery (`kaine/evaluation/benchmarks/in
 
 | File | Coverage |
 |---|---|
-| `tests/test_eidolon_module.py` | Module tick, drift, speech-loop counting |
-| `tests/test_eidolon_self_inference.py` | The four derivations, the disabled no-op, seed application |
-| `tests/test_eidolon_drift.py` | Divergence, window handling, top sources |
-| `tests/test_eidolon_document.py` | JSON round trip, `save_atomic`, `generate_launch_name` |
-| `tests/test_eidolon_capability_map.py` | Whitelist and policy accumulation |
-| `tests/test_eidolon_seed.py` | Seed loading and first-boot-only application |
-| `tests/test_eidolon_scorer_calibration.py` | Scorer calibration |
-| `tests/systems/test_eidolon_subsystem.py` | End-to-end subsystem test |
+| `tests/test_self_model_module.py` | Module tick, drift, speech-loop counting |
+| `tests/test_self_model_self_inference.py` | The four derivations, the disabled no-op, seed application |
+| `tests/test_self_model_drift.py` | Divergence, window handling, top sources |
+| `tests/test_self_model_document.py` | JSON round trip, `save_atomic`, `generate_launch_name` |
+| `tests/test_self_model_capability_map.py` | Whitelist and policy accumulation |
+| `tests/test_self_model_seed.py` | Seed loading and first-boot-only application |
+| `tests/test_self_model_scorer_calibration.py` | Scorer calibration |
+| `tests/systems/test_self_model_subsystem.py` | End-to-end subsystem test |
 
 ## Spec and related
 

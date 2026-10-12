@@ -70,7 +70,7 @@ been complete, so no derived setting depends on records with bare keys.
   canonical ordering requirement), `research-event-log` and
   `planned-test-calibration` (one added requirement each).
 - Code: `kaine/bus/schema.py`, `kaine/cycle/engine.py`,
-  `kaine/workspace/syneidesis.py`,
+  `kaine/workspace/core.py`,
   `kaine/evaluation/observers/research_event_observer.py`,
   `kaine/experiment/tone_analysis.py`; docs under `docs/08-cognitive-cycle/` and
   `docs/17-research-data/`.

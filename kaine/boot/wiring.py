@@ -10,7 +10,7 @@ from typing import Any, Mapping, Optional
 
 from kaine.boot.common import _effective_hot_swap_mode
 from kaine.boot.errors import ConfigurationError, _require_keys
-from kaine.defaults import lingua_section_api_key
+from kaine.defaults import language_section_api_key
 from kaine.modules.registry import ModuleRegistry
 from kaine.storage import resolve
 from kaine.workspace.strategies import build_drive_sources, dominant_drive
@@ -70,7 +70,7 @@ def make_coherence_scorer(kaine_config: dict[str, Any]):
 # Allowed keys for the [syneidesis] section (workspace selection + the live
 # four-factor salience source selectors). A typo (e.g. `salience_goal_factors`)
 # must fail loudly rather than silently leave the goal factor on its default.
-_SYNEIDESIS_ALLOWED_KEYS: set[str] = {
+_WORKSPACE_ALLOWED_KEYS: set[str] = {
     "top_k",
     "publication_threshold",
     "novelty_window",
@@ -119,7 +119,7 @@ def make_salience_factors(
     )
 
     section = dict(kaine_config.get("syneidesis") or {})
-    _require_keys(section, _SYNEIDESIS_ALLOWED_KEYS)
+    _require_keys(section, _WORKSPACE_ALLOWED_KEYS)
 
     affect_factor = str(section.get("salience_thymos_factor", _SALIENCE_AFFECT_FACTOR_DEFAULT))
     goal_factor = str(section.get("salience_goal_factor", _SALIENCE_GOAL_FACTOR_DEFAULT))
@@ -245,7 +245,7 @@ def _wire_oscillators(registry: ModuleRegistry, kaine_config: dict[str, Any]) ->
             log.info("attached oscillator to module %s", module.name)
 
 
-def _wire_lingua_self_model(registry: ModuleRegistry) -> None:
+def _wire_language_self_model(registry: ModuleRegistry) -> None:
     """Confirm the language module seeds its persona from the *bus-mediated* self-model module's
     self-model snapshot rather than an in-process self-model module reference.
 
@@ -268,7 +268,7 @@ def _wire_lingua_self_model(registry: ModuleRegistry) -> None:
     log.info("lingua persona seeded from bus-mediated eidolon.self_model snapshot")
 
 
-def _wire_lingua_organ_adapter(
+def _wire_language_organ_adapter(
     registry: ModuleRegistry,
     kaine_config: dict[str, Any] | None,
 ) -> None:
@@ -290,8 +290,8 @@ def _wire_lingua_organ_adapter(
     if _effective_hot_swap_mode(mode, kaine_config) != "organ_adapter":
         return
 
-    lingua_cfg = kaine_config.get("lingua", {})
-    organ_url = voice_cfg.get("organ_url") or lingua_cfg.get("chat_url")
+    language_cfg = kaine_config.get("lingua", {})
+    organ_url = voice_cfg.get("organ_url") or language_cfg.get("chat_url")
     if not organ_url:
         log.warning(
             "organ_adapter hot-swap configured but neither organ_url nor "
@@ -305,7 +305,7 @@ def _wire_lingua_organ_adapter(
     organ_adapters_dir = Path(
         voice_cfg.get("organ_adapters_dir", "/organ-adapters")
     )
-    api_key = lingua_section_api_key(lingua_cfg)
+    api_key = language_section_api_key(language_cfg)
 
     from kaine.modules.sleep.organ_adapter import OrganAdapterResolver, organ_root_url
 
@@ -321,7 +321,7 @@ def _wire_lingua_organ_adapter(
     )
 
 
-def _wire_eidolon_capabilities(registry: ModuleRegistry) -> None:
+def _wire_self_model_capabilities(registry: ModuleRegistry) -> None:
     """Inject the effectors module's effector whitelist into the self-model module's self-inference engine
     so the self-model's ``capability_map`` reflects what the entity can execute
     (the ``eidolon-self-inference`` "Capability map from Effectors whitelist"
@@ -329,14 +329,14 @@ def _wire_eidolon_capabilities(registry: ModuleRegistry) -> None:
     is fixed for the boot, so re-running (e.g. after a supervisor rebuild) is safe."""
     if "praxis" not in registry or "eidolon" not in registry:
         return
-    praxis = registry.get("praxis")
-    eidolon = registry.get("eidolon")
-    engine = getattr(eidolon, "self_inference", None)
+    effectors = registry.get("praxis")
+    self_model = registry.get("eidolon")
+    engine = getattr(self_model, "self_inference", None)
     if engine is None or not hasattr(engine, "set_whitelist_commands"):
         return
-    effectors = sorted(getattr(praxis, "enabled_effectors", ()) or ())
-    engine.set_whitelist_commands(effectors)
-    log.info("wired eidolon capability whitelist from praxis (%d effectors)", len(effectors))
+    effector_names = sorted(getattr(effectors, "enabled_effectors", ()) or ())
+    engine.set_whitelist_commands(effector_names)
+    log.info("wired eidolon capability whitelist from praxis (%d effectors)", len(effector_names))
 
 
 def _wire_affect_drive_relevance(registry: ModuleRegistry) -> None:
@@ -365,22 +365,22 @@ def _wire_self_hearing_gate(registry: ModuleRegistry) -> None:
     """
     if "vox" not in registry or "audition" not in registry:
         return
-    from kaine.modules.vox.coordination import SpeakingGate
+    from kaine.modules.vocal.coordination import SpeakingGate
 
-    vox = registry.get("vox")
+    vocal = registry.get("vox")
     audition = registry.get("audition")
     # Reuse an existing gate if one side already has one; otherwise create a
     # fresh shared gate. This makes rewire_module idempotent and preserves the
     # gate object across supervisor rebuilds.
     gate: Optional[Any] = None
-    if hasattr(vox, "_speaking_gate") and vox._speaking_gate is not None:
-        gate = vox._speaking_gate
+    if hasattr(vocal, "_speaking_gate") and vocal._speaking_gate is not None:
+        gate = vocal._speaking_gate
     elif hasattr(audition, "_speaking_gate") and audition._speaking_gate is not None:
         gate = audition._speaking_gate
     if gate is None:
         gate = SpeakingGate()
-    if hasattr(vox, "set_speaking_gate"):
-        vox.set_speaking_gate(gate)
+    if hasattr(vocal, "set_speaking_gate"):
+        vocal.set_speaking_gate(gate)
     if hasattr(audition, "set_speaking_gate"):
         audition.set_speaking_gate(gate)
     log.info("wired self-hearing gate between vox and audition")

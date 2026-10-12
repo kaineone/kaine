@@ -44,11 +44,8 @@ from kaine.boot.factories.audition import (  # noqa: F401 - re-exported
     _live_mic_source_label,
     make_audition,
 )
-from kaine.boot.factories.eidolon import (  # noqa: F401 - re-exported
-    make_eidolon,
-)
-from kaine.boot.factories.empatheia import (  # noqa: F401 - re-exported
-    make_empatheia,
+from kaine.boot.factories.effectors import (  # noqa: F401 - re-exported
+    make_effectors,
 )
 from kaine.boot.factories.episodic_memory import (  # noqa: F401 - re-exported
     make_episodic_memory,
@@ -56,21 +53,21 @@ from kaine.boot.factories.episodic_memory import (  # noqa: F401 - re-exported
 from kaine.boot.factories.interoception import (  # noqa: F401 - re-exported
     make_interoception,
 )
-from kaine.boot.factories.lingua import (  # noqa: F401 - re-exported
-    make_lingua,
+from kaine.boot.factories.language import (  # noqa: F401 - re-exported
+    make_language,
 )
 from kaine.boot.factories.mundus import (  # noqa: F401 - re-exported
     make_mundus,
 )
-from kaine.boot.factories.nous import (  # noqa: F401 - re-exported
-    _NOUS_COMPLEXITY_THRESHOLD,
-    make_nous,
-)
 from kaine.boot.factories.perception import (  # noqa: F401 - re-exported
     make_perception,
 )
-from kaine.boot.factories.praxis import (  # noqa: F401 - re-exported
-    make_praxis,
+from kaine.boot.factories.planning import (  # noqa: F401 - re-exported
+    _PLANNING_COMPLEXITY_THRESHOLD,
+    make_planning,
+)
+from kaine.boot.factories.self_model import (  # noqa: F401 - re-exported
+    make_self_model,
 )
 from kaine.boot.factories.sequence import (  # noqa: F401 - re-exported
     make_sequence,
@@ -86,11 +83,14 @@ from kaine.boot.factories.sleep import (  # noqa: F401 - re-exported
     make_sleep,
     voice_alignment_config_from_section,
 )
+from kaine.boot.factories.social_cognition import (  # noqa: F401 - re-exported
+    make_social_cognition,
+)
 from kaine.boot.factories.vision import (  # noqa: F401 - re-exported
     make_vision,
 )
-from kaine.boot.factories.vox import (  # noqa: F401 - re-exported
-    make_vox,
+from kaine.boot.factories.vocal import (  # noqa: F401 - re-exported
+    make_vocal,
 )
 from kaine.boot.factories.world_model import (  # noqa: F401 - re-exported
     make_world_model,
@@ -135,12 +135,12 @@ from kaine.boot.wiring import (  # noqa: F401 - re-exported
     _OSCILLATOR_MIN_POPULATION,
     _SALIENCE_AFFECT_FACTOR_DEFAULT,
     _SALIENCE_GOAL_FACTOR_DEFAULT,
-    _SYNEIDESIS_ALLOWED_KEYS,
-    _wire_eidolon_capabilities,
-    _wire_lingua_organ_adapter,
-    _wire_lingua_self_model,
+    _WORKSPACE_ALLOWED_KEYS,
+    _wire_language_organ_adapter,
+    _wire_language_self_model,
     _wire_oscillators,
     _wire_self_hearing_gate,
+    _wire_self_model_capabilities,
     drive_sources_for,
     make_coherence_scorer,
     make_salience_factors,

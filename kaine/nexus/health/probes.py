@@ -114,8 +114,8 @@ async def _main():
                 "loaded and transcribed a test clip"
             )
         else:
-            from kaine.modules.vox.client import TTSRequest
-            from kaine.modules.vox.sherpa_tts import SherpaKokoroTTS
+            from kaine.modules.vocal.client import TTSRequest
+            from kaine.modules.vocal.sherpa_tts import SherpaKokoroTTS
             from kaine.model_paths import DEFAULT_TTS
 
             client = SherpaKokoroTTS(
@@ -522,7 +522,7 @@ async def probe_state_encryption(
     return await asyncio.to_thread(_check_key)
 
 
-async def nous_health_probe(*, backend: str = "pymdp") -> tuple[str, str]:
+async def planning_health_probe(*, backend: str = "pymdp") -> tuple[str, str]:
     """Probe the planning module's active-inference backend (pymdp or NumPy).
 
     The ``backend`` keyword selects which implementation is checked:
@@ -533,9 +533,9 @@ async def nous_health_probe(*, backend: str = "pymdp") -> tuple[str, str]:
     def _check() -> tuple[str, str]:
         if backend == "numpy":
             try:
-                from kaine.modules.nous.engine import encode_snapshot_default
-                from kaine.modules.nous.generative_model import build_generative_model
-                from kaine.modules.nous.numpy_engine import NumpyActiveInferenceEngine
+                from kaine.modules.planning.engine import encode_snapshot_default
+                from kaine.modules.planning.generative_model import build_generative_model
+                from kaine.modules.planning.numpy_engine import NumpyActiveInferenceEngine
                 engine = NumpyActiveInferenceEngine(build_generative_model())
                 engine.infer(encode_snapshot_default(engine.model))
                 engine.close()
@@ -556,7 +556,7 @@ async def nous_health_probe(*, backend: str = "pymdp") -> tuple[str, str]:
         except Exception:
             devices = "unknown"
         try:
-            from kaine.modules.nous.generative_model import build_generative_model
+            from kaine.modules.planning.generative_model import build_generative_model
             build_generative_model()
         except Exception as exc:
             return DEGRADED, (

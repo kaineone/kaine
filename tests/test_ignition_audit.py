@@ -45,7 +45,7 @@ FORBIDDEN_CONTENT_KEYS = frozenset(
 )
 
 
-def test_vox_synthesized_origin_nous_is_nous_initiated():
+def test_vocal_synthesized_origin_planning_is_planning_initiated():
     """The vocal module copies the language module's origin, so a planning module utterance is attributed by it."""
     intents = [
         {"stream": "volition.out", "type": "intent.speak", "payload": {"kind": "speak", "entry_id": "e1"}},
@@ -59,7 +59,7 @@ def test_vox_synthesized_origin_nous_is_nous_initiated():
     ]
     report = classify_realizations([], intents, realizations)
     assert report.realized_total == 1
-    assert report.nous_initiated == 1
+    assert report.planning_initiated == 1
     assert report.input_triggered == 0
     assert report.self_initiated == 0
 
@@ -93,7 +93,7 @@ def test_realization_origin_uses_own_payload_not_last_intent():
         {"stream": "lingua.internal", "type": "internal_speech", "payload": {"entry_id": "e3", "origin": "nous"}},
     ]
     report = classify_realizations([], intents, realizations)
-    assert report.nous_initiated == 2
+    assert report.planning_initiated == 2
     assert report.self_initiated == 1
     assert report.realized_total == 3
 
@@ -102,24 +102,24 @@ def _broadcast(members):
     return {"selected": list(members)}
 
 
-def _vox_synthesized(success=True, entry_id=None):
+def _vocal_synthesized(success=True, entry_id=None):
     payload = {"success": success}
     if entry_id is not None:
         payload["entry_id"] = entry_id
     return {"stream": "vox.synthesized", "type": "vox.synthesized", "payload": payload}
 
 
-def test_vox_synthesized_failure_counts_as_realization_failed():
+def test_vocal_synthesized_failure_counts_as_realization_failed():
     intents = [_intent(entry_id="e1")]
-    realizations = [_vox_synthesized(success=False, entry_id="e1")]
+    realizations = [_vocal_synthesized(success=False, entry_id="e1")]
     report = classify_realizations([], intents, realizations)
     assert report.realization_failed_count == 1
     assert report.realized_total == 0
 
 
-def test_vox_synthesized_success_still_realized():
+def test_vocal_synthesized_success_still_realized():
     intents = [_intent(entry_id="e1")]
-    realizations = [_vox_synthesized(success=True, entry_id="e1")]
+    realizations = [_vocal_synthesized(success=True, entry_id="e1")]
     report = classify_realizations([], intents, realizations)
     assert report.realized_total == 1
     assert report.realization_failed_count == 0
@@ -152,7 +152,7 @@ def test_realized_speak_self_initiated():
     assert report.saliences == [0.9]
 
 
-def test_internal_speech_and_vox_realizations_count():
+def test_internal_speech_and_vocal_realizations_count():
     broadcasts = [_broadcast([_member("E1", "mnemos.trace")])]
     intents = [_intent("E1"), _intent("E2")]
     realizations = [
@@ -267,7 +267,7 @@ def test_base_thesis_no_broadcasts_at_all():
 # --- Scenario: Planning-originated intents ---
 
 
-def test_nous_origin_think_realized_as_internal_speech_is_nous_initiated():
+def test_planning_origin_think_realized_as_internal_speech_is_planning_initiated():
     # Even with a drive in the coalition, origin "nous" wins first.
     broadcasts = [_broadcast([_member("D1", "thymos.drive"), _member("E1", "mnemos.trace")])]
     intents = [
@@ -276,12 +276,12 @@ def test_nous_origin_think_realized_as_internal_speech_is_nous_initiated():
     intents[0]["payload"]["origin"] = "nous"
     realizations = [_realization("internal_speech", entry_id="E1")]
     report = classify_realizations(broadcasts, intents, realizations)
-    assert report.nous_initiated == 1
+    assert report.planning_initiated == 1
     assert report.drive_triggered == 0
     assert report.self_initiated == 0
 
 
-def test_nous_origin_requested_sleep_is_nous_initiated_rest():
+def test_planning_origin_requested_sleep_is_planning_initiated_rest():
     broadcasts = []
     intents = [
         {"stream": "volition.out", "type": "intent.rest", "payload": {"origin": "nous", "entry_id": "R1", "salience": 0.6}},
@@ -291,8 +291,8 @@ def test_nous_origin_requested_sleep_is_nous_initiated_rest():
     ]
     report = classify_realizations(broadcasts, intents, realizations)
     assert report.realized_total == 1
-    assert report.nous_initiated == 1
-    assert "R1" in report.nous_initiated_entry_ids
+    assert report.planning_initiated == 1
+    assert "R1" in report.planning_initiated_entry_ids
 
 
 def test_proposal_outcome_counts():
@@ -301,8 +301,8 @@ def test_proposal_outcome_counts():
         {"stream": "volition_feedback.out", "type": "volition.proposal_outcome", "payload": {"proposal_id": "p2", "realized": False}},
     ]
     report = classify_realizations([], [], [], proposal_outcomes=outcomes)
-    assert report.nous_proposals_realized == 1
-    assert report.nous_proposals_declined == 1
+    assert report.planning_proposals_realized == 1
+    assert report.planning_proposals_declined == 1
 
 
 def test_proposal_outcome_counts_includes_forwarded():
@@ -312,25 +312,25 @@ def test_proposal_outcome_counts_includes_forwarded():
         {"stream": "volition_feedback.out", "type": "volition.proposal_outcome", "payload": {"proposal_id": "p3", "realized": False, "reason": "forwarded"}},
     ]
     report = classify_realizations([], [], [], proposal_outcomes=outcomes)
-    assert report.nous_proposals_realized == 1
-    assert report.nous_proposals_declined == 1
-    assert report.nous_proposals_forwarded == 1
+    assert report.planning_proposals_realized == 1
+    assert report.planning_proposals_declined == 1
+    assert report.planning_proposals_forwarded == 1
 
 
-def test_any_intent_on_nous_out_is_unrealizable():
+def test_any_intent_on_planning_out_is_unrealizable():
     for kind in ("intent.act", "intent.speak", "intent.think", "intent.rest"):
         report = classify_realizations(
             [],
             [{"stream": "nous.out", "type": kind, "payload": {"entry_id": "x"}}],
             [],
         )
-        assert report.unrealizable_nous_intents == 1, kind
+        assert report.unrealizable_planning_intents == 1, kind
 
 
 # --- Scenario: unrealizable planning intents counted separately ---
 
 
-def test_unrealizable_nous_intents_counted_separately():
+def test_unrealizable_planning_intents_counted_separately():
     broadcasts = [_broadcast([_member("A1", "mnemos.trace")])]
     intents = [
         _intent("N1", kind="intent.act", stream="nous.out"),
@@ -341,7 +341,7 @@ def test_unrealizable_nous_intents_counted_separately():
         _realization("praxis.action", entry_id="A1", stream="praxis.out")
     ]
     report = classify_realizations(broadcasts, intents, realizations)
-    assert report.unrealizable_nous_intents == 2
+    assert report.unrealizable_planning_intents == 2
     # Not counted among executed actions.
     assert report.realized_total == 1
     assert report.drive_triggered + report.input_triggered + report.self_initiated == 1

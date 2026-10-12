@@ -6,7 +6,7 @@ import pytest
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle import CognitiveCycle
-from tests._fakes import FakeClock, FakeRegistry, FakeSyneidesis
+from tests._fakes import FakeClock, FakeRegistry, FakeWorkspace
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ async def cycle():
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
     c = CognitiveCycle(
         bus=bus,
-        syneidesis=FakeSyneidesis(),
+        workspace=FakeWorkspace(),
         registry=FakeRegistry([]),
         clock=FakeClock(),
         sleep=FakeClock().sleep,

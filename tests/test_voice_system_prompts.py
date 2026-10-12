@@ -17,7 +17,7 @@ from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
-from kaine.modules.lingua import EXTERNAL_STREAM, FakeChatClient, IntentExpressionLog, Lingua
+from kaine.modules.language import EXTERNAL_STREAM, FakeChatClient, IntentExpressionLog, Language
 from kaine.modules.sleep import Sleep, TrainingResult
 from kaine.modules.sleep.subprocess_trainer import SubprocessTrainerError, write_job_spec
 from kaine.modules.sleep.voice_alignment import DPOPair, VoiceAlignmentConfig
@@ -86,8 +86,8 @@ def _records(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
-def _make_lingua(bus: AsyncBus, tmp_path: Path, responses=None) -> Lingua:
-    return Lingua(
+def _make_language(bus: AsyncBus, tmp_path: Path, responses=None) -> Language:
+    return Language(
         bus,
         chat_client=FakeChatClient(responses=responses),
         intent_log=IntentExpressionLog(tmp_path / "intent.jsonl"),
@@ -99,8 +99,8 @@ def _snapshot(events=None) -> WorkspaceSnapshot:
     return WorkspaceSnapshot(tick_index=0, selected_events=events or [], inhibited=False)
 
 
-async def _say(lingua, *, about, snapshot, about_kind):
-    return await lingua._produce_inner(
+async def _say(language, *, about, snapshot, about_kind):
+    return await language._produce_inner(
         about=about,
         snapshot=snapshot,
         mode="external",
@@ -273,8 +273,8 @@ def test_write_system_prompt_once(monkeypatch, tmp_path):
 @pytest.mark.asyncio
 async def test_heard_sentinel_never_in_system_prompt_store(bus: AsyncBus, tmp_path: Path):
     sentinel = "PURPLE-HERON-4471 said this"
-    lingua = _make_lingua(bus, tmp_path, responses=["A reply."])
-    await lingua.initialize()
+    language = _make_language(bus, tmp_path, responses=["A reply."])
+    await language.initialize()
     try:
         heard = _snapshot(
             [
@@ -289,7 +289,7 @@ async def test_heard_sentinel_never_in_system_prompt_store(bus: AsyncBus, tmp_pa
                 )
             ]
         )
-        await _say(lingua, about=sentinel, snapshot=heard, about_kind="heard")
+        await _say(language, about=sentinel, snapshot=heard, about_kind="heard")
 
         records = _records(tmp_path / "intent.jsonl")
         assert len(records) == 1
@@ -304,7 +304,7 @@ async def test_heard_sentinel_never_in_system_prompt_store(bus: AsyncBus, tmp_pa
             decrypted = get_state_encryptor().maybe_decrypt(path.read_bytes()).decode("utf-8")
             assert sentinel not in decrypted
     finally:
-        await lingua.shutdown()
+        await language.shutdown()
 
 
 @pytest.mark.asyncio

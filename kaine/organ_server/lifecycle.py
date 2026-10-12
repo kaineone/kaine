@@ -39,8 +39,8 @@ from urllib.parse import urlparse
 
 from kaine.defaults import (
     DEFAULT_ORGAN_PORT,
-    lingua_section_api_key,
-    lingua_section_chat_url,
+    language_section_api_key,
+    language_section_chat_url,
 )
 from kaine.organ_server.served import ORGAN_GGUF_REPO
 from kaine.shared_services import is_shared
@@ -136,7 +136,7 @@ def build_launch_cmd(
     reliably suppress the chain-of-thought (the model reasons first and the
     visible ``content`` comes back empty). Actual suppression is enforced
     per-request, client-side, via ``chat_template_kwargs.enable_thinking=false``
-    (kaine.modules.lingua.client) — the organ is a voice, not a reasoner.
+    (kaine.modules.language.client) — the organ is a voice, not a reasoner.
 
     The organ unloads after ``sleep_idle_seconds`` idle seconds and reloads on the
     next request (``-1`` keeps it loaded).
@@ -299,14 +299,14 @@ def _read_pidfile(pidfile: Path) -> Optional[int]:
         return None
 
 
-def sleep_idle_seconds_from_config(lingua: dict[str, Any]) -> int:
+def sleep_idle_seconds_from_config(language: dict[str, Any]) -> int:
     """Return the idle-unload timeout from [lingua].model_server_sleep_idle_seconds.
 
     ``-1`` keeps the organ loaded indefinitely; any non-negative integer releases
     the model and KV cache after that many seconds with no requests, reloading on
     the next request. Other types or values are rejected before launch.
     """
-    value = lingua.get("model_server_sleep_idle_seconds", 600)
+    value = language.get("model_server_sleep_idle_seconds", 600)
     if isinstance(value, bool) or not isinstance(value, int) or value < -1:
         raise ValueError(
             "[lingua].model_server_sleep_idle_seconds must be an integer of -1 or more (-1 keeps the organ loaded)"
@@ -335,10 +335,10 @@ def _resolve_launch(
     host that downloaded it; an operator override may point ``-m`` at a file."""
     from kaine.organ_server.served import detect_organ_backend
 
-    lingua = config.get("lingua") or {}
-    chat_url = lingua_section_chat_url(lingua)
-    alias = str(lingua.get("model_id", ORGAN_GGUF_REPO))
-    api_key = lingua_section_api_key(lingua)
+    language = config.get("lingua") or {}
+    chat_url = language_section_chat_url(language)
+    alias = str(language.get("model_id", ORGAN_GGUF_REPO))
+    api_key = language_section_api_key(language)
 
     backend = detect_organ_backend().backend
     binary = locate_binary(backend, override=override_bin)
@@ -355,7 +355,7 @@ def _resolve_launch(
     # repo-relative default from served_gguf_path() would make `-m state/models/…`
     # fail to open. resolve() also follows an operator symlink to wherever the
     # local build actually lives.
-    gguf = str(Path(lingua.get("model_gguf_path") or served_gguf_path()).resolve())
+    gguf = str(Path(language.get("model_gguf_path") or served_gguf_path()).resolve())
     # An accepted voice-alignment adapter to attach at launch (--lora), set by the
     # on-device reload bracket; absent = serve the base organ unchanged.
     lora_adapter = os.environ.get(LORA_ADAPTER_ENV) or None
@@ -365,7 +365,7 @@ def _resolve_launch(
         alias=alias,
         chat_url=chat_url,
         lora_adapter=lora_adapter,
-        sleep_idle_seconds=sleep_idle_seconds_from_config(lingua),
+        sleep_idle_seconds=sleep_idle_seconds_from_config(language),
     )
     _update_organ_env(config)
     return binary, cmd, chat_url, alias, api_key
@@ -524,10 +524,10 @@ def cmd_status(
     cfg = config if config is not None else _load_config()
     emit = out if out is not None else sys.stdout.write
 
-    lingua = cfg.get("lingua") or {}
-    chat_url = lingua_section_chat_url(lingua)
-    alias = str(lingua.get("model_id", ORGAN_GGUF_REPO))
-    api_key = lingua_section_api_key(lingua)
+    language = cfg.get("lingua") or {}
+    chat_url = language_section_chat_url(language)
+    alias = str(language.get("model_id", ORGAN_GGUF_REPO))
+    api_key = language_section_api_key(language)
 
     from kaine.organ_server.served import verify_served_alias
 

@@ -19,8 +19,8 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.modules.affect import Affect
 from kaine.modules.affect.goals import GoalLedger, GoalState
-from kaine.modules.nous import Nous
-from kaine.modules.nous.engine import FakeEngine, PymdpEngine
+from kaine.modules.planning import Planning
+from kaine.modules.planning.engine import FakeEngine, PymdpEngine
 from kaine.modules.sleep import FakeTrainer, RestScheduler, Sleep, VoiceAlignmentConfig
 
 
@@ -482,19 +482,19 @@ async def test_sleep_malformed_schedule_logs_warning_and_stays_fresh(
 
 
 @pytest.mark.asyncio
-async def test_nous_deserialize_seeds_fake_engine(bus: AsyncBus):
+async def test_planning_deserialize_seeds_fake_engine(bus: AsyncBus):
     restored_posterior = [
         [0.0, 1.0, 0.0, 0.0],
         [0.2, 0.6, 0.2],
         [0.1, 0.1, 0.7, 0.1],
         [0.25, 0.25, 0.25, 0.25],
     ]
-    original = Nous(bus, engine=FakeEngine())
+    original = Planning(bus, engine=FakeEngine())
     original._last_posterior = restored_posterior
     snapshot = original.serialize()
 
     seeded_engine = FakeEngine(timeout_on=0)
-    new = Nous(bus, engine=seeded_engine)
+    new = Planning(bus, engine=seeded_engine)
     new.deserialize(snapshot)
 
     assert new._last_posterior == restored_posterior
@@ -506,15 +506,15 @@ async def test_nous_deserialize_seeds_fake_engine(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_nous_mismatched_posterior_ignored_and_warning(bus: AsyncBus, caplog):
-    original = Nous(bus, engine=FakeEngine())
+async def test_planning_mismatched_posterior_ignored_and_warning(bus: AsyncBus, caplog):
+    original = Planning(bus, engine=FakeEngine())
     original._last_posterior = [[0.5, 0.5], [0.3, 0.3, 0.4]]  # wrong shape
     snapshot = original.serialize()
 
     engine = FakeEngine()
     default_fallback = list(engine._last_posterior)
-    new = Nous(bus, engine=engine)
-    with caplog.at_level(logging.WARNING, logger="kaine.modules.nous"):
+    new = Planning(bus, engine=engine)
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.planning"):
         new.deserialize(snapshot)
 
     assert engine._last_posterior == default_fallback
@@ -539,8 +539,8 @@ def test_pymdp_engine_seed_posterior_valid_and_invalid():
 
 
 @pytest.mark.asyncio
-async def test_nous_logs_when_engine_cannot_take_the_posterior(bus: AsyncBus, caplog):
-    from kaine.modules.nous.module import Nous
+async def test_planning_logs_when_engine_cannot_take_the_posterior(bus: AsyncBus, caplog):
+    from kaine.modules.planning.module import Planning
 
     class _NoSeedEngine:
         actions = ("noop",)
@@ -548,7 +548,7 @@ async def test_nous_logs_when_engine_cannot_take_the_posterior(bus: AsyncBus, ca
         def step(self, snapshot):  # pragma: no cover - never stepped here
             raise AssertionError
 
-    nous = Nous(bus, engine=_NoSeedEngine())
-    with caplog.at_level(logging.INFO, logger="kaine.modules.nous.module"):
-        nous.deserialize({"posterior": [[0.5, 0.5]], "last_action": None})
+    planning = Planning(bus, engine=_NoSeedEngine())
+    with caplog.at_level(logging.INFO, logger="kaine.modules.planning.module"):
+        planning.deserialize({"posterior": [[0.5, 0.5]], "last_action": None})
     assert any("cannot take the restored posterior" in r.message for r in caplog.records)

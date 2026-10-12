@@ -39,7 +39,7 @@ After the phases the sleep module runs the sleep-time intent audit. A base-form 
 
 The fatigue and maintenance triggers share one consumer loop, which runs only when `[hypnos.consolidation].fatigue_triggered = true`. A maintenance poll checks `is_due()` regardless. `is_due()` is true once the effective deadline has passed, or once the original deadline plus `max_deferral_seconds` has passed. `try_defer()` pushes the effective deadline back by `per_defer_seconds`, up to that cap; nothing in the running system calls it outside tests.
 
-Rest requests come from the planning module through the action selection module's `NousProposalSource` (`origin = "nous"`), so they arise only when the planning module is enabled. The sleep module answers each with a `hypnos.rest_request` event at intensity 0.0, so the answer never competes for the workspace.
+Rest requests come from the planning module through the action selection module's `PlanningProposalSource` (`origin = "nous"`), so they arise only when the planning module is enabled. The sleep module answers each with a `hypnos.rest_request` event at intensity 0.0, so the answer never competes for the workspace.
 
 ## Pipeline
 

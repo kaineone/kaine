@@ -23,7 +23,7 @@ from typing import Any
 from kaine import legacy_aliases
 from kaine.bus.schema import Event
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver
-from kaine.evaluation.proactive_audit import LINGUA_EXTERNAL_STREAM
+from kaine.evaluation.proactive_audit import LANGUAGE_EXTERNAL_STREAM
 from kaine.evaluation.sink import AsyncJsonlSink
 
 log = logging.getLogger(__name__)
@@ -114,7 +114,7 @@ def pearson(xs: list[float], ys: list[float]) -> float:
 
 class AffectCorrelationRecorder(StreamSubscriberObserver):
     name = "affect_correlation"
-    streams = (LINGUA_EXTERNAL_STREAM,)
+    streams = (LANGUAGE_EXTERNAL_STREAM,)
 
     def __init__(
         self,

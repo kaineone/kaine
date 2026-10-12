@@ -17,9 +17,9 @@ import pytest
 
 from kaine.modules.audition.sherpa_stt import SherpaMoonshineSTT as _SherpaMoonshineSTT
 from kaine.modules.audition.stt_client import STTClient, TranscriptionResult
-from kaine.modules.vox.client import SynthesisResult, TTSClient, TTSRequest
-from kaine.modules.vox.sherpa_tts import APPLIED_PROSODY
-from kaine.modules.vox.sherpa_tts import SherpaKokoroTTS as _SherpaKokoroTTS
+from kaine.modules.vocal.client import SynthesisResult, TTSClient, TTSRequest
+from kaine.modules.vocal.sherpa_tts import APPLIED_PROSODY
+from kaine.modules.vocal.sherpa_tts import SherpaKokoroTTS as _SherpaKokoroTTS
 
 
 class SherpaMoonshineSTT(_SherpaMoonshineSTT):

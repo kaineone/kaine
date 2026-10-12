@@ -199,7 +199,7 @@ Workspace scoring and access. A candidate's priority is the product of its repor
 
 ### Action selection
 
-Executive action selection (`kaine/workspace/volition.py`). When the section is absent, the action selection module falls back to `DriveBiasedActionSelectionPolicy`.
+Executive action selection (`kaine/workspace/action_selection.py`). When the section is absent, the action selection module falls back to `DriveBiasedActionSelectionPolicy`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -207,14 +207,14 @@ Executive action selection (`kaine/workspace/volition.py`). When the section is 
 | `drive_initiative` | boolean | `true` | Read when `policy` is not `"self_initiated_report"`. `true` turns drive threshold crossings into intents; `false` uses the plain default policy. |
 | `report_threshold` | float | `0.6` | Report bar for speech. When the top score among the broadcast's members (the entity's own speech excluded) reaches it, the action selection module forms an `intent.speak`. The code enforces `0 <= think_threshold <= report_threshold <= 1`; keeping the bars above `[syneidesis].publication_threshold` is a recommendation. |
 | `think_threshold` | float | `0.45` | Report bar for inner speech: a top score at or above it, but below `report_threshold`, forms an `intent.think`. |
-| `speak_refractory_s` | float | `8.0` | Minimum entity seconds between spoken reports under the self-initiated policy. `NousProposalSource` also reads it when the planning module is enabled. |
-| `think_refractory_s` | float | `3.0` | Minimum entity seconds between think intents under the self-initiated policy. `NousProposalSource` also reads it when the planning module is enabled. |
+| `speak_refractory_s` | float | `8.0` | Minimum entity seconds between spoken reports under the self-initiated policy. `PlanningProposalSource` also reads it when the planning module is enabled. |
+| `think_refractory_s` | float | `3.0` | Minimum entity seconds between think intents under the self-initiated policy. `PlanningProposalSource` also reads it when the planning module is enabled. |
 | `interrupt_threshold` | float | unset | Opt-in interruption of an utterance in progress. Must satisfy `report_threshold < interrupt_threshold <= 1.0`. |
 | `sig_expiry_s` | float | unset | Entity seconds after which the novelty signature (the top member's source and type) stops blocking a repeat report. Unset means it never expires. |
 
 None of these keys is in the shipped file, so the defaults above apply. The `thesis_test` profile sets `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`.
 
-Regardless of policy, inhibition gates first: if `snapshot.inhibited` is true, `Volition.select()` returns no intents.
+Regardless of policy, inhibition gates first: if `snapshot.inhibited` is true, `ActionSelection.select()` returns no intents.
 
 ### Oscillator
 

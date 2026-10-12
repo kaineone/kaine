@@ -112,7 +112,7 @@ Otherwise the verdict is NULL.
 
 ### Self-model accuracy runner
 
-The runner checks whether the self-model module scorer's fixed-threshold heuristic reproduces the expected score. A fixed battery of `(planted-signal, claim, expected-score)` cases plants known affect and activity signals into a temporary evaluation-logs directory and runs the real `EidolonAccuracyRunner` scorer on a self-description carrying a known claim.
+The runner checks whether the self-model module scorer's fixed-threshold heuristic reproduces the expected score. A fixed battery of `(planted-signal, claim, expected-score)` cases plants known affect and activity signals into a temporary evaluation-logs directory and runs the real `SelfModelAccuracyRunner` scorer on a self-description carrying a known claim.
 
 The verdict is WIN when the scorer reproduces every expected score, and NULL otherwise.
 
@@ -130,7 +130,7 @@ The benchmark lives in [`kaine/evaluation/benchmarks/active_inference/`](../../k
 
 ### What the benchmark compares
 
-The active-inference agent drives the live planning module's [`PymdpEngine`](../../kaine/modules/nous/engine.py), the default expected-free-energy engine in the cognitive loop (the `[nous].backend = "numpy"` engine is not exercised here). It receives the environment's generative model (`A`, `B`, `C`, `D`) and at each step runs pymdp belief updating and computes each policy's expected free energy `G`. It samples its policy from the posterior `softmax(γ·(−G) + ln E)` with γ = 16, the value the NumPy engine uses. The engine's pymdp `Agent` is built with pymdp's default precision of 1.0, so the benchmark computes the posterior itself, using a generator derived from each evaluation seed so that runs reproduce. Belief persists between steps.
+The active-inference agent drives the live planning module's [`PymdpEngine`](../../kaine/modules/planning/engine.py), the default expected-free-energy engine in the cognitive loop (the `[nous].backend = "numpy"` engine is not exercised here). It receives the environment's generative model (`A`, `B`, `C`, `D`) and at each step runs pymdp belief updating and computes each policy's expected free energy `G`. It samples its policy from the posterior `softmax(γ·(−G) + ln E)` with γ = 16, the value the NumPy engine uses. The engine's pymdp `Agent` is built with pymdp's default precision of 1.0, so the benchmark computes the posterior itself, using a generator derived from each evaluation seed so that runs reproduce. Belief persists between steps.
 
 The baseline is tabular Q-learning with ε-greedy exploration, keyed by the history of observations in the current episode (by default the whole episode, `memory = horizon`). That gives it the same information as a belief-keeping agent without a model: on the T-maze it can carry the cue to the arm, which a memoryless learner cannot (its best expected return there is 0). `memory = 0` keeps the memoryless learner as an explicit control. The baseline has no belief state. Its hyperparameters are tuned per task by a small grid on held-out seeds, and the chosen values are recorded.
 

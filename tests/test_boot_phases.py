@@ -24,7 +24,7 @@ EXPECTED_PHASE_ORDER = [
     "_phase_registry",
     "_phase_maturation_gate",
     "_phase_workspace",
-    "_phase_volition",
+    "_phase_action_selection",
     "_phase_cycle",
     "_phase_supervision",
     "_phase_runtime_state",

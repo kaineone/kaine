@@ -7,12 +7,12 @@ The vocal module is KAINE's voice module. This capability fixes its name and its
 
 ### Requirement: Vocal module identity
 The voice organ SHALL be the module named `vox` (renamed from `audio_out`),
-implemented by the `Vox` class, publishing to the `vox.out` stream. Its behavior
+implemented by the `Vocal` class, publishing to the `vox.out` stream. Its behavior
 (Chatterbox TTS with affect-driven parameters, sink writing, self-hearing
 suppression) SHALL be unchanged by the rename.
 
 #### Scenario: Module reports its name
-- **WHEN** the `Vox` module is constructed
+- **WHEN** the `Vocal` module is constructed
 - **THEN** its `name` attribute equals `"vox"`
 
 #### Scenario: Output stream follows the name

@@ -5,35 +5,35 @@ from kaine.modules.affect import Affect
 from kaine.modules.audition import Audition
 from kaine.modules.base import BaseModule
 from kaine.modules.echo import EchoModule
-from kaine.modules.eidolon import Eidolon
-from kaine.modules.empatheia import Empatheia
+from kaine.modules.effectors import Effectors
 from kaine.modules.episodic_memory import EpisodicMemory
 from kaine.modules.interoception import Interoception
-from kaine.modules.lingua import Lingua
-from kaine.modules.nous import Nous
-from kaine.modules.praxis import Praxis
+from kaine.modules.language import Language
+from kaine.modules.planning import Planning
 from kaine.modules.registry import ModuleRegistry
+from kaine.modules.self_model import SelfModel
 from kaine.modules.sequence import Sequence
 from kaine.modules.sleep import Sleep
+from kaine.modules.social_cognition import SocialCognition
 from kaine.modules.vision import Vision
-from kaine.modules.vox import Vox
+from kaine.modules.vocal import Vocal
 from kaine.modules.world_model import WorldModel
 
 __all__ = [
     "Audition",
-    "Vox",
+    "Vocal",
     "BaseModule",
     "Sequence",
     "EchoModule",
-    "Eidolon",
-    "Empatheia",
+    "SelfModel",
+    "SocialCognition",
     "Sleep",
-    "Lingua",
+    "Language",
     "EpisodicMemory",
     "ModuleRegistry",
-    "Nous",
+    "Planning",
     "WorldModel",
-    "Praxis",
+    "Effectors",
     "Interoception",
     "Affect",
     "Vision",
