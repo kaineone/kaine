@@ -62,4 +62,5 @@
 - [ ] 10.1 The guard turns strict for every scope.
 - [ ] 10.2 CHANGELOG `[Unreleased]` entry; the configuration appendix lists each deprecated name and the last release that reads it.
 - [ ] 10.3 Open `functional-module-names-drop-aliases` for the operator aliases.
+- [ ] 10.5 Sweep comments and docstrings that name a renamed function, class or keyword argument (`make_lingua`, `_phase_volition`, `make_hypnos`, the red-team harness docstring's `praxis_factory`, and the rest), and add a grep-based check that none remain.
 - [x] 10.4 **Owner decision (decided 2026-10-11):** `[individuation].disclosure` becomes "You are periodically and privately assessed for how much you have changed since you first woke, for your own protection. The assessment never enters your experience." It is entity-facing text, so the codemod never touches it; the change lands by hand in task 4.3.

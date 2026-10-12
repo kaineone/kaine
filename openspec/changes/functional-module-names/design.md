@@ -570,6 +570,16 @@ are the ones the sections above leave open; each follows from those sections.
   kind has a driver. Comments and docstrings that name a renamed function (such as
   `make_lingua` or `_phase_volition`) keep the old name, as in 5a and 5b, because
   comments take the prose rules; the close-out sweeps them.
+- **After PR 5c.** Review found two side effects. The string rule for exact class
+  names also renamed three dashboard labels (`role="Vox"` in the health probe
+  config). Those are operator text, so they are back to their old value, and a
+  string passed as a `role=`, `title=` or `label=` keyword argument now takes the
+  operator scope (fixture `label_kwargs`); the dashboard labels move in PR 7. The
+  `recorded_by` field in `tests/fixtures/planning_golden/*.json` names the script
+  that recorded the fixture, and it changed with the script's rename. That is
+  accepted: recorded provenance strings in test fixtures follow script renames,
+  since they name a file in this repository rather than a value any reader
+  compares.
 - **Local data.** `tests/test_legacy_local_data.py` runs only when
   `KAINE_LOCAL_DATA_ROOT` is set. It copies `backups/` and `state/forks/` to a
   temporary directory, reads everything from the copy with every read-map on,
