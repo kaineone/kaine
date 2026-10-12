@@ -430,12 +430,17 @@ are the ones the sections above leave open; each follows from those sections.
 - **Stage.** `StageValueError` is deliberately not a `ValueError`, so the
   fail-safe for an unreadable file cannot swallow it. An unreadable or
   unparseable file keeps its embodied reading (the delta spec covers stored
-  values only), and a missing `stage` key still reads as the developmental
-  stage. The cycle checks the stage file right after the data root is installed,
+  values only). A file that parses but whose top level is not a JSON object
+  (`null`, `[]`, `0`, `""`, `false`) is refused like an unrecognized value,
+  because it used to read as the developmental stage and could regress a lived
+  entity. A JSON object without a `stage` key (`{}`) still reads as the
+  developmental stage; that is a decision, kept because a fresh entity's first
+  write and the defaults rely on it, and it is pinned by a test. The cycle checks the stage file right after the data root is installed,
   before any gate, revive or boot step, and exits with 13
   (`STAGE_REFUSED_EXIT`). The check also runs when reviving, so an operator
   moves a bad file aside first. A revive refuses a bundle whose stage value is
-  unrecognized and names the bundle's `stage.json`.
+  unrecognized or whose stage member is not a JSON object, and names the bundle's
+  `stage.json`.
 - **Lived history.** `OWN_LIVED_ARTIFACTS` lists old and new paths. The legacy
   tree digest writes the old name for a new path, so renaming a tree's
   directories cannot change the legacy identity derived from it.
@@ -455,7 +460,21 @@ are the ones the sections above leave open; each follows from those sections.
   the manifest's shape is validated before any step, created directories must be
   parents of their destination, stage backups must sit in `.rename_state/`, and
   a Qdrant alias is removed only while it still points at the recorded
-  collection. The code has no state lock today, so the boot wiring (9.1) must
+  collection. A revert checks every step first (moves, the chain of stage
+  hashes and their backups, Qdrant aliases) and writes nothing when one cannot
+  be undone. A move whose source and destination are both missing counts as
+  reverted, because a file nested in a moved module directory is in that state
+  whenever the directory sits at its old name. Planning refuses a database it
+  cannot read (locked, or with a hot journal) and tolerates only a missing
+  `memories` table. The manifest and the stage backups are fsynced, file and
+  directory, before the first move and on every status write. Qdrant is an
+  explicit choice: `migrate` takes a client or `no_qdrant=True` and the command
+  line takes `--qdrant-url` or `--no-qdrant`, so no run leaves the Qdrant store
+  under its old names by accident; the boot wiring (9.1) passes the configured
+  client. The explicit `ROLLBACK` in the collection rewrite is belt and braces:
+  SQLite also discards an uncommitted transaction when the connection closes,
+  so a test can show the database unchanged after a failure in the middle of
+  the `vec0` rebuild but cannot tell the two apart. The code has no state lock today, so the boot wiring (9.1) must
   run it before anything opens the state; the command line is for an operator
   with the cycle stopped.
 - **Left for later steps.** The episodic memory module stores its
@@ -465,6 +484,14 @@ are the ones the sections above leave open; each follows from those sections.
   `extract_bundle_gestation` compares against the literal `gestation/` prefix
   and `BUNDLED_GESTATION_FILES`; step 6 renames those literals and must keep
   the old directory lookup.
+- **Before the keys scope flips (PR 6).** Some readers parse raw TOML or hold
+  literal module names outside the normalized config path, and each must
+  normalize or map before step 7 marks the keys scope done:
+  `kaine/research/ignition_study/overlay.py` (a literal `["hypnos"]`),
+  `kaine/setup/wizard_core.py`, `kaine/setup/web/app.py` and
+  `kaine/nexus/health/config.py` (raw TOML reads). A plugin that declares both
+  an old seam and its new seam must be refused rather than deduplicated, so a
+  plugin cannot fill one seam twice under two names.
 - **Local data.** `tests/test_legacy_local_data.py` runs only when
   `KAINE_LOCAL_DATA_ROOT` is set. It copies `backups/` and `state/forks/` to a
   temporary directory, reads everything from the copy with every read-map on,
@@ -507,10 +534,15 @@ alias already exists.
    names with the matching delta folders in active changes. The config,
    seam, bundle-key and dataset aliases from PR 4 go live here. This cannot be
    split by module, because one stream links modules from different layers.
+   Before the scope flips, the raw TOML readers and the literal module list
+   named under "Compatibility readers as built" normalize or map, and a plugin
+   declaring an old seam and its new seam is refused.
 7. **Operator surface.** `--scope operator`: environment variables, CLI flags,
    the pip extra and entry-point shim, quadlet and compose names, UI strings.
 8. **Persisted names.** `--scope persisted`: state paths, file names,
-   collection names and stage values in code; `rename_state` goes live.
+   collection names and stage values in code; `rename_state` goes live, with
+   the boot wiring passing the configured Qdrant client (or `no_qdrant=True`
+   when the store is sqlite-vec only).
 9. **Close-out.** The guard turns strict, the CHANGELOG gets its
    `[Unreleased]` entry, the configuration appendix lists the deprecated
    names and the last release that reads them, and the follow-up change for
