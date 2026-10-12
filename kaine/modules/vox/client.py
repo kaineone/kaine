@@ -71,14 +71,12 @@ class ChatterboxClient:
         if self._client is None:
             import httpx
 
-            client_kwargs: dict[str, Any] = {
-                "base_url": self._base_url,
-                "timeout": self._timeout_s,
-                "trust_env": False,
-            }
-            if self._transport is not None:
-                client_kwargs["transport"] = self._transport
-            self._client = httpx.AsyncClient(**client_kwargs)
+            self._client = httpx.AsyncClient(
+                base_url=self._base_url,
+                timeout=self._timeout_s,
+                trust_env=False,
+                transport=self._transport,
+            )
         return self._client
 
     async def synthesize(self, request: TTSRequest) -> SynthesisResult:
