@@ -180,7 +180,7 @@ systemctl --user restart kaine-chatterbox.service   # Quadlet install only
 curl -s http://127.0.0.1:8883/
 ```
 
-Chatterbox needs a predefined voice id. Set `[vox].predefined_voice_id` in `config/kaine.operator.toml` to a filename Chatterbox can find under its `voices/` directory before you enable the vocal module.
+Chatterbox needs a predefined voice id. With `[vox].predefined_voice_id` unset, the vocal module uses the first voice the server lists at startup. To use a particular one, set `[vox].predefined_voice_id` (or `[vox].default_voice`) in `config/kaine.operator.toml` to a filename Chatterbox can find under its `voices/` directory.
 
 ### sherpa-onnx
 

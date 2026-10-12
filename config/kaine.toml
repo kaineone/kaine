@@ -1045,17 +1045,30 @@ chatterbox_url = "http://127.0.0.1:8883"
 # voice parameters are fixed by the model and speaker preset.
 backend = "chatterbox"
 # sherpa_model_id = "kokoro-en"
-# sherpa_speaker_id = 0   # a public Kokoro preset speaker
+# sherpa_speaker_id = 0   # a Kokoro preset speaker; unset, the vocal module picks one
+#                           # (see voice_gender and default_voice below)
 # sherpa_model_dir = ""   # default: <models dir>/sherpa-onnx/<id>
 # sherpa_num_threads = 2
 voice_mode = "predefined"
-# REQUIRED for voice_mode = "predefined": a voice filename your Chatterbox
-# instance actually serves. Chatterbox returns 400 ("Missing
-# 'predefined_voice_id'") if it is unset, so the vocal module cannot speak until you set it.
-# List what your server has: curl -s http://127.0.0.1:8883/get_predefined_voices
-# Then set e.g. predefined_voice_id = "Abigail.wav" (or your own uploaded voice).
-# (Left unset in the shipped config — voice choice is operator-local.)
-# predefined_voice_id = "Abigail.wav"
+# Voice choice. The shipped config names no voice and the project ships no
+# voice files: voice choice is operator-local. With no voice configured the
+# vocal module picks one the engine itself ships, the first in sorted order:
+#   chatterbox: from the server's list (curl -s http://127.0.0.1:8883/get_predefined_voices),
+#               read once at startup;
+#   sherpa_onnx: from the speaker table of the pinned Kokoro model.
+# It logs the voice it chose. If the list is empty or the server is unreachable,
+# the vocal module stays silent and the health surface says why.
+# An explicit voice wins, in this order: predefined_voice_id (Chatterbox) or
+# sherpa_speaker_id (Kokoro), then default_voice, then the automatic pick.
+# predefined_voice_id = "<a filename your Chatterbox server serves>"
+# default_voice names a voice the engine ships: a Chatterbox filename or
+# display name, or a Kokoro speaker name such as "af_sarah".
+# default_voice = ""
+# voice_gender filters the automatic pick: "any" (default), "female" or "male".
+# Kokoro speaker names encode gender (af_/bf_ female, am_/bm_ male); the
+# Chatterbox server reports no gender, so there the preference is logged as not
+# applicable and the pick is made from all voices.
+# voice_gender = "any"
 output_format = "wav"
 sink_path = "state/vox"
 baseline_temperature = 0.7

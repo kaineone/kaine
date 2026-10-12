@@ -23,6 +23,10 @@ ChatterboxParams. The entity's base voice identity (predefined_voice_id) is
 never altered; only expressive dynamics are nudged. When disabled or when no
 prosody has been seen, synthesis falls back to affect-only parameters.
 See `mirroring.py`.
+
+When no voice is configured, the vocal module picks one the engine ships at
+startup (see voices.py). If no voice can be chosen, it stays silent and reports
+why.
 """
 from __future__ import annotations
 
@@ -33,6 +37,7 @@ import uuid
 from pathlib import Path
 from typing import Any, ClassVar, Optional
 
+from kaine.backend_state import record_backend_failure
 from kaine.bus.client import AsyncBus
 from kaine.bus.schema import Event
 from kaine.entity_clock import EntityClock
@@ -55,6 +60,12 @@ from kaine.modules.vox.playback import (
     TeePlayer,
     build_player,
     wav_duration_s,
+)
+from kaine.modules.vox.voices import (
+    VoiceChoice,
+    VoiceSelectionError,
+    normalize_gender,
+    select_chatterbox_voice,
 )
 from kaine.storage import resolve
 
@@ -106,6 +117,9 @@ class Vox(BaseModule):
         mirror_ceiling: float = 0.5,
         mirror_decay_s: float = 10.0,
         audition_prosody_stream: str = "audition.out",
+        voice_gender: str = "any",
+        default_voice: Optional[str] = None,
+        voice_note: Optional[str] = None,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -126,6 +140,10 @@ class Vox(BaseModule):
         self._voice_label = voice_label
         self._voice_mode = voice_mode
         self._voice_id = predefined_voice_id
+        self._voice_gender = normalize_gender(voice_gender)
+        self._default_voice = (default_voice or "").strip() or None
+        self._voice_note = voice_note
+        self._voice_choice: Optional[VoiceChoice] = None
         self._output_format = output_format
         self._sink_path = resolve(sink_path)
         self._sink_enabled = bool(sink_enabled)
@@ -187,6 +205,10 @@ class Vox(BaseModule):
     def tts_client(self) -> TTSClient:
         return self._tts_client
 
+    @property
+    def voice_id(self) -> Optional[str]:
+        return self._voice_id
+
     async def initialize(self) -> None:
         if hasattr(self._tts_client, "warm_up"):
             try:
@@ -203,6 +225,7 @@ class Vox(BaseModule):
                     exc,
                     exc_info=True,
                 )
+        await self._resolve_voice()
         if self._sink_enabled:
             self._sink_path.mkdir(parents=True, exist_ok=True)
         # Surface (but never auto-delete) any clips left by prior runs of the
@@ -242,6 +265,52 @@ class Vox(BaseModule):
                 self._consumer_loop(), name=f"{self.name}-consumer"
             )
         )
+
+    async def _resolve_voice(self) -> None:
+        """Pick a shipped voice when none is configured (openspec vox-default-voice).
+
+        Runs once at startup. A failure never raises: it is logged once, recorded
+        for the health surface, and leaves the vocal module silent.
+        """
+        if self._tts_unavailable is not None:
+            return
+
+        lister = getattr(self._tts_client, "list_voices", None)
+        if self._voice_mode != "predefined" or self._voice_id or lister is None:
+            label = self._voice_label or self._voice_id
+            if label:
+                log.info(
+                    "vocal module voice: %s (%s)",
+                    label,
+                    self._voice_note or "configured",
+                )
+            return
+
+        server = f"the Chatterbox server at {self._tts_client.base_url}"
+        try:
+            voices = await lister()
+            choice = select_chatterbox_voice(
+                voices,
+                gender=self._voice_gender,
+                default_voice=self._default_voice,
+                server=server,
+            )
+        except VoiceSelectionError as exc:
+            reason = str(exc)
+        except Exception as exc:  # noqa: BLE001
+            reason = (
+                f"cannot list the voices of {server} ({type(exc).__name__}: {exc}); "
+                "start the server, or set [vox].predefined_voice_id"
+            )
+        else:
+            self._voice_id = choice.name
+            self._voice_choice = choice
+            log.info("vocal module voice: %s (%s)", choice.name, choice.note)
+            return
+
+        self._tts_unavailable = f"no voice: {reason}"
+        record_backend_failure("vox", self._backend, reason)
+        log.warning("vocal module silent: %s", reason)
 
     async def shutdown(self) -> None:
         await super().shutdown()
