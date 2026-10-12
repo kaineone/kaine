@@ -11,7 +11,7 @@ A `WetwareOscillator` records one firing-fraction sample each time its module pu
 - Steps with zero drive are tagged too, so their sample is the territory's activity after that publish, like the silicon oscillator at zero drive.
 - docs/cl1.md notes the one-publish delay.
 
-It uses the broker's tagged exchange from planning-on-wetware, and adds no broker code.
+It uses the broker's tagged exchange from nous-on-wetware, and adds no broker code.
 
 Also fixed here: `test_drive_mode_records_taken_proposal` (added by #251) built its `TerritoryObservation` with only `tag` and `spikes`, so it raised TypeError. No CI job runs the plugin suite, so it merged red. Its stub now builds a complete observation.
 

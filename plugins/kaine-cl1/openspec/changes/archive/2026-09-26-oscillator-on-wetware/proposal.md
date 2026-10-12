@@ -9,7 +9,7 @@ KAINE accepts a plugin oscillator through the `oscillator.<module>` seam and cal
 - **`WetwareOscillator`** (`kaine_cl1/backends/oscillator.py`) implements KAINE's `OscillatorProtocol` (`step`, `phase`, `set_frequency`, `serialize`, `deserialize`) with the silicon oscillator's semantics:
   - `step(drive)` clamps the drive to [0, 1], stimulates the oscillator's own territory with amplitude proportional to `drive * drive_scale`, runs one substrate tick, and appends the territory's firing fraction (the share of its channels that spiked) to a history of `2 * plv_window` samples;
   - `phase()` returns the instantaneous phase of the de-meaned history through an FFT-based Hilbert transform (NumPy only), and the neutral phase (0.0) until `plv_window` samples exist or when the series is flat;
-  - `set_frequency(scale)` sets `drive_scale`, as the silicon oscillator does (the sleep module lowers it during maintenance);
+  - `set_frequency(scale)` sets `drive_scale`, as the silicon oscillator does (Hypnos lowers it during maintenance);
   - `serialize`/`deserialize` carry `drive_scale` only; the phase history is runtime context, as in silicon.
 - **One territory per oscillated module.** `[plugins.cl1.oscillators]` lists the modules (`modules = [...]`) and the channels each gets (`channels_per_module`, default 4); each oscillator leases territory `oscillator.<module>`. The plugin declares one `oscillator.<module>` seam per listed module and builds the oscillator in `make_oscillator`. The channel budget across all territories is checked at load time.
 - KAINE only attaches oscillators when `[oscillator].enabled` is true and rejects oscillator seams otherwise; the plugin's docs and errors say so.
@@ -20,7 +20,7 @@ Earlier drafts described entraining a frequency with periodic stimulation and cl
 
 - Changing the PLV coherence math or how the workspace uses phase.
 - Converting the modules themselves (this is the oscillator seam only).
-- A shared cognitive tick: each `step` advances the substrate by one tick window and reads only this oscillator's territory, like the sequence module and interoception module backends.
+- A shared cognitive tick: each `step` advances the substrate by one tick window and reads only this oscillator's territory, like the Chronos and Soma backends.
 - Real hardware (the plugin is simulator-only).
 
 ## Impact

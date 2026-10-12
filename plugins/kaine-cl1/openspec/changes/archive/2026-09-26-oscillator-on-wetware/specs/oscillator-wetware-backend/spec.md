@@ -15,7 +15,7 @@ A `WetwareOscillator` SHALL implement KAINE's `OscillatorProtocol`. Each `step(d
 - **WHEN** two oscillators on disjoint territories are stepped with the same slowly varying drive sequence, and two others with drive sequences of clearly different period
 - **THEN** the phase-locking value of the first pair over the run is higher than that of the second pair
 
-### Requirement: Sleep can slow substrate oscillators
+### Requirement: Hypnos can slow substrate oscillators
 `set_frequency(scale)` SHALL set the drive scale (negative values clamp to 0) so that stimulation amplitude is proportional to `drive * scale`, matching the silicon oscillator.
 
 #### Scenario: Deep-sleep slowdown
