@@ -612,6 +612,19 @@ RESOLUTIONS = [
         "contexts": ["comment", "docstring", "toml_comment"],
         "why": "the module, in code comments",
     },
+
+    {
+        "name": "phantasia",
+        "action": "keep",
+        "pattern": r"both parents carry a Phantasia world model",
+        "why": "a quoted error message the code still emits; it changes with the operator step",
+    },
+    {
+        "name": "being",
+        "action": "rename",
+        "pattern": r"\bSeed being\b",
+        "why": "the glossary term for the seeded entity; links already point at #seed-entity",
+    },
 ]
 
 KEY_OVERRIDES = (

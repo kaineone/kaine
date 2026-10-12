@@ -459,6 +459,20 @@ def _is_prose_like(ctx: str | None) -> bool:
     }
 
 
+def _is_prose_compound(token: str, capabilities: frozenset[str]) -> bool:
+    if not re.fullmatch(r"^[A-Za-z]+(?:[-/][A-Za-z]+)+$", token):
+        return False
+    if token in capabilities:
+        return False
+    for segment in re.split(r"[-/]", token):
+        if not (
+            re.fullmatch(r"^[a-z]+$", segment)
+            or re.fullmatch(r"^[A-Z][a-z]+$", segment)
+        ):
+            return False
+    return True
+
+
 def _is_code_reference(text: str, start: int, end: int, ctx: str | None) -> bool:
     """Return True when a prose-context match is actually a code/config reference."""
     if ctx not in {"md_prose", "comment", "docstring", "toml_comment"}:
@@ -1224,6 +1238,7 @@ def _assign_scope(
     toml_table: str | None,
     tokens: list[dict],
     table,
+    capabilities: frozenset[str] = frozenset(),
 ) -> str:
     """Assign a scope to a candidate match using the rules from the spec."""
     lower_path = rel_path.lower().replace("\\", "/")
@@ -1279,9 +1294,14 @@ def _assign_scope(
     if ctx in {"py_text", "toml_text"}:
         return "operator"
 
-    if ctx in {"md_prose", "comment", "docstring", "toml_comment"} and shape == "bare":
+    if ctx in {"md_prose", "comment", "docstring", "toml_comment"}:
         if not _is_code_reference(text, start, end, ctx):
-            return "prose"
+            if shape == "bare":
+                return "prose"
+            if _is_prose_compound(T, capabilities):
+                top_dirs = getattr(table, "REPO_TOP_DIRS", ())
+                if not any(T.startswith(d + "/") for d in top_dirs):
+                    return "prose"
     target = _link_target(rel_path, T, table)
     if target is not None:
         return _path_move_scope(target)
@@ -1561,6 +1581,36 @@ def _resolve_non_guarded(
     return (True, "word")
 
 
+def _adjust_possessive(
+    text: str, start: int, end: int, new_sub: str, ctx: str | None
+) -> tuple[int, str]:
+    """
+    Extend a replacement through a bare apostrophe when the old name ended in
+    ``s`` but the new name does not.
+
+    Only in prose-like contexts, when the old text ends in ``s``/``S``, the
+    match is not a code reference, the character before the match is not a
+    quote/apostrophe, and the character after the apostrophe is not a
+    letter or digit. Path segments never extend.
+    """
+    old_sub = text[start:end]
+    if not old_sub or old_sub[-1] not in ("s", "S"):
+        return end, new_sub
+    if not new_sub or new_sub[-1].lower() == "s":
+        return end, new_sub
+    if ctx not in {"md_prose", "comment", "docstring", "toml_comment"}:
+        return end, new_sub
+    if _is_code_reference(text, start, end, ctx):
+        return end, new_sub
+    if start > 0 and text[start - 1] in ("'", '"'):
+        return end, new_sub
+    if end >= len(text) or text[end] != "'":
+        return end, new_sub
+    if end + 1 < len(text) and text[end + 1].isalnum():
+        return end, new_sub
+    return end + 1, new_sub + "'s"
+
+
 def _replacement_for(
     text: str,
     start: int,
@@ -1573,12 +1623,36 @@ def _replacement_for(
     ctx: str | None,
     T: str,
     rel_path: str,
+    capabilities: frozenset[str] = frozenset(),
 ) -> str:
     entry = _all_entries(table)[old_key]
     forms = _new_forms(entry, plural)
     matched = text[start:end]
 
     code_like = _is_code_reference(text, start, end, ctx)
+
+    if (
+        _is_prose_compound(T, capabilities)
+        and ctx in {"md_prose", "comment", "docstring", "toml_comment"}
+        and not code_like
+    ):
+        sep = "-" if "-" in T else "/"
+        if matched[0].isupper():
+            if sep == "-":
+                kebab = forms["kebab"]
+                if kebab and kebab[0].islower():
+                    return kebab[0].upper() + kebab[1:]
+                return kebab
+            prose = forms["prose"]
+            if prose and prose[0].islower():
+                return prose[0].upper() + prose[1:]
+            return prose
+        if sep == "-":
+            return forms["kebab"]
+        prose = forms["prose"]
+        if prose and prose[0].isupper():
+            return prose[0].lower() + prose[1:]
+        return prose
 
     kebab = False
     if start > 0 and text[start - 1] == "-":
@@ -1613,7 +1687,10 @@ def _replacement_for(
 
     if matched[0].isupper():
         if not code_like and _is_prose_like(ctx) and shape == "bare":
-            return forms["prose"]
+            prose = forms["prose"]
+            if prose and prose[0].islower():
+                return prose[0].upper() + prose[1:]
+            return prose
         return forms["class"]
 
     if not code_like and _is_prose_like(ctx) and shape == "bare":
@@ -1742,6 +1819,7 @@ def _apply_key_overrides(
     rel_path: str,
     tokens: list[dict],
     table,
+    capabilities: frozenset[str] = frozenset(),
 ) -> list[tuple[int, int, str, str, str, str]]:
     replacements: list[tuple[int, int, str, str, str, str]] = []
     regex, group_map = _name_regex(table)
@@ -1798,6 +1876,7 @@ def _apply_key_overrides(
                             toml_table,
                             tokens,
                             table,
+                            capabilities,
                         )
                         if scope in scopes:
                             replacements.append(
@@ -1930,6 +2009,7 @@ def _apply_word_matches(
     rel_path: str,
     tokens: list[dict],
     table,
+    capabilities: frozenset[str] = frozenset(),
 ) -> tuple[
     list[tuple[int, int, str, str, str, str]],
     dict[str, int],
@@ -1973,11 +2053,11 @@ def _apply_word_matches(
             action, rule_text = resolution
             if action == "rename":
                 scope = _assign_scope(
-                    rel_path, ctx, text, start, end, W, T, shape, toml_table, tokens, table
+                    rel_path, ctx, text, start, end, W, T, shape, toml_table, tokens, table, capabilities
                 )
                 if scope in scopes:
                     new_text = _replacement_for(
-                        text, start, end, scope, shape, old_key, plural, table, ctx, T, rel_path
+                        text, start, end, scope, shape, old_key, plural, table, ctx, T, rel_path, capabilities
                     )
                     replacements.append(
                         (start, end, new_text, scope, rule_text, old_key)
@@ -2006,11 +2086,11 @@ def _apply_word_matches(
             action, rule_text = guarded_result
             if action == "rename":
                 scope = _assign_scope(
-                    rel_path, ctx, text, start, end, W, T, shape, toml_table, tokens, table
+                    rel_path, ctx, text, start, end, W, T, shape, toml_table, tokens, table, capabilities
                 )
                 if scope in scopes:
                     new_text = _replacement_for(
-                        text, start, end, scope, shape, old_key, plural, table, ctx, T, rel_path
+                        text, start, end, scope, shape, old_key, plural, table, ctx, T, rel_path, capabilities
                     )
                     replacements.append(
                         (start, end, new_text, scope, rule_text, old_key)
@@ -2035,11 +2115,11 @@ def _apply_word_matches(
         rename, rule_text = _resolve_non_guarded(ctx, T, rel_path, text, start, end, table)
         if rename:
             scope = _assign_scope(
-                rel_path, ctx, text, start, end, W, T, shape, toml_table, tokens, table
+                rel_path, ctx, text, start, end, W, T, shape, toml_table, tokens, table, capabilities
             )
             if scope in scopes:
                 new_text = _replacement_for(
-                    text, start, end, scope, shape, old_key, plural, table, ctx, T, rel_path
+                    text, start, end, scope, shape, old_key, plural, table, ctx, T, rel_path, capabilities
                 )
                 replacements.append((start, end, new_text, scope, rule_text, old_key))
                 blocked.append((start, end))
@@ -2197,6 +2277,7 @@ def rewrite_text(
     scopes: set[str],
     only: set[str] | None = None,
     change_ids: frozenset[str] = frozenset(),
+    capabilities: frozenset[str] = frozenset(),
 ) -> FileResult:
     """
     Rewrite the contents of one file according to the table.
@@ -2217,7 +2298,7 @@ def rewrite_text(
     replacements: list[tuple[int, int, str, str, str, str]] = []
 
     overrides = _apply_key_overrides(
-        text, intervals, blocked, scopes, only, rel_path, tokens, table
+        text, intervals, blocked, scopes, only, rel_path, tokens, table, capabilities
     )
     replacements.extend(overrides)
 
@@ -2228,7 +2309,7 @@ def rewrite_text(
     replacements.extend(phrases)
 
     word_reps, kept, queued = _apply_word_matches(
-        text, intervals, blocked, scopes, only, change_ids, rel_path, tokens, table
+        text, intervals, blocked, scopes, only, change_ids, rel_path, tokens, table, capabilities
     )
     replacements.extend(word_reps)
 
@@ -2242,6 +2323,14 @@ def rewrite_text(
         key_collisions = []
 
     collisions: list[tuple[str, str, str]] = seq_collisions + key_collisions
+
+    adjusted: list[tuple[int, int, str, str, str, str]] = []
+    for rep in replacements:
+        start, end, new_sub, scope, rule, old_key = rep
+        ctx = _context_at(start, intervals)
+        new_end, new_sub = _adjust_possessive(text, start, end, new_sub, ctx)
+        adjusted.append((start, new_end, new_sub, scope, rule, old_key))
+    replacements = adjusted
 
     replacements.sort(key=lambda r: r[0])
     new_text = text
@@ -2447,7 +2536,8 @@ def new_path(
                 new_sub = forms["upper"]
             else:
                 new_sub = forms["class"]
-            current_segment = current_segment[:start] + new_sub + current_segment[end:]
+            new_end, new_sub = _adjust_possessive(segment, start, end, new_sub, "path")
+            current_segment = current_segment[:start] + new_sub + current_segment[new_end:]
             changed = True
 
         new_parts.append(current_segment)
@@ -2507,6 +2597,31 @@ def change_ids(root: Path, files: Iterable[str]) -> frozenset[str]:
     return frozenset(cid for cid in (active | archived) if "-" in cid)
 
 
+def openspec_capabilities(files: Iterable[str]) -> frozenset[str]:
+    """Collect capability folder names following every openspec/specs/ segment."""
+    caps: set[str] = set()
+    for rel in files:
+        rel_norm = rel.replace("\\", "/")
+        parts = rel_norm.split("/")
+        for i in range(len(parts) - 2):
+            if parts[i] == "openspec" and parts[i + 1] == "specs":
+                candidate = parts[i + 2]
+                if candidate and i + 2 < len(parts) - 1:
+                    caps.add(candidate)
+            elif (
+                parts[i] == "openspec"
+                and parts[i + 1] == "changes"
+                and parts[i + 2] != "archive"
+                and i + 3 < len(parts)
+                and parts[i + 3] == "specs"
+                and i + 4 < len(parts)
+            ):
+                candidate = parts[i + 4]
+                if candidate and i + 4 < len(parts) - 1:
+                    caps.add(candidate)
+    return frozenset(caps)
+
+
 def is_excluded(rel_path: str, table) -> bool:
     """Return True when a path is excluded from processing."""
     rel_norm = rel_path.replace("\\", "/")
@@ -2540,6 +2655,7 @@ def plan(
     """Build a full rename plan for the repository."""
     files = tracked_files(root)
     change_ids_set = change_ids(root, files)
+    capabilities_set = openspec_capabilities(files)
 
     moves: list[tuple[str, str, str]] = []
     results: dict[str, FileResult] = {}
@@ -2569,7 +2685,7 @@ def plan(
         except UnicodeDecodeError:
             continue
 
-        result = rewrite_text(rel, text, table, scopes, only, change_ids_set)
+        result = rewrite_text(rel, text, table, scopes, only, change_ids_set, capabilities_set)
         if result.skipped:
             results[rel] = result
             continue
