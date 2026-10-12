@@ -1503,9 +1503,9 @@ def _assign_scope(
         return "operator"
     if ctx in {"py_string", "py_text"}:
         full = _enclosing_string_content(text, start, ctx, tokens)
-        if full is not None and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", full) and any(
-            ch.isupper() for ch in full
-        ):
+        if full is not None and re.fullmatch(
+            r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*", full
+        ) and any(ch.isupper() for ch in full.split(".")[0]):
             return "identifiers"
     if ctx == "md_code" and any(ch.isupper() for ch in W):
         return "identifiers"
