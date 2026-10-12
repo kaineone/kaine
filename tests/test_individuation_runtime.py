@@ -153,7 +153,7 @@ def build(tmp_path: Path, **over: Any):
         "organ_unloaded": lambda: False,
         "sleeping": None,
         "born_at": lambda: None,
-        "is_gestating": lambda: False,
+        "is_developing": lambda: False,
         "bus": bus,
         "notify": None,
         "entity_name": "test",
