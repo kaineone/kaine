@@ -555,6 +555,12 @@ _MODULE_CLASSES = "Topos|Soma|Chronos|Thymos|Hypnos|Mnemos|Phantasia|Lingua|Vox|
 # Explicit overrides for review-queue items are added by later pull requests.
 RESOLUTIONS = [
     {
+        "name": "nexus",
+        "action": "keep",
+        "pattern": r"kaine\.nexus\.sessionKey",
+        "why": "browser storage key held in the operator's browser; renamed with the UI strings",
+    },
+    {
         "name": "perception",
         "action": "keep",
         "pattern": r"audition\.perception\b",
@@ -758,6 +764,9 @@ PATH_OVERRIDES = {
     "tests/test_praxis_effectors.py": "tests/test_effectors.py",
     "tests/test_workspace_syneidesis.py": "tests/test_workspace_core.py",
     "tests/test_perception_locus.py": "tests/test_perceptual_locus.py",
+    # Test names that would otherwise read badly after the rename.
+    "tests/test_developmental_gestation_lock.py": "tests/test_development_lock.py",
+    "tests/test_womb_sources.py": "tests/test_stimulus_sources.py",
     # Keys ending in "/" are directory prefixes.
     "openspec/specs/spot-supervisor/": "openspec/specs/supervisor/",
     "docs/08-cognitive-cycle/perception-locus.md": "docs/08-cognitive-cycle/perceptual-locus.md",
