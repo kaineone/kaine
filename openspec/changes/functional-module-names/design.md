@@ -301,7 +301,7 @@ The docs prose PR (step 3) sets it by hand, with the docs that quote it
 
 ### Compatibility
 
-There has been no live run and development is paused, so internal names can
+There has been no live run, so internal names can
 break cleanly. Two kinds of data must stay readable: preserved entity state
 and recorded datasets. Operator-facing names get a bounded window.
 

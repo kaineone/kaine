@@ -1,10 +1,6 @@
 # KAINE
 
-Part of the Kaine project — **[kaine.one](https://kaine.one)**
-
-> **Status: on hiatus.** Active development is paused. Contributions are still
-> welcome as pull requests (see [CONTRIBUTING.md](CONTRIBUTING.md)), but reviews
-> happen only occasionally and on no fixed schedule.
+Part of the Kaine project: **[kaine.one](https://kaine.one)**
 
 **Kaine Autonomous Intelligent Networked Entity** — a composite cognitive
 architecture built to test one claim: that a mind is the **continuous competition

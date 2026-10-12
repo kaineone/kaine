@@ -108,5 +108,4 @@ entrainment marker. "Maternal heartbeat" and "maternal drive" stay.
   K1-Jev records and the K1-Jev question text, and entity-facing text. The owner's
   new disclosure text is set by hand in the docs prose PR (design.md,
   "Entity-facing text").
-- Branches in flight conflict with the identifier PRs. Development is paused,
-  and the codemod is deterministic, so a branch rebases by re-running it.
+- Branches in flight conflict with the identifier PRs. The codemod is deterministic, so a branch rebases by re-running it.
