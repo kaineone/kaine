@@ -388,6 +388,90 @@ the entity to either stage. A missing `stage` key keeps its current meaning. `OW
 lists both the old and the new paths, so a tree that has not been migrated,
 such as a fork root or bundle root, is still recognized as lived.
 
+### Compatibility readers as built (PR 4)
+
+The readers live in `kaine/legacy_aliases.py` and read the table at call time.
+Each one acts only on entries whose scope the table marks done, so every reader
+in this PR is inert and each is tested with a synthetic entry. The choices below
+are the ones the sections above leave open; each follows from those sections.
+
+- **Last release.** The table holds `ALIAS_LAST_RELEASE = "27.01"`, the name
+  every warning quotes. It is a placeholder that the close-out step (10.2) sets
+  by the rule under Window above.
+- **State paths.** The three `STATE_PATHS` entries that had bare file names now
+  carry their directory (`lifecycle/`, `individuation/`), because
+  `rename_state` works from the state root.
+- **Config.** `_load_merged_config` normalizes each layer as soon as it is
+  parsed, before the tier's module-toggle refusal and the study allowlist, so
+  both see the new names. A layer that sets an old and a new name is a
+  `ProfileError`, which the cycle reports as a configuration error. A value alias
+  is matched on the new key path after the table and key renames. The
+  dashboard's own loader normalizes its three files the same way.
+- **Environment.** `getenv` covers `ENV_VARS` and `COMPOSE_VARS`, not the
+  test-only variables, and warns once per old name per process.
+  `check_environment()` runs at cycle and dashboard start-up, so a pair that
+  disagrees stops the start even when the variable is read later (the
+  embodiment approval is read when the module is built). The compose files keep
+  their `${NEXUS_*}` references until step 7 renames them; that step writes the
+  fallback (`${DASHBOARD_X:-${NEXUS_X}}`) in the same edit.
+- **CLI and seams.** An old flag is added as a hidden alias only when the parser
+  has the new one; the ignition study's parser moved into `_build_parser()` to
+  take it. `--serve-nexus` exists only in `scripts/prepare-headless-host.sh`, so
+  its alias lands with that script's rename in step 7. Plugin seams resolve
+  before validation, the run manifest records the new seam, and the plugin is
+  still called with the module name it declared.
+- **Read-maps.** Nothing on disk is rewritten. A record that holds an old and a
+  new field keeps the new one and logs one warning per pair; recorded data cannot
+  be corrected, so it is not refused. A bundle member under a new name beats the
+  same member under an old name whatever the tar order. Evaluation readers also
+  look in a sidecar directory written under an old name. The manifest's
+  `modules` list, the raw bus archive and the dashboard record have no reader in
+  the repository, so only the local-data test reads the manifest list.
+- **Stage.** `StageValueError` is deliberately not a `ValueError`, so the
+  fail-safe for an unreadable file cannot swallow it. An unreadable or
+  unparseable file keeps its embodied reading (the delta spec covers stored
+  values only), and a missing `stage` key still reads as the developmental
+  stage. The cycle checks the stage file right after the data root is installed,
+  before any gate, revive or boot step, and exits with 13
+  (`STAGE_REFUSED_EXIT`). The check also runs when reviving, so an operator
+  moves a bad file aside first. A revive refuses a bundle whose stage value is
+  unrecognized and names the bundle's `stage.json`.
+- **Lived history.** `OWN_LIVED_ARTIFACTS` lists old and new paths. The legacy
+  tree digest writes the old name for a new path, so renaming a tree's
+  directories cannot change the legacy identity derived from it.
+- **`rename_state`.** It plans only from active entries, so it does nothing
+  until the persisted scope is done. Order: module directories, state files with
+  their SQLite companions (`-wal`, `-shm`, `-journal`), the stage file, the
+  `collection` column, Qdrant aliases. A `vec0` partition key cannot be updated
+  in place, so the vector table is rebuilt in the same transaction with each
+  row's id and embedding kept. Every refusal is checked before the first write,
+  and the manifest is written before the first move. Each step decides from the
+  disk whether it ran, so a re-run resumes and `--revert` undoes in reverse
+  order and then removes `.rename_state/`. The database reverts by the inverse
+  mapping (same rows, possibly different file bytes); a companion that SQLite
+  checkpointed away does not block a revert; the stage file comes back from a
+  per-step byte copy. Every manifest path is checked to stay under the root,
+  symlinks are refused (an operator resolves a linked module directory first),
+  the manifest's shape is validated before any step, created directories must be
+  parents of their destination, stage backups must sit in `.rename_state/`, and
+  a Qdrant alias is removed only while it still points at the recorded
+  collection. The code has no state lock today, so the boot wiring (9.1) must
+  run it before anything opens the state; the command line is for an operator
+  with the cycle stopped.
+- **Left for later steps.** The episodic memory module stores its
+  `collection_prefix` inside its own snapshot state; when step 8 renames the
+  collections, that stored prefix needs the same map. The loose legacy bundle
+  layout is found by its `phantasia/` directory on disk, and
+  `extract_bundle_gestation` compares against the literal `gestation/` prefix
+  and `BUNDLED_GESTATION_FILES`; step 6 renames those literals and must keep
+  the old directory lookup.
+- **Local data.** `tests/test_legacy_local_data.py` runs only when
+  `KAINE_LOCAL_DATA_ROOT` is set. It copies `backups/` and `state/forks/` to a
+  temporary directory, reads everything from the copy with every read-map on,
+  checks that the real trees did not change, and deletes the copy. An encrypted
+  bundle is checked by its manifest only, and an encrypted fork snapshot is
+  skipped, unless `KAINE_STATE_KEY` is set.
+
 ### PR sequence
 
 Each PR runs the codemod (or adds infrastructure), passes
