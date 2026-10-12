@@ -324,7 +324,7 @@ audition = false
 hypnos = false
 empatheia = false
 phantasia = false
-# The embodiment module's helpers. The perceptual locus module arbitrates the physical-XOR-virtual sense
+# Embodiment helpers. The perceptual locus module arbitrates the physical-XOR-virtual sense
 # locus; the embodiment module routes intents/perception to a body through a pluggable adapter
 # (the shipped default is the transport-free `stub` reference body). Both off by
 # default; Mundus additionally requires KAINE_MUNDUS_OPERATOR_APPROVED=1.
@@ -1317,7 +1317,7 @@ latent_kind = "categorical"    # or "gaussian"
 learning_rate = 0.001
 
 [perception]
-# The perceptual locus module arbiter (physical XOR virtual sense gating). Enabled via
+# Perceptual locus arbiter (physical XOR virtual sense gating). Enabled via
 # [modules].perception. When the entity is embodied in a virtual world its
 # physical camera/mic are inhibited, and vice-versa.
 # Allow the entity to switch its own sense locus via the effectors module's intents. Off by
