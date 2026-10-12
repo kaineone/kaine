@@ -642,6 +642,87 @@ are the ones the sections above leave open; each follows from those sections.
   bundle is checked by its manifest only, and an encrypted fork snapshot is
   skipped, unless `KAINE_STATE_KEY` is set.
 
+### Keys step, split in two (PR 6a and 6b)
+
+The keys step changes wire names, so it lands in two PRs. **6a** prepares and
+changes no behaviour: every reader it adds acts only once the keys scope is done,
+and the fast suite's outcomes match main's test by test. **6b** runs the codemod,
+moves the files, marks the keys scope done and so turns the readers on.
+
+What 6a decides, from a keys-scope dry run on main (72 moves, about 10.5k
+replacements in about 900 files):
+
+- **Config keys.** `CONFIG_KEYS` now lists every config key the keys run renames
+  (twelve more compound keys such as `soma_stream`, `lingua_quiet_s`,
+  `salience_thymos_factor`, `nexus_url`), every module key used as a key inside
+  another table (`[evaluation.observers].empatheia`, a plugin's backend and
+  territory tables; the guarded names rename only in `[modules]`), and every
+  stream name used as a key (`[bus.per_stream_maxlen]`). `research_event_log.nexus_record`
+  joins the table moves. The normalizer also maps stream names used as values or
+  list items and the tier's `unsupported_modules` list. The bus configuration, the
+  study overlay, the setup page and wizard and the base-thesis profile reader read
+  their TOML raw; each now normalizes every layer, so an operator file with old
+  names merges under the new ones and a layer that sets both names is refused.
+- **Strings inside stored files stay.** A keys-scope string that is a key or value
+  inside a file on disk (records, reports, the development readout, run
+  manifests, study plans, job files, sidecar directory names) joins
+  `PERSISTED_EXACT`, so the keys run leaves it and the persisted step decides it
+  with read-maps: the affect, sleep, social-cognition and planning record fields,
+  the self-model drift signals, the workspace-mediation benchmark fields, the
+  world-model cue, model revisions in run manifests, the stimulus-source readout
+  and reasons, the supervisor escalation reason, the forked job kind,
+  `gestation_budget_seconds`, and three sidecar directory names. The codemod now
+  also treats a TOML key equal to such a name as persisted.
+- **Strings the UI reads move with the UI.** Template context variables, the
+  dashboard's health block key, the runtime keys the supervisor banner reads and
+  the session cookie name go to the new `OPERATOR_EXACT` list, so they change with
+  the dashboard strings in PR 7 and the template never reads a missing key.
+- **Names that reach disk through code.** Decommission and the public metrics
+  bundle's deny list handle every form of a module-named state directory
+  (`legacy_aliases.name_forms`), because those directories keep their names until
+  PR 8 while the literals change in 6b. Snapshot artifact directories are found
+  under any form of the module's name, and a merge maps them to one module. The
+  preservation bundle names its world-model member once, so the directory and
+  the tar member cannot drift apart. Study plans map their module lists on read,
+  and `study.json` is never rewritten, so its hash holds. The control file's freeze
+  sources, the self-model's drift-episode source counts and restored per-stream
+  cursors read old names.
+- **Plugins.** A plugin that declares one seam under its old and its new name is
+  refused instead of merged.
+- **Queue and collisions.** Every queued perception, echo and spot match in the
+  keys scope is decided by a rule: perception renames only as the locus module key
+  in module lists and maps (the feed keeps its own source, which also means the
+  feed's few transition events, all at salience zero, stop counting as the locus
+  module's drive source); echo renames only as the recorder module key; two
+  supervisor selftest messages name the config table and rename with it. A probe
+  that renames every queued match changes nothing more in the keys scope; the 128
+  matches still queued belong to the UI step. Of the 39 collisions, the six test
+  files that exercise the readers with old names as literals are excluded from the
+  codemod, and the other 26 are accepted after a check (in each the new key
+  already has another role in that file and never meets the renamed key in one
+  mapping).
+- **Stream cursors.** The only stream position that survives a restart in a
+  state file is the stage file's `hypnos_cursor`; module snapshots also carry
+  cursors (embodiment, interoception, self-model, and the sequence module's
+  per-stream map). Redis stream ids are time-ordered and the rename needs a
+  restart, so a cursor recorded against `hypnos.out` and used on `sleep.out` reads
+  exactly the entries written after the restart: no replay and no skip, and the
+  sleep count and the maturation gate see every new sleep once. A stream-keyed
+  cursor map is remapped on restore, keeping the value already under the new name.
+  There are no consumer groups and no other Redis keys holding state.
+- **Redis persistence.** Compose, quadlet and the native scripts run Redis with AOF
+  (`appendonly yes`, `appendfsync everysec`) and no RDB, with `maxmemory`
+  (4 GB by default) and `noeviction`. After 6b the old streams stay as orphans at
+  their caps, and the "Bus budget" preboot row counts only configured streams, so
+  the caps alone would let real memory reach twice the budget, where `noeviction`
+  turns a full Redis into failed writes. So 6b ships a one-time cleanup: a command
+  that lists the old-named module streams and deletes them only when asked, and a
+  preboot warning while any remain. Nothing reads those streams after the flip.
+- **Config digest.** `compute_config_digest` hashes the resolved configuration,
+  so the same settings hash differently once the keys are renamed. 6b records
+  `"config_key_scheme": 2` in run manifests (absent means 1), so a comparison
+  across the rename is explicitly different rather than silently different.
+
 ### PR sequence
 
 Each PR runs the codemod (or adds infrastructure), passes
