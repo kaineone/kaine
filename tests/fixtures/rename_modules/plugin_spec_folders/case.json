@@ -1,0 +1,8 @@
+{
+  "args": ["--apply", "--scope", "identifiers", "--only", "soma"],
+  "expect_exit": 0,
+  "moves": [
+    ["plugins/demo/src/demo/soma.py", "plugins/demo/src/demo/interoception.py"]
+  ],
+  "report_contains": ["## moves (1)"]
+}

@@ -2427,8 +2427,8 @@ def rewrite_text(
 
 def _path_move_scope(rel_norm: str) -> str:
     """Return the move scope for a repo-relative path."""
-    if rel_norm.startswith("openspec/specs/") or re.match(
-        r"openspec/changes/[^/]+/specs/", rel_norm
+    if re.match(r"(?:plugins/[^/]+/)?openspec/specs/", rel_norm) or re.match(
+        r"(?:plugins/[^/]+/)?openspec/changes/[^/]+/specs/", rel_norm
     ):
         return "keys"
     if rel_norm.startswith("docs/"):
