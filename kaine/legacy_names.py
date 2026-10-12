@@ -817,7 +817,48 @@ PERSISTED_EXACT = {
     "hypnos_cursor": "sleep_cursor",
     "empatheia_agents": "social_cognition_agents",
     "mnemos_": "episodic_memory_",
+    # Keys and values inside stored files; the keys run leaves them, the persisted step decides.
+    "thymos_state": "affect_state",
+    "hypnos_payload": "sleep_payload",
+    "empatheia_deviation": "social_cognition_deviation",
+    "nous_initiated": "planning_initiated",
+    "nous_initiated_entry_ids": "planning_initiated_entry_ids",
+    "nous_proposals_realized": "planning_proposals_realized",
+    "nous_proposals_declined": "planning_proposals_declined",
+    "nous_proposals_forwarded": "planning_proposals_forwarded",
+    "unrealizable_nous_intents": "unrealizable_planning_intents",
+    "eidolon_drift": "self_model_drift",
+    "eidolon_drift_count": "self_model_drift_count",
+    "eidolon_drift_signal": "self_model_drift_signal",
+    "eidolon_identity_history_len": "self_model_identity_history_len",
+    "eidolon_self_model_found": "self_model_found",
+    "hypnos_adapters_present": "sleep_adapters_present",
+    "soma_gain": "interoception_gain",
+    "soma_error": "interoception_error",
+    "topos_gain": "vision_gain",
+    "topos_error": "vision_error",
+    "soma_units": "interoception_units",
+    "topos_units": "vision_units",
+    "topos_lr": "vision_lr",
+    "phantasia_cue": "world_model_cue",
+    "lingua_revision": "language_revision",
+    "topos_encoder": "vision_encoder",
+    "womb_prediction_error": "stimulus_source_prediction_error",
+    "womb_lost": "stimulus_source_lost",
+    "womb_not_ready": "stimulus_source_not_ready",
+    "no_womb_feed_configured": "no_stimulus_source_feed_configured",
+    "spot_escalation": "supervisor_escalation",
+    "forked_being": "forked_entity",
+    "gestation_budget_seconds": "development_budget_seconds",
+    "replay_mnemos": "replay_episodic_memory",
+    "replay_phantasia": "replay_world_model",
+    "eidolon_accuracy": "self_model_accuracy",
+    "nous_policy": "planning_policy",
+
 }
+
+# Strings an operator-facing template, page script or browser reads; they move with the UI strings in the operator step.
+OPERATOR_EXACT = ("nexus_available", "nexus_error", "nexus_port", "nexus_running", "mnemos_store", "spot_state", "spot_escalated", "kaine_nexus_session")
 
 REPO_TOP_DIRS = (
     "kaine",
@@ -988,6 +1029,7 @@ CONFIG_TABLES = tuple(
 ) + (
     {"old": "phantasia.world_model", "new": "world_model.backend", "scope": "keys"},
     {"old": "perception_feed.womb", "new": "perception_feed.stimulus_source", "scope": "keys"},
+    {"old": "research_event_log.nexus_record", "new": "research_event_log.dashboard_record", "scope": "keys"},
 )
 
 CONFIG_KEYS = (
@@ -998,6 +1040,23 @@ CONFIG_KEYS = (
     {"old": "womb_presence_window_seconds", "new": "stimulus_source_presence_window_seconds", "scope": "keys"},
     {"old": "womb_prediction_error_ceiling", "new": "stimulus_source_prediction_error_ceiling", "scope": "keys"},
     {"old": "birth_transition_seconds", "new": "maturation_transition_seconds", "scope": "keys"},
+    {"old": "chronos_stream", "new": "sequence_stream", "scope": "keys"},
+    {"old": "hypnos_stream", "new": "sleep_stream", "scope": "keys"},
+    {"old": "lingua_external_stream", "new": "language_external_stream", "scope": "keys"},
+    {"old": "lingua_quiet_s", "new": "language_quiet_s", "scope": "keys"},
+    {"old": "mnemos_stream", "new": "episodic_memory_stream", "scope": "keys"},
+    {"old": "require_operator_ack_for_birth", "new": "require_operator_ack_for_maturation", "scope": "keys"},
+    {"old": "salience_thymos_factor", "new": "salience_affect_factor", "scope": "keys"},
+    {"old": "soma_stream", "new": "interoception_stream", "scope": "keys"},
+    {"old": "thymos_state_stream", "new": "affect_state_stream", "scope": "keys"},
+    {"old": "volition_stream", "new": "action_selection_stream", "scope": "keys"},
+    {"old": "nous_step_burst", "new": "planning_step_burst", "scope": "keys"},
+    {"old": "nexus_url", "new": "dashboard_url", "scope": "keys"},
+)
+
+# Module keys used as keys inside other tables (for example [evaluation.observers] or a plugin's backend table).
+CONFIG_KEYS = CONFIG_KEYS + tuple(
+    {"old": k, "new": e["new_key"], "scope": "keys"} for k, e in MODULES.items() if k not in GUARDED
 )
 
 CONFIG_VALUES = (
@@ -1062,6 +1121,11 @@ STREAM_NAMES = tuple(
     {"old": "stage.gestation.womb_lost", "new": "stage.development.stimulus_source_lost", "scope": "keys"},
     {"old": "stage.birth.ready", "new": "stage.maturation.ready", "scope": "keys"},
     {"old": "nexus.snapshot", "new": "dashboard.snapshot", "scope": "keys"},
+)
+
+# Stream names used as keys (the [bus.per_stream_maxlen] table).
+CONFIG_KEYS = CONFIG_KEYS + tuple(
+    {"old": e["old"], "new": e["new"], "scope": e["scope"]} for e in STREAM_NAMES
 )
 
 RECORD_FIELDS = (

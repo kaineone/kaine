@@ -140,8 +140,9 @@ def normalize_config_layer(layer: dict, source: str) -> dict:
     table_entries = active(table.CONFIG_TABLES)
     key_entries = active(table.CONFIG_KEYS)
     value_entries = active(table.CONFIG_VALUES)
+    stream_entries = active(table.STREAM_NAMES)
 
-    if not table_entries and not key_entries and not value_entries:
+    if not table_entries and not key_entries and not value_entries and not stream_entries:
         return layer
 
     changes: list[str] = []
@@ -240,6 +241,46 @@ def normalize_config_layer(layer: dict, source: str) -> dict:
             old_label = f"[{path_text}].{old_key}" if path_text else f"[].{old_key}"
             new_label = f"[{path_text}].{new_key}" if path_text else f"[].{new_key}"
             changes.append(f"{old_label} -> {new_label}")
+
+    # Stream names as values.
+    for table_path, table_value in list(_walk_tables(result)):
+        for entry in stream_entries:
+            old = entry["old"]
+            new = entry["new"]
+            for key in list(table_value.keys()):
+                value = table_value[key]
+                if isinstance(value, str) and value == old:
+                    table_value[key] = new
+                    path_text = _format_table_path(table_path)
+                    label = f"[{path_text}].{key}" if path_text else f"[].{key}"
+                    changes.append(f"{label} = \"{old}\" -> \"{new}\"")
+                elif isinstance(value, list):
+                    mapped_items = []
+                    list_changed = False
+                    for item in value:
+                        if isinstance(item, str) and item == old:
+                            mapped_items.append(new)
+                            list_changed = True
+                        else:
+                            mapped_items.append(item)
+                    if list_changed:
+                        table_value[key] = mapped_items
+                        path_text = _format_table_path(table_path)
+                        label = f"[{path_text}].{key}" if path_text else f"[].{key}"
+                        changes.append(f"{label} = \"{old}\" -> \"{new}\"")
+
+    # Module lists.
+    tier = result.get("tier")
+    if isinstance(tier, dict):
+        unsupported_modules = tier.get("unsupported_modules")
+        if isinstance(unsupported_modules, list):
+            mapped_modules = []
+            for module in unsupported_modules:
+                new_module = map_module_key(module)
+                if new_module != module:
+                    changes.append(f"[tier].unsupported_modules: {module} -> {new_module}")
+                mapped_modules.append(new_module)
+            tier["unsupported_modules"] = mapped_modules
 
     # Listed value replacements.
     for entry in value_entries:
@@ -633,3 +674,67 @@ def parameter_for_config_key(key: str, parameters: Collection[str]) -> str:
 
     mapped = "_".join(mapped_parts)
     return mapped if mapped in parameters else key
+
+
+def name_forms(name: str) -> tuple[str, ...]:
+    """Every form of a module key, regardless of scope.
+
+    Used where both the old and the new name must be handled whatever the
+    scopes say, such as deleting an entity's state directories or denying
+    paths in a public bundle.
+    """
+    forms = {name}
+    table = _table()
+    entry = table.MODULES.get(name)
+    if entry is not None:
+        forms.add(entry["new_key"])
+    for old, entry in table.MODULES.items():
+        if entry["new_key"] == name:
+            forms.add(old)
+    return (name,) + tuple(sorted(forms - {name}))
+
+
+def map_study_plan(plan: dict) -> dict:
+    """Map module names inside a study plan when the keys scope is done.
+
+    The stored study.json is never rewritten; this maps on read.
+    """
+    if not scope_done("keys"):
+        return plan
+    mapped = dict(plan)
+    for key in ("base_modules", "order"):
+        value = mapped.get(key)
+        if isinstance(value, list):
+            mapped[key] = map_module_list(value)
+    return mapped
+
+
+def map_freeze_source(source):
+    """Return a freeze source under the new module name when keys are done.
+
+    A freeze source recorded in the control file by an older release (for
+    example the supervisor's old module key) reads under the new name.
+    """
+    if not isinstance(source, str) or not scope_done("keys"):
+        return source
+    return map_module_key(source)
+
+
+def map_stream_keys(mapping: dict) -> dict:
+    """Return a copy of a stream-name-to-value mapping with renamed keys.
+
+    If an old key and its renamed form both appear, the value already under
+    the new name is kept.
+    """
+    if not scope_done("keys"):
+        return mapping
+    result = {}
+    for key, value in mapping.items():
+        new_key = map_stream(key)
+        if key == new_key and new_key not in result:
+            result[new_key] = value
+    for key, value in mapping.items():
+        new_key = map_stream(key)
+        if new_key not in result:
+            result[new_key] = value
+    return result
