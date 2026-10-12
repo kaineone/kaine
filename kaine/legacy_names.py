@@ -852,6 +852,9 @@ EXCLUDED_GLOBS = (
     "kaine/legacy_names.py",
     # The deprecated recovery-command shim keeps its old module name on purpose.
     "kaine/lifecycle/mnemos_recover.py",
+    # The deprecated dashboard command shim keeps its old package name on purpose.
+    "kaine/nexus/__init__.py",
+    "kaine/nexus/__main__.py",
     "tests/fixtures/rename_modules/",
     # These documents record the rename itself and must keep the old names.
     "openspec/changes/functional-module-names/",
@@ -1109,6 +1112,7 @@ PACKAGING = (
     {"kind": "quadlet_unit", "old": "kaine-nexus.container", "new": "kaine-dashboard.container", "scope": "operator"},
     {"kind": "compose_service", "old": "nexus", "new": "dashboard", "scope": "operator"},
     {"kind": "module_shim", "old": "kaine.lifecycle.mnemos_recover", "new": "kaine.lifecycle.episodic_memory_recover", "scope": "operator"},
+    {"kind": "module_shim", "old": "kaine.nexus", "new": "kaine.dashboard", "scope": "operator"},
 )
 
 del _MODULE_CLASSES
