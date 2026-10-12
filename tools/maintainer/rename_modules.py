@@ -1369,6 +1369,8 @@ def _assign_scope(
     if T.startswith("docs/"):
         return "prose"
 
+    if ctx == "py_name" and T in getattr(table, "PERSISTED_EXACT", {}):
+        return "persisted"
     if ctx == "py_name":
         return "identifiers"
     for prefix in ("kaine.", "tests."):

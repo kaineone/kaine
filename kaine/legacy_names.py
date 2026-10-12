@@ -676,6 +676,7 @@ PERSISTED_EXACT = {
     "womb_seed": "stimulus_source_seed",
     "womb_params_digest": "stimulus_source_params_digest",
     "birth_bloom_ends_at": "maturation_bloom_ends_at",
+    "hypnos_cursor": "sleep_cursor",
     "empatheia_agents": "social_cognition_agents",
     "mnemos_": "episodic_memory_",
 }
@@ -897,6 +898,7 @@ STAGE_FIELDS = (
     {"old": "womb_seed", "new": "stimulus_source_seed", "scope": "persisted"},
     {"old": "womb_params_digest", "new": "stimulus_source_params_digest", "scope": "persisted"},
     {"old": "birth_bloom_ends_at", "new": "maturation_bloom_ends_at", "scope": "persisted"},
+    {"old": "hypnos_cursor", "new": "sleep_cursor", "scope": "persisted"},
 )
 
 BUNDLE_MEMBERS = (
