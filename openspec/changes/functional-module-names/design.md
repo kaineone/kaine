@@ -514,7 +514,7 @@ are the ones the sections above leave open; each follows from those sections.
   keys straight into constructor keyword arguments. An identifiers PR renames the
   parameter (`interoception_stream`) one step before the keys PR renames the key
   (`soma_stream`), which broke the affect module's build from the shipped config
-  in PR 5a before it merged. `kaine/boot/factories/config_kwargs.py` maps each key
+  in PR 5a before it merged. `kaine/boot/config_kwargs.py` maps each key
   to the parameter it feeds by renaming its old module-key components through the
   table, so there is no second list and the map becomes the identity once the keys
   are renamed. `tests/test_factories_from_shipped_config.py` builds every module

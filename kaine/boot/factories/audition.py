@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Any, Mapping, Optional
 if TYPE_CHECKING:
     pass
 from kaine.boot.common import _check_injections
+from kaine.boot.config_kwargs import config_kwargs
 from kaine.boot.errors import ConfigurationError, _require_keys
-from kaine.boot.factories.config_kwargs import config_kwargs
 from kaine.boot.perception_feed import _build_perception_feed_audio_factory
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock

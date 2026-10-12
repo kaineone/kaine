@@ -9,7 +9,7 @@ from collections.abc import Callable
 from typing import Any
 
 from kaine import legacy_names
-from kaine.boot.factories.config_kwargs import config_kwargs, parameter_for_config_key
+from kaine.boot.config_kwargs import config_kwargs, parameter_for_config_key
 
 
 def _make_target(param: str) -> Callable[..., Any]:

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     pass
-from kaine.boot.factories.config_kwargs import config_kwargs
+from kaine.boot.config_kwargs import config_kwargs
 from kaine.bus.client import AsyncBus
 from kaine.modules.base import BaseModule
 

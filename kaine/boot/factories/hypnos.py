@@ -13,13 +13,13 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
 from kaine.boot.common import _effective_hot_swap_mode
+from kaine.boot.config_kwargs import config_kwargs
 from kaine.boot.errors import (
     ConfigurationError,
     VoiceAlignmentConfigError,
     _require_keys,
     _warn_retired_keys,
 )
-from kaine.boot.factories.config_kwargs import config_kwargs
 from kaine.bus.client import AsyncBus
 from kaine.defaults import lingua_section_api_key, lingua_section_chat_url
 from kaine.entity_clock import EntityClock

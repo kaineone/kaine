@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     pass
+from kaine.boot.config_kwargs import config_kwargs
 from kaine.boot.errors import _require_keys
-from kaine.boot.factories.config_kwargs import config_kwargs
 from kaine.boot.perception_feed import _build_perception_feed_video_factory
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
