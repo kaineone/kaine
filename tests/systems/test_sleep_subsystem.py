@@ -23,14 +23,14 @@ async def test_phase_consolidate_memory_runs_clean_without_collaborator():
 
 @pytest.mark.asyncio
 async def test_phase_reset_affect_calls_affect():
-    class FakeThymos:
+    class FakeAffect:
         def __init__(self):
             self.calls = 0
 
         async def affective_reset(self):
             self.calls += 1
 
-    t = FakeThymos()
+    t = FakeAffect()
     result = await reset_affect(t)
     assert result.success is True
     assert t.calls == 1

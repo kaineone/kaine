@@ -362,7 +362,7 @@ def main(argv: list[str] | None = None) -> int:
         "--train-script",
         dest="train_script",
         default=str(default_train_script),
-        help="path to hypnos_external_train.py",
+        help="path to sleep_external_train.py",
     )
     parser.add_argument(
         "--converter",

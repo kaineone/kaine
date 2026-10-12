@@ -372,11 +372,16 @@ def _name_regex(table) -> tuple[re.Pattern[str], dict[int, tuple[str, bool]]]:
         lower = re.escape(text.lower())
         capital = re.escape(text[0].upper() + text[1:]) if text else ""
         upper = re.escape(text.upper())
-        part = f"(?P<g{idx}>(?:{lower}|{capital}|{upper})(?![a-z]))"
+        capital_alt = f"|(?<![A-Z]){capital}(?![a-z])" if capital != upper else ""
+        part = (
+            f"(?P<g{idx}>(?:(?<![A-Za-z]){lower}(?![a-z])"
+            f"|(?<![A-Za-z]){upper}(?![A-Za-z])"
+            f"{capital_alt}))"
+        )
         parts.append(part)
         group_map[idx] = (old_key, plural)
 
-    pattern = "(?<![A-Za-z])(?:" + "|".join(parts) + ")"
+    pattern = "(?:" + "|".join(parts) + ")"
     return re.compile(pattern), group_map
 
 
@@ -1290,6 +1295,77 @@ def _name_token_at(tokens: list[dict], offset: int) -> str | None:
     return None
 
 
+def _file_chain_path(tokens: list[dict], start: int, rel_path: str, parts: list[str]) -> str | None:
+    """The repository path a `__file__`-relative `/` chain points at, or None."""
+    from pathlib import PurePosixPath
+
+    idx = None
+    for i, tok in enumerate(tokens):
+        if tok.get("start", 0) <= start < tok.get("end", 0):
+            idx = i
+            break
+    if idx is None:
+        return None
+
+    file_idx = None
+    for i in range(idx, -1, -1):
+        tok = tokens[i]
+        if tok.get("type") == tokenize.NAME and tok.get("string") == "__file__":
+            file_idx = i
+            break
+        if tok.get("type") == tokenize.NEWLINE:
+            break
+    if file_idx is None:
+        return None
+
+    levels = 0
+    i = file_idx + 1
+    while i < idx:
+        tok = tokens[i]
+        if tok.get("type") == tokenize.NAME:
+            name = tok.get("string", "")
+            if name == "parent":
+                levels += 1
+                i += 1
+                continue
+            if name == "parents":
+                i += 1
+                if i < idx and tokens[i].get("string") == "[":
+                    i += 1
+                    if i < idx and tokens[i].get("type") == tokenize.NUMBER:
+                        try:
+                            n = int(tokens[i].get("string", "0"))
+                        except ValueError:
+                            return None
+                        levels += n + 1
+                        i += 1
+                        if i < idx and tokens[i].get("string") == "]":
+                            i += 1
+                            continue
+                return None
+            i += 1
+            continue
+        if tok.get("type") == tokenize.OP and tok.get("string") == "/":
+            break
+        i += 1
+
+    if levels < 1:
+        return None
+
+    try:
+        base = PurePosixPath(rel_path).parents[levels - 1]
+    except IndexError:
+        return None
+
+    joined = base.joinpath(*parts)
+    import posixpath
+
+    normalized = posixpath.normpath(joined.as_posix())
+    if normalized.startswith("..") or normalized.startswith("/"):
+        return None
+    return normalized
+
+
 def _statement_uses_file(tokens: list[dict], start: int) -> bool:
     """Return True if the logical statement uses ``__file__``."""
     idx = None
@@ -1325,9 +1401,6 @@ def _assign_scope(
     """Assign a scope to a candidate match using the rules from the spec."""
     lower_path = rel_path.lower().replace("\\", "/")
 
-    if re.fullmatch(r"[\w./-]*\.(?:html|js|css|jinja|j2)", T):
-        return "identifiers"
-
     if ctx in {"py_string", "py_text", "toml_string", "toml_text"}:
         full_content = _enclosing_string_content(text, start, ctx, tokens)
         if full_content is not None:
@@ -1343,7 +1416,8 @@ def _assign_scope(
                 if parts and parts[0] in top_dirs:
                     return _path_move_scope("/".join(parts))
                 if _statement_uses_file(tokens, start):
-                    return "identifiers"
+                    resolved = _file_chain_path(tokens, start, rel_path, parts)
+                    return _path_move_scope(resolved) if resolved else "identifiers"
                 return "persisted"
         if ("/" in T) or any(
             T.endswith(ext)
@@ -1373,6 +1447,8 @@ def _assign_scope(
         return "operator"
     if lower_path.startswith("quadlet/") or lower_path.startswith("compose/"):
         return "operator"
+    if re.fullmatch(r"[\w./-]*\.(?:html|js|css|jinja|j2)", T):
+        return "identifiers"
     ui_globs = getattr(table, "UI_GLOBS", ())
     if any(fnmatch.fnmatch(rel_path, g) for g in ui_globs):
         if ctx != "comment":

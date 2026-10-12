@@ -11,8 +11,8 @@ from kaine.modules.context import BroadcastContext, featurize_events
 from kaine.workspace import (
     NoveltyTracker,
     RuleBasedSalience,
+    StaticAffectModulator,
     StaticGoalScorer,
-    StaticThymosModulator,
     Syneidesis,
 )
 from kaine.workspace.coherence import CoherenceScorer
@@ -50,7 +50,7 @@ def _syn(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=64),
             goal_scorer=StaticGoalScorer(),
-            affect_modulator=StaticThymosModulator(),
+            affect_modulator=StaticAffectModulator(),
         ),
         top_k=top_k,
         publication_threshold=threshold,

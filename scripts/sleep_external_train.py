@@ -1045,7 +1045,7 @@ def _train(
 
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
-        sys.stderr.write("usage: hypnos_external_train.py <job_dir>\n")
+        sys.stderr.write("usage: sleep_external_train.py <job_dir>\n")
         return 2
     job_dir = Path(argv[1]).resolve()
     if not job_dir.is_dir():

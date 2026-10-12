@@ -114,11 +114,11 @@ class _FakeNetwork:
         return [self.value] * self.units
 
 
-class _FakeMnemos:
+class _FakeEpisodicMemory:
     pass
 
 
-class _FakeThymos:
+class _FakeAffect:
     async def affective_reset(self) -> None:
         pass
 
@@ -289,8 +289,8 @@ async def test_sleep_audit_drain_continues_past_undecodable_entries(bus, tmp_pat
     )
     sleep = Sleep(
         bus,
-        episodic_memory=_FakeMnemos(),
-        affect=_FakeThymos(),
+        episodic_memory=_FakeEpisodicMemory(),
+        affect=_FakeAffect(),
         trainer=_FakeTrainer(),
         voice_alignment_config=config,
     )

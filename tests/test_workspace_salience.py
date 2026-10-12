@@ -8,7 +8,7 @@ import pytest
 from kaine.bus.schema import Event
 from kaine.workspace.novelty import NoveltyTracker
 from kaine.workspace.salience import RuleBasedSalience
-from kaine.workspace.strategies import StaticGoalScorer, StaticThymosModulator
+from kaine.workspace.strategies import StaticAffectModulator, StaticGoalScorer
 
 
 def _ev(intensity: float = 0.8, payload=None) -> Event:
@@ -30,7 +30,7 @@ def _strategy(
     return RuleBasedSalience(
         novelty=NoveltyTracker(window=novelty_window),
         goal_scorer=StaticGoalScorer(goal),
-        affect_modulator=StaticThymosModulator(affect),
+        affect_modulator=StaticAffectModulator(affect),
     )
 
 
@@ -69,7 +69,7 @@ async def test_default_static_scorers_yield_intensity_times_novelty():
     s = RuleBasedSalience(
         novelty=NoveltyTracker(window=4),
         goal_scorer=StaticGoalScorer(),
-        affect_modulator=StaticThymosModulator(),
+        affect_modulator=StaticAffectModulator(),
     )
     score = await s.score(_ev(0.6), context={})
     assert score == pytest.approx(0.6, abs=1e-9)
@@ -91,7 +91,7 @@ async def test_invalid_default_static_scorer_rejected():
     with pytest.raises(ValueError):
         StaticGoalScorer(default=1.5)
     with pytest.raises(ValueError):
-        StaticThymosModulator(default=-0.1)
+        StaticAffectModulator(default=-0.1)
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +109,7 @@ def test_downgraded_factors_emit_warning(caplog):
         RuleBasedSalience(
             novelty=NoveltyTracker(window=4),
             goal_scorer=StaticGoalScorer(),
-            affect_modulator=StaticThymosModulator(),
+            affect_modulator=StaticAffectModulator(),
             downgraded_factors=["thymos_modulation (set to static)"],
         )
     combined = " ".join(r.message for r in caplog.records)
@@ -125,7 +125,7 @@ def test_static_scorers_without_downgrade_flag_are_silent(caplog):
         RuleBasedSalience(
             novelty=NoveltyTracker(window=4),
             goal_scorer=StaticGoalScorer(),
-            affect_modulator=StaticThymosModulator(),
+            affect_modulator=StaticAffectModulator(),
         )
     assert caplog.records == [], f"unexpected warnings: {[r.message for r in caplog.records]}"
 
@@ -138,7 +138,7 @@ def test_no_warning_for_real_scorers(caplog):
         async def relevance(self, event):
             return 0.8
 
-    class RealThymosModulator:
+    class RealAffectModulator:
         async def modulate(self, event):
             return 0.9
 
@@ -146,6 +146,6 @@ def test_no_warning_for_real_scorers(caplog):
         RuleBasedSalience(
             novelty=NoveltyTracker(window=4),
             goal_scorer=RealGoalScorer(),
-            affect_modulator=RealThymosModulator(),
+            affect_modulator=RealAffectModulator(),
         )
     assert caplog.records == [], f"unexpected warnings: {[r.message for r in caplog.records]}"

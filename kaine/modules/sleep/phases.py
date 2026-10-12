@@ -53,7 +53,7 @@ def _now_ms() -> float:
 # Collaborator protocols — duck-typed so tests can supply tiny fakes.
 # ---------------------------------------------------------------------------
 
-class _SupportsMnemos(Protocol):
+class _SupportsEpisodicMemory(Protocol):
     """The episodic memory module: memory consolidation, replay, and downscaling of trace strengths.
 
     deep_consolidation also calls ``open_replay_window()`` and
@@ -84,7 +84,7 @@ class _SupportsTimeReset(Protocol):
 # ---------------------------------------------------------------------------
 
 async def light_consolidation(
-    episodic_memory: Optional[_SupportsMnemos],
+    episodic_memory: Optional[_SupportsEpisodicMemory],
     *,
     active_modules: list[Any] | None = None,
     frequency_scale: float = 0.5,
@@ -155,7 +155,7 @@ async def light_consolidation(
 # ---------------------------------------------------------------------------
 
 async def deep_consolidation(
-    episodic_memory: Optional[_SupportsMnemos],
+    episodic_memory: Optional[_SupportsEpisodicMemory],
     *,
     suspend_perception: Any = None,
     restore_perception: Any = None,
@@ -503,7 +503,7 @@ async def affective_reset(
 # These names are deprecated; prefer the new phase functions above.
 # ---------------------------------------------------------------------------
 
-async def consolidate_memory(episodic_memory: Optional[_SupportsMnemos]) -> PhaseResult:
+async def consolidate_memory(episodic_memory: Optional[_SupportsEpisodicMemory]) -> PhaseResult:
     """Legacy alias for the pre-restructure memory consolidation step.
 
     Delegates to ``light_consolidation`` without the oscillator hook,

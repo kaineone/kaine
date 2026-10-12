@@ -26,8 +26,8 @@ from kaine.workspace.novelty import NoveltyTracker
 from kaine.workspace.salience import RuleBasedSalience
 from kaine.workspace.strategies import (
     DriveRelevanceGoalScorer,
+    StaticAffectModulator,
     StaticGoalScorer,
-    StaticThymosModulator,
     build_drive_sources,
 )
 from kaine.workspace.syneidesis import Syneidesis
@@ -159,7 +159,7 @@ async def test_real_affect_factor_changes_selection_outcome():
     )
 
     snap_static = await _select_one(
-        RuleBasedSalience(NoveltyTracker(), StaticGoalScorer(), StaticThymosModulator()),
+        RuleBasedSalience(NoveltyTracker(), StaticGoalScorer(), StaticAffectModulator()),
         ev,
     )
 
@@ -195,7 +195,7 @@ def test_deliberate_downgrade_emits_degraded_warning(caplog):
         RuleBasedSalience(
             NoveltyTracker(),
             StaticGoalScorer(),
-            StaticThymosModulator(),
+            StaticAffectModulator(),
             downgraded_factors=["thymos_modulation (set to static)"],
         )
     combined = " ".join(r.message for r in caplog.records)
@@ -209,7 +209,7 @@ def test_static_defaults_do_not_warn(caplog):
     # Static scorers with no downgrade flag (the strategy-level equivalent of the
     # shipped goal-static baseline) must be silent — no nag on a normal boot.
     with caplog.at_level(logging.WARNING, logger="kaine.workspace.salience"):
-        RuleBasedSalience(NoveltyTracker(), StaticGoalScorer(), StaticThymosModulator())
+        RuleBasedSalience(NoveltyTracker(), StaticGoalScorer(), StaticAffectModulator())
     assert caplog.records == []
 
 
@@ -231,7 +231,7 @@ async def test_static_fallback_reproduces_two_factor_selection_bit_for_bit():
         ("4-0", _event("topos", 0.7, payload={"c": 3})),
     ]
 
-    strategy = RuleBasedSalience(NoveltyTracker(window=4), StaticGoalScorer(), StaticThymosModulator())
+    strategy = RuleBasedSalience(NoveltyTracker(window=4), StaticGoalScorer(), StaticAffectModulator())
     syn = Syneidesis(strategy, top_k=3, publication_threshold=0.35)
     snap = await syn.select(list(events), {"tick_index": 1})
 
@@ -357,7 +357,7 @@ def test_make_salience_factors_affect_static_is_a_downgrade():
     affect, goal, downgraded = make_salience_factors(
         _cfg(**{"salience_thymos_factor": "static"}), AffectStateProvider()
     )
-    assert isinstance(affect, StaticThymosModulator)
+    assert isinstance(affect, StaticAffectModulator)
     assert any("thymos" in d for d in downgraded), downgraded
 
 

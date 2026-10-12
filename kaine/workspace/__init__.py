@@ -8,8 +8,8 @@ from kaine.workspace.strategies import (
     DriveRelevanceGoalScorer,
     GoalScorer,
     SalienceStrategy,
+    StaticAffectModulator,
     StaticGoalScorer,
-    StaticThymosModulator,
     dominant_drive,
 )
 from kaine.workspace.syneidesis import Syneidesis
@@ -21,7 +21,7 @@ __all__ = [
     "RuleBasedSalience",
     "SalienceStrategy",
     "StaticGoalScorer",
-    "StaticThymosModulator",
+    "StaticAffectModulator",
     "Syneidesis",
     "AffectModulator",
     "dominant_drive",

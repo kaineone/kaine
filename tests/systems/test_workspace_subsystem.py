@@ -12,8 +12,8 @@ from kaine.bus.schema import Event
 from kaine.workspace import (
     NoveltyTracker,
     RuleBasedSalience,
+    StaticAffectModulator,
     StaticGoalScorer,
-    StaticThymosModulator,
     Syneidesis,
 )
 
@@ -34,7 +34,7 @@ async def test_syneidesis_selects_top_k():
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
-            affect_modulator=StaticThymosModulator(),
+            affect_modulator=StaticAffectModulator(),
         ),
         top_k=2,
         publication_threshold=0.0,
@@ -57,7 +57,7 @@ async def test_syneidesis_inhibits_below_threshold():
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
-            affect_modulator=StaticThymosModulator(),
+            affect_modulator=StaticAffectModulator(),
         ),
         top_k=5,
         publication_threshold=0.99,
@@ -73,7 +73,7 @@ async def test_syneidesis_empty_candidate_set():
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
-            affect_modulator=StaticThymosModulator(),
+            affect_modulator=StaticAffectModulator(),
         ),
         top_k=5,
         publication_threshold=0.0,

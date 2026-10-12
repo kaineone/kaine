@@ -41,7 +41,7 @@ async def bus():
     await bus.close()
 
 
-class FakeMnemos:
+class FakeEpisodicMemory:
     def __init__(self) -> None:
         self.consolidated = 0
         self.downscale_calls: list[float] = []
@@ -61,7 +61,7 @@ class FakeMnemos:
         return []
 
 
-class FakeThymos:
+class FakeAffect:
     def __init__(self) -> None:
         self.resets = 0
 
@@ -98,8 +98,8 @@ def _make_sleep(
     )
     return Sleep(
         bus,
-        episodic_memory=episodic_memory or FakeMnemos(),
-        affect=FakeThymos(),
+        episodic_memory=episodic_memory or FakeEpisodicMemory(),
+        affect=FakeAffect(),
         sequence_resetters=[FakeResetter(), FakeResetter()],
         trainer=trainer or FakeTrainer(),
         voice_alignment_config=config,
@@ -326,13 +326,13 @@ async def test_concurrent_sleep_rejected(bus: AsyncBus, tmp_path: Path):
     asyncio.Event, not by relying on training to keep the sleep alive."""
     hold = asyncio.Event()
 
-    class SlowMnemos(FakeMnemos):
+    class SlowEpisodicMemory(FakeEpisodicMemory):
         async def consolidate_now(self) -> int:
             await hold.wait()
             self.consolidated += 1
             return 5
 
-    sleep = _make_sleep(bus, tmp_path, episodic_memory=SlowMnemos())
+    sleep = _make_sleep(bus, tmp_path, episodic_memory=SlowEpisodicMemory())
     first = asyncio.create_task(sleep.enter_sleep())
     await asyncio.sleep(0.01)
     with pytest.raises(SleepBusyError):
@@ -343,7 +343,7 @@ async def test_concurrent_sleep_rejected(bus: AsyncBus, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_one_phase_failure_does_not_stop_others(bus: AsyncBus, tmp_path: Path):
-    class BoomMnemos:
+    class BoomEpisodicMemory:
         """The episodic memory module stub where consolidate_now raises; other methods succeed."""
         async def consolidate_now(self) -> int:
             raise RuntimeError("boom")
@@ -357,8 +357,8 @@ async def test_one_phase_failure_does_not_stop_others(bus: AsyncBus, tmp_path: P
 
     sleep = Sleep(
         bus,
-        episodic_memory=BoomMnemos(),
-        affect=FakeThymos(),
+        episodic_memory=BoomEpisodicMemory(),
+        affect=FakeAffect(),
         sequence_resetters=[FakeResetter()],
         trainer=FakeTrainer(),
         voice_alignment_config=VoiceAlignmentConfig(

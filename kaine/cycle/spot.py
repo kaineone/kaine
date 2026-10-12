@@ -207,7 +207,7 @@ class Spot:
 
     # --- liveness ---------------------------------------------------------
 
-    def _sleep_sleeping(self) -> bool:
+    def _sleeping(self) -> bool:
         try:
             if "hypnos" not in self._registry:
                 return False
@@ -250,7 +250,7 @@ class Spot:
                 return AssessResult(
                     "dead", repr(exc) if exc is not None else None
                 )
-        if not self._sleep_sleeping():
+        if not self._sleeping():
             stale = module.heartbeat_age() > self._timeout_for(module)
             any_running = any(not t.done() for t in tasks)
             if stale and any_running:

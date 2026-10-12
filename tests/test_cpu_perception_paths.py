@@ -68,11 +68,11 @@ def _load_vision_section(tmp_path: Path, env: dict[str, str]) -> dict[str, objec
 def _capture_vision(section: dict[str, object], monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
     captured: dict[str, object] = {}
 
-    class CaptureTopos:
+    class CaptureVision:
         def __init__(self, bus: object, *, entity_clock: object = None, **kwargs: object) -> None:
             captured.update(kwargs)
 
-    monkeypatch.setattr("kaine.modules.vision.module.Vision", CaptureTopos)
+    monkeypatch.setattr("kaine.modules.vision.module.Vision", CaptureVision)
     make_vision(_MockBus(), section, entity_clock=None)
     return captured
 

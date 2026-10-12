@@ -96,7 +96,7 @@ def test_external_train_script_not_imported_by_kaine():
         text = py_file.read_text(encoding="utf-8", errors="ignore")
         # The script is invoked by *path* (subprocess argv), never imported.
         # Catch both an accidental module import and a stray `import` of it.
-        if "import hypnos_external_train" in text or "from hypnos_external_train" in text:
+        if "import sleep_external_train" in text or "from sleep_external_train" in text:
             offenders.append(str(py_file.relative_to(REPO_ROOT)))
     assert not offenders, (
         "scripts/sleep_external_train.py must never be imported by kaine "

@@ -9,8 +9,8 @@ from kaine.bus.schema import Event
 from kaine.workspace import (
     NoveltyTracker,
     RuleBasedSalience,
+    StaticAffectModulator,
     StaticGoalScorer,
-    StaticThymosModulator,
     Syneidesis,
 )
 
@@ -30,7 +30,7 @@ def _real_syn(top_k: int = 5, threshold: float = 0.35) -> Syneidesis:
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=64),
             goal_scorer=StaticGoalScorer(),
-            affect_modulator=StaticThymosModulator(),
+            affect_modulator=StaticAffectModulator(),
         ),
         top_k=top_k,
         publication_threshold=threshold,
@@ -103,7 +103,7 @@ async def test_runtime_mutators_validate_inputs():
 @pytest.mark.asyncio
 async def test_invalid_construction_rejected():
     rb = RuleBasedSalience(
-        NoveltyTracker(window=4), StaticGoalScorer(), StaticThymosModulator()
+        NoveltyTracker(window=4), StaticGoalScorer(), StaticAffectModulator()
     )
     with pytest.raises(ValueError):
         Syneidesis(strategy=rb, top_k=0)

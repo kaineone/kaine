@@ -21,7 +21,7 @@ class FakeClock:
         return self.t
 
 
-class FakeSoma:
+class FakeInteroception:
     def self_rhythm_state(self) -> tuple[float, float] | None:
         return (0.0, 1.0)
 
@@ -65,7 +65,7 @@ def _owner(tmp_path: Path, **cfg_overrides: Any) -> gestation.GestationOwner:
     config = _config(**cfg_overrides)
     owner = gestation.GestationOwner(
         bus=None,
-        interoception=FakeSoma(),
+        interoception=FakeInteroception(),
         drive=FakeDrive(),
         beat_phase=lambda: 0.0,
         is_paused=lambda: False,

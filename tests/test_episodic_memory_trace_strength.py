@@ -906,7 +906,7 @@ async def test_summary_and_health_surface_a_blocked_sleep(bus, tmp_path):
         assert health["import_pending"] is True
         assert health["blocked_sleeps"] == 1
 
-        class FakeMnemos:
+        class FakeEpisodicMemory:
             opened = False
             closed = False
 
@@ -922,7 +922,7 @@ async def test_summary_and_health_surface_a_blocked_sleep(bus, tmp_path):
             async def downscale(self, protect=()):
                 return await core.downscale(protect=protect)
 
-        result = await deep_consolidation(FakeMnemos())
+        result = await deep_consolidation(FakeEpisodicMemory())
         assert not result.success
         assert "downscale blocked: import_pending" in result.error
         assert result.metadata["downscale"]["blocked"] == "import_pending"

@@ -24,8 +24,8 @@ from kaine.modules import ModuleRegistry
 from kaine.workspace import (
     NoveltyTracker,
     RuleBasedSalience,
+    StaticAffectModulator,
     StaticGoalScorer,
-    StaticThymosModulator,
     Syneidesis,
 )
 from tests._module_shedding import CANONICAL_MODULE_NAMES, build_fakes
@@ -40,7 +40,7 @@ async def test_full_stack_unbooted_runs_50_ticks_and_round_trips_snapshot(tmp_pa
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
-            affect_modulator=StaticThymosModulator(),
+            affect_modulator=StaticAffectModulator(),
         ),
         top_k=20,
         publication_threshold=0.0,
@@ -108,7 +108,7 @@ async def test_full_stack_with_nexus_co_existence(tmp_path):
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
-            affect_modulator=StaticThymosModulator(),
+            affect_modulator=StaticAffectModulator(),
         ),
         top_k=10,
         publication_threshold=0.0,

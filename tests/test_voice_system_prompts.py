@@ -119,7 +119,7 @@ def _event(source, type_, payload, salience=0.6):
     )
 
 
-class _FakeMnemos:
+class _FakeEpisodicMemory:
     def __init__(self) -> None:
         self.consolidated = 0
         self.downscale_calls = []
@@ -139,7 +139,7 @@ class _FakeMnemos:
         return []
 
 
-class _FakeThymos:
+class _FakeAffect:
     def __init__(self) -> None:
         self.resets = 0
 
@@ -197,8 +197,8 @@ def _make_sleep(
     )
     return Sleep(
         bus,
-        episodic_memory=_FakeMnemos(),
-        affect=_FakeThymos(),
+        episodic_memory=_FakeEpisodicMemory(),
+        affect=_FakeAffect(),
         sequence_resetters=[_FakeResetter()],
         trainer=trainer or _RejectingTrainer(),
         voice_alignment_config=config,

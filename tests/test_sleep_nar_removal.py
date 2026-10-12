@@ -34,7 +34,7 @@ async def bus():
     await bus.close()
 
 
-class FakeMnemos:
+class FakeEpisodicMemory:
     def __init__(self) -> None:
         self.replay_calls = 0
 
@@ -49,7 +49,7 @@ class FakeMnemos:
         return []
 
 
-class FakeThymos:
+class FakeAffect:
     async def affective_reset(self) -> None:
         return None
 
@@ -69,8 +69,8 @@ async def test_no_nar_burst_during_full_maintenance_cycle(bus: AsyncBus, tmp_pat
     )
     sleep = Sleep(
         bus,
-        episodic_memory=FakeMnemos(),
-        affect=FakeThymos(),
+        episodic_memory=FakeEpisodicMemory(),
+        affect=FakeAffect(),
         trainer=FakeTrainer(),
         voice_alignment_config=config,
     )
@@ -87,7 +87,7 @@ async def test_no_nar_burst_during_full_maintenance_cycle(bus: AsyncBus, tmp_pat
 @pytest.mark.asyncio
 async def test_replay_reaches_workspace_not_via_burst(bus: AsyncBus, tmp_path: Path):
     """Replay drives the normal path (mnemos.replay_now invoked during the window)."""
-    episodic_memory = FakeMnemos()
+    episodic_memory = FakeEpisodicMemory()
     config = VoiceAlignmentConfig(
         intent_log_path=tmp_path / "intent.jsonl",
         adapter_output_dir=tmp_path / "adapters",
@@ -96,7 +96,7 @@ async def test_replay_reaches_workspace_not_via_burst(bus: AsyncBus, tmp_path: P
     sleep = Sleep(
         bus,
         episodic_memory=episodic_memory,
-        affect=FakeThymos(),
+        affect=FakeAffect(),
         trainer=FakeTrainer(),
         voice_alignment_config=config,
     )

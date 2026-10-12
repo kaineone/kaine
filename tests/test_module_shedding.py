@@ -22,8 +22,8 @@ from kaine.modules import ModuleRegistry
 from kaine.workspace import (
     NoveltyTracker,
     RuleBasedSalience,
+    StaticAffectModulator,
     StaticGoalScorer,
-    StaticThymosModulator,
     Syneidesis,
 )
 from tests._module_shedding import (
@@ -40,7 +40,7 @@ async def _make_stack(names):
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
-            affect_modulator=StaticThymosModulator(),
+            affect_modulator=StaticAffectModulator(),
         ),
         top_k=20,
         publication_threshold=0.0,

@@ -26,7 +26,7 @@ async def bus():
     await bus.close()
 
 
-class RecordingThymos:
+class RecordingAffect:
     def __init__(
         self,
         calls: list[str] | None = None,
@@ -45,7 +45,7 @@ class RecordingThymos:
         self.calls.append("reset")
 
 
-class RecordingMnemos:
+class RecordingEpisodicMemory:
     def __init__(
         self,
         calls: list[str],
@@ -113,8 +113,8 @@ async def _completed_events(bus) -> list[dict]:
 @pytest.mark.asyncio
 async def test_shutdown_during_a_sleep_resets_and_reports(bus, tmp_path):
     calls = []
-    episodic_memory = RecordingMnemos(calls, hang_in="replay")
-    affect = RecordingThymos()
+    episodic_memory = RecordingEpisodicMemory(calls, hang_in="replay")
+    affect = RecordingAffect()
     sleep = _make_sleep(bus, tmp_path, episodic_memory=episodic_memory, affect=affect)
 
     await sleep.initialize()
@@ -143,8 +143,8 @@ async def test_shutdown_during_a_sleep_resets_and_reports(bus, tmp_path):
 @pytest.mark.asyncio
 async def test_shutdown_waits_for_a_held_reset(bus, tmp_path):
     gate = asyncio.Event()
-    affect = RecordingThymos(gate=gate)
-    episodic_memory = RecordingMnemos([])
+    affect = RecordingAffect(gate=gate)
+    episodic_memory = RecordingEpisodicMemory([])
     sleep = _make_sleep(bus, tmp_path, episodic_memory=episodic_memory, affect=affect)
     await sleep.initialize()
 
@@ -174,8 +174,8 @@ async def test_shutdown_waits_for_a_held_reset(bus, tmp_path):
 @pytest.mark.asyncio
 async def test_shutdown_wait_is_bounded(bus, tmp_path, monkeypatch, caplog):
     gate = asyncio.Event()
-    affect = RecordingThymos(gate=gate)
-    episodic_memory = RecordingMnemos([])
+    affect = RecordingAffect(gate=gate)
+    episodic_memory = RecordingEpisodicMemory([])
     sleep = _make_sleep(bus, tmp_path, episodic_memory=episodic_memory, affect=affect)
     await sleep.initialize()
 
@@ -214,8 +214,8 @@ async def test_shutdown_wait_is_bounded(bus, tmp_path, monkeypatch, caplog):
 
 @pytest.mark.asyncio
 async def test_shutdown_without_a_sleep(bus, tmp_path):
-    affect = RecordingThymos()
-    episodic_memory = RecordingMnemos([])
+    affect = RecordingAffect()
+    episodic_memory = RecordingEpisodicMemory([])
     sleep = _make_sleep(bus, tmp_path, episodic_memory=episodic_memory, affect=affect)
     await sleep.initialize()
     await asyncio.wait_for(sleep.shutdown(), 10)

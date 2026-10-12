@@ -10,7 +10,7 @@ from kaine.modules.affect.modulator import StateModulator
 from kaine.modules.affect.state import DimensionalState
 from kaine.workspace.novelty import NoveltyTracker
 from kaine.workspace.salience import RuleBasedSalience, arousal_contrast
-from kaine.workspace.strategies import StaticGoalScorer, StaticThymosModulator
+from kaine.workspace.strategies import StaticAffectModulator, StaticGoalScorer
 
 
 def _ev(intensity: float = 0.8, source: str = "soma", payload=None) -> Event:
@@ -43,7 +43,7 @@ async def test_rule_based_salience_is_original_product_at_zero_gain():
     s = RuleBasedSalience(
         novelty=NoveltyTracker(window=32),
         goal_scorer=StaticGoalScorer(1.0),
-        affect_modulator=StaticThymosModulator(1.0),
+        affect_modulator=StaticAffectModulator(1.0),
     )
     score = await s.score(_ev(0.8), context={})
     assert score == pytest.approx(0.8, abs=1e-9)
@@ -100,12 +100,12 @@ async def test_steady_source_does_not_suppress_alerts():
     strategy = RuleBasedSalience(
         novelty=NoveltyTracker(window=32),
         goal_scorer=StaticGoalScorer(1.0),
-        affect_modulator=StaticThymosModulator(1.0),
+        affect_modulator=StaticAffectModulator(1.0),
     )
     fresh = RuleBasedSalience(
         novelty=NoveltyTracker(window=32),
         goal_scorer=StaticGoalScorer(1.0),
-        affect_modulator=StaticThymosModulator(1.0),
+        affect_modulator=StaticAffectModulator(1.0),
     )
     expected = await fresh.score(
         _ev(0.8, source="audition", payload={"p": "fresh"}), context={}

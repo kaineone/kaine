@@ -28,8 +28,8 @@ from kaine.persistence.jsonl_sink import AsyncJsonlSink
 from kaine.workspace import (
     NoveltyTracker,
     RuleBasedSalience,
+    StaticAffectModulator,
     StaticGoalScorer,
-    StaticThymosModulator,
     Syneidesis,
 )
 from kaine.workspace.volition import Volition
@@ -156,7 +156,7 @@ def _make_cycle(bus: ScriptedBus) -> CognitiveCycle:
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=32),
             goal_scorer=StaticGoalScorer(),
-            affect_modulator=StaticThymosModulator(),
+            affect_modulator=StaticAffectModulator(),
         ),
         top_k=5,
         publication_threshold=0.35,

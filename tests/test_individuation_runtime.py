@@ -151,7 +151,7 @@ def build(tmp_path: Path, **over: Any):
         "tick_index": lambda: 0,
         "is_paused": lambda: False,
         "organ_unloaded": lambda: False,
-        "sleep_sleeping": None,
+        "sleeping": None,
         "born_at": lambda: None,
         "is_gestating": lambda: False,
         "bus": bus,
@@ -214,7 +214,7 @@ async def test_start_gestating_on_birth(tmp_path: Path):
 
 
 async def test_start_asleep(tmp_path: Path):
-    runtime = build(tmp_path, sleep_sleeping=lambda: True)
+    runtime = build(tmp_path, sleeping=lambda: True)
     await runtime.start()
     assert runtime.scheduler.abort_reason() == "asleep"
 

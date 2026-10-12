@@ -541,6 +541,13 @@ are the ones the sections above leave open; each follows from those sections.
   `functional-module-names-drop-aliases`), and `tests/test_persisted_names_pinned.py`
   pins the collection names and state paths to the table until the persisted scope
   is done.
+- **Case boundaries (after PR 5b).** The name pattern matched an old name only at
+  the start of a word, so a Capitalized old name after a lowercase letter
+  (`StaticThymosModulator`, `FakeSoma`) was never renamed. The Capitalized form
+  now matches at any case change and the UPPER form only as a whole upper-case
+  word; the seven modules renamed so far were re-run for the leftovers. A
+  `__file__`-relative path takes the move scope of the path it resolves to, and
+  the template and asset file-name rule sits below the quadlet and compose check.
 - **Local data.** `tests/test_legacy_local_data.py` runs only when
   `KAINE_LOCAL_DATA_ROOT` is set. It copies `backups/` and `state/forks/` to a
   temporary directory, reads everything from the copy with every read-map on,

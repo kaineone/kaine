@@ -179,7 +179,7 @@ class _FakeDrive:
         self.scale = 0.0
 
 
-class _FakeSoma:
+class _FakeInteroception:
     pass
 
 
@@ -191,7 +191,7 @@ async def test_owner_publishes_viability_r1(
     clock = _FakeClock(0.0)
     bus = _RecordingBus()
     drive = _FakeDrive()
-    interoception = _FakeSoma()
+    interoception = _FakeInteroception()
     cfg = GestationReadoutConfig.from_dict({})
 
     owner = GestationOwner(
@@ -242,7 +242,7 @@ async def test_owner_publishes_nothing_when_viability_watch_is_off(
     clock = _FakeClock(0.0)
     bus = _RecordingBus()
     drive = _FakeDrive()
-    interoception = _FakeSoma()
+    interoception = _FakeInteroception()
     cfg = GestationReadoutConfig.from_dict({"viability_watch": False})
 
     owner = GestationOwner(
@@ -288,7 +288,7 @@ async def test_paused_time_is_not_lived_time(
     clock = _FakeClock(0.0)
     bus = _RecordingBus()
     drive = _FakeDrive()
-    interoception = _FakeSoma()
+    interoception = _FakeInteroception()
     cfg = GestationReadoutConfig.from_dict({})
 
     owner = GestationOwner(
@@ -332,7 +332,7 @@ async def test_advance_lived_counts_only_unpaused_intervals(
     clock = _FakeClock(0.0)
     bus = _RecordingBus()
     drive = _FakeDrive()
-    interoception = _FakeSoma()
+    interoception = _FakeInteroception()
     cfg = GestationReadoutConfig.from_dict({})
 
     owner = GestationOwner(

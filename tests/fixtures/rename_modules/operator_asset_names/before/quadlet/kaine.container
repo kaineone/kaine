@@ -1,0 +1,3 @@
+[Container]
+Volume=%h/kaine/nexus/static/nexus.css:/srv/nexus.css:ro
+Exec=python -m kaine.nexus --serve /srv/nexus.css
