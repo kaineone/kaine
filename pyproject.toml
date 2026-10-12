@@ -176,7 +176,7 @@ include = ["kaine*"]
     "static/*.css",
     "static/*.js",
     "static/fonts/*.woff2",
-    "static/fonts/OFL.txt",
+    "static/fonts/OFL-*.txt",
     "static/vendor/*.js",
     "static/vendor/*.css",
     "static/vendor/vendor/*.js",
