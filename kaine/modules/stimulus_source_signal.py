@@ -148,18 +148,27 @@ class StimulusSourceParams:
             }
         )
 
+        config_key_for: dict[str, str] = {
+            parameter_for_config_key(name, cls.__dataclass_fields__): name
+            for name in stimulus_source_allowed | video_allowed | audio_allowed
+        }
+
+        def _label(field: str) -> str:
+            return config_key_for.get(field, field)
+
         def _float_field(name: str, lo: float, hi: float, open_lo: bool = False) -> None:
             value = kwargs[name]
+            label = _label(name)
             if isinstance(value, bool):
-                raise ValueError(f"{name} must be a number, not a bool")
+                raise ValueError(f"{label} must be a number, not a bool")
             value = float(value)
             if not math.isfinite(value):
-                raise ValueError(f"{name} must be finite")
+                raise ValueError(f"{label} must be finite")
             lo_ok = value > lo if open_lo else value >= lo
             hi_ok = value <= hi
             if not (lo_ok and hi_ok):
                 raise ValueError(
-                    f"{name}={value} outside allowed range "
+                    f"{label}={value} outside allowed range "
                     f"[{lo}, {hi}]"
                 )
             kwargs[name] = value
@@ -185,7 +194,7 @@ class StimulusSourceParams:
             "maternal_distress_excursions",
         ):
             if not isinstance(kwargs[name], bool):
-                raise ValueError(f"{name} must be a bool")
+                raise ValueError(f"{_label(name)} must be a bool")
 
         if kwargs["maternal_distress_excursions"]:
             raise ValueError(
