@@ -231,7 +231,7 @@ async def test_serialize_roundtrip_includes_forward_model_and_fatigue(bus: Async
 
     # Forward model readout weights should match after restore. The CfC
     # reservoir itself is a frozen, independently-seeded random projection
-    # that is intentionally never serialised (mirroring Chronos's
+    # that is intentionally never serialised (mirroring Sequence's
     # CfCNetwork) — `soma` and `fresh` have DIFFERENT reservoirs, so only
     # the persisted readout weights (the learned, adapting part) are
     # expected to round-trip exactly.

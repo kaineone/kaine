@@ -1,10 +1,10 @@
-# Phantasia
+# World model
 
-Phantasia is KAINE's world-model module. It is a latent recurrent world model in the DreamerV3 style (Hafner et al. 2025; Ha and Schmidhuber 2018) that learns from the entity's own waking trajectories, predicts the next broadcast, reports how far the present broadcast departs from that prediction, and rolls out imagined trajectories during sleep. The brain function it draws on is the construction of simulated scenes (Hassabis and Maguire 2007). The question it lets the module-addition study ask is whether world-model prediction error, competing alongside perceptual and interoceptive error, changes the sequence of accessed coalitions in characteristic ways. This page is for operators who enable it, researchers who check the world-model implementation, and contributors who change the encoder or the backends.
+World model is KAINE's world-model module. It is a latent recurrent world model in the DreamerV3 style (Hafner et al. 2025; Ha and Schmidhuber 2018) that learns from the entity's own waking trajectories, predicts the next broadcast, reports how far the present broadcast departs from that prediction, and rolls out imagined trajectories during sleep. The brain function it draws on is the construction of simulated scenes (Hassabis and Maguire 2007). The question it lets the module-addition study ask is whether world-model prediction error, competing alongside perceptual and interoceptive error, changes the sequence of accessed coalitions in characteristic ways. This page is for operators who enable it, researchers who check the world-model implementation, and contributors who change the encoder or the backends.
 
 ## Status
 
-Phantasia is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].phantasia = false`) and in the base-thesis `thesis_test` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it second in its default order of six: Mnemos, Phantasia, Nous, Eidolon, Empatheia, Vox. The study overlay sets `training_enabled = true` and `persist_weights = true`, and the runner checks that each step's preservation bundle captured the world model.
+World model is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].phantasia = false`) and in the base-thesis `thesis_test` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it second in its default order of six: Episodic memory, World model, Planning, Self-model, Social cognition, Vocal. The study overlay sets `training_enabled = true` and `persist_weights = true`, and the runner checks that each step's preservation bundle captured the world model.
 
 - The default backend is `"dreamerv3"`, the learning world model.
 - The default engine is `"jax"` (`DreamerV3WorldModel`), which needs the `[worldmodel]` optional extra (`jax[cpu]`, `chex`, `einops`).
@@ -13,12 +13,12 @@ Phantasia is built and tested, and held: it is off in the shipped `config/kaine.
 
 The world model begins untrained at first boot. The shipped `[phantasia]` block turns on sleep-time training and weight persistence; the constructor defaults for both flags are `false`, so a configuration that omits them neither trains nor saves weights.
 
-Phantasia is a world model only. It has no actor, critic, reward head or return head; action selection belongs to [Nous](nous.md).
+World model is a world model only. It has no actor, critic, reward head or return head; action selection belongs to [Planning](planning.md).
 
 ## What it does
 
-1. Waking prediction error. On every broadcast while the entity is awake, accessed or inhibited, Phantasia encodes the snapshot, folds it into the world model's recurrent state, and publishes `phantasia.world_error`. The event enters the workspace competition as a candidate whose intensity grows with the error, so world-model surprise competes with the other modules' reports. Phantasia reports at fixed baseline and alert levels and does not use the graded intensity of the four base-thesis processors.
-2. Sleep-time imagination. During a [Hypnos](hypnos.md) sleep, each `mnemos.replay` cue makes Phantasia reseed the world model from its recent waking observations and roll out imagined future states, published as `phantasia.scenario`. These events enter the workspace competition like any other module event.
+1. Waking prediction error. On every broadcast while the entity is awake, accessed or inhibited, World model encodes the snapshot, folds it into the world model's recurrent state, and publishes `phantasia.world_error`. The event enters the workspace competition as a candidate whose intensity grows with the error, so world-model surprise competes with the other modules' reports. World model reports at fixed baseline and alert levels and does not use the graded intensity of the four base-thesis processors.
+2. Sleep-time imagination. During a [Sleep](sleep.md) sleep, each `mnemos.replay` cue makes World model reseed the world model from its recent waking observations and roll out imagined future states, published as `phantasia.scenario`. These events enter the workspace competition like any other module event.
 
 The waking trajectory buffer lives only in memory and is never serialized.
 
@@ -26,12 +26,12 @@ The waking trajectory buffer lives only in memory and is never serialized.
 
 | Source | Stream | Event type | What is used |
 |---|---|---|---|
-| Syneidesis | `workspace.broadcast` | snapshot | The snapshot, encoded as an observation vector (waking path) |
-| [Mnemos](mnemos.md) | `mnemos.out` | `mnemos.replay` | `memory_id`, recorded as the scenario's seed id |
-| [Hypnos](hypnos.md) | `hypnos.out` | `hypnos.sleep.started` | Pauses the waking path and starts a training pass |
-| [Hypnos](hypnos.md) | `hypnos.out` | `hypnos.sleep.completed` | Resumes the waking path and closes the scenario window if it is still open |
+| Workspace | `workspace.broadcast` | snapshot | The snapshot, encoded as an observation vector (waking path) |
+| [Episodic memory](episodic-memory.md) | `mnemos.out` | `mnemos.replay` | `memory_id`, recorded as the scenario's seed id |
+| [Sleep](sleep.md) | `hypnos.out` | `hypnos.sleep.started` | Pauses the waking path and starts a training pass |
+| [Sleep](sleep.md) | `hypnos.out` | `hypnos.sleep.completed` | Resumes the waking path and closes the scenario window if it is still open |
 
-A background task, `_peer_consumer_loop`, polls the Mnemos and Hypnos streams every 50 ms. The waking path is paused from `hypnos.sleep.started` to `hypnos.sleep.completed`. The scenario window is separate: Hypnos opens it with `open_scenario_window()` before phase 2 and closes it with `close_scenario_window()` after phase 3, so it never depends on when the poll sees the sleep start.
+A background task, `_peer_consumer_loop`, polls the Episodic memory and Sleep streams every 50 ms. The waking path is paused from `hypnos.sleep.started` to `hypnos.sleep.completed`. The scenario window is separate: Sleep opens it with `open_scenario_window()` before phase 2 and closes it with `close_scenario_window()` after phase 3, so it never depends on when the poll sees the sleep start.
 
 ## Outputs
 
@@ -115,7 +115,7 @@ flowchart TD
 
 ### Waking path
 
-On each broadcast outside a sleep, Phantasia:
+On each broadcast outside a sleep, World model:
 
 1. encodes the snapshot;
 2. appends the observation to the ring buffer;
@@ -126,11 +126,11 @@ On each broadcast outside a sleep, Phantasia:
 
 On `hypnos.sleep.started`, the waking path stops and `_maybe_train()` runs one in-memory training pass over the buffer if `training_enabled` is true. The waking path resumes on `hypnos.sleep.completed`.
 
-Hypnos opens the scenario window before phase 2, whose replay publishes the `mnemos.replay` cues, and closes it in a `finally` after phase 3. The poll can handle a cue after the window has closed, so Phantasia keeps the open window and the last four closed ones and answers a cue whose timestamp falls inside one of them. A cue from an earlier sleep is ignored even while a later window is open. `initialize()` clears the sleep state and closes the window, so a light restart that misses `hypnos.sleep.completed` cannot leave the waking path paused. On such a cue, `generate_scenario()` runs. It resets the world model, replays the last `rollout_horizon` waking observations to seed it, and calls `world_model.imagine(rollout_horizon)`. The rollout is summarized as per-step mean magnitudes and an overall drift, and published as `phantasia.scenario` with the replay's `memory_id` as `seed_memory_id`. A cue published outside the window is ignored. Hypnos's associative replay phase, off by default, can also cue scenarios directly.
+Sleep opens the scenario window before phase 2, whose replay publishes the `mnemos.replay` cues, and closes it in a `finally` after phase 3. The poll can handle a cue after the window has closed, so World model keeps the open window and the last four closed ones and answers a cue whose timestamp falls inside one of them. A cue from an earlier sleep is ignored even while a later window is open. `initialize()` clears the sleep state and closes the window, so a light restart that misses `hypnos.sleep.completed` cannot leave the waking path paused. On such a cue, `generate_scenario()` runs. It resets the world model, replays the last `rollout_horizon` waking observations to seed it, and calls `world_model.imagine(rollout_horizon)`. The rollout is summarized as per-step mean magnitudes and an overall drift, and published as `phantasia.scenario` with the replay's `memory_id` as `seed_memory_id`. A cue published outside the window is ignored. Sleep's associative replay phase, off by default, can also cue scenarios directly.
 
 ### Training
 
-`train_now()` passes the whole buffer to `world_model.train()` as one trajectory. If any row is non-finite or the loss is NaN or infinite, the pass aborts and the last good parameters are kept. Training writes no files. A pass that learned and did not abort increments the count of successful training passes, which the developmental gate runner reads when Phantasia is registered.
+`train_now()` passes the whole buffer to `world_model.train()` as one trajectory. If any row is non-finite or the loss is NaN or infinite, the pass aborts and the last good parameters are kept. Training writes no files. A pass that learned and did not abort increments the count of successful training passes, which the developmental gate runner reads when World model is registered.
 
 ## Key files
 
@@ -153,14 +153,14 @@ Hypnos opens the scenario window before phase 2, whose replay publishes the `mne
 2. Choose an engine. For the JAX engine (the default), install the extra with `.venv/bin/pip install -e '.[worldmodel]'`. For the NumPy engine, set `engine = "numpy"` under `[phantasia]`. The shipped training and persistence settings apply to both.
 3. For the development fallback, set `backend = "fake"` and `persist_weights = false`; `persist_weights = true` with this backend raises a `ValueError` at construction.
 
-Phantasia needs no external service. To force a scenario in a test without a full sleep:
+World model needs no external service. To force a scenario in a test without a full sleep:
 
 ```python
 phantasia.open_scenario_window()  # normally opened by Hypnos before phase 2
 await phantasia.generate_scenario(seed_memory_id="test")
 ```
 
-## What Phantasia keeps
+## What World model keeps
 
 - The trajectory ring buffer is an in-memory deque and is never serialized.
 - `train_now()` writes nothing to disk, and the upstream disk hooks are bypassed.
@@ -171,10 +171,10 @@ await phantasia.generate_scenario(seed_memory_id="test")
 
 The learned parameters are derived numeric weights. With `persist_weights = true` and `backend = "dreamerv3"`:
 
-- At `initialize()` Phantasia loads the weights from `checkpoint_path` if the file exists; otherwise it starts fresh and saves there.
+- At `initialize()` World model loads the weights from `checkpoint_path` if the file exists; otherwise it starts fresh and saves there.
 - It saves after each training pass that learned at least one step without aborting, and on graceful shutdown, including an operator freeze. An aborted pass leaves the last good checkpoint in place.
 - The checkpoint is an in-memory NPZ of the parameter tree with an embedded header (`obs_dim`, the core's dimensions, `latent_kind`, the encoder version). It is written atomically (temporary file and `os.replace`) and encrypted with AES-256-GCM when `[security.state_encryption]` is enabled. Both engines use the same codec (`kaine-phantasia-rssm-npz-v1`, float32) and the header does not record the engine, so a checkpoint written under one engine loads under the other.
-- Two checks fail closed: `persist_weights = true` with the `fake` backend is a `ValueError` at construction, and a checkpoint whose header does not match the running model raises `CheckpointMismatchError` at boot. Phantasia never discards learned weights and reinitializes on its own.
+- Two checks fail closed: `persist_weights = true` with the `fake` backend is a `ValueError` at construction, and a checkpoint whose header does not match the running model raises `CheckpointMismatchError` at boot. World model never discards learned weights and reinitializes on its own.
 - The decommission backup bundle copies `state/phantasia/` as transferable cognitive state (CAL Article 4.2(b)), and `delete_entity_state` removes it.
 - The trajectory buffer is never part of a checkpoint.
 - The preservation record carries the backend, the engine, the checkpoint path and the encoder version, and the preservation bundle carries the pass-count sidecar with the weights, which revive restores. Reviving a bundle without weights into an instance that persists weights logs a warning that the world model starts fresh.
@@ -184,10 +184,10 @@ The learned parameters are derived numeric weights. With `persist_weights = true
 Fork snapshots store module artifacts in `<snapshot root>/<id>/artifacts/<module>/` (directories `0700`, files `0600`; the checkpoint is encrypted at rest when state encryption is on).
 
 - `snapshot` exports `world_model.ckpt` and its pass-count sidecar, and fails atomically, leaving no snapshot directory, if any artifact export fails.
-- `fork` records `metadata["artifacts_from_parent"]` (`kaine/lifecycle/manager.py`) and copies the parent's Phantasia artifacts into the child's own snapshot, unless Phantasia is shed, so every fork owns an independent copy.
-- `restore` writes the weights to Phantasia's own `checkpoint_path` and logs a warning when the snapshot has no world model.
+- `fork` records `metadata["artifacts_from_parent"]` (`kaine/lifecycle/manager.py`) and copies the parent's World model artifacts into the child's own snapshot, unless World model is shed, so every fork owns an independent copy.
+- `restore` writes the weights to World model's own `checkpoint_path` and logs a warning when the snapshot has no world model.
 - Symlinked artifact directories are never followed.
-- `merge` refuses when both parents carry a world model unless `world_model_from="a"` or `"b"` names the one that continues, because two learned models cannot be averaged. The Nexus `/diagnostics/merges` route accepts `world_model_from` (`kaine/nexus/diagnostics.py`). `merge` records each module's artifact source in `metadata["artifact_sources"]`.
+- `merge` refuses when both parents carry a world model unless `world_model_from="a"` or `"b"` names the one that continues, because two learned models cannot be averaged. The Dashboard `/diagnostics/merges` route accepts `world_model_from` (`kaine/nexus/diagnostics.py`). `merge` records each module's artifact source in `metadata["artifact_sources"]`.
 
 ## Tests
 
@@ -206,4 +206,4 @@ Fork snapshots store module artifacts in `<snapshot root>/<id>/artifacts/<module
 ## Spec and related
 
 - Primary spec: [`openspec/specs/phantasia/spec.md`](../../openspec/specs/phantasia/spec.md)
-- Related modules: [Mnemos](mnemos.md) supplies replay cues; [Hypnos](hypnos.md) opens and closes the sleep window; [Thymos](thymos.md) supplies the affect slots of the observation vector; [Nous](nous.md) owns action selection.
+- Related modules: [Episodic memory](episodic-memory.md) supplies replay cues; [Sleep](sleep.md) opens and closes the sleep window; [Affect](affect.md) supplies the affect slots of the observation vector; [Planning](planning.md) owns action selection.

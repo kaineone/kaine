@@ -415,7 +415,7 @@ async def test_serialize_roundtrip_with_forward_model(bus: AsyncBus):
     assert "forward_model" in state
     assert "buffer_summary" in state
 
-    # Restore into a fresh Topos with a new LatentForwardModel.
+    # Restore into a fresh Vision with a new LatentForwardModel.
     fresh_fm = LatentForwardModel(latent_dim=4, units=16, seed=99)
     enc2 = FakeEncoder([[0.4, 0.4, 0.4, 0.4]])
     fresh_topos = Topos(bus, encoder=enc2, forward_prediction=True)

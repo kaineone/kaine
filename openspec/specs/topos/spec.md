@@ -1,16 +1,16 @@
-# topos Specification
+# vision Specification
 
 ## Purpose
-Topos is KAINE's visual perception module. This capability covers its RAM-only frame buffer, the frozen, replaceable video encoder that turns clips into latents, change detection and habituation, and the `topos.report` events it publishes.
+Vision is KAINE's visual perception module. This capability covers its RAM-only frame buffer, the frozen, replaceable video encoder that turns clips into latents, change detection and habituation, and the `topos.report` events it publishes.
 
 ## Requirements
 
-### Requirement: Topos publishes topos.report for each processed frame
-Topos SHALL maintain a bounded, RAM-only ring buffer of the most recent frames of
-size `clip_len`. Topos SHALL publish a `topos.report` event to its `topos.out`
+### Requirement: Vision publishes topos.report for each processed frame
+Vision SHALL maintain a bounded, RAM-only ring buffer of the most recent frames of
+size `clip_len`. Vision SHALL publish a `topos.report` event to its `topos.out`
 stream when the ring buffer is full AND a clip latent is produced on the clip
 cadence (see the strided-clip requirement) — NOT once per incoming frame. Before
-the ring buffer first fills, Topos SHALL publish no `topos.report`. Each published
+the ring buffer first fills, Vision SHALL publish no `topos.report`. Each published
 event SHALL carry `latent` (list of floats — the pooled clip embedding),
 `change_score` (float `>= 0`), `habituation_score` (float in `[0.0, 1.0]`),
 `encoder_model_id` (string), and `prediction_error` (float). Salience SHALL be
@@ -33,7 +33,7 @@ forward model is enabled, when the normalized prediction error is surprising).
 - **THEN** the second event's salience equals the configured alert salience
 
 ### Requirement: Encoder is replaceable via the Encoder protocol
-Topos SHALL accept an `Encoder` collaborator that exposes `clip_len` (the number
+Vision SHALL accept an `Encoder` collaborator that exposes `clip_len` (the number
 of frames it consumes) and `async encode_clip(frames) -> list[float]` (encode a
 clip of exactly `clip_len` frames to one pooled vector). The default encoder SHALL
 be a **temporally-native video encoder** (InternVideo-Next base, `clip_len = 16`)
@@ -43,7 +43,7 @@ same clip of frames. A per-frame encoder MAY implement the protocol with
 `clip_len = 1`.
 
 #### Scenario: Custom clip encoder substitutes cleanly
-- **WHEN** Topos is constructed with a custom `Encoder` whose `encode_clip`
+- **WHEN** Vision is constructed with a custom `Encoder` whose `encode_clip`
   returns a constant vector
 - **THEN** every published `topos.report` carries that vector as `latent`
 
@@ -64,7 +64,7 @@ SHALL produce `change_score = 0`. Orthogonal frames SHALL produce
 `change_score = 2`.
 
 #### Scenario: First frame yields zero change
-- **WHEN** Topos processes one frame after initialization
+- **WHEN** Vision processes one frame after initialization
 - **THEN** the report's `change_score == 0.0`
 
 #### Scenario: Repeated identical frames yield zero change
@@ -89,9 +89,9 @@ identical); score near 0.0 corresponds to a maximally changing scene.
 - **WHEN** 8 mutually orthogonal frames are processed in a window of 16
 - **THEN** the eighth report's `habituation_score <= 0.5`
 
-### Requirement: Frozen encoder, no training in Topos
+### Requirement: Frozen encoder, no training in Vision
 The default encoder SHALL load its underlying torch model in `eval()` mode with
-`requires_grad_(False)` on every parameter, and Topos SHALL never call `.train()`
+`requires_grad_(False)` on every parameter, and Vision SHALL never call `.train()`
 or any optimizer on the encoder. The encoder SHALL load ONLY from vendored,
 revision-pinned modeling code and locally cached weights: it SHALL NOT pass
 `trust_remote_code=True` and SHALL NOT fetch code or weights from a remote host at
@@ -117,14 +117,14 @@ from `[topos].device` in `config/kaine.toml` (`auto`, `cpu`, `cuda`,
 - **WHEN** `[topos].device = "cpu"` is configured
 - **THEN** the encoder's tensors live on `cpu` even on a CUDA host
 
-### Requirement: Default Topos config and disabled-by-default
+### Requirement: Default Vision config and disabled-by-default
 The repository SHALL ship a `[topos]` section in `config/kaine.toml` with default
 values for the encoder backend/id, the pinned encoder revision, the local weights
 directory, `clip_len`, `clip_stride`, clip resolution, pooling, device,
 `change_alert_threshold`, `baseline_salience`, and `alert_salience`. The shipped
 default `encoder_model_id` SHALL be the InternVideo-Next id and SHALL NOT be
 `facebook/dinov2-small` (no Meta-owned model in the default configuration). The
-`[modules].topos = false` flag SHALL keep first boot from auto-registering Topos.
+`[modules].topos = false` flag SHALL keep first boot from auto-registering Vision.
 
 #### Scenario: kaine.toml carries the temporal-encoder defaults and no Meta model
 - **WHEN** an operator inspects `config/kaine.toml`
@@ -133,7 +133,7 @@ default `encoder_model_id` SHALL be the InternVideo-Next id and SHALL NOT be
   `facebook/`-namespaced model id, and `[modules].topos == false`
 
 ### Requirement: Clip latent produced on a strided sliding window
-Topos SHALL produce a clip latent by encoding the most recent `clip_len` frames
+Vision SHALL produce a clip latent by encoding the most recent `clip_len` frames
 every `clip_stride` frame-ticks (a strided sliding window). The default
 `clip_stride` SHALL align the clip-latent cadence with the experiential /
 conscious-access rate (~3.33 Hz at the shipped 10 Hz vision sampling), and SHALL
@@ -180,12 +180,12 @@ be a load-time error.
 - **THEN** encoder load raises a clear error rather than loading mismatched code
   and weights
 
-### Requirement: Topos habituation and encoder revision follow configuration
-The composition root SHALL build Topos's habituator with `[topos].habituation_window` when it is set; the window SHALL be an integer of at least 2. `[topos].encoder_revision`, when set, SHALL equal the InternVideo-Next loader's pinned revision; any other value SHALL refuse boot with a configuration error naming the configured and pinned revisions, because the pin decides which vendored code and weights load.
+### Requirement: Vision habituation and encoder revision follow configuration
+The composition root SHALL build Vision's habituator with `[topos].habituation_window` when it is set; the window SHALL be an integer of at least 2. `[topos].encoder_revision`, when set, SHALL equal the InternVideo-Next loader's pinned revision; any other value SHALL refuse boot with a configuration error naming the configured and pinned revisions, because the pin decides which vendored code and weights load.
 
 #### Scenario: The habituation window is applied
 - **WHEN** `[topos].habituation_window = 8`
-- **THEN** Topos's habituator keeps a rolling window of 8 embeddings
+- **THEN** Vision's habituator keeps a rolling window of 8 embeddings
 
 #### Scenario: An unpinned revision is refused
 - **WHEN** `[topos].encoder_revision` names a revision other than the pinned one

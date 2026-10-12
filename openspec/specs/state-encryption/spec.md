@@ -54,8 +54,8 @@ encryption key MUST be communicated out-of-band for cross-host transfers.
 - **THEN** the state is successfully restored
 
 ### Requirement: SECURITY.md names all v4 at-rest state files
-SECURITY.md §4 SHALL enumerate all new v4 at-rest state files (Empatheia Qdrant
-collection, Phantasia world-model checkpoints, sidecar JSONL logs under
+SECURITY.md §4 SHALL enumerate all new v4 at-rest state files (Social cognition Qdrant
+collection, World model world-model checkpoints, sidecar JSONL logs under
 `state/evaluation/observers/`) alongside the v1 files, noting which gain
 application-layer encryption under this change and which remain OS-layer
 operator responsibility.
@@ -68,20 +68,20 @@ operator responsibility.
 ### Requirement: A configuration error never disables encryption
 A component that reads `[security.state_encryption]` SHALL NOT treat a configuration that cannot be loaded or validated as a disabled or empty encryption section; it SHALL raise a configuration error. A process that performs cognitive-state file I/O SHALL NOT perform that I/O when its configured encryption posture could not be installed (for example the configuration failed to load or validate, or encryption is enabled and no key is available); it SHALL log an error naming the cause and leave those state operations unavailable instead of falling back to the disabled pass-through encryptor.
 
-#### Scenario: Malformed configuration at Nexus startup
-- **WHEN** Nexus reads the state-encryption section and the configuration fails to load or validate
-- **THEN** Nexus logs an error naming the cause, does not construct its fork manager, and performs no fork or merge state I/O
+#### Scenario: Malformed configuration at Dashboard startup
+- **WHEN** Dashboard reads the state-encryption section and the configuration fails to load or validate
+- **THEN** Dashboard logs an error naming the cause, does not construct its fork manager, and performs no fork or merge state I/O
 
-#### Scenario: Encryption enabled without a key at Nexus startup
-- **WHEN** `[security.state_encryption].enabled` is true and no key is available when Nexus starts
-- **THEN** Nexus logs an error naming the missing key, does not construct its fork manager, and never writes a fork snapshot in plaintext
+#### Scenario: Encryption enabled without a key at Dashboard startup
+- **WHEN** `[security.state_encryption].enabled` is true and no key is available when Dashboard starts
+- **THEN** Dashboard logs an error naming the missing key, does not construct its fork manager, and never writes a fork snapshot in plaintext
 
 #### Scenario: Decommission cannot install the encryption posture
 - **WHEN** `python -m kaine.lifecycle` (decommission) starts and the merged configuration cannot be loaded or validated, or the state-encryption posture cannot be installed
 - **THEN** it reports a configuration error and exits before assessing divergence, capturing a backup or deleting anything, so it never judges or copies encrypted state through the pass-through encryptor
 
-#### Scenario: Nexus reports disabled fork operations
-- **WHEN** Nexus has no fork manager (the encryption posture could not be installed, or the fork manager could not be constructed)
+#### Scenario: Dashboard reports disabled fork operations
+- **WHEN** Dashboard has no fork manager (the encryption posture could not be installed, or the fork manager could not be constructed)
 - **THEN** the fork listing reports that fork operations are unavailable, with the actual reason, instead of an empty list of forks
 
 #### Scenario: Encrypted state with encryption disabled stops decommission
@@ -89,10 +89,10 @@ A component that reads `[security.state_encryption]` SHALL NOT treat a configura
 - **THEN** it refuses with a configuration error and exit status 6 before assessing divergence, capturing a backup or deleting anything, because it could neither read that state for the welfare assessment nor back it up faithfully
 
 ### Requirement: The intent-expression log is encrypted at rest
-When state encryption is enabled, every line Lingua writes to `state/lingua/intent_expression.jsonl` SHALL be its own AES-256-GCM envelope. Every reader of that log and of its rotated corpus SHALL decrypt line by line, accepting legacy plaintext lines. On its first write under encryption, Lingua SHALL rewrite a live log that holds plaintext lines so that every line is an envelope. Hypnos SHALL do the same for the being's own rotated corpus files at sleep. Backups, `state/forks` and preservation bundles SHALL never be rewritten.
+When state encryption is enabled, every line Language writes to `state/lingua/intent_expression.jsonl` SHALL be its own AES-256-GCM envelope. Every reader of that log and of its rotated corpus SHALL decrypt line by line, accepting legacy plaintext lines. On its first write under encryption, Language SHALL rewrite a live log that holds plaintext lines so that every line is an envelope. Sleep SHALL do the same for the entity's own rotated corpus files at sleep. Backups, `state/forks` and preservation bundles SHALL never be rewritten.
 
 #### Scenario: Lines are envelopes on disk
-- **WHEN** encryption is enabled and Lingua logs an utterance
+- **WHEN** encryption is enabled and Language logs an utterance
 - **THEN** the appended line is an encryption envelope and no generated text appears in the file's raw bytes
 
 #### Scenario: A legacy plaintext log is migrated once

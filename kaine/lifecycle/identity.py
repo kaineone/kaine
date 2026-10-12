@@ -378,8 +378,8 @@ def tree_digest(state_root: Path | str, artifacts: list[Path]) -> str:
     root = resolve(state_root)
     lines: list[str] = []
     # A top-level artifact that is a symlink is followed: operators relocate a
-    # being's data (for example to bulk storage) by linking it, and the data is
-    # still this being's own. Symlinks inside a directory artifact are skipped so
+    # entity's data (for example to bulk storage) by linking it, and the data is
+    # still this entity's own. Symlinks inside a directory artifact are skipped so
     # the walk cannot loop or leave the artifact.
     for artifact in artifacts:
         try:
@@ -494,7 +494,7 @@ def has_prior_lived_history_in_lineage(
                 )
                 return True
             # Its own or an ancestor's record, or a descendant's: a fork
-            # whose lineage names this being proves this being lived.
+            # whose lineage names this entity proves this entity lived.
             if sidecar[0] in target_ids or identity.entity_id in sidecar[1]:
                 return True
 
@@ -568,10 +568,10 @@ def lived_before(
     state_root: Path | str = "state",
     bundle_roots: Iterable[Path | str] = (),
 ) -> bool:
-    """Return whether this being has lived before this boot.
+    """Return whether this entity has lived before this boot.
 
-    Implements the maturation-gate liveness rule approved for KAINE: a being is
-    treated as already-lived (and therefore must never be regressed into a womb)
+    Implements the maturation-gate liveness rule approved for KAINE: an entity is
+    treated as already-lived (and therefore must never be regressed into a stimulus source)
     when any of the following hold:
 
       * its identity is unknown (``None``);
@@ -579,13 +579,13 @@ def lived_before(
         (:data:`OWN_LIVED_ARTIFACTS`), which deliberately excludes ``forks/``
         and ``preservation/``;
       * ``forks/``, in-tree ``preservation/`` or any configured bundle root
-        contains a readable record whose sidecar or manifest names this being
-        or one of its ancestors, or a descendant whose lineage names this being;
+        contains a readable record whose sidecar or manifest names this entity
+        or one of its ancestors, or a descendant whose lineage names this entity;
       * a fork sidecar, preservation manifest, or bundle manifest is unreadable,
         malformed, or lacks an identity object — every ambiguity resolves to
         "lived".
 
-    Foreign snapshots or bundles are not counted as this being's own history.
+    Foreign snapshots or bundles are not counted as this entity's own history.
     """
     if identity is None:
         return True

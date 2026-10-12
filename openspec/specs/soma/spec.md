@@ -1,22 +1,22 @@
-# soma Specification
+# interoception Specification
 
 ## Purpose
-Soma, the interoceptive module: it reads the host substrate's metrics (and the cycle's latency) as the entity's body sense, scores wellness, predicts its own substrate state with a replaceable forward model, and reports on the bus without blocking the event loop.
+Interoception, the interoceptive module: it reads the host substrate's metrics (and the cycle's latency) as the entity's body sense, scores wellness, predicts its own substrate state with a replaceable forward model, and reports on the bus without blocking the event loop.
 
 ## Requirements
 
-### Requirement: Soma publishes interoception reports at a configurable interval
-Soma SHALL publish a `soma.report` event to its `soma.out` stream every
+### Requirement: Interoception publishes interoception reports at a configurable interval
+Interoception SHALL publish a `soma.report` event to its `soma.out` stream every
 `read_interval_s` seconds (default 1.0) carrying three fields: `metrics`
 (a flat dict of measured values), `wellness` (a float in `[0.0, 1.0]`),
 and `alerts` (a list of metric keys whose values exceeded their
 configured thresholds, possibly empty). The event's salience SHALL be
 elevated (default 0.7) when `alerts` is non-empty and SHALL remain low
-(default 0.1) when alerts is empty, so Syneidesis treats anomalies as
+(default 0.1) when alerts is empty, so Workspace treats anomalies as
 salient by default.
 
 #### Scenario: Baseline report published with low salience
-- **WHEN** Soma reads metrics under threshold and publishes
+- **WHEN** Interoception reads metrics under threshold and publishes
 - **THEN** the published `soma.report` event has empty `alerts` and
   salience equal to the configured baseline
 
@@ -26,8 +26,8 @@ salient by default.
 - **THEN** the published `soma.report` event has `alerts` containing
   `"cpu_percent"` and salience equal to the configured alert level
 
-### Requirement: Soma consumes cycle.out latency events
-Soma SHALL subscribe to the `cycle.out` stream and maintain a rolling
+### Requirement: Interoception consumes cycle.out latency events
+Interoception SHALL subscribe to the `cycle.out` stream and maintain a rolling
 window of recent `cycle.tick` event `wall_duration_ms` payloads. The
 mean of the window SHALL be exposed in subsequent metrics dicts as
 `cycle_latency_avg_ms`. The window size SHALL be configurable.
@@ -35,7 +35,7 @@ mean of the window SHALL be exposed in subsequent metrics dicts as
 #### Scenario: Latency average updates with new tick events
 - **WHEN** the cycle publishes `cycle.tick` events with
   `wall_duration_ms` values 100, 200, and 300 to `cycle.out`
-- **THEN** the next `metrics` dict Soma reads contains
+- **THEN** the next `metrics` dict Interoception reads contains
   `cycle_latency_avg_ms == 200.0`
 
 #### Scenario: Window respects configured size
@@ -45,11 +45,11 @@ mean of the window SHALL be exposed in subsequent metrics dicts as
 
 ### Requirement: Graceful degradation when pynvml is unavailable
 The default `SystemMetricsReader` SHALL attempt to initialize NVML once
-when Soma initializes. If initialization fails for any reason, Soma
+when Interoception initializes. If initialization fails for any reason, Interoception
 SHALL log a single warning and continue producing reports without any
 `gpu_*` metric keys.
 
-#### Scenario: NVML init failure does not stop Soma
+#### Scenario: NVML init failure does not stop Interoception
 - **WHEN** `pynvml.nvmlInit()` raises an exception during
   `Soma.initialize`
 - **THEN** `Soma.initialize` completes successfully and subsequent
@@ -57,7 +57,7 @@ SHALL log a single warning and continue producing reports without any
   `cpu_percent`, `ram_percent`, and other CPU-side metrics
 
 ### Requirement: Wellness score is in [0,1] and weighted across present metrics
-Soma SHALL compute a `wellness` score that:
+Interoception SHALL compute a `wellness` score that:
 - equals 1.0 when every present metric is at its healthy value,
 - decreases linearly per per-metric normalization curve,
 - weighted-averages the per-metric contributions using configured
@@ -80,14 +80,14 @@ Soma SHALL compute a `wellness` score that:
   and equals 0.85
 
 ### Requirement: AnomalyDetector strategy is replaceable
-Soma SHALL accept an `AnomalyDetector` collaborator implementing
+Interoception SHALL accept an `AnomalyDetector` collaborator implementing
 `evaluate(metrics) -> AlertResult`. The default
 `ThresholdAnomalyDetector` SHALL apply per-metric `>` comparisons
 against configured thresholds; missing metrics SHALL NOT trigger an
 alert.
 
 #### Scenario: Custom detector replaces the default
-- **WHEN** Soma is constructed with a custom detector that always
+- **WHEN** Interoception is constructed with a custom detector that always
   returns one alert key `"forced"`
 - **THEN** every published `soma.report` event has `alerts == ["forced"]`
   and the elevated alert salience
@@ -100,46 +100,46 @@ alert.
 The `SystemMetricsReader` SHALL execute its synchronous psutil and
 pynvml calls off the asyncio event loop (via `asyncio.to_thread` or
 equivalent) so that other modules' coroutines and the cognitive cycle
-are not stalled while Soma reads metrics.
+are not stalled while Interoception reads metrics.
 
 #### Scenario: Metrics read does not block cycle ticks
-- **WHEN** Soma's read takes 50 ms wall time
+- **WHEN** Interoception's read takes 50 ms wall time
 - **THEN** other coroutines scheduled during that window still receive
   CPU time and the cycle's tick latency is not inflated by 50 ms
 
-### Requirement: Default soma config and disabled-by-default
+### Requirement: Default interoception config and disabled-by-default
 The repository SHALL ship a `[soma]` section in `config/kaine.toml`
 with default values for `read_interval_s`, per-metric thresholds, and
 per-metric weights, and SHALL keep `[modules].soma = false` so first
-boot does not auto-register Soma without an operator opt-in.
+boot does not auto-register Interoception without an operator opt-in.
 
 #### Scenario: kaine.toml carries defaults
 - **WHEN** an operator reads `config/kaine.toml`
 - **THEN** they find a `[soma]` section with `read_interval_s`,
   thresholds, and weights, and `[modules].soma == false`
 
-### Requirement: Soma accepts an injected forward model
-Soma's constructor SHALL accept an optional `forward_model` object. When it is `None`, Soma SHALL build its default `SubstrateForwardModel` with the configured `forward_model_units`, as before. When it is provided, Soma SHALL use it in place of the default and SHALL call only the interface Soma already uses on its forward model (`step`, `prediction_error_to_salience`, `suspended`, `adaptation_steps`, `state_dict`, `load_state_dict`).
+### Requirement: Interoception accepts an injected forward model
+Interoception's constructor SHALL accept an optional `forward_model` object. When it is `None`, Interoception SHALL build its default `SubstrateForwardModel` with the configured `forward_model_units`, as before. When it is provided, Interoception SHALL use it in place of the default and SHALL call only the interface Interoception already uses on its forward model (`step`, `prediction_error_to_salience`, `suspended`, `adaptation_steps`, `state_dict`, `load_state_dict`).
 
 #### Scenario: Default unchanged
-- **WHEN** Soma is constructed without `forward_model`
+- **WHEN** Interoception is constructed without `forward_model`
 - **THEN** it builds a `SubstrateForwardModel` exactly as it does today
 
 #### Scenario: Injected model used
-- **WHEN** Soma is constructed with `forward_model=model`
+- **WHEN** Interoception is constructed with `forward_model=model`
 - **THEN** each interoceptive tick calls `model.step` and no `SubstrateForwardModel` is built
 
-### Requirement: Soma's reservoir survives preservation and needs no torch
-Soma's CfC reservoir SHALL be generated from a seed drawn once when Soma is first created, from the process's ambient NumPy random state unless the caller supplies one, so a run seeded through the experiment seeding helper rebuilds the same reservoir while an unseeded process gets a fresh one; the seed SHALL be part of its serialized state, and a revived Soma SHALL rebuild the identical reservoir from it before restoring its readout. A snapshot without a seed SHALL start a new reservoir and say so in the log. Soma SHALL offer a NumPy CfC backend, the default, that needs no torch and matches the torch backend to 1e-5 given the same weights.
+### Requirement: Interoception's reservoir survives preservation and needs no torch
+Interoception's CfC reservoir SHALL be generated from a seed drawn once when Interoception is first created, from the process's ambient NumPy random state unless the caller supplies one, so a run seeded through the experiment seeding helper rebuilds the same reservoir while an unseeded process gets a fresh one; the seed SHALL be part of its serialized state, and a revived Interoception SHALL rebuild the identical reservoir from it before restoring its readout. A snapshot without a seed SHALL start a new reservoir and say so in the log. Interoception SHALL offer a NumPy CfC backend, the default, that needs no torch and matches the torch backend to 1e-5 given the same weights.
 
 #### Scenario: A seeded experiment reproduces
-- **WHEN** two Soma instances are created after the same `set_global_seed` call and given no reservoir seed
+- **WHEN** two Interoception instances are created after the same `set_global_seed` call and given no reservoir seed
 - **THEN** they draw the same reservoir seed and produce the same outputs
 
 #### Scenario: Revive keeps the reservoir
-- **WHEN** Soma is preserved and revived in a new process
+- **WHEN** Interoception is preserved and revived in a new process
 - **THEN** its reservoir weights are identical to the preserved ones, and the same inputs give the same hidden states and predictions
 
 #### Scenario: A host without torch
-- **WHEN** Soma runs on the NumPy backend where torch cannot be imported
+- **WHEN** Interoception runs on the NumPy backend where torch cannot be imported
 - **THEN** it starts and runs, and the extras check does not require the `core` extra for it

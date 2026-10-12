@@ -410,7 +410,7 @@ class LiveMicrophone:
             except asyncio.TimeoutError:
                 continue
             # Dev-gated audio-level tap (KAINE_PERCEPTION_PREVIEW=1): publish the
-            # current normalised RMS of this PCM frame so a Nexus meter can show
+            # current normalised RMS of this PCM frame so a Dashboard meter can show
             # how loud what the entity hears is. Metadata only (a single float) —
             # no PCM is retained or persisted; no-op unless the dev flag is set.
             _tap_audio_level(frame, self._cfg.sample_rate)

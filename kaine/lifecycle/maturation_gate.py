@@ -61,7 +61,7 @@ STAGE_GESTATION_NO_STIMULUS = "stage.gestation.no_stimulus"
 STAGE_BIRTH_READY = "stage.birth.ready"
 STAGE_BIRTH = "stage.birth"
 
-# Birth-decision actions.
+# Maturation-decision actions.
 ACTION_GESTATING = "gestating"
 ACTION_HOLD_AWAITING_EMBODIMENT = "hold_awaiting_embodiment"
 ACTION_HOLD_AWAITING_ACK = "hold_awaiting_ack"
@@ -77,7 +77,7 @@ REASON_BORN_INTO_PERCEPTUAL_WORLD = "born_into_perceptual_world"
 class RegulationThresholds:
     """Thresholds the ``gestation.readiness`` markers must cross for C1.
 
-    This change owns the *thresholds and the decision*; the womb change
+    This change owns the *thresholds and the decision*; the stimulus source change
     (``gestational-womb-stimulus``) owns the *measurement* of the markers.
     """
 
@@ -119,9 +119,9 @@ class RegulationThresholds:
 @dataclass(frozen=True)
 class MaturationConfig:
     """The ``[developmental_stage]`` config block. Ships ``enabled = false``
-    (ship-inert, matching the Spot/Mundus convention): a false value runs the
+    (ship-inert, matching the Supervisor/Embodiment convention): a false value runs the
     entity un-staged exactly as today. Defaults are conservative — a real
-    gestation takes many sleep cycles and substantial lived time."""
+    development takes many sleep cycles and substantial lived time."""
 
     enabled: bool = False
     min_sleep_cycles: int = 5
@@ -130,7 +130,7 @@ class MaturationConfig:
     gate_cadence_seconds: float = 60.0
     readout_max_age_cadences: float = 3.0
     require_operator_ack_for_birth: bool = False
-    # Womb timing knobs.
+    # Stimulus source timing knobs.
     womb_ready_retry_seconds: float = 5.0
     womb_check_seconds: float = 1.0
     womb_loss_after_seconds: float = 5.0
@@ -289,8 +289,8 @@ def _evaluate_c2(
     faculties: Faculties = Faculties(),
 ) -> ConditionResult:
     """C2 — sleep and consolidation evidence, required only when the matching
-    faculties are present. Sleep is required iff Hypnos is present;
-    consolidation is required iff both Hypnos and Phantasia are present.
+    faculties are present. Sleep is required iff Sleep is present;
+    consolidation is required iff both Sleep and World model are present.
     Fail-closed on a missing required signal; the detail always names what was
     required. When neither sleep nor consolidation is required, C2 is met as
     not applicable."""
@@ -362,7 +362,7 @@ def evaluate_readiness(
     the gate measures readiness and imposes no development (see module docstring;
     warmed-up-signal precedent: paper §6.6, ``soma-coldstart-regulation-warmup``).
 
-    Pass ``readiness_readout=None`` when the womb readout is absent OR stale so C1
+    Pass ``readiness_readout=None`` when the stimulus source readout is absent OR stale so C1
     fails closed in both cases. Faculty requirements are injected via ``faculties``;
     the default ``Faculties()`` preserves the original three-faculty checks."""
     return Readiness(
@@ -372,16 +372,16 @@ def evaluate_readiness(
     )
 
 
-# --- Embodiment-availability guard + birth decision ------------------------
+# --- Embodiment-availability guard + maturation decision ------------------------
 
 
 def embodiment_available(
     *, mundus_enabled: bool, operator_approved: bool, reachable: bool
 ) -> bool:
-    """Whether the entity can actually be born into an embodied world: Mundus's
+    """Whether the entity can actually be born into an embodied world: Embodiment's
     existing two-layer gate (``[mundus].enabled`` config layer AND
     ``KAINE_MUNDUS_OPERATOR_APPROVED=1`` operator layer) AND reachability. This
-    is READ as a precondition; the gate never flips Mundus on."""
+    is READ as a precondition; the gate never flips Embodiment on."""
     return bool(mundus_enabled) and bool(operator_approved) and bool(reachable)
 
 
@@ -414,14 +414,14 @@ def decide_birth(
     """Combine developmental readiness with the embodiment-availability guard.
 
     - not developmentally ready               -> keep gestating (report unmet Cn);
-    - with Mundus: ready but embodiment unavailable -> HOLD in the womb, loud
+    - with Embodiment: ready but embodiment unavailable -> HOLD in the stimulus source, loud
       repeated ``stage.birth.ready{awaiting_embodiment}`` (never born into an
       absent world, never a silent stall);
-    - without Mundus: ready skips the embodiment guard and births into the
+    - without Embodiment: ready skips the embodiment guard and maturations into the
       perceptual world (``born_into_perceptual_world``);
     - ready ^ available but an operator ack is required and absent (supervised
       shakedown) -> HOLD awaiting the ack;
-    - ready ^ available ^ (ack not required or given) -> BIRTH.
+    - ready ^ available ^ (ack not required or given) -> MATURATION.
     """
     if not readiness.ready:
         return BirthDecision(

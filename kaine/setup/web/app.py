@@ -1390,7 +1390,7 @@ def create_setup_app(
                 nexus_cfg = _nexus_config_for(request)
                 nexus_url = f"http://127.0.0.1:{nexus_cfg.port}/"
             except Exception:
-                # No readable Nexus config: the page shows no Nexus link.
+                # No readable Dashboard config: the page shows no Dashboard link.
                 pass
 
             explanation = ""
@@ -1505,7 +1505,7 @@ def serve(
     """Run the setup server on a loopback address only.
 
     ``port=0`` selects a free port.  Uvicorn is used programmatically, the
-    same way Nexus does.  The server stops itself on finish or idle timeout.
+    same way Dashboard does.  The server stops itself on finish or idle timeout.
 
     If ``on_ready`` is given, the bound socket is passed to uvicorn so the
     selected port cannot be lost to a race; the callback receives the final

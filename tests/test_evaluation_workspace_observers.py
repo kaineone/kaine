@@ -133,7 +133,7 @@ async def bus():
 
 @pytest.mark.asyncio
 async def test_trajectory_records_real_broadcast_and_event_decode_reads_it(bus):
-    # Publish exactly as Syneidesis does — {snapshot:<json>,...}.
+    # Publish exactly as Workspace does — {snapshot:<json>,...}.
     await bus.publish_workspace(_snapshot(7, ["soma", "eidolon"]), source="syneidesis")
     sink = FakeSink()
     rec = TrajectoryRecorder(bus, sink)

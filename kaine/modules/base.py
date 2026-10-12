@@ -31,7 +31,7 @@ class BaseModule(ABC):
 
     name: ClassVar[str]
 
-    # ENGINEERING EXTENSION (paper §3.4.3): the Thymos drives that this module's
+    # ENGINEERING EXTENSION (paper §3.4.3): the Affect drives that this module's
     # events tend to relieve. The salience goal factor reads these declarations
     # (see kaine.workspace.strategies.build_drive_sources). Empty means none.
     relieves_drives: ClassVar[frozenset[str]] = frozenset()
@@ -46,7 +46,7 @@ class BaseModule(ABC):
         # None until attached via attach_oscillator(); modules without one
         # report the neutral phase, so the coherence factor degrades to 1.0.
         self._oscillator: Optional[OscillatorProtocol] = None
-        # Centralized liveness heartbeat for the Spot supervisor. Bumped after
+        # Centralized liveness heartbeat for the Supervisor supervisor. Bumped after
         # each successful on_workspace and at the end of publish; the cycle's
         # 10 Hz broadcast refreshes it for every live module regardless of
         # the module's own publishing activity, so "quiet" never reads as "hung."
@@ -64,7 +64,7 @@ class BaseModule(ABC):
         return time.monotonic() - self._last_heartbeat
 
     def health(self) -> dict[str, Any]:
-        """Operational liveness snapshot for the Spot supervisor.
+        """Operational liveness snapshot for the Supervisor supervisor.
 
         Pure and never raises — every task introspection is guarded by
         done()/cancelled() so a pending or cancelled task can't blow up.
@@ -96,7 +96,7 @@ class BaseModule(ABC):
         """Light restart: tear down, reset for a fresh start, re-initialize.
 
         Valid only when construction held no external resources (see
-        holds_external_resources). The Spot supervisor uses the heavy rebuild
+        holds_external_resources). The Supervisor supervisor uses the heavy rebuild
         path for modules that do.
         """
         await self.shutdown()
@@ -107,7 +107,7 @@ class BaseModule(ABC):
     def holds_external_resources(self) -> bool:
         """Whether this module owns external handles (httpx/Qdrant clients,
         model handles, perception supervisors) that a light restart() cannot
-        safely recreate. Modules that do override this to return True so Spot
+        safely recreate. Modules that do override this to return True so Supervisor
         rebuilds them via the boot factory instead."""
         return False
 
@@ -202,7 +202,7 @@ class BaseModule(ABC):
         Called by ``hypnos-fatigue-phases`` phase 1 to slow oscillators during
         maintenance (e.g. 0.5 = half speed during deep sleep). Delegates to the
         attached oscillator; a true no-op when no oscillator is attached, so
-        Hypnos can invoke it unconditionally without error regardless of
+        Sleep can invoke it unconditionally without error regardless of
         oscillatory-layer deployment status. No-op correctness is exercised by
         ``tests/test_hypnos_oscillator_hook.py``.
 

@@ -50,7 +50,7 @@ class RuleBasedSalience:
     """Product-form salience with arousal contrast.
 
     priority = intensity * novelty * goal;
-    score = thymos level factor times the arousal contrast of the priority.
+    score = affect level factor times the arousal contrast of the priority.
 
     Precision is local to each processor, which scores its own prediction error
     against its recent errors, so the workspace applies no per-source weight.
@@ -80,7 +80,7 @@ class RuleBasedSalience:
 
         # Announce a deliberate downgrade (a factor that ships REAL by default but
         # was set to the static negative control) so it is visible in operator
-        # logs rather than silent. Shipped defaults (thymos=real, goal=staged
+        # logs rather than silent. Shipped defaults (affect=real, goal=staged
         # static) pass an empty list here, so a normal boot stays quiet.
         downgraded = list(downgraded_factors)
         if downgraded:

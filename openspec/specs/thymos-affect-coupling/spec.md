@@ -1,14 +1,14 @@
 # thymos-affect-coupling Specification
 
 ## Purpose
-This capability controls how Thymos couples perceived speaker emotion into appraisal, using a base weight when familiarity is unknown and persisting the familiarity cache. The coupling can be disabled gracefully, and the perceived-emotion contribution is routed through appraisal.
+This capability controls how Affect couples perceived speaker emotion into appraisal, using a base weight when familiarity is unknown and persisting the familiarity cache. The coupling can be disabled gracefully, and the perceived-emotion contribution is routed through appraisal.
 ## Requirements
 ### Requirement: Graceful degradation and opt-out
-Thymos SHALL use `coupling_base` as the contribution weight when no familiarity
+Affect SHALL use `coupling_base` as the contribution weight when no familiarity
 is known for the speaker, and SHALL add no perceived-emotion contribution to
 appraisal when `[thymos.coupling].enabled` is false.
 
-#### Scenario: No Empatheia model uses base weight
+#### Scenario: No Social cognition model uses base weight
 - **WHEN** an `audition.emotion` arrives with no prior `empatheia.agent_model`
 - **THEN** the appraisal contribution uses `coupling_base`
 
@@ -17,17 +17,17 @@ appraisal when `[thymos.coupling].enabled` is false.
 - **THEN** the appraisal scores are identical to the no-perceived-emotion case and the dimensional state is not changed by coupling
 
 ### Requirement: Familiarity cache persistence
-Thymos SHALL serialize the per-agent familiarity cache so that coupling strength
+Affect SHALL serialize the per-agent familiarity cache so that coupling strength
 is not cold-reset after a fork restore.
 
 #### Scenario: Cache survives a serialize/deserialize round-trip
-- **WHEN** the familiarity cache holds a non-empty entry and Thymos is serialized
+- **WHEN** the familiarity cache holds a non-empty entry and Affect is serialized
   then deserialized
 - **THEN** the same familiarity values are present and coupling uses them on the
   next event
 
 ### Requirement: Appraisal-routed perceived emotion
-A detected speaker emotion (`audition.emotion`) SHALL be folded into Thymos's
+A detected speaker emotion (`audition.emotion`) SHALL be folded into Affect's
 own Scherer appraisal as a perceptual input, weighted by `familiarity` from the
 latest `empatheia.agent_model`, and SHALL NOT be written directly to the
 dimensional (valence/arousal/dominance) state. The entity's own appraisal —
@@ -40,7 +40,7 @@ shift toward the speaker's state.
 
 #### Scenario: Perceived emotion is appraised, not imposed
 - **WHEN** an `audition.emotion` event reports a strongly positive-valence emotion while coupling is enabled
-- **THEN** Thymos's appraised intrinsic_pleasantness rises and the entity's own appraisal→state path moves valence upward
+- **THEN** Affect's appraised intrinsic_pleasantness rises and the entity's own appraisal→state path moves valence upward
 - **AND** no code path moves the dimensional state toward a fixed VAD target for that emotion
 
 #### Scenario: Higher familiarity appraises others' emotion as more significant

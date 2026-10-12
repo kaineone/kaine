@@ -191,7 +191,7 @@ async def _check_presence(
         if not isinstance(frame_index, int) or isinstance(frame_index, bool):
             continue
 
-        # The running local womb names itself "local"; an external provider
+        # The running local stimulus source names itself "local"; an external provider
         # names itself (e.g. its body adapter) with anything else.
         provider = payload.get("provider")
         if local:

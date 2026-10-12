@@ -42,7 +42,7 @@ def test_union_concatenates_lists_dedup_preserving_order():
     assert out == {"l": [1, 2, 3, 4, 5]}
 
 
-# ---- Mnemos ----
+# ---- Episodic memory ----
 
 
 def test_mnemos_sums_short_term_and_preserves_matching_prefix():
@@ -89,7 +89,7 @@ def test_mnemos_one_parent_missing():
     assert out == {"short_term_size": 3, "collection_prefix": "mnemos_"}
 
 
-# ---- Nous ----
+# ---- Planning ----
 
 
 def test_nous_one_sided_selection_keeps_lower_entropy():
@@ -140,7 +140,7 @@ def test_nous_one_parent_missing():
     assert out == {"posterior": [[1.0, 0.0]]}
 
 
-# ---- Eidolon ----
+# ---- Self-model ----
 
 
 def test_eidolon_dedups_values_orders_history_and_sums_drift():
@@ -181,7 +181,7 @@ def test_eidolon_baseline_one_sided():
     assert out["personality_baseline"] == {"x": 0.9}
 
 
-# ---- Thymos ----
+# ---- Affect ----
 
 
 def test_thymos_averages_dim_max_drives_unions_goals():

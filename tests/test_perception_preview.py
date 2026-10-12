@@ -78,7 +78,7 @@ def test_encode_jpeg_preview_uses_memory_only():
 
 
 # ---------------------------------------------------------------------------
-# Topos tap
+# Vision tap
 # ---------------------------------------------------------------------------
 
 
@@ -189,16 +189,16 @@ def test_audio_level_tap_on_reports_normalised_rms(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Nexus preview routes — now a LOOPBACK PROXY to the cycle's preview server.
+# Dashboard preview routes — now a LOOPBACK PROXY to the cycle's preview server.
 #
-# The holder lives in the cycle process; Nexus is separate. The routes proxy to
+# The holder lives in the cycle process; Dashboard is separate. The routes proxy to
 # 127.0.0.1:<port> where the cycle serves the in-RAM slot. These tests stand up a
 # real PreviewServer on an ephemeral loopback port and point the router at it, so
-# the whole proxy path (Nexus route → loopback socket → holder) is exercised end
+# the whole proxy path (Dashboard route → loopback socket → holder) is exercised end
 # to end — not a bypass.
 # ---------------------------------------------------------------------------
 
-from kaine.perception_preview_server import PreviewServer  # noqa: E402,I001 — section-local import kept adjacent to the nexus preview route tests
+from kaine.perception_preview_server import PreviewServer  # noqa: E402,I001 — section-local import kept adjacent to the dashboard preview route tests
 
 
 @pytest.fixture

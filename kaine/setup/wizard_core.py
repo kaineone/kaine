@@ -59,7 +59,7 @@ MODULE_ORDER = [
     "mundus",
 ]
 
-#: Cognitive modules (the embodiment modules Perception and Mundus, and Echo,
+#: Cognitive modules (the embodiment modules Perceptual locus and Embodiment, and Recorder,
 #: which is test infrastructure, are never part of a preset).
 FULL_ENTITY_MODULES: dict[str, bool] = {
     m: m not in ("perception", "mundus") for m in MODULE_ORDER
@@ -192,18 +192,18 @@ def implied_extras(modules: dict[str, bool], shipped: dict[str, Any]) -> list[st
     """Compute the optional-dependency extras implied by the chosen modules.
 
     Module-based:
-    - nous + [nous].backend == "pymdp" -> reasoning
+    - planning + [nous].backend == "pymdp" -> reasoning
     - audition + capture -> audio
-    - topos + capture -> vision
+    - vision + capture -> vision
     - oscillator.enabled -> oscillator
     - hypnos.voice_alignment -> training
-    - phantasia + [phantasia].backend == "dreamerv3" + [phantasia].engine == "jax"
+    - world model + [phantasia].backend == "dreamerv3" + [phantasia].engine == "jax"
       -> worldmodel
 
     Speech-edge:
     - audition enabled, backend == "sherpa_onnx" and transcription_enabled ->
       speech-edge
-    - vox enabled, backend == "sherpa_onnx" -> speech-edge
+    - vocal enabled, backend == "sherpa_onnx" -> speech-edge
 
     Perception-feed-based (closes the gap that the shipped ``capture_enabled =
     off`` hides for research runs): the top-level ``[perception_feed].mode``

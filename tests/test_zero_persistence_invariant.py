@@ -264,7 +264,7 @@ def test_runtime_state_only_contains_operational_keys(tmp_path):
 
 
 def test_escalation_state_only_contains_operational_keys(tmp_path):
-    """Spot's escalation.json holds operational fields only — no sensory
+    """Supervisor's escalation.json holds operational fields only — no sensory
     content. Mirrors the runtime.json invariant for the supervisor's halt file.
     """
     import json
@@ -398,13 +398,13 @@ def test_no_frame_writers_in_perception_feed_module():
 
 def test_perception_preview_persists_nothing():
     """The dev-gated perception PREVIEW (paper §4.4 override) must obey the same
-    zero-persistence invariant: the holder + the Topos/Audition taps may keep a
+    zero-persistence invariant: the holder + the Vision/Audition taps may keep a
     single frame/level in RAM but must open NO file and invoke NO frame/audio
     writer. Extends the invariant to the new preview code path."""
     repo_root = Path(__file__).parent.parent
     targets = [
         repo_root / "kaine" / "perception_preview.py",
-        # The loopback preview server bridges the RAM holder to Nexus over a
+        # The loopback preview server bridges the RAM holder to Dashboard over a
         # socket — it must never spill a frame to disk either.
         repo_root / "kaine" / "perception_preview_server.py",
         repo_root / "kaine" / "modules" / "topos" / "module.py",

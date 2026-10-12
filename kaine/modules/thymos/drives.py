@@ -139,7 +139,7 @@ class DriveCrossing:
 
 
 class DriveSet:
-    """Holds Thymos's four drives and surfaces crossings each tick."""
+    """Holds Affect's four drives and surfaces crossings each tick."""
 
     def __init__(
         self,

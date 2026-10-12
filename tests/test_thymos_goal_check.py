@@ -90,7 +90,7 @@ async def test_social_drive_served_by_audition_positive(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_social_drive_ignored_by_soma_negative(bus: AsyncBus):
-    """Social drive 0.8 + only non-serving soma events → -0.8."""
+    """Social drive 0.8 + only non-serving interoception events → -0.8."""
     thymos = Thymos(bus, publish_interval_s=5.0, clock=lambda: 0.0)
     await thymos.initialize()
     try:
@@ -263,7 +263,7 @@ async def test_drive_relevance_goal_scorer_results_unchanged():
 
 
 # ---------------------------------------------------------------------------
-# Boot wiring (build_registry and Spot's rewire_module both run it)
+# Boot wiring (build_registry and Supervisor's rewire_module both run it)
 # ---------------------------------------------------------------------------
 
 

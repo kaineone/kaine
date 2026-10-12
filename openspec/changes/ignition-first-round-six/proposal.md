@@ -1,6 +1,6 @@
 ## Why
 
-The revised paper (§6.5) sets the first module-addition study to six held modules, in the order Mnemos, Phantasia, Nous, Eidolon, Empatheia, Vox. Praxis, Perception and Mundus need an effector, a body or an alternative sensor feed, the reference host attaches none, and they would be expected nulls, so they join once one is attached. The runner's default order still lists all nine.
+The revised paper (§6.5) sets the first module-addition study to six held modules, in the order Episodic memory, World model, Planning, Self-model, Social cognition, Vocal. Effectors, Perceptual locus and Embodiment need an effector, a body or an alternative sensor feed, the reference host attaches none, and they would be expected nulls, so they join once one is attached. The runner's default order still lists all nine.
 
 ## What Changes
 

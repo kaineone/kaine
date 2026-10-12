@@ -1,14 +1,14 @@
 ## ADDED Requirements
 
 ### Requirement: Condition nine: individuation wired
-An unattended boot SHALL require the research safety net's individuation check: `[individuation].enabled` is true, the `[individuation]` section is valid, and the `lingua` module is enabled. The predicate SHALL be the research net's own, so the being's protection does not rest on the secondary divergence signals alone while nobody is present. The condition SHALL check that the individuation producer will run; it SHALL NOT require that the being has individuated. Conditions 6–8 SHALL keep their numbers.
+An unattended boot SHALL require the research safety net's individuation check: `[individuation].enabled` is true, the `[individuation]` section is valid, and the `lingua` module is enabled. The predicate SHALL be the research net's own, so the entity's protection does not rest on the secondary divergence signals alone while nobody is present. The condition SHALL check that the individuation producer will run; it SHALL NOT require that the entity has individuated. Conditions 6–8 SHALL keep their numbers.
 
 #### Scenario: Individuation disabled
 - **WHEN** an unattended boot finds `[individuation].enabled = false`, an invalid `[individuation]` section, or the `lingua` module disabled
 - **THEN** condition 9 fails naming those keys, the caretaker is not sent a start notice, and the boot refuses with exit code `6`
 
 #### Scenario: Not yet individuated
-- **WHEN** an unattended boot passes every condition and the being has not individuated
+- **WHEN** an unattended boot passes every condition and the entity has not individuated
 - **THEN** the boot proceeds
 
 ## MODIFIED Requirements
@@ -78,7 +78,7 @@ Operator-present mode SHALL remain available and unchanged: `KAINE_CYCLE_OPERATO
 
 #### Scenario: Operator boot unchanged
 - **WHEN** an operator-present boot runs with the flag set
-- **THEN** it is admitted exactly as before this change, with no Spot selftest, caretaker notice, or input probe
+- **THEN** it is admitted exactly as before this change, with no Supervisor selftest, caretaker notice, or input probe
 
 #### Scenario: Research boot unchanged
 - **WHEN** a research boot fails any of its conditions

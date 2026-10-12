@@ -55,7 +55,7 @@ def test_attach_none_clears():
 
 
 def test_set_frequency_noop_without_oscillator():
-    # Must not raise — Hypnos invokes this unconditionally.
+    # Must not raise — Sleep invokes this unconditionally.
     _Mod().set_frequency(0.5)
 
 

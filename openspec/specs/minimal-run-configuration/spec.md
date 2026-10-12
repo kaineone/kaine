@@ -1,25 +1,25 @@
 # minimal-run-configuration Specification
 
 ## Purpose
-This capability provides an opt-in minimal experiment configuration that activates only Soma, Chronos, and Lingua while leaving Syneidesis and Volition always on, keeps every other built module constructed-but-disabled, and forces workspace competition in the smallest runnable set. It also gives the operator a way to inject text stimuli.
+This capability provides an opt-in minimal experiment configuration that activates only Interoception, Sequence, and Language while leaving Workspace and Action selection always on, keeps every other built module constructed-but-disabled, and forces workspace competition in the smallest runnable set. It also gives the operator a way to inject text stimuli.
 
 ## Requirements
 
 ### Requirement: Minimal experiment configuration
 
 The system SHALL provide an explicitly-labeled, opt-in experiment configuration that
-activates only the modules the ablation needs — Soma, Chronos, and Lingua — while
-leaving the always-on Syneidesis workspace and Volition action layer active. All other
+activates only the modules the ablation needs — Interoception, Sequence, and Language — while
+leaving the always-on Workspace workspace and Action selection action layer active. All other
 built modules SHALL remain constructed-but-disabled; the configuration SHALL NOT remove
 or delete any module. The configuration SHALL set `volition.drive_initiative = false`
-so Volition matches the paper's described default action policy, and SHALL pin Lingua
+so Action selection matches the paper's described default action policy, and SHALL pin Language
 to greedy decoding.
 
 #### Scenario: Only three modules activate
 
 - **WHEN** the minimal experiment configuration is selected at boot
-- **THEN** exactly Soma, Chronos, and Lingua are registered as modules, Syneidesis and
-  Volition run as cycle scaffolding, and every other module is left disabled but still
+- **THEN** exactly Interoception, Sequence, and Language are registered as modules, Workspace and
+  Action selection run as cycle scaffolding, and every other module is left disabled but still
   present in the codebase
 
 #### Scenario: No work is lost
@@ -28,15 +28,15 @@ to greedy decoding.
 - **THEN** any previously-built module can be reactivated by flipping its `[modules]`
   toggle, with no code restored or rebuilt
 
-#### Scenario: Volition matches the paper's default policy
+#### Scenario: Action selection matches the paper's default policy
 
 - **WHEN** the minimal configuration is active
 - **THEN** `volition.drive_initiative` is false, so no drive-initiated intents are
-  emitted and Volition forms a speak intent only from a user utterance
+  emitted and Action selection forms a speak intent only from a user utterance
 
 ### Requirement: Workspace capacity forces competition in the minimal set
 
-The minimal experiment configuration SHALL set the Syneidesis `top_k` capacity low
+The minimal experiment configuration SHALL set the Workspace `top_k` capacity low
 enough that competitive selection genuinely excludes candidates on the minimal set
 (which has only two predictive modules plus injected utterances). The shipped default
 `top_k = 5` exceeds the minimal set's typical candidate count, so with it selection
@@ -47,21 +47,21 @@ actually competes, and the choice SHALL be documented alongside the ablation.
 #### Scenario: Minimal overlay lowers top_k
 
 - **WHEN** the minimal experiment configuration is active
-- **THEN** the Syneidesis `top_k` is set below the minimal set's typical per-tick
+- **THEN** the Workspace `top_k` is set below the minimal set's typical per-tick
   candidate count, so competitive selection excludes candidates rather than admitting
   all of them
 
 ### Requirement: Minimal build boots without disabled modules
 
 The minimal configuration SHALL boot and run the cognitive cycle without any hard
-dependency on disabled modules (Mnemos, Eidolon, Thymos, Perception, Audition, and the
+dependency on disabled modules (Episodic memory, Self-model, Affect, Perceptual locus, Audition, and the
 rest). Cross-module wiring SHALL degrade cleanly when a module is absent.
 
 #### Scenario: Clean boot on three modules
 
-- **WHEN** the cycle boots with only Soma, Chronos, and Lingua enabled and the
+- **WHEN** the cycle boots with only Interoception, Sequence, and Language enabled and the
   operator-present and organ boot gates satisfied
-- **THEN** the cycle initializes, Syneidesis selects, Volition gates, and no disabled-
+- **THEN** the cycle initializes, Workspace selects, Action selection gates, and no disabled-
   module dependency raises an error
 
 ### Requirement: Operator text-stimulus injection
@@ -69,14 +69,14 @@ rest). Cross-module wiring SHALL degrade cleanly when a module is absent.
 The system SHALL provide a headless path to inject a single seeded user utterance into
 a minimal (Audition-absent) build and to capture the entity's resulting external
 speech. The injected stimulus SHALL reach the cycle on a stream the cycle actually
-reads, carry the source/type of a user utterance so Volition forms a speak intent, and
+reads, carry the source/type of a user utterance so Action selection forms a speak intent, and
 the resulting output SHALL be observable on `lingua.external`.
 
 #### Scenario: Single stimulus produces capturable output
 
 - **WHEN** the operator injects one seeded user-utterance stimulus into a running
   minimal build
-- **THEN** Volition forms a speak intent, Lingua generates a response, and the response
+- **THEN** Action selection forms a speak intent, Language generates a response, and the response
   is readable from `lingua.external`
 
 #### Scenario: Injection works without the Audition module

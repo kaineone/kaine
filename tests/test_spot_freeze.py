@@ -79,7 +79,7 @@ def _spot(registry, fork_manager, bus):
 
 
 async def test_incident_writes_control_with_spot_source(bus, tmp_path):
-    # A module that stays dead even after a light restart, so Spot's freeze
+    # A module that stays dead even after a light restart, so Supervisor's freeze
     # persists with source="spot" (it never recovers on this single poll).
     mod = _AlwaysDeadMod(bus)
     await mod.initialize()
@@ -115,7 +115,7 @@ async def test_operator_freeze_short_circuits_spot(bus, tmp_path):
     stop = asyncio.Event()
     await spot._poll_once(stop)
 
-    # Spot took no action: the module's crashed task is untouched, no incident.
+    # Supervisor took no action: the module's crashed task is untouched, no incident.
     control = control_state.read_control()
     assert control.source == "operator"
     assert "light" not in spot._incidents
@@ -124,7 +124,7 @@ async def test_operator_freeze_short_circuits_spot(bus, tmp_path):
 
 async def test_spot_unfreezes_only_its_own_freeze_on_recovery(bus, tmp_path):
     # A pure module whose only task crashed; a light restart recreates a healthy
-    # workspace task, so Spot recovers and clears its OWN freeze.
+    # workspace task, so Supervisor recovers and clears its OWN freeze.
     mod = _LightMod(bus)
 
     async def _boom():
@@ -146,8 +146,8 @@ async def test_spot_unfreezes_only_its_own_freeze_on_recovery(bus, tmp_path):
 
 
 async def test_gestation_only_freeze_crashed_module_recovered(bus, tmp_path, monkeypatch):
-    # A crashed module under a gestation-only freeze is restarted by Spot.
-    # Spot pushes and later pops only its own freeze entry.
+    # A crashed module under a development-only freeze is restarted by Supervisor.
+    # Supervisor pushes and later pops only its own freeze entry.
     mod = _LightMod(bus)
 
     async def _boom():
@@ -191,7 +191,7 @@ async def test_gestation_only_freeze_crashed_module_recovered(bus, tmp_path, mon
 
 
 async def test_gestation_only_freeze_hung_module_spot_ignores(bus, tmp_path, monkeypatch):
-    # A hung module under a gestation-only freeze is left alone: heartbeats are
+    # A hung module under a development-only freeze is left alone: heartbeats are
     # unreliable while perception is paused.
     mod = _HungMod(bus)
     hang_event = asyncio.Event()
@@ -228,8 +228,8 @@ async def test_gestation_only_freeze_hung_module_spot_ignores(bus, tmp_path, mon
 
 
 async def test_welfare_plus_gestation_freeze_spot_stays_out(bus, tmp_path, monkeypatch):
-    # A mixed stack containing welfare (or operator) keeps Spot out, even when
-    # a gestation freeze is also present.
+    # A mixed stack containing welfare (or operator) keeps Supervisor out, even when
+    # a development freeze is also present.
     mod = _LightMod(bus)
 
     async def _boom():
@@ -270,8 +270,8 @@ async def test_welfare_plus_gestation_freeze_spot_stays_out(bus, tmp_path, monke
 
 async def test_hung_module_is_really_hung_without_a_freeze(bus, tmp_path, monkeypatch):
     # Control for the hung-module tests: with no freeze at all, the same module
-    # does read as hung and Spot opens an incident, so "Spot ignores it" in the
-    # gestation cases is a real decision, not a module that never looked hung.
+    # does read as hung and Supervisor opens an incident, so "Supervisor ignores it" in the
+    # development cases is a real decision, not a module that never looked hung.
     mod = _HungMod(bus)
     hang_event = asyncio.Event()
     mod._tasks = [asyncio.create_task(hang_event.wait())]
@@ -292,8 +292,8 @@ async def test_hung_module_is_really_hung_without_a_freeze(bus, tmp_path, monkey
 async def test_hung_module_ignored_while_spot_entry_sits_on_gestation(
     bus, tmp_path, monkeypatch
 ):
-    # Spot's own entry on top of a gestation freeze: the cycle is still paused
-    # for the lost womb, so a stale heartbeat is still no signal.
+    # Supervisor's own entry on top of a development freeze: the cycle is still paused
+    # for the lost stimulus source, so a stale heartbeat is still no signal.
     mod = _HungMod(bus)
     hang_event = asyncio.Event()
     mod._tasks = [asyncio.create_task(hang_event.wait())]

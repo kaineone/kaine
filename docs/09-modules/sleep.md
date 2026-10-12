@@ -1,32 +1,32 @@
-# Hypnos
+# Sleep
 
-Hypnos is the sleep analog: a fatigue-triggered offline period during which the four predictive processors stop adapting their forward models, and at whose end affect and drives return to baseline. This page is the module reference. It covers what starts a sleep, what a sleep does in the base-thesis form and with the held modules, the events Hypnos publishes, and its configuration. The full pipeline is described in [Sleep and maintenance](../10-sleep/README.md), and the gated training phase in [Voice alignment](../10-sleep/voice-alignment.md).
+Sleep is the sleep analog: a fatigue-triggered offline period during which the four predictive processors stop adapting their forward models, and at whose end affect and drives return to baseline. This page is the module reference. It covers what starts a sleep, what a sleep does in the base-thesis form and with the held modules, the events Sleep publishes, and its configuration. The full pipeline is described in [Sleep and maintenance](../10-sleep/README.md), and the gated training phase in [Voice alignment](../10-sleep/voice-alignment.md).
 
 ## Status
 
-Hypnos ships disabled in the default config (`[modules].hypnos = false` in `config/kaine.toml`). The `thesis_test` profile enables it, because fatigue-triggered rest and the affective reset are part of the base-thesis form.
+Sleep ships disabled in the default config (`[modules].hypnos = false` in `config/kaine.toml`). The `thesis_test` profile enables it, because fatigue-triggered rest and the affective reset are part of the base-thesis form.
 
-Three parts of the pipeline stay off unless an operator turns them on. Associative replay needs `[hypnos.consolidation].associative_replay = true` and Phantasia. Voice alignment needs `[hypnos.voice_alignment].enabled = true` and the environment variable `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`, and even then it trains nothing, because no validated preference source exists yet (see [Voice alignment](../10-sleep/voice-alignment.md)). Memory consolidation and replay need Mnemos.
+Three parts of the pipeline stay off unless an operator turns them on. Associative replay needs `[hypnos.consolidation].associative_replay = true` and World model. Voice alignment needs `[hypnos.voice_alignment].enabled = true` and the environment variable `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`, and even then it trains nothing, because no validated preference source exists yet (see [Voice alignment](../10-sleep/voice-alignment.md)). Memory consolidation and replay need Episodic memory.
 
 ## What a sleep is
 
-A sleep runs between a `hypnos.sleep.started` and a `hypnos.sleep.completed` event. The cognitive cycle keeps running throughout. A sleep lock stops a second sleep from starting, and nothing else waits on it. When the sleep starts, `enter_sleep` switches the perception locus to `off` and pauses the shared stimulus playlist; when it ends, including after a failure or cancellation, it restores the remembered pre-sleep locus (falling back to `physical`) and resumes the playlist. Sleep time does not count as awake time.
+A sleep runs between a `hypnos.sleep.started` and a `hypnos.sleep.completed` event. The cognitive cycle keeps running throughout. A sleep lock stops a second sleep from starting, and nothing else waits on it. When the sleep starts, `enter_sleep` switches the perceptual locus to `off` and pauses the shared stimulus playlist; when it ends, including after a failure or cancellation, it restores the remembered pre-sleep locus (falling back to `physical`) and resumes the playlist. Sleep time does not count as awake time.
 
-The predictive processors read `hypnos.out` and suspend forward-model adaptation for the whole window: Topos, Audition (both its acoustic and its tone forward models), Soma and Chronos. Each keeps predicting and reporting, but none updates its weights until `hypnos.sleep.completed` arrives. Soma's fatigue decays three times faster while the window is open.
+The predictive processors read `hypnos.out` and suspend forward-model adaptation for the whole window: Vision, Audition (both its acoustic and its tone forward models), Interoception and Sequence. Each keeps predicting and reporting, but none updates its weights until `hypnos.sleep.completed` arrives. Interoception's fatigue decays three times faster while the window is open.
 
-Every sleep ends with phase 5, the affective reset. It calls Thymos's `affective_reset()`, which returns valence, arousal and dominance to baseline, clears the drives and the learning-progress and alert-rate trackers, and publishes `thymos.state` with `reset: true` (see [Thymos](thymos.md#sleep-reset)). When `hypnos.sleep.completed` arrives, Soma resets its fatigue accumulator and its regulation state. Because every sleep ends this way, arousal cannot drift across a whole run.
+Every sleep ends with phase 5, the affective reset. It calls Affect's `affective_reset()`, which returns valence, arousal and dominance to baseline, clears the drives and the learning-progress and alert-rate trackers, and publishes `thymos.state` with `reset: true` (see [Affect](affect.md#sleep-reset)). When `hypnos.sleep.completed` arrives, Interoception resets its fatigue accumulator and its regulation state. Because every sleep ends this way, arousal cannot drift across a whole run.
 
 ### In the base-thesis form
 
-With Mnemos, Phantasia and voice alignment off, the consolidation phases do no work:
+With Episodic memory, World model and voice alignment off, the consolidation phases do no work:
 
 - Phase 1 calls the oscillator hook, a no-op unless the oscillatory layer is active, and skips consolidation.
 - Phase 2 returns at once. The perceptual feed is paused for the whole sleep in any case (see [Sleep](../10-sleep/README.md)).
 - Phase 3 is skipped by its flag.
-- Phase 4 computes the consolidation-divergence metric and skips training. Hypnos then rotates the language organ's intent log into the per-sleep corpus and computes the content-free voice measures.
-- Phase 5 resets Thymos.
+- Phase 4 computes the consolidation-divergence metric and skips training. Sleep then rotates the language organ's intent log into the per-sleep corpus and computes the content-free voice measures.
+- Phase 5 resets Affect.
 
-After the phases Hypnos runs the sleep-time intent audit. A base-form sleep is therefore short, and what it does is suspend adaptation, reset affect and drives, and reset Soma's fatigue. The consolidation phases begin to work once Mnemos and Phantasia join.
+After the phases Sleep runs the sleep-time intent audit. A base-form sleep is therefore short, and what it does is suspend adaptation, reset affect and drives, and reset Interoception's fatigue. The consolidation phases begin to work once Episodic memory and World model join.
 
 ## Triggers
 
@@ -39,7 +39,7 @@ After the phases Hypnos runs the sleep-time intent audit. A base-form sleep is t
 
 The fatigue and maintenance triggers share one consumer loop, which runs only when `[hypnos.consolidation].fatigue_triggered = true`. A maintenance poll checks `is_due()` regardless. `is_due()` is true once the effective deadline has passed, or once the original deadline plus `max_deferral_seconds` has passed. `try_defer()` pushes the effective deadline back by `per_defer_seconds`, up to that cap; nothing in the running system calls it outside tests.
 
-Rest requests come from Nous through Volition's `NousProposalSource` (`origin = "nous"`), so they arise only when Nous is enabled. Hypnos answers each with a `hypnos.rest_request` event at intensity 0.0, so the answer never competes for the workspace.
+Rest requests come from Planning through Action selection's `NousProposalSource` (`origin = "nous"`), so they arise only when Planning is enabled. Sleep answers each with a `hypnos.rest_request` event at intensity 0.0, so the answer never competes for the workspace.
 
 ## Pipeline
 
@@ -60,7 +60,7 @@ flowchart TD
     R --> E([hypnos.sleep.completed])
 ```
 
-Each phase catches its own errors, and the later phases still run after one fails. The affective reset runs in a `finally` after phases 1 to 4, shielded from a second cancel, so even a sleep that raises or is cancelled ends with it, and an aborted `hypnos.sleep.completed` is published on any exception, including a cancel. Phase 3 re-injects Phantasia's scenarios as `hypnos.association` events, which compete in the workspace like any other event. The order follows the paper (§3.5): replay, then synaptic downscaling, then associative replay, then the voice, and sleep ends with the affective reset. Phase 2 opens Mnemos's replay window itself, immediately before it replays, and closes it afterwards, so replay never depends on Mnemos having seen `hypnos.sleep.started` on the bus. When Phantasia is present, Hypnos also opens its scenario window before phase 2, whose replay cues Phantasia through `mnemos.replay`, and closes it in a `finally` after phase 3, which cues Phantasia directly. On shutdown, Hypnos stops its loops, cancels a sleep still in flight and waits for it, so the sleep ends with the affective reset and an aborted `hypnos.sleep.completed`, then waits for the reset and publish tasks it holds; each wait is bounded at 5 s. The cycle's shutdown and Spot's halt shut Hypnos down before the other modules, so the sleep ends while Mnemos, Thymos and Phantasia are still up. The phase functions are in `kaine/modules/hypnos/phases.py`; phase 4 is driven from `kaine/modules/hypnos/module.py`.
+Each phase catches its own errors, and the later phases still run after one fails. The affective reset runs in a `finally` after phases 1 to 4, shielded from a second cancel, so even a sleep that raises or is cancelled ends with it, and an aborted `hypnos.sleep.completed` is published on any exception, including a cancel. Phase 3 re-injects World model's scenarios as `hypnos.association` events, which compete in the workspace like any other event. The order follows the paper (§3.5): replay, then synaptic downscaling, then associative replay, then the voice, and sleep ends with the affective reset. Phase 2 opens Episodic memory's replay window itself, immediately before it replays, and closes it afterwards, so replay never depends on Episodic memory having seen `hypnos.sleep.started` on the bus. When World model is present, Sleep also opens its scenario window before phase 2, whose replay cues World model through `mnemos.replay`, and closes it in a `finally` after phase 3, which cues World model directly. On shutdown, Sleep stops its loops, cancels a sleep still in flight and waits for it, so the sleep ends with the affective reset and an aborted `hypnos.sleep.completed`, then waits for the reset and publish tasks it holds; each wait is bounded at 5 s. The cycle's shutdown and Supervisor's halt shut Sleep down before the other modules, so the sleep ends while Episodic memory, Affect and World model are still up. The phase functions are in `kaine/modules/hypnos/phases.py`; phase 4 is driven from `kaine/modules/hypnos/module.py`.
 
 ## Outputs
 
@@ -73,7 +73,7 @@ Each phase catches its own errors, and the later phases still run after one fail
 | `hypnos.out` | `hypnos.consolidation_divergence` | Content-free divergence metric, every sleep | `baseline_salience` |
 | `hypnos.out` | `hypnos.ignition_audit` | Content-free intent audit, every sleep | `baseline_salience` |
 
-Hypnos reports at these fixed levels; its events are not graded by surprise. Soma resets fatigue and regulation in response to `hypnos.sleep.completed`, and the four processors resume adaptation on it, so an aborted sleep still ends the window.
+Sleep reports at these fixed levels; its events are not graded by surprise. Interoception resets fatigue and regulation in response to `hypnos.sleep.completed`, and the four processors resume adaptation on it, so an aborted sleep still ends the window.
 
 ## Configuration
 
@@ -106,7 +106,7 @@ The retired key `nous_step_burst` is accepted and ignored with a warning, so old
 
 ## Sleep-time intent audit
 
-Every sleep, Hypnos publishes `hypnos.ignition_audit` for the window since the previous sleep (or since boot). It classifies each realized intent, an `external_speech`, `internal_speech`, `vox.synthesized` or `praxis.action` event or a requested `hypnos.sleep.started` (never a `realization_failed`), by the coalition that produced it:
+Every sleep, Sleep publishes `hypnos.ignition_audit` for the window since the previous sleep (or since boot). It classifies each realized intent, an `external_speech`, `internal_speech`, `vox.synthesized` or `praxis.action` event or a requested `hypnos.sleep.started` (never a `realization_failed`), by the coalition that produced it:
 
 | Class | Rule |
 |---|---|
@@ -119,7 +119,7 @@ Every sleep, Hypnos publishes `hypnos.ignition_audit` for the window since the p
 
 ## Consolidation divergence
 
-At the start of phase 4, on every sleep, the pair builder scans the intent-expression log and counts the records in which the organ's generated text differs from the faithful rendering of the coalition it was conditioned on. Hypnos publishes the result as `hypnos.consolidation_divergence`:
+At the start of phase 4, on every sleep, the pair builder scans the intent-expression log and counts the records in which the organ's generated text differs from the faithful rendering of the coalition it was conditioned on. Sleep publishes the result as `hypnos.consolidation_divergence`:
 
 | Field | Meaning |
 |---|---|
@@ -156,8 +156,8 @@ The metric is computed whether or not training runs and is persisted to `state/h
 ## Enabling and use
 
 1. Set `[modules].hypnos = true`, or run the `thesis_test` profile.
-2. Enable Soma for the fatigue and maintenance triggers and Thymos for the affective reset.
-3. For memory consolidation and replay, enable Mnemos. For associative replay, also set `[hypnos.consolidation].associative_replay = true` and enable Phantasia.
+2. Enable Interoception for the fatigue and maintenance triggers and Affect for the affective reset.
+3. For memory consolidation and replay, enable Episodic memory. For associative replay, also set `[hypnos.consolidation].associative_replay = true` and enable World model.
 
 ## Tests
 
@@ -168,24 +168,24 @@ The metric is computed whether or not training runs and is persisted to `state/h
 | `tests/test_hypnos_trigger.py` | Fatigue trigger |
 | `tests/test_hypnos_scheduler.py` | Interval and deferral |
 | `tests/test_hypnos_rest_requests.py` | `intent.rest` handling |
-| `tests/test_hypnos_sleep_pause.py` | Perception locus and playlist pause and restore |
+| `tests/test_hypnos_sleep_pause.py` | Perceptual locus and playlist pause and restore |
 | `tests/test_hypnos_associative_replay.py` | Phase 3 |
 | `tests/test_hypnos_oscillator_hook.py` | Phase-1 oscillator hook |
 | `tests/test_hypnos_nar_removal.py` | Replay reaching the workspace through the normal cycle |
-| `tests/test_hypnos_replay_handoff.py` | Phase 2 replaying the traces phase 1 consolidated, with Mnemos |
-| `tests/test_soma_hypnos_flag.py` | Soma's `crossed` flag |
-| `tests/test_sleep_suspension_cursor.py` | Topos, Audition and Chronos suspending adaptation during sleep |
+| `tests/test_hypnos_replay_handoff.py` | Phase 2 replaying the traces phase 1 consolidated, with Episodic memory |
+| `tests/test_soma_hypnos_flag.py` | Interoception's `crossed` flag |
+| `tests/test_sleep_suspension_cursor.py` | Vision, Audition and Sequence suspending adaptation during sleep |
 | `tests/test_hypnos_voice_alignment.py`, `tests/test_hypnos_voice_alignment_integration.py` | Pair builder, gates and vetoes |
 | `tests/test_hypnos_organ_window_bracket.py` | Organ window |
-| `tests/test_hypnos_phantasia_window.py` | Phantasia's scenario window around phases 2 and 3, through a real sleep on the bus |
+| `tests/test_hypnos_phantasia_window.py` | World model's scenario window around phases 2 and 3, through a real sleep on the bus |
 | `tests/test_hypnos_shutdown.py` | Shutdown during a sleep and during a held reset; the bounded wait |
-| `tests/test_module_shutdown_order.py` | The cycle and Spot shut Hypnos down first, so the reset runs while Thymos is up |
+| `tests/test_module_shutdown_order.py` | The cycle and Supervisor shut Sleep down first, so the reset runs while Affect is up |
 
 
 ## See also
 
 - [Sleep and maintenance](../10-sleep/README.md)
 - [Voice alignment](../10-sleep/voice-alignment.md)
-- [Soma](soma.md), [Thymos](thymos.md), [Mnemos](mnemos.md), [Phantasia](phantasia.md), [Lingua](lingua.md)
+- [Interoception](interoception.md), [Affect](affect.md), [Episodic memory](episodic-memory.md), [World model](world-model.md), [Language](language.md)
 - [Preservation and the safety net](../11-preservation.md)
 - [Perception feed and sleep](../appendix-a-configuration/perception-and-sleep.md)

@@ -1,6 +1,6 @@
 # Running experiments
 
-KAINE's research programme has two live parts and a set of offline instruments. The live parts are the planned workspace-mediation test, which asks whether competition for the workspace does work that pooling the same reports does not, and the module-addition study, which grows a being one module at a time. The offline instruments measure specific mechanisms without booting an entity: the controlled instrument runners, the active-inference benchmark, the oscillatory ablation, the development harness of the workspace-mediation test, the shared-seed suite and the multi-seed stability harness. Use the offline instruments when you need reproducible numbers, a seeded null result, or a check that a nondeterministic process is stable across seeds.
+KAINE's research programme has two live parts and a set of offline instruments. The live parts are the planned workspace-mediation test, which asks whether competition for the workspace does work that pooling the same reports does not, and the module-addition study, which grows an entity one module at a time. The offline instruments measure specific mechanisms without booting an entity: the controlled instrument runners, the active-inference benchmark, the oscillatory ablation, the development harness of the workspace-mediation test, the shared-seed suite and the multi-seed stability harness. Use the offline instruments when you need reproducible numbers, a seeded null result, or a check that a nondeterministic process is stable across seeds.
 
 No live experiment has been run yet. Live runs are recorded by the evaluation sidecar and the study's broadcast log; see [The evaluation sidecar](../17-research-data/README.md).
 
@@ -8,7 +8,7 @@ No live experiment has been run yet. Live runs are recorded by the evaluation si
 
 ### The module-addition study
 
-The module-addition study seeds a being through a gestation and preserves it just after birth. `branch 0` and a `repeat` start from that seed with the base-thesis modules, and `branch k` starts from the seed with the first k held modules added in a fixed order. An accumulate line carries one being forward through every step. The first study adds six modules, in the default order Mnemos, Phantasia, Nous, Eidolon, Empatheia and Vox. Praxis, Perception and Mundus need an effector, a body or an alternative sensor feed, so they join once one is attached. Every viewing plays the same film programme, and the report is content-free and descriptive, with one being per condition.
+The module-addition study seeds an entity through a development and preserves it just after maturation. `branch 0` and a `repeat` start from that seed with the base-thesis modules, and `branch k` starts from the seed with the first k held modules added in a fixed order. An accumulate line carries one being forward through every step. The first study adds six modules, in the default order Episodic memory, World model, Planning, Self-model, Social cognition and Vocal. Effectors, Perceptual locus and Embodiment need an effector, a body or an alternative sensor feed, so they join once one is attached. Every viewing plays the same film programme, and the report is content-free and descriptive, with one being per condition.
 
 The code and the configuration call it the ignition study (`kaine/research/ignition_study/`). [The module-addition study](./ignition-study.md) covers running it, resuming it and reading its report.
 
@@ -16,9 +16,9 @@ The code and the configuration call it the ignition study (`kaine/research/ignit
 
 ### The planned workspace-mediation test
 
-The planned test runs before any held module joins. It follows the paper's §6.3. Each perceptual and interoceptive processor (Topos, Audition, Soma) conditions its forward model on the broadcast context: a 24-component summary of the accessed members of the latest accessed broadcast (which modules' reports gained access, which event types, how strongly and how recently), weighted by the intensity each member reported. If global availability does work, knowing which other modules' reports gained access should help a processor predict its own input.
+The planned test runs before any held module joins. It follows the paper's §6.3. Each perceptual and interoceptive processor (Vision, Audition, Interoception) conditions its forward model on the broadcast context: a 24-component summary of the accessed members of the latest accessed broadcast (which modules' reports gained access, which event types, how strongly and how recently), weighted by the intensity each member reported. If global availability does work, knowing which other modules' reports gained access should help a processor predict its own input.
 
-**Primary measure: cross-module broadcast information gain.** At each report, Topos, Audition (its acoustic path) and Soma evaluate their forward models twice: once with the context they hold and once with a null context in which every other source's share is replaced by its mean over the contexts the processor has adopted so far in the run. The gain is the null error minus the actual error, divided by the processor's running mean error. Soma's null context also keeps Lingua's share, because the language organ's load on the host would otherwise predict Soma's input. Chronos is excluded, since the broadcast is its input and not its context. The analysis reports each processor's mean gain and a headline that averages over reports and then over the three processors. The processors publish the per-report gain as `context_gain`, with `context_age_s`, on their report events; see [Research event streams](../17-research-data/event-streams.md#processor-report-fields).
+**Primary measure: cross-module broadcast information gain.** At each report, Vision, Audition (its acoustic path) and Interoception evaluate their forward models twice: once with the context they hold and once with a null context in which every other source's share is replaced by its mean over the contexts the processor has adopted so far in the run. The gain is the null error minus the actual error, divided by the processor's running mean error. Interoception's null context also keeps Language's share, because the language organ's load on the host would otherwise predict Interoception's input. Sequence is excluded, since the broadcast is its input and not its context. The analysis reports each processor's mean gain and a headline that averages over reports and then over the three processors. The processors publish the per-report gain as `context_gain`, with `context_age_s`, on their report events; see [Research event streams](../17-research-data/event-streams.md#processor-report-fields).
 
 **Arms.** Three arms run on the same film programme with the same seeds and calibration, and the context is weighted by reported intensity in all three.
 
@@ -34,7 +34,7 @@ The thesis predicts a higher information gain under competitive selection than u
 
 **Decision rule.** For each run and each control, the paired contrast is the headline gain of the workspace-on arm minus that of the control. A one-sided sign test on the run-level contrasts, offset by a minimum effect, gives WIN, NEGATIVE or NULL against each control, and the thesis needs a WIN against both. The verdict is NOT EXERCISED when the workspace-on arm never has more candidates than the coalition holds. The minimum effect, the initial learning period excluded from each run, the analysis bands and bins, and the number of runs follow from rules stated in advance and are recorded in the repository before the live runs (see [Settings of the planned test](#settings-of-the-planned-test)).
 
-**What is built.** The context and the measure's inputs are built: Syneidesis records `access_threshold` in every broadcast's metadata, `kaine/modules/context.py` computes the context and the null context, Topos, Audition and Soma learn the context online as an extra forward-model input, and the three processors publish `context_gain` per report. The three arms are built and selected by `[syneidesis].arm`; every broadcast records its arm. The positive control is built and off by default (`[positive_control]`; check complete control runs with `python -m kaine.experiment.positive_control <run_id> [<run_id> ...]`). The calibration tool and the boot check of the live runs are built (below). The live calibration of the processors' intensity levels, the access threshold and the report bars is not built yet. In general use the organ samples; in the planned runs its decoding is greedy, set by the study configuration. A live workspace-mediation run selects its arm and greedy decoding together with `KAINE_STUDY=workspace_mediation_competitive`, `workspace_mediation_matched` or `workspace_mediation_pooled`, and pins its seed with `[experiment].seed`; the module-addition study's overlay pins greedy decoding with the competitive arm. The planned affect-gain ablation (arousal live against arousal held at baseline) is also not built.
+**What is built.** The context and the measure's inputs are built: Workspace records `access_threshold` in every broadcast's metadata, `kaine/modules/context.py` computes the context and the null context, Vision, Audition and Interoception learn the context online as an extra forward-model input, and the three processors publish `context_gain` per report. The three arms are built and selected by `[syneidesis].arm`; every broadcast records its arm. The positive control is built and off by default (`[positive_control]`; check complete control runs with `python -m kaine.experiment.positive_control <run_id> [<run_id> ...]`). The calibration tool and the boot check of the live runs are built (below). The live calibration of the processors' intensity levels, the access threshold and the report bars is not built yet. In general use the organ samples; in the planned runs its decoding is greedy, set by the study configuration. A live workspace-mediation run selects its arm and greedy decoding together with `KAINE_STUDY=workspace_mediation_competitive`, `workspace_mediation_matched` or `workspace_mediation_pooled`, and pins its seed with `[experiment].seed`; the module-addition study's overlay pins greedy decoding with the competitive arm. The planned affect-gain ablation (arousal live against arousal held at baseline) is also not built.
 
 ### Settings of the planned test
 
@@ -98,21 +98,21 @@ Because the runner uses an echo client and no live language organ, it shows the 
 
 ### Memory coherence runner
 
-The runner measures retrieval advantage. A fixed battery of unique fabricated facts is planted into a real in-memory `MnemosCore` (`FakeEmbedder` with `InMemoryStorage`). A full-system arm, whose answer comes from what Mnemos returns, is scored against a bare arm with no memory using the production `score_async`.
+The runner measures retrieval advantage. A fixed battery of unique fabricated facts is planted into a real in-memory `MnemosCore` (`FakeEmbedder` with `InMemoryStorage`). A full-system arm, whose answer comes from what Episodic memory returns, is scored against a bare arm with no memory using the production `score_async`.
 
 The verdict is WIN only when all of these hold:
 
 - full-system retrieval accuracy exceeds the bare arm by at least the floor on the planted battery;
 - a fact that was never stored yields the `NON_RECALL_MARKER` (scored 0, never a confabulated positive);
-- the advantage vanishes when the same client runs against an emptied Mnemos, which shows the advantage comes from retrieval and is not hard-coded.
+- the advantage vanishes when the same client runs against an emptied Episodic memory, which shows the advantage comes from retrieval and is not hard-coded.
 
 Otherwise the verdict is NULL.
 
-`kaine.evaluation` does not import `kaine.modules.*` at module top level. The real Mnemos is built by an injected `mnemos_builder` callable, and the CLI default uses a function-local import inside `_default_mnemos_builder`, so the import never runs when the module is imported.
+`kaine.evaluation` does not import `kaine.modules.*` at module top level. The real Episodic memory is built by an injected `mnemos_builder` callable, and the CLI default uses a function-local import inside `_default_mnemos_builder`, so the import never runs when the module is imported.
 
 ### Self-model accuracy runner
 
-The runner checks whether the Eidolon scorer's fixed-threshold heuristic reproduces the expected score. A fixed battery of `(planted-signal, claim, expected-score)` cases plants known affect and activity signals into a temporary evaluation-logs directory and runs the real `EidolonAccuracyRunner` scorer on a self-description carrying a known claim.
+The runner checks whether the Self-model scorer's fixed-threshold heuristic reproduces the expected score. A fixed battery of `(planted-signal, claim, expected-score)` cases plants known affect and activity signals into a temporary evaluation-logs directory and runs the real `EidolonAccuracyRunner` scorer on a self-description carrying a known claim.
 
 The verdict is WIN when the scorer reproduces every expected score, and NULL otherwise.
 
@@ -124,13 +124,13 @@ Given the same `--seed` and battery, each runner reproduces its verdict and its 
 
 ## Active-inference benchmark
 
-The active-inference benchmark tests one of the paper's falsifiable claims about Nous. Nous's bounded discrete active-inference decisions are compared with a reinforcement-learning baseline, matched on observation model and reward, over bounded discrete tasks. The benchmark reports decision quality, sample efficiency and the value of epistemic action, and emits WIN, NULL or NEGATIVE per task.
+The active-inference benchmark tests one of the paper's falsifiable claims about Planning. Planning's bounded discrete active-inference decisions are compared with a reinforcement-learning baseline, matched on observation model and reward, over bounded discrete tasks. The benchmark reports decision quality, sample efficiency and the value of epistemic action, and emits WIN, NULL or NEGATIVE per task.
 
 The benchmark lives in [`kaine/evaluation/benchmarks/active_inference/`](../../kaine/evaluation/benchmarks/active_inference/). It constructs discrete POMDP environments and runs both agents on them. It does not boot an entity, attach to the event bus or run a cognitive cycle, and it enables no module.
 
 ### What the benchmark compares
 
-The active-inference agent drives the live Nous [`PymdpEngine`](../../kaine/modules/nous/engine.py), the default expected-free-energy engine in the cognitive loop (the `[nous].backend = "numpy"` engine is not exercised here). It receives the environment's generative model (`A`, `B`, `C`, `D`) and at each step runs pymdp belief updating and computes each policy's expected free energy `G`. It samples its policy from the posterior `softmax(γ·(−G) + ln E)` with γ = 16, the value the NumPy engine uses. The engine's pymdp `Agent` is built with pymdp's default precision of 1.0, so the benchmark computes the posterior itself, using a generator derived from each evaluation seed so that runs reproduce. Belief persists between steps.
+The active-inference agent drives the live Planning [`PymdpEngine`](../../kaine/modules/nous/engine.py), the default expected-free-energy engine in the cognitive loop (the `[nous].backend = "numpy"` engine is not exercised here). It receives the environment's generative model (`A`, `B`, `C`, `D`) and at each step runs pymdp belief updating and computes each policy's expected free energy `G`. It samples its policy from the posterior `softmax(γ·(−G) + ln E)` with γ = 16, the value the NumPy engine uses. The engine's pymdp `Agent` is built with pymdp's default precision of 1.0, so the benchmark computes the posterior itself, using a generator derived from each evaluation seed so that runs reproduce. Belief persists between steps.
 
 The baseline is tabular Q-learning with ε-greedy exploration, keyed by the history of observations in the current episode (by default the whole episode, `memory = horizon`). That gives it the same information as a belief-keeping agent without a model: on the T-maze it can carry the cue to the arm, which a memoryless learner cannot (its best expected return there is 0). `memory = 0` keeps the memoryless learner as an explicit control. The baseline has no belief state. Its hyperparameters are tuned per task by a small grid on held-out seeds, and the chosen values are recorded.
 
@@ -179,7 +179,7 @@ The suite verdict aggregates conservatively: a mix of WIN and NEGATIVE across ta
 
 The oscillatory-ablation runner measures whether the oscillatory coherence layer changes [workspace selection](../08-cognitive-cycle/global-workspace.md). It runs the cognitive cycle twice under identical conditions, toggling only the coherence layer, and emits WIN, NULL or NEGATIVE.
 
-The runner lives in [`kaine/evaluation/benchmarks/oscillatory_ablation/`](../../kaine/evaluation/benchmarks/oscillatory_ablation/). It drives only the cycle engine and Syneidesis over a scripted in-memory bus.
+The runner lives in [`kaine/evaluation/benchmarks/oscillatory_ablation/`](../../kaine/evaluation/benchmarks/oscillatory_ablation/). It drives only the cycle engine and Workspace over a scripted in-memory bus.
 
 ### The determinism guarantee
 
@@ -236,16 +236,16 @@ The stimulus is synthetic. The runner exercises selection and coherence under co
 
 ## Development harness of the workspace-mediation test
 
-[`kaine/evaluation/benchmarks/workspace_mediation_ablation/`](../../kaine/evaluation/benchmarks/workspace_mediation_ablation/) is development tooling that exercises the test's pipeline offline. It is not the planned test and does not test the thesis. It runs a reduced pair of real processors, Soma and Topos, over an in-memory bus, compares the workspace-on arm with the pooled arm only, and measures the cross-module broadcast information gain. It boots no entity, opens no network connection and does not use the language organ.
+[`kaine/evaluation/benchmarks/workspace_mediation_ablation/`](../../kaine/evaluation/benchmarks/workspace_mediation_ablation/) is development tooling that exercises the test's pipeline offline. It is not the planned test and does not test the thesis. It runs a reduced pair of real processors, Interoception and Vision, over an in-memory bus, compares the workspace-on arm with the pooled arm only, and measures the cross-module broadcast information gain. It boots no entity, opens no network connection and does not use the language organ.
 
 Its two arms run from the same seed and stimulus with identically initialized modules:
 
-- workspace on: on each tick Syneidesis selects a coalition of at most `top_k` candidates, and each processor adopts as its context the members whose scores reach `access_threshold`;
+- workspace on: on each tick Workspace selects a coalition of at most `top_k` candidates, and each processor adopts as its context the members whose scores reach `access_threshold`;
 - pooled: every candidate of the tick enters the context, weighted by its reported intensity, with no scoring, selection, access threshold or inhibition.
 
-The candidates on each tick are Soma's report, Topos's report and `n_background` scripted background events, so the candidate count exceeds `top_k` and selection excludes. Soma reads scripted host metrics through a `ScriptedMetricsReader`. Topos sees synthetic frames through a vector encoder double whose latent is the frame itself, and the harness gives its forward model a higher learning rate (`topos_lr`) so that a short run shows learning. Both modules run on an injected clock.
+The candidates on each tick are Interoception's report, Vision's report and `n_background` scripted background events, so the candidate count exceeds `top_k` and selection excludes. Interoception reads scripted host metrics through a `ScriptedMetricsReader`. Vision sees synthetic frames through a vector encoder double whose latent is the frame itself, and the harness gives its forward model a higher learning rate (`topos_lr`) so that a short run shows learning. Both modules run on an injected clock.
 
-The measure is the one the planned test uses, read from each processor's report. Soma and Topos evaluate their forward models with the context they hold and with the null context and publish the per-report gain as `context_gain`. The harness averages each processor's gain over its reports after the initial learning period (`warmup_ticks`) to get `IG_j`, averages the two processors to get the headline `IG`, and reports `dIG`, the workspace-on headline minus the pooled one. The verdict is WIN when `dIG` is at least `min_effect`, NEGATIVE when it is at most `-min_effect`, and NULL otherwise. A run is NOT EXERCISED when the workspace-on arm never had more candidates than `top_k`, had no accessed broadcast, or left the gain undefined. Its verdict outcome is then `NOT_EXERCISED`, and the reason is in the detail and in `not_exercised_reason`.
+The measure is the one the planned test uses, read from each processor's report. Interoception and Vision evaluate their forward models with the context they hold and with the null context and publish the per-report gain as `context_gain`. The harness averages each processor's gain over its reports after the initial learning period (`warmup_ticks`) to get `IG_j`, averages the two processors to get the headline `IG`, and reports `dIG`, the workspace-on headline minus the pooled one. The verdict is WIN when `dIG` is at least `min_effect`, NEGATIVE when it is at most `-min_effect`, and NULL otherwise. A run is NOT EXERCISED when the workspace-on arm never had more candidates than `top_k`, had no accessed broadcast, or left the gain undefined. Its verdict outcome is then `NOT_EXERCISED`, and the reason is in the detail and in `not_exercised_reason`.
 
 ```bash
 python -m kaine.evaluation.benchmarks.workspace_mediation_ablation \
@@ -344,4 +344,4 @@ For live runs, raise `tolerance` to the spread the live process admits and run m
 - [Research event streams](../17-research-data/event-streams.md): the event fields behind live analysis.
 - [Research participation](../17-research-data/participation.md): submitting results back to the project.
 - [For researchers](../14-for-researchers.md): reproducing and citing KAINE results.
-- [Nous](../09-modules/nous.md): the module whose engine the active-inference benchmark exercises.
+- [Planning](../09-modules/planning.md): the module whose engine the active-inference benchmark exercises.

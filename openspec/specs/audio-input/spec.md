@@ -148,7 +148,7 @@ it came from: the perception-feed mode (`playlist`, `seeded`, `womb`,
 speech from an operator channel SHALL be treated as a user utterance
 addressed to the entity; speech from other channels SHALL still be
 perceived and compete for the workspace. The operator-utterance
-transcription event used by Volition SHALL have source `audition` and
+transcription event used by Action selection SHALL have source `audition` and
 type `audition.transcription`.
 
 #### Scenario: A film character speaks

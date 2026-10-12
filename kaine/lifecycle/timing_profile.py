@@ -41,7 +41,7 @@ class InvalidForkTimingProfile(ValueError):
     """Raised when a fork's ``metadata['timing']`` is present but malformed.
 
     A loud failure at parse time is deliberate: a silently-dropped or
-    mis-coerced ``time_scale`` would mis-pace a being. Callers that attach a
+    mis-coerced ``time_scale`` would mis-pace an entity. Callers that attach a
     profile (the ``POST /forks`` API) and callers that apply one (the runtime
     seam) both surface this rather than guessing.
     """
@@ -152,7 +152,7 @@ def fork_timing_profile(
 
     Raises :class:`InvalidForkTimingProfile` when ``timing`` is present but
     malformed (missing/``<= 0``/non-numeric ``time_scale``, or a non-positive
-    rate override) — a loud failure beats silently mis-pacing a being.
+    rate override) — a loud failure beats silently mis-pacing an entity.
     """
     metadata = getattr(source, "metadata", source)
     if not isinstance(metadata, Mapping):

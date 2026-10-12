@@ -170,7 +170,7 @@ class WombParams:
         _float_field("maternal_distress_max_magnitude", 0.0, 1.0)
         _float_field("maternal_distress_max_seconds", 0.0, math.inf, open_lo=True)
         _float_field("external_drive_max_amplitude", 0.0, 1.0)
-        # The bounded birth bloom (WombClock.begin_birth enforces the same range).
+        # The bounded maturation bloom (WombClock.begin_birth enforces the same range).
         _float_field("birth_transition_seconds", 0.0, 30.0, open_lo=True)
 
         for name in (
@@ -364,7 +364,7 @@ def beat_pulse(phase: float | np.ndarray) -> float | np.ndarray:
 
 
 def colour_saturation(lived_seconds: float, params: WombParams) -> float:
-    """Cone-maturation analog: saturation rises from near-grey toward birth.
+    """Cone-maturation analog: saturation rises from near-grey toward maturation.
 
     Returns ``1 - exp(-lived_seconds / colour_ramp_seconds)`` in ``[0, 1)``.
     Non-finite or negative inputs saturate to 0.

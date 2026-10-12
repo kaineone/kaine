@@ -37,7 +37,7 @@ from kaine.modules.topos.module import Topos
 
 
 class _FakeEncoder:
-    """Minimal Topos encoder double — no DINOv2 download, deterministic latent."""
+    """Minimal Vision encoder double — no DINOv2 download, deterministic latent."""
 
     model_id = "fake/encoder-integration"
     latent_dim = 4
@@ -77,7 +77,7 @@ def womb_clock():
 @pytest.fixture
 def virtual_feed_state(tmp_path, monkeypatch):
     """Point perception_state at temp files and select the virtual feed exactly
-    as ``build_registry`` now does for a configured seeded/playlist/womb feed."""
+    as ``build_registry`` now does for a configured seeded/playlist/stimulus source feed."""
     desired = tmp_path / "desired.json"
     runtime = tmp_path / "runtime.json"
     monkeypatch.setattr(perception_state, "DESIRED_PATH", desired)
@@ -92,7 +92,7 @@ def virtual_feed_state(tmp_path, monkeypatch):
 
 
 def _make_topos(bus: AsyncBus, clock) -> Topos:
-    # Womb video source factory (mirror of what boot injects in womb mode).
+    # Stimulus source video source factory (mirror of what boot injects in stimulus source mode).
     from kaine.modules.topos.feed import WombProceduralSource, WombSchedule
     from kaine.modules.womb_signal import WombParams
 
@@ -119,7 +119,7 @@ def _make_topos(bus: AsyncBus, clock) -> Topos:
 
 
 def _make_audition(bus: AsyncBus, clock) -> Audition:
-    # Womb audio stream factory (mirror of what boot injects in womb mode).
+    # Stimulus source audio stream factory (mirror of what boot injects in stimulus source mode).
     from kaine.modules.audition.feed import WombAudioSchedule, WombProceduralAudioStream
     from kaine.modules.womb_signal import WombParams
 
@@ -142,7 +142,7 @@ def _make_audition(bus: AsyncBus, clock) -> Audition:
         stt_model="fake-stt",
         capture_enabled=True,
         stream_factory=_womb_stream_factory,
-        # RMS VAD on the continuous womb soundscape, flushed quickly so the
+        # RMS VAD on the continuous stimulus source soundscape, flushed quickly so the
         # test does not wait the 30 s default max-utterance window.
         live_mic_config=LiveMicConfig(
             sample_rate=16000,
@@ -168,7 +168,7 @@ async def _wait_for_events(bus: AsyncBus, stream: str, *, timeout_s: float = 8.0
 
 @pytest.mark.asyncio
 async def test_womb_feed_delivers_vision_and_hearing(bus, virtual_feed_state, womb_clock):
-    """The smoking gun: with the womb feed selected (virtual locus), Topos
+    """The smoking gun: with the stimulus source feed selected (virtual locus), Vision
     publishes to topos.out and Audition publishes to audition.out."""
     topos = _make_topos(bus, womb_clock)
     audition = _make_audition(bus, womb_clock)
@@ -195,7 +195,7 @@ async def test_womb_feed_delivers_vision_and_hearing(bus, virtual_feed_state, wo
 
 @pytest.mark.asyncio
 async def test_physical_locus_keeps_womb_feed_dark(bus, tmp_path, monkeypatch, womb_clock):
-    """The locus model still holds: in the PHYSICAL locus the virtual womb feed
+    """The locus model still holds: in the PHYSICAL locus the virtual stimulus source feed
     must NOT run (it binds to `virtual`). This is the privacy-load-bearing XOR —
     proving the fix did not simply force the feed always-on."""
     desired = tmp_path / "desired.json"

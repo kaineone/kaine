@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 
 class WetwareInteroceptiveModel:
-    """Drop-in for Soma's `forward_model=` (silicon CfC reservoir + readout).
+    """Drop-in for Interoception's `forward_model=` (silicon CfC reservoir + readout).
 
     The biological substrate replaces the frozen recurrent reservoir; the
     readout remains a tiny linear head trained online so prediction-error

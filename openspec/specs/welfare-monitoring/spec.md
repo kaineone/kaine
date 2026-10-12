@@ -39,7 +39,7 @@ SHALL be bus-only, with no import of `kaine.evaluation` by the cycle-layer monit
 - **THEN** the welfare-protective monitor preserves the entity first, then takes the configured action (pause/end/notify), and records the welfare action
 
 #### Scenario: The sustained-distress arm still functions
-- **WHEN** Soma reports sustained interoceptive distress on `soma.out` crossing the configured duration
+- **WHEN** Interoception reports sustained interoceptive distress on `soma.out` crossing the configured duration
 - **THEN** the welfare-protective monitor still triggers the preserve-then-act response from that arm
 
 ### Requirement: Research log and raw archive capture gray-zone events
@@ -80,7 +80,7 @@ immediately once warm-up ends.
 #### Scenario: Sustained distress after warm-up still triggers the response
 
 - **WHEN** the warm-up window has elapsed and repeated gray-zone events cross the
-  configured threshold within the window (or Soma reports sustained distress)
+  configured threshold within the window (or Interoception reports sustained distress)
 - **THEN** the monitor preserves the entity first, then takes the configured
   action, as before
 

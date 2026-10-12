@@ -56,7 +56,7 @@ class AuditChainResult:
 
 
 class ActionAuditLog:
-    """Tamper-evident, atomic-append JSONL audit log for Praxis actions.
+    """Tamper-evident, atomic-append JSONL audit log for Effectors actions.
 
     Each record is one JSON object on a single line. Content (file body, shell
     stdout, notification body) is intentionally NOT written here — only metadata

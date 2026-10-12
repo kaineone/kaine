@@ -34,8 +34,8 @@ data_source = "reference_culture"
 [plugins.cl1.backends]
 chronos = "cl1"
 soma = "cl1"
-# nous = "cl1"                # a policy proposal beside Nous' engine; see [plugins.cl1.nous]
-# audition_frontend, phantasia_surprise, volition, thymos: hybrid-wetware-conversions
+# nous = "cl1"                # a policy proposal beside Planning's engine; see [plugins.cl1.nous]
+# audition_frontend, phantasia_surprise, action selection, affect: hybrid-wetware-conversions
 
 # Channel-territory sizes (electrodes leased per converted module). Channel 0 is
 # reserved, so the sum must stay <= 63.
@@ -50,7 +50,7 @@ chronos = 12
 soma = 12
 # nous = 10                   # two per action (four by default) plus two feedback channels
 
-# Nous on the substrate (docs/19-plugins-and-cl1.md): "shadow" logs the tissue's policy proposal
+# Planning on the substrate (docs/19-plugins-and-cl1.md): "shadow" logs the tissue's policy proposal
 # and leaves Nous unchanged; "drive" acts on it. Only read when nous = "cl1".
 # [plugins.cl1.nous]
 # mode = "shadow"

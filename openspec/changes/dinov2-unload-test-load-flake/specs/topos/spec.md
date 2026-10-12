@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: An encoder unload waits for in-flight inference
-A Topos encoder's unload SHALL release its model only after every inference already running in a worker thread has finished, including an inference whose caller was cancelled.
+A Vision encoder's unload SHALL release its model only after every inference already running in a worker thread has finished, including an inference whose caller was cancelled.
 
 #### Scenario: A cancelled encode is still running in its worker thread
 - **WHEN** an encode is cancelled while its forward pass runs in a worker thread and unload is then called

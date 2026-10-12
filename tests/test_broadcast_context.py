@@ -78,8 +78,8 @@ def test_inhibited_broadcast_is_not_adopted():
 
     vec = ctx.vector()
     assert vec is not None
-    assert vec[4 + 2] == pytest.approx(0.5)  # topos bin
-    assert vec[4 + 0] == pytest.approx(0.0)  # soma bin
+    assert vec[4 + 2] == pytest.approx(0.5)  # vision bin
+    assert vec[4 + 0] == pytest.approx(0.0)  # interoception bin
 
 
 def test_riders_below_threshold_are_excluded():
@@ -98,8 +98,8 @@ def test_riders_below_threshold_are_excluded():
     assert ctx.observe(snapshot) is True
 
     vec = ctx.vector()
-    assert vec[4 + 2] == pytest.approx(0.5)  # topos
-    assert vec[4 + 5] == pytest.approx(0.0)  # thymos
+    assert vec[4 + 2] == pytest.approx(0.5)  # vision
+    assert vec[4 + 5] == pytest.approx(0.0)  # affect
 
 
 def test_null_vector_keeps_kept_share_and_averages_the_rest():
@@ -142,9 +142,9 @@ def test_null_vector_keeps_kept_share_and_averages_the_rest():
     assert null is not None
 
     # Kept source uses the current context's share.
-    assert null[4 + 2] == pytest.approx(0.5)  # current topos
+    assert null[4 + 2] == pytest.approx(0.5)  # current vision
     # Dropped source uses the running mean over adopted contexts.
-    assert null[4 + 0] == pytest.approx((0.3 + 0.9) / 2)  # mean soma
+    assert null[4 + 0] == pytest.approx((0.3 + 0.9) / 2)  # mean interoception
     # Components 0..3 are running means.
     assert null[0] == pytest.approx(math.log1p(2))
     assert null[1] == pytest.approx((0.5 + 0.7) / 2)

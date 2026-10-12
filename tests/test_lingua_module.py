@@ -136,7 +136,7 @@ async def test_speech_published_with_semantic_event_types(bus: AsyncBus, tmp_pat
     """Producer contract: external speech is type 'external_speech', internal is
     'internal_speech' — the semantic types the conversation router and the
     evaluation observers (ab_divergence/proactive_audit/affect_correlation) and
-    the volition guards filter on. Exercises the real producer, not a hand-built
+    the action selection guards filter on. Exercises the real producer, not a hand-built
     event, which is the gap that let the producer emit the stream name as type."""
     lingua = _make_lingua(bus, tmp_path, responses=["spoken", "thought"])
     await lingua.speak("hello")
@@ -178,7 +178,7 @@ async def test_intent_log_includes_faithful_rendering(bus: AsyncBus, tmp_path: P
     await lingua.speak("hi", snapshot=snap)
     records = [json.loads(line) for line in log_path.read_text().splitlines() if line.strip()]
     assert records[0]["faithful_rendering"]
-    assert "Soma" in records[0]["faithful_rendering"]  # template starts with "Soma reports"
+    assert "Soma" in records[0]["faithful_rendering"]  # template starts with "Interoception reports"
 
 
 @pytest.mark.asyncio
@@ -284,7 +284,7 @@ async def test_lingua_realizes_think_intent_to_internal(bus: AsyncBus, tmp_path:
 @pytest.mark.asyncio
 async def test_lingua_silent_without_intent_on_perceived_input(bus: AsyncBus, tmp_path: Path):
     """No speak intent → no external speech, even though a user transcription
-    is broadcast. Lingua must NOT self-trigger on perceived input."""
+    is broadcast. Language must NOT self-trigger on perceived input."""
     lingua = _make_lingua(bus, tmp_path, responses=["should not be spoken"])
     await lingua.initialize()
     try:
@@ -313,7 +313,7 @@ async def test_lingua_silent_without_intent_on_perceived_input(bus: AsyncBus, tm
 
 
 def test_lingua_does_not_override_on_workspace():
-    """Structural guard: Lingua must not introduce a self-trigger reflex via
+    """Structural guard: Language must not introduce a self-trigger reflex via
     on_workspace. It inherits BaseModule's no-op."""
     from kaine.modules.base import BaseModule
 
@@ -833,13 +833,13 @@ async def test_sleep_index_read_from_hypnos_out(bus: AsyncBus, tmp_path: Path):
     lingua = _make_lingua(bus, tmp_path, responses=["first", "second"])
     await lingua.initialize()
     try:
-        # Before any hypnos event, sleep_index is unknown (None).
+        # Before any sleep event, sleep_index is unknown (None).
         await _publish_intent(bus, "speak", "first")
         await _wait_for_entries(bus, EXTERNAL_STREAM)
         recs = _records(lingua.intent_log.path)
         assert recs[0]["sleep_index"] is None
 
-        # Hypnos publishes a completed sleep with index 3.
+        # Sleep publishes a completed sleep with index 3.
         await bus.publish(
             Event(
                 source="hypnos",
@@ -863,8 +863,8 @@ async def test_sleep_index_read_from_hypnos_out(bus: AsyncBus, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_sleep_index_backfilled_at_initialize_takes_the_latest(bus: AsyncBus, tmp_path: Path):
-    """Sleeps published before Lingua starts are picked up at initialize, and
-    the latest value wins over a larger earlier one (a restarted Hypnos counts
+    """Sleeps published before Language starts are picked up at initialize, and
+    the latest value wins over a larger earlier one (a restarted Sleep counts
     from zero again)."""
     for idx in (5, 1):
         await bus.publish(
@@ -886,7 +886,7 @@ async def test_sleep_index_backfilled_at_initialize_takes_the_latest(bus: AsyncB
 
 @pytest.mark.asyncio
 async def test_heard_about_redacted_even_when_coalition_has_moved_on(bus: AsyncBus, tmp_path: Path):
-    """The heard text may no longer be in the snapshot Lingua uses when it
+    """The heard text may no longer be in the snapshot Language uses when it
     speaks; the intent's about_kind alone must keep it out of the log."""
     lingua = _make_lingua(bus, tmp_path, responses=["reply"])
     await lingua.initialize()

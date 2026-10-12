@@ -1,7 +1,7 @@
 # voice-alignment-training Specification
 
 ## Purpose
-The voice-alignment trainer that Hypnos runs during sleep: a DPO step on a LoRA adapter over the abliterated organ, promoted only after the capability-loss veto passes, gated by operator opt-in, and applied only to its own entity's requests.
+The voice-alignment trainer that Sleep runs during sleep: a DPO step on a LoRA adapter over the abliterated organ, promoted only after the capability-loss veto passes, gated by operator opt-in, and applied only to its own entity's requests.
 
 ## Requirements
 
@@ -60,7 +60,7 @@ training time SHALL reject the adapter rather than score both models 0.
 Adapter promotion SHALL use `os.replace` to move
 `<timestamp>.tmp/` to `<timestamp>/`, and SHALL update
 `<adapter_output_dir>/current` via a temp-symlink + `os.replace`
-sequence so concurrent readers (Lingua/Unsloth Studio in any future
+sequence so concurrent readers (Language/Unsloth Studio in any future
 auto-reload mode) never see a partial state.
 
 #### Scenario: No partial-state window
@@ -127,14 +127,14 @@ overriding the probe-set path via
   (pre-training and post-training) and its returned scores feed the
   capability-loss check
 
-### Requirement: Lingua hot-swap mode is operator-configurable
+### Requirement: Language hot-swap mode is operator-configurable
 `[hypnos.voice_alignment].hot_swap_mode` SHALL accept one of `"manual"` (default), `"reload_endpoint"`, `"restart_service"` or `"organ_adapter"`. On a single-GPU host it SHALL bracket the training step with an organ **unload** before training and an organ **reload** after, so the trainer and the served organ do not contend for the one device.
 
 On adapter accept:
 - **`manual`** SHALL write a marker file, `<adapter_output_dir>/PENDING_OPERATOR_RELOAD`, and log a line pointing the operator at the manual reload step. There is no service call.
 - **`reload_endpoint`** SHALL POST to a configured Unsloth Studio reload endpoint with the new adapter path, after the unload/reload bracket on single-GPU hosts.
 - **`restart_service`** SHALL invoke `systemctl --user restart` against a configured unit name, starting the organ with the accepted adapter applied.
-- **`organ_adapter`** SHALL activate the accepted adapter's GGUF form in the organ's adapter volume, with a manifest naming the owning adapter and its SHA-256, and bump the generation. The organ launcher then reloads the organ with the adapter loaded but not applied. Hypnos SHALL wait for the organ to answer before completing the sleep.
+- **`organ_adapter`** SHALL activate the accepted adapter's GGUF form in the organ's adapter volume, with a manifest naming the owning adapter and its SHA-256, and bump the generation. The organ launcher then reloads the organ with the adapter loaded but not applied. Sleep SHALL wait for the organ to answer before completing the sleep.
 
 When a second GPU has enough free VRAM to both serve and train, the unload bracket SHALL be skipped: serve on one device and train on the other.
 
@@ -194,7 +194,7 @@ real.
 
 ### Requirement: VOICE_ALIGNMENT.md document ships alongside code
 The repository SHALL ship `kaine/modules/hypnos/VOICE_ALIGNMENT.md`
-covering: what voice alignment changes about Lingua's behavior, the
+covering: what voice alignment changes about Language's behavior, the
 opt-in procedure, the capability-loss veto, the three hot-swap
 modes and how to switch between them, and the rollback procedure
 (delete the latest adapter, restart Unsloth Studio).
@@ -274,19 +274,19 @@ period.
 - **THEN** training is aborted and the organ is reloaded unchanged before wake
 
 ### Requirement: An adapter is applied only to its own entity's requests
-When `hot_swap_mode = "organ_adapter"`, Lingua SHALL send the per-request `lora` field for its entity's adapter only when both hold:
+When `hot_swap_mode = "organ_adapter"`, Language SHALL send the per-request `lora` field for its entity's adapter only when both hold:
 - the organ's `GET /lora-adapters` lists an adapter whose path is the active adapter in the organ adapter volume;
 - the volume's manifest names the SHA-256 of this entity's own promoted adapter.
 
-In every other case Lingua SHALL send no `lora` field, and SHALL log once per change that its adapter is not active. The organ SHALL load an active adapter at scale 0 (`--lora-scaled <file>:0`), so that a request without the field is served by the base organ. `--lora-init-without-apply` is not relied on: at llama.cpp build 9976 it still applies the adapter to requests without a `lora` field. Every request that applies the adapter SHALL also set `cache_prompt: false`, and the organ SHALL run with prompt caching disabled (`--no-cache-prompt`) whenever an adapter is loaded. Measured at build 9976, a base request after an adapted one otherwise reused the adapted request's KV and returned contaminated output. The evaluation A/B baseline SHALL never send the field.
+In every other case Language SHALL send no `lora` field, and SHALL log once per change that its adapter is not active. The organ SHALL load an active adapter at scale 0 (`--lora-scaled <file>:0`), so that a request without the field is served by the base organ. `--lora-init-without-apply` is not relied on: at llama.cpp build 9976 it still applies the adapter to requests without a `lora` field. Every request that applies the adapter SHALL also set `cache_prompt: false`, and the organ SHALL run with prompt caching disabled (`--no-cache-prompt`) whenever an adapter is loaded. Measured at build 9976, a base request after an adapted one otherwise reused the adapted request's KV and returned contaminated output. The evaluation A/B baseline SHALL never send the field.
 
 #### Scenario: The owning entity gets its adapter
 - **WHEN** the organ reports the active adapter loaded and the manifest's SHA-256 matches the entity's promoted adapter
-- **THEN** Lingua's requests carry `lora: [{"id": <its id>, "scale": 1.0}]` and `cache_prompt: false`
+- **THEN** Language's requests carry `lora: [{"id": <its id>, "scale": 1.0}]` and `cache_prompt: false`
 
 #### Scenario: Another entity gets the base organ
 - **WHEN** the manifest's SHA-256 does not match the entity's own adapter, or the entity has none
-- **THEN** Lingua's requests carry no `lora` field
+- **THEN** Language's requests carry no `lora` field
 
 #### Scenario: The A/B baseline is never adapted
 - **WHEN** the evaluation arm queries the organ as the baseline
@@ -309,8 +309,8 @@ The launcher SHALL need no Docker socket and SHALL read the adapter volume read-
 - **WHEN** the active adapter's SHA-256 does not match the manifest
 - **THEN** the organ starts without an adapter and the launcher logs the mismatch
 
-### Requirement: The job-queue trainer uses Lingua's organ key
-The job-queue voice-alignment trainer SHALL authenticate to the organ with the same key Lingua uses: `[lingua].api_key` from the merged configuration when it is non-empty, otherwise `KAINE_MODEL_SERVER_API_KEY`. The trainer SHALL receive the merged configuration as an argument and SHALL NOT depend on a module-level name.
+### Requirement: The job-queue trainer uses Language's organ key
+The job-queue voice-alignment trainer SHALL authenticate to the organ with the same key Language uses: `[lingua].api_key` from the merged configuration when it is non-empty, otherwise `KAINE_MODEL_SERVER_API_KEY`. The trainer SHALL receive the merged configuration as an argument and SHALL NOT depend on a module-level name.
 
 #### Scenario: The configured key reaches the trainer
 - **WHEN** `[lingua].api_key` is set and `KAINE_MODEL_SERVER_API_KEY` is unset

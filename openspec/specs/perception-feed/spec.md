@@ -1,18 +1,18 @@
 # perception-feed Specification
 
 ## Purpose
-This capability governs the perception feed around sleep and programme boundaries: Hypnos restores the locus that was active before sleep without keeping sensory content, the programme pauses while the entity cannot perceive, and the end of a programme preserves and stops the entity. A viewing after birth begins with the womb-to-world transition.
+This capability governs the perception feed around sleep and programme boundaries: Sleep restores the locus that was active before sleep without keeping sensory content, the programme pauses while the entity cannot perceive, and the end of a programme preserves and stops the entity. A viewing after maturation begins with the stimulus-source-to-world transition.
 
 ## Requirements
 
-### Requirement: Perception locus restore after sleep
+### Requirement: Perceptual locus restore after sleep
 
-Hypnos sleep SHALL restore the entity's desired locus to the value that was active immediately before sleep, not a hardcoded value. Only locus flags are persisted — never any sensory content.
+Sleep sleep SHALL restore the entity's desired locus to the value that was active immediately before sleep, not a hardcoded value. Only locus flags are persisted — never any sensory content.
 
 #### Scenario: Restore returns to pre-sleep locus
 
 - **GIVEN** the desired locus is `virtual` (selected at boot via `select_virtual_feed()`)
-- **WHEN** Hypnos sleep starts (locus written `off`) and later sleep completes
+- **WHEN** Sleep sleep starts (locus written `off`) and later sleep completes
 - **THEN** the desired locus is restored to `virtual`, and the playlist/virtual feed continues rather than going permanently dark
 
 #### Scenario: Restore after pre-sleep physical locus
@@ -40,14 +40,14 @@ Hypnos sleep SHALL restore the entity's desired locus to the value that was acti
 - **THEN** they contain only locus flags and operational metadata — no frames, audio bytes, or transcribed text
 
 ### Requirement: The programme waits while the entity cannot perceive
-The playlist clock SHALL be paused by holder, so overlapping pauses (a Hypnos replay window and a cycle freeze) keep it paused until every holder has released it, and elapsed programme time SHALL exclude every paused span. While the cycle is frozen, by any freeze holder, the playlist clock SHALL be held paused, so the programme resumes where the entity left it and no part of it is skipped.
+The playlist clock SHALL be paused by holder, so overlapping pauses (a Sleep replay window and a cycle freeze) keep it paused until every holder has released it, and elapsed programme time SHALL exclude every paused span. While the cycle is frozen, by any freeze holder, the playlist clock SHALL be held paused, so the programme resumes where the entity left it and no part of it is skipped.
 
 #### Scenario: A freeze does not skip the film
 - **WHEN** the entity is frozen for 60 s at 10 min into a film and then thawed
 - **THEN** the programme resumes at 10 min, not 11 min
 
 #### Scenario: Overlapping pauses
-- **WHEN** a freeze begins during a Hypnos replay window and the replay window ends first
+- **WHEN** a freeze begins during a Sleep replay window and the replay window ends first
 - **THEN** the clock stays paused until the freeze ends
 
 ### Requirement: The end of a programme preserves and stops the entity
@@ -65,14 +65,14 @@ When a playlist programme runs past its last item while not paused, the cycle SH
 - **WHEN** the end-of-programme preservation reports failure
 - **THEN** the entity is frozen under the `programme_end` holder, a critical log line names the error, and the caretaker is notified when configured
 
-### Requirement: A viewing after birth opens with the womb-to-world transition
-When `[perception_feed].transition_seconds` is above zero, the mode is `playlist`, the being's stage is embodied with `womb_t_at_birth`, the womb seed and the womb parameter digest recorded, and the configured womb parameters have the recorded digest, the feed SHALL open with a crossfade lasting `transition_seconds` of perceived time:
-- video: from the womb's bloom-peak field rendered at `womb_t_at_birth` to the programme's first frame, held still, at the film's native resolution;
+### Requirement: A viewing after maturation opens with the stimulus-source-to-world transition
+When `[perception_feed].transition_seconds` is above zero, the mode is `playlist`, the entity's stage is embodied with `womb_t_at_birth`, the stimulus source seed and the stimulus source parameter digest recorded, and the configured stimulus source parameters have the recorded digest, the feed SHALL open with a crossfade lasting `transition_seconds` of perceived time:
+- video: from the stimulus source's bloom-peak field rendered at `womb_t_at_birth` to the programme's first frame, held still, at the film's native resolution;
 - audio: silence for the whole crossfade, as the bloom ended in silence; once programme time starts, the programme's sound fades in linearly over `[perception_feed].transition_audio_fade_seconds` (0 means no fade).
 
-The crossfade SHALL be a deterministic function of the womb seed, the womb parameters, `womb_t_at_birth`, the being's lived time and the fade curve. No transition frame or sample SHALL be written to storage.
+The crossfade SHALL be a deterministic function of the stimulus source seed, the stimulus source parameters, `womb_t_at_birth`, the entity's lived time and the fade curve. No transition frame or sample SHALL be written to storage.
 
-The crossfade SHALL advance only while it is perceived: not while another holder (such as `freeze` or `hypnos`) pauses the playlist clock, not while the cycle is frozen, and not while the primary surface is unwanted in the desired perception state. The video surface SHALL start the crossfade whenever Topos is present; the audio surface SHALL start it only when it is the only surface.
+The crossfade SHALL advance only while it is perceived: not while another holder (such as `freeze` or `hypnos`) pauses the playlist clock, not while the cycle is frozen, and not while the primary surface is unwanted in the desired perception state. The video surface SHALL start the crossfade whenever Vision is present; the audio surface SHALL start it only when it is the only surface.
 
 The playlist clock SHALL be paused under the holder `transition` before either surface reads it. The holder SHALL be released exactly once, when the perceived crossfade reaches `transition_seconds`, even when no surface is reading, so programme time zero is the end of the transition.
 
@@ -89,15 +89,15 @@ The run manifest SHALL record `transition_seconds`, `transition_audio_fade_secon
 - **AND** the ignition log's film position for it is zero
 
 #### Scenario: A freeze during the crossfade
-- **WHEN** the being is frozen partway through the crossfade
+- **WHEN** the entity is frozen partway through the crossfade
 - **THEN** the crossfade stops where it was
-- **AND** after the unfreeze it runs for the remaining time, so the being perceives the full `transition_seconds`
+- **AND** after the unfreeze it runs for the remaining time, so the entity perceives the full `transition_seconds`
 
 #### Scenario: The programme's sound fades in after the crossfade
 - **WHEN** a viewing's transition is running
 - **THEN** no programme sound is heard
 - **AND** when programme time starts, the sound rises from silence to full level over `transition_audio_fade_seconds`
 
-#### Scenario: No recorded birth state
-- **WHEN** a playlist viewing starts for a being without `womb_t_at_birth`, or whose womb parameters no longer match the recorded digest
+#### Scenario: No recorded maturation state
+- **WHEN** a playlist viewing starts for an entity without `womb_t_at_birth`, or whose stimulus source parameters no longer match the recorded digest
 - **THEN** no transition is rendered, the programme starts as before, and the boot log says why

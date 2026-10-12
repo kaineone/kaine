@@ -10,7 +10,7 @@ A two-arm ablation that runs the cycle twice with identical seeds, stimuli and m
 The system SHALL provide an ablation runner that executes the cognitive cycle twice
 under matched seed, matched stimulus schedule, and matched modules, differing ONLY in
 whether the language organ is conditioned by the competitive workspace or by a flat
-fan-in of the same module outputs. The workspace-on arm SHALL use Syneidesis
+fan-in of the same module outputs. The workspace-on arm SHALL use Workspace
 competitive selection and broadcast as built. The workspace-off arm SHALL bypass
 scoring, threshold, top-k selection, inhibition, and broadcast, and condition the organ
 on a flat rendering of all current module outputs. The runner SHALL reuse the
@@ -27,7 +27,7 @@ deterministic offline harness pattern (in-memory scripted bus, `deterministic=Tr
 #### Scenario: No module internals are modified
 
 - **WHEN** the ablation runs
-- **THEN** Soma, Chronos, Syneidesis, Volition, and Lingua execute their shipped
+- **THEN** Interoception, Sequence, Workspace, Action selection, and Language execute their shipped
   behavior unchanged, and the workspace-off arm is realized purely in the conditioning
   path (which snapshot is handed to the context assembler), not by altering any module
 
@@ -88,7 +88,7 @@ confirmation. All measures SHALL be computed across multiple seeds with greedy
 #### Scenario: Primary measure 1 — cross-module error coupling
 
 - **WHEN** the runner analyzes per-module precision-weighted error time series
-- **THEN** it computes the Pearson correlation between Soma's and Chronos's error series
+- **THEN** it computes the Pearson correlation between Interoception's and Sequence's error series
   over a sliding window for each arm, and the pre-registered directional criterion is a
   statistically significant INCREASE in that correlation under workspace-on relative to
   workspace-off (reflecting mutual influence via the shared broadcast); if the on-arm
@@ -109,23 +109,23 @@ confirmation. All measures SHALL be computed across multiple seeds with greedy
 - **THEN** it is reported as secondary confirmation that the primary effects propagate
   to the observable, and NOT as independent evidence that the workspace does work
 
-### Requirement: Soma-salience coverage for measure power
+### Requirement: Interoception-salience coverage for measure power
 
-The ablation's stimulus battery SHALL include substrate perturbations that make Soma's
+The ablation's stimulus battery SHALL include substrate perturbations that make Interoception's
 prediction error salient on a reported fraction of ticks, because cross-module coupling
-can only be detected when Soma periodically enters the selected coalition. A run in
-which Soma never enters the coalition SHALL be flagged as underpowered for the primary
+can only be detected when Interoception periodically enters the selected coalition. A run in
+which Interoception never enters the coalition SHALL be flagged as underpowered for the primary
 coupling measure rather than reported as a clean NULL.
 
-#### Scenario: Battery exercises Soma salience
+#### Scenario: Battery exercises Interoception salience
 
 - **WHEN** the ablation battery runs
-- **THEN** Soma's error crosses into the selected coalition on a reported fraction of
-  ticks, so the coupling path from Soma through the broadcast to Chronos is exercised
+- **THEN** Interoception's error crosses into the selected coalition on a reported fraction of
+  ticks, so the coupling path from Interoception through the broadcast to Sequence is exercised
 
 #### Scenario: Underpowered run is flagged, not counted as NULL
 
-- **WHEN** Soma never enters the coalition across a run
+- **WHEN** Interoception never enters the coalition across a run
 - **THEN** the run is flagged underpowered for primary measure 1 rather than reported
   as a NULL, so a false NULL from flat substrate is not mistaken for an inert workspace
 

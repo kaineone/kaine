@@ -499,7 +499,7 @@ async def test_welfare_repeated_distress_arm_fires_and_latches_one_preserve(
     """The repeated_distress arm fires (the previously-dead
     `and crossing_reason is None` guard).
 
-    Honest coupling note: the windowed-repeat counter is fed in the soma path
+    Honest coupling note: the windowed-repeat counter is fed in the interoception path
     ONLY when a sustained crossing fires, so "repeated_distress" is reachable only
     via a sustained crossing that ALSO crosses the windowed-repeat arm. We make
     the sustained arm fire by the timer (small distress_duration_s) and set

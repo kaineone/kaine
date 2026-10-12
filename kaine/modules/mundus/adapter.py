@@ -109,7 +109,7 @@ class EmbodimentCapabilities:
 
 @runtime_checkable
 class EmbodimentAdapter(Protocol):
-    """The one narrow interface the Mundus core drives a body through."""
+    """The one narrow interface the Embodiment core drives a body through."""
 
     def capabilities(self) -> EmbodimentCapabilities:
         """Return the (immutable) capability descriptor for this body."""

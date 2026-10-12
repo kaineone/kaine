@@ -70,7 +70,7 @@ def test_inhibition_flag_encoded():
 def test_salience_weighted_coalition_buckets():
     quiet = encode_snapshot(_snapshot([_event("soma", "soma.report", salience=0.1)]))
     loud = encode_snapshot(_snapshot([_event("soma", "soma.report", salience=0.9)]))
-    # Higher-salience soma event yields a larger soma bucket value.
+    # Higher-salience interoception event yields a larger interoception bucket value.
     assert max(loud) > max(quiet)
 
 

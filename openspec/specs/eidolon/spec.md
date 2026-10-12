@@ -1,17 +1,17 @@
-# eidolon Specification
+# self-model Specification
 
 ## Purpose
-Eidolon is the self-model module that persists a structured `SelfModelDocument` to JSON at a configurable path, updates its drift detector from workspace broadcasts, records drift as episodes, keeps an unbounded identity history by default, and saves periodically and at shutdown.
+Self-model is the self-model module that persists a structured `SelfModelDocument` to JSON at a configurable path, updates its drift detector from workspace broadcasts, records drift as episodes, keeps an unbounded identity history by default, and saves periodically and at shutdown.
 
 ## Requirements
 
 ### Requirement: SelfModelDocument structure and empty defaults
-Eidolon SHALL define a `SelfModelDocument` data type carrying at minimum:
+Self-model SHALL define a `SelfModelDocument` data type carrying at minimum:
 `values` (list of strings), `behavioral_norms` (list of strings),
 `capability_map` (dict), `personality_baseline` (dict mapping trait
 names to floats), `identity_history` (list of dated snapshots), and
 `internal_speech_count` (int). On a fresh deployment every field
-SHALL be empty / zero — Eidolon prescribes no identity.
+SHALL be empty / zero — Self-model prescribes no identity.
 
 #### Scenario: Fresh SelfModelDocument is empty
 - **WHEN** `SelfModelDocument()` is constructed with no arguments
@@ -20,9 +20,9 @@ SHALL be empty / zero — Eidolon prescribes no identity.
   `identity_history == []`, and `internal_speech_count == 0`
 
 ### Requirement: JSON persistence at a configurable path
-Eidolon SHALL persist its SelfModelDocument to a JSON file at a configurable
+Self-model SHALL persist its SelfModelDocument to a JSON file at a configurable
 path (default `state/eidolon/self_model.json`). Writes SHALL be
-atomic — Eidolon writes to a temporary file first and renames it
+atomic — Self-model writes to a temporary file first and renames it
 into place, so a crash mid-save SHALL NOT corrupt the persisted
 document. On startup, an existing file at the configured path SHALL
 be loaded; absent file means a fresh empty SelfModelDocument is used.
@@ -30,17 +30,17 @@ be loaded; absent file means a fresh empty SelfModelDocument is used.
 #### Scenario: Existing file is loaded on init
 - **WHEN** a `self_model.json` with `values = ["honesty"]` exists at
   the configured path
-- **THEN** the Eidolon module after `initialize` has a SelfModelDocument
+- **THEN** the Self-model module after `initialize` has a SelfModelDocument
   whose `values == ["honesty"]`
 
 #### Scenario: Save is atomic
-- **WHEN** Eidolon writes the SelfModelDocument and is interrupted partway
+- **WHEN** Self-model writes the SelfModelDocument and is interrupted partway
   through
 - **THEN** the on-disk JSON file is either fully the prior version
   or fully the new version, never half-written
 
 ### Requirement: Workspace broadcasts update the drift detector
-Eidolon SHALL subscribe to `workspace.broadcast` and update its
+Self-model SHALL subscribe to `workspace.broadcast` and update its
 `DriftDetector` with each observed broadcast. The default
 `SourceDistributionDrift` SHALL track two histograms of event-source
 frequencies — a recent window (default 100 broadcasts) and all-time
@@ -52,9 +52,9 @@ cumulative.
   cumulative histogram counts all 150
 
 ### Requirement: Drift score elevation publishes a diagnostics event
-Eidolon SHALL compute the symmetric KL divergence between the recent
+Self-model SHALL compute the symmetric KL divergence between the recent
 and cumulative histograms (smoothed with a small epsilon). When the
-score exceeds the configured threshold, Eidolon SHALL publish an
+score exceeds the configured threshold, Self-model SHALL publish an
 `eidolon.drift` event whose payload contains `score`, `recent_count`,
 `historical_count`, and `top_drifted_sources` (a list of source names
 without any payload content). The salience SHALL escalate to the
@@ -73,20 +73,20 @@ configured `alert_salience` when the threshold is crossed.
   contents
 
 ### Requirement: Internal-speech subscription increments counter
-Eidolon SHALL subscribe to a configurable internal-speech stream
+Self-model SHALL subscribe to a configurable internal-speech stream
 (default `lingua.internal`). For each event observed on that stream
 the module SHALL increment `SelfModelDocument.internal_speech_count`.
-Eidolon SHALL NOT record the content of internal speech in the
+Self-model SHALL NOT record the content of internal speech in the
 SelfModelDocument — only the count and bounded hash fingerprints.
 
 #### Scenario: Counter increments per internal-speech event
 - **WHEN** three events arrive on the configured internal-speech
-  stream while Eidolon is running
+  stream while Self-model is running
 - **THEN** `SelfModelDocument.internal_speech_count` after the third event
   equals the prior count plus three
 
 ### Requirement: Periodic save and final-save-on-shutdown
-Eidolon SHALL persist the SelfModelDocument to disk every `save_interval_s`
+Self-model SHALL persist the SelfModelDocument to disk every `save_interval_s`
 seconds (default 30) while running. `shutdown()` SHALL force a final
 save regardless of how recently the periodic save fired.
 
@@ -94,13 +94,13 @@ save regardless of how recently the periodic save fired.
 - **WHEN** `Eidolon.shutdown()` is awaited
 - **THEN** the on-disk file reflects the current in-memory SelfModelDocument
 
-### Requirement: Default Eidolon config and disabled-by-default
+### Requirement: Default Self-model config and disabled-by-default
 The repository SHALL ship an `[eidolon]` block in `config/kaine.toml`
 with default values for `persistence_path`, `drift_window`,
 `drift_threshold`, `save_interval_s`, `internal_speech_stream`,
 `identity_history_cap`, `baseline_salience`, and `alert_salience`.
 `[modules].eidolon = false` SHALL keep first boot from auto-registering
-Eidolon.
+Self-model.
 
 #### Scenario: kaine.toml carries defaults
 - **WHEN** an operator inspects `config/kaine.toml`
@@ -109,12 +109,12 @@ Eidolon.
 
 ### Requirement: The self-model observes the developing voice on both channels
 
-Eidolon SHALL observe both internal and external speech and record the
+Self-model SHALL observe both internal and external speech and record the
 developing voice in the self-model as lightweight per-utterance features. For
 each observed utterance it SHALL record `{timestamp, channel, length,
 word_count}` (channel is `internal` or `external`) into the
 `voice_observations` buffer, and SHALL maintain an `external_speech_count`
-alongside the existing `internal_speech_count`. Eidolon SHALL NOT persist the
+alongside the existing `internal_speech_count`. Self-model SHALL NOT persist the
 raw utterance text in the self-model (only derived features). The buffer is the
 entity's memory of its developing voice: `[eidolon].voice_observations_cap`
 SHALL ship as `0`, meaning no observation is ever dropped; a positive value
@@ -145,13 +145,13 @@ change.
 
 #### Scenario: The voice buffer is unbounded by default
 
-- **WHEN** Eidolon runs with `voice_observations_cap = 0` and observes more
+- **WHEN** Self-model runs with `voice_observations_cap = 0` and observes more
   than 256 utterances
 - **THEN** `voice_observations` holds every observation
 
 #### Scenario: A negative voice cap is rejected
 
-- **WHEN** Eidolon is constructed with `voice_observations_cap = -1`
+- **WHEN** Self-model is constructed with `voice_observations_cap = -1`
 - **THEN** construction raises `ValueError`
 
 #### Scenario: Older self-models still load
@@ -162,14 +162,14 @@ change.
 
 ### Requirement: Drift is recorded as episodes
 
-Eidolon SHALL record drift in `identity_history` as episodes. An episode is one
+Self-model SHALL record drift in `identity_history` as episodes. An episode is one
 contiguous run of broadcasts whose drift score is at or above the threshold,
 and its entry SHALL summarise every alert in the run: `kind =
 "drift_episode"`, `onset`, `end`, `peak_score`, `count` (alerts in the run),
 `sources` (how often each source was among the top drifted sources) and
 `top_sources`, plus `timestamp` (the onset) and `score` (the peak) for readers
 of the older per-alert entries. The first broadcast below the threshold SHALL
-close the episode. Eidolon SHALL update the list in place rather than copying
+close the episode. Self-model SHALL update the list in place rather than copying
 it per alert, and SHALL save the self-model as compact JSON with the C encoder.
 Self-models saved earlier, with indentation or per-alert entries, SHALL load
 unchanged.
@@ -206,17 +206,17 @@ episodes. A negative value SHALL be rejected at construction.
 
 #### Scenario: Cap 0 keeps every entry
 
-- **WHEN** Eidolon runs with `identity_history_cap = 0` and records more than 256
+- **WHEN** Self-model runs with `identity_history_cap = 0` and records more than 256
   drift episodes
 - **THEN** `identity_history` holds every episode
 
 #### Scenario: A positive cap keeps the most recent entries
 
-- **WHEN** Eidolon runs with `identity_history_cap = 4` and records 10 drift
+- **WHEN** Self-model runs with `identity_history_cap = 4` and records 10 drift
   episodes
 - **THEN** `identity_history` holds the 4 most recent episodes
 
 #### Scenario: A negative cap is rejected
 
-- **WHEN** Eidolon is constructed with `identity_history_cap = -1`
+- **WHEN** Self-model is constructed with `identity_history_cap = -1`
 - **THEN** construction raises `ValueError`

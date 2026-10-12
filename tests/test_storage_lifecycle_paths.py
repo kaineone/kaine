@@ -110,7 +110,7 @@ def test_merger_from_name_output_dir_under_data_root(tmp_path):
 
 
 def test_eidolon_default_persistence_path_under_data_root(tmp_path):
-    """Eidolon's default persistence path resolves under the installed data root."""
+    """Self-model's default persistence path resolves under the installed data root."""
     root = tmp_path / "root"
     set_data_root(root)
     eidolon = Eidolon(_FakeBus())

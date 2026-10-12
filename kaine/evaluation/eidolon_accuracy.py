@@ -131,7 +131,7 @@ class EidolonAccuracyRunner(BaseObserver):
         and tolerant of missing files (fresh-boot)."""
         signals: dict[str, float] = {}
 
-        # Affect-correlation logs carry recent Thymos state vectors.
+        # Affect-correlation logs carry recent Affect state vectors.
         ac_dir = self._logs_dir / "affect_correlation"
         if ac_dir.exists():
             valences: list[float] = []

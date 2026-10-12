@@ -71,7 +71,7 @@ class CycleControl:
     reason: Optional[str] = None
     # Who commanded the freeze: "operator" (the default and the operator's
     # control file), "spot" (the module supervisor), or "welfare" (the
-    # preservation monitor). Spot only resumes its own freeze and never
+    # preservation monitor). Supervisor only resumes its own freeze and never
     # clears an operator or welfare freeze.
     source: str = "operator"
     # C2: the authoritative stacked freeze sources (oldest first). The legacy
@@ -196,7 +196,7 @@ def pop_freeze(
 ) -> CycleControl:
     """Pop the topmost freeze entry — only entries from ``source`` if given.
 
-    A recovery (e.g. Spot's) lifts only its own freeze; a welfare or operator
+    A recovery (e.g. Supervisor's) lifts only its own freeze; a welfare or operator
     freeze lower in the stack remains in force, and the cycle stays frozen
     until the stack empties. Welfare entries are never removed here — only
     :func:`override`, :func:`stand_down` with the matching source, or
@@ -218,9 +218,9 @@ def pop_freeze(
 def stand_down(path: Path | None = None, *, source: str) -> CycleControl:
     """Explicitly lift every freeze entry commanded by ``source``.
 
-    A welfare, gestation or programme_end entry may also be lifted by
+    A welfare, development or programme_end entry may also be lifted by
     :func:`override` naming it. An operator stand-down with
-    ``source="operator"`` leaves welfare, gestation and programme_end entries
+    ``source="operator"`` leaves welfare, development and programme_end entries
     in place.
     """
     current = read_control(path)
@@ -279,7 +279,7 @@ def freeze(
 def unfreeze(path: Path | None = None) -> CycleControl:
     """Clean boot: lift every active freeze, whatever its source.
 
-    This is intended for the cycle's own fresh start; Nexus operator resume
+    This is intended for the cycle's own fresh start; Dashboard operator resume
     uses :func:`stand_down` with ``source="operator"`` instead.
     """
     state = CycleControl()

@@ -12,9 +12,9 @@ from typing import Any, Callable
 
 from kaine import secrets_file
 
-# Where Nexus reads its operator token (kaine.nexus.config.load_nexus_config).
+# Where Dashboard reads its operator token (kaine.nexus.config.load_nexus_config).
 DEFAULT_SECRETS_PATH = Path("config/secrets.toml")
-# Nexus rejects shorter operator tokens (kaine.nexus.config.load_nexus_config).
+# Dashboard rejects shorter operator tokens (kaine.nexus.config.load_nexus_config).
 _MIN_NEXUS_TOKEN_LEN = 32
 
 
@@ -24,9 +24,9 @@ def ensure_nexus_token(
     out: Callable[[str], Any],
     env: dict[str, str] | None = None,
 ) -> str:
-    """Ensure a Nexus operator sign-in token exists.
+    """Ensure a Dashboard operator sign-in token exists.
 
-    Without a token, Nexus rejects every sign-in with 503. The environment
+    Without a token, Dashboard rejects every sign-in with 503. The environment
     variable ``KAINE_NEXUS_TOKEN`` takes precedence; otherwise the token is read
     from or written to ``[nexus] operator_token`` in the secrets file.
     """
@@ -65,7 +65,7 @@ def ensure_nexus_token(
         return "error"
 
     if isinstance(existing, str) and existing.strip():
-        # Never overwrite an operator's token, but say so when Nexus would
+        # Never overwrite an operator's token, but say so when Dashboard would
         # refuse it rather than reporting it as fine.
         if len(existing.strip()) < _MIN_NEXUS_TOKEN_LEN:
             out(

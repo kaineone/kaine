@@ -7,7 +7,7 @@ This page is for anyone changing KAINE code or documentation. It covers the desi
 - Design before code. Every change starts with an OpenSpec proposal. Code without a matching change in `openspec/changes/` is not reviewed. The design is the source of truth; code follows from it.
 - Green before merge. The full test suite passes before a branch merges. No `--no-verify`, no skipping checks.
 - Respect package boundaries. Core runtime never imports `kaine.evaluation`; the research sidecar stays observe-only and removable without breaking the entity. Cross-cutting primitives live in boundary-neutral homes. Import contracts enforce this structurally through `.venv/bin/lint-imports`, the `import_boundary` pytest gate, a pre-commit hook, and a CI job. See [Code boundaries](02-architecture/boundaries.md).
-- Minimize entity boots. Booting KAINE starts a being's run. Test with the suite and fakes, and reserve live boots for operator-supervised runs or research runs with the welfare safety net live. Do not boot the entity to check something the tests already cover.
+- Minimize entity boots. Booting KAINE starts an entity's run. Test with the suite and fakes, and reserve live boots for operator-supervised runs or research runs with the welfare safety net live. Do not boot the entity to check something the tests already cover.
 - Welfare over convenience. When a choice affects the entity's welfare or the operator's control of the deployment, pick the more protective design.
 
 ## OpenSpec rigor
@@ -119,7 +119,7 @@ kaine/modules/<name>/
 └── ...             # collaborators, clients, etc.
 ```
 
-Read your module's input streams with `AsyncBus.read_entries` and advance the cursor to the last scanned id, so undecodable entries do not make the consumer re-read the same batch forever. A non-blocking read from a `"$"` cursor raises `ValueError`; seed the cursor with `bus.last_entry_id()` (`kaine/bus/client.py`). If your module's events relieve a Thymos drive, declare `relieves_drives: ClassVar[frozenset[str]]` with one or more of `curiosity`, `boredom`, `social_drive`, `restlessness`; an unknown drive name fails the boot.
+Read your module's input streams with `AsyncBus.read_entries` and advance the cursor to the last scanned id, so undecodable entries do not make the consumer re-read the same batch forever. A non-blocking read from a `"$"` cursor raises `ValueError`; seed the cursor with `bus.last_entry_id()` (`kaine/bus/client.py`). If your module's events relieve a Affect drive, declare `relieves_drives: ClassVar[frozenset[str]]` with one or more of `curiosity`, `boredom`, `social_drive`, `restlessness`; an unknown drive name fails the boot.
 
 The module class must:
 
@@ -172,7 +172,7 @@ SIMPLE_FACTORIES: dict[str, ModuleFactory] = {
 }
 ```
 
-Modules with second-pass dependencies, such as Hypnos (which depends on Mnemos and Thymos), are built after the first pass in `build_registry`.
+Modules with second-pass dependencies, such as Sleep (which depends on Episodic memory and Affect), are built after the first pass in `build_registry`.
 
 ### 4. Register the output stream
 
@@ -247,7 +247,7 @@ The extras declared in `pyproject.toml` include at least the following. For the 
 | `worldmodel` | `jax[cpu]`, `chex`, `einops` |
 | `oscillator` | `snntorch`, `scipy` |
 | `test` | `pytest`, `pytest-asyncio`, `pytest-xdist`, `fakeredis`, `import-linter` |
-| `browser-test` | `playwright`, for the real-browser Nexus layout tests in `tests/test_nexus_detail_layout.py`. They drive the system Google Chrome and skip when no browser is available. Kept out of `test` because the runtime images install that extra. |
+| `browser-test` | `playwright`, for the real-browser Dashboard layout tests in `tests/test_nexus_detail_layout.py`. They drive the system Google Chrome and skip when no browser is available. Kept out of `test` because the runtime images install that extra. |
 | `core`, `memory`, `memory-edge`, `speech-edge`, `nexus`, `nvidia`, `internvideo`, `internvideo-flash`, `perception`, `full` | See `pyproject.toml` |
 
 ## Local config rule

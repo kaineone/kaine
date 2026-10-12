@@ -6,7 +6,7 @@ This capability keeps every runtime client of KAINE's own local services from fo
 ## Requirements
 
 ### Requirement: Clients of KAINE's own services ignore proxy settings
-Every runtime HTTP client in `kaine/` that talks to a KAINE service (the organ, speech-to-text, text-to-speech, the trainer, Nexus probes) SHALL ignore proxy environment variables. Only setup-time downloads of public weights and wheels MAY use a proxy, and they SHALL be named in an allowlist that a guard test enforces.
+Every runtime HTTP client in `kaine/` that talks to a KAINE service (the organ, speech-to-text, text-to-speech, the trainer, Dashboard probes) SHALL ignore proxy environment variables. Only setup-time downloads of public weights and wheels MAY use a proxy, and they SHALL be named in an allowlist that a guard test enforces.
 
 #### Scenario: A host has a proxy configured
 - **WHEN** `HTTP_PROXY` or `ALL_PROXY` is set in the environment of a running cycle

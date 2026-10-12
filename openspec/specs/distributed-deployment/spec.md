@@ -8,7 +8,7 @@ Distributed-deployment keeps KAINE's live cognitive cycle and stateful stores on
 ### Requirement: The live cognitive loop and stateful stores never run on untrusted compute
 
 The system SHALL NOT distribute the live cognitive cycle, the modules in its
-per-tick feedback path, or the stateful stores (Mnemos memory, the Eidolon
+per-tick feedback path, or the stateful stores (Episodic memory memory, the Self-model
 self-model, and the Redis workspace state) onto untrusted nodes (volunteer /
 BOINC-style / public-swarm compute). This boundary holds even when such
 distribution is technically requested.
@@ -45,9 +45,9 @@ contract, not in-process Python object references.
 
 #### Scenario: The language organ runs on a separate trusted host
 
-- **WHEN** Lingua runs in a process on a different trusted host from the
+- **WHEN** Language runs in a process on a different trusted host from the
   coordinator
-- **THEN** it obtains the Eidolon self-model via a bus-mediated snapshot rather
+- **THEN** it obtains the Self-model self-model via a bus-mediated snapshot rather
   than an in-process reference
 - **AND** it emits the same speech and evaluation events as in the single-host
   deployment
@@ -67,14 +67,14 @@ disallowed per the boundary requirement above.
   host
 - **AND** no live computation is performed on the untrusted holders of the shares
 
-### Requirement: Quadlet cycle and Nexus units can reach the Redis bus
+### Requirement: Quadlet cycle and Dashboard units can reach the Redis bus
 `quadlet/kaine-cycle.container` and `quadlet/kaine-nexus.container` SHALL set `Environment=KAINE_REDIS_URL=redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0` so the in-container processes connect to the Redis service by container name, matching `compose/kaine.yml`.
 
 #### Scenario: Cycle container has Redis URL
 - **WHEN** `quadlet/kaine-cycle.container` is inspected
 - **THEN** it contains `KAINE_REDIS_URL` pointing to `kaine-redis:6379/0`
 
-#### Scenario: Nexus container has Redis URL
+#### Scenario: Dashboard container has Redis URL
 - **WHEN** `quadlet/kaine-nexus.container` is inspected
 - **THEN** it contains `KAINE_REDIS_URL` pointing to `kaine-redis:6379/0`
 

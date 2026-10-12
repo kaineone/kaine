@@ -222,7 +222,7 @@ def test_goal_ledger_load_dict_non_dict_data_leaves_existing(caplog):
 
 
 # ---------------------------------------------------------------------------
-# Thymos goals persistence
+# Affect goals persistence
 # ---------------------------------------------------------------------------
 
 
@@ -399,7 +399,7 @@ def test_scheduler_restore_rejects_negative_deferral():
 
 
 # ---------------------------------------------------------------------------
-# Hypnos schedule persistence
+# Sleep schedule persistence
 # ---------------------------------------------------------------------------
 
 
@@ -477,7 +477,7 @@ async def test_hypnos_malformed_schedule_logs_warning_and_stays_fresh(
 
 
 # ---------------------------------------------------------------------------
-# Nous posterior restoration into engine
+# Planning posterior restoration into engine
 # ---------------------------------------------------------------------------
 
 

@@ -222,7 +222,7 @@ class LatentForwardModel:
         if any(not math.isfinite(v) for v in latent):
             # A skipped reading touches neither the buffer nor the weights and
             # leaves no prediction behind, so the next reading scores nothing,
-            # reports no gain and makes no update, as in Soma's forward model.
+            # reports no gain and makes no update, as in Interoception's forward model.
             log.warning("LatentForwardModel: non-finite latent; skipping step")
             self.last_null_error = None
             self.last_scored_had_context = False

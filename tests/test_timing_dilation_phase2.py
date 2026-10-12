@@ -42,12 +42,12 @@ class ManualClock:
 
 
 # ---------------------------------------------------------------------------
-# COGNITIVE: Soma fatigue dt-integral scales with time_scale.
+# COGNITIVE: Interoception fatigue dt-integral scales with time_scale.
 # ---------------------------------------------------------------------------
 
 
 def _fatigue_after_two_ticks(scale: float, real_dt: float) -> float:
-    """Drive a Soma fatigue accumulator through the injected subjective clock.
+    """Drive a Interoception fatigue accumulator through the injected subjective clock.
 
     First tick seeds ``_last_time``; the real clock then advances by
     ``real_dt`` and the second tick integrates ``e * dt`` where
@@ -84,7 +84,7 @@ def test_fatigue_integral_scales_with_time_scale():
 
 @pytest.mark.asyncio
 async def test_soma_fatigue_through_module_scales(monkeypatch):
-    """End-to-end through the Soma module: the SAME real elapsed time accrues
+    """End-to-end through the Interoception module: the SAME real elapsed time accrues
     more fatigue at a higher time_scale because the dt-integral reads the
     injected subjective clock."""
     pytest.importorskip("fakeredis.aioredis")
@@ -139,7 +139,7 @@ async def test_soma_fatigue_through_module_scales(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# COGNITIVE: Topos capture cadence (real sleep) scales with time_scale.
+# COGNITIVE: Vision capture cadence (real sleep) scales with time_scale.
 # ---------------------------------------------------------------------------
 
 
@@ -192,7 +192,7 @@ async def test_topos_capture_cadence_real_sleep_scales():
 
 
 def test_spot_liveness_poll_does_not_scale():
-    """The Spot module-supervisor poll/heartbeat-timeout are read straight off
+    """The Supervisor module-supervisor poll/heartbeat-timeout are read straight off
     SpotConfig and never routed through the EntityClock — a watchdog must keep
     real wall-clock cadence even if the mind dilates."""
     from kaine.cycle.spot import SpotConfig
@@ -202,7 +202,7 @@ def test_spot_liveness_poll_does_not_scale():
     # path, so the values the watchdog uses are identical regardless of scale.
     assert cfg.poll_interval_s == pytest.approx(1.5)
     assert cfg.heartbeat_timeout_s == pytest.approx(9.0)
-    # The Spot source must not reach for the subjective clock at all.
+    # The Supervisor source must not reach for the subjective clock at all.
     import inspect
 
     import kaine.cycle.spot as spot_mod
@@ -258,7 +258,7 @@ def test_build_registry_injects_one_shared_clock(monkeypatch):
     # Every cognitive module holds the SAME instance (identity, not a copy).
     assert registry.get("soma")._clock is clock
     assert registry.get("perception")._clock is clock
-    # Thymos stores clock.now (a bound method of the shared instance).
+    # Affect stores clock.now (a bound method of the shared instance).
     assert registry.get("thymos")._clock == clock.now
 
 

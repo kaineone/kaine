@@ -196,8 +196,8 @@ async def test_check_perception_womb_passes():
 def test_build_registry_womb_mode_shares_one_clock_and_selects_virtual(
     monkeypatch, tmp_path
 ):
-    """The real boot path: womb mode installs ONE shared womb clock (offset by
-    the lived gestation time) that Topos and Audition both receive, and binds
+    """The real boot path: stimulus source mode installs ONE shared stimulus source clock (offset by
+    the lived development time) that Vision and Audition both receive, and binds
     the senses to the virtual locus."""
     import asyncio
 

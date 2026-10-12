@@ -100,7 +100,7 @@ def assess_fork(
     *,
     fork_state_root: Path | str,
 ) -> DivergenceAssessment:
-    """Assess a fork's individuation against its birth-state baseline.
+    """Assess a fork's individuation against its maturation-state baseline.
 
     Thin wrapper over :func:`kaine.lifecycle.divergence.assess_divergence`
     pointed at the fork's own materialized state root, so the same verdict that

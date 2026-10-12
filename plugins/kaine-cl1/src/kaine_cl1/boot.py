@@ -81,7 +81,7 @@ def wetware_injection(
 
     Example:
         kwarg, obj = wetware_injection("chronos", broker, territory)
-        chronos = Chronos(bus, **{kwarg: obj}, featurizer=..., anomaly=..., ...)
+        sequence = Sequence(bus, **{kwarg: obj}, featurizer=..., anomaly=..., ...)
     """
     try:
         spec = WETWARE_BACKENDS[module]

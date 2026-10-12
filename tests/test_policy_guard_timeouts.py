@@ -69,7 +69,7 @@ def _proposal(
 
 def _snapshot(events, *, inhibited: bool = False) -> WorkspaceSnapshot:
     # The coalition is ordered by salience (highest first) by the time it
-    # reaches Volition, so the helper sorts to match real engine behavior. The
+    # reaches Action selection, so the helper sorts to match real engine behavior. The
     # precision-weighted scores the report policy reads mirror each salience.
     selected = sorted(events, key=lambda item: item[1].salience, reverse=True)
     return WorkspaceSnapshot(
@@ -191,7 +191,7 @@ def test_nous_think_guard_timeout_through_report_policy():
     v = Volition(policy=source)
 
     # Non-proposal salience stays below the inner policy's think bar so the
-    # report policy itself stays silent; the Nous think proposals drive action.
+    # report policy itself stays silent; the Planning think proposals drive action.
     base = _soma_report(0.5)
 
     snap1 = _snapshot([base, _proposal("p1", THINK)])

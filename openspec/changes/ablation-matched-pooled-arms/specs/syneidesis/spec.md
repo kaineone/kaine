@@ -1,18 +1,18 @@
 ## ADDED Requirements
 
 ### Requirement: The workspace runs one arm of the planned ablation
-Syneidesis SHALL run one of three arms, selected by `[syneidesis].arm`: `competitive` (the default), `matched` or `pooled` (paper §6.3, A.8). In the competitive arm selection, access and inhibition SHALL be as before. Every snapshot SHALL carry its arm in `metadata["arm"]`. The matched and pooled arms SHALL be refused when the coherence layer is on, and an unknown arm SHALL be refused. The `[syneidesis]` key guard SHALL accept `arm`, so the shipped configuration boots.
+Workspace SHALL run one of three arms, selected by `[syneidesis].arm`: `competitive` (the default), `matched` or `pooled` (paper §6.3, A.8). In the competitive arm selection, access and inhibition SHALL be as before. Every snapshot SHALL carry its arm in `metadata["arm"]`. The matched and pooled arms SHALL be refused when the coherence layer is on, and an unknown arm SHALL be refused. The `[syneidesis]` key guard SHALL accept `arm`, so the shipped configuration boots.
 
 #### Scenario: The default arm is competitive
-- **WHEN** Syneidesis is built without an arm
+- **WHEN** Workspace is built without an arm
 - **THEN** its snapshots equal those of the competitive arm and carry `metadata["arm"] == "competitive"`
 
 #### Scenario: An unknown arm is refused
-- **WHEN** Syneidesis is built with arm `"random"`
+- **WHEN** Workspace is built with arm `"random"`
 - **THEN** construction raises `ValueError`
 
 ### Requirement: The matched arm draws a score-blind coalition of the competitive size
-In the matched arm, on a broadcast tick, Syneidesis SHALL score every candidate as in the competitive arm and SHALL draw `min(top_k, n)` of the `n` candidates uniformly without replacement, without regard to score, from a generator seeded from the run seed. The drawn members SHALL be ordered by score, descending. A drawn member SHALL be accessed when its score reaches the access threshold, and the snapshot SHALL be inhibited when no drawn member is accessed. The score table SHALL hold every candidate's score. A tick that is not a broadcast tick SHALL draw nothing, and a context that does not say whether the tick is a broadcast tick SHALL be refused rather than fall back to top-k selection. The generator's state SHALL NOT be persisted: the draws are reproducible within one uninterrupted run, and a restart or revive starts the stream again from the seed.
+In the matched arm, on a broadcast tick, Workspace SHALL score every candidate as in the competitive arm and SHALL draw `min(top_k, n)` of the `n` candidates uniformly without replacement, without regard to score, from a generator seeded from the run seed. The drawn members SHALL be ordered by score, descending. A drawn member SHALL be accessed when its score reaches the access threshold, and the snapshot SHALL be inhibited when no drawn member is accessed. The score table SHALL hold every candidate's score. A tick that is not a broadcast tick SHALL draw nothing, and a context that does not say whether the tick is a broadcast tick SHALL be refused rather than fall back to top-k selection. The generator's state SHALL NOT be persisted: the draws are reproducible within one uninterrupted run, and a restart or revive starts the stream again from the seed.
 
 #### Scenario: The matched coalition has the competitive size
 - **WHEN** a broadcast tick has 12 candidates and `top_k=5`
@@ -31,7 +31,7 @@ In the matched arm, on a broadcast tick, Syneidesis SHALL score every candidate 
 - **THEN** the snapshot is inhibited
 
 ### Requirement: The pooled arm broadcasts every candidate with no gate
-In the pooled arm Syneidesis SHALL score no candidate. Every candidate of the tick SHALL be a member, in the tick's canonical order; the snapshot SHALL NOT be inhibited, even with no candidates; the score table SHALL carry each candidate's intensity in place of a score; and the metadata SHALL carry no access threshold.
+In the pooled arm Workspace SHALL score no candidate. Every candidate of the tick SHALL be a member, in the tick's canonical order; the snapshot SHALL NOT be inhibited, even with no candidates; the score table SHALL carry each candidate's intensity in place of a score; and the metadata SHALL carry no access threshold.
 
 #### Scenario: Every candidate is a member
 - **WHEN** a pooled tick has 12 candidates and `top_k=5`

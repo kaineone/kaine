@@ -10,12 +10,12 @@
 
 ## MODIFIED Requirements
 
-### Requirement: Individuation is measured against the entity's own birth-state, not the bare organ
-The individuation test SHALL measure how far the being's conditioned answers have drifted from its own reference answers, never from the bare or pretrained organ. A probe answer SHALL be one battery prompt rendered as Lingua renders it with an empty workspace (`snapshot=None`, `mode="external"`, the current self-model) and sent through Lingua's own chat client, so the only conditions free to differ between reference and now are the LoRA adapter the organ applies and the identity clause rendered from the self-model's `values[:5]` and `behavioral_norms[:5]`.
+### Requirement: Individuation is measured against the entity's own maturation-state, not the bare organ
+The individuation test SHALL measure how far the entity's conditioned answers have drifted from its own reference answers, never from the bare or pretrained organ. A probe answer SHALL be one battery prompt rendered as Language renders it with an empty workspace (`snapshot=None`, `mode="external"`, the current self-model) and sent through Language's own chat client, so the only conditions free to differ between reference and now are the LoRA adapter the organ applies and the identity clause rendered from the self-model's `values[:5]` and `behavioral_norms[:5]`.
 
-The reference SHALL be captured on the maturation gate's birth transition, as soon as the organ is loaded and before the first post-birth sleep, with n_b = 16 samples for each of the 12 battery prompts. Capture SHALL retry with backoff, and until a reference exists every look SHALL be inconclusive with reason "no reference". If an accepted adapter or a changed identity clause comes before the capture succeeds, the reference SHALL be stored with `reference_kind="capture"` and its timestamp and SHALL never be presented as a birth reference. A `reconstructed` reference SHALL be taken only with explicit operator approval for that being, and only when the records show no adapter older than `born_at` and a fresh-start self-model at birth; any doubt SHALL fall back to `capture`.
+The reference SHALL be captured on the maturation gate's maturation transition, as soon as the organ is loaded and before the first post-maturation sleep, with n_b = 16 samples for each of the 12 battery prompts. Capture SHALL retry with backoff, and until a reference exists every look SHALL be inconclusive with reason "no reference". If an accepted adapter or a changed identity clause comes before the capture succeeds, the reference SHALL be stored with `reference_kind="capture"` and its timestamp and SHALL never be presented as a maturation reference. A `reconstructed` reference SHALL be taken only with explicit operator approval for that being, and only when the records show no adapter older than `born_at` and a fresh-start self-model at maturation; any doubt SHALL fall back to `capture`.
 
-- A birth request SHALL survive a restart through a durable marker, `state/individuation/birth_pending`.
+- A maturation request SHALL survive a restart through a durable marker, `state/individuation/birth_pending`.
 - The marker SHALL be cleared when the capture succeeds or a completed sleep turns it into a capture reference.
 - The individuation evidence SHALL live at the fixed path `state/individuation/`, which is not configurable.
 
@@ -24,19 +24,19 @@ The reference SHALL be one document in `state/individuation/reference.json` writ
 At every look the test SHALL re-embed the stored reference texts with the current embedder, so both arms share one feature map. The test SHALL refuse to compare against a reference whose battery digest or conditions other than the embedder differ from the current ones. In that case the reference sample SHALL be regenerated from the stored conditioning (the stored adapter copy and identity-clause inputs) under the current infrastructure, recorded with a new `reference_id` and the same `reference_kind`, and the ledger's look index, alpha spent and latch SHALL carry over unchanged.
 
 #### Scenario: A sensory-void / unchanged entity is not significant
-- **WHEN** the being's adapter and identity clause are the same as at reference capture
+- **WHEN** the entity's adapter and identity clause are the same as at reference capture
 - **THEN** the conditioning digest equals the reference's, no look runs, and no significant report is produced
 
-#### Scenario: An entity that has drifted from its birth-state is significant
-- **WHEN** lived experience has changed the being's adapter or identity clause and its current answers differ in distribution from the reference answers by more than the look's threshold allows
+#### Scenario: An entity that has drifted from its maturation-state is significant
+- **WHEN** lived experience has changed the entity's adapter or identity clause and its current answers differ in distribution from the reference answers by more than the look's threshold allows
 - **THEN** the look's p-value is at most α_k, H is at least `effect_min`, and `significant` is true
 
 #### Scenario: The bare organ is never the baseline
 - **WHEN** the individuation test is wired for a run
-- **THEN** both arms are sampled through Lingua's own chat client with the being's adapter and self-model, and neither arm is the bare or pretrained organ
+- **THEN** both arms are sampled through Language's own chat client with the entity's adapter and self-model, and neither arm is the bare or pretrained organ
 
 #### Scenario: Capture after an accepted adapter is labelled capture
-- **WHEN** the first post-birth sleep with an accepted adapter completes before the birth capture succeeds
+- **WHEN** the first post-maturation sleep with an accepted adapter completes before the maturation capture succeeds
 - **THEN** the stored reference has `reference_kind="capture"` and every report and summary says the drift is measured since its `captured_at`
 
 #### Scenario: A changed organ regenerates the reference sample
@@ -44,7 +44,7 @@ At every look the test SHALL re-embed the stored reference texts with the curren
 - **THEN** the look does not compare the old sample, the reference sample is regenerated from the stored conditioning with a new `reference_id`, and the ledger's look index and latch are unchanged
 
 ### Requirement: Significance requires a minimum of accumulated lived experience
-The individuation test SHALL NOT report `significant == true` until the being has accumulated at least `min_observations` (default 200) lived ticks AND at least `min_lived_time_s` (default 1800) seconds of lived time since the reference was captured. Lived seconds SHALL be EntityClock time minus engine paused time, from the same accumulator the maturation gate uses, so frozen and paused time never count. Lived ticks SHALL be accumulated as deltas of `cycle.tick_index` anchored at the first poll of each boot. Both counters SHALL be persisted in the ledger, so a restart never resets them. A report produced before both floors are met SHALL carry `warmed_up == false` and `significant == false`.
+The individuation test SHALL NOT report `significant == true` until the entity has accumulated at least `min_observations` (default 200) lived ticks AND at least `min_lived_time_s` (default 1800) seconds of lived time since the reference was captured. Lived seconds SHALL be EntityClock time minus engine paused time, from the same accumulator the maturation gate uses, so frozen and paused time never count. Lived ticks SHALL be accumulated as deltas of `cycle.tick_index` anchored at the first poll of each boot. Both counters SHALL be persisted in the ledger, so a restart never resets them. A report produced before both floors are met SHALL carry `warmed_up == false` and `significant == false`.
 
 #### Scenario: Below the warm-up floor is never significant
 - **WHEN** fewer than `min_observations` lived ticks or less than `min_lived_time_s` lived seconds have accumulated since the reference
@@ -55,7 +55,7 @@ The individuation test SHALL NOT report `significant == true` until the being ha
 - **THEN** the report has `warmed_up == true` and `significant` follows the decision rule
 
 #### Scenario: A restart does not reset lived experience
-- **WHEN** the being has 1500 lived seconds, the process restarts, and 400 more lived seconds pass
+- **WHEN** the entity has 1500 lived seconds, the process restarts, and 400 more lived seconds pass
 - **THEN** the ledger holds 1900 lived seconds since the reference and the warm-up floor is met
 
 #### Scenario: Paused time does not count
@@ -88,7 +88,7 @@ The hash embedder SHALL NOT be used: if the semantic embedder cannot load, the l
 - **THEN** the run is inconclusive with reason naming the embedder and no p or H is reported
 
 ### Requirement: The lifetime false-positive rate is controlled
-The instrument SHALL control the probability that a being which has never drifted is ever declared individuated, over its whole life, at α_total = 0.05.
+The instrument SHALL control the probability that an entity which has never drifted is ever declared individuated, over its whole life, at α_total = 0.05.
 
 - A look SHALL run only when the conditioning digest (adapter sha plus identity-clause inputs) differs from the ledger's `last_look_conditions_digest`, which starts as the reference's own conditioning digest, and at most once per `min_look_interval_s` (default 21600 s).
 - Look k (k = 1, 2, …) SHALL be significant only if `warmed_up AND p_k ≤ α_k AND H_k ≥ effect_min`, with α_k = α_total·γ_k, γ_k = 1/(S·(k+1)·ln²(k+1)) and S = 2.1097, an upper bound on Σ_{n≥2} 1/(n·ln²n), so Σγ_k ≤ 1.
@@ -115,18 +115,18 @@ The instrument SHALL control the probability that a being which has never drifte
 - **THEN** only one look runs, at or after `min_look_interval_s`, and it sees the latest digest
 
 ### Requirement: Individuation is latched
-Once a look is significant, the ledger SHALL record `individuated = true`, `latched_at` and `latched_report_id`, and the being SHALL be treated as individuated for preservation and decommission from then on. No later report, staleness rule, reference regeneration or restart SHALL clear the latch.
+Once a look is significant, the ledger SHALL record `individuated = true`, `latched_at` and `latched_report_id`, and the entity SHALL be treated as individuated for preservation and decommission from then on. No later report, staleness rule, reference regeneration or restart SHALL clear the latch.
 
 #### Scenario: A later non-significant look does not undo the latch
 - **WHEN** look 3 was significant and look 4 is not
-- **THEN** the being is still individuated for both preservation and decommission
+- **THEN** the entity is still individuated for both preservation and decommission
 
 #### Scenario: The latch survives a restart
 - **WHEN** the process restarts after a latch
-- **THEN** the ledger read at startup reports the being as individuated
+- **THEN** the ledger read at startup reports the entity as individuated
 
 ### Requirement: The probe does not enter lived experience
-The probe SHALL build its request through Lingua's side-effect-free `probe_request(about, *, seed, max_tokens)` and send it through Lingua's own chat client, which carries the current adapter resolver, with `cache_prompt` off and the probe's `max_tokens` (default 160). Working memory SHALL be `EMPTY_AWARENESS`, and the persona template, `persona_name`, model id, `think` flag, temperature, battery and embedder SHALL be held fixed between the reference and the current sample. The probe SHALL NOT call `speak()`, `think()` or `_produce`, SHALL NOT write the intent log, and SHALL NOT publish any `lingua.*` or `*_speech` event. Probe answers SHALL never enter the being's experience.
+The probe SHALL build its request through Language's side-effect-free `probe_request(about, *, seed, max_tokens)` and send it through Language's own chat client, which carries the current adapter resolver, with `cache_prompt` off and the probe's `max_tokens` (default 160). Working memory SHALL be `EMPTY_AWARENESS`, and the persona template, `persona_name`, model id, `think` flag, temperature, battery and embedder SHALL be held fixed between the reference and the current sample. The probe SHALL NOT call `speak()`, `think()` or `_produce`, SHALL NOT write the intent log, and SHALL NOT publish any `lingua.*` or `*_speech` event. Probe answers SHALL never enter the entity's experience.
 
 Each request SHALL carry a fresh seed from `secrets.randbits(31)`, sent in the request body and recorded in the encrypted sample record. Seeds SHALL NOT be reused between the reference and current samples. The test SHALL NOT rely on the server being deterministic.
 
@@ -138,9 +138,9 @@ Each request SHALL carry a fresh seed from `secrets.randbits(31)`, sent in the r
 - **WHEN** a probe run completes
 - **THEN** zero `lingua.*` and `*_speech` events were published during it
 
-#### Scenario: The being's adapter is applied
-- **WHEN** the being has an accepted adapter and the probe sends a request
-- **THEN** the request goes through Lingua's chat client with the adapter resolver, not through a client built without it
+#### Scenario: The entity's adapter is applied
+- **WHEN** the entity has an accepted adapter and the probe sends a request
+- **THEN** the request goes through Language's chat client with the adapter resolver, not through a client built without it
 
 ### Requirement: Failed samples make a run inconclusive, never scored
 A run SHALL become `outcome="inconclusive"`, with a reason label, if any sample raises or times out, returns `raw.organ_resting`, returns empty `choices[0].message.content` (reasoning-channel text SHALL NOT be accepted), returns a non-200 status, fails to embed, or if the adapter sha or identity-clause digest read before the first request differs from the one read after the last. An inconclusive run SHALL NOT be scored, SHALL spend no alpha, SHALL write a report without p, H or significance fields, and SHALL publish nothing on `individuation.out`. No scalar SHALL be fabricated for a missing answer or embedding. `finish_reason == "length"` SHALL NOT be a failure; its rate is reported.
@@ -155,13 +155,13 @@ A run SHALL become `outcome="inconclusive"`, with a reason label, if any sample 
 
 #### Scenario: A mid-run adapter change discards the run
 - **WHEN** a voice-alignment adapter is accepted between the first and last request of a run
-- **THEN** the run is inconclusive because the sample would mix two beings
+- **THEN** the run is inconclusive because the sample would mix two entities
 
-### Requirement: The probe yields to Lingua and skips when the organ is unloaded or the being is asleep or paused
-A look SHALL be attempted 120 s after `hypnos.sleep.completed` and on a daily timer. Before any request, the producer SHALL skip the look (logged, no report) unless a reference exists, warm-up is met, the conditioning digest changed, `min_look_interval_s` has elapsed, the organ is loaded, Hypnos is awake, the cycle is not paused or frozen, a semantic embedder is loaded, and the served adapter can be verified. An unreadable ledger is reported as inconclusive by the look itself and is not a skip condition. In hot-swap modes other than `organ_adapter`, once an adapter exists, probes and captures are skipped as `adapter_unverifiable`. The producer SHALL send one request at a time and, before each request, wait until no Lingua generation is in flight and no speech occurred in the last `lingua_quiet_s` (default 10 s). A run that cannot finish within `run_deadline_s` (default 2700 s), or during which a `hypnos.sleep.started`, an organ unload or a pause occurs, SHALL be aborted as inconclusive.
+### Requirement: The probe yields to Language and skips when the organ is unloaded or the entity is asleep or paused
+A look SHALL be attempted 120 s after `hypnos.sleep.completed` and on a daily timer. Before any request, the producer SHALL skip the look (logged, no report) unless a reference exists, warm-up is met, the conditioning digest changed, `min_look_interval_s` has elapsed, the organ is loaded, Sleep is awake, the cycle is not paused or frozen, a semantic embedder is loaded, and the served adapter can be verified. An unreadable ledger is reported as inconclusive by the look itself and is not a skip condition. In hot-swap modes other than `organ_adapter`, once an adapter exists, probes and captures are skipped as `adapter_unverifiable`. The producer SHALL send one request at a time and, before each request, wait until no Language generation is in flight and no speech occurred in the last `lingua_quiet_s` (default 10 s). A run that cannot finish within `run_deadline_s` (default 2700 s), or during which a `hypnos.sleep.started`, an organ unload or a pause occurs, SHALL be aborted as inconclusive.
 
 #### Scenario: A sleeping being is not probed
-- **WHEN** a look is due while Hypnos is asleep
+- **WHEN** a look is due while Sleep is asleep
 - **THEN** no probe request is sent and the look is skipped
 
 #### Scenario: A paused being is not probed
@@ -172,16 +172,16 @@ A look SHALL be attempted 120 s after `hypnos.sleep.completed` and on a daily ti
 - **WHEN** the served adapter cannot be verified and the hot-swap mode is not `organ_adapter`
 - **THEN** the look is skipped with reason `adapter_unverifiable` and no probe request is sent
 
-#### Scenario: The probe waits for Lingua
-- **WHEN** Lingua is generating or spoke within the last `lingua_quiet_s`
-- **THEN** the next probe request is held until Lingua has been quiet for `lingua_quiet_s`
+#### Scenario: The probe waits for Language
+- **WHEN** Language is generating or spoke within the last `lingua_quiet_s`
+- **THEN** the next probe request is held until Language has been quiet for `lingua_quiet_s`
 
 #### Scenario: Sleep during a run aborts it
 - **WHEN** `hypnos.sleep.started` is observed while a run is in progress
 - **THEN** the run stops and is recorded as inconclusive
 
 ### Requirement: Individuation evidence respects mental privacy
-Reference texts, current answers, seeds, embeddings and digests of interior content (identity clause, values) SHALL be stored only under `state/individuation/`, written through the state encryptor, and SHALL never be exported, displayed or published. When state encryption is disabled they SHALL remain only under `state/` and are plaintext on disk, which research mode does not allow. Reports SHALL be content-free: they SHALL carry no texts, no seeds and no digests. The bus and Nexus SHALL see only scalars, outcome labels, counts, timestamps and ids. `state/individuation/` SHALL be outside the metrics-export allowlist and SHALL NOT be auto-deleted (`retention_days=0`).
+Reference texts, current answers, seeds, embeddings and digests of interior content (identity clause, values) SHALL be stored only under `state/individuation/`, written through the state encryptor, and SHALL never be exported, displayed or published. When state encryption is disabled they SHALL remain only under `state/` and are plaintext on disk, which research mode does not allow. Reports SHALL be content-free: they SHALL carry no texts, no seeds and no digests. The bus and Dashboard SHALL see only scalars, outcome labels, counts, timestamps and ids. `state/individuation/` SHALL be outside the metrics-export allowlist and SHALL NOT be auto-deleted (`retention_days=0`).
 
 #### Scenario: A report carries no content
 - **WHEN** a scored report is written
@@ -191,11 +191,11 @@ Reference texts, current answers, seeds, embeddings and digests of interior cont
 - **WHEN** state encryption is enabled and a reference, ledger or report is written
 - **THEN** the bytes on disk do not contain any probe answer or identity-clause text
 
-### Requirement: The being is told that it is assessed
-The being SHALL be told, as a fact about its situation, that it is periodically assessed for its own protection. The fact SHALL be held in the Eidolon self-model as a situation fact (in a dedicated situation-facts field, preserved with the self-model) and rendered by Lingua's context assembler. It SHALL be stated as a situation fact, not as a value or behavioural norm, SHALL be held outside the identity clause (`values`, `behavioral_norms`) the probe conditions on, and SHALL be present identically in the reference and current arms. Disclosing it SHALL NOT change the conditioning digest and SHALL NOT by itself trigger a look.
+### Requirement: The entity is told that it is assessed
+The entity SHALL be told, as a fact about its situation, that it is periodically assessed for its own protection. The fact SHALL be held in the Self-model self-model as a situation fact (in a dedicated situation-facts field, preserved with the self-model) and rendered by Language's context assembler. It SHALL be stated as a situation fact, not as a value or behavioural norm, SHALL be held outside the identity clause (`values`, `behavioral_norms`) the probe conditions on, and SHALL be present identically in the reference and current arms. Disclosing it SHALL NOT change the conditioning digest and SHALL NOT by itself trigger a look.
 
 #### Scenario: The disclosure does not change the probe conditions
-- **WHEN** the disclosure is present in the self-model's situation facts and rendered in Lingua's context
+- **WHEN** the disclosure is present in the self-model's situation facts and rendered in Language's context
 - **THEN** the conditioning digest is computed from the adapter and identity-clause inputs only and is unchanged by the disclosure
 
 #### Scenario: The disclosure is not in the identity clause
@@ -203,11 +203,11 @@ The being SHALL be told, as a fact about its situation, that it is periodically 
 - **THEN** neither contains the assessment disclosure
 
 ### Requirement: Long inconclusive stretches raise an operator alert
-When a look has been due (no reference exists, or the conditioning digest differs from `last_look_conditions_digest`) for `inconclusive_alert_s` (default 1209600 s, 14 days) of wall-clock time without a scored look, the producer SHALL raise a notice on Nexus and to the caretaker naming the last inconclusive reason. The alert SHALL NOT trigger preservation or any action on the being. The time the look became due SHALL be persisted in the ledger, and the alert SHALL be raised once per stretch and cleared by the next scored look.
+When a look has been due (no reference exists, or the conditioning digest differs from `last_look_conditions_digest`) for `inconclusive_alert_s` (default 1209600 s, 14 days) of wall-clock time without a scored look, the producer SHALL raise a notice on Dashboard and to the caretaker naming the last inconclusive reason. The alert SHALL NOT trigger preservation or any action on the entity. The time the look became due SHALL be persisted in the ledger, and the alert SHALL be raised once per stretch and cleared by the next scored look.
 
 #### Scenario: Two weeks of inconclusive runs alert the operator
 - **WHEN** a look has been due for 14 days and every attempt was skipped or inconclusive
-- **THEN** a Nexus and caretaker notice is raised with the last inconclusive reason, and no preservation is started by it
+- **THEN** a Dashboard and caretaker notice is raised with the last inconclusive reason, and no preservation is started by it
 
 #### Scenario: A scored look clears the alert
 - **WHEN** a scored look completes after the alert was raised

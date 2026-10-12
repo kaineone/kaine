@@ -152,7 +152,7 @@ async def check_services(
     kaine_toml: str | os.PathLike[str] | None = None,
     secrets_toml: str | os.PathLike[str] | None = None,
 ) -> list[CheckResult]:
-    """Probe every configured dependency via the shared Nexus health prober.
+    """Probe every configured dependency via the shared Dashboard health prober.
 
     Reuses :func:`kaine.nexus.health.load_health_prober` (which already
     deep-merges the operator config and resolves Redis/Qdrant secrets) and
@@ -167,7 +167,7 @@ async def check_services(
     )
 
     # Sherpa loads run in a child process with a bounded timeout. Pre-boot must
-    # wait longer than that load before declaring it degraded, and the Nexus
+    # wait longer than that load before declaring it degraded, and the Dashboard
     # prober's outer timeout must be longer still so the child result can be
     # returned. Network probes keep their own short timeouts, so raising the
     # outer timeout here does not make them hang.
@@ -242,7 +242,7 @@ async def check_organ(config: dict[str, Any]) -> list[CheckResult]:
     """Confirm the configured organ actually GENERATES content.
 
     Mirrors the exact gate the cycle boot runs (kaine.cycle.__main__): skip
-    when lingua is disabled, skip (not fail) while the organ is deliberately
+    when language is disabled, skip (not fail) while the organ is deliberately
     unloaded for a voice-alignment training window, else send one real
     completion through ``verify_organ_generates`` and require non-empty text.
     """
@@ -291,7 +291,7 @@ async def check_perception(config: dict[str, Any]) -> list[CheckResult]:
     """Confirm the configured deterministic perception feed actually delivers.
 
     Checks at the SOURCE level (the exact factories ``kaine.boot`` wires into
-    Topos/Audition), so this stays robust to internal fixes elsewhere in the
+    Vision/Audition), so this stays robust to internal fixes elsewhere in the
     perception pipeline: it proves the source itself yields a frame / a PCM
     block, independent of what the live module does with it afterward.
 
@@ -300,7 +300,7 @@ async def check_perception(config: dict[str, Any]) -> list[CheckResult]:
     "live" (real camera/microphone) is also SKIPPED: ``kaine.boot`` does not
     build a source_factory for it (the real cv2/sounddevice path is used
     directly), so there is no offline source to probe; hardware capture must
-    be verified by bringing Topos/Audition up.
+    be verified by bringing Vision/Audition up.
     """
     feed = dict(config.get("perception_feed") or {})
     mode = str(feed.get("mode", "off")).lower()
@@ -1323,7 +1323,7 @@ async def run_async_checks(config: dict[str, Any]) -> list[CheckResult]:
     to one honest FAIL row instead of losing the whole report.
 
     The state-encryption key is resolved into the environment FIRST, before
-    SERVICES runs — the SERVICES group includes the Nexus health board's own
+    SERVICES runs — the SERVICES group includes the Dashboard health board's own
     ``State encryption`` probe (``kaine.nexus.health.probe_state_encryption``),
     which reads ``$KAINE_STATE_KEY`` directly. Resolving the key here (once)
     keeps that probe and the WELFARE NET check below consistent instead of

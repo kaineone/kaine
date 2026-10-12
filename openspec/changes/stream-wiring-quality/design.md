@@ -1,11 +1,11 @@
 ## Context
 
-See `proposal.md` for motivation. Lingua already defines `EXTERNAL_STREAM` and `INTERNAL_STREAM` but bypasses `self.publish`, so the registry-derived `lingua.out` is never written. Stream literals are scattered across modules, Nexus, evaluation, and config. The import-linter contract list in `pyproject.toml` omits newer top-level modules. Ruff is not configured or run anywhere.
+See `proposal.md` for motivation. Language already defines `EXTERNAL_STREAM` and `INTERNAL_STREAM` but bypasses `self.publish`, so the registry-derived `lingua.out` is never written. Stream literals are scattered across modules, Dashboard, evaluation, and config. The import-linter contract list in `pyproject.toml` omits newer top-level modules. Ruff is not configured or run anywhere.
 
 ## Goals / Non-Goals
 
 **Goals:**
-- Make Lingua's events visible to the cycle engine through a consistent stream contract.
+- Make Language's events visible to the cycle engine through a consistent stream contract.
 - Eliminate hard-coded stream literals outside the canonical source.
 - Complete the sidecar-boundary source list.
 - Turn on ruff in pre-commit and CI and clear existing errors.
@@ -19,8 +19,8 @@ See `proposal.md` for motivation. Lingua already defines `EXTERNAL_STREAM` and `
 ## Decisions
 
 **Decision 1: Add an aggregate `lingua.out` stream.**
-Lingua will continue to publish to `lingua.external` and `lingua.internal` for their specific consumers, and will also call `self.publish` with a lightweight aggregate event on `lingua.out` containing mode, text, and metadata. This preserves the existing `<module>.out` convention that the engine and other consumers expect, without breaking the separate-channel design.
-- *Alternative:* Update the engine/registry to read `lingua.external`/`lingua.internal`. Rejected because it spreads Lingua-specific knowledge into the generic registry and breaks the `<module>.out` abstraction for every other module.
+Language will continue to publish to `lingua.external` and `lingua.internal` for their specific consumers, and will also call `self.publish` with a lightweight aggregate event on `lingua.out` containing mode, text, and metadata. This preserves the existing `<module>.out` convention that the engine and other consumers expect, without breaking the separate-channel design.
+- *Alternative:* Update the engine/registry to read `lingua.external`/`lingua.internal`. Rejected because it spreads Language-specific knowledge into the generic registry and breaks the `<module>.out` abstraction for every other module.
 
 **Decision 2: Export canonical stream constants from `kaine.bus.schema`.**
 Add a small registry of known module streams (or make `module_stream()` the single helper) and update consumers to import from there. Config validation will warn on unknown `[bus.per_stream_maxlen]` keys.

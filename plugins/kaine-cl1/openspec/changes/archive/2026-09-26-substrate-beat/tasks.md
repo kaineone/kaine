@@ -8,7 +8,7 @@
 ## 2. Plugin and backends
 
 - [x] 2.1 `Cl1Plugin.on_cycle_tick(tick)`; relax the accelerated-time requirement when real-time beat mode is available.
-- [x] 2.2 Chronos, Soma and oscillator backends: queue for next, read latest (beat mode); per-step behaviour unchanged in standalone mode.
+- [x] 2.2 Sequence, Interoception and oscillator backends: queue for next, read latest (beat mode); per-step behaviour unchanged in standalone mode.
 
 ## 3. Tests
 

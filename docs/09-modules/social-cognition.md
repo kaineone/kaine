@@ -1,26 +1,26 @@
-# Empatheia
+# Social cognition
 
-Empatheia is KAINE's social-cognition module. It builds a model of each agent the entity hears from that agent's tone of voice, tracks how familiar the agent is, and reports a social prediction error when an agent's expressed emotion departs from its usual pattern. The construct is theory of mind, the attribution of mental states to others (Premack and Woodruff 1978), and the brain function it draws on is mentalizing (Frith and Frith 2006). This page is for operators who enable the module, tune its thresholds, or connect it to Thymos's affect coupling.
+Social cognition is KAINE's social-cognition module. It builds a model of each agent the entity hears from that agent's tone of voice, tracks how familiar the agent is, and reports a social prediction error when an agent's expressed emotion departs from its usual pattern. The construct is theory of mind, the attribution of mental states to others (Premack and Woodruff 1978), and the brain function it draws on is mentalizing (Frith and Frith 2006). This page is for operators who enable the module, tune its thresholds, or connect it to Affect's affect coupling.
 
 ## Status
 
-Empatheia is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].empatheia = false`) and in the base-thesis `thesis_test` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it fifth in its default order of six: Mnemos, Phantasia, Nous, Eidolon, Empatheia, Vox. The study overlay gives each line of the study its own agent collection (`[empatheia].collection`).
+Social cognition is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].empatheia = false`) and in the base-thesis `thesis_test` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it fifth in its default order of six: Episodic memory, World model, Planning, Self-model, Social cognition, Vocal. The study overlay gives each line of the study its own agent collection (`[empatheia].collection`).
 
 - It reads Audition's `audition.emotion` events (the tone of voice) and, when speech-to-text is on, `audition.transcription`. In the base-thesis form speech-to-text is off, so tone events are its only input.
-- The production backend is Qdrant, on the same instance as Mnemos, in the collection `empatheia_agents`.
+- The production backend is Qdrant, on the same instance as Episodic memory, in the collection `empatheia_agents`.
 - The in-memory backend (`backend = "inmemory"`) needs no external service and is used in tests.
 - Agent identity is coarse. Every operator-facing channel maps to one agent, named by `speaker_label`, and every other channel gets its own `media:<channel>` agent. There is no speaker diarization.
 
 ## What it does
 
-Empatheia keeps a probabilistic model of each agent and publishes two kinds of event.
+Social cognition keeps a probabilistic model of each agent and publishes two kinds of event.
 
-1. `empatheia.agent_model` reports numeric facts about one agent (familiarity, reliability, interaction count) after every update. Thymos reads the familiarity when `[thymos.coupling].enabled = true`.
+1. `empatheia.agent_model` reports numeric facts about one agent (familiarity, reliability, interaction count) after every update. Affect reads the familiarity when `[thymos.coupling].enabled = true`.
 2. `empatheia.social_error` is published when an observed emotion deviates from the agent's model by more than `deviation_threshold`. It enters the workspace competition as a candidate whose intensity grows with the deviation, and it carries no behavioural data and no transcript text.
 
-Empatheia stores emotion histograms and numeric summaries only. `_handle_transcription()` ignores the `text` field: it folds in a neutral observation with zero confidence, which moves the histogram toward neutral by the update rate (0.2) and counts one interaction.
+Social cognition stores emotion histograms and numeric summaries only. `_handle_transcription()` ignores the `text` field: it folds in a neutral observation with zero confidence, which moves the histogram toward neutral by the update rate (0.2) and counts one interaction.
 
-`on_workspace()` does nothing. Empatheia works from Audition's events and does not read the broadcast.
+`on_workspace()` does nothing. Social cognition works from Audition's events and does not read the broadcast.
 
 ## Inputs
 
@@ -49,9 +49,9 @@ All keys are under `[empatheia]` and `[empatheia.qdrant]`. The full reference is
 | `backend` | string | `"qdrant"` | `"qdrant"` or `"inmemory"` (the constructor default is `"inmemory"`; the shipped file sets `"qdrant"`) |
 | `collection` | string | `"empatheia_agents"` | Qdrant collection for agent profiles |
 | `speaker_label` | string | `"operator"` | Agent id for the operator-facing channels |
-| `operator_sources` | list of strings | `["live_mic", "microphone", "remote"]` | Channels attributed to the operator agent; any other channel becomes `media:<channel>`. Volition also uses this key to decide which Audition sources are user utterances. Chronos uses a fixed constant and ignores the key. |
+| `operator_sources` | list of strings | `["live_mic", "microphone", "remote"]` | Channels attributed to the operator agent; any other channel becomes `media:<channel>`. Action selection also uses this key to decide which Audition sources are user utterances. Sequence uses a fixed constant and ignores the key. |
 | `deviation_threshold` | float | `0.5` | Deviation above which `empatheia.social_error` is published; must lie in (0, 1] |
-| `baseline_salience` | float | `0.15` | Lowest intensity of Empatheia's events |
+| `baseline_salience` | float | `0.15` | Lowest intensity of Social cognition's events |
 | `alert_salience` | float | `0.6` | Intensity at full familiarity or full deviation |
 | `[empatheia.qdrant].host` | string | `"127.0.0.1"` | Qdrant host |
 | `[empatheia.qdrant].port` | int | `6533` | Qdrant port |
@@ -131,7 +131,7 @@ An event with no `source_label` is attributed to the operator agent.
 
 `InMemoryAgentStore` keeps a `dict[str, AgentModel]` in the process and serializes it losslessly to JSON.
 
-`QdrantAgentStore` uses the Qdrant instance that Mnemos uses. It stores each profile's JSON in the point payload under `"profile_json"`, keyed by agent id, alongside an embedding of the behavioural summary from the shared `[embedding]` text embedder, kept for later similarity search. A local cache serves `get()` without a round trip, and `serialize()` snapshots that cache.
+`QdrantAgentStore` uses the Qdrant instance that Episodic memory uses. It stores each profile's JSON in the point payload under `"profile_json"`, keyed by agent id, alongside an embedding of the behavioural summary from the shared `[embedding]` text embedder, kept for later similarity search. A local cache serves `get()` without a round trip, and `serialize()` snapshots that cache.
 
 ### Fork and merge
 
@@ -143,17 +143,17 @@ An event with no `source_label` is attributed to the operator agent.
 
 The merged profiles travel in the merged snapshot. Restoring it loads them into the store's cache, which `get()` and `all_profiles()` read first, and each profile reaches Qdrant on its next update. See [Forks and merges](../12-forks-and-merges.md#empatheiamergestrategy). For preservation, `export_preservation_state()` captures every profile and `import_preservation_state()` re-embeds and restores them.
 
-### Thymos coupling
+### Affect coupling
 
-When `[thymos.coupling].enabled = true` (it ships `false`), Thymos caches the `familiarity` of each `empatheia.agent_model` and folds a perceived speaker emotion into its own appraisal with the weight
+When `[thymos.coupling].enabled = true` (it ships `false`), Affect caches the `familiarity` of each `empatheia.agent_model` and folds a perceived speaker emotion into its own appraisal with the weight
 
 ```
 weight = min(coupling_ceiling, coupling_base + familiarity × coupling_familiarity_gain)
 ```
 
-with `coupling_base = 0.05`, `coupling_familiarity_gain = 0.10` and `coupling_ceiling = 0.15` by default. The perceived emotion enters the appraisal and is never written to the entity's valence, arousal or dominance directly. See [Thymos](thymos.md).
+with `coupling_base = 0.05`, `coupling_familiarity_gain = 0.10` and `coupling_ceiling = 0.15` by default. The perceived emotion enters the appraisal and is never written to the entity's valence, arousal or dominance directly. See [Affect](affect.md).
 
-Each `empatheia.agent_model` carries the `source_label` of the audio event that updated the model. Thymos caches the familiarity under that label as well as under `agent_id` (`operator` or `media:<channel>`), and looks it up by the perceived emotion's `source_label`, so a familiar channel raises the weight.
+Each `empatheia.agent_model` carries the `source_label` of the audio event that updated the model. Affect caches the familiarity under that label as well as under `agent_id` (`operator` or `media:<channel>`), and looks it up by the perceived emotion's `source_label`, so a familiar channel raises the weight.
 
 ## Key files
 
@@ -167,9 +167,9 @@ Each `empatheia.agent_model` carries the `source_label` of the audio event that 
 
 ## Enabling
 
-1. Start the Qdrant container that Mnemos uses, or set `backend = "inmemory"`.
+1. Start the Qdrant container that Episodic memory uses, or set `backend = "inmemory"`.
 2. In the operator file `config/kaine.operator.toml`, set `[modules].empatheia = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
-3. Optionally turn on Thymos coupling with `[thymos.coupling].enabled = true`.
+3. Optionally turn on Affect coupling with `[thymos.coupling].enabled = true`.
 
 To try the agent model by hand:
 
@@ -184,7 +184,7 @@ model.update_from_emotion("happy", confidence=0.9, prediction_error=0.1)
 print(model.familiarity())  # about 0.072 after one interaction
 ```
 
-## What Empatheia keeps
+## What Social cognition keeps
 
 - `_handle_transcription()` ignores the `text` field.
 - `_handle_emotion()` reads the `category` string and two numbers.
@@ -198,10 +198,10 @@ print(model.familiarity())  # about 0.072 after one interaction
 | `tests/test_empatheia_agent.py` | Updates, deviation, familiarity growth, weighted averages |
 | `tests/test_empatheia_store.py` | `InMemoryAgentStore` operations; `QdrantAgentStore` with a mocked client |
 | `tests/test_empatheia_merge.py` | Weighted merge, count sum, edge cases |
-| `tests/test_empatheia_merge_wired.py` | `ForkManager.merge` uses the Empatheia strategy by default |
+| `tests/test_empatheia_merge_wired.py` | `ForkManager.merge` uses the Social cognition strategy by default |
 | `tests/test_empatheia_module.py` | Module tick; emotion to agent model; transcription without text; the social-error threshold |
 
 ## Spec and related
 
 - Primary spec: `openspec/specs/empatheia/spec.md`
-- Related modules: [Audition](audition.md) publishes `audition.emotion`; [Thymos](thymos.md) reads familiarity for affect coupling; [Mnemos](mnemos.md) shares the Qdrant instance.
+- Related modules: [Audition](audition.md) publishes `audition.emotion`; [Affect](affect.md) reads familiarity for affect coupling; [Episodic memory](episodic-memory.md) shares the Qdrant instance.

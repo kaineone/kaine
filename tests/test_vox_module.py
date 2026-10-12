@@ -173,7 +173,7 @@ async def test_lingua_external_event_triggers_synthesis(bus: AsyncBus, tmp_path:
     await vox.initialize()
     try:
         # Simulate a lingua.external event using bus.client.xadd directly
-        # (matches how Lingua actually publishes — it bypasses the
+        # (matches how Language actually publishes — it bypasses the
         # default <module>.out routing for the dedicated stream).
         await bus.client.xadd(
             "lingua.external",
@@ -310,7 +310,7 @@ async def test_real_chatterbox_synthesis(bus: AsyncBus, tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 def _make_vox_with_mirroring(bus: AsyncBus, tmp_path: Path, **overrides) -> Vox:
-    """Build a Vox instance with mirroring enabled."""
+    """Build a Vocal instance with mirroring enabled."""
     overrides.setdefault("player", FakePlayer())
     return Vox(
         bus,
@@ -355,7 +355,7 @@ async def test_mirroring_disabled_uses_affect_only(bus: AsyncBus, tmp_path: Path
 
 @pytest.mark.asyncio
 async def test_mirroring_enabled_caches_prosody_event(bus: AsyncBus, tmp_path: Path):
-    """When mirroring is enabled, Vox caches the audition.prosody payload."""
+    """When mirroring is enabled, Vocal caches the audition.prosody payload."""
     vox = _make_vox_with_mirroring(bus, tmp_path)
     await vox.initialize()
     try:

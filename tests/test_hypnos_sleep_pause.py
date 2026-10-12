@@ -26,7 +26,7 @@ class _FakeClock:
 
 
 def _bare_hypnos(desired_path, clock=None):
-    """Build a Hypnos instance without the full constructor: only the
+    """Build a Sleep instance without the full constructor: only the
     suspend/restore seam's attributes are under test here."""
     from kaine.modules.hypnos.module import Hypnos
 

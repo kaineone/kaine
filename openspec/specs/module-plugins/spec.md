@@ -31,7 +31,7 @@ A plugin SHALL declare its seams when it is loaded, and SHALL be able to fill on
 - **THEN** boot raises `PluginError` naming the plugin and the seam before any module is constructed
 
 #### Scenario: Returned seam was not declared
-- **WHEN** a plugin declared only `chronos.network` and its `injections` for Soma returns `{"forward_model": model}`
+- **WHEN** a plugin declared only `chronos.network` and its `injections` for Interoception returns `{"forward_model": model}`
 - **THEN** boot raises `PluginError` naming the plugin, the module and the key
 
 #### Scenario: Two plugins claim one seam
@@ -43,15 +43,15 @@ A plugin SHALL declare its seams when it is loaded, and SHALL be able to fill on
 - **THEN** boot raises `PluginError` naming the plugin and the seam
 
 #### Scenario: Declared seam is honoured
-- **WHEN** an enabled plugin returns `{"network": model}` for Chronos and Chronos is enabled
-- **THEN** the constructed Chronos uses `model` as its network and builds no default CfC network
+- **WHEN** an enabled plugin returns `{"network": model}` for Sequence and Sequence is enabled
+- **THEN** the constructed Sequence uses `model` as its network and builds no default CfC network
 
 ### Requirement: Substitutions survive a module restart
-When Spot rebuilds a module on its heavy-restart path, the rebuilt module SHALL receive plugin injections the same way `build_registry` supplies them.
+When Supervisor rebuilds a module on its heavy-restart path, the rebuilt module SHALL receive plugin injections the same way `build_registry` supplies them.
 
-#### Scenario: Chronos restarted under a plugin
-- **WHEN** Chronos was built with a plugin-supplied network and Spot rebuilds it
-- **THEN** the rebuilt Chronos uses a network supplied by the same plugin, not the default CfC network
+#### Scenario: Sequence restarted under a plugin
+- **WHEN** Sequence was built with a plugin-supplied network and Supervisor rebuilds it
+- **THEN** the rebuilt Sequence uses a network supplied by the same plugin, not the default CfC network
 
 ### Requirement: Substitutions are recorded
 Boot SHALL log each filled seam at WARNING level, and the run manifest SHALL record, for each enabled plugin, its name, the distribution name and version from package metadata, and its declared seams. The manifest entry SHALL be complete when the manifest is written, which happens before modules are constructed.
@@ -67,12 +67,12 @@ Each plugin SHALL receive only its own `[plugins.<name>]` table. Configuration s
 - **WHEN** `[plugins].enabled = "cl"`
 - **THEN** configuration validation raises `ConfigShapeError` naming `plugins.enabled`
 
-### Requirement: Nous' engine can be wrapped
-A plugin SHALL be able to declare `nous.engine_wrapper` and supply a callable. When Nous is constructed with a wrapper, KAINE SHALL build the default engine from `[nous]` as it does without plugins, call the wrapper with that engine, and use the returned engine. The returned object SHALL satisfy `ActiveInferenceEngine`; otherwise construction SHALL fail with an error naming the plugin.
+### Requirement: Planning's engine can be wrapped
+A plugin SHALL be able to declare `nous.engine_wrapper` and supply a callable. When Planning is constructed with a wrapper, KAINE SHALL build the default engine from `[nous]` as it does without plugins, call the wrapper with that engine, and use the returned engine. The returned object SHALL satisfy `ActiveInferenceEngine`; otherwise construction SHALL fail with an error naming the plugin.
 
 #### Scenario: Wrapper receives the default engine
-- **WHEN** a plugin supplies a wrapper for Nous and `[nous]` sets `planning_horizon = 2`
-- **THEN** the wrapper is called with a `PymdpEngine` built with that horizon, and Nous uses the wrapper's return value
+- **WHEN** a plugin supplies a wrapper for Planning and `[nous]` sets `planning_horizon = 2`
+- **THEN** the wrapper is called with a `PymdpEngine` built with that horizon, and Planning uses the wrapper's return value
 
 #### Scenario: Wrapper returns something that is not an engine
 - **WHEN** the wrapper returns an object without `step`

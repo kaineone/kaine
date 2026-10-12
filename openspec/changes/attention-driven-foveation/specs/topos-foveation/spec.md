@@ -4,7 +4,7 @@
 
 ### Requirement: Coarse spatial saliency map
 
-Topos SHALL compute a coarse spatial saliency map over the current frame by tiling
+Vision SHALL compute a coarse spatial saliency map over the current frame by tiling
 the frame into a fixed grid and scoring each tile by its change (feature distance to
 the previous frame) and its localized forward-model prediction error. The map SHALL
 be held in process memory only and SHALL NOT be written to disk.
@@ -22,9 +22,9 @@ be held in process memory only and SHALL NOT be written to disk.
 
 ### Requirement: Precision-weighted fovea-target selection
 
-Topos SHALL select a fovea target from the saliency map as the precision-weighted
+Vision SHALL select a fovea target from the saliency map as the precision-weighted
 combination of the bottom-up saliency and an optional top-down bias region, and
-SHALL derive the fovea size from Thymos arousal. With no top-down bias present the
+SHALL derive the fovea size from Affect arousal. With no top-down bias present the
 target SHALL be the bottom-up saliency argmax. Target updates SHALL be damped by a
 dwell/hysteresis rule so the fovea does not oscillate between comparable regions.
 
@@ -42,9 +42,9 @@ dwell/hysteresis rule so the fovea does not oscillate between comparable regions
 
 #### Scenario: Arousal sets fovea size
 
-- **WHEN** Thymos arousal differs between two ticks
+- **WHEN** Affect arousal differs between two ticks
 - **THEN** the selected fovea size changes monotonically with arousal (this is a
-  distinct visual coupling, not the Syneidesis salience-selection window; the default
+  distinct visual coupling, not the Workspace salience-selection window; the default
   mapping follows the arousal-narrowing effect — higher arousal, tighter fovea — and
   the sign is a tuning parameter)
 
@@ -56,7 +56,7 @@ dwell/hysteresis rule so the fovea does not oscillate between comparable regions
 
 ### Requirement: Peripheral and foveal views from one in-memory grab
 
-When foveation is enabled, Topos SHALL derive both a downsampled peripheral view of
+When foveation is enabled, Vision SHALL derive both a downsampled peripheral view of
 the whole frame and a foveal crop around the fovea target from a single
 in-memory screen grab, and SHALL release each grabbed frame as it ages out. No
 grabbed frame, peripheral view, or foveal crop SHALL be written to disk.
@@ -73,7 +73,7 @@ grabbed frame, peripheral view, or foveal crop SHALL be written to disk.
 
 ### Requirement: Saccadic native region re-capture
 
-If a native-resolution region capture pinned to the fovea is enabled, Topos SHALL
+If a native-resolution region capture pinned to the fovea is enabled, Vision SHALL
 re-pin the capture region only when the fovea target moves beyond a configured
 hysteresis threshold and a minimum dwell has elapsed (a saccade), and SHALL NOT
 reconfigure the region capture on every tick.
@@ -92,7 +92,7 @@ reconfigure the region capture on every tick.
 
 ### Requirement: Content-free fovea publication
 
-Topos SHALL publish the fovea location and size as content-free normalized values
+Vision SHALL publish the fovea location and size as content-free normalized values
 (coordinates and size in [0, 1]) and SHALL NOT include any pixel data with them.
 Where a predicted next fovea is produced, it SHALL likewise be content-free.
 
@@ -104,10 +104,10 @@ Where a predicted next fovea is produced, it SHALL likewise be content-free.
 
 ### Requirement: Foveation is off by default with a uniform fallback
 
-Foveation SHALL be disabled by default, and when disabled Topos SHALL produce the
+Foveation SHALL be disabled by default, and when disabled Vision SHALL produce the
 existing single whole-frame latent and salience unchanged.
 
 #### Scenario: Default install is unchanged
 
 - **WHEN** the shipped configuration is used without enabling foveation
-- **THEN** Topos emits a single whole-frame latent exactly as before this change
+- **THEN** Vision emits a single whole-frame latent exactly as before this change

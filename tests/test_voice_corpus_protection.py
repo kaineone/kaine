@@ -34,7 +34,7 @@ from kaine.security.crypto import (
 
 @pytest.fixture(autouse=True)
 def _voice_alignment_opt_in(monkeypatch):
-    """Existing hypnos tests assume voice-alignment training fires.
+    """Existing sleep tests assume voice-alignment training fires.
     Two-layer safety gate (config.enabled + env var) is set by default
     so the trainer is actually called; tests that want to exercise the
     skip-on-disabled paths override this fixture explicitly."""

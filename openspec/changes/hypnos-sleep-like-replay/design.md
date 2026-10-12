@@ -8,12 +8,12 @@
 ## Application to KAINE
 
 **Candidates.**
-- The Chronos and Topos forward heads (single linear readouts).
+- The Sequence and Vision forward heads (single linear readouts).
 - The Audition acoustic and speech-path MLPs.
-- The Soma CfC readout.
-- The Phantasia RSSM, which is larger and last.
+- The Interoception CfC readout.
+- The World model RSSM, which is larger and last.
 
-**Phase.** A Hypnos phase after the existing consolidation phases, running only during sleep, with adaptation already suspended. Each learner exposes `replay_consolidate(noise_rng, budget)` through a protocol. Learners without it are skipped.
+**Phase.** A Sleep phase after the existing consolidation phases, running only during sleep, with adaptation already suspended. Each learner exposes `replay_consolidate(noise_rng, budget)` through a protocol. Learners without it are skipped.
 
 **Statistics.** Only the per-feature mean and variance that the buffer summaries already persist are used to set noise rates. No raw buffer is needed.
 

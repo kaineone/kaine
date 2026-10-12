@@ -1,14 +1,14 @@
 ## MODIFIED Requirements
 
 ### Requirement: Five-phase sleep pipeline runs in fixed order
-Hypnos SHALL expose `async enter_sleep()` that runs five phases in the order
+Sleep SHALL expose `async enter_sleep()` that runs five phases in the order
 the paper gives (§3.5): light consolidation, deep consolidation (memory replay
 then synaptic downscaling), associative replay, voice alignment, and the
 affective reset. The affective reset SHALL be the last phase, so that sleep
 ends with it, and `hypnos.sleep.completed` SHALL follow it. The affective reset
 SHALL run exactly once even when an earlier phase raises or the sleep is
 cancelled, and a second cancel SHALL NOT interrupt it. On any exception,
-including a cancel, Hypnos SHALL publish an aborted `hypnos.sleep.completed`
+including a cancel, Sleep SHALL publish an aborted `hypnos.sleep.completed`
 and re-raise the exception. Each phase SHALL
 return a `PhaseResult` carrying `phase` name, `success` bool, `elapsed_ms`, and
 `error` (None on success). A failure in any one phase SHALL be logged and SHALL
@@ -21,7 +21,7 @@ NOT prevent later phases from running.
   `voice_alignment`, `affective_reset`, in that order
 
 #### Scenario: One phase failing does not stop the others
-- **WHEN** the Mnemos consolidation phase raises during `enter_sleep()`
+- **WHEN** the Episodic memory consolidation phase raises during `enter_sleep()`
 - **THEN** all four subsequent phases still execute and the completion event
   records `success == False` for light consolidation but `success == True` for
   the others (assuming they succeeded)

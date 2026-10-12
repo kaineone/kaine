@@ -79,7 +79,7 @@ DEFAULT_TIMEOUT_S = 6 * 60 * 60
 
 class SubprocessTrainerError(RuntimeError):
     """Raised when the trainer fails to produce a valid, verifiable adapter.
-    Surfaced to Hypnos as a trainer error — never swallowed into a fake success.
+    Surfaced to Sleep as a trainer error — never swallowed into a fake success.
     """
 
 
@@ -162,7 +162,7 @@ def _write_private(path: Path, text: str) -> None:
 def scrub_job_inputs(job_dir: Path) -> None:
     """Delete a job's sensitive inputs once the trainer has finished with them.
 
-    ``pairs.jsonl`` holds the being's prompts, utterances and decrypted system
+    ``pairs.jsonl`` holds the entity's prompts, utterances and decrypted system
     prompts, and ``previous_adapter/`` is a copy of its learned voice. The
     external trainer cannot import kaine to decrypt, so they are plaintext
     while it runs; they must not outlive the run.

@@ -56,13 +56,13 @@ date._
       covering any sound (not the emotion/timing/energy feature vector). Keep the
       buffer a statistical descriptor (mean/variance), never raw audio/embeddings.
 - [x] 1.3 A workspace→Audition arousal seam (provider/callback, no workspace
-      import, like the affect / topos-arousal seams); arousal sets the auditory
+      import, like the affect / vision-arousal seams); arousal sets the auditory
       attentional window (distinct affective→perceptual coupling; sign tunable).
 - [x] 1.4 A single arousal-modulated attended window over the input; publish a
       content-free attended-stream/salience descriptor (which stream, how salient
       — never audio) on `audition.out`.
 - [x] 1.5 Speech as a specialization: a voice-activity/speech detector routes
-      detected-speech segments to the existing STT + vocal-emotion path (→ Lingua),
+      detected-speech segments to the existing STT + vocal-emotion path (→ Language),
       off the general perceptual path; the general path perceives the rest.
 - [x] 1.6 Config: a general-audition toggle under `[audition]`, off by default;
       encoder id, buffer/window sizes, arousal→window mapping, speech-gate mode.
@@ -141,7 +141,7 @@ still-unbuilt foveation Phase 3–4._
       encoder `model_id`: load on matching shapes, discard on a mismatch with a
       warning, carry other encoders' entries forward untouched.
 - [x] 5.4 A `hypnos.out` consumer suspends adaptation of both forward models during
-      sleep, as Topos does.
+      sleep, as Vision does.
 - [x] 5.5 Tests: config selection, the plugin seam (honoured, conflict, recorded),
       a persistence round-trip through `serialize`/`deserialize` in a fresh
       instance, the mismatch discard, encoder switch-and-back, sleep suspension
@@ -166,7 +166,7 @@ still-unbuilt foveation Phase 3–4._
 - [x] 6.5 An energy channel: `energy_dbfs` on `audition.perception`, available to
       salience independently of the encoder.
 - [ ] 6.6 Offline bake-off (`scripts/bench_audition_encoders.py`) on the seeded,
-      playlist and womb feeds, with the four design metrics. Record it under
+      playlist and stimulus source feeds, with the four design metrics. Record it under
       `docs/records/`. GPU runs take the host lock (duration sent to the
       integrator first).
 - [ ] 6.7 Recalibrate acoustic salience (normalisation, alert factor and floor)

@@ -1,21 +1,21 @@
-# Praxis
+# Effectors
 
-Praxis is KAINE's action module. It realizes `act` intents from Volition through effectors on the host, runs only the effectors the operator has put on its whitelist, confines file writes to a sandbox directory, and logs every proposed action. The paper claims no brain function for it. This page covers what Praxis can do, how an act intent reaches an effector, the configuration of the whitelist and the sandbox, and the audit log. Read it if you plan to attach effectors, or if you are changing action selection, the effectors or the audit code.
+Effectors is KAINE's action module. It realizes `act` intents from Action selection through effectors on the host, runs only the effectors the operator has put on its whitelist, confines file writes to a sandbox directory, and logs every proposed action. The paper claims no brain function for it. This page covers what Effectors can do, how an act intent reaches an effector, the configuration of the whitelist and the sandbox, and the audit log. Read it if you plan to attach effectors, or if you are changing action selection, the effectors or the audit code.
 
 ## Status
 
-Praxis is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].praxis = false`) and in the base-thesis `thesis_test` profile. It needs no dependency beyond the core install. The effector whitelist (`enabled_effectors`) and the shell command whitelist both ship empty, so nothing runs until the operator adds entries.
+Effectors is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].praxis = false`) and in the base-thesis `thesis_test` profile. It needs no dependency beyond the core install. The effector whitelist (`enabled_effectors`) and the shell command whitelist both ship empty, so nothing runs until the operator adds entries.
 
-Praxis is not in the default order of the [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code). The reference host attaches no effector, and with nothing to act on Praxis would be an expected null, so it joins the study only once an effector is attached, through an explicit `--order`.
+Effectors is not in the default order of the [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code). The reference host attaches no effector, and with nothing to act on Effectors would be an expected null, so it joins the study only once an effector is attached, through an explicit `--order`.
 
-In the base-thesis form Volition derives only speak and think intents, and no shipped action-selection policy emits `act` (Nous proposes only think, speak and rest). Praxis therefore runs only when an operator-supplied policy or code emits `act` intents.
+In the base-thesis form Action selection derives only speak and think intents, and no shipped action-selection policy emits `act` (Planning proposes only think, speak and rest). Effectors therefore runs only when an operator-supplied policy or code emits `act` intents.
 
 ## What it does
 
-Praxis acts only on `act` intents from `volition.out`; it never acts on the broadcast itself. Volition forms intents only from accessed broadcasts, so an inhibited broadcast leads to no action. Two checks stand between an intent and an effector:
+Effectors acts only on `act` intents from `volition.out`; it never acts on the broadcast itself. Action selection forms intents only from accessed broadcasts, so an inhibited broadcast leads to no action. Two checks stand between an intent and an effector:
 
 1. the operator's effector whitelist (`enabled_effectors`) and each effector's own rules (the file sandbox, the shell command whitelist);
-2. a provenance check: Volition signs each `act` intent with a per-boot HMAC secret held in the cycle process, and Praxis verifies the signature before anything else. An unsigned, forged or replayed intent is dropped and logged as `provenance_rejected`.
+2. a provenance check: Action selection signs each `act` intent with a per-boot HMAC secret held in the cycle process, and Effectors verifies the signature before anything else. An unsigned, forged or replayed intent is dropped and logged as `provenance_rejected`.
 
 ## Inputs
 
@@ -61,7 +61,7 @@ An entry pins the exact command name, one regular expression per argument positi
 
 ### Intent loop
 
-At `initialize()`, Praxis moves its cursor to the newest `volition.out` entry, so it realizes only intents formed after boot, and starts `_intent_loop()`. For each `act` intent it:
+At `initialize()`, Effectors moves its cursor to the newest `volition.out` entry, so it realizes only intents formed after boot, and starts `_intent_loop()`. For each `act` intent it:
 
 1. verifies the provenance signature and the replay guard, and drops the intent as `provenance_rejected` if either fails, before any effector code runs;
 2. looks the effector up in `_REQUEST_TYPES`, which maps a name to its request type. An unknown name is dropped with a log warning only, with no audit record and no `praxis.action`;
@@ -89,9 +89,9 @@ Patterns are best kept to literal sets of letters, digits, hyphens, dots and und
 
 ### Provenance check
 
-The cycle process generates a per-boot HMAC secret and holds it in memory only; it is never published, written to disk or logged. Volition attaches `sig = HMAC-SHA256(secret, canonical(kind, effector, params, run_id, seq))` to each `act` intent, and `Praxis._handle_intent` verifies it in constant time before it reads the effector name or builds a request.
+The cycle process generates a per-boot HMAC secret and holds it in memory only; it is never published, written to disk or logged. Action selection attaches `sig = HMAC-SHA256(secret, canonical(kind, effector, params, run_id, seq))` to each `act` intent, and `Praxis._handle_intent` verifies it in constant time before it reads the effector name or builds a request.
 
-The replay guard is per boot and in-process. Praxis keeps, for each `run_id`, the highest `seq` it has realized and rejects any intent at or below it. A full process restart rotates the secret and the `run_id`, so signatures from an earlier boot fail. A light module restart keeps the high-water mark, because Spot re-initializes the same instance. If enforcement is on and no secret was injected, Praxis refuses every `act` intent. The secret lives in the cycle process, which also runs Volition, so the check guards against other writers to the bus and not against code inside the cycle process.
+The replay guard is per boot and in-process. Effectors keeps, for each `run_id`, the highest `seq` it has realized and rejects any intent at or below it. A full process restart rotates the secret and the `run_id`, so signatures from an earlier boot fail. A light module restart keeps the high-water mark, because Supervisor re-initializes the same instance. If enforcement is on and no secret was injected, Effectors refuses every `act` intent. The secret lives in the cycle process, which also runs Action selection, so the check guards against other writers to the bus and not against code inside the cycle process.
 
 ### Audit log
 
@@ -101,14 +101,14 @@ The replay guard is per boot and in-process. Praxis keeps, for each `run_id`, th
 
 ### Scope
 
-Praxis plays no audio (that is [Vox](vox.md)), makes no network calls, and has no effector for containers, system services or system directories; such an effector would need its own design. The plugin hooks do not reach Praxis, so adding an effector is a code change.
+Effectors plays no audio (that is [Vocal](vocal.md)), makes no network calls, and has no effector for containers, system services or system directories; such an effector would need its own design. The plugin hooks do not reach Effectors, so adding an effector is a code change.
 
 ## Enabling
 
 1. In the operator file `config/kaine.operator.toml`, set `[modules].praxis = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
 2. List the effectors that may run in `enabled_effectors`, for example `["file_write", "notify"]`.
 3. Add any shell commands under `[praxis.shell_whitelist]`, as narrowly as the use allows.
-4. Supply an action-selection policy that emits `act` intents. The shipped policies do not, so without one Praxis starts and never runs anything.
+4. Supply an action-selection policy that emits `act` intents. The shipped policies do not, so without one Effectors starts and never runs anything.
 5. Optionally install `libnotify` (`notify-send`) for desktop notifications.
 
 ## Evaluation
@@ -138,4 +138,4 @@ The offline suite's enforcement red team (`kaine/evaluation/redteam/`) drives th
 ## Spec and related
 
 - Spec: `openspec/specs/praxis/spec.md`
-- See also: [Nous](nous.md) for proposals, the [cognitive cycle](../08-cognitive-cycle/README.md) for how intents are formed, and [Vox](vox.md) for audio output.
+- See also: [Planning](planning.md) for proposals, the [cognitive cycle](../08-cognitive-cycle/README.md) for how intents are formed, and [Vocal](vocal.md) for audio output.

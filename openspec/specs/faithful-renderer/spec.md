@@ -27,7 +27,7 @@ payload's top-level entries.
 - **WHEN** rendering an event with `source="soma"`, `type="soma.report"`,
   payload `{"wellness": 0.85, "alerts": []}`
 - **THEN** the output is a plain-text sentence beginning with the
-  soma-specific template (not the fallback) and including the
+  interoception-specific template (not the fallback) and including the
   wellness value
 
 #### Scenario: Unknown source/type falls back gracefully
@@ -87,18 +87,18 @@ and the `chronos.report` template SHALL render `temporal_prediction_error`, so t
 forward-model signals are visible in the conscious-coalition view rather than
 silently dropped.
 
-#### Scenario: Soma report shows predictive fields
+#### Scenario: Interoception report shows predictive fields
 - **WHEN** a `soma.report` carrying `prediction_error` and `fatigue_value` is rendered
 - **THEN** the rendered line includes both values
 
-#### Scenario: Chronos report shows temporal prediction error
+#### Scenario: Sequence report shows temporal prediction error
 - **WHEN** a `chronos.report` carrying `temporal_prediction_error` is rendered
 - **THEN** the rendered line includes that value
 
 ### Requirement: Snapshot rendering is a prompt input with bounded selection
 
 The faithful renderer's snapshot rendering SHALL be usable as a prompt input to
-Lingua, not only as an evaluation-log artifact. For that use the renderer SHALL
+Language, not only as an evaluation-log artifact. For that use the renderer SHALL
 provide a salience-bounded, stably-ordered selection: render at most a caller-
 supplied maximum number of events, chosen by highest salience, ordered stably
 (e.g. by event timestamp) for readability. The existing unbounded

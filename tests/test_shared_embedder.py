@@ -189,7 +189,7 @@ def test_boot_wires_same_shared_embedder_for_modules_and_spot_rebuild():
     mnemos = registry.get("mnemos")
     assert mnemos._core._embedder is shared
 
-    # Spot rebuild of the same module must receive the existing instance.
+    # Supervisor rebuild of the same module must receive the existing instance.
     mnemos2 = construct_module("mnemos", bus, config, registry=registry)
     assert mnemos2._core._embedder is shared
 

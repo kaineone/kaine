@@ -64,7 +64,7 @@ async def test_on_workspace_invoked_for_each_broadcast(real_bus: AsyncBus):
     mod = _NamedEcho(real_bus)
     await mod.initialize()
     try:
-        # Publish three workspace snapshots via syneidesis source.
+        # Publish three workspace snapshots via workspace source.
         for i in range(3):
             await real_bus.publish_workspace(
                 {

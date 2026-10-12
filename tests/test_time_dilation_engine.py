@@ -56,7 +56,7 @@ class RecordingBus:
 
 
 class SlowSyneidesis:
-    """A syneidesis stand-in that spends wall time inside select()."""
+    """A workspace stand-in that spends wall time inside select()."""
 
     def __init__(self, monotonic: MonotonicSource, delay_s: float = 0.15) -> None:
         self._monotonic = monotonic

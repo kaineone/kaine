@@ -58,7 +58,7 @@ class BackendFailure:
 
 
 # Process-global registry. Boot is single-threaded, but a lock keeps the reader
-# (the async Nexus health prober, possibly on another thread) consistent.
+# (the async Dashboard health prober, possibly on another thread) consistent.
 _LOCK = threading.Lock()
 _FAILURES: list[BackendFailure] = []
 
@@ -109,7 +109,7 @@ def backend_failures() -> list[BackendFailure]:
 
 
 def backend_failures_snapshot() -> list[dict[str, Any]]:
-    """Content-free dicts for the Nexus health surface / diagnostics JSON."""
+    """Content-free dicts for the Dashboard health surface / diagnostics JSON."""
     return [f.as_dict() for f in backend_failures()]
 
 

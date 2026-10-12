@@ -239,7 +239,7 @@ async def test_emotion_cancelled_inference_unload_waits_for_worker(monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# Topos encoders
+# Vision encoders
 # --------------------------------------------------------------------------
 
 

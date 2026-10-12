@@ -45,7 +45,7 @@ async def verify_organ_generates(
     thought is not suppressed reasons to exhaustion and returns empty ``content``
     — it passes the alias check yet leaves the entity voiceless (the exact failure
     this gate exists to catch). So the gate sends one real completion through the
-    production Lingua client (thinking suppressed by the organ default
+    production Language client (thinking suppressed by the organ default
     ``think=False``) and checks the visible text is non-empty.
 
     Never raises: an unreachable / erroring / mute organ returns ``ok=False`` with

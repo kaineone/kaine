@@ -276,7 +276,7 @@ async def test_welfare_gray_zone_cursor_advances_to_end_after_one_drain(
 
 
 # ---------------------------------------------------------------------------
-# Hypnos audit drain
+# Sleep audit drain
 # ---------------------------------------------------------------------------
 
 
@@ -316,7 +316,7 @@ async def test_hypnos_audit_drain_continues_past_undecodable_entries(bus, tmp_pa
 
 
 # ---------------------------------------------------------------------------
-# Chronos user-input stream
+# Sequence user-input stream
 # ---------------------------------------------------------------------------
 
 

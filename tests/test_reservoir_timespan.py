@@ -124,7 +124,7 @@ def test_soma_numpy_torch_parity_with_timespans():
 
 
 # ---------------------------------------------------------------------------
-# B/D. Soma timespan plumbing and feature layout
+# B/D. Interoception timespan plumbing and feature layout
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -165,7 +165,7 @@ async def test_soma_legacy_forward_model_called_without_timespan(bus: AsyncBus):
             self.calls: list[int] = []
 
         def step(self, feature, *args, **kwargs):
-            # A legacy plugin model takes no timespan: Soma must not pass one.
+            # A legacy plugin model takes no timespan: Interoception must not pass one.
             assert not args and not kwargs
             self.calls.append(len(feature))
             return super().step(feature)
@@ -219,7 +219,7 @@ def test_metrics_vram_slot_layout_1():
 
 
 # ---------------------------------------------------------------------------
-# E/F. Chronos timespan from featurizer clock
+# E/F. Sequence timespan from featurizer clock
 # ---------------------------------------------------------------------------
 
 def _empty_snapshot(tick: int = 0) -> WorkspaceSnapshot:

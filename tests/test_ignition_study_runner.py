@@ -483,11 +483,11 @@ def test_dry_run_e2e(tmp_path: Path, known_modules):
         ("branch", 2),
         ("accumulate", None),
     ]
-    # The seed is born automatically; the being in the seed never waits on
+    # The seed is born automatically; the entity in the seed never waits on
     # an operator acknowledgement.
     seed_overlay = _read_overlay(study_dir / "gestation")
     assert seed_overlay["developmental_stage"]["require_operator_ack_for_birth"] is False
-    # Phantasia's world model is checked wherever it is enabled.
+    # World model's world model is checked wherever it is enabled.
     for s in steps:
         if "phantasia" in s["modules"]:
             assert s["world_model_captured"] is True
@@ -1127,7 +1127,7 @@ def test_failed_timeout_preservation_records_a_critical_step(
     procs: list[subprocess.Popen] = []
 
     # The first run's programme clock stands still until the stand-in seed is
-    # up (its stage file is its last write before it waits for the birth
+    # up (its stage file is its last write before it waits for the maturation
     # request), then jumps past the budget: the timeout fires on a running
     # seed however long the child took to start.
     stage_file = study_dir / "gestation" / "state" / "lifecycle" / "stage.json"
@@ -1149,7 +1149,7 @@ def test_failed_timeout_preservation_records_a_critical_step(
     def alive(pid: int) -> bool:
         return any(p.pid == pid and p.poll() is None for p in procs)
 
-    # The control CLI fails, so neither the birth nor the timeout preservation
+    # The control CLI fails, so neither the maturation nor the timeout preservation
     # succeeds and the stand-in seed keeps running.
     failing_control = [sys.executable, "-c", "raise SystemExit(3)"]
     try:
@@ -1191,7 +1191,7 @@ def test_failed_timeout_preservation_records_a_critical_step(
             p.wait()
 
     # Once the operator has stopped it, the retry runs.  The control CLI waits
-    # long enough for a slowly starting seed to answer the birth request.
+    # long enough for a slowly starting seed to answer the maturation request.
     retry = _runner(study_dir, script, cycle_alive=alive, preserve_wait_seconds=budget)
     assert _run(retry, retry=True) == "complete"
     assert [s["outcome"] for s in _load_steps(study_dir)] == [
@@ -1372,7 +1372,7 @@ def test_cycle_process_alive_checks_the_command_line():
 
 
 # --------------------------------------------------------------------------- #
-# The birth bloom fallback follows the child's configuration
+# The maturation bloom fallback follows the child's configuration
 # --------------------------------------------------------------------------- #
 
 
@@ -1579,7 +1579,7 @@ def test_resume_adopts_an_unrecorded_birth_preservation(tmp_path: Path, known_mo
     assert steps[0]["bundle"] == str(seed)
     assert steps[0]["preservation_id"] == "p-born"
     assert steps[0]["adopted"] is True
-    # No second gestation: the first child is branch 0, revived from the seed.
+    # No second development: the first child is branch 0, revived from the seed.
     env_logs = _load_jsonl(study_dir / "env_log.jsonl")
     assert env_logs[0]["line"] == "branch"
     assert "/10" not in [urlsplit(u).path for u in flush_log]

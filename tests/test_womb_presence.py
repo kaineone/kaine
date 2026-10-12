@@ -71,7 +71,7 @@ def test_payload_none_when_audio_goes_stale():
     clock.mark_delivered("audio", 3)
     publisher = WombPresencePublisher(None, clock, max_staleness_s=2.0)
     fake.advance(3.0)
-    # Video keeps delivering; only audio has gone quiet. The womb must be
+    # Video keeps delivering; only audio has gone quiet. The stimulus source must be
     # seen AND heard, so there is no presence.
     clock.mark_delivered("video", 97)
     assert publisher.presence_payload() is None

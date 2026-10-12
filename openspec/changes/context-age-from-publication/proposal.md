@@ -13,7 +13,7 @@ it on the monotonic wall clock.
   it.
 - `BroadcastContext` measures age from `published_at` when the snapshot has
   it, and from receipt otherwise; the age is never negative.
-- Audition receives the shared entity clock at boot, like Topos and Soma, and
+- Audition receives the shared entity clock at boot, like Vision and Interoception, and
   its context uses it.
 
 ## Capabilities

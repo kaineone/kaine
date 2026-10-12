@@ -78,8 +78,8 @@ def build_overlay(
         # per-step sandbox.
         "storage": {"data_root": "."},
         "soma": {
-            # Gestation uses local womb mode, which requires Soma's self-rhythm.
-            # A being gestated with the self-rhythm also keeps it for all later
+            # Development uses local stimulus source mode, which requires Interoception's self-rhythm.
+            # An entity gestated with the self-rhythm also keeps it for all later
             # viewings, because the interoceptive feature slots must remain filled.
             "self_rhythm_enabled": True,
         },
@@ -90,7 +90,7 @@ def build_overlay(
         # Relative to the step's working directory; the runner records it.
         "ignition_log": {"enabled": True, "directory": IGNITION_LOG_DIR},
         # Every step records the workspace graph (the ignition log), the external
-        # utterances and the safety records; the Nexus record, the workspace
+        # utterances and the safety records; the Dashboard record, the workspace
         # trajectory and the raw archive are never part of a study, overriding the
         # operator config.
         "research_event_log": {

@@ -8,13 +8,13 @@ For the selection algorithm, see [The global workspace](./global-workspace.md). 
 
 The cycle entrypoint in `kaine/cycle/__main__.py` boots by running the phases in `_BOOT_PHASES` in order: `stage`, `preconditions`, `run_identity`, `gates`, `bus`, `womb_hold`, `registry`, `maturation_gate`, `workspace`, `volition`, `cycle`, `supervision`, `runtime_state`, `sidecar`, `ignition_log`, `preview`, `remote_bridge`, `signals`, `spot`, `safety_net`, `launch`, `birth`, `womb_watch`, `caretaker`, `gestation`, `watchers`.
 
-Every phase reads and writes one shared `BootContext`, a slotted dataclass in `kaine/cycle/boot_context.py`. Its repr shows no field, because it holds the Praxis intent secret.
+Every phase reads and writes one shared `BootContext`, a slotted dataclass in `kaine/cycle/boot_context.py`. Its repr shows no field, because it holds the Effectors intent secret.
 
 A phase returns `None` to continue, or an exit code to refuse the boot. The exit codes are documented with first boot; see [First boot](../04-getting-started/first-boot.md).
 
-After the last phase, the run loop supervises the cycle until stopped, and shutdown always runs. The process exits `70` when Spot escalated.
+After the last phase, the run loop supervises the cycle until stopped, and shutdown always runs. The process exits `70` when Supervisor escalated.
 
-When a phase raises, the entrypoint releases what the half-built boot holds. It cancels the boot tasks already started, stops the welfare producer and closes the bus, then re-raises. It deliberately does not shut the modules down. A module's shutdown persists its state, Phantasia's world-model weights for example, and a half-built boot must not write that state over a good saved copy.
+When a phase raises, the entrypoint releases what the half-built boot holds. It cancels the boot tasks already started, stops the welfare producer and closes the bus, then re-raises. It deliberately does not shut the modules down. A module's shutdown persists its state, World model's world-model weights for example, and a half-built boot must not write that state over a good saved copy.
 
 ## Rates and timing
 
@@ -31,7 +31,7 @@ The cycle decides broadcast ticks with a fractional accumulator (`_experience_ac
 
 `CognitiveCycle.__init__` falls back to an access rate equal to the processing rate only when no value is supplied. The composition root at `kaine/cycle/__main__.py` and `config/kaine.toml` both default `experiential_rate_hz` to 3.333 Hz. Setting the two rates equal gives one broadcast per tick, and a lower `experiential_rate_hz` makes broadcasts sparser.
 
-The config and `cycle.set_rates` accept any positive value. Only [Soma](../09-modules/soma.md)'s `reduce_rate` advisory clamps the processing rate, to between 0.5 and 20.0 Hz.
+The config and `cycle.set_rates` accept any positive value. Only [Interoception](../09-modules/interoception.md)'s `reduce_rate` advisory clamps the processing rate, to between 0.5 and 20.0 Hz.
 
 ### Adaptive access rate
 
@@ -39,8 +39,8 @@ The config and `cycle.set_rates` accept any positive value. Only [Soma](../09-mo
 
 `experiential_rate_hz` is the resting rate. With `[cycle.access_rate].enabled`, the shipped default, the cycle recomputes the access rate for each tick from an access drive between 0 and 1.
 
-- **Tonic** drive: [Thymos](../09-modules/thymos.md) arousal above its baseline, scaled to the range 0 to 1. This follows the exploratory, high-tonic mode of the adaptive-gain account of the locus coeruleus.
-- **Phasic** drive: the highest intensity among the tick's categorical alerts (events whose payload carries `alert: true`: a predictive processor's report that meets its alert criterion, or an event another module publishes at its alert level, such as a Thymos drive crossing, a Soma fatigue or regulation event, or a failed sleep), above `salience_floor` (0.5) and scaled to the range 0 to 1, held as a peak that decays with time constant `phasic_decay_s` (1 entity second). Graded reports without an alert do not count, so with no alert and arousal at baseline the rate stays at its resting value. Events from `cycle` and `syneidesis` never count. Raising the rate after an alert is a design choice modeled on the phasic locus coeruleus response; the affect-gain ablation is planned to test the opposite direction too.
+- **Tonic** drive: [Affect](../09-modules/affect.md) arousal above its baseline, scaled to the range 0 to 1. This follows the exploratory, high-tonic mode of the adaptive-gain account of the locus coeruleus.
+- **Phasic** drive: the highest intensity among the tick's categorical alerts (events whose payload carries `alert: true`: a predictive processor's report that meets its alert criterion, or an event another module publishes at its alert level, such as a Affect drive crossing, a Interoception fatigue or regulation event, or a failed sleep), above `salience_floor` (0.5) and scaled to the range 0 to 1, held as a peak that decays with time constant `phasic_decay_s` (1 entity second). Graded reports without an alert do not count, so with no alert and arousal at baseline the rate stays at its resting value. Events from `cycle` and `syneidesis` never count. Raising the rate after an alert is a design choice modeled on the phasic locus coeruleus response; the affect-gain ablation is planned to test the opposite direction too.
 
 The drive is the larger of the two, and the tick's access rate is `resting + (processing − resting) × drive`: the resting rate when calm, one broadcast per processing tick at full drive. The drive is computed before the tick's broadcast decision, so an alert can make its own tick a broadcast tick. When the resting rate is below the processing rate, the adaptive rate stays between them; when it is not, the rate equals the resting rate. The operator's rate control and fork timing profiles set the resting rate.
 
@@ -59,9 +59,9 @@ Every `cycle.tick` event carries the tick's effective `experiential_rate_hz` and
 
 `EntityClock` (`kaine/entity_clock.py`) is the single shared entity clock (the code also calls it the subjective clock). Every module that times a cognitive process derives its "now" and durations from one injected `EntityClock` instance, so one `time_scale` setting changes the rate of the whole system together. `EntityClock.wall()` is the real monotonic clock, used for slip and health measurement. `EntityClock.now()` is entity time (`origin + wall_elapsed * scale`). `EntityClock.period(hz)` converts a rate in entity time into the real seconds-per-tick budget the cycle paces against: `1 / (hz * scale)`. That is what `CognitiveCycle.tick()` uses to compute `target_ms` each tick.
 
-Infrastructure timers that must track wall-clock time whatever the time scale, such as the Spot watchdog, preservation monitor, and network timeouts, do not use this clock.
+Infrastructure timers that must track wall-clock time whatever the time scale, such as the Supervisor watchdog, preservation monitor, and network timeouts, do not use this clock.
 
-`CognitiveCycle.pacing_stats` is the pacing report exposed through the `pacing_stats` property and shown in Nexus. It uses a rolling 32-tick window of real per-tick wall time against the target budget. Among its fields:
+`CognitiveCycle.pacing_stats` is the pacing report exposed through the `pacing_stats` property and shown in Dashboard. It uses a rolling 32-tick window of real per-tick wall time against the target budget. Among its fields:
 
 - `target_rate_hz` = `processing_rate_hz * time_scale`
 - `achieved_rate_hz`, derived from the mean effective tick period, `max(wall, target)`
@@ -76,7 +76,7 @@ It also carries `mean_tick_ms`, `mean_target_ms`, `overrun_ticks`, `window_ticks
 
 Every change publishes a `cycle.time_scale` event with `from`, `to`, `reason` (`overload` or `headroom`), `utilization`, and `window_s`. Each `cycle.tick` payload and each ignition-log record carries `time_scale`. The run manifest records the timing settings under `timing`. The `pacing` block of `runtime.json` shows `time_scale`, `auto_time_scale`, and `time_scale_changes`.
 
-Soma's `reduce_rate` regulation still lowers the processing rate when it senses overload. That lowers utilization, and automatic dilation may then raise the scale back toward the ceiling.
+Interoception's `reduce_rate` regulation still lowers the processing rate when it senses overload. That lowers utilization, and automatic dilation may then raise the scale back toward the ceiling.
 
 ## Tick sequence
 
@@ -103,7 +103,7 @@ flowchart TD
 
 The run loop drains these two streams before each tick. `consume_control_events()` reads up to 32 entries from `cycle.control` using a persistent cursor. Each `cycle.set_rates` event applies updated `processing_rate_hz` and/or `experiential_rate_hz`. Both must be positive. On success the cycle publishes `cycle.rates` to `cycle.out`. Invalid payloads are logged and skipped without disrupting the loop.
 
-### Drain soma regulation
+### Drain interoception regulation
 
 `consume_soma_regulation()` reads up to 32 `soma.regulation` events from `soma.out`.
 
@@ -111,7 +111,7 @@ The run loop drains these two streams before each tick. `consume_control_events(
 |---|---|
 | `reduce_rate` | Multiply `processing_rate` by 0.8, clamped to [0.5, 20.0] Hz |
 | `shed_module` | Call `registry.request_shed_low_priority()` if available |
-| `request_maintenance` | Latch `cycle.maintenance_requested = True` as an advisory signal. Hypnos observes the `request_maintenance` regulation event directly on `soma.out`; nothing else reads this flag to drive behaviour. |
+| `request_maintenance` | Latch `cycle.maintenance_requested = True` as an advisory signal. Sleep observes the `request_maintenance` regulation event directly on `soma.out`; nothing else reads this flag to drive behaviour. |
 
 Unknown action values are silently ignored. All advisories are advisory only: the cycle acts within safe bounds, logs, and continues.
 
@@ -119,7 +119,7 @@ Unknown action values are silently ignored. All advisories are advisory only: th
 
 The main read path is one round-trip `read_entries_block` for all active module streams returned by `registry.active_streams()`. A per-stream `asyncio.gather` is used only as a fallback. Each stream is read with `block_ms=0` (non-blocking) and `count=100` (the `read_count` constructor argument; there is no config key). The per-stream cursor advances to the last entry ID scanned, decodable or not, so a batch of undecodable entries moves the cursor past itself instead of stalling the stream. Read failures increment a per-stream error counter but do not stop the loop.
 
-On a production boot the entrypoint constructs the cycle with `seed_cursors_to_tail=true`. Every stream cursor is seeded to the stream tail before the first read, so an in-run process restart against a live Redis replays nothing that predates the boot, including stale soma rate advisories. Library or test construction reads from the beginning.
+On a production boot the entrypoint constructs the cycle with `seed_cursors_to_tail=true`. Every stream cursor is seeded to the stream tail before the first read, so an in-run process restart against a live Redis replays nothing that predates the boot, including stale interoception rate advisories. Library or test construction reads from the beginning.
 
 ### Selection
 
@@ -131,15 +131,15 @@ On a broadcast tick, if selection succeeded, the cycle calls `bus.publish_worksp
 
 Only `source="syneidesis"` may call `publish_workspace`. Any other source raises `ReservedStreamError`.
 
-### Volition and proposal outcomes
+### Action selection and proposal outcomes
 
-After a successful broadcast, inhibited or not, the cycle calls `Volition.select(snapshot)`. Volition checks the inhibition flag first and returns no intents for an inhibited broadcast. It is never called on a tick that is not a broadcast tick.
+After a successful broadcast, inhibited or not, the cycle calls `Volition.select(snapshot)`. Action selection checks the inhibition flag first and returns no intents for an inhibited broadcast. It is never called on a tick that is not a broadcast tick.
 
 Each returned intent is published to `volition.out` with event type `intent.speak`, `intent.think`, `intent.act`, or `intent.rest`. The cycle then publishes any `proposal_outcome` values, including those for inhibited broadcasts, returned by the policy to `volition_feedback.out` as `volition.proposal_outcome` events.
 
-Proposal outcomes are generated only when the action-selection policy includes the `NousProposalSource` wrapper, which requires [Nous](../09-modules/nous.md) to be enabled. With no profile selected, the loader applies the `thesis_test` profile, and that profile has `nous = false`, so no proposal outcomes are produced by default.
+Proposal outcomes are generated only when the action-selection policy includes the `NousProposalSource` wrapper, which requires [Planning](../09-modules/planning.md) to be enabled. With no profile selected, the loader applies the `thesis_test` profile, and that profile has `nous = false`, so no proposal outcomes are produced by default.
 
-The cycle never invokes effectors directly. [Lingua](../09-modules/lingua.md), [Praxis](../09-modules/praxis.md), [Perception](../09-modules/perception.md), [Mundus](../09-modules/mundus.md), and [Hypnos](../09-modules/hypnos.md) subscribe to `volition.out` and realize intents independently. Hypnos accepts `intent.rest` as a request to rest.
+The cycle never invokes effectors directly. [Language](../09-modules/language.md), [Effectors](../09-modules/effectors.md), [Perceptual locus](../09-modules/perceptual-locus.md), [Embodiment](../09-modules/embodiment.md), and [Sleep](../09-modules/sleep.md) subscribe to `volition.out` and realize intents independently. Sleep accepts `intent.rest` as a request to rest.
 
 ### Latency telemetry
 
@@ -152,13 +152,13 @@ Every tick publishes a `cycle.tick` event to `cycle.out`:
 | `target_duration_ms` | float | `1000 / (processing_rate_hz * time_scale)` |
 | `slip_ms` | float | `max(0, wall - target)` |
 | `is_experiential` | bool | whether the tick was a broadcast tick (a broadcast was attempted) |
-| `error` | bool | did Syneidesis raise? |
+| `error` | bool | did Workspace raise? |
 | `processing_rate_hz` | float | current processing rate |
 | `experiential_rate_hz` | float | current effective access rate |
 | `access_drive` | float | current access drive in [0, 1] |
 | `time_scale` | float | current time scale |
 
-Salience is 0.05 for clean ticks and 0.5 for error ticks. [Soma](../09-modules/soma.md) subscribes to `cycle.out` to track latency as part of interoceptive prediction error.
+Salience is 0.05 for clean ticks and 0.5 for error ticks. [Interoception](../09-modules/interoception.md) subscribes to `cycle.out` to track latency as part of interoceptive prediction error.
 
 ## Operator freeze
 
@@ -179,13 +179,13 @@ The operator can freeze the cycle by writing `state/cycle/control.json`:
 }
 ```
 
-The freeze is a stack of `{source, reason, frozen_at}` entries. The `stack` is authoritative; the top-level `frozen`, `frozen_at`, `reason`, and `source` fields are a legacy view mirroring the top of the stack. Older single-slot files are promoted to a one-entry stack on read. Sources stack independently: a Spot recovery pops only Spot's own entry, so a welfare pause underneath survives supervisor recovery and can be lifted only by an operator override that names it or an explicit welfare stand-down; the operator's resume does not lift it. The cycle resumes only when the stack is empty.
+The freeze is a stack of `{source, reason, frozen_at}` entries. The `stack` is authoritative; the top-level `frozen`, `frozen_at`, `reason`, and `source` fields are a legacy view mirroring the top of the stack. Older single-slot files are promoted to a one-entry stack on read. Sources stack independently: a Supervisor recovery pops only Supervisor's own entry, so a welfare pause underneath survives supervisor recovery and can be lifted only by an operator override that names it or an explicit welfare stand-down; the operator's resume does not lift it. The cycle resumes only when the stack is empty.
 
-A freeze-watch task in the cycle entrypoint polls this file and calls `cycle.pause()` and `cycle.resume()` to match the commanded state. `pause()` clears an `asyncio.Event`; `run_forever` blocks on `await self._paused.wait()`, so no ticks fire while the event is clear. On freeze, the watch snapshots the desired perception flags and suspends them for non-gestation freezes; a gestation-only freeze keeps perception on. On resume it writes the snapshot back, so a freeze/resume cycle never leaves the entity deaf or blind.
+A freeze-watch task in the cycle entrypoint polls this file and calls `cycle.pause()` and `cycle.resume()` to match the commanded state. `pause()` clears an `asyncio.Event`; `run_forever` blocks on `await self._paused.wait()`, so no ticks fire while the event is clear. On freeze, the watch snapshots the desired perception flags and suspends them for non-development freezes; a development-only freeze keeps perception on. On resume it writes the snapshot back, so a freeze/resume cycle never leaves the entity deaf or blind.
 
 A freeze stops the entity clock while operators repair infrastructure. It is not a shutdown. The file contains only operational fields: freeze entries with ISO timestamps and optional reason strings. It never contains sensory content.
 
-The Nexus `POST /diagnostics/cycle/freeze` endpoint writes this file: freezing pushes an `operator` entry and resuming removes `operator` entries only (`stand_down(source="operator")`). `POST /diagnostics/cycle/override` lifts named `welfare`, `gestation` or `programme_end` entries (`override()`). The `unfreeze` function, used only by the cycle's own clean boot, replaces the file with a `CycleControl()` whose fields are `frozen:false`, `frozen_at:null`, `reason:null`, `source:"operator"`, and `stack:[]`.
+The Dashboard `POST /diagnostics/cycle/freeze` endpoint writes this file: freezing pushes an `operator` entry and resuming removes `operator` entries only (`stand_down(source="operator")`). `POST /diagnostics/cycle/override` lifts named `welfare`, `gestation` or `programme_end` entries (`override()`). The `unfreeze` function, used only by the cycle's own clean boot, replaces the file with a `CycleControl()` whose fields are `frozen:false`, `frozen_at:null`, `reason:null`, `source:"operator"`, and `stack:[]`.
 
 ```mermaid
 stateDiagram-v2
@@ -227,7 +227,7 @@ Hooks are awaited in registration order. A hook that raises is logged and skippe
 
 ## Phase collection
 
-When `[oscillator].enabled = true` in `config/kaine.toml` (see [Core, cycle and host configuration](../appendix-a-configuration/core.md)), the cycle sets `collect_phases = True`. Before passing events to Syneidesis each tick, `_collect_module_phases()` calls `module.phase()` on every module that exposes it via `registry.all_modules()`. The resulting dict is passed in `context['phases']` to `Syneidesis.select()`. Modules without an oscillator return the neutral phase.
+When `[oscillator].enabled = true` in `config/kaine.toml` (see [Core, cycle and host configuration](../appendix-a-configuration/core.md)), the cycle sets `collect_phases = True`. Before passing events to Workspace each tick, `_collect_module_phases()` calls `module.phase()` on every module that exposes it via `registry.all_modules()`. The resulting dict is passed in `context['phases']` to `Syneidesis.select()`. Modules without an oscillator return the neutral phase.
 
 When the layer is disabled, `_collect_module_phases()` is never called and `context['phases']` is absent, giving zero per-tick overhead.
 
@@ -264,13 +264,13 @@ coherence_ceiling = 1.25
 
 The `[oscillator]` section also accepts `beta`, `threshold`, and `base_drive`. Their defaults are set in `config/kaine.toml`.
 
-Dynamic rate changes via the `cycle.control` stream override the `[cycle]` values for the current process. Only Soma's `reduce_rate` advisory clamps the processing rate to [0.5, 20.0] Hz.
+Dynamic rate changes via the `cycle.control` stream override the `[cycle]` values for the current process. Only Interoception's `reduce_rate` advisory clamps the processing rate to [0.5, 20.0] Hz.
 
 ## Key files
 
 | File | Role |
 |---|---|
-| `kaine/cycle/engine.py` | `CognitiveCycle`: tick loop, rate control, Soma consumer |
+| `kaine/cycle/engine.py` | `CognitiveCycle`: tick loop, rate control, Interoception consumer |
 | `kaine/cycle/control_state.py` | Freeze state serialization: `CycleControl`, `freeze()`, `unfreeze()` |
 | `kaine/cycle/__main__.py` | Entrypoint: assembles modules, starts freeze-watch task |
 | `kaine/cycle/boot_context.py` | Shared slotted dataclass for boot-phase state, `BootContext` |

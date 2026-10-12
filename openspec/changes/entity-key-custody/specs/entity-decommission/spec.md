@@ -2,9 +2,9 @@
 
 ### Requirement: Transferable backup before deletion
 Decommission SHALL capture an encrypted, transferable backup of the entity's durable state before
-any deletion, satisfying CAL Article 4.2(b). The backup SHALL bundle the Eidolon self-model, the
-Lingua intent log, the Hypnos voice adapters, the latest fork snapshot, and an export (or explicit
-volume-copy instructions) for the Mnemos and Empatheia Qdrant collections, plus a manifest
+any deletion, satisfying CAL Article 4.2(b). The backup SHALL bundle the Self-model self-model, the
+Language intent log, the Sleep voice adapters, the latest fork snapshot, and an export (or explicit
+volume-copy instructions) for the Episodic memory and Social cognition Qdrant collections, plus a manifest
 describing the entity, timestamp, divergence assessment, and contents. If the backup cannot be
 completed, decommission SHALL abort without deleting anything. Under per-entity custody the backup SHALL
 remain encrypted under the entity's data key with its escrow shares, and the trustees SHALL retain their

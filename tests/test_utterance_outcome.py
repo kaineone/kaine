@@ -453,7 +453,7 @@ async def test_malformed_event_in_poll_does_not_drop_reply(bus, tmp_path, caplog
         await _xadd_external_speech(bus, R1, t0)
         await _wait_for_open(observer)
 
-        # Both events arrive before the next poll; the malformed thymos event
+        # Both events arrive before the next poll; the malformed affect event
         # must not abort handling of the reply.
         await bus.publish(
             Event(

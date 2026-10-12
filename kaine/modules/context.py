@@ -32,7 +32,7 @@ def event_contribution(source: str, event_type: str, weight: float) -> list[floa
     if not math.isfinite(weight) or weight < 0.0:
         return vec
 
-    # [4..11] source mass; unknown non-audition sources share the praxis/overflow bin.
+    # [4..11] source mass; unknown non-audition sources share the effectors/overflow bin.
     if source != AUDITION_SOURCE:
         try:
             idx = DEFAULT_KNOWN_SOURCES.index(source)

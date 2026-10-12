@@ -31,7 +31,7 @@ _NOUS_STREAM = "nous.out"
 
 
 class NousPolicyObserver(StreamSubscriberObserver):
-    """Records Nous policy events (EFE, horizon, action) to JSONL."""
+    """Records Planning policy events (EFE, horizon, action) to JSONL."""
 
     name = "nous_policy"
     streams = (_NOUS_STREAM,)

@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Drives are setpoint deficits with relief
-Each Thymos drive SHALL evolve between events by the exact solution of linear build and decay toward the equilibrium `beta u / (beta u + delta)`, with build signal `u` in `[0, 1]`. Curiosity and boredom SHALL be relieved continuously, `D <- D exp(-rho c dt)`, so their relief does not depend on the perceptual report rate: curiosity with `c` the perceptual learning progress above a noise floor, boredom with `c` the excess of the fast perceptual alert rate over its slow, habituated rate beyond a margin. The social drive SHALL be relieved by a new operator interaction and restlessness by each Volition intent other than REST, each as `D <- D (1 - rho c)`. Here `rho` is the drive's relief gain. With the shipped rates, the full-deprivation equilibrium `beta / (beta + delta)` of every drive SHALL exceed its threshold.
+Each Affect drive SHALL evolve between events by the exact solution of linear build and decay toward the equilibrium `beta u / (beta u + delta)`, with build signal `u` in `[0, 1]`. Curiosity and boredom SHALL be relieved continuously, `D <- D exp(-rho c dt)`, so their relief does not depend on the perceptual report rate: curiosity with `c` the perceptual learning progress above a noise floor, boredom with `c` the excess of the fast perceptual alert rate over its slow, habituated rate beyond a margin. The social drive SHALL be relieved by a new operator interaction and restlessness by each Action selection intent other than REST, each as `D <- D (1 - rho c)`. Here `rho` is the drive's relief gain. With the shipped rates, the full-deprivation equilibrium `beta / (beta + delta)` of every drive SHALL exceed its threshold.
 
 #### Scenario: Curiosity falls when perception is learning
 - **WHEN** the perceptual modules' raw prediction errors fall steadily over a minute of subjective time
@@ -20,7 +20,7 @@ Each Thymos drive SHALL evolve between events by the exact solution of linear bu
 - **THEN** its value stays at or below `beta / (beta + delta)`
 
 ### Requirement: Valence tracks the rate of change of prediction error
-Thymos SHALL move valence toward `clip(P + (W - 0.5), -1, 1)` with time constant `valence_time_constant_s`, where `P` is the appraisal's intrinsic-pleasantness check, `clip(tanh(valence_progress_gain * g) + c, -1, 1)`, `g` the signed perceptual learning progress from time-decayed means of raw prediction error over subjective time, `c` the appraisal contribution of a perceived speaker emotion, and `W` Soma's last wellness. A module's means SHALL count only samples from its first positive error on, and SHALL be unbiased by any single sample: early on both equal the plain mean of the samples so far.
+Affect SHALL move valence toward `clip(P + (W - 0.5), -1, 1)` with time constant `valence_time_constant_s`, where `P` is the appraisal's intrinsic-pleasantness check, `clip(tanh(valence_progress_gain * g) + c, -1, 1)`, `g` the signed perceptual learning progress from time-decayed means of raw prediction error over subjective time, `c` the appraisal contribution of a perceived speaker emotion, and `W` Interoception's last wellness. A module's means SHALL count only samples from its first positive error on, and SHALL be unbiased by any single sample: early on both equal the plain mean of the samples so far.
 
 #### Scenario: Errors falling is pleasant
 - **WHEN** the perceptual modules' raw prediction errors fall steadily on a healthy host
@@ -35,7 +35,7 @@ Thymos SHALL move valence toward `clip(P + (W - 0.5), -1, 1)` with time constant
 - **THEN** valence stays above -0.2 while the averages fill
 
 ### Requirement: Appraisal novelty reflects surprise
-Thymos SHALL compute the novelty appraisal check as `1 - prod (1 - s_m)` over coalition members that carry a normalised error ratio `r`, with `s = clip(ln r / ln 3, 0, 1)`.
+Affect SHALL compute the novelty appraisal check as `1 - prod (1 - s_m)` over coalition members that carry a normalised error ratio `r`, with `s = clip(ln r / ln 3, 0, 1)`.
 
 #### Scenario: Surprise is reachable
 - **WHEN** the coalition holds a perceptual report with normalised error ratio 3 and pleasantness and goal significance are near zero
@@ -44,7 +44,7 @@ Thymos SHALL compute the novelty appraisal check as `1 - prod (1 - s_m)` over co
 ## MODIFIED Requirements
 
 ### Requirement: Dimensional state with homeostatic drift
-Thymos SHALL maintain a `DimensionalState` containing `valence`
+Affect SHALL maintain a `DimensionalState` containing `valence`
 (float in `[-1, 1]`), `arousal` (float in `[0, 1]`), and `dominance`
 (float in `[-1, 1]`). On every internal tick arousal and dominance SHALL
 drift toward their configured baselines by a configurable fraction
@@ -56,7 +56,7 @@ valence after an affective reset.
 
 #### Scenario: Drift moves valence toward baseline
 - **WHEN** the state has `valence=0.8`, the baseline is 0.0, there is no
-  learning progress, Soma's wellness is 0.5 and no perceived emotion is
+  learning progress, Interoception's wellness is 0.5 and no perceived emotion is
   present (so the valence target equals the baseline), and 2.0 seconds pass
 - **THEN** the new valence is between 0.0 and 0.8 (strictly less
   than the prior value)

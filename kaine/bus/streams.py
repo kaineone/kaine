@@ -15,19 +15,19 @@ from kaine.bus.schema import WORKSPACE_STREAM, module_stream
 
 # --- Workspace, cycle and action selection --------------------------------
 
-# WORKSPACE_STREAM (imported above) is the broadcast, written by Syneidesis.
+# WORKSPACE_STREAM (imported above) is the broadcast, written by Workspace.
 #: Tick, rate and time-scale events from the cycle engine.
 CYCLE_STREAM = "cycle.out"
-#: Intents chosen by Volition.
+#: Intents chosen by Action selection.
 VOLITION_STREAM = module_stream("volition")
-#: Outcomes reported back to Volition by the effectors.
+#: Outcomes reported back to Action selection by the effectors.
 VOLITION_FEEDBACK_STREAM = "volition_feedback.out"
 
-# --- Lingua's speech channels ---------------------------------------------
+# --- Language's speech channels ---------------------------------------------
 
-#: Speech addressed to the world (Vox reads it).
+#: Speech addressed to the world (Vocal reads it).
 LINGUA_EXTERNAL_STREAM = "lingua.external"
-#: Inner speech (Eidolon reads it; Vox never does).
+#: Inner speech (Self-model reads it; Vocal never does).
 LINGUA_INTERNAL_STREAM = "lingua.internal"
 
 # --- Module output streams (one per module under kaine/modules/) ----------
@@ -38,7 +38,7 @@ ECHO_STREAM = module_stream("echo")
 EIDOLON_STREAM = module_stream("eidolon")
 EMPATHEIA_STREAM = module_stream("empatheia")
 HYPNOS_STREAM = module_stream("hypnos")
-#: Lingua's aggregate stream: a copy of every utterance on either channel.
+#: Language's aggregate stream: a copy of every utterance on either channel.
 LINGUA_STREAM = module_stream("lingua")
 MNEMOS_STREAM = module_stream("mnemos")
 MUNDUS_STREAM = module_stream("mundus")
@@ -53,7 +53,7 @@ VOX_STREAM = module_stream("vox")
 
 # --- Cycle-layer and lifecycle producers -----------------------------------
 
-#: The womb rhythm, readiness readouts and presence, written during gestation.
+#: The stimulus source rhythm, readiness readouts and presence, written during development.
 GESTATION_STREAM = module_stream("gestation")
 #: Individuation divergence verdicts (kaine.cycle.individuation_runtime).
 INDIVIDUATION_STREAM = module_stream("individuation")
@@ -61,7 +61,7 @@ INDIVIDUATION_STREAM = module_stream("individuation")
 LIFECYCLE_STREAM = module_stream("lifecycle")
 #: Preservation events from the divergence and welfare monitors.
 PRESERVATION_STREAM = module_stream("preservation")
-#: Spot module-supervisor incidents (kaine.cycle.spot).
+#: Supervisor module-supervisor incidents (kaine.cycle.spot).
 SPOT_STREAM = module_stream("spot")
 #: Welfare-protective responses (kaine.cycle.preservation_monitor).
 WELFARE_STREAM = module_stream("welfare")

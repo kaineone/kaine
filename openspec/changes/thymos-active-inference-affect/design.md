@@ -6,10 +6,10 @@
 
 ## Shadow readouts
 
-- **Where.** In Thymos, from the same broadcast the appraisal reads. When Nous is enabled, `U` and `EU` come from Nous's preference vector `C` and its predicted observations (an injected read-only provider). When Nous is off, a minimal interoceptive model is used: categorical Soma bands with preferences at the homeostatic set points. Which of the two becomes primary is an open item.
+- **Where.** In Affect, from the same broadcast the appraisal reads. When Planning is enabled, `U` and `EU` come from Planning's preference vector `C` and its predicted observations (an injected read-only provider). When Planning is off, a minimal interoceptive model is used: categorical Interoception bands with preferences at the homeostatic set points. Which of the two becomes primary is an open item.
 - **Output.** `thymos.shadow_affect` on `thymos.out` carries `{valence_shadow, arousal_shadow, model}`. It is content-free and excluded from salience and from every consumer except the research log.
 - **Offline comparison.** On recorded runs, the correlation and lag between the shadow readouts and today's valence and arousal; the shadow readouts' response to marked surprises; and the stability of their range.
 
 ## Gate
 
-The ablation runs on the current Thymos first. Then shadow readouts can ship off by default. A switch needs its own change, the paper note and a re-baselined study.
+The ablation runs on the current Affect first. Then shadow readouts can ship off by default. A switch needs its own change, the paper note and a re-baselined study.

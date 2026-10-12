@@ -1,26 +1,26 @@
 # nexus-observability Specification
 
 ## Purpose
-Nexus's live diagnostics: one server-sent-event feed of every active module stream and the workspace broadcast, and the status indicators an operator needs to watch a run, from coherence, fatigue and welfare to encryption, supervision, the safety net and run admissibility.
+Dashboard's live diagnostics: one server-sent-event feed of every active module stream and the workspace broadcast, and the status indicators an operator needs to watch a run, from coherence, fatigue and welfare to encryption, supervision, the safety net and run admissibility.
 
 ## Requirements
 
 ### Requirement: Live streams for all active modules
-The Nexus diagnostics SSE bridge SHALL relay the output streams of every active
+The Dashboard diagnostics SSE bridge SHALL relay the output streams of every active
 module, including `empatheia.out`, `phantasia.out`, and the `workspace.broadcast`
 stream (which carries `metadata['coherence']`), so no enabled module is invisible
 in the live event feed.
 
 #### Scenario: New module streams reach the feed
-- **WHEN** Empatheia or Phantasia publishes an event while enabled
-- **THEN** that event appears in the Nexus diagnostics SSE feed
+- **WHEN** Social cognition or World model publishes an event while enabled
+- **THEN** that event appears in the Dashboard diagnostics SSE feed
 
 #### Scenario: Disabled-module stream is a no-op
 - **WHEN** a module is disabled and produces no events
 - **THEN** its stream contributes nothing and the dashboard renders without error
 
 ### Requirement: Coherence (PLV) chart
-Nexus SHALL render a phase-locking-value (coherence) time series from
+Dashboard SHALL render a phase-locking-value (coherence) time series from
 `WorkspaceSnapshot.metadata['coherence']`. When the oscillatory layer is disabled
 and the key is absent, the chart SHALL render empty without error rather than
 breaking the page.
@@ -34,16 +34,16 @@ breaking the page.
 - **THEN** the coherence chart shows an empty series and the page still loads
 
 ### Requirement: Fatigue-accumulator trend
-Nexus SHALL render a Soma fatigue-accumulator trend from `soma.report`
+Dashboard SHALL render a Interoception fatigue-accumulator trend from `soma.report`
 `fatigue_value`, with the maintenance threshold shown as a reference, so the
-operator can see how close the substrate is to triggering Hypnos maintenance.
+operator can see how close the substrate is to triggering Sleep maintenance.
 
 #### Scenario: Fatigue trend advances
 - **WHEN** `soma.report` events carrying `fatigue_value` are observed
 - **THEN** the fatigue trend series advances and the threshold reference is shown
 
 ### Requirement: Welfare and prediction-error counts on the evaluation tab
-Nexus SHALL surface, on the evaluation tab, the `welfare_observer` Gray-Zone
+Dashboard SHALL surface, on the evaluation tab, the `welfare_observer` Gray-Zone
 counts (unmaintained fatigue, sustained extreme VAD, replay overload), the
 `prediction_error_observer` sliding-window statistics per source, and a coherence
 summary — read from the live sidecar registry when available and otherwise from
@@ -64,7 +64,7 @@ error, when its source is absent.
   without error
 
 ### Requirement: State-encryption status probe
-The Nexus health board SHALL report the `[security.state_encryption]` posture —
+The Dashboard health board SHALL report the `[security.state_encryption]` posture —
 encrypted-at-rest, plaintext (disabled), or enabled-but-no-key (fail-closed) —
 without ever reading or logging the encryption key.
 
@@ -77,8 +77,8 @@ without ever reading or logging the encryption key.
 - **THEN** the health board reports a fail-closed (no-key) status
 
 ### Requirement: Fork merge-warning surfaced
-The Nexus forks panel SHALL surface the `nous.merge_warning` flag when a fork
-merge recorded a Nous policy divergence, so the operator is alerted to a posterior
+The Dashboard forks panel SHALL surface the `nous.merge_warning` flag when a fork
+merge recorded a Planning policy divergence, so the operator is alerted to a posterior
 clash across branches.
 
 #### Scenario: Merge warning is shown
@@ -90,7 +90,7 @@ clash across branches.
 - **THEN** no warning marker is shown for that fork
 
 ### Requirement: Supervisor incident status on the health surface
-The Nexus health snapshot SHALL include a `spot` block reporting the supervisor
+The Dashboard health snapshot SHALL include a `spot` block reporting the supervisor
 incident state — `ok`, `recovery`, or `critical` — derived from the freeze control
 (`frozen` and `source == "spot"` ⇒ `recovery`) and the escalation record
 (`escalated` ⇒ `critical`), together with the affected `module`, `attempts`,
@@ -110,7 +110,7 @@ the correct state.
   operator message and `snapshot_id`
 
 #### Scenario: Default ok state
-- **WHEN** there is no Spot freeze and no escalation
+- **WHEN** there is no Supervisor freeze and no escalation
 - **THEN** the health snapshot's `spot.state` is `"ok"`
 
 ### Requirement: Operator alert UI for supervisor incidents
@@ -126,7 +126,7 @@ the alert border SHALL be disabled under `prefers-reduced-motion`.
 - **THEN** the page renders the alert border in its red (critical) state
 
 #### Scenario: Live console receives incident lines
-- **WHEN** Spot publishes `spot.log` events during an incident
+- **WHEN** Supervisor publishes `spot.log` events during an incident
 - **THEN** the diagnostics page appends those lines to the incident console via the
   SSE stream
 
@@ -135,7 +135,7 @@ the alert border SHALL be disabled under `prefers-reduced-motion`.
 - **THEN** the alert border is shown without a pulsing animation
 
 ### Requirement: Entity-care status on the health surface
-The Nexus health snapshot SHALL include a read-only `entity_care` block reporting the entity's
+The Dashboard health snapshot SHALL include a read-only `entity_care` block reporting the entity's
 divergence/individuation summary and the CAL care-obligation checklist that applies before
 decommission. The block SHALL be non-content (statuses and static obligation text only) and SHALL
 NOT expose any destructive control — decommission remains a gated CLI action. The block SHALL be
@@ -152,11 +152,11 @@ guarded so a missing or unreadable signal yields a safe default rather than an e
 
 ### Requirement: GPU pre-flight status is surfaced read-only
 
-The Nexus health snapshot SHALL include a read-only `gpu_preflight` block derived
+The Dashboard health snapshot SHALL include a read-only `gpu_preflight` block derived
 from the last pre-flight verdict, reporting only non-content operational data:
 per-device VRAM, evicted/loaded model ids, GPU process names, the KAINE services
 detected, and an operator state. The block SHALL never raise; a missing or corrupt
-pre-flight record SHALL yield state `unknown`. Nexus SHALL NOT expose any control
+pre-flight record SHALL yield state `unknown`. Dashboard SHALL NOT expose any control
 that terminates a process from this block.
 
 #### Scenario: Blocked pre-flight surfaces as critical
@@ -171,9 +171,9 @@ that terminates a process from this block.
 - **THEN** the `gpu_preflight` block reports state `unknown`
 - **AND** the snapshot is produced without error
 
-### Requirement: Nous health probe verifies the generative model builds
+### Requirement: Planning health probe verifies the generative model builds
 
-The Nous health probe SHALL confirm that the active-inference generative
+The Planning health probe SHALL confirm that the active-inference generative
 model can be constructed, not merely that `pymdp` and `jax` are importable.
 A broken dependency (e.g. numpy ABI mismatch) that only surfaces at
 construction time would pass an import-only probe and give a false UP result.
@@ -203,7 +203,7 @@ caller.
 - **THEN** the probe SHALL return `DOWN` (unchanged from prior behaviour)
 
 ### Requirement: Run identity surfaced on diagnostics
-The Nexus dashboard SHALL surface the live run's identity — `run_id`, `seed`,
+The Dashboard dashboard SHALL surface the live run's identity — `run_id`, `seed`,
 `git_sha`, `kaine_version`, and the `deterministic` flag — read from the active
 `RunContext` and persisted by the cycle into `state/cycle/runtime.json`. The
 diagnostics page SHALL render a "run identity" block from these fields, and
@@ -220,7 +220,7 @@ run metadata; the surface SHALL carry no entity-interior content.
 - **THEN** the run-identity block degrades gracefully and the page still loads
 
 ### Requirement: Supervision mode and safety-net gate badge
-The Nexus dashboard SHALL surface the active supervision mode — `operator` or
+The Dashboard dashboard SHALL surface the active supervision mode — `operator` or
 `research` — and, in research mode, the four-condition safety-net gate `checks`
 dict (`preservation_enabled`, `welfare_response_wired`, `logging_active`,
 `self_check_passed` / `dry_self_check_passed`). The cycle SHALL write
@@ -238,10 +238,10 @@ visually prominent. These are non-content operational flags.
 - **THEN** the diagnostics page shows an operator-supervised badge and no gate-checks list
 
 ### Requirement: Preservation and welfare-protective events surfaced
-The Nexus dashboard SHALL surface preservation and welfare-protective events —
+The Dashboard dashboard SHALL surface preservation and welfare-protective events —
 `preservation.preserved`, `preservation.failed`, `preservation.skipped`, and
 `welfare.protective_action` (source `preservation`, stream `preservation.out`) —
-in a persistent panel analogous to the Spot console. The panel SHALL display
+in a persistent panel analogous to the Supervisor console. The panel SHALL display
 only an allowlist of non-content fields (e.g. `preservation_id`, `snapshot_id`,
 `reason`, `action`/`action_taken`, `transition`, `monitor`), render a
 `preservation.failed` event in the down/critical colour, and persist the last N
@@ -264,7 +264,7 @@ SHALL be surfaced.
 - **THEN** `_preservation_block()` returns the recent records using only allowlisted non-content fields
 
 ### Requirement: Live welfare status on the entity-care panel
-The Nexus dashboard SHALL surface a compact numeric welfare-counter row —
+The Dashboard dashboard SHALL surface a compact numeric welfare-counter row —
 unmaintained-fatigue crossings, sustained-VAD episodes, replay overload, and
 sustained interoceptive distress — on the diagnostics entity-care panel, sourced
 from the same aggregation as the evaluation tab. The row SHALL be numeric only
@@ -279,7 +279,7 @@ and carry no entity-interior content.
 - **THEN** the row renders an empty/none state and the page still loads
 
 ### Requirement: Live admissibility indicator
-The Nexus dashboard SHALL surface a lightweight live admissibility indicator that,
+The Dashboard dashboard SHALL surface a lightweight live admissibility indicator that,
 without scanning all run history, reports whether the current run's manifest is
 present (`data/evaluation/runs/<run_id>/manifest.json`), the last tick index from
 runtime.json, and a recording / gap-detected / unknown pill. A `HealthProber`
@@ -295,7 +295,7 @@ command-line operation.
 - **THEN** the admissibility indicator shows an "unknown" pill without error
 
 ### Requirement: Deterministic-mode indicator
-The Nexus dashboard SHALL render a deterministic-mode indicator near the
+The Dashboard dashboard SHALL render a deterministic-mode indicator near the
 cycle-rate charts, shown ONLY when the run's `deterministic` flag (from
 runtime.json) is true, stating that timestamps are logical rather than wall-clock.
 The indicator SHALL use the degraded colour and SHALL NOT appear in production
@@ -311,7 +311,7 @@ The indicator SHALL use the degraded colour and SHALL NOT appear in production
 
 ### Requirement: The diagnostics surface streams over a single multiplexed connection
 
-The Nexus console SHALL open at most one Server-Sent-Events connection to the
+The Dashboard console SHALL open at most one Server-Sent-Events connection to the
 diagnostics stream, and client features SHALL receive events through a client-side
 dispatcher rather than each opening its own `EventSource`. The server SHALL
 privacy-filter and encode each bus event once per event, then fan the filtered event
@@ -347,7 +347,7 @@ cognitive content) SHALL remain unchanged.
 The left-rail status chip SHALL reflect the real cognitive-cycle state, not a hardwired
 awake/sleeping binary. It SHALL be a four-state chip — OFFLINE, FROZEN, SLEEPING,
 AWAKE — computed live from the single diagnostics stream (the pushed cycle-status and
-operator-freeze flag, plus Hypnos sleep/wake events), with priority
+operator-freeze flag, plus Sleep sleep/wake events), with priority
 OFFLINE > FROZEN > SLEEPING > AWAKE. Its page-load default (before any live data
 arrives) SHALL be OFFLINE, since with no live data the console cannot know a cycle is
 running. The chip inputs SHALL be metadata-only (cycle running-state, freeze flag,
@@ -365,12 +365,12 @@ sleep/wake) and carry no cognitive content.
 
 #### Scenario: Running cycle reflects sleep/wake
 
-- **WHEN** the cycle is running, not frozen, and Hypnos is asleep
+- **WHEN** the cycle is running, not frozen, and Sleep is asleep
 - **THEN** the status chip reads SLEEPING
-- **AND WHEN** Hypnos wakes, the chip reads AWAKE
+- **AND WHEN** Sleep wakes, the chip reads AWAKE
 
 ### Requirement: The diagnostics streams are streams that something writes
-Every stream returned by `diagnostics_streams()` SHALL be one the system writes: `workspace.broadcast` or `module_stream(name)` for a canonical module name. It SHALL include `cycle.out`, so `cycle.tick`, `cycle.rates` and `cycle.time_scale` events reach Nexus. It SHALL NOT list an event type as if it were a stream.
+Every stream returned by `diagnostics_streams()` SHALL be one the system writes: `workspace.broadcast` or `module_stream(name)` for a canonical module name. It SHALL include `cycle.out`, so `cycle.tick`, `cycle.rates` and `cycle.time_scale` events reach Dashboard. It SHALL NOT list an event type as if it were a stream.
 
 #### Scenario: No phantom stream
 - **WHEN** the diagnostics stream list is built
@@ -378,7 +378,7 @@ Every stream returned by `diagnostics_streams()` SHALL be one the system writes:
 
 #### Scenario: Ticks reach the feed
 - **WHEN** the cycle publishes a `cycle.tick` event
-- **THEN** the Nexus bridge relays it to diagnostics clients
+- **THEN** the Dashboard bridge relays it to diagnostics clients
 
 ### Requirement: Charts read the events that carry their data
 The coherence chart SHALL plot `metadata.coherence` from `workspace.broadcast` events when it is a number. The salience chart SHALL plot only module events, not events from source `cycle` or `syneidesis`.
@@ -392,7 +392,7 @@ The coherence chart SHALL plot `metadata.coherence` from `workspace.broadcast` e
 - **THEN** the salience chart receives no sample from it
 
 ### Requirement: The bridge relays every event published after it starts
-The Nexus bus bridge SHALL resolve each stream's starting cursor to that stream's last entry id at the time of its first successful read (`0-0` when the stream is empty) and SHALL relay, after the privacy filter, every decodable event published to its streams after that point. A failed resolution SHALL be retried on the next poll. A non-blocking read SHALL never be issued with the `$` cursor.
+The Dashboard bus bridge SHALL resolve each stream's starting cursor to that stream's last entry id at the time of its first successful read (`0-0` when the stream is empty) and SHALL relay, after the privacy filter, every decodable event published to its streams after that point. A failed resolution SHALL be retried on the next poll. A non-blocking read SHALL never be issued with the `$` cursor.
 
 #### Scenario: Events after start reach a client
 - **WHEN** the bridge has started and a module publishes an event to a diagnostics stream

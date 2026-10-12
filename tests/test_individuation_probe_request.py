@@ -27,7 +27,7 @@ from kaine.storage import set_data_root
 
 
 class _FakeBus:
-    """Minimal bus stub for constructing Eidolon in tests without a real bus."""
+    """Minimal bus stub for constructing Self-model in tests without a real bus."""
 
     def __init__(self):
         self.client = None
@@ -231,7 +231,7 @@ def test_privacy_filter_strips_situation_facts():
 
 @pytest.mark.asyncio
 async def test_probe_ignores_the_live_workspace(bus: AsyncBus, tmp_path: Path):
-    """The probe always uses empty working memory, even while Lingua holds a
+    """The probe always uses empty working memory, even while Language holds a
     live coalition, so moment-to-moment content never enters the measurement."""
     from datetime import datetime, timezone
 

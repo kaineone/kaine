@@ -34,22 +34,22 @@ from kaine.workspace.volition import (
 
 log = logging.getLogger(__name__)
 
-# Nous → Volition event contract.
+# Planning → Action selection event contract.
 NOUS_SOURCE = "nous"
 NOUS_PROPOSAL_TYPE = "nous.proposal"
 
 # Drive summary helpers are mirrored here so this module stays independent of
-# kaine.workspace.drive_policy (the drive policy already imports from volition).
+# kaine.workspace.drive_policy (the drive policy already imports from action selection).
 THYMOS_DRIVE_SOURCE = "thymos"
 THYMOS_DRIVE_TYPE = "thymos.drive"
 
 
 class NousProposalSource:
-    """Policy wrapper that realizes accessed Nous proposals.
+    """Policy wrapper that realizes accessed Planning proposals.
 
     Runs the wrapped ``inner`` policy first. For each kind the wrapped policy
     guards itself (it exposes ``<kind>_in_flight`` and implements
-    :meth:`note_external_intent`), a realized Nous proposal arms that policy's
+    :meth:`note_external_intent`), a realized Planning proposal arms that policy's
     own guard. For any other kind the source keeps a local guard and drops
     inner intents of that kind while it is armed. Records an outcome for every
     proposal seen.
@@ -111,7 +111,7 @@ class NousProposalSource:
         return list(self._last_outcomes)
 
     def observe_inhibited(self, snapshot: WorkspaceSnapshot) -> None:
-        """Record an outcome for every Nous proposal in the coalition.
+        """Record an outcome for every Planning proposal in the coalition.
 
         Guard clearing still runs on every call, including inhibited
         observations. With ``drive_actions=False`` the recorded reason is
@@ -167,11 +167,11 @@ class NousProposalSource:
 
     @staticmethod
     def _without_proposals(snapshot: WorkspaceSnapshot) -> WorkspaceSnapshot:
-        """The coalition as the wrapped policy sees it: without Nous proposals.
+        """The coalition as the wrapped policy sees it: without Planning proposals.
 
-        A proposal is Nous's own choice of action, handled only here. Leaving it
+        A proposal is Planning's own choice of action, handled only here. Leaving it
         in would let the wrapped policy report on the proposal itself, and would
-        make the wrapped policy decide differently with Nous on than with it off.
+        make the wrapped policy decide differently with Planning on than with it off.
         """
         kept = [
             (entry_id, event)
@@ -200,7 +200,7 @@ class NousProposalSource:
     def _non_nous_members(
         self, snapshot: WorkspaceSnapshot
     ) -> list[tuple[Optional[str], object]]:
-        # Referents must be neither Nous proposals nor the entity's own speech.
+        # Referents must be neither Planning proposals nor the entity's own speech.
         return [
             (entry_id, event)
             for entry_id, event in snapshot.selected_events

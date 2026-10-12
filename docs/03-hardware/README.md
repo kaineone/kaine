@@ -10,7 +10,7 @@ KAINE's hardware needs split into two paths. Reproducing results offline (Path A
 |---|---|---|
 | GPU | None required | One GPU recommended for the language organ; CPU-only works (slower) |
 | VRAM | None | Enough for the served organ and enabled modules; the shipped config budgets about 4.1 GB for the 4B organ |
-| Supporting services | None | Redis, model server, Qdrant (voice services only if Audition/Vox are enabled) |
+| Supporting services | None | Redis, model server, Qdrant (voice services only if Audition/Vocal are enabled) |
 | Python | 3.12 recommended (3.11+ required) | 3.12 recommended (3.11+ required) |
 | What runs | Test suite + offline runners/benchmarks | The full cognitive cycle |
 
@@ -28,7 +28,7 @@ On a two-GPU host the secondary GPU can run vision or other non-organ work. On a
 
 CPU-only hosts run everything on CPU. The cycle works in full, but the organ and neural perception run much more slowly, so a CPU-only host suits exploring the architecture better than live-pace interaction.
 
-Several workloads stay on CPU even when a GPU is present: the NumPy CfC networks of Chronos and Soma (`cfc_backend = "numpy"`), the Audition emotion model (`emotion_device = "cpu"`), speech-to-text, and all control paths. The shared `[embedding]` instance also runs on CPU by default; set `[embedding].backend = "sentence_transformers"` to move it to torch.
+Several workloads stay on CPU even when a GPU is present: the NumPy CfC networks of Sequence and Interoception (`cfc_backend = "numpy"`), the Audition emotion model (`emotion_device = "cpu"`), speech-to-text, and all control paths. The shared `[embedding]` instance also runs on CPU by default; set `[embedding].backend = "sentence_transformers"` to move it to torch.
 
 ## GPU and VRAM guidance (Path B)
 
@@ -76,19 +76,19 @@ The model server can unload the organ after it has been idle for `[lingua].model
 
 ## Supporting services and their footprint (Path B)
 
-A live boot expects these local services. Voice services are only needed when Audition or Vox is enabled; the baseline thinking entity needs Redis, the model server, and Qdrant. None call the cloud at runtime.
+A live boot expects these local services. Voice services are only needed when Audition or Vocal is enabled; the baseline thinking entity needs Redis, the model server, and Qdrant. None call the cloud at runtime.
 
 | Service | Role | Footprint |
 |---|---|---|
 | Redis | Event bus (Redis Streams) | Light; CPU/RAM only |
-| Model server | Language organ inference (Lingua) | The served organ's VRAM (about 4.1 GB in the shipped config) when loaded |
-| Qdrant | Vector memory (Mnemos, Empatheia) | Light; grows with stored memories |
+| Model server | Language organ inference (Language) | The served organ's VRAM (about 4.1 GB in the shipped config) when loaded |
+| Qdrant | Vector memory (Episodic memory, Social cognition) | Light; grows with stored memories |
 | Speaches (optional) | Speech-to-text (Audition, only with `transcription_enabled = true`) | CPU with `Systran/faster-distil-whisper-medium.en`; must not run on GPU |
-| Chatterbox (optional) | Voice synthesis (Vox) | GPU-served TTS; can share the secondary GPU |
+| Chatterbox (optional) | Voice synthesis (Vocal) | GPU-served TTS; can share the secondary GPU |
 
 > Speaches STT must run on CPU with the configured `medium.en` model (`[audition].stt_model`). Running it on GPU triggers a cuDNN crash when the secondary GPU is also serving Chatterbox; a missing model returns HTTP 404 that breaks the voice loop. See [Getting started](../04-getting-started/README.md) and [Troubleshooting](../06-operation/troubleshooting.md).
 
-As an alternative to Speaches and Chatterbox, Audition and Vox can use sherpa-onnx. Set `[audition].backend = "sherpa_onnx"` and `[vox].backend = "sherpa_onnx"`, and run `python -m kaine.setup.speech_models` to fetch the models.
+As an alternative to Speaches and Chatterbox, Audition and Vocal can use sherpa-onnx. Set `[audition].backend = "sherpa_onnx"` and `[vox].backend = "sherpa_onnx"`, and run `python -m kaine.setup.speech_models` to fetch the models.
 
 If a service is shared with another entity or managed outside KAINE, set `[services.<name>].shared = true`. The pre-flight in [`kaine/cycle/preflight.py`](../../kaine/cycle/preflight.py) respects that flag and does not demand an exclusive instance.
 
@@ -98,7 +98,7 @@ If a service is shared with another entity or managed outside KAINE, set `[servi
 
 ## Voice-alignment trainer by GPU vendor
 
-The optional sleep-cycle voice-alignment trainer (Hypnos) runs unsloth in its own environment, separate from the entity-runtime venv. Which unsloth a host can use depends on the GPU vendor reported by `describe_host()["backend"]`:
+The optional sleep-cycle voice-alignment trainer (Sleep) runs unsloth in its own environment, separate from the entity-runtime venv. Which unsloth a host can use depends on the GPU vendor reported by `describe_host()["backend"]`:
 
 | Detected backend | Trainer | Notes |
 |---|---|---|
@@ -127,13 +127,13 @@ This pulls transformers v5 as a dependency. Use `pip install` directly rather th
 
 ## Lighter and larger hardware
 
-The default `[embedding]` backend uses a shared NumPy MiniLM embedder, so Mnemos, Empatheia, and Hypnos do not load torch unless you set `[embedding].backend = "sentence_transformers"`. Soma and Chronos run their CfC networks on NumPy by default, Nous can use `backend = "numpy"`, and Phantasia can use `engine = "numpy"`. Audition and Vox can use `sherpa_onnx` instead of the Speaches/Chatterbox services.
+The default `[embedding]` backend uses a shared NumPy MiniLM embedder, so Episodic memory, Social cognition, and Sleep do not load torch unless you set `[embedding].backend = "sentence_transformers"`. Interoception and Sequence run their CfC networks on NumPy by default, Planning can use `backend = "numpy"`, and World model can use `engine = "numpy"`. Audition and Vocal can use `sherpa_onnx` instead of the Speaches/Chatterbox services.
 
 The edge tier profiles reduce the active module set and swap heavy backends to lighter ones:
 
-- `tier0.toml` lists Topos, Audition, Vox, Empatheia and Phantasia as `unsupported_modules`, sets `oscillator_supported = false`, and selects the `llama_cpp` backend for Lingua, `sqlite_vec` for Mnemos and `numpy` for Nous.
-- `tier1.toml` lists no unsupported modules. It swaps Audition and Vox to `backend = "sherpa_onnx"`, Nous to `backend = "numpy"`, Phantasia to `engine = "numpy"`, blanks the emotion model ID, sets Topos `device = "cpu"`, and selects `llama_cpp` for Lingua and `sqlite_vec` for Mnemos.
+- `tier0.toml` lists Vision, Audition, Vocal, Social cognition and World model as `unsupported_modules`, sets `oscillator_supported = false`, and selects the `llama_cpp` backend for Language, `sqlite_vec` for Episodic memory and `numpy` for Planning.
+- `tier1.toml` lists no unsupported modules. It swaps Audition and Vocal to `backend = "sherpa_onnx"`, Planning to `backend = "numpy"`, World model to `engine = "numpy"`, blanks the emotion model ID, sets Vision `device = "cpu"`, and selects `llama_cpp` for Language and `sqlite_vec` for Episodic memory.
 
 Tier profiles do not set `[modules]` toggles; they change defaults and backend selections. Tier definitions and deployment trade-offs are in [Choosing a deployment](../07-deployment/README.md); current capability lists are in [Getting started](../04-getting-started/README.md).
 
-On hosts that cannot sustain the processing rate, set `[cycle].auto_time_scale = true`. The cycle then lowers `time_scale`, so entity time runs slower than wall-clock time and the dynamics keep their timing relative to each other. The long-term portability plan (NumPy CfC core, sherpa-onnx speech, NumPy Nous and Phantasia, Termux and thin-client offload, arm64 images, multi-node residency) is recorded in the archived portability-tiers spec at [`openspec/changes/archive/2026-09-17-portability-tiers`](../../openspec/changes/archive/2026-09-17-portability-tiers).
+On hosts that cannot sustain the processing rate, set `[cycle].auto_time_scale = true`. The cycle then lowers `time_scale`, so entity time runs slower than wall-clock time and the dynamics keep their timing relative to each other. The long-term portability plan (NumPy CfC core, sherpa-onnx speech, NumPy Planning and World model, Termux and thin-client offload, arm64 images, multi-node residency) is recorded in the archived portability-tiers spec at [`openspec/changes/archive/2026-09-17-portability-tiers`](../../openspec/changes/archive/2026-09-17-portability-tiers).

@@ -34,7 +34,7 @@ NON_RECALL_MARKER = "__KAINE_NO_MEMORY_RECALLED__"
 
 @runtime_checkable
 class CognitiveQueryClient(Protocol):
-    """A way to ask the real stack a question — wraps Lingua but lets
+    """A way to ask the real stack a question — wraps Language but lets
     us inject a fake for tests."""
 
     async def query(self, user_text: str) -> str: ...

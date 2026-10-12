@@ -65,7 +65,7 @@ class ArtifactKind(str, Enum):
 #: Which job kinds are reproducible (seeded feed + deterministic-cycle mode +
 #: run-identity + admissibility) and so MAY be validated by BOINC
 #: replicate-and-compare quorum. Non-deterministic kinds (QLoRA/abliterate/
-#: consolidate/forked-being) can NOT be quorum-validated and rely solely on the
+#: consolidate/forked-entity) can NOT be quorum-validated and rely solely on the
 #: trusted-side re-verification gate — quorum is Sybil-vulnerable and does not
 #: verify a non-deterministic training step (see the gate + BOINC docs).
 _DETERMINISTIC_KINDS: frozenset[JobKind] = frozenset({JobKind.EVAL})
@@ -110,7 +110,7 @@ class BatchJob:
     directive, seeds, etc. It is deliberately a plain dict so the whole
     descriptor round-trips through JSON and can be packed as a work unit.
     ``base_model_ref`` is called out because most kinds need it. ``time_scale``
-    and ``directive`` are the forked-being extras (ignored by other kinds).
+    and ``directive`` are the forked-entity extras (ignored by other kinds).
     """
 
     kind: JobKind
@@ -118,8 +118,8 @@ class BatchJob:
     job_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     inputs: dict[str, Any] = field(default_factory=dict)
     base_model_ref: Optional[str] = None
-    #: Forked-being extras. ``fork_snapshot_id`` is the ``ForkManager.fork()``
-    #: snapshot this being starts from; ``directive`` is what it is asked to do;
+    #: Forked-entity extras. ``fork_snapshot_id`` is the ``ForkManager.fork()``
+    #: snapshot this entity starts from; ``directive`` is what it is asked to do;
     #: ``time_scale`` (> 0) is its subjective pacing (PR #92 per-fork dilation).
     fork_snapshot_id: Optional[str] = None
     directive: Optional[str] = None
@@ -149,7 +149,7 @@ class BatchJob:
     def is_entity_bearing(self) -> bool:
         """True when running this job instantiates a *full individual* off-host.
 
-        Only forked-being jobs are entity-bearing. This gates whether the job may
+        Only forked-entity jobs are entity-bearing. This gates whether the job may
         go to an anonymous volunteer at all (it may not, until a volunteer-host
         welfare-and-security model exists — see the runner ordering + BOINC).
         """

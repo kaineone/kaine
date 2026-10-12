@@ -22,25 +22,25 @@ _MAX_OUTCOME_HISTORY = 256
 
 
 class CapabilityMapBuilder:
-    """Accumulates Nous policy events and builds the capability_map entry.
+    """Accumulates Planning policy events and builds the capability_map entry.
 
-    Praxis whitelist entries are injected at construction time (and do not
+    Effectors whitelist entries are injected at construction time (and do not
     change at runtime); EFE policy outcomes accumulate via ``observe_policy``.
     """
 
     def __init__(self, whitelist_commands: Optional[list[str]] = None) -> None:
-        # Sorted list of whitelisted command names from Praxis.
+        # Sorted list of whitelisted command names from Effectors.
         self._whitelist: list[str] = sorted(whitelist_commands or [])
-        # Count of Nous policy selections (action label → count).
+        # Count of Planning policy selections (action label → count).
         self._policy_counts: Counter[str] = Counter()
         # Running sum of EFE per action label (for mean EFE).
         self._efe_sums: dict[str, float] = {}
 
     def set_whitelist(self, whitelist_commands: Optional[list[str]]) -> None:
-        """Set the Praxis effector whitelist (once, at boot wiring).
+        """Set the Effectors effector whitelist (once, at boot wiring).
 
         Stored sorted for deterministic ``capability_map`` output. The whitelist
-        is fixed for the boot — Praxis effector enablement does not change at
+        is fixed for the boot — Effectors effector enablement does not change at
         runtime — so this is a set-once injection, not a live update path.
         """
         self._whitelist = sorted(whitelist_commands or [])
@@ -68,8 +68,8 @@ class CapabilityMapBuilder:
     def build(self) -> dict[str, Any]:
         """Return the capability_map dict to write into SelfModelDocument.
 
-        ``effectors`` — whitelisted Praxis commands (what can be executed).
-        ``policy_outcomes`` — per-action stats from Nous EFE history.
+        ``effectors`` — whitelisted Effectors commands (what can be executed).
+        ``policy_outcomes`` — per-action stats from Planning EFE history.
 
         If neither source has data yet the result is an empty dict.
         """

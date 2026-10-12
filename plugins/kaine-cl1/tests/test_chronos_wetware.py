@@ -39,7 +39,7 @@ def _open():
 
 
 class _LinearHead:
-    """Faithful minimal stand-in for Chronos' ForwardPredictionHead."""
+    """Faithful minimal stand-in for Sequence's ForwardPredictionHead."""
 
     def __init__(self, units: int, feat: int, lr: float = 0.15):
         self._W = np.zeros((feat, units))

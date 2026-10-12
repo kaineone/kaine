@@ -16,9 +16,9 @@ The schema SHALL declare ranges taken from the producing modules, for example:
 - `confidence ∈ [0, 1]`
 - drive `value ∈ [0, 1]`
 - `familiarity ∈ [0, 1]`
-- Soma's `fatigue_value ≥ 0` and `unexpected_error ≥ 0`
+- Interoception's `fatigue_value ≥ 0` and `unexpected_error ≥ 0`
 
-It SHALL use a generic `>= 0` where no hard upper bound is defined, and SHALL omit fields with no defined bound rather than guessing. Soma's fatigue accumulates on a scale of 0 to its configured threshold, not a unit scale. The sweep SHALL read records through the shared run-records loader (decrypting both encrypted and plaintext lines) without importing the evaluation package.
+It SHALL use a generic `>= 0` where no hard upper bound is defined, and SHALL omit fields with no defined bound rather than guessing. Interoception's fatigue accumulates on a scale of 0 to its configured threshold, not a unit scale. The sweep SHALL read records through the shared run-records loader (decrypting both encrypted and plaintext lines) without importing the evaluation package.
 
 #### Scenario: In-range records have no violations
 - **WHEN** a run's records hold only in-range values (e.g. `prediction_error = 0.0`, `valence = -0.5`, `confidence = 0.7`)

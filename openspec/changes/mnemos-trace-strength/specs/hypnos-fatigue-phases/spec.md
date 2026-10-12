@@ -1,9 +1,9 @@
 ## MODIFIED Requirements
 
 ### Requirement: Deep consolidation with global activation downscaling
-Hypnos phase 2 SHALL first replay traces of the wake just ended inside a replay
+Sleep phase 2 SHALL first replay traces of the wake just ended inside a replay
 window during which external perception is suspended, and SHALL then call
-Mnemos's `downscale` with the replayed traces as the protected set, which
+Episodic memory's `downscale` with the replayed traces as the protected set, which
 downscales and then prunes (paper A.10). The phase metadata SHALL record the downscaling summary: the traces
 stored since the previous sleep, the factor, the number protected, the number
 pruned at the floor and for the budget, the total strength before and after
@@ -24,7 +24,7 @@ SHALL NOT be accepted.
 
 #### Scenario: The old factor key fails the boot
 - **WHEN** `[hypnos.consolidation]` sets `downscale_factor`
-- **THEN** the Hypnos factory raises a configuration error
+- **THEN** the Sleep factory raises a configuration error
 
 #### Scenario: A failed replay skips downscaling
 - **WHEN** `replay_now()` raises in phase 2

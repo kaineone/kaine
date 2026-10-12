@@ -495,7 +495,7 @@ def test_decommission_backup_includes_phantasia_checkpoint(tmp_path: Path, monke
     manifest = json.loads((result.backup_path / "manifest.json").read_text())
     assert "state/phantasia/" in manifest["restore_notes"]
 
-    # Deletion removes the phantasia subtree (after backup).
+    # Deletion removes the world model subtree (after backup).
     deletion = delete_entity_state(
         state_root=state_root, qdrant_cfg=None, redis_cfg=None, dry_run=False
     )

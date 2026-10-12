@@ -54,7 +54,7 @@ def _read_json_object(path: Path) -> dict | None:
 
 
 def new_request(gestation_started_at: str | None) -> BirthRequest:
-    """Mint a new birth request record."""
+    """Mint a new maturation request record."""
     return BirthRequest(
         request_id=uuid4().hex,
         requested_at=datetime.now(timezone.utc).isoformat(),
@@ -63,7 +63,7 @@ def new_request(gestation_started_at: str | None) -> BirthRequest:
 
 
 def write_request(req: BirthRequest, path: Path | None = None) -> None:
-    """Write the birth request record atomically."""
+    """Write the maturation request record atomically."""
     target = resolve(path or BIRTH_REQUEST_PATH)
     payload = {
         "request_id": req.request_id,
@@ -74,7 +74,7 @@ def write_request(req: BirthRequest, path: Path | None = None) -> None:
 
 
 def read_request(path: Path | None = None) -> BirthRequest | None:
-    """Return the birth request record, or None if missing or malformed."""
+    """Return the maturation request record, or None if missing or malformed."""
     target = resolve(path or BIRTH_REQUEST_PATH)
     data = _read_json_object(target)
     if data is None:
@@ -94,7 +94,7 @@ def read_request(path: Path | None = None) -> BirthRequest | None:
 
 
 def clear_request(path: Path | None = None) -> None:
-    """Remove the birth request file if present."""
+    """Remove the maturation request file if present."""
     target = resolve(path or BIRTH_REQUEST_PATH)
     try:
         target.unlink()

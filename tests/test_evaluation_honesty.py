@@ -381,7 +381,7 @@ def test_claim_keywords_scores_supported_claims():
 
 
 # ---------------------------------------------------------------------------
-# M6 — curiosity is labelled a proxy in eidolon output
+# M6 — curiosity is labelled a proxy in self-model output
 # ---------------------------------------------------------------------------
 
 
@@ -431,7 +431,7 @@ async def test_eidolon_accuracy_curiosity_proxy_used_false_when_no_audit_file(tm
 
 
 # ---------------------------------------------------------------------------
-# L3 — empatheia observer skips pairings with absent confidence
+# L3 — social cognition observer skips pairings with absent confidence
 # ---------------------------------------------------------------------------
 
 
@@ -501,7 +501,7 @@ async def test_empatheia_observer_scores_present_confidence(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# L5 — Nous health probe performs a build check
+# L5 — Planning health probe performs a build check
 # ---------------------------------------------------------------------------
 
 

@@ -52,7 +52,7 @@ class IndividuationStoreError(RuntimeError):
 
 
 class ReferenceUnreadable(IndividuationStoreError):
-    """The birth-reference document could not be read or validated."""
+    """The maturation-reference document could not be read or validated."""
 
 
 class ReferenceExists(IndividuationStoreError):
@@ -186,7 +186,7 @@ class ProbeSample:
 
 @dataclass(frozen=True)
 class ReferenceDoc:
-    """The encrypted birth/capture/reconstructed reference document."""
+    """The encrypted maturation/capture/reconstructed reference document."""
 
     reference_id: str
     reference_kind: str
@@ -303,7 +303,7 @@ def load_reference(paths: IndividuationPaths) -> ReferenceDoc | None:
 def copy_birth_adapter(
     paths: IndividuationPaths, adapter_file: Path | None
 ) -> str:
-    """Copy the birth adapter next to the reference and return its digest."""
+    """Copy the maturation adapter next to the reference and return its digest."""
     if adapter_file is None:
         return "none"
 
@@ -720,7 +720,7 @@ def conditioning_digest(
     """Pure digest of the identity-conditioning inputs.
 
     Only the first five values and norms participate, matching the
-    birth-reference conditioning.
+    maturation-reference conditioning.
     """
     payload = json.dumps(
         {

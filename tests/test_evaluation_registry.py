@@ -130,7 +130,7 @@ def test_no_core_module_imports_kaine_evaluation():
         text=True,
     )
     matches = [line for line in proc.stdout.strip().splitlines() if line]
-    # The cycle entrypoint and nexus entrypoint are the allowed coupling points.
+    # The cycle entrypoint and dashboard entrypoint are the allowed coupling points.
     # nexus/__main__.py uses a lazy/optional import to mount the tab when enabled.
     allowed = {
         "kaine/cycle/__main__.py",
@@ -158,7 +158,7 @@ class _FakeCognitiveClient:
 @pytest.mark.asyncio
 async def test_registry_builds_memory_and_eidolon_with_providers(tmp_path):
     """With a memory_source + cognitive_query_client supplied, the memory-probe
-    and eidolon-accuracy observers instantiate (the 7-of-9 → 9 fix)."""
+    and self-model-accuracy observers instantiate (the 7-of-9 → 9 fix)."""
     cfg = _config(tmp_path)
     sidecar = SidecarRegistry(
         bus=FakeBus(),

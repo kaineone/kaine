@@ -151,7 +151,7 @@ async def test_epistemic_action_emitted_as_proposal(bus: AsyncBus):
         assert "proposal_id" in payload
         assert "step" in payload
         assert 0.0 <= payload["preference"] <= 1.0
-        # Source is nous; it published a proposal, not a direct effector call.
+        # Source is planning; it published a proposal, not a direct effector call.
         assert proposals[0].source == "nous"
         intents = await _read(bus, "intent.act")
         assert intents == []

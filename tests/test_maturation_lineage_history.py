@@ -153,7 +153,7 @@ def test_resolve_boot_stage_gestation_for_fresh_identity_with_foreign_records(
 
     with _data_root(data_root):
         stage_state, enabled, fresh = _resolve_boot_stage(config, identity=me)
-        # The same bundle naming this being would make it lived, which proves
+        # The same bundle naming this entity would make it lived, which proves
         # the check reads this location.
         (bundle_dir / "manifest.json").write_text(json.dumps(_manifest(me)))
         lived_state, _, lived_fresh = _resolve_boot_stage(config, identity=me)
@@ -207,9 +207,9 @@ def test_has_prior_lived_history_reads_bundle_roots(tmp_path: Path) -> None:
 def test_resolve_boot_stage_finds_own_bundle_under_configured_out_root(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # This being was preserved into the configured preservation out_root, and
+    # This entity was preserved into the configured preservation out_root, and
     # its tree holds none of its own lived artifacts: it has lived, so it must
-    # not be regressed into gestation.
+    # not be regressed into development.
     monkeypatch.setattr("kaine.lifecycle.stage.STAGE_PATH", tmp_path / "state" / "lifecycle" / "stage.json")
     me = mint_identity()
     (tmp_path / "state").mkdir()
@@ -227,7 +227,7 @@ def test_resolve_boot_stage_finds_own_bundle_under_configured_out_root(
 
 
 def test_lived_before_true_when_a_descendant_record_names_this_being(tmp_path: Path) -> None:
-    """A fork or bundle whose lineage names this being proves it lived."""
+    """A fork or bundle whose lineage names this entity proves it lived."""
     me = mint_identity()
     child = fork_identity(me)
     forks = tmp_path / "forks" / "child-fork"
@@ -304,7 +304,7 @@ def test_resolve_start_stage_revived_bundle_outside_roots_is_embodied(
         gestation_state, gestation_enabled, gestation_fresh = _resolve_boot_stage(
             config, identity=me
         )
-        # A revival of the bundle treats the being as already-lived.
+        # A revival of the bundle treats the entity as already-lived.
         stage_state, enabled, fresh = _resolve_start_stage(config, revive, identity=me)
 
     assert gestation_enabled is True

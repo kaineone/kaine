@@ -272,7 +272,7 @@ def make_hypnos(
         kwargs["entity_clock"] = entity_clock
     # Semantic embedder for the consolidation-divergence MAGNITUDE, on the same
     # scale as the A/B meter. Lives in the boundary-neutral kaine.text_embedding
-    # (Hypnos never imports kaine.evaluation). Lazy: the heavy model only loads
+    # (Sleep never imports kaine.evaluation). Lazy: the heavy model only loads
     # the first sleep that actually builds pairs; absent the dep, magnitude
     # degrades to null and rate/counts still emit.
     if embedder is not None:
@@ -299,7 +299,7 @@ def make_hypnos(
         kwargs["phantasia"] = phantasia
     # Shared playlist clock (playlist-sleep-pause): boot stashes the SAME
     # instance used by both playlist feeds under the [perception_feed] section;
-    # pass it to Hypnos so sleep suspends/resumes playback at the same seam as
+    # pass it to Sleep so sleep suspends/resumes playback at the same seam as
     # the locus flip. Absent in non-playlist modes → honest no-op.
     if kaine_config is not None:
         _pf = kaine_config.get("perception_feed") or {}
@@ -329,7 +329,7 @@ def _resolve_trainer(
 ) -> Optional[Any]:
     """Pick a Trainer based on operator opt-in + the configured backend.
 
-    Returns None (Hypnos falls back to FakeTrainer) when voice_alignment is
+    Returns None (Sleep falls back to FakeTrainer) when voice_alignment is
     disabled or the operator approval env var is unset — both are honest
     outcomes (training simply not in play).
 
@@ -522,7 +522,7 @@ def _make_organ_window_runner(
     voice_config: "VoiceAlignmentConfig",
     kaine_config: dict[str, Any],
 ) -> Optional[Any]:
-    """Build the on-device unload→train→reload runner Hypnos brackets training with.
+    """Build the on-device unload→train→reload runner Sleep brackets training with.
 
     Returns an async callable ``runner(train_thunk) -> (TrainingResult,
     OrganWindowResult)``. ``boot`` is the allowed composition root, so it may

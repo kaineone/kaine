@@ -199,7 +199,7 @@ class IndividuationScheduler:
     def gate(
         self, sampler: Callable[[str, int], Awaitable[Any]]
     ) -> Callable[[str, int], Awaitable[Any]]:
-        """Return a gated sampler that waits for the being's own speech first."""
+        """Return a gated sampler that waits for the entity's own speech first."""
 
         async def gated(prompt: str, seed: int) -> Any:
             while True:

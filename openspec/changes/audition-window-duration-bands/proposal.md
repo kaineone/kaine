@@ -22,6 +22,6 @@ Three defects in Audition, found by the mathematics review of 2026-10-08.
 
 - **Code:** `kaine/modules/audition/{acoustic,module}.py`.
 - **Behaviour:** under raised arousal the acoustic embedding covers only the most recent part of each window, so onsets dominate; acoustic alerts and arousal startles are recalibrated by the self-normalising running ratios. Tone-event salience no longer follows host latency.
-- **Preserved beings:** acoustic forward models saved under `spectral-logband-32` and speech-path models without the layout tag re-learn online.
+- **Preserved entities:** acoustic forward models saved under `spectral-logband-32` and speech-path models without the layout tag re-learn online.
 - **Docs:** `docs/09-modules/audition.md`; `openspec/changes/attention-driven-audition/tasks.md` note.
 - **Paper:** §3.5 and Appendix A.2 (the tone feature vector) and A.4 (the auditory window).

@@ -1,13 +1,13 @@
 ## Why
 
-The paper (§3.3, §4) says that with Mnemos present the consolidation phases of
-Hypnos have material to work on, and that sleep combines the replay of
+The paper (§3.3, §4) says that with Episodic memory present the consolidation phases of
+Sleep have material to work on, and that sleep combines the replay of
 selectively strengthened traces (Wilson and McNaughton 1994; Wei et al. 2016)
 with synaptic downscaling. In the code, phase 1 moves every short-term entry
 into the episodic store, and phase 2's `replay_now()` then builds its
 candidates from the short-term buffer alone. By the time phase 2 runs the
-buffer is empty, so a sleep replays nothing. The Mnemos module page records
-this as a known gap. Mnemos is held, so the base-thesis form is unaffected.
+buffer is empty, so a sleep replays nothing. The Episodic memory module page records
+this as a known gap. Episodic memory is held, so the base-thesis form is unaffected.
 
 ## What Changes
 
@@ -17,9 +17,9 @@ this as a known gap. Mnemos is held, so the base-thesis form is unaffected.
 - `Mnemos.replay_now()` adds that batch to its candidates, with the episodic
   point id as the replayed `memory_id`. Selection, the window guard and
   redaction are unchanged.
-- Mnemos drops the batch when it sees `hypnos.sleep.completed`, so the batch
+- Episodic memory drops the batch when it sees `hypnos.sleep.completed`, so the batch
   lives only for the sleep that made it. A preservation import drops it too.
-- When a `mnemos.replay` event is a member of a stored broadcast, Mnemos
+- When a `mnemos.replay` event is a member of a stored broadcast, Episodic memory
   records it as `<replay of {memory_id}>` without the replayed text. Storing
   the text would nest the old trace inside the new one on every sleep, now
   that replay publishes events.
@@ -36,7 +36,7 @@ this as a known gap. Mnemos is held, so the base-thesis form is unaffected.
 ## Impact
 
 - `kaine/modules/mnemos/memory.py`, `kaine/modules/mnemos/module.py`,
-  `kaine/modules/hypnos/phases.py` (docstrings), tests, and the Mnemos and
+  `kaine/modules/hypnos/phases.py` (docstrings), tests, and the Episodic memory and
   sleep pages of the book.
-- Behaviour: only with Mnemos enabled. Phase 2 now publishes up to
+- Behaviour: only with Episodic memory enabled. Phase 2 now publishes up to
   `selection_top_k` `mnemos.replay` events per sleep.

@@ -154,7 +154,7 @@ class Mundus(BaseModule):
         return True
 
     async def activate(self) -> bool:
-        """Start Mundus from a dormant state; returns True if it came up."""
+        """Start Embodiment from a dormant state; returns True if it came up."""
         if not self._enabled():
             return False
         if self._tasks:
@@ -169,16 +169,16 @@ class Mundus(BaseModule):
 
     @property
     def enabled_by_config(self) -> bool:
-        """Whether Mundus is enabled by configuration (operator approval separate)."""
+        """Whether Embodiment is enabled by configuration (operator approval separate)."""
         return self._config_enabled
 
     @property
     def dormant(self) -> bool:
-        """Whether Mundus is currently held dormant (gestation)."""
+        """Whether Embodiment is currently held dormant (development)."""
         return self._dormant
 
     def set_dormant(self, dormant: bool) -> None:
-        """Set whether Mundus should remain dormant across the next initialize()."""
+        """Set whether Embodiment should remain dormant across the next initialize()."""
         self._dormant = bool(dormant)
 
     @property
@@ -375,8 +375,8 @@ class Mundus(BaseModule):
 
     async def _speech_loop(self) -> None:
         """Mirror KAINE's external speech out the body's local chat, so the
-        entity is conversational in-world before volition produces avatar
-        intents directly. (intent.avatar.say from volition still works too.)"""
+        entity is conversational in-world before action selection produces avatar
+        intents directly. (intent.avatar.say from action selection still works too.)"""
         while True:
             try:
                 entries, last_scanned = await self._bus.read_entries(

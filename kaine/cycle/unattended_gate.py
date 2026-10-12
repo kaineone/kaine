@@ -187,7 +187,7 @@ class UnattendedGateResult:
         """Numbered condition names (underscore-normalised) → pass/fail.
 
         The insertion order follows condition number 1 to 9 so runtime.json and
-        Nexus render the list deterministically.
+        Dashboard render the list deterministically.
         """
         ordered = sorted(self.conditions, key=lambda c: c.number)
         return {

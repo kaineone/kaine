@@ -143,7 +143,7 @@ def test_all_conditions_required() -> None:
     }
 
 
-# --- birth decision + availability guard ------------------------------------
+# --- maturation decision + availability guard ------------------------------------
 
 
 def test_not_ready_keeps_gestating() -> None:

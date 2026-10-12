@@ -91,7 +91,7 @@ def blend_frames(womb: np.ndarray, film: np.ndarray, alpha: float) -> np.ndarray
     """Return ``womb + alpha * (film - womb)`` as uint8.
 
     ``alpha`` is clamped to [0, 1]. Both frames must have the same shape. The
-    endpoints are exact: alpha 0 returns the womb frame's values and alpha 1 the
+    endpoints are exact: alpha 0 returns the stimulus source frame's values and alpha 1 the
     film frame's. :class:`WombWorldTransition` computes the same arithmetic in
     preallocated buffers.
     """
@@ -202,12 +202,12 @@ def render_birth_field(
     width: int,
     height: int,
 ) -> np.ndarray:
-    """Render the womb's bloom-peak field at ``womb_t_at_birth``.
+    """Render the stimulus source's bloom-peak field at ``womb_t_at_birth``.
 
-    The womb generator's own pure function (``WombProceduralSource.frame_at``
+    The stimulus source generator's own pure function (``WombProceduralSource.frame_at``
     at ``birth_progress = 1.0``: bright, pulse-free, full colour) at frame index
     ``floor(womb_t_at_birth * frame_rate_hz)``, with the recorded seed and the
-    being's lived gestation time.
+    entity's lived development time.
     """
     from kaine.modules.topos.feed import (
         WombClock,
@@ -492,9 +492,9 @@ class TransitionController:
 
 
 class WombWorldTransition:
-    """The per-boot womb-to-world transition shared by both surfaces.
+    """The per-boot stimulus-source-to-world transition shared by both surfaces.
 
-    Holds the womb's bloom-peak frame (rendered once, at construction), the
+    Holds the stimulus source's bloom-peak frame (rendered once, at construction), the
     programme's opening frame (decoded once, by the video surface) with the
     float32 buffers the per-read blend reuses, the controller and the number of
     sample frames heard since programme time started (for the audio fade-in).
@@ -548,7 +548,7 @@ class WombWorldTransition:
             return self._prepared
 
     def prepare(self, first_frame: Callable[[], Any]) -> bool:
-        """Obtain the programme's opening frame once and size the womb frame to
+        """Obtain the programme's opening frame once and size the stimulus source frame to
         it, at the film's native resolution. The frame is decoded before the
         lock is taken; the lock only publishes the result. On failure the
         transition is abandoned (the programme starts now). Returns True when
@@ -635,7 +635,7 @@ class TransitionVideoSource:
     """A ``_VideoSource`` presenting the crossfade, then the playlist.
 
     Wraps a ``PlaylistSource``. While the transition runs, ``read()`` returns
-    the crossfade from the womb's bloom-peak field to the programme's opening
+    the crossfade from the stimulus source's bloom-peak field to the programme's opening
     frame; once released, it reads the playlist as usual.
     """
 

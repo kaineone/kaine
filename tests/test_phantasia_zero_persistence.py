@@ -66,7 +66,7 @@ async def bus():
 async def test_training_pass_writes_no_disk_artifacts(
     bus: AsyncBus, tmp_path, monkeypatch
 ):
-    """A Phantasia training/imagination pass writes NO model-state files to disk.
+    """A World model training/imagination pass writes NO model-state files to disk.
 
     Uses a private TMPDIR and an audit-hook write recorder so the test is
     hermetic and not affected by concurrent machine-wide /tmp traffic.

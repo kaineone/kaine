@@ -1,11 +1,11 @@
 ## Why
 
 The paper (A.7) states that awake time is accumulated across the boots of one
-being and persisted with it. Gestation progress (awake seconds, consecutive
+being and persisted with it. Development progress (awake seconds, consecutive
 entrainment passes, viability history) and the readout's baselines are saved
 next to `stage.json` in `state/lifecycle/`, but a preservation bundle carries
-only `stage.json`. A being revived into a fresh state root therefore restarts
-its gestation readout from zero.
+only `stage.json`. An entity revived into a fresh state root therefore restarts
+its development readout from zero.
 
 ## What Changes
 
@@ -24,7 +24,7 @@ its gestation readout from zero.
 
 ### Modified Capabilities
 
-- `entity-preservation`: gestation progress travels with the being.
+- `entity-preservation`: development progress travels with the entity.
 
 ## Impact
 

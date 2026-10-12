@@ -1,25 +1,25 @@
 ## ADDED Requirements
 
-### Requirement: Hypnos opens Phantasia's scenario window around phases 2 and 3
-When Phantasia is present, Hypnos SHALL open its scenario window through
-`open_scenario_window()` before phase 2, whose replay cues Phantasia through
+### Requirement: Sleep opens World model's scenario window around phases 2 and 3
+When World model is present, Sleep SHALL open its scenario window through
+`open_scenario_window()` before phase 2, whose replay cues World model through
 `mnemos.replay`, and SHALL close it through `close_scenario_window()` in a
-`finally` after phase 3, which cues Phantasia directly, so the window is
-closed after an exception or a cancel in either phase. A Phantasia
+`finally` after phase 3, which cues World model directly, so the window is
+closed after an exception or a cancel in either phase. A World model
 collaborator without these methods SHALL be cued as before.
 
-#### Scenario: A sleep cues Phantasia through the bus
-- **WHEN** a real Hypnos, Mnemos and Phantasia share a bus with their peer
+#### Scenario: A sleep cues World model through the bus
+- **WHEN** a real Sleep, Episodic memory and World model share a bus with their peer
   polls running, the short-term buffer holds traces, and `enter_sleep()` runs
-- **THEN** Phantasia publishes a `phantasia.scenario` seeded from each
+- **THEN** World model publishes a `phantasia.scenario` seeded from each
   replayed trace, and the scenario window is closed after the sleep
 
 #### Scenario: A cancel in phase 2 closes the window
 - **WHEN** the sleep is cancelled during phase 2's replay
-- **THEN** Phantasia's scenario window is closed
+- **THEN** World model's scenario window is closed
 
 ### Requirement: Shutdown settles an in-flight sleep and the held tasks
-Hypnos's `shutdown()` SHALL stop its background loops, then cancel a sleep
+Sleep's `shutdown()` SHALL stop its background loops, then cancel a sleep
 task still in flight and wait for it, so that the sleep ends with the
 affective reset and an aborted `hypnos.sleep.completed`, and SHALL then wait
 for the tasks it holds in `_shielded_tasks`. Each wait SHALL be bounded, and
@@ -38,12 +38,12 @@ a task still pending after it SHALL be logged and left.
 - **WHEN** a held task does not finish
 - **THEN** shutdown returns after the bound and logs the pending task
 
-### Requirement: Hypnos shuts down before the other modules
-The cycle's shutdown and Spot's halt SHALL shut Hypnos down first and the other
+### Requirement: Sleep shuts down before the other modules
+The cycle's shutdown and Supervisor's halt SHALL shut Sleep down first and the other
 modules after it in registration order, so a sleep still in flight ends while
-Mnemos, Thymos and Phantasia are up.
+Episodic memory, Affect and World model are up.
 
-#### Scenario: The reset runs while Thymos is up
-- **WHEN** the cycle shuts its modules down during a sleep, with Hypnos
-  registered after Thymos
-- **THEN** the affective reset runs before Thymos shuts down
+#### Scenario: The reset runs while Affect is up
+- **WHEN** the cycle shuts its modules down during a sleep, with Sleep
+  registered after Affect
+- **THEN** the affective reset runs before Affect shuts down

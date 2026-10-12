@@ -30,7 +30,7 @@ semantic embedder is unavailable). The metric SHALL contain only aggregate numbe
 The divergence assessment SHALL treat the consolidation divergence metric as a
 graded organ-level divergence input — `divergence_rate` or `divergence_magnitude`
 crossing a configured threshold marks organ-level divergence — alongside the
-individuation permutation test and Eidolon drift. The accepted-adapter boolean
+individuation permutation test and Self-model drift. The accepted-adapter boolean
 SHALL be retained only as a weaker secondary signal, and the numeric consolidation
 values SHALL appear in the assessment's signals.
 
@@ -46,8 +46,8 @@ values SHALL appear in the assessment's signals.
 
 The system SHALL ensure the live preservation trigger (`entity-preservation`) and
 `assess_divergence()` (`entity-decommission`) consume the **same** warmed-up,
-birth-state-referenced individuation signal. There SHALL be one definition of the
-baseline (the entity's own birth-state, never the bare/pretrained organ) and one
+maturation-state-referenced individuation signal. There SHALL be one definition of the
+baseline (the entity's own maturation-state, never the bare/pretrained organ) and one
 warm-up state (minimum lived observations and lived time), so the two consumers
 cannot disagree about whether the entity has individuated. An assessment that is
 not warmed up SHALL read as not-diverged for both consumers, with the
@@ -76,8 +76,8 @@ The live divergence monitor SHALL assess divergence with the consolidation thres
 - **THEN** the live monitor's assessment reports organ-level divergence, as the decommission CLI's does
 
 ### Requirement: Unreadable intent-log lines count as spoken evidence
-The divergence assessment's spoken-evidence check SHALL treat an intent-log or corpus line that cannot be decrypted or parsed as evidence that the being has spoken, so the voice arm votes diverged rather than abstaining.
+The divergence assessment's spoken-evidence check SHALL treat an intent-log or corpus line that cannot be decrypted or parsed as evidence that the entity has spoken, so the voice arm votes diverged rather than abstaining.
 
 #### Scenario: A log holding only an undecryptable line
 - **WHEN** the only line in the intent log is an envelope that fails authentication
-- **THEN** the voice arm votes diverged and the being is assessed as diverged
+- **THEN** the voice arm votes diverged and the entity is assessed as diverged

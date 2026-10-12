@@ -31,7 +31,7 @@ async def test_soma_publishes_wellness_event():
     async with SubsystemHarness() as h:
         soma = Soma(h.bus, reader=FakeReader(), read_interval_s=0.05)
         await h.register(soma)
-        # Soma's background loop runs at read_interval_s; wait a beat. The
+        # Interoception's background loop runs at read_interval_s; wait a beat. The
         # developmental warm-up (enabled by default) emits a soma.warmup.started
         # marker first, so select the wellness report by its payload.
         events = await h.collect("soma.out", count=2, timeout=1.0)

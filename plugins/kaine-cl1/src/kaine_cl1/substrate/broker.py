@@ -99,7 +99,7 @@ class SubstrateBroker:
     _accelerated: bool = field(default=True, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     #: Serialises synchronous (pre-beat) windows and the switch to beat mode across threads:
-    #: Nous steps its engine in a worker thread while Chronos and Soma step on the event loop.
+    #: Planning steps its engine in a worker thread while Sequence and Interoception step on the event loop.
     _sync_lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
     _latest: dict[str, TerritoryObservation] = field(default_factory=dict, repr=False)
     _next: dict[str, list[StimRequest]] = field(default_factory=dict, repr=False)

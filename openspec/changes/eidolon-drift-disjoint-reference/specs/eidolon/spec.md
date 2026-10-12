@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Workspace broadcasts update the drift detector
-Eidolon SHALL subscribe to `workspace.broadcast` and update its
+Self-model SHALL subscribe to `workspace.broadcast` and update its
 `DriftDetector` with each observed broadcast. The default
 `SourceDistributionDrift` SHALL track a recent window of event-source
 frequencies (default 100 broadcasts), a reference histogram of the

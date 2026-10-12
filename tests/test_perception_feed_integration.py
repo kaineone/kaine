@@ -42,7 +42,7 @@ from kaine.modules.topos.module import Topos
 
 
 class _FakeEncoder:
-    """Minimal Topos encoder double — no DINOv2 download, deterministic latent."""
+    """Minimal Vision encoder double — no DINOv2 download, deterministic latent."""
 
     model_id = "fake/encoder-integration"
     latent_dim = 4
@@ -155,7 +155,7 @@ async def _wait_for_events(bus: AsyncBus, stream: str, *, timeout_s: float = 8.0
 
 @pytest.mark.asyncio
 async def test_seeded_feed_delivers_vision_and_hearing(bus, virtual_feed_state):
-    """The smoking gun: with the seeded feed selected (virtual locus), Topos
+    """The smoking gun: with the seeded feed selected (virtual locus), Vision
     publishes to topos.out and Audition publishes to audition.out."""
     topos = _make_topos(bus)
     audition = _make_audition(bus)

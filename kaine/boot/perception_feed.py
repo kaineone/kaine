@@ -26,7 +26,7 @@ def _womb_params(feed: dict[str, Any]) -> WombParams:
     audio = womb.pop("audio", None)
     if audio is not None and not isinstance(audio, dict):
         raise ValueError("[perception_feed.womb.audio] must be a table")
-    # [perception_feed.womb.readout] belongs to the gestation owner, which
+    # [perception_feed.womb.readout] belongs to the development owner, which
     # validates it itself (GestationReadoutConfig).
     readout = womb.pop("readout", None)
     if readout is not None and not isinstance(readout, dict):
@@ -67,10 +67,10 @@ def _install_shared_womb_clock(
     stage_path: Path | None = None,
     stage_state: Any | None = None,
 ) -> None:
-    """Install one shared womb clock for both A/V surfaces.
+    """Install one shared stimulus source clock for both A/V surfaces.
 
     One clock for both surfaces so the beat is seen and heard together; the
-    offset continues the maternal trajectory across boots; womb time runs on
+    offset continues the maternal trajectory across boots; stimulus source time runs on
     the real monotonic clock (the mother is external), while the colour schedule
     follows lived subjective time.
     """
@@ -137,7 +137,7 @@ def _install_shared_womb_clock(
 
 
 def bind_womb_unawake_source(kaine_config: dict[str, Any] | None, fn: Callable[[], float]) -> None:
-    """Hand the cycle's time-not-awake account to the womb's colour schedule.
+    """Hand the cycle's time-not-awake account to the stimulus source's colour schedule.
 
     The cycle is built after the feed.
     """
@@ -168,12 +168,12 @@ def _transition_setting(feed: dict[str, Any], key: str, default: float) -> float
 def _plan_womb_world_transition(
     feed: dict[str, Any], stage_state: Any | None
 ) -> tuple[bool, str, int]:
-    """Decide whether this boot opens with the womb-to-world transition.
+    """Decide whether this boot opens with the stimulus-source-to-world transition.
 
     Returns ``(active, reason, log_level)``. The transition runs when the mode
     is ``playlist``, ``transition_seconds`` is above zero, the stage is embodied
     with ``womb_t_at_birth``, ``womb_seed`` and the parameter digest recorded,
-    and the configured womb parameters still have the recorded digest. An
+    and the configured stimulus source parameters still have the recorded digest. An
     unstaged, unborn or disabled case is reported at info; a born being missing
     its record, or a parameter mismatch, at warning. Invalid settings raise
     ``ValueError``.
@@ -243,10 +243,10 @@ def _build_womb_world_transition(
     video_present: bool = True,
     on_event: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> Any | None:
-    """Build this boot's womb-to-world transition, or return None and log why.
+    """Build this boot's stimulus-source-to-world transition, or return None and log why.
 
-    The womb's bloom-peak field is rendered once, here, from the stage's
-    recorded seed, womb time and lived time and the configured womb parameters.
+    The stimulus source's bloom-peak field is rendered once, here, from the stage's
+    recorded seed, stimulus source time and lived time and the configured stimulus source parameters.
     Constructing the controller pauses ``playlist_clock`` under ``transition``
     before any surface reads it. ``perceiving``, ``video_present`` and
     ``on_event`` pass through to the ``TransitionController``.
@@ -304,7 +304,7 @@ def _build_womb_world_transition(
 
 
 def _transition_perceived(video_present: bool) -> bool:
-    """Whether the being perceives the womb-to-world crossfade right now.
+    """Whether the entity perceives the stimulus-source-to-world crossfade right now.
 
     Not while the cycle is frozen (any freeze source; this also covers a boot
     that revives a frozen being before the freeze watcher pauses the
@@ -386,8 +386,8 @@ def _install_womb_world_transition(
     ``stage_state`` is the boot's resolved stage (a revive's preserved stage
     included); without it the stage file is read. The transition is stashed
     beside the shared playlist clock so the video and audio factories (and
-    Spot's restart path) wrap their playlist sources with the same instance.
-    ``video_present`` says whether Topos is enabled (build_registry corrects it
+    Supervisor's restart path) wrap their playlist sources with the same instance.
+    ``video_present`` says whether Vision is enabled (build_registry corrects it
     once the modules are constructed); ``bus`` receives the
     ``perception.transition`` outcome events.
     """
@@ -423,8 +423,8 @@ def _build_perception_feed_video_factory(
     The factory matches the LiveCamera ``source_factory(device, *, width, height)``
     signature; the deterministic sources ignore ``device``. Seeded uses the
     config geometry directly + the ``[perception_feed.video]`` knobs; playlist
-    resolves + (later, at open()) verifies the operator manifest; womb uses a
-    shared womb clock so the maternal environment is seen and heard together.
+    resolves + (later, at open()) verifies the operator manifest; stimulus source uses a
+    shared stimulus source clock so the maternal environment is seen and heard together.
     """
     from kaine.modules.topos.feed import (
         PlaylistSource,
@@ -477,7 +477,7 @@ def _build_perception_feed_video_factory(
     # Shared start-clock injected by build_registry so video and audio stay on the
     # same item (playlist-realtime-av-sync). None -> a private clock (standalone).
     shared_clock = feed.get("_shared_playlist_clock")
-    # A born being's viewing opens with the womb-to-world crossfade when boot
+    # A born entity's viewing opens with the stimulus-source-to-world crossfade when boot
     # built one (womb-to-world-transition); the same instance serves audio.
     transition = feed.get("_womb_world_transition")
 
@@ -606,7 +606,7 @@ def _build_perception_feed_audio_factory(
     reads the shared ``seed`` + the ``[perception_feed.video].surprise_interval``
     (so the surprise cadence is shared cross-modally) + the
     ``[perception_feed.audio]`` knobs. Playlist walks the SAME manifest as the
-    video surface. Womb reads a shared seed and the same shared womb clock so
+    video surface. Stimulus source reads a shared seed and the same shared stimulus source clock so
     the maternal heartbeat stays phase-locked across surfaces.
     """
     if mode == "screen":
@@ -680,7 +680,7 @@ def _build_perception_feed_audio_factory(
     # SAME shared start-clock instance the video factory received, so both feeds
     # cross item boundaries together (playlist-realtime-av-sync).
     shared_clock = feed.get("_shared_playlist_clock")
-    # The programme's sound fades in after the womb-to-world crossfade when boot
+    # The programme's sound fades in after the stimulus-source-to-world crossfade when boot
     # built one (womb-to-world-transition); the same instance serves video.
     transition = feed.get("_womb_world_transition")
 
@@ -722,11 +722,11 @@ def gather_perception_feed_descriptor(
     for ``off``/``live`` just the mode; for ``womb`` the parameters plus the
     video/audio schedules and the lived-seconds offset. A ``playlist`` descriptor
     also records ``transition_seconds``, ``transition_audio_fade_seconds`` and
-    whether this boot plans the womb-to-world transition
+    whether this boot plans the stimulus-source-to-world transition
     (``transition_planned``, judged from ``stage_state`` — the boot's resolved
     stage — or else the stage file; the outcome is published as
     ``perception.transition`` events). Best-effort — a
-    malformed/absent manifest or womb config degrades to ``{"mode": ...}`` and
+    malformed/absent manifest or stimulus source config degrades to ``{"mode": ...}`` and
     never raises, so it can't crash boot. No rendered frames, no PCM, no
     operator paths.
 
@@ -781,7 +781,7 @@ def gather_perception_feed_descriptor(
             params = _womb_params(feed)
             descriptor["womb"] = dataclasses.asdict(params)
         except Exception:
-            # The womb parameters are validated for real at boot time; the
+            # The stimulus source parameters are validated for real at boot time; the
             # covariate must not crash the run if they can't be read here.
             descriptor["womb"] = {"invalid": True}
         descriptor["video"] = WombSchedule(

@@ -45,7 +45,7 @@ def test_write_desired_locus_preserves_attribution_when_omitted(tmp_path: Path) 
     assert d.locked_by == "gestation"
 
 
-# --- honest denial reason (W2.2, spec: self-switch refused during gestation) --
+# --- honest denial reason (W2.2, spec: self-switch refused during development) --
 
 
 def _switch(locked_by: str):
@@ -74,7 +74,7 @@ def test_operator_lock_denial_unchanged() -> None:
 
 
 def test_self_switch_refused_while_gestating() -> None:
-    # The load-bearing behaviour: while the womb lock is held the entity cannot
-    # leave the womb, regardless of dwell/policy.
+    # The load-bearing behaviour: while the stimulus source lock is held the entity cannot
+    # leave the stimulus source, regardless of dwell/policy.
     allowed, _ = _switch("gestation")
     assert allowed is False

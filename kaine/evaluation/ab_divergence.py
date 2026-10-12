@@ -163,7 +163,7 @@ class ConditionedInferenceClient(Protocol):
     client, model, persona scaffolding, and prompt structure, any divergence the
     control reports is attributable to the conditioning ALONE — which is exactly
     what the A/B meter is supposed to measure. The real implementation (wired at
-    the cycle entrypoint) reuses Lingua's ``ContextAssembler`` + chat client, so
+    the cycle entrypoint) reuses Language's ``ContextAssembler`` + chat client, so
     the control exercises the production conditioning path, not a parallel fake.
     """
 
@@ -205,11 +205,11 @@ async def divergence_control(
 
 
 class AssemblerConditionedClient:
-    """Real conditioned-inference path for the control: Lingua's own
+    """Real conditioned-inference path for the control: Language's own
     ``ContextAssembler`` + the language-organ chat client.
 
     Wired at the cycle entrypoint (the allowed module-coupling point), this
-    builds the conditioned prompt the SAME way Lingua does in production, then
+    builds the conditioned prompt the SAME way Language does in production, then
     runs it through the SAME chat client. ``conditioning`` is the rendered
     workspace/awareness block: an empty string reproduces the "nothing salient"
     prompt (the bare arm), a populated string injects the workspace contents.

@@ -11,7 +11,7 @@ competitive selection today, so neither control can be run.
 
 - `[syneidesis].arm` selects the arm of the live cycle: `competitive` (the
   default, selection and access as built), `matched` or `pooled`.
-- Matched arm: on each broadcast tick Syneidesis scores every candidate as
+- Matched arm: on each broadcast tick Workspace scores every candidate as
   before, then draws `min(top_k, n)` candidates uniformly without replacement,
   without regard to score, from a generator seeded from the run seed. A drawn
   member is accessed when its score reaches the access threshold, and the
@@ -20,7 +20,7 @@ competitive selection today, so neither control can be run.
   broadcast ticks.
 - Pooled arm: no candidate is scored. Every candidate of the tick is a member,
   the broadcast is never inhibited, the score table carries each candidate's
-  intensity (so Volition applies its report rule to intensities), and the
+  intensity (so Action selection applies its report rule to intensities), and the
   broadcast has no access threshold, so every member enters the context. An
   empty pooled broadcast replaces the context with the featurization of the
   empty set, because in this arm every broadcast replaces the context.
@@ -28,7 +28,7 @@ competitive selection today, so neither control can be run.
   workspace record copies it, so each run's records say which arm produced
   them.
 - The matched and pooled arms require the coherence layer to be off, as it is
-  in the base-thesis form; Syneidesis refuses the combination at construction.
+  in the base-thesis form; Workspace refuses the combination at construction.
 - The module-addition study's overlay pins `[lingua].temperature = 0.0` and
   `[syneidesis].arm = "competitive"`, so an operator override cannot make a
   study run sample stochastically or run a control arm.
@@ -48,10 +48,10 @@ competitive selection today, so neither control can be run.
   tick is a broadcast tick. Its generator is not persisted: draws reproduce
   within one uninterrupted run, and a restart or revive restarts the stream
   from the seed.
-- Lingua no longer lets an empty pooled broadcast replace its cached coalition.
+- Language no longer lets an empty pooled broadcast replace its cached coalition.
 - The individuation probe gets its own decoding temperature,
   `[individuation].probe_temperature` (default 0.0, at least 0), wired from
-  the individuation runtime to Lingua, so moving greedy decoding out of the
+  the individuation runtime to Language, so moving greedy decoding out of the
   default profile does not change the probe's conditions.
 
 ## Capabilities
@@ -78,7 +78,7 @@ competitive selection today, so neither control can be run.
   `config/kaine.toml`,
   `config/profiles/thesis_test.toml`, `config/studies/`, docs, tests.
 - The individuation probe decodes at its own temperature,
-  `[individuation].probe_temperature` (default 0.0), which Lingua's probe
+  `[individuation].probe_temperature` (default 0.0), which Language's probe
   request uses and its probe conditions report under the existing
   `temperature` key. The voice's temperature never reaches the probe, so a
   reference captured under the old greedy default stays valid after this

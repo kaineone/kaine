@@ -75,7 +75,7 @@ _SPOT_OUT_SALIENCE = 0.5
 class IncidentLogConfig:
     """``[spot.incident_log]`` — the durable incident-log side-channel.
 
-    Ships ``enabled = true`` so any operator who turns Spot on automatically gets
+    Ships ``enabled = true`` so any operator who turns Supervisor on automatically gets
     the research-value log; it is dormant while ``[spot].enabled = false``. There
     is deliberately NO ``retention_days`` key: the retention purge is
     unconditionally disabled for the incident log (see incident_log.py).
@@ -538,7 +538,7 @@ class Spot:
                 )
 
     async def escalate_supervision_lost(self, reason: str) -> None:
-        """Escalate because Spot itself stopped supervising (unattended runs).
+        """Escalate because Supervisor itself stopped supervising (unattended runs).
 
         Takes a final snapshot, shuts every module down and writes
         ``escalation.json`` with a supervision-lost message. An unattended
@@ -569,7 +569,7 @@ class Spot:
     @staticmethod
     def _health_metrics(module: BaseModule) -> dict[str, Any]:
         """Read ``BaseModule.health()`` for the detect record. ``health()`` is
-        documented as pure/never-raises, but Spot must never crash on its own
+        documented as pure/never-raises, but Supervisor must never crash on its own
         instrumentation, so this is guarded and falls back to neutral values."""
         try:
             h = module.health()
@@ -592,18 +592,18 @@ class Spot:
             and bool(control.stack)
             and all(entry.get("source") == "gestation" for entry in control.stack)
         )
-        # Any gestation entry means the cycle is paused for a lost womb, so
-        # heartbeats stay stale even while Spot's own entry sits on top of it.
+        # Any development entry means the cycle is paused for a lost stimulus source, so
+        # heartbeats stay stale even while Supervisor's own entry sits on top of it.
         under_gestation = control.frozen and any(
             entry.get("source") == "gestation" for entry in control.stack
         )
         if control.frozen and control.source != "spot" and not gestation_only:
             # A frozen cycle's modules are silent by design, so heartbeat
-            # staleness is not a valid liveness signal for a freeze Spot does
-            # not own. Spot keeps working for its OWN recovery freeze (on
-            # recovery it pops only its own entry) and for a gestation-only
+            # staleness is not a valid liveness signal for a freeze Supervisor does
+            # not own. Supervisor keeps working for its OWN recovery freeze (on
+            # recovery it pops only its own entry) and for a development-only
             # freeze, where crashes can still be repaired while perception is
-            # paused. Spot stays out of operator/welfare freezes and of any
+            # paused. Supervisor stays out of operator/welfare freezes and of any
             # mixed stack that contains them.
             return
         for module in list(self._registry.all_modules()):
@@ -615,7 +615,7 @@ class Spot:
                 continue
             if under_gestation and state == "hung":
                 # Heartbeats are unreliable while the cycle is paused for
-                # gestation; only crashes are actionable.
+                # development; only crashes are actionable.
                 continue
             incident = self._incidents.setdefault(name, _Incident())
             if incident.incident_id is None:
@@ -698,7 +698,7 @@ class Spot:
                     },
                 )
                 self._incidents.pop(name, None)
-                # Spot only ever lifts its own freeze. If any spot entry is
+                # Supervisor only ever lifts its own freeze. If any supervisor entry is
                 # present in the stack, pop the newest one; other sources
                 # remain frozen.
                 control = control_state.read_control(path=self._control_path)

@@ -46,7 +46,7 @@ FORBIDDEN_CONTENT_KEYS = frozenset(
 
 
 def test_vox_synthesized_origin_nous_is_nous_initiated():
-    """Vox copies Lingua's origin, so a Nous utterance is attributed by it."""
+    """Vocal copies Language's origin, so a Planning utterance is attributed by it."""
     intents = [
         {"stream": "volition.out", "type": "intent.speak", "payload": {"kind": "speak", "entry_id": "e1"}},
     ]
@@ -81,7 +81,7 @@ def _realization(rtype="external_speech", entry_id=None, stream="lingua.external
 
 
 def test_realization_origin_uses_own_payload_not_last_intent():
-    """Precise attribution: speech is nous-initiated from its own origin."""
+    """Precise attribution: speech is planning-initiated from its own origin."""
     intents = [
         {"stream": "volition.out", "type": "intent.think", "payload": {"kind": "think", "entry_id": "e1", "origin": "nous"}},
         {"stream": "volition.out", "type": "intent.think", "payload": {"kind": "think", "entry_id": "e2"}},
@@ -240,7 +240,7 @@ def test_drive_triggered_realized_action():
 
 
 def test_base_thesis_input_triggered_zero():
-    # Conversation surface off, transcription off, mundus off: no external
+    # Conversation surface off, transcription off, embodiment off: no external
     # input types can appear in any coalition, so input_triggered == 0 —
     # the invariant holds every sleep.
     broadcasts = [
@@ -264,7 +264,7 @@ def test_base_thesis_no_broadcasts_at_all():
     assert report.self_initiated == 1
 
 
-# --- Scenario: Nous-originated intents ---
+# --- Scenario: Planning-originated intents ---
 
 
 def test_nous_origin_think_realized_as_internal_speech_is_nous_initiated():
@@ -327,7 +327,7 @@ def test_any_intent_on_nous_out_is_unrealizable():
         assert report.unrealizable_nous_intents == 1, kind
 
 
-# --- Scenario: unrealizable nous intents counted separately ---
+# --- Scenario: unrealizable planning intents counted separately ---
 
 
 def test_unrealizable_nous_intents_counted_separately():
@@ -440,7 +440,7 @@ def test_pipeline_wires_audit_every_sleep():
     # Merged into the completed metadata so it rides hypnos.sleep.completed
     # into the sleep_snapshots JSONL.
     assert 'summary["ignition_audit"]' in src
-    # Boundary (2.5): hypnos never imports kaine.evaluation.
+    # Boundary (2.5): sleep never imports kaine.evaluation.
     assert "import kaine.evaluation" not in src
     assert "from kaine.evaluation" not in src
 

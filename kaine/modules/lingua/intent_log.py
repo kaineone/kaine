@@ -20,14 +20,14 @@ log = logging.getLogger(__name__)
 
 
 class IntentExpressionLog:
-    """JSONL append log of every Lingua output.
+    """JSONL append log of every Language output.
 
-    Each record is the input to Phase 6 Hypnos's DPO pair construction.
+    Each record is the input to Phase 6 Sleep's DPO pair construction.
     The "chosen" side is the `faithful_rendering` field; the "rejected"
     side (when applicable) is the `generated_text`. Mode and metadata
-    let Hypnos partition the training data.
+    let Sleep partition the training data.
 
-    The log is the corpus of the being's own utterances, and it never holds
+    The log is the corpus of the entity's own utterances, and it never holds
     heard speech.
 
     When state encryption is enabled, each line is written as its own

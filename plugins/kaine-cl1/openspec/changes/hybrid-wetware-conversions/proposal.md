@@ -24,14 +24,14 @@ the module's event shapes are unchanged.
   salience" acoustic front end. STT and vocal-emotion stay silicon (model-bound).
   Encode audio envelope → temporal stim; decode surprise → auditory salience.
   *Likely permanent hybrid*, since transcription is not a wetware task.
-- **Phantasia (surprise read-out only).** Source the RSSM world-model's scalar
+- **World model (surprise read-out only).** Source the RSSM world-model's scalar
   **surprise** from culture criticality/LZ instead of silicon. The world-model
   rollout itself stays silicon (high-dimensional). *Likely permanent hybrid.*
-- **Volition / action-selection.** Closed-loop discrete action selection, the
+- **Action selection / action-selection.** Closed-loop discrete action selection, the
   literal DishBrain "Pong" paradigm. Encode state → stim; decode action from
   territory firing balance. Hardest decode; strongest concept. *Could become a
   full conversion* if decode proves reliable.
-- **Thymos (dimensional affect read-out).** Read valence/arousal from population
+- **Affect (dimensional affect read-out).** Read valence/arousal from population
   dynamics (arousal ≈ global excitability). Welfare-sensitive; gated behind
   explicit review even in the simulator, and never used to drive outward action.
 

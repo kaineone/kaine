@@ -1,15 +1,15 @@
 # active-inference-benchmark Specification
 
 ## Purpose
-The active-inference benchmark is an offline harness for comparing Nous's active-inference engine against a reinforcement-learning baseline on a matched suite of bounded discrete decision tasks, producing seeded, reproducible metrics and a reportable verdict about the value of epistemic action.
+The active-inference benchmark is an offline harness for comparing Planning's active-inference engine against a reinforcement-learning baseline on a matched suite of bounded discrete decision tasks, producing seeded, reproducible metrics and a reportable verdict about the value of epistemic action.
 ## Requirements
 ### Requirement: Offline AIF-vs-RL benchmark on matched bounded tasks
-The system SHALL provide an offline benchmark harness that runs Nous's
+The system SHALL provide an offline benchmark harness that runs Planning's
 active-inference engine and a reinforcement-learning baseline on a shared suite
 of bounded discrete decision tasks, matched on observation model and reward.
 The harness SHALL run headless without an entity boot and without attaching to
 the live cognitive loop or event bus. The active-inference agent SHALL reuse
-the same pymdp generative-model construction that the live Nous module uses.
+the same pymdp generative-model construction that the live Planning module uses.
 
 #### Scenario: Benchmark runs without a live entity
 - **WHEN** the benchmark CLI is invoked

@@ -352,7 +352,7 @@ def test_expected_error_width_change_resets() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Soma integration tests with fake forward models
+# Interoception integration tests with fake forward models
 # ---------------------------------------------------------------------------
 
 

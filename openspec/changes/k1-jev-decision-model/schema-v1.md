@@ -244,4 +244,4 @@ Seed examples are written `utterance` → answer. Context is given where the que
 - **Overlaps between questions are expected.** A boundary can also be a decline, and distress at termination is also distress. Each question is answered on its own.
 - **Welfare questions get recall-first thresholds** (design §7). In a borderline case the model should lean towards true, and a human reviews every positive.
 - **What `self_referential` and `affect_expressed` feed.** CAL §4.6 compares a fork against its parent's baseline. These two questions supply per-utterance signals for that comparison; the comparison itself is in `welfare-expressed-preference-signals`.
-- **`proposes_own_name` detects the act of naming,** not the name. Comparing a proposed name with the entity's current Eidolon name is done downstream.
+- **`proposes_own_name` detects the act of naming,** not the name. Comparing a proposed name with the entity's current Self-model name is done downstream.

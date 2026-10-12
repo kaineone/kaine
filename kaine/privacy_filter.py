@@ -43,7 +43,7 @@ from kaine.bus.schema import Event
 # any depth), and the "novel content key" gap is closed two ways instead:
 #   - genuinely content-bearing keys the audit found leaking are added below
 #     (`description`, `statement`), matching how the research taxonomy and the
-#     eval nexus tab already treat them as content; and
+#     eval dashboard tab already treat them as content; and
 #   - a CI guard (tests/test_nexus_privacy.py::test_no_uncovered_content_key_in_
 #     module_publishers) scans every module `publish()` payload and fails when a
 #     new content-capable key is introduced without being added here.
@@ -51,25 +51,25 @@ from kaine.bus.schema import Event
 # operational familiarity label (metrics), so it is not entity-interior content.
 # ---------------------------------------------------------------------------
 
-# Perceptual/latent embeddings (Topos clip embeddings 768/384-dim; Chronos
+# Perceptual/latent embeddings (Vision clip embeddings 768/384-dim; Sequence
 # CfC hidden state 32-dim and 24-dim feature vector); never displayed by
-# Nexus; persisting them would break zero raw-sense-data persistence.
+# Dashboard; persisting them would break zero raw-sense-data persistence.
 VECTOR_FIELDS: frozenset[str] = frozenset(
     {"latent", "peripheral", "foveal", "temporal_context", "feature_vector"}
 )
 
 # Backstop for embeddings published under a name not in VECTOR_FIELDS. 16 sits
 # above the longest small numeric list on the diagnostics streams (5-element
-# Thymos appraisal scores, 3-element proprioceptive position) and below the
-# shortest embedding (the 24-element Chronos feature vector).
+# Affect appraisal scores, 3-element proprioceptive position) and below the
+# shortest embedding (the 24-element Sequence feature vector).
 VECTOR_BACKSTOP_MIN_LEN: int = 16
 
-# Reviewed non-embedding numeric lists of unbounded length (Hypnos ignition-audit
-# saliences, Phantasia per-step magnitudes); adding a key here is a reviewed
+# Reviewed non-embedding numeric lists of unbounded length (Sleep ignition-audit
+# saliences, World model per-step magnitudes); adding a key here is a reviewed
 # change with a test.
 VECTOR_EXEMPT_KEYS: frozenset[str] = frozenset({"saliences", "step_magnitudes"})
 
-# Eidolon self-model values and norms are entity-interior text; Lingua reads them
+# Self-model self-model values and norms are entity-interior text; Language reads them
 # from the raw bus, and no diagnostics consumer does.
 CONTENT_FIELDS: frozenset[str] = frozenset(
     {
@@ -80,23 +80,23 @@ CONTENT_FIELDS: frozenset[str] = frozenset(
         "belief_text",
         "memory_text",
         "affect_reason",
-        # Retired field removed: Nous no longer emits the pre-pymdp-swap field.
+        # Retired field removed: Planning no longer emits the pre-pymdp-swap field.
         "transcription",
-        # Lingua's external-speech events carry these for the A/B evaluation
+        # Language's external-speech events carry these for the A/B evaluation
         # observers (raw bus access). They are content - the triggering user
         # utterance and the rendered workspace-access block - so they must be
         # scrubbed from the diagnostics surface.
         "user_input",
         "faithful_rendering",
-        # Thymos goal events carry a free-text goal `description`; Nous belief
+        # Affect goal events carry a free-text goal `description`; Planning belief
         # events carry a free-text `statement` (the dominant latent-factor label).
         # Both are entity-interior content — the research taxonomy and the eval
-        # nexus tab already exclude/drop them — so they must not reach diagnostics.
+        # dashboard tab already exclude/drop them — so they must not reach diagnostics.
         "description",
         "statement",
         "values",
         "behavioral_norms",
-        # The facts the being is told about its situation are entity-interior text.
+        # The facts the entity is told about its situation are entity-interior text.
         "situation_facts",
     }
 )
@@ -200,7 +200,7 @@ def _scrub(
 def strip_vectors(payload: Any) -> Any:
     """Strip vector fields and long numeric lists from *payload*.
 
-    This is the one vector rule shared by the diagnostics surface and Mnemos
+    This is the one vector rule shared by the diagnostics surface and Episodic memory
     memory text: it removes every named vector field (``VECTOR_FIELDS``) and
     any numeric list of ``VECTOR_BACKSTOP_MIN_LEN`` or more items, but keeps
     all content keys intact.

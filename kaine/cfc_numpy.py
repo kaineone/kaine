@@ -127,8 +127,8 @@ def generate_cfc_weights(
 ) -> tuple[ReservoirWeights, NumpyReadout]:
     """Generate a reservoir and an initial readout from the same seed.
 
-    The readout weights are drawn *after* the reservoir so that Soma and
-    Chronos can share one seed and still obtain the same readout initialisation
+    The readout weights are drawn *after* the reservoir so that Interoception and
+    Sequence can share one seed and still obtain the same readout initialisation
     as the torch path.
     """
     rng = np.random.default_rng(seed)

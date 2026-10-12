@@ -32,7 +32,7 @@ async def bus():
 
 
 async def _publish_self_model(bus: AsyncBus, **fields) -> None:
-    # Source "eidolon" routes to the eidolon.out stream Lingua consumes.
+    # Source "eidolon" routes to the eidolon.out stream Language consumes.
     await bus.publish(
         Event(
             source="eidolon",
@@ -71,8 +71,8 @@ async def _wait_for(pred, *, timeout_s: float = 2.0) -> bool:
 
 @pytest.mark.asyncio
 async def test_lingua_boots_against_bus_mediated_self_model(bus: AsyncBus, tmp_path: Path):
-    # A self-model snapshot already on the bus at boot (the Eidolon initial
-    # publish) seeds Lingua's persona — no in-process provider is wired.
+    # A self-model snapshot already on the bus at boot (the Self-model initial
+    # publish) seeds Language's persona — no in-process provider is wired.
     await _publish_self_model(bus, name="Kaine Umarov")
     lingua = _make_lingua(bus, tmp_path)
     assert lingua._self_model_provider is None  # no in-process reference

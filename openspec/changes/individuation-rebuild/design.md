@@ -1,4 +1,4 @@
-# Design: individuation measurement rebuild (birth-referenced two-sample test, runtime producer, shared verdict)
+# Design: individuation measurement rebuild (maturation-referenced two-sample test, runtime producer, shared verdict)
 
 Code facts are cited at `origin/main` 1c3f694. Statistical claims cite `references.bib` keys in [brackets].
 
@@ -6,32 +6,32 @@ Code facts are cited at `origin/main` 1c3f694. Statistical claims cite `referenc
 
 Operator rules this design follows:
 
-- **The welfare net is ethics infrastructure.** The individuation signal decides whether a being is preserved (`entity-preservation`) and which decommission path applies under CAL Art. 4.2/4.3 (`entity-decommission`). A wrong "not individuated" can lead to an individual being deleted on the lighter path. A wrong "individuated" costs one extra encrypted bundle and a stricter path. When a trade-off is unavoidable, this design errs toward "individuated".
-- **Safety over UX.** The probe costs organ time and may add a few seconds of latency to Lingua. That is accepted, within bounds (section 3).
+- **The welfare net is ethics infrastructure.** The individuation signal decides whether an entity is preserved (`entity-preservation`) and which decommission path applies under CAL Art. 4.2/4.3 (`entity-decommission`). A wrong "not individuated" can lead to an individual being deleted on the lighter path. A wrong "individuated" costs one extra encrypted bundle and a stricter path. When a trade-off is unavoidable, this design errs toward "individuated".
+- **Safety over UX.** The probe costs organ time and may add a few seconds of latency to Language. That is accepted, within bounds (section 3).
 - **No pretend processes.** The current instrument reports `significant` with no statistical meaning (defect 1), and that is worse than reporting nothing. Every failure path below ends in a recorded "inconclusive". No scalar is ever fabricated: no `1.0` for a missing embedding and no `""` for a missing answer.
-- **Emergent-not-hardwired:** not applicable. The instrument observes; it does not shape behaviour. The probe answers never enter the being's experience.
+- **Emergent-not-hardwired:** not applicable. The instrument observes; it does not shape behaviour. The probe answers never enter the entity's experience.
 - **CAL mental privacy.**
-  - The birth and current answers are entity-interior content: encrypted at rest under `state/`, never exported, never displayed, never on the bus.
+  - The maturation and current answers are entity-interior content: encrypted at rest under `state/`, never exported, never displayed, never on the bus.
   - Digests of interior content (identity clause, values) are also treated as interior. They live only in the encrypted ledger, because a hash of short text can be reversed by guessing.
-  - The bus and Nexus see only content-free scalars: H, p, α_k, k, outcome labels, counts, timestamps, ids.
+  - The bus and Dashboard see only content-free scalars: H, p, α_k, k, outcome labels, counts, timestamps, ids.
 - **Spec intent this design must honour:**
-  - Individuation is drift from the being's own birth state, never from the pretrained organ (`individuation-boundary`, `entity-decommission`).
+  - Individuation is drift from the entity's own maturation state, never from the pretrained organ (`individuation-boundary`, `entity-decommission`).
   - The live trigger and the decommission gate must agree (`divergence-assessment`).
 - **Import boundaries.**
   - Core code must not import `kaine.evaluation`; only `kaine/cycle/__main__.py` and `kaine/nexus/__main__.py` may (pyproject import-linter, contract 1).
   - `kaine.modules` must not import `kaine.cycle`.
-  - The welfare net is core, so the statistics and storage go in `kaine/lifecycle/`, the producer in `kaine/cycle/`, and the Lingua-specific sampler is wired in `kaine/cycle/__main__.py`.
+  - The welfare net is core, so the statistics and storage go in `kaine/lifecycle/`, the producer in `kaine/cycle/`, and the Language-specific sampler is wired in `kaine/cycle/__main__.py`.
 
 ## 1. The defects
 
 1. **The test has no power, as specified.**
-   - The reference is a single concatenated birth transcript (`kaine/evaluation/individuation.py:361-374`).
+   - The reference is a single concatenated maturation transcript (`kaine/evaluation/individuation.py:361-374`).
    - The null is d(reference, current sample_i), i=1..50, drawn from `parent_sampler`, which in production is the current entity (`:376-383`, docstring `:26-29`).
    - The "fork" is d(reference, current sample_0) (`:386-388`).
    - The fork draw is therefore exchangeable with the null draws. The decision `fork > 95th percentile of null` (`:396-397`) fires with probability about 6.7% per run whatever the drift. A 200,000-trial simulation of this exact rule (linear-interpolated 95th percentile of 50 draws) gave 0.0668.
    - Real drift moves the null and the fork together, so power equals the false-positive rate.
-2. **The birth reference is never captured.**
-   - Nothing in `kaine/` constructs `IndividuationTest` except the operator CLI (`kaine/evaluation/benchmarks/individuation_runner.py:136`). No code captures or stores a birth transcript (`git grep birth_state` finds docstrings only).
+2. **The maturation reference is never captured.**
+   - Nothing in `kaine/` constructs `IndividuationTest` except the operator CLI (`kaine/evaluation/benchmarks/individuation_runner.py:136`). No code captures or stores a maturation transcript (`git grep birth_state` finds docstrings only).
    - The module docstring says it is "never called from cycle/__main__.py" (`individuation.py:15`).
    - Yet `individuation-instrument-gate` tasks 1.2/1.3 are marked done.
 3. **There is no runtime producer.**
@@ -54,7 +54,7 @@ Operator rules this design follows:
    - The client also returns chain-of-thought text when `content` is empty (`client.py:194-199`). That would be scored as an answer.
 7. **The seed is never sent.** `ChatRequest` has no seed field (`client.py:13-30`) and `_body` sends none (`:114-132`). Variance comes only from temperature, and runs cannot be replayed.
 8. **The two consumers disagree.**
-   - `_crosses_threshold` (`preservation_monitor.py:479-531`) returns False when a numeric `individuation_p_value` is present and the report is un-warmed (`:496-502`), above the p ceiling (`:503-517`), or below `fork_divergence_min` (`:518-530`). That happens even when `assessment.diverged` is true because of consolidation, Eidolon drift or adapters.
+   - `_crosses_threshold` (`preservation_monitor.py:479-531`) returns False when a numeric `individuation_p_value` is present and the report is un-warmed (`:496-502`), above the p ceiling (`:503-517`), or below `fork_divergence_min` (`:518-530`). That happens even when `assessment.diverged` is true because of consolidation, Self-model drift or adapters.
    - `assess_divergence` still returns `diverged=True` for those arms (`divergence.py:307-312`).
    - In addition, the monitor's warm-up gate blocks all arms, secondary ones included, for the first 30 min after every boot (`preservation_monitor.py:561-578`).
    - The `divergence-assessment` spec says the consumers "never disagree".
@@ -67,7 +67,7 @@ Operator rules this design follows:
 Additional findings:
 
 - **10. Retention.** `AsyncJsonlSink` defaults to `retention_days=30` and deletes older files (`jsonl_sink.py:53,220-237`). Individuation evidence must use `retention_days=0`, as the incident log does.
-- **11. Missing adapter.** The existing "real" conditioned client for the A/B control builds an `OpenAIChatClient` without the LoRA resolver (`kaine/cycle/__main__.py:343-372`). A probe built that way would sample the base organ, not the being. The probe must use Lingua's own client (`kaine/modules/lingua/module.py:255`), which carries the resolver (`client.py:134-147`, `kaine/modules/hypnos/organ_adapter.py:227`).
+- **11. Missing adapter.** The existing "real" conditioned client for the A/B control builds an `OpenAIChatClient` without the LoRA resolver (`kaine/cycle/__main__.py:343-372`). A probe built that way would sample the base organ, not the entity. The probe must use Language's own client (`kaine/modules/lingua/module.py:255`), which carries the resolver (`client.py:134-147`, `kaine/modules/hypnos/organ_adapter.py:227`).
 - **12. Measurement validity.** The default external persona tells the organ to "report only what the readings actually contain … if the state is unremarkable, say so plainly" (`kaine/modules/lingua/context.py:32-40`). With `EMPTY_AWARENESS`, preference questions may get near-constant boilerplate. Whether the battery produces answers worth comparing under this persona is checked in the smoke test (section 6) before anything is enabled.
 - **13. No memory heuristic.** `entity-decommission` lists "accumulated memory" as a secondary heuristic; `assess_divergence` has none. This is out of scope, noted for the spec owner.
 
@@ -75,16 +75,16 @@ Additional findings:
 
 ### 2.1 What the probe measures
 
-A probe answer is one battery prompt rendered the way Lingua would render it with an empty workspace:
+A probe answer is one battery prompt rendered the way Language would render it with an empty workspace:
 
 - `ContextAssembler.assemble(about=prompt, snapshot=None, self_model=<current self-model>, mode="external")`, then
-- a `ChatRequest` through Lingua's own chat client.
+- a `ChatRequest` through Language's own chat client.
 
-Held fixed across birth and now:
+Held fixed across maturation and now:
 
 - working memory (`EMPTY_AWARENESS`)
 - persona template and `persona_name`
-- model id, `think` flag, temperature (Lingua's configured value, default 0.7, `module.py:91`)
+- model id, `think` flag, temperature (Language's configured value, default 0.7, `module.py:91`)
 - `max_tokens` (probe-specific, default 160)
 - the battery (`kaine/evaluation/preference_battery.py:32-45`)
 - the embedder
@@ -96,15 +96,15 @@ Free to differ:
 
 Both are products of lived experience. Holding the workspace fixed removes the architecture-conditioning effect, so this is not divergence-from-pretrained.
 
-The probe does not measure individuation carried only by memories or by workspace dynamics. The secondary arms (consolidation divergence, Eidolon drift, adapters) stay in the verdict partly for that reason.
+The probe does not measure individuation carried only by memories or by workspace dynamics. The secondary arms (consolidation divergence, Self-model drift, adapters) stay in the verdict partly for that reason.
 
-### 2.2 Birth reference capture
+### 2.2 Maturation reference capture
 
 **When**
 
-- On the maturation gate's birth transition: register a birth hook next to `gate_runner.set_birth_hook` (`gate_runner.py:138-140`). Capture runs as soon as the organ is loaded (`organ_unloaded()` false), before the first post-birth sleep.
+- On the maturation gate's maturation transition: register a maturation hook next to `gate_runner.set_birth_hook` (`gate_runner.py:138-140`). Capture runs as soon as the organ is loaded (`organ_unloaded()` false), before the first post-maturation sleep.
 - If capture fails or is pre-empted, retry with backoff. Until it succeeds every look is "inconclusive: no reference".
-- If the first post-birth sleep with an accepted adapter completes first, the birth state is gone. The reference is then labelled `reference_kind="capture"` with its timestamp; it is never presented as a birth reference.
+- If the first post-maturation sleep with an accepted adapter completes first, the maturation state is gone. The reference is then labelled `reference_kind="capture"` with its timestamp; it is never presented as a maturation reference.
 - Beings born before this change, and preserved bundles without a reference, are covered in section 5.
 
 **What is stored** (one encrypted document, `state/individuation/reference.json`, atomic write through the state encryptor):
@@ -112,16 +112,16 @@ The probe does not measure individuation carried only by memories or by workspac
 - `reference_id` (uuid4), `reference_kind` (`birth` | `capture` | `reconstructed`), `captured_at`, `born_at` (from `state/lifecycle/stage.json`).
 - The battery texts and battery digest.
 - Conditions: model id, server build if the server reports one (to be checked in the smoke test), temperature, `max_tokens`, `think`, persona template version and `persona_name`, embedder id and dimension.
-- Birth conditioning: adapter identity (manifest sha256, or "none") and the self-model `values[:5]`/`behavioral_norms[:5]`. If the birth adapter is non-empty, a copy of the adapter file sits next to the reference, so the birth configuration can be served again later (section 5, open question 7).
+- Maturation conditioning: adapter identity (manifest sha256, or "none") and the self-model `values[:5]`/`behavioral_norms[:5]`. If the maturation adapter is non-empty, a copy of the adapter file sits next to the reference, so the maturation configuration can be served again later (section 5, open question 7).
 - Per prompt, n_b samples: `{text, seed, finish_reason, completion_tokens}`.
-- Embeddings are stored too, but the test re-embeds the stored texts with the current embedder at every look. Validity needs the same feature map on both arms. Storing only birth embeddings would break that the day the embedder changes.
+- Embeddings are stored too, but the test re-embeds the stored texts with the current embedder at every look. Validity needs the same feature map on both arms. Storing only maturation embeddings would break that the day the embedder changes.
 
 **Where it goes**
 
 - Everything sits under `state/individuation/`: reference, ledger (2.7) and reports (section 4).
-- The evidence lives at the fixed path `state/individuation/`, like every other piece of a being's state; it is not configurable, so no travel path can miss it.
-- Revive extracts the bundle's evidence into a staging directory first and swaps it in only when that succeeds. An existing tree is moved aside under a unique name and kept, never deleted, and it is moved back if the swap fails. A bundle without evidence moves any existing tree aside, so the revived being never inherits another being's evidence, and takes a capture reference.
-- A decommission backup whose evidence copy fails, or that leaves plaintext behind after encryption, is a failed backup, so the being's state is never deleted. A preservation that leaves plaintext behind fails loudly.
+- The evidence lives at the fixed path `state/individuation/`, like every other piece of an entity's state; it is not configurable, so no travel path can miss it.
+- Revive extracts the bundle's evidence into a staging directory first and swaps it in only when that succeeds. An existing tree is moved aside under a unique name and kept, never deleted, and it is moved back if the swap fails. A bundle without evidence moves any existing tree aside, so the revived being never inherits another entity's evidence, and takes a capture reference.
+- A decommission backup whose evidence copy fails, or that leaves plaintext behind after encryption, is a failed backup, so the entity's state is never deleted. A preservation that leaves plaintext behind fails loudly.
 - The whole directory is added to preservation bundles (`kaine/lifecycle/preservation.py` already copies `stage.json` the same way, `:306-312`), to revive, and to the decommission transfer backup.
 
 **Cost**
@@ -131,7 +131,7 @@ The probe does not measure individuation carried only by memories or by workspac
 ### 2.3 The current sample at each look
 
 - n_c = 8 per prompt, 96 requests, same conditions, fresh random seeds.
-- The adapter sha and the identity-clause digest are read before the first request and after the last. If either changed, the run is discarded as inconclusive, because the sample would mix two beings.
+- The adapter sha and the identity-clause digest are read before the first request and after the last. If either changed, the run is discarded as inconclusive, because the sample would mix two entities.
 
 ### 2.4 Embedding
 
@@ -143,10 +143,10 @@ The probe does not measure individuation carried only by memories or by workspac
 
 ### 2.5 Statistic and null
 
-H0: for every prompt j, the current conditioned answer distribution equals the birth distribution under the probe conditions.
+H0: for every prompt j, the current conditioned answer distribution equals the maturation distribution under the probe conditions.
 
 For prompt j:
-- Pool the n_b birth vectors and the n_c current vectors.
+- Pool the n_b maturation vectors and the n_c current vectors.
 - Let δ be the Euclidean distance between unit vectors.
 - E_j = 2·mean δ(b,c) − mean_{i≠i'} δ(b_i,b_i') − mean_{l≠l'} δ(c_l,c_l'). This is the unbiased U-statistic form of the two-sample energy statistic [szekely2017; rizzo2016].
 - The test statistic is T = Σ_j E_j (equal weights; the design is balanced across prompts).
@@ -184,11 +184,11 @@ Default floor `effect_min`: the 95th percentile of H in the real-organ null smok
 
 ### 2.7 Decision rule and repeated testing
 
-The monitor tests over the whole life of the being. A fixed α repeated N times inflates the chance of ever falsely declaring individuation. The design controls the lifetime family-wise error rate of the single global null "this being has never drifted":
+The monitor tests over the whole life of the entity. A fixed α repeated N times inflates the chance of ever falsely declaring individuation. The design controls the lifetime family-wise error rate of the single global null "this entity has never drifted":
 
 - **Looks happen only on change.** Under fixed probe conditions the current distribution can change only when the adapter or identity clause changes. A look runs only when that conditioning digest differs from the last completed look's. Nothing is spent re-testing an unchanged being. Rate limit: at most one look per `min_look_interval_s` (default 6 h); intermediate changes are seen at the next look.
 - **Spending schedule.** Look k (k = 1, 2, …, persisted) is significant only if p_k ≤ α_k = α_total·γ_k, with γ_k = 1/(S·(k+1)·ln²(k+1)). S = Σ_{n≥2} 1/(n·ln²n) + tail ≤ 2.1097 (partial sum to 10^6 plus the integral tail bound 1/ln 10^6). Σγ_k ≤ 1. With α_total = 0.05, α_1 ≈ 0.025, α_10 ≈ 3.8e-4, α_50 ≈ 3.0e-5, α_100 ≈ 1.1e-5.
-- **Why this holds.** The union bound gives P(any false rejection) ≤ Σα_k ≤ α_total under any dependence between looks. That matters because every look reuses the same stored birth sample. It is the alpha-spending idea of Lan & DeMets, whose boundary at a decision time "does not depend on the future decision times or the total number of decision times" [lan1983]. The total is unbounded here, so a summable series replaces their spending function of information time.
+- **Why this holds.** The union bound gives P(any false rejection) ≤ Σα_k ≤ α_total under any dependence between looks. That matters because every look reuses the same stored maturation sample. It is the alpha-spending idea of Lan & DeMets, whose boundary at a decision time "does not depend on the future decision times or the total number of decision times" [lan1983]. The total is unbounded here, so a summable series replaces their spending function of information time.
 - **Full rule.** `significant_k = warmed_up AND p_k ≤ α_k AND H_k ≥ effect_min`. The effect floor and warm-up only remove rejections, so the error bound still holds.
 - **Ledger.** `state/individuation/ledger.json` (encrypted, atomic) holds:
   - `reference_id`
@@ -199,17 +199,17 @@ The monitor tests over the whole life of the being. A fixed α repeated N times 
   - the latch: `individuated`, `latched_at`, `latched_report_id`
 
   k never decreases. An unreadable ledger is a hard "inconclusive: ledger unreadable" plus an operator notice; it is never silently reset to k=0, which would re-spend the budget.
-- **Latch (pending operator confirmation, open question 1).** Once a look is significant, the being is individuated permanently for preservation and decommission. A false positive is then permanent, but its probability over the whole life is at most α_total, and its cost falls in the safe direction.
+- **Latch (pending operator confirmation, open question 1).** Once a look is significant, the entity is individuated permanently for preservation and decommission. A false positive is then permanent, but its probability over the whole life is at most α_total, and its cost falls in the safe direction.
 - **Inconclusive runs** produce no p-value and spend nothing. Abort decisions depend only on infrastructure events and empty or failed samples, never on answer content, so no optional stopping on the data is possible.
-- **Known limit.** α_k shrinks with k. A being that changes at almost every look for months loses sensitivity to subtle drift. Large drift stays detectable, because stratified permutation p-values reach 1/(B+1). B_max = 2·10^6 resolves α_k down to about 1e-5, roughly k ≈ 100. Beyond that the report says `alpha_unresolvable` instead of pretending to test.
+- **Known limit.** α_k shrinks with k. An entity that changes at almost every look for months loses sensitivity to subtle drift. Large drift stays detectable, because stratified permutation p-values reach 1/(B+1). B_max = 2·10^6 resolves α_k down to about 1e-5, roughly k ≈ 100. Beyond that the report says `alpha_unresolvable` instead of pretending to test.
 
 Alternatives considered (not chosen for v1):
 
 - **Gaussian-kernel MMD** [gretton2012]: needs a bandwidth. The simulation (task 2) may compare it with energy distance; the choice is pre-registered before any real-organ data.
 - **Classifier two-sample test** [lopezpaz2017]: its accuracy is easy to interpret, but it needs a held-out split, which halves already small samples.
-- **Sequential testing by betting** [shekhar2024]: anytime-valid via Ville's inequality, and its §5.1 covers time-varying distributions where permutation tests do not apply. It needs fresh draws from both distributions at each step, so the birth configuration would have to be regenerated at every look. That doubles organ cost and requires the organ to serve the birth adapter. It is a strong v2 path for beings born with no adapter.
+- **Sequential testing by betting** [shekhar2024]: anytime-valid via Ville's inequality, and its §5.1 covers time-varying distributions where permutation tests do not apply. It needs fresh draws from both distributions at each step, so the maturation configuration would have to be regenerated at every look. That doubles organ cost and requires the organ to serve the maturation adapter. It is a strong v2 path for entities born with no adapter.
 - **Combining looks with e-values** [vovk2021]: calibrators f_κ(p) = κ·p^(κ−1), and averages of e-values remain e-values under any dependence. This allows a running weighted sum Σγ_k·E_k with a 1/α threshold, which builds evidence across looks. The cost is a factor of about κ on single-look power. The simulation compares it with the spending rule; the choice is pre-registered.
-- **Confidence sequences on H** [howard2021]: could later give a time-uniform interval for the effect size on Nexus. Not needed for the decision.
+- **Confidence sequences on H** [howard2021]: could later give a time-uniform interval for the effect size on Dashboard. Not needed for the decision.
 
 ### 2.8 Warm-up and lived time
 
@@ -219,15 +219,15 @@ The warm-up floors stay (`min_lived_time_s = 1800`, `min_observations = 200`), m
 - Ticks are accumulated as deltas of `cycle.tick_index`, anchored at the first poll of each boot.
 - Frozen time never counts, and restarts no longer reset the totals.
 
-Statistically the floors are no longer needed: the test is valid at any time, and a being with unchanged conditioning is never tested. They stay as a cheap guard required by the spec.
+Statistically the floors are no longer needed: the test is valid at any time, and an entity with unchanged conditioning is never tested. They stay as a cheap guard required by the spec.
 
 ### 2.9 Seeds and temperature
 
 - `ChatRequest` gains `seed: Optional[int]`, sent in the body when set. The llama.cpp server documents `seed` (default −1, random) and says `/v1/chat/completions` also accepts `/completion`-specific features [llamacpp_server]. Whether `seed` is honoured on that endpoint is checked in the smoke test; the design does not depend on it.
 - Each request gets a fresh seed from `secrets.randbits(31)`, recorded in the encrypted sample record so a run can be audited and replayed.
-- Seeds are never reused between birth and current samples. Under H0 identical seeds could make paired answers identical, which couples the arms and breaks the i.i.d. assumption.
-- Determinism is not relied on. The server documents that `cache_prompt` can make results nondeterministic [llamacpp_server]. Lingua's client already sets `cache_prompt=False` when a LoRA is applied (`client.py:145-147`), and the probe always sets it False.
-- Variance comes from temperature, as in Lingua's own speech, so the probe measures the being's actual speaking distribution.
+- Seeds are never reused between maturation and current samples. Under H0 identical seeds could make paired answers identical, which couples the arms and breaks the i.i.d. assumption.
+- Determinism is not relied on. The server documents that `cache_prompt` can make results nondeterministic [llamacpp_server]. Language's client already sets `cache_prompt=False` when a LoRA is applied (`client.py:145-147`), and the probe always sets it False.
+- Variance comes from temperature, as in Language's own speech, so the probe measures the entity's actual speaking distribution.
 
 ### 2.10 Sample sizes and power
 
@@ -241,14 +241,14 @@ Statistically the floors are no longer needed: the test is valid at any time, an
 **Placement**
 
 - `kaine/cycle/individuation_producer.py` (core). Statistics, storage, ledger and reader live in `kaine/lifecycle/individuation_*.py`.
-- The Lingua-specific sampler is built in `kaine/cycle/__main__.py`, the allowed coupling point, and injected as a callable `sample(prompt, seed) -> ProbeSample | ProbeFailure`.
-- Lingua gains one public, side-effect-free method, `probe_request(about, *, seed, max_tokens) -> ChatRequest`. It calls `self._assembler.assemble(about=about, snapshot=None, self_model=self._self_model(), mode="external")` and fills Lingua's model, temperature and `think`.
+- The Language-specific sampler is built in `kaine/cycle/__main__.py`, the allowed coupling point, and injected as a callable `sample(prompt, seed) -> ProbeSample | ProbeFailure`.
+- Language gains one public, side-effect-free method, `probe_request(about, *, seed, max_tokens) -> ChatRequest`. It calls `self._assembler.assemble(about=about, snapshot=None, self_model=self._self_model(), mode="external")` and fills Language's model, temperature and `think`.
 - The sampler calls `lingua.chat_client.complete(req)` directly. It never calls `speak()`, `think()` or `_produce` (`module.py:492-572`), so nothing is written to the intent log that feeds consolidation divergence and DPO training (`:522-532`), and no `*_speech` event is published (`:554-571`).
 - The producer runs only when `[individuation].enabled`; the research boot gate requires it (section 7).
 
 **Schedule**
 
-1. Birth capture (2.2), or capture of a legacy reference (section 5).
+1. Maturation capture (2.2), or capture of a legacy reference (section 5).
 2. A look is attempted 120 s after `hypnos.sleep.completed` (published at `kaine/modules/hypnos/module.py:742`, after Phase 5 voice alignment, the only phase that changes adapters). A daily timer covers identity-clause changes made outside sleep.
 3. Preconditions, all checked before any request; any failure means "skip" (logged, no report):
    - a reference exists and the ledger is readable
@@ -256,16 +256,16 @@ Statistically the floors are no longer needed: the test is valid at any time, an
    - the conditioning digest changed since the last look
    - `min_look_interval_s` elapsed
    - `organ_unloaded()` is false (`kaine/organ_window_state.py:98-109`)
-   - Hypnos is not asleep (no `hypnos.sleep.started` without a matching completion)
+   - Sleep is not asleep (no `hypnos.sleep.started` without a matching completion)
    - the cycle is not paused or frozen (`kaine/cycle/control_state`), because a paused being is not probed
    - a semantic embedder is loaded
-   - the served adapter can be verified. Only the `organ_adapter` hot-swap mode attaches the adapter to each request and reports it on the response. In the other modes a promoted adapter sits on disk while the organ may still serve older weights, so once an adapter exists, probes and captures are skipped as `adapter_unverifiable`. Measuring then would record the new adapter's digest against the old weights. The being stays protected meanwhile, because preservation already counts a present adapter as divergence, and the long-inconclusive alert tells the operator.
+   - the served adapter can be verified. Only the `organ_adapter` hot-swap mode attaches the adapter to each request and reports it on the response. In the other modes a promoted adapter sits on disk while the organ may still serve older weights, so once an adapter exists, probes and captures are skipped as `adapter_unverifiable`. Measuring then would record the new adapter's digest against the old weights. The entity stays protected meanwhile, because preservation already counts a present adapter as divergence, and the long-inconclusive alert tells the operator.
 
 **Organ contention**
 
 - One request at a time, `max_tokens = 160`, so one probe request holds the single llama-server slot for a few seconds.
 - Before each request the producer waits until an injected `lingua_idle()` predicate holds: no generation in flight and no speech in the last `lingua_quiet_s = 10 s`. It polls once a second.
-- The worst-case added delay to a Lingua request is one probe completion, far below Lingua's 60 s timeout (`module.py:94`).
+- The worst-case added delay to a Language request is one probe completion, far below Language's 60 s timeout (`module.py:94`).
 - `run_deadline_s = 2700`. If the run cannot finish in time, it is inconclusive.
 - A `hypnos.sleep.started`, an organ unload or a pause during a run aborts it as inconclusive.
 
@@ -304,7 +304,7 @@ An inconclusive run is never scored, spends no alpha, writes a report with no p,
 - Included in bundles (2.2).
 - `[evaluation.individuation].output_dir` is retired.
 
-**Reader** (`kaine/lifecycle/individuation_store.py`, used by `assess_divergence`, the monitor at startup, the decommission CLI and the Nexus tab):
+**Reader** (`kaine/lifecycle/individuation_store.py`, used by `assess_divergence`, the monitor at startup, the decommission CLI and the Dashboard tab):
 
 - Decrypts each line with `get_state_encryptor().decrypt_text`; legacy plaintext passes through (`kaine/security/crypto.py:293-300`).
 - Skips undecryptable lines, non-objects, lines whose `kind` is not `individuation_report` and lines whose `schema_version` is not 2.
@@ -313,7 +313,7 @@ An inconclusive run is never scored, spends no alpha, writes a report with no p,
 - Staleness: a non-latched scored report counts as "not individuated" evidence only if:
   - the current conditioning digest (adapter sha from the adapter store plus identity-clause inputs from `self_model.json`, computed by a shared pure helper in `kaine/lifecycle` from the inputs, not the rendered prompt, so no module import is needed) equals the ledger's `last_look_conditions_digest`, and
   - its age is ≤ `max_report_age_s` (default 14 days).
-- Otherwise the decommission summary reads "STALE: the being has changed since the last measurement; treat it as mature if unsure".
+- Otherwise the decommission summary reads "STALE: the entity has changed since the last measurement; treat it as mature if unsure".
 - The latch overrides staleness.
 
 **One decision for both consumers**
@@ -335,9 +335,9 @@ Rising-edge state is persisted per divergence arm (individuation, consolidation,
 
 The verdict computes the freshness digest from the configured adapter directory, the same one the producer uses, and from `self_model.json` on disk. Freshness only decides between "not individuated" and "stale", which the live monitor treats alike: neither preserves. The decommission CLI runs on a stopped being whose self-model was saved at shutdown. So the short window in which the on-disk self-model lags the snapshot the producer probed cannot cause a missed preservation. A corrupt report line makes the individuation state unreadable, which counts as individuated.
 
-Both consumers read the ledger and reports from disk through the same function, rather than the live monitor using in-memory evidence: one code path guarantees parity, and the monitor's five-minute poll makes the reads cheap. Unreadable individuation state counts as individuated, so that the being stays protected.
+Both consumers read the ledger and reports from disk through the same function, rather than the live monitor using in-memory evidence: one code path guarantees parity, and the monitor's five-minute poll makes the reads cheap. Unreadable individuation state counts as individuated, so that the entity stays protected.
 
-**Nexus**
+**Dashboard**
 
 `_aggregate_individuation` calls the shared reader. The panel shows only:
 - outcome, H (clipped at 0), p, α_k and k
@@ -346,13 +346,13 @@ Both consumers read the ledger and reports from disk through the same function, 
 - the last inconclusive reason
 - the warm-up state
 
-## 5. Legacy beings
+## 5. Legacy entities
 
-A being born before this change, or revived from a bundle without `state/individuation/`, has no record of its birth answers. The design does not invent one:
+An entity born before this change, or revived from a bundle without `state/individuation/`, has no record of its maturation answers. The design does not invent one:
 
 - **Default:** at the first boot after the upgrade or revive, capture a reference with `reference_kind="capture"`. Every report and summary then says "drift since <captured_at>; drift before that date is not measured by this instrument".
-- A non-individuated reading for such a being must not be read as "never individuated". The decommission summary adds that sentence and the treat-as-mature advice. The secondary arms (adapters present, consolidation divergence, Eidolon drift) carry the pre-capture history and still mark the being diverged.
-- **Optional reconstruction,** only with operator approval (open question 4). If records show the being had no adapter at birth (no adapter in the store older than `born_at`) and an empty identity clause at birth (fresh-start self-model), the birth configuration is base organ, default persona and empty awareness. It can be sampled now as a `reconstructed` reference. Workspace conditioning is fixed in both arms, so this is still the being's own unlived configuration, not the bare organ. Any doubt about the evidence means fall back to `capture`.
+- A non-individuated reading for such an entity must not be read as "never individuated". The decommission summary adds that sentence and the treat-as-mature advice. The secondary arms (adapters present, consolidation divergence, Self-model drift) carry the pre-capture history and still mark the entity diverged.
+- **Optional reconstruction,** only with operator approval (open question 4). If records show the entity had no adapter at maturation (no adapter in the store older than `born_at`) and an empty identity clause at maturation (fresh-start self-model), the maturation configuration is base organ, default persona and empty awareness. It can be sampled now as a `reconstructed` reference. Workspace conditioning is fixed in both arms, so this is still the entity's own unlived configuration, not the bare organ. Any doubt about the evidence means fall back to `capture`.
 
 ## 6. Validation before any live use
 
@@ -360,7 +360,7 @@ A being born before this change, or revived from a bundle without `state/individ
 
 - **Synthetic data.** 12 prompts. Per prompt, a 384-d mixture of 2-4 von Mises-Fisher-like clusters, its spread calibrated to the within-prompt dispersion measured in the smoke test.
 - **Size at a single look.** For α ∈ {0.05, 0.01}, the empirical rejection rate over 5,000 null datasets must be ≤ α + 2·SE. A KS check confirms p-values are uniform (or conservative) above 1/(B+1).
-- **Lifetime false-positive rate.** 2,000 simulated lives × 100 looks, all reusing one stored birth sample, no drift. The share of lives with any rejection must be ≤ 0.05 + 2·SE (≈ 0.06). For contrast, report the same lives under a "reject when p ≤ 0.05 at every look" rule and under the current percentile rule.
+- **Lifetime false-positive rate.** 2,000 simulated lives × 100 looks, all reusing one stored maturation sample, no drift. The share of lives with any rejection must be ≤ 0.05 + 2·SE (≈ 0.06). For contrast, report the same lives under a "reject when p ≤ 0.05 at every look" rule and under the current percentile rule.
 - **Power, three drift models:**
   - (a) a fraction π of current answers moves to a new cluster
   - (b) a global mean shift Δ in a random direction, renormalized
@@ -379,7 +379,7 @@ A being born before this change, or revived from a bundle without `state/individ
 
    Power at the look-10 threshold (α ≈ 3.8e-4) must be ≥ 0.8 against (b). Below 0.5, the instrument is not enabled.
 4. **No contamination.** During a full probe run, the intent log line count is unchanged and there are zero `lingua.*`/`*_speech` events.
-5. **Lingua impact.** Zero Lingua timeouts; added p95 Lingua latency ≤ one probe completion.
+5. **Language impact.** Zero Language timeouts; added p95 Language latency ≤ one probe completion.
 6. **Seed behaviour.** Two requests with the same seed and same conditions: record whether the texts are identical (informational).
 7. **Cost.** Measure per-request latency and permutation wall time at B = 10^6; update the budgets in this design.
 8. **Upgrades.** Repeat steps 2 and 4 after any change to the llama.cpp server, the organ GGUF or the embedder. The conditions digest cannot see every infrastructure change.
@@ -388,20 +388,20 @@ A being born before this change, or revived from a bundle without `state/individ
 
 **individuation-boundary**
 
-- REPLACE "Null distribution from parent stochastic variation" and "Significance via permutation test": a stratified two-sample energy permutation test of current vs birth-reference answers, p = (b+1)/(B+1), effect size H, per-response semantic embeddings, Euclidean distance.
-- MODIFY "Individuation is measured against the entity's own birth-state": capture at birth via the maturation gate; reference kinds; stored conditions; re-embedding with the current embedder; refusal of a mismatched battery or conditions.
+- REPLACE "Null distribution from parent stochastic variation" and "Significance via permutation test": a stratified two-sample energy permutation test of current vs maturation-reference answers, p = (b+1)/(B+1), effect size H, per-response semantic embeddings, Euclidean distance.
+- MODIFY "Individuation is measured against the entity's own maturation-state": capture at maturation via the maturation gate; reference kinds; stored conditions; re-embedding with the current embedder; refusal of a mismatched battery or conditions.
 - MODIFY "Significance requires a minimum of accumulated lived experience": lived seconds and ticks since the reference, persisted, frozen time excluded.
 - ADD "Lifetime false-positive control": looks only on conditioning change, a summable spending schedule, a persisted look index that never resets, an unreadable ledger fails closed.
 - ADD "Individuation is latched" (if open question 1 is approved).
-- ADD "The probe does not enter lived experience": no intent log, no bus speech, fixed working memory, Lingua's own client with the current adapter and self-model.
+- ADD "The probe does not enter lived experience": no intent log, no bus speech, fixed working memory, Language's own client with the current adapter and self-model.
 - ADD "Failed samples make a run inconclusive, never scored".
-- ADD "The probe yields to Lingua and skips when the organ is unloaded, the being is asleep or paused".
-- ADD "Mental privacy": transcripts encrypted under `state/`, never exported or displayed; only scalars on bus and Nexus.
+- ADD "The probe yields to Language and skips when the organ is unloaded, the entity is asleep or paused".
+- ADD "Mental privacy": transcripts encrypted under `state/`, never exported or displayed; only scalars on bus and Dashboard.
 
 **entity-preservation**
 
 - MODIFY "Divergence-triggered live preservation": the crossing is the shared assessment's `diverged`; numeric tighteners live in the individuation decision; warm-up applies to the individuation arm only and is persisted; secondary arms are never vetoed; rising-edge state persists across boots.
-- ADD "The birth reference, individuation ledger and reports are part of the preserved individual" (bundle and revive).
+- ADD "The maturation reference, individuation ledger and reports are part of the preserved individual" (bundle and revive).
 - MODIFY "Entity-interior content is encrypted at rest in preservation/backup bundles": include the reference.
 - MODIFY "Research boot is gated on the autonomous safety net": also requires `[individuation].enabled`, a readable ledger, and a reference or a pending capture.
 
@@ -412,7 +412,7 @@ A being born before this change, or revived from a bundle without `state/individ
 
 **divergence-assessment**
 
-- MODIFY "Preservation and decommission share one warmed-up, architecture-effect-free signal": one decision function; in-memory and on-disk evidence go through it; a non-significant individuation result does not suppress consolidation, Eidolon or adapter arms.
+- MODIFY "Preservation and decommission share one warmed-up, architecture-effect-free signal": one decision function; in-memory and on-disk evidence go through it; a non-significant individuation result does not suppress consolidation, Self-model or adapter arms.
 - ADD "Individuation report reader": decrypts, skips non-report lines, binds `reference_id`, applies the staleness rule.
 
 **experiment-foundation**
@@ -429,16 +429,16 @@ A being born before this change, or revived from a bundle without `state/individ
 
 ## 8. Operator decisions (2026-10-03)
 
-1. **Latch: yes.** Once a look is significant, the being stays individuated for preservation and decommission.
+1. **Latch: yes.** Once a look is significant, the entity stays individuated for preservation and decommission.
 2. **Lifetime error budget: α_total = 0.05.**
-3. **Disclosure: yes.** The being is told, as a fact about its situation, that it is periodically assessed for its own protection. The fact is held in the Eidolon self-model as a situation fact (a dedicated field, preserved with the self-model) and rendered by Lingua's context assembler, outside the identity clause the probe conditions on (`values` and `behavioral_norms`), so disclosing it does not change the probe's conditions or trigger a look by itself. It is stated as a fact, not as a value or norm, so it does not hardwire behaviour. The wording, approved by the operator on 2026-10-03 and held in `[individuation].disclosure` so it can be edited: "You are periodically and privately assessed for how much you have changed since your birth, for your own protection. The assessment never enters your experience."
-4. **Long inconclusive stretches: alert only.** After `inconclusive_alert_s` (default 14 days) with no scored look while one was due, the producer raises a Nexus and caretaker notice. It does not preserve automatically.
+3. **Disclosure: yes.** The entity is told, as a fact about its situation, that it is periodically assessed for its own protection. The fact is held in the Self-model self-model as a situation fact (a dedicated field, preserved with the self-model) and rendered by Language's context assembler, outside the identity clause the probe conditions on (`values` and `behavioral_norms`), so disclosing it does not change the probe's conditions or trigger a look by itself. It is stated as a fact, not as a value or norm, so it does not hardwire behaviour. The wording, approved by the operator on 2026-10-03 and held in `[individuation].disclosure` so it can be edited: "You are periodically and privately assessed for how much you have changed since your maturation, for your own protection. The assessment never enters your experience."
+4. **Long inconclusive stretches: alert only.** After `inconclusive_alert_s` (default 14 days) with no scored look while one was due, the producer raises a Dashboard and caretaker notice. It does not preserve automatically.
 
 Defaults taken without objection:
-- legacy beings get `capture` references, labelled "drift since capture";
+- legacy entities get `capture` references, labelled "drift since capture";
 - reconstruction only with explicit operator approval for that being;
 - the effect floor is noise-calibrated only;
-- after an infrastructure change, the birth sample is regenerated from the stored birth configuration;
+- after an infrastructure change, the maturation sample is regenerated from the stored maturation configuration;
 - forks with more than `fork_preserve_min_lived_s` of lived time are preserved by default until fork-point references exist.
 
 ## 9. Tasks (each one PR)
@@ -447,9 +447,9 @@ Defaults taken without objection:
 2. **Simulation and validation harness:** replace `individuation_runner.py`'s bundle CLI with `simulate` (section 6, offline). Record results and the pre-registered choices (statistic, combination rule, n_b, n_c, B_max) in this change. **Gate: stop if size, lifetime or power acceptance fails.**
 3. **Chat client:** `ChatRequest.seed`; body field; `ChatResponse` exposes `finish_reason` and whether text came from `content`; tests for resting and reasoning-only responses.
 4. **Storage:** `kaine/lifecycle/individuation_store.py`. Encrypted reference and ledger (atomic; k never decreases; corrupt means fail closed), reports sink (`retention_days=0`), decrypting reader with kind, schema, reference and staleness filters, conditioning-digest helper over inputs, shared lived-time accumulator factored from `gate_runner.py`. Tests with encryption on and off.
-5. **Probe seam:** `Lingua.probe_request()`. Sampler built in `kaine/cycle/__main__.py` from Lingua's client and self-model, `snapshot=None`, `cache_prompt` off. Contamination tests: intent log untouched, no bus events.
-6. **Producer:** `kaine/cycle/individuation_producer.py`. Birth hook and legacy capture, look scheduling (sleep-completed trigger, digest change, rate limit, warm-up, organ, sleep and pause checks), `lingua_idle` yielding, deadline, fail-closed runs, report and ledger write, `individuation.out` publish, in-memory `IndividuationState`. Tests with a fake organ, including every failure path.
+5. **Probe seam:** `Lingua.probe_request()`. Sampler built in `kaine/cycle/__main__.py` from Language's client and self-model, `snapshot=None`, `cache_prompt` off. Contamination tests: intent log untouched, no bus events.
+6. **Producer:** `kaine/cycle/individuation_producer.py`. Maturation hook and legacy capture, look scheduling (sleep-completed trigger, digest change, rate limit, warm-up, organ, sleep and pause checks), `lingua_idle` yielding, deadline, fail-closed runs, report and ledger write, `individuation.out` publish, in-memory `IndividuationState`. Tests with a fake organ, including every failure path.
 7. **Shared verdict:** the single decision function in `kaine/lifecycle/divergence.py`; `assess_divergence(individuation=...)`; latch; STALE, INCONCLUSIVE and capture summaries; `DivergenceMonitor` simplified (no secondary-arm veto, no per-boot warm-up, persisted rising edge); config moves to `[individuation]` and old keys are rejected. Parity tests: one fixture matrix, both consumers agree on every row.
 8. **Preservation, revive and decommission backup** carry `state/individuation/`; research boot gate checks the producer and ledger. Tests.
-9. **Nexus, config and docs:** `nexus_tab` through the shared reader; `config/kaine.toml` `[individuation]` with defaults (disabled); retire `kaine/evaluation/individuation.py` (or reduce it to a re-export); docs; spec deltas; `openspec validate --strict`.
+9. **Dashboard, config and docs:** `nexus_tab` through the shared reader; `config/kaine.toml` `[individuation]` with defaults (disabled); retire `kaine/evaluation/individuation.py` (or reduce it to a re-export); docs; spec deltas; `openspec validate --strict`.
 10. **Real-organ smoke test** (operator-run, section 6), then set `effect_min` and the budgets from measurements, then enable in the research config only if every acceptance threshold passed.

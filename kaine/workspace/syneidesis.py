@@ -308,7 +308,7 @@ class Syneidesis:
 
         No candidate is scored, selected or gated: every candidate is a member,
         the snapshot is never inhibited, and the score table carries intensities,
-        which Volition reads in place of scores. The metadata has no access
+        which Action selection reads in place of scores. The metadata has no access
         threshold, so every member enters the processors' context.
         """
         return WorkspaceSnapshot(

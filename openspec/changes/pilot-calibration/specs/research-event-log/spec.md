@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: Reports carry entity time and wakefulness
-Topos (`topos.report`), Audition (`audition.perception`) and Soma (`soma.report`) SHALL put on every report `entity_time_s`, the entity clock's reading for the report (entity seconds since the run started), and `awake`, false while Hypnos holds the processor asleep, and the curated research log SHALL copy both. The planned test counts a report only when the entity was awake and the report falls after the learning period T_learn, measured in entity time from the start of the run (paper Appendix A.8). The range sweep SHALL bound `entity_time_s` below by 0.
+Vision (`topos.report`), Audition (`audition.perception`) and Interoception (`soma.report`) SHALL put on every report `entity_time_s`, the entity clock's reading for the report (entity seconds since the run started), and `awake`, false while Sleep holds the processor asleep, and the curated research log SHALL copy both. The planned test counts a report only when the entity was awake and the report falls after the learning period T_learn, measured in entity time from the start of the run (paper Appendix A.8). The range sweep SHALL bound `entity_time_s` below by 0.
 
 #### Scenario: A report while asleep
-- **WHEN** Topos reports after a sleep has started
+- **WHEN** Vision reports after a sleep has started
 - **THEN** the report carries `awake` false and the entity clock's reading in `entity_time_s`
 
 ### Requirement: The research log records the positive control's ladder and settings

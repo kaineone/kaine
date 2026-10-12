@@ -1,14 +1,14 @@
-# Vox
+# Vocal
 
-Vox is KAINE's voice. It turns the language organ's external speech into sound with local speech synthesis, and it varies the prosody of that sound with the entity's affect. It draws on speech production along the dorsal stream (Hickok and Poeppel 2007), and the question it adds to the module-addition study is whether listeners can detect that affect-driven variation. This page covers the synthesis backends, the mapping from affect to prosody, optional prosodic mirroring of a conversation partner, and self-hearing suppression. Read it if you are enabling spoken output or changing how text becomes sound.
+Vocal is KAINE's voice. It turns the language organ's external speech into sound with local speech synthesis, and it varies the prosody of that sound with the entity's affect. It draws on speech production along the dorsal stream (Hickok and Poeppel 2007), and the question it adds to the module-addition study is whether listeners can detect that affect-driven variation. This page covers the synthesis backends, the mapping from affect to prosody, optional prosodic mirroring of a conversation partner, and self-hearing suppression. Read it if you are enabling spoken output or changing how text becomes sound.
 
 ## Status
 
-Vox is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].vox = false`) and in the base-thesis `thesis_test` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it sixth and last in its default order of six: Mnemos, Phantasia, Nous, Eidolon, Empatheia, Vox.
+Vocal is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].vox = false`) and in the base-thesis `thesis_test` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it sixth and last in its default order of six: Episodic memory, World model, Planning, Self-model, Social cognition, Vocal.
 
 `[vox].backend` selects the synthesizer: `"chatterbox"` (the default) or `"sherpa_onnx"`. The file sink (`sink_enabled`) is off by default, self-hearing suppression is on, and prosodic mirroring is off (`[vox.mirroring].enabled = false`).
 
-During gestation Vox is held dormant, since the gestational stimulus has no air to speak into, and the gate runner activates it at birth. Inner speech is unaffected.
+During development Vocal is held dormant, since the developmental stimulus has no air to speak into, and the gate runner activates it at maturation. Inner speech is unaffected.
 
 Prosodic mirroring needs Audition with `prosody_enabled = true`, which needs `librosa` (`pip install -e .[audio]`).
 
@@ -22,7 +22,7 @@ Prosodic mirroring needs Audition with `prosody_enabled = true`, which needs `li
 The sherpa-onnx backend has these limits:
 
 - Kokoro applies only `speed_factor` from the affect mapping and from mirroring; `temperature`, `exaggeration` and `cfg_weight` have no effect, and its speech is plain.
-- The voice is a preset speaker, so a being moved from one backend to the other does not keep its voice.
+- The voice is a preset speaker, so an entity moved from one backend to the other does not keep its voice.
 - `vox.synthesized` lists the parameters actually applied in `prosody_applied`: all four under Chatterbox, `["speed_factor"]` under Kokoro. Its `voice` field reads `"kokoro-en speaker N"` under sherpa-onnx.
 
 ### Fetching the model
@@ -32,16 +32,16 @@ Download models ahead of time with `python -m kaine.setup.speech_models [--tts I
 ### Failure behaviour
 
 - A missing `sherpa-onnx` package stops the boot at the extras check. Install it with `pip install "kaine[speech-edge]"`.
-- Missing model files disable Vox only, and the health surface shows the reason.
-- The Nexus health surface probes Chatterbox only when `backend = "chatterbox"`. For sherpa-onnx it loads the model and runs one real inference once per process, then reports the remembered result with its age, retrying a failure after 60 s.
-- While speech synthesis is unavailable, Vox publishes a failure event at most once every 60 s.
+- Missing model files disable Vocal only, and the health surface shows the reason.
+- The Dashboard health surface probes Chatterbox only when `backend = "chatterbox"`. For sherpa-onnx it loads the model and runs one real inference once per process, then reports the remembered result with its age, retrying a failure after 60 s.
+- While speech synthesis is unavailable, Vocal publishes a failure event at most once every 60 s.
 
 ## What it does
 
-When [Lingua](lingua.md) realizes a `speak` intent, its text reaches Vox for synthesis. Vox:
+When [Language](language.md) realizes a `speak` intent, its text reaches Vocal for synthesis. Vocal:
 
 - reads `lingua.external` for the text to synthesize;
-- keeps the latest `thymos.state` from [Thymos](thymos.md);
+- keeps the latest `thymos.state` from [Affect](affect.md);
 - maps the affect to prosodic parameters (all four under Chatterbox, `speed_factor` only under Kokoro);
 - optionally blends in a bounded residual of the partner's prosody from `audition.prosody`, which fades after the partner stops speaking;
 - plays the audio on the operating system's audio device;
@@ -80,7 +80,7 @@ Full reference: [`[vox]` in the modules configuration](../appendix-a-configurati
 | `sherpa_num_threads` | int | `2` | ONNX Runtime threads |
 | `chatterbox_url` | string | `"http://127.0.0.1:8883"` | Chatterbox service URL |
 | `voice_mode` | string | `"predefined"` | `"predefined"` uses a voice file the operator has given Chatterbox |
-| `predefined_voice_id` | string | unset | Required in `predefined` mode: a voice filename the Chatterbox server serves. Unset, Chatterbox returns 400 and Vox cannot speak. List the voices with `curl -s http://127.0.0.1:8883/get_predefined_voices` and set, for example, `"Abigail.wav"`. |
+| `predefined_voice_id` | string | unset | Required in `predefined` mode: a voice filename the Chatterbox server serves. Unset, Chatterbox returns 400 and Vocal cannot speak. List the voices with `curl -s http://127.0.0.1:8883/get_predefined_voices` and set, for example, `"Abigail.wav"`. |
 | `output_format` | string | `"wav"` | Audio format |
 | `sink_path` | string | `"state/vox"` | Directory of the optional clip sink |
 | `sink_enabled` | bool | `false` | Write clips to disk, bounded by `retain_count` |
@@ -124,7 +124,7 @@ When the state equals the default `DimensionalState()`, the function returns the
 
 ### Prosodic mirroring
 
-When mirroring is on, Vox reads `audition.prosody` and caches the latest six numbers: `f0_mean_hz`, `f0_std_hz`, `f0_voiced_frac`, `rms_mean`, `rms_std` and `tempo_bpm`. At synthesis time `blend_prosody()` adds a bounded residual to the affect-driven parameters:
+When mirroring is on, Vocal reads `audition.prosody` and caches the latest six numbers: `f0_mean_hz`, `f0_std_hz`, `f0_voiced_frac`, `rms_mean`, `rms_std` and `tempo_bpm`. At synthesis time `blend_prosody()` adds a bounded residual to the affect-driven parameters:
 
 | Prosody feature | Parameter nudged | Reference range |
 |---|---|---|
@@ -151,7 +151,7 @@ flowchart LR
 
 ### Self-hearing suppression
 
-When `suppress_self_hearing = true` and a `SpeakingGate` is wired at boot, Vox calls `gate.mark_speaking(duration_s + hangover_s)` before it hands the audio to the player. [Audition](audition.md)'s live-capture loop polls the gate and drops frames while it is open. An operator with acoustically isolated input, such as a headset microphone, may set `suppress_self_hearing = false`.
+When `suppress_self_hearing = true` and a `SpeakingGate` is wired at boot, Vocal calls `gate.mark_speaking(duration_s + hangover_s)` before it hands the audio to the player. [Audition](audition.md)'s live-capture loop polls the gate and drops frames while it is open. An operator with acoustically isolated input, such as a headset microphone, may set `suppress_self_hearing = false`.
 
 ### File sink
 
@@ -173,10 +173,10 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 
 1. In the operator file `config/kaine.operator.toml`, set `[modules].vox = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
 2. For `backend = "chatterbox"`, start Chatterbox with the operator's voice in its `voices/` directory and set `predefined_voice_id` to that filename (keep personal filenames out of version control). For `backend = "sherpa_onnx"`, fetch the model with `python -m kaine.setup.speech_models --tts kokoro-en` and set `sherpa_speaker_id` to the preset you want.
-3. Keep [Lingua](lingua.md) on, since Vox speaks its output, and [Thymos](thymos.md), since Vox's prosody follows its affect.
+3. Keep [Language](language.md) on, since Vocal speaks its output, and [Affect](affect.md), since Vocal's prosody follows its affect.
 4. For prosodic mirroring, turn on [Audition](audition.md)'s `prosody_enabled` and set `[vox.mirroring].enabled = true`.
 
-## What Vox keeps
+## What Vocal keeps
 
 - Audio never goes on the bus; `vox.synthesized` carries numeric metadata such as `bytes_produced` and `latency_ms`.
 - The file sink is off by default and, when on, is bounded by `retain_count`.
@@ -201,4 +201,4 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 - Spec: `openspec/specs/vox/spec.md`
 - Prosodic mirroring spec: `openspec/specs/vox-prosodic-mirroring/spec.md`
 - Archived change: `openspec/changes/archive/2026-06-15-audio-out-playback` (playback reliability and device selection)
-- See also: [Lingua](lingua.md) (the text), [Thymos](thymos.md) (the affect), [Audition](audition.md) (the partner's prosody), [Hypnos](hypnos.md) (uses Lingua's intent log for voice-alignment training).
+- See also: [Language](language.md) (the text), [Affect](affect.md) (the affect), [Audition](audition.md) (the partner's prosody), [Sleep](sleep.md) (uses Language's intent log for voice-alignment training).

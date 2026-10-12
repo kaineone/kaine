@@ -24,7 +24,7 @@ async def test_praxis_file_write_lands_in_sandbox(tmp_path):
             whitelist=CommandWhitelist(),  # empty shell whitelist
         )
         await h.register(praxis)
-        # Praxis observes the bus for action requests on praxis.action stream.
+        # Effectors observes the bus for action requests on praxis.action stream.
         # Smoke: serialize works.
         assert isinstance(praxis.serialize(), dict)
 

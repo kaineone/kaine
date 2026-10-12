@@ -440,7 +440,7 @@ def test_assess_never_raises_on_garbage_state(tmp_path: Path):
 
 
 # --------------------------------------------------------------------------- #
-# 3. Research event taxonomy + Nexus surface
+# 3. Research event taxonomy + Dashboard surface
 # --------------------------------------------------------------------------- #
 
 

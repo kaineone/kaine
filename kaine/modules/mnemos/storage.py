@@ -37,7 +37,7 @@ def _validate_stamp(value: Any, backend: str, key: str) -> None:
     """Fail loudly on malformed embedding-space stamps.
 
     A stamp that is present but malformed must never be read as "no
-    stamp"; otherwise Mnemos would silently re-stamp a store and
+    stamp"; otherwise Episodic memory would silently re-stamp a store and
     pretend the existing vectors belong to the current embedder.
 
     The four canonical keys must be present with the right types; extra
@@ -364,7 +364,7 @@ class InMemoryStorage:
         """Full-fidelity dump of the requested collections' points.
 
         Each point is ``{id, vector, text, payload, affect}`` — the same shape
-        :meth:`upsert` stores. Used by Mnemos preservation so the persisted
+        :meth:`upsert` stores. Used by Episodic memory preservation so the persisted
         vector memory travels with the bundle, not just its sizes.
         Collections that do not exist are simply absent from the result.
         """
@@ -608,7 +608,7 @@ class SqliteVecStorage:
     process with no Qdrant server and near-zero idle footprint — the single-user
     edge counterpart of :class:`QdrantStorage`. It stores the same CLS
     collections and exposes the same ``search`` (``query_points``-equivalent)
-    API, so Mnemos's memory semantics are unchanged (openspec runtime-backends).
+    API, so Episodic memory's memory semantics are unchanged (openspec runtime-backends).
 
     ``sqlite_vec`` is imported lazily inside :meth:`initialize` (mirroring
     :class:`QdrantStorage`'s lazy ``qdrant_client`` import), so a Tier-2 install

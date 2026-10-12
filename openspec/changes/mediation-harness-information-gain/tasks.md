@@ -2,8 +2,8 @@
 
 - [x] 1.1 `measures.py`: keep the sign test; add the per-processor mean gain over included reports after the initial learning period and the headline over processors (undefined when any processor's is); remove the correlation and entropy measures.
 - [x] 1.2 `pooled.py` replaces `conditioning.py`: the pooled snapshot holds every candidate, carries no access threshold and is never inhibited.
-- [x] 1.3 `stimulus.py`: seeded batteries for Soma's metrics, Topos's frames (through a vector encoder double) and background candidates; a coupled battery and an independent one.
-- [x] 1.4 `runner.py`: run the workspace-on and pooled arms over real Soma and Topos with the same seeds; read `context_gain` per report; compute `IG_j`, `IG` and `dIG`; classify WIN, NULL, NEGATIVE or NOT EXERCISED.
+- [x] 1.3 `stimulus.py`: seeded batteries for Interoception's metrics, Vision's frames (through a vector encoder double) and background candidates; a coupled battery and an independent one.
+- [x] 1.4 `runner.py`: run the workspace-on and pooled arms over real Interoception and Vision with the same seeds; read `context_gain` per report; compute `IG_j`, `IG` and `dIG`; classify WIN, NULL, NEGATIVE or NOT EXERCISED.
 - [x] 1.5 `stability.py` and `__main__.py` use the new headline and options.
 - [x] 1.6 Delete `inject.py` and its test, and the stale exemption for it.
 

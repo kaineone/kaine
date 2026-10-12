@@ -87,7 +87,7 @@ _NEXUS_STATIC = Path(__file__).parent.parent / "nexus" / "static"
 
 def _asset_url(path: str) -> str:
     """Cache-bust a `/static/...` URL with the file's mtime. A local copy (not an
-    import from kaine.nexus — the evaluation sidecar must not depend on Nexus
+    import from kaine.nexus — the evaluation sidecar must not depend on Dashboard
     internals); it only references the shared template chrome's asset files on
     disk, which the boundary allows."""
     rel = path.split("?", 1)[0]
@@ -160,7 +160,7 @@ def _aggregate_welfare(
             "source": "live",
         }
 
-    # 2. JSONL rollup (cold dashboard / Nexus restart).
+    # 2. JSONL rollup (cold dashboard / Dashboard restart).
     return welfare_counts_from_jsonl(logs_root)
 
 
@@ -284,8 +284,8 @@ def _aggregate_individuation(config: EvaluationConfig) -> dict[str, Any] | None:
     """Return the most recent individuation-boundary result, or None.
 
     Reads from the shared encrypted store via ``read_individuation``. Any
-    failure, or a being with no reference and no latch, is
-    surfaced as ``None`` so the Nexus panel stays empty until real evidence
+    failure, or an entity with no reference and no latch, is
+    surfaced as ``None`` so the Dashboard panel stays empty until real evidence
     exists.
     """
     from datetime import datetime, timezone
@@ -367,7 +367,7 @@ def aggregate_evaluation_metrics(
 ) -> dict[str, Any]:
     """Public entrypoint for the evaluation metrics aggregate.
 
-    Used by the unified console at ``/`` (via the Nexus composition root) to
+    Used by the unified console at ``/`` (via the Dashboard composition root) to
     render the evaluation panels server-side. Returns the empty shape when the
     sidecar is disabled.
     """
@@ -429,7 +429,7 @@ def _aggregate(
 
     affect_dir = logs_root / "affect_correlation"
     # The correlator can be expensive over many lines — Phase 5 says it
-    # runs as a batch during Hypnos. Here we cache by checking only the
+    # runs as a batch during Sleep. Here we cache by checking only the
     # latest file.
     correlation_matrix: dict[str, dict[str, float]] = {}
     if affect_dir.exists():

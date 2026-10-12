@@ -58,7 +58,7 @@ and returns a prediction-error scalar in [0, 1] that a module maps to salience.
 `kaine_cl1.boot` builds stock modules and injects CL1 clients through existing
 seams. Missing seams are contributed upstream as vendor-neutral (`forward_model=`
 / a `BackendRegistry` entry, silicon default unchanged). This design assumes the
-Chronos/Soma seams may need that generic upstream addition and treats it as the
+Sequence/Interoception seams may need that generic upstream addition and treats it as the
 preferred path (a fallback subclass-in-this-repo is available meanwhile).
 
 ## Risks / Trade-offs

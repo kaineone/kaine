@@ -1,7 +1,7 @@
 # nexus-dashboard Specification
 
 ## Purpose
-Nexus is the operator's local web dashboard for a running KAINE: service and
+Dashboard is the operator's local web dashboard for a running KAINE: service and
 dependency health, live metrics, and the supported operator controls, presented in one
 consistent visual design. It stays on loopback behind the operator token, never shows
 cognitive content past the privacy boundary, explains an incomplete setup instead of
@@ -15,9 +15,9 @@ The diagnostics surface SHALL present a health board that shows, at a glance,
 the live status of every external dependency and every configured module. For
 each dependency it SHALL show a status of `up`, `down`, `degraded`, or
 `not_configured`, with a short human-readable detail and a last-checked time.
-Dependencies covered SHALL include: Redis (bus), Qdrant (Mnemos), the chat LLM
-endpoint (Lingua/Hypnos), Speaches/STT (Audio In), Chatterbox/TTS (Audio Out),
-and the ONA `NAR` binary (Nous). For each module the board SHALL show whether it
+Dependencies covered SHALL include: Redis (bus), Qdrant (Episodic memory), the chat LLM
+endpoint (Language/Sleep), Speaches/STT (Audio In), Chatterbox/TTS (Audio Out),
+and the ONA `NAR` binary (Planning). For each module the board SHALL show whether it
 is enabled, initialized, and — where applicable — actively capturing or
 erroring.
 
@@ -47,7 +47,7 @@ page never blocks on a hung dependency and never floods a service with probes.
 
 ### Requirement: Professional visual design system
 
-The Nexus surfaces (conversation, diagnostics, evaluation) SHALL share a
+The Dashboard surfaces (conversation, diagnostics, evaluation) SHALL share a
 cohesive, professional visual design: a responsive multi-panel layout, a refined
 dark theme with a defined type scale and status color palette, and clear
 grouping of related information into cards/panels. The redesign SHALL NOT remove
@@ -64,7 +64,7 @@ build step (server-rendered templates plus vanilla JS and vendored assets).
 
 The diagnostics surface SHALL render live numeric metrics as visualizations
 rather than only as raw text: at minimum a time-series of cycle processing and
-experiential rate, a time-series of Thymos affect (valence/arousal/dominance),
+experiential rate, a time-series of Affect affect (valence/arousal/dominance),
 and module-attribution as a chart. Visualizations SHALL be driven by data
 already exposed (the metrics snapshot, the diagnostics SSE stream, and the
 evaluation summary), buffering recent points client-side. All charting assets
@@ -108,7 +108,7 @@ The redesign SHALL preserve the existing privacy boundary and binding: content
 fields SHALL remain stripped on the diagnostics surface unless
 `dev_content_override` is set (with the dev-mode banner shown when it is), the
 conversation surface SHALL continue to show full content, the evaluation surface
-SHALL remain scrubbed, and Nexus SHALL continue to bind loopback-only. Health
+SHALL remain scrubbed, and Dashboard SHALL continue to bind loopback-only. Health
 and metric data (statuses, counts, rates) are non-content and MAY be shown
 without `dev_content_override`.
 
@@ -125,26 +125,26 @@ without `dev_content_override`.
 - **THEN** the health board and metric visualizations still render (statuses,
   counts, and rates are not private content)
 
-### Requirement: Nexus reports incomplete setup without a traceback
+### Requirement: Dashboard reports incomplete setup without a traceback
 When the event bus cannot be configured, for example because no Redis password
 exists yet, `python -m kaine.nexus` SHALL exit with status 1. It SHALL log a
 single message that names the setup step that fixes the problem, and SHALL NOT
 print a traceback.
 
 #### Scenario: Fresh clone before Redis setup
-- **WHEN** Nexus is started before `scripts/redis-bootstrap.sh` has run
+- **WHEN** Dashboard is started before `scripts/redis-bootstrap.sh` has run
 - **THEN** it exits 1
 - **AND** it logs a message naming `bash scripts/redis-bootstrap.sh`
 - **AND** no traceback is printed
 
 ### Requirement: Login lands on a mounted console
-After a successful sign-in, Nexus SHALL redirect the operator to a console
+After a successful sign-in, Dashboard SHALL redirect the operator to a console
 that is mounted:
 
 - `/` when the conversation console is enabled;
 - otherwise `/diagnostics/`.
 
-Page navigation SHALL link only consoles that are mounted. Nexus SHALL refuse
+Page navigation SHALL link only consoles that are mounted. Dashboard SHALL refuse
 to start when neither console is enabled, since sign-in would lead nowhere.
 
 #### Scenario: Default configuration
@@ -164,15 +164,15 @@ to start when neither console is enabled, since sign-in would lead nowhere.
 
 #### Scenario: Nothing to serve
 - **WHEN** both the conversation console and diagnostics are disabled
-- **THEN** Nexus exits 1 with a message saying that no console is enabled
+- **THEN** Dashboard exits 1 with a message saying that no console is enabled
 
-### Requirement: Nexus access mode
-Nexus SHALL support `[nexus].access` with values `"open"` and `"token"`, overridable by `KAINE_NEXUS_ACCESS`. The committed configuration SHALL ship `"open"`. An invalid value SHALL fail startup with an error naming the allowed values.
+### Requirement: Dashboard access mode
+Dashboard SHALL support `[nexus].access` with values `"open"` and `"token"`, overridable by `KAINE_NEXUS_ACCESS`. The committed configuration SHALL ship `"open"`. An invalid value SHALL fail startup with an error naming the allowed values.
 
 **Open mode:**
 - Every surface, read and state-changing, SHALL work without a token or sign-in.
 - `/login` SHALL redirect to the landing console.
-- At startup, Nexus SHALL log once, at INFO, that it is open to anyone who can reach it, and list the accepted hosts.
+- At startup, Dashboard SHALL log once, at INFO, that it is open to anyone who can reach it, and list the accepted hosts.
 
 **Token mode** SHALL behave exactly as before: bearer token or session, with the session key required for state-changing requests.
 
@@ -196,7 +196,7 @@ Nexus SHALL support `[nexus].access` with values `"open"` and `"token"`, overrid
 - **WHEN** `access = "token"` and a request has no token or session
 - **THEN** privileged surfaces are refused exactly as before
 
-### Requirement: Tailnet hosts can reach Nexus
+### Requirement: Tailnet hosts can reach Dashboard
 `KAINE_NEXUS_EXTRA_HOSTS`, a comma-separated list of host names or addresses, SHALL be added to the Host allowlist. For each entry, its `http://` and `https://` origins, with and without the configured and published ports, SHALL be added to the allowed origins. Entries SHALL be validated as host names or IP literals; an invalid entry SHALL fail startup naming it.
 
 #### Scenario: Served over the tailnet
@@ -211,7 +211,7 @@ When the conversation console is not mounted, a request for `/` SHALL redirect t
 - **THEN** the response redirects to `/diagnostics/`
 
 ### Requirement: Read-only mode refuses every control
-Nexus SHALL support `[nexus].read_only` (default false), overridable by `KAINE_NEXUS_READ_ONLY`. When it is true, Nexus SHALL refuse every request whose method is not GET, HEAD or OPTIONS with HTTP 403, before routing and in every access mode. Pages SHALL show a banner saying controls are off. A study viewer SHALL run Nexus in read-only mode, because some controls (the cycle rate) reach a running entity through its bus.
+Dashboard SHALL support `[nexus].read_only` (default false), overridable by `KAINE_NEXUS_READ_ONLY`. When it is true, Dashboard SHALL refuse every request whose method is not GET, HEAD or OPTIONS with HTTP 403, before routing and in every access mode. Pages SHALL show a banner saying controls are off. A study viewer SHALL run Dashboard in read-only mode, because some controls (the cycle rate) reach a running entity through its bus.
 
 #### Scenario: A rate change against a watched study is refused
 - **WHEN** `read_only` is true and a client POSTs to `/diagnostics/cycle/rates`
@@ -222,7 +222,7 @@ Nexus SHALL support `[nexus].read_only` (default false), overridable by `KAINE_N
 - **THEN** the page renders with the read-only banner
 
 ### Requirement: The merge form offers the world-model choice and shows refusal reasons
-The dashboard's snapshot-merge form SHALL offer a labelled choice of which parent's Phantasia world model continues: none, A, or B. It SHALL send `world_model_from` as `"a"` or `"b"` when A or B is chosen and leave the field out otherwise. When the merge API answers with an error, the form SHALL show the status code and the server's `detail` text. The form SHALL NOT offer `allow_unmerged_adapters`.
+The dashboard's snapshot-merge form SHALL offer a labelled choice of which parent's World model world model continues: none, A, or B. It SHALL send `world_model_from` as `"a"` or `"b"` when A or B is chosen and leave the field out otherwise. When the merge API answers with an error, the form SHALL show the status code and the server's `detail` text. The form SHALL NOT offer `allow_unmerged_adapters`.
 
 #### Scenario: Choosing parent B's world model
 - **WHEN** the operator enters two snapshot ids, chooses B under "world model from" and confirms the merge
@@ -237,14 +237,14 @@ The dashboard's snapshot-merge form SHALL offer a labelled choice of which paren
 - **THEN** the form's status shows `409` and that detail text
 
 ### Requirement: Resume releases only the operator's own freeze
-The Nexus resume control SHALL remove only freeze entries whose source is `operator`. When other holders remain, the cycle SHALL stay frozen and the response and the freeze panel SHALL name the remaining holders.
+The Dashboard resume control SHALL remove only freeze entries whose source is `operator`. When other holders remain, the cycle SHALL stay frozen and the response and the freeze panel SHALL name the remaining holders.
 
 #### Scenario: Resume over a welfare pause
 - **WHEN** the operator resumes while `operator` and `welfare` freezes are active
-- **THEN** the `operator` entry is removed, the `welfare` entry stays, the cycle stays frozen, and Nexus shows that a welfare freeze is holding it
+- **THEN** the `operator` entry is removed, the `welfare` entry stays, the cycle stays frozen, and Dashboard shows that a welfare freeze is holding it
 
 ### Requirement: Protective freezes are lifted only by a named override
-Nexus SHALL lift a `welfare`, `gestation` or `programme_end` freeze only through a separate override that names each holder it lifts and is confirmed by repeating those names. It SHALL refuse to override `spot` or `preserve` freezes, which release themselves, and any unknown source. Each override SHALL append a content-free record (time, sources lifted, holders remaining) to an audit log and SHALL be refused in read-only mode.
+Dashboard SHALL lift a `welfare`, `gestation` or `programme_end` freeze only through a separate override that names each holder it lifts and is confirmed by repeating those names. It SHALL refuse to override `spot` or `preserve` freezes, which release themselves, and any unknown source. Each override SHALL append a content-free record (time, sources lifted, holders remaining) to an audit log and SHALL be refused in read-only mode.
 
 #### Scenario: A confirmed override lifts the named welfare freeze
 - **WHEN** a welfare freeze is active and the operator overrides `welfare` with the confirmation `welfare`
@@ -266,7 +266,7 @@ The diagnostics and evaluation pages SHALL lay their boards out so that a board'
 - **THEN** no right sidebar element is rendered
 
 ### Requirement: The EventSource wrapper installs in browsers
-The Nexus auth script SHALL replace `window.EventSource` with its wrapper without error when the browser's `EventSource` defines `CONNECTING`, `OPEN` and `CLOSED` as read-only, and the wrapper SHALL expose the same constant values.
+The Dashboard auth script SHALL replace `window.EventSource` with its wrapper without error when the browser's `EventSource` defines `CONNECTING`, `OPEN` and `CLOSED` as read-only, and the wrapper SHALL expose the same constant values.
 
 #### Scenario: Read-only constants
 - **WHEN** `nexus_auth.js` loads in a page whose `EventSource` constants are non-writable
@@ -287,7 +287,7 @@ The diagnostics page SHALL render successfully when no cycle is running, whether
 - **THEN** `GET /diagnostics/` answers 200 and shows the rate form without an effective-rate line
 
 ### Requirement: Operator controls require authentication and CSRF protection
-All operator controls exposed by the Nexus dashboard (cycle freeze/unfreeze, cycle rate adjustment, fork/merge actions, perception toggle, and perception locus selection) SHALL be gated by both the operator token and CSRF/Origin validation. The controls SHALL NOT be reachable by unauthenticated or cross-origin requests.
+All operator controls exposed by the Dashboard dashboard (cycle freeze/unfreeze, cycle rate adjustment, fork/merge actions, perception toggle, and perceptual locus selection) SHALL be gated by both the operator token and CSRF/Origin validation. The controls SHALL NOT be reachable by unauthenticated or cross-origin requests.
 
 #### Scenario: Unauthenticated freeze request is rejected
 - **WHEN** a POST request arrives at the cycle freeze endpoint without a valid operator token

@@ -35,7 +35,7 @@ log = logging.getLogger(__name__)
 #: Where the bracket publishes the window phase; consumers read it.
 ORGAN_WINDOW_STATE = Path("state/hypnos/organ_window.json")
 
-#: Window phases (surfaced to consumers + Nexus).
+#: Window phases (surfaced to consumers + Dashboard).
 PHASE_IDLE = "idle"  # no training window; organ serving normally
 PHASE_RESTING = "resting"  # organ unloaded for training; consumers defer/skip
 PHASE_TRAINING = "training"  # trainer running against the safetensors base
@@ -53,7 +53,7 @@ def write_window_state(
     last_adapter_reason: Optional[str] = None,
     path: Optional[Path] = None,
 ) -> None:
-    """Persist the current organ-window phase for consumers + Nexus.
+    """Persist the current organ-window phase for consumers + Dashboard.
 
     Guarded — a write failure logs and is swallowed (the bracket always writes
     RESTING before it unloads, so a missing file safely means "organ available").

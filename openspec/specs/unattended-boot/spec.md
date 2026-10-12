@@ -1,7 +1,7 @@
 # unattended-boot Specification
 
 ## Purpose
-This capability lets a full entity start with nobody present, for example after the host recovers from a power cut, once the research phase is over. An unattended start reuses the research safety net and adds its own conditions: Spot armed and self-tested, the caretaker told, and continuous input. It refuses with exit code 6 and names every failed condition; nothing overrides the gate. Auto-start happens only through a separate opt-in unit, and the attended and research modes are unchanged.
+This capability lets a full entity start with nobody present, for example after the host recovers from a power cut, once the research phase is over. An unattended start reuses the research safety net and adds its own conditions: Supervisor armed and self-tested, the caretaker told, and continuous input. It refuses with exit code 6 and names every failed condition; nothing overrides the gate. Auto-start happens only through a separate opt-in unit, and the attended and research modes are unchanged.
 
 ## Requirements
 
@@ -35,19 +35,19 @@ An unattended boot SHALL evaluate the research safety net's five conditions — 
 - **WHEN** an unattended boot passes all eight conditions with no experiment or admissibility configuration present
 - **THEN** the boot proceeds as a plain autonomous cycle with no experiment record and no admissibility requirements applied
 
-### Requirement: Condition six — Spot armed and self-tested
-An unattended boot SHALL require that `[spot].enabled` is true, that the restart ladder has at least one rung, that the escalation state path and the incident log are writable, and that Spot's selftest passes within its bounded window, all before any entity module is constructed.
+### Requirement: Condition six — Supervisor armed and self-tested
+An unattended boot SHALL require that `[spot].enabled` is true, that the restart ladder has at least one rung, that the escalation state path and the incident log are writable, and that Supervisor's selftest passes within its bounded window, all before any entity module is constructed.
 
-#### Scenario: Spot disabled
+#### Scenario: Supervisor disabled
 - **WHEN** an unattended boot finds `[spot].enabled = false`
 - **THEN** condition 6 fails with the reason "not enabled" and the boot refuses with exit code `6`
 
-#### Scenario: Spot selftest fails
-- **WHEN** Spot's configuration is valid but its selftest does not complete freeze, snapshot, restart, release, and incident record within the bounded window
+#### Scenario: Supervisor selftest fails
+- **WHEN** Supervisor's configuration is valid but its selftest does not complete freeze, snapshot, restart, release, and incident record within the bounded window
 - **THEN** condition 6 fails with the selftest's reason and the boot refuses with exit code `6`
 
 #### Scenario: Selftest touches no entity
-- **WHEN** the gate runs Spot's selftest
+- **WHEN** the gate runs Supervisor's selftest
 - **THEN** no entity module is imported or constructed, no entity state is read or written, and all selftest artifacts live in a scratch directory that is removed afterwards
 
 ### Requirement: Condition seven — caretaker told
@@ -70,21 +70,21 @@ An unattended boot SHALL send a content-free start notice through every channel 
 - **THEN** the notice is not sent to that address and the channel counts as not accepted
 
 ### Requirement: Caretaker notices are content-free
-Every caretaker notice SHALL carry only the operator-chosen install label, the time, the event kind, gate condition results, and the Nexus address. A notice SHALL NOT carry cognitive content, affect, welfare signals, perception data, or any other content from the entity's mind. HTTP channel tokens SHALL be read from `config/secrets.toml`.
+Every caretaker notice SHALL carry only the operator-chosen install label, the time, the event kind, gate condition results, and the Dashboard address. A notice SHALL NOT carry cognitive content, affect, welfare signals, perception data, or any other content from the entity's mind. HTTP channel tokens SHALL be read from `config/secrets.toml`.
 
 #### Scenario: Notice payload audited
 - **WHEN** any caretaker notice is built
 - **THEN** its fields are exactly the allowed set, and a test asserts that no other field can be added
 
 ### Requirement: Unacknowledged starts are surfaced, not punished
-While an unattended start is unacknowledged, Nexus SHALL show a standing banner and the notifier SHALL repeat the notice every `[caretaker].reminder_interval_s` (default 14400, minimum 900). Acknowledgement SHALL be a Nexus POST behind the operator session and SHALL be recorded in the event log. An unacknowledged start SHALL NOT pause, stop, or otherwise change the entity.
+While an unattended start is unacknowledged, Dashboard SHALL show a standing banner and the notifier SHALL repeat the notice every `[caretaker].reminder_interval_s` (default 14400, minimum 900). Acknowledgement SHALL be a Dashboard POST behind the operator session and SHALL be recorded in the event log. An unacknowledged start SHALL NOT pause, stop, or otherwise change the entity.
 
 #### Scenario: Reminder repeats
 - **WHEN** an unattended start remains unacknowledged for one reminder interval
 - **THEN** the notice is sent again through the configured channels
 
 #### Scenario: Acknowledgement stops reminders
-- **WHEN** an operator acknowledges the start in Nexus
+- **WHEN** an operator acknowledges the start in Dashboard
 - **THEN** reminders stop, the banner clears, and the acknowledgement is written to the event log
 
 #### Scenario: No acknowledgement ever arrives
@@ -111,10 +111,10 @@ An unattended boot SHALL require that `[perception_feed].mode` is `live`, `seede
 - **THEN** nothing is written to disk and the data is dropped before the gate continues
 
 ### Requirement: Notices while running unattended
-While the entity runs unattended, the cycle SHALL send a best-effort caretaker notice on Spot escalation, on loss of Spot's supervision task, on a welfare-protective response, on a boot failure after admission, when a gestating entity's womb is lost, and when every configured input has delivered nothing for `[caretaker].input_loss_after_s` (default 60). A failed send SHALL be logged and SHALL NOT stop the entity. Input loss SHALL NOT stop the entity; a lost womb freezes a gestating entity under the developmental-stage rules, not under this requirement.
+While the entity runs unattended, the cycle SHALL send a best-effort caretaker notice on Supervisor escalation, on loss of Supervisor's supervision task, on a welfare-protective response, on a boot failure after admission, when a gestating entity's stimulus source is lost, and when every configured input has delivered nothing for `[caretaker].input_loss_after_s` (default 60). A failed send SHALL be logged and SHALL NOT stop the entity. Input loss SHALL NOT stop the entity; a lost stimulus source freezes a gestating entity under the developmental-stage rules, not under this requirement.
 
-#### Scenario: Spot escalates
-- **WHEN** Spot escalates during an unattended run
+#### Scenario: Supervisor escalates
+- **WHEN** Supervisor escalates during an unattended run
 - **THEN** a caretaker notice is sent with the event kind "spot escalation"
 
 #### Scenario: Camera unplugged
@@ -148,7 +148,7 @@ Operator-present mode SHALL remain available and unchanged: `KAINE_CYCLE_OPERATO
 
 #### Scenario: Operator boot unchanged
 - **WHEN** an operator-present boot runs with the flag set
-- **THEN** it is admitted exactly as before this change, with no Spot selftest, caretaker notice, or input probe
+- **THEN** it is admitted exactly as before this change, with no Supervisor selftest, caretaker notice, or input probe
 
 #### Scenario: Research boot unchanged
 - **WHEN** a research boot fails any of its five conditions

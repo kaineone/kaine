@@ -32,7 +32,7 @@ def test_security_md_exists() -> None:
 
 
 def test_security_md_mentions_eidolon_self_model(security_text: str) -> None:
-    """§4 must name the Eidolon self-model file."""
+    """§4 must name the Self-model self-model file."""
     assert "self_model" in security_text, (
         "SECURITY.md §4 does not mention the Eidolon self-model "
         "(expected substring 'self_model')"
@@ -48,7 +48,7 @@ def test_security_md_mentions_observer_jsonl(security_text: str) -> None:
 
 
 def test_security_md_mentions_phantasia(security_text: str) -> None:
-    """§4 must name the Phantasia world-model checkpoints."""
+    """§4 must name the World model world-model checkpoints."""
     assert "phantasia" in security_text, (
         "SECURITY.md §4 does not mention the Phantasia checkpoints "
         "(expected substring 'phantasia')"
@@ -56,7 +56,7 @@ def test_security_md_mentions_phantasia(security_text: str) -> None:
 
 
 def test_security_md_mentions_empatheia(security_text: str) -> None:
-    """§4 must name the Empatheia Qdrant store."""
+    """§4 must name the Social cognition Qdrant store."""
     assert "empatheia" in security_text, (
         "SECURITY.md §4 does not mention the Empatheia Qdrant store "
         "(expected substring 'empatheia')"

@@ -1,6 +1,6 @@
 # Supporting services
 
-Before the KAINE cycle starts, bring up the services its default entity relies on. The shipped `config/kaine.toml` alone turns every module off, and with no profile selected the loader applies the `thesis_test` profile, so that profile defines the default entity. `config/kaine.operator.toml` merges last and wins, and the first-run wizard (`python -m kaine.setup`) always writes a full `[modules]` table there, so after the wizard has run its module choices replace the profile's. `thesis_test` turns on Soma, Chronos, Topos, Audition, Lingua, Thymos and Hypnos and turns everything else off, including Phantasia, Nous, Mnemos, Perception and Mundus.
+Before the KAINE cycle starts, bring up the services its default entity relies on. The shipped `config/kaine.toml` alone turns every module off, and with no profile selected the loader applies the `thesis_test` profile, so that profile defines the default entity. `config/kaine.operator.toml` merges last and wins, and the first-run wizard (`python -m kaine.setup`) always writes a full `[modules]` table there, so after the wizard has run its module choices replace the profile's. `thesis_test` turns on Interoception, Sequence, Vision, Audition, Language, Affect and Sleep and turns everything else off, including World model, Planning, Episodic memory, Perceptual locus and Embodiment.
 
 This page is for the operator installing and starting those services. The supervised first boot is covered in [First boot](first-boot.md).
 
@@ -9,15 +9,15 @@ This page is for the operator installing and starting those services. The superv
 Besides the `[modules]` flags, `thesis_test` sets `[perception_feed]` mode `"seeded"` and seed `0`, `[topos].foveation = true`, `[chronos].forward_prediction = true`, `[audition].transcription_enabled = false` and `general_audition = true`, and `[volition]` `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`. Everything else comes from the shipped `config/kaine.toml`. For a default run, start:
 
 - Redis, the cycle's event bus.
-- Qdrant, which `scripts/first-boot.sh` requires even though Mnemos is off in the default profile.
-- The model server, the OpenAI-compatible server that hosts the [Lingua](../09-modules/lingua.md) organ.
+- Qdrant, which `scripts/first-boot.sh` requires even though Episodic memory is off in the default profile.
+- The model server, the OpenAI-compatible server that hosts the [Language](../09-modules/language.md) organ.
 
 Two speech services are optional:
 
 - Speaches, only when [Audition](../09-modules/audition.md) transcription is on (`transcription_enabled = true`) with the default `speaches` backend.
-- Chatterbox, only when [Vox](../09-modules/vox.md) is enabled with the default `chatterbox` backend.
+- Chatterbox, only when [Vocal](../09-modules/vocal.md) is enabled with the default `chatterbox` backend.
 
-You can avoid the separate speech services by switching Audition and Vox to `sherpa_onnx`.
+You can avoid the separate speech services by switching Audition and Vocal to `sherpa_onnx`.
 
 ## Redis (event bus)
 
@@ -27,7 +27,7 @@ KAINE runs its own Redis container, isolated from any system Redis.
 bash scripts/redis-bootstrap.sh
 ```
 
-The script creates a password on first run, writes it to `compose/.env` and `config/secrets.toml` (both are set to `chmod 600`; other entries are left alone), starts the `kaine-redis` container, and confirms `PONG`. Re-running keeps the existing password. Use `--rotate` to replace it; if the container is already running, pass `--container` too, or the script refuses. Anything still connected, such as Nexus or a running cycle, must be restarted after a rotation.
+The script creates a password on first run, writes it to `compose/.env` and `config/secrets.toml` (both are set to `chmod 600`; other entries are left alone), starts the `kaine-redis` container, and confirms `PONG`. Re-running keeps the existing password. Use `--rotate` to replace it; if the container is already running, pass `--container` too, or the script refuses. Anything still connected, such as Dashboard or a running cycle, must be restarted after a rotation.
 
 Check the container:
 
@@ -94,7 +94,7 @@ That stops the container but does not remove it.
 
 ## Model server (language organ)
 
-If [Lingua](../09-modules/lingua.md) is enabled, the model server serves the published KAINE organ. The first-run wizard, `python -m kaine.setup`, can download and start it hardware-aware and with explicit consent. The manual steps are below.
+If [Language](../09-modules/language.md) is enabled, the model server serves the published KAINE organ. The first-run wizard, `python -m kaine.setup`, can download and start it hardware-aware and with explicit consent. The manual steps are below.
 
 ### Download the organ
 
@@ -131,14 +131,14 @@ The shipped config sets `[lingua].model_server_sleep_idle_seconds = 600`. After 
 
 | Format | Repo | When | Why |
 | --- | --- | --- | --- |
-| GGUF | `kaineone/Qwen3.5-4B-abliterated-GGUF` | always when Lingua is enabled | served by the OpenAI-compatible model server |
+| GGUF | `kaineone/Qwen3.5-4B-abliterated-GGUF` | always when Language is enabled | served by the OpenAI-compatible model server |
 | safetensors | `kaineone/Qwen3.5-4B-abliterated` | only when Stage-2 voice-alignment training is enabled | the trainer's `base_model_path` |
 
 ### Served-alias check
 
 The server must list the organ under the exact value of `[lingua].model_id`. The bootstrap launches with `--alias` set to that value. The wizard checks this after launch and reports a mismatch between the served name and `[lingua].model_id`, so the first cycle does not hit a 404.
 
-Chain-of-thought is suppressed at the server with `--reasoning-budget 0` and in requests with `chat_template_kwargs = {"enable_thinking": false}`, because Lingua is an output organ that voices accessed content.
+Chain-of-thought is suppressed at the server with `--reasoning-budget 0` and in requests with `chat_template_kwargs = {"enable_thinking": false}`, because Language is an output organ that voices accessed content.
 
 Verify the alias is served:
 
@@ -158,7 +158,7 @@ The cycle refuses to boot, with exit code `9`, if the organ returns no content. 
 
 ## Speech services
 
-The default entity has [Audition](../09-modules/audition.md) enabled with `transcription_enabled = false`, so speech-to-text never runs and Audition does not contact Speaches. The health board lists Speaches as `not configured` while transcription is off, which is expected. [Vox](../09-modules/vox.md) is off by default; enable it only if you want TTS.
+The default entity has [Audition](../09-modules/audition.md) enabled with `transcription_enabled = false`, so speech-to-text never runs and Audition does not contact Speaches. The health board lists Speaches as `not configured` while transcription is off, which is expected. [Vocal](../09-modules/vocal.md) is off by default; enable it only if you want TTS.
 
 ### Speaches STT
 
@@ -173,14 +173,14 @@ A cuDNN crash or a 404 at this endpoint breaks the voice loop. See [Troubleshoot
 
 ### Chatterbox TTS
 
-If Vox uses the `chatterbox` backend, run Chatterbox. Use the upstream project, or the `kaine-chatterbox` Quadlet unit:
+If Vocal uses the `chatterbox` backend, run Chatterbox. Use the upstream project, or the `kaine-chatterbox` Quadlet unit:
 
 ```bash
 systemctl --user restart kaine-chatterbox.service   # Quadlet install only
 curl -s http://127.0.0.1:8883/
 ```
 
-Chatterbox needs a predefined voice id. Set `[vox].predefined_voice_id` in `config/kaine.operator.toml` to a filename Chatterbox can find under its `voices/` directory before you enable Vox.
+Chatterbox needs a predefined voice id. Set `[vox].predefined_voice_id` in `config/kaine.operator.toml` to a filename Chatterbox can find under its `voices/` directory before you enable Vocal.
 
 ### sherpa-onnx
 
@@ -208,6 +208,6 @@ Stage-2 voice-alignment training needs a separate trainer environment. Configure
 
 - `trainer_backend = "subprocess"` runs the trainer in a local Python environment; set `trainer_python` to its interpreter.
 - `trainer_backend = "job_queue"` plus the `kaine-trainer` compose service is for container hosts.
-- `hot_swap_mode` decides how an accepted adapter reaches the served organ: `"manual"` (the default; the operator reloads), `"reload_endpoint"`, `"restart_service"`, or `"organ_adapter"` (Hypnos publishes the active GGUF LoRA into `organ_adapters_dir`, which is mounted into the organ container, and waits for the organ to report ready).
+- `hot_swap_mode` decides how an accepted adapter reaches the served organ: `"manual"` (the default; the operator reloads), `"reload_endpoint"`, `"restart_service"`, or `"organ_adapter"` (Sleep publishes the active GGUF LoRA into `organ_adapters_dir`, which is mounted into the organ container, and waits for the organ to report ready).
 
 See [Voice alignment](../10-sleep/voice-alignment.md) for the full setup.

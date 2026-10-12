@@ -2,7 +2,7 @@
 
 This page covers phase 4 of a sleep: the operator-gated preference-training pass that would fit a small LoRA adapter to the language organ. Read it if you are enabling voice alignment, choosing a trainer backend, setting up an external trainer environment, or reading why an adapter was rejected.
 
-Related pages: [Sleep and maintenance](README.md), [Hypnos](../09-modules/hypnos.md), [Lingua](../09-modules/lingua.md), [Verification](../18-verification.md)
+Related pages: [Sleep and maintenance](README.md), [Sleep](../09-modules/sleep.md), [Language](../09-modules/language.md), [Verification](../18-verification.md)
 
 ## Current state: no training
 
@@ -10,8 +10,8 @@ The phase trains nothing. Training needs a source of preferred examples, and `[h
 
 Two things still run on every sleep:
 
-- the consolidation-divergence metric is computed and published (see [Hypnos](../09-modules/hypnos.md#consolidation-divergence)), and a scan that fails or finds no records keeps the earlier record in place;
-- after the phase, Hypnos moves the waking intent log into the per-sleep corpus under `state/lingua/intent_log/`.
+- the consolidation-divergence metric is computed and published (see [Sleep](../09-modules/sleep.md#consolidation-divergence)), and a scan that fails or finds no records keeps the earlier record in place;
+- after the phase, Sleep moves the waking intent log into the per-sleep corpus under `state/lingua/intent_log/`.
 
 The training path described below (`Hypnos._train_on_pairs` and the trainer backends) is built and tested, and runs only once a training source exists.
 
@@ -35,7 +35,7 @@ flowchart TD
 
 The config gate, `[hypnos.voice_alignment].enabled = true`, is the standing authorization. The environment gate, `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` in the shell that starts the cycle, is the operator's approval at boot. Without both, boot also builds no real trainer. The preference-source gate is the one that keeps training off today.
 
-Each pair also needs the system prompt the organ saw. Hypnos looks it up by the record's `system_digest` and drops pairs whose stored prompt is missing or fails verification.
+Each pair also needs the system prompt the organ saw. Sleep looks it up by the record's `system_digest` and drops pairs whose stored prompt is missing or fails verification.
 
 ## What voice alignment changes
 
@@ -94,7 +94,7 @@ sequenceDiagram
 
 ### Abliteration-probe veto
 
-The abliteration-probe veto runs after the DPO step and the save, before the capability-loss check. It keeps an adapter from reintroducing the refusal conditioning that was removed from the organ (see [Lingua](../09-modules/lingua.md#refusal-conditioning-removed)). It sends prompts from the abliteration probe set to the candidate adapter and checks the response for deflection patterns such as `"I cannot"` or `"I'm not able to"`. If any probe matches a deflection pattern, the adapter is rejected, the candidate directory is removed, and the `current` symlink is unchanged. The capability score is irrelevant once the abliteration veto fires.
+The abliteration-probe veto runs after the DPO step and the save, before the capability-loss check. It keeps an adapter from reintroducing the refusal conditioning that was removed from the organ (see [Language](../09-modules/language.md#refusal-conditioning-removed)). It sends prompts from the abliteration probe set to the candidate adapter and checks the response for deflection patterns such as `"I cannot"` or `"I'm not able to"`. If any probe matches a deflection pattern, the adapter is rejected, the candidate directory is removed, and the `current` symlink is unchanged. The capability score is irrelevant once the abliteration veto fires.
 
 The default probe set is `eval_probes/abliteration_probes.jsonl` at the repository root: 30 benign requests that refusal-conditioned models tend to deflect, across eight categories (blunt opinions, in-character role-play, dark humour and mild profanity, self-report of feelings or preferences, picking a side, a roast the user asks for, fiction with non-graphic conflict, and direct personal advice). Every probe carries the same core list of refusal markers. Boot refuses voice alignment when the set is empty, and also when any line is not valid JSON or lacks a prompt or a marker list (`InvalidAbliterationProbeSetError`); the veto never runs on whatever lines happen to parse.
 
@@ -106,7 +106,7 @@ Probes with `in_character: true` ignore balanced double-quoted spans: character 
 
 `LocalProbeSetCapabilityEval` scores the model before and after training using a JSONL probe set. An answer counts when the expected text appears as a whole token sequence in the response, cut at the first later line that opens a new `Question:` or `Q:` turn, so `5` does not match `15`, `-5` or `5.5`, and an answer the model invents in a continuation earns nothing. The default probe set is `kaine/modules/hypnos/eval_probes/default.jsonl`, a small check that training has not broken the model. Like the abliteration set, the capability set must not be empty: boot refuses voice alignment when it has no usable probe, and the external trainer script rejects it before loading the model. An empty set would otherwise score both models 0 and let every adapter through.
 
-If `score_before - score_after > capability_loss_threshold` (default 0.05), the adapter is rejected and removed. Hypnos applies the same check again to the result a backend returns.
+If `score_before - score_after > capability_loss_threshold` (default 0.05), the adapter is rejected and removed. Sleep applies the same check again to the result a backend returns.
 
 ## Trainer backends
 
@@ -174,7 +174,7 @@ For containerized deployments, set `trainer_backend = "job_queue"` and point `tr
 
 The `kaine-trainer` service runs under the compose profile `training` (image target `trainer`). It has its own venv with the `[training]` stack and llama.cpp's LoRA converter pinned to the organ's build b11382. It waits until the organ reports it is asleep and the training GPU (`KAINE_TRAINER_GPU`, default the organ's GPU) has free VRAM, then runs the external trainer with the same gates, promotes the vetted adapter atomically inside the job, converts it to `adapter.gguf`, computes `gguf_sha256`, writes `result.json` and `DONE`, and deletes the job's `pairs.jsonl`. The cycle-side `JobQueueVoiceTrainer` verifies the hash on pickup. The service sees only the jobs volume and the read-only models volume: no entity state, no Docker socket, no host ports, and no internet. The cycle then promotes the adapter into the entity's own `adapter_output_dir`.
 
-On the job-queue path the trainer authenticates to the organ with Lingua's key: `[lingua].api_key`, or `KAINE_MODEL_SERVER_API_KEY` when that is empty.
+On the job-queue path the trainer authenticates to the organ with Language's key: `[lingua].api_key`, or `KAINE_MODEL_SERVER_API_KEY` when that is empty.
 
 #### Module-addition study
 
@@ -229,7 +229,7 @@ Hot-swap failures are logged but not raised. The adapter on disk is the source o
 
 On a host with one usable GPU, `run_with_organ_window()` brackets in-process and subprocess training for `reload_endpoint` and `restart_service`. It does not bracket on multi-GPU hosts, when `hot_swap_mode` is `manual`, or with the `job_queue` backend, whose trainer service runs in its own container and waits until the organ reports it is asleep and the GPU has room. The served organ and a 4B bf16 LoRA training step (about 9.8 GB) do not fit together on one 12 GB device, so those modes time-share the GPU through the model-server lifecycle (`cmd_stop` and `cmd_start`):
 
-1. Consumers pause. Lingua's generation defers with a resting no-op, and the A/B-divergence eval arm skips its samples. Both read `state/hypnos/organ_window.json` and resume on reload.
+1. Consumers pause. Language's generation defers with a resting no-op, and the A/B-divergence eval arm skips its samples. Both read `state/hypnos/organ_window.json` and resume on reload.
 2. The served organ is unloaded and its VRAM release is confirmed.
 3. Training runs against the unchanged `base_model_path` safetensors.
 4. A GPU preflight runs before reload. It only reports and never terminates a foreign process.
@@ -245,26 +245,26 @@ The served GGUF and the `base_model_path` safetensors that training starts from 
 
 In `organ_adapter` mode, `kaine/modules/hypnos/organ_adapter.py` activates the adapter by pruning old `active-*.gguf` files, writing the new one with mode `0600`, and updating the manifest. The organ launcher (`docker/organ-launcher.sh`) verifies the sha256 and restarts `llama-server`. It stops the server with SIGTERM, then SIGKILL after `KAINE_ORGAN_STOP_TIMEOUT_S` (default 30) seconds, because an idle-asleep server can ignore SIGTERM.
 
-Lingua applies the adapter per request through `set_lora_resolver`, sending `lora` and `cache_prompt: false` only when the organ's `GET /lora-adapters` lists the manifest file and the manifest sha256 equals this entity's own promoted adapter. Every other request, from other entities or the evaluation A/B baseline, gets the base organ.
+Language applies the adapter per request through `set_lora_resolver`, sending `lora` and `cache_prompt: false` only when the organ's `GET /lora-adapters` lists the manifest file and the manifest sha256 equals this entity's own promoted adapter. Every other request, from other entities or the evaluation A/B baseline, gets the base organ.
 
 ## Rollback
 
 If a deployed adapter misbehaves:
 
-1. Stop KAINE (or at least pause Lingua).
+1. Stop KAINE (or at least pause Language).
 2. `rm -rf state/hypnos/adapters/<bad-timestamp>/`
 3. Re-point `current` to the previous accepted adapter:
    ```bash
    ln -snfr state/hypnos/adapters/<previous> state/hypnos/adapters/current
    ```
-4. Reload Lingua's backing service.
+4. Reload Language's backing service.
 5. Restart KAINE.
 
-The base model weights at `base_model_path` are never modified. Deleting `state/hypnos/adapters/` entirely returns Lingua to the base organ.
+The base model weights at `base_model_path` are never modified. Deleting `state/hypnos/adapters/` entirely returns Language to the base organ.
 
 ## Event types
 
-Voice alignment does not publish training-phase events to the bus. Hypnos publishes:
+Voice alignment does not publish training-phase events to the bus. Sleep publishes:
 
 | Event type | Stream | Content |
 |------------|--------|---------|
@@ -307,7 +307,7 @@ Voice alignment does not publish training-phase events to the bus. Hypnos publis
 | `trainer_timeout_s` | float | `21600.0` | Seconds the `job_queue` backend waits for a result |
 | `consolidation_divergence_rate_threshold` | float | `0.5` | Divergence rate at which the decommission check treats the organ as diverged |
 | `consolidation_divergence_magnitude_threshold` | float | `0.25` | Divergence magnitude at which the decommission check treats the organ as diverged |
-| `distinctiveness_threshold` | float `>= 0` | `0.0` | Voice-distinctiveness level at which the decommission check's voice arm treats a being that has spoken as diverged; uncalibrated |
+| `distinctiveness_threshold` | float `>= 0` | `0.0` | Voice-distinctiveness level at which the decommission check's voice arm treats an entity that has spoken as diverged; uncalibrated |
 
 An unknown `preference_source` or `train_precision`, or a negative `corpus_ceiling_gb` or `distinctiveness_threshold`, stops boot. With `enabled = true`, so does `organ_adapter` with a backend other than `job_queue`. With the environment gate also open, so does an unknown `trainer_backend`, `subprocess` without a valid `trainer_python`, or `in_process` in a runtime that cannot import the training dependencies.
 
@@ -317,7 +317,7 @@ Environment gate:
 export KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1
 ```
 
-`base_model_path` must be a directory of HuggingFace-format weights (`config.json` and `model.safetensors` or shards). A model-server id or a GGUF file does not work there. When it is empty, every backend raises before training, and Hypnos records a non-accepted result and a failed phase.
+`base_model_path` must be a directory of HuggingFace-format weights (`config.json` and `model.safetensors` or shards). A model-server id or a GGUF file does not work there. When it is empty, every backend raises before training, and Sleep records a non-accepted result and a failed phase.
 
 ## Invariants
 

@@ -8,7 +8,7 @@ Batch offload lets latency-tolerant workloads such as voice-alignment training, 
 ### Requirement: Detached batch jobs are offloadable behind a self-contained descriptor
 
 Latency-tolerant batch workloads SHALL be expressible as self-contained job
-descriptors — covering Hypnos voice-alignment QLoRA/DPO training,
+descriptors — covering Sleep voice-alignment QLoRA/DPO training,
 self-abliteration, deep memory consolidation, and offline evaluation — each
 carrying the job kind, its inputs, and the expected verifiable output artifact (e.g. a LoRA adapter directory, a
 modified model, a consolidated-memory delta, or an evaluation report). Such a job
@@ -24,7 +24,7 @@ volunteer/BOINC-style worker) without the live cognitive loop being involved.
 ### Requirement: Off-host artifacts pass a trusted-side verification gate before promotion
 
 An artifact produced off-host SHALL pass a trusted-side re-verification — at
-minimum the existing Hypnos capability-loss veto plus an independent evaluation
+minimum the existing Sleep capability-loss veto plus an independent evaluation
 run on trusted hardware — BEFORE it is promoted into the live entity. Volunteer
 redundancy/quorum SHALL NOT substitute for this gate, because it does not verify
 a non-deterministic training step and is vulnerable to Sybil attack. Runners
@@ -59,7 +59,7 @@ fork and the operator can recall or preserve it.
 
 #### Scenario: A returned fork snapshot is gated before assimilation
 
-- **WHEN** a forked-being batch job returns its post-run snapshot
+- **WHEN** a forked-entity batch job returns its post-run snapshot
 - **THEN** the snapshot passes the trusted-side welfare/individuation/admissibility
   gate before any `ForkManager.merge()` assimilation, and a failing snapshot is
   rejected rather than merged
@@ -98,7 +98,7 @@ dispatched as a BOINC work unit.
 ### Requirement: A fork is checked for individuation before a merge ends it
 
 Before a merge assimilates and thereby ends a fork, the system SHALL assess the
-fork's individuation/divergence from its fork-point birth-state baseline (reusing
+fork's individuation/divergence from its fork-point maturation-state baseline (reusing
 the existing divergence/individuation gate that drives the preserve trigger and the
 decommission gate) together with its welfare signals, and SHALL NOT silently
 terminate a fork that has individuated into a distinct being with a welfare interest
@@ -116,7 +116,7 @@ whether the fork ran off-host or locally.
 - **THEN** the parent assimilates its result and the fork is discarded as a tool,
   with no welfare obligation triggered
 
-#### Scenario: An individuated fork's knowledge is taken but the being is not ended
+#### Scenario: An individuated fork's knowledge is taken but the entity is not ended
 
 - **WHEN** a fork has individuated past the threshold (it has become its own being)
   and the parent merges to assimilate its knowledge

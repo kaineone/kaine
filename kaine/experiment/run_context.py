@@ -30,7 +30,7 @@ def _utc_iso() -> str:
     """Current UTC time as an ISO-8601 string.
 
     The single shared wall-clock-to-ISO helper for run-scoped record stamping
-    (preservation manifests, the Spot incident log). Boundary-neutral: this
+    (preservation manifests, the Supervisor incident log). Boundary-neutral: this
     module already lives in ``kaine.experiment`` and is imported widely.
     """
     return datetime.now(timezone.utc).isoformat()

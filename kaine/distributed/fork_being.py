@@ -38,7 +38,7 @@ from kaine.lifecycle.timing_profile import build_timing_metadata
 
 log = logging.getLogger(__name__)
 
-#: Where a forked-being work unit writes its post-run snapshot in the result
+#: Where a forked-entity work unit writes its post-run snapshot in the result
 #: bundle (relative path).
 DEFAULT_SNAPSHOT_RELPATH = "post_run_snapshot.json"
 
@@ -55,7 +55,7 @@ def build_forked_being_job(
     """Build the batch-job descriptor for a forked temporary being.
 
     ``fork_snapshot_id`` must be an existing ``ForkManager.fork()`` snapshot;
-    ``directive`` is what the being is asked to do; ``time_scale`` (> 0) is its
+    ``directive`` is what the entity is asked to do; ``time_scale`` (> 0) is its
     subjective pacing. The ``time_scale`` is validated eagerly via
     :func:`build_timing_metadata` so a bad value is rejected at the API boundary,
     not silently stored (mirroring the per-fork dilation contract).

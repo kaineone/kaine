@@ -79,7 +79,7 @@ class Mnemos(BaseModule):
         traces_per_day: float = 288000.0,
         # Persisted-store budget in bytes (paper A.10, Table A1 row B).
         storage_budget_bytes: int = 10 * 1024**3,
-        # Peer stream names for affect + Hypnos window tracking
+        # Peer stream names for affect + Sleep window tracking
         thymos_stream: str = "thymos.out",
         hypnos_stream: str = "hypnos.out",
         # Shared subjective clock (injected at boot). The spontaneous-recall
@@ -122,7 +122,7 @@ class Mnemos(BaseModule):
             redact_content=replay_redact_content,
         )
 
-        # Peer bus streams to subscribe to for affect and Hypnos window events.
+        # Peer bus streams to subscribe to for affect and Sleep window events.
         self._thymos_stream = thymos_stream
         self._hypnos_stream = hypnos_stream
         self._peer_cursors: dict[str, str] = {}
@@ -250,7 +250,7 @@ class Mnemos(BaseModule):
         return self._clock.now() - self._last_recall_monotonic >= self._recall_cooldown_s
 
     # ------------------------------------------------------------------
-    # Affect subscription (thymos.state) + Hypnos sleep-end tracking
+    # Affect subscription (thymos.state) + Sleep sleep-end tracking
     # ------------------------------------------------------------------
 
     async def _peer_consumer_loop(self) -> None:
@@ -296,7 +296,7 @@ class Mnemos(BaseModule):
             except Exception:
                 log.warning("mnemos: failed to parse thymos.state payload", exc_info=True)
         elif stream == self._hypnos_stream:
-            # The window is opened by Hypnos through open_replay_window(),
+            # The window is opened by Sleep through open_replay_window(),
             # so a late sleep.started on the bus cannot reopen it after the sleep ended.
             if event.type == "hypnos.sleep.completed":
                 self._replay_engine.close_window()
@@ -310,26 +310,26 @@ class Mnemos(BaseModule):
 
     @property
     def replay_engine(self) -> ReplayEngine:
-        """The replay engine (for tests and Hypnos orchestration)."""
+        """The replay engine (for tests and Sleep orchestration)."""
         return self._replay_engine
 
     def open_replay_window(self) -> None:
-        """Open the replay window. Hypnos calls this inside a sleep, immediately before phase 2's replay."""
+        """Open the replay window. Sleep calls this inside a sleep, immediately before phase 2's replay."""
         self._replay_engine.open_window()
 
     def close_replay_window(self) -> None:
-        """Close the replay window. Hypnos calls this once phase 2's replay is done."""
+        """Close the replay window. Sleep calls this once phase 2's replay is done."""
         self._replay_engine.close_window()
 
     async def replay_now(self) -> list[ReplayEvent]:
-        """Run the replay selection during the active Hypnos maintenance window.
+        """Run the replay selection during the active Sleep maintenance window.
 
         Selects traces from the whole wake just ended (paper A.10): the
         short-term buffer plus every trace persisted since the last
         downscaling (``await self._core.wake_pool()``), publishes them as
         ``mnemos.replay`` events, and returns the list of published events.
 
-        Raises `ReplayWindowError` unless Hypnos has opened the replay window (`open_replay_window()`).
+        Raises `ReplayWindowError` unless Sleep has opened the replay window (`open_replay_window()`).
         """
         # Candidates: the short-term buffer and every persisted trace stored since
         # the last downscaling, which includes the traces phase 1 just moved and the
@@ -572,7 +572,7 @@ class Mnemos(BaseModule):
         return result
 
     def serialize(self) -> dict[str, Any]:
-        """Synchronous metadata view (fork/merge snapshots, Nexus).
+        """Synchronous metadata view (fork/merge snapshots, Dashboard).
 
         The full memory contents are captured by the async
         :meth:`export_preservation_state` (used by preservation/revive); a
@@ -668,7 +668,7 @@ class Mnemos(BaseModule):
 
 
 # Raw-perceptual event types whose verbatim payload must NEVER be persisted into
-# memory text at the encoding site. Mnemos memory is legitimately persistent
+# memory text at the encoding site. Episodic memory memory is legitimately persistent
 # cognitive state, but a raw transcript / raw visual frame selected into the
 # workspace is RAW sense data — covered by the project's zero-raw-sense-data
 # persistence invariant. This denylist is defence-in-depth at the SOURCE,
@@ -721,7 +721,7 @@ def _point_key(point_id: Any) -> str:
 
 
 def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
-    """Serialize the snapshot to the text Mnemos stores and recalls against.
+    """Serialize the snapshot to the text Episodic memory stores and recalls against.
 
     The content view keeps each selected event's source and type with its
     stripped payload. It drops the tick index and bus entry IDs (both are

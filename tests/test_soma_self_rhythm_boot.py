@@ -88,7 +88,7 @@ def test_construct_module_injects_perception_feed_for_soma(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_maternal_drive_starts_at_the_usual_drive_never_the_bound():
-    # Soma steps its self-rhythm from initialize(), long before the gestation
+    # Interoception steps its self-rhythm from initialize(), long before the development
     # owner exists, so the provider must start at the configured usual drive
     # (the readout's baseline_drive_fraction), not at the bound (scale 1.0)
     # that a perturbation probe uses briefly and announces.

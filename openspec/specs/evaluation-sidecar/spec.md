@@ -50,7 +50,7 @@ follow the broadcast and dispatch the decoded snapshot payload to its handler;
 The new workspace-following observer base SHALL touch only the bus reader
 protocol; `kaine.evaluation` SHALL NOT import `kaine.modules.*`. The
 `memory_source` and `cognitive_query_client` that the memory-probe and
-eidolon-accuracy observers require SHALL be constructed as adapters at the cycle
+self-model-accuracy observers require SHALL be constructed as adapters at the cycle
 entrypoint (the allowed coupling point) and injected, so those observers
 instantiate when enabled without the evaluation layer importing any module.
 
@@ -148,7 +148,7 @@ fails to load.
 - **THEN** the sidecar's start SHALL raise `RuntimeError`
 - **AND** SHALL NOT fall back to `HashEmbedder`
 
-### Requirement: Eidolon accuracy only advertises supported claim signals
+### Requirement: Self-model accuracy only advertises supported claim signals
 
 `CLAIM_KEYWORDS` SHALL NOT map any claim keyword to a signal key that is
 never populated by `_signals_snapshot()`.  Unsupported claims SHALL be
@@ -166,7 +166,7 @@ absent from the map with a comment explaining why.
 
 The curiosity signal derived from proactive-audit file existence SHALL be
 stored under the key `"curiosity_proxy"` in both `_signals_snapshot()` and
-`CLAIM_KEYWORDS`.  Every eidolon accuracy JSONL record SHALL include a
+`CLAIM_KEYWORDS`.  Every self-model accuracy JSONL record SHALL include a
 `"curiosity_proxy_used": bool` field indicating whether any scored claim
 was evaluated against this proxy.
 
@@ -183,7 +183,7 @@ for a controlled `(utterance, workspace-conditioning)` input by running BOTH
 arms through the SAME inference path, varying ONLY the workspace conditioning:
 the conditioned arm is the utterance under the supplied conditioning, the bare
 arm is the SAME utterance under EMPTY conditioning. The control SHALL reuse the
-language organ's real conditioning path (Lingua's `ContextAssembler` + the
+language organ's real conditioning path (Language's `ContextAssembler` + the
 language-organ chat client, wired at the cycle entrypoint) rather than a
 parallel reimplementation, so any divergence it reports is attributable to the
 conditioning alone — which is exactly the quantity the meter is defined to
@@ -214,9 +214,9 @@ while running.
 #### Scenario: The control exercises the real conditioning path
 
 - **WHEN** the real control client is constructed at the cycle entrypoint
-- **THEN** it builds the conditioned prompt with Lingua's own `ContextAssembler`
+- **THEN** it builds the conditioned prompt with Language's own `ContextAssembler`
   and runs it through the language-organ chat client
-- **AND** empty conditioning reproduces Lingua's "nothing salient" prompt
+- **AND** empty conditioning reproduces Language's "nothing salient" prompt
 - **AND** `kaine.evaluation` imports no `kaine.modules.*` code (the coupling is a
   duck-typed seam injected at the entrypoint)
 
@@ -246,7 +246,7 @@ model to execute.
   rather than faked when the model is absent
 
 ### Requirement: Controlled offline runners for the passive instruments
-The system SHALL provide a controlled, seeded, offline runner for each of the A/B-divergence, memory-coherence, and self-model (Eidolon) instruments. Each runner SHALL execute a FIXED stimulus battery against the instrument's production control seam and emit a shared-schema `Verdict` plus seeded JSONL. Each runner SHALL call `set_global_seed(seed)` at the start of a run so that, given the same seed and battery, the verdict and reported metrics are reproducible. Each runner SHALL run headless without an entity boot and without attaching to live modules, the network, or any external service — using deterministic / echo clients and an in-memory Mnemos only. Each runner SHALL expose a `__main__` CLI accepting at least `--seed` and `--out`.
+The system SHALL provide a controlled, seeded, offline runner for each of the A/B-divergence, memory-coherence, and self-model (Self-model) instruments. Each runner SHALL execute a FIXED stimulus battery against the instrument's production control seam and emit a shared-schema `Verdict` plus seeded JSONL. Each runner SHALL call `set_global_seed(seed)` at the start of a run so that, given the same seed and battery, the verdict and reported metrics are reproducible. Each runner SHALL run headless without an entity boot and without attaching to live modules, the network, or any external service — using deterministic / echo clients and an in-memory Episodic memory only. Each runner SHALL expose a `__main__` CLI accepting at least `--seed` and `--out`.
 
 #### Scenario: Each runner emits a verdict on its battery
 
@@ -273,17 +273,17 @@ The system SHALL provide a controlled, seeded, offline runner for each of the A/
 
 - **WHEN** the memory-coherence runner runs its planted-fact battery through a
   full-system retrieval arm and a bare arm, then re-runs the SAME full-system client
-  against an EMPTIED Mnemos as a recorded check
+  against an EMPTIED Episodic memory as a recorded check
 - **THEN** with the facts planted, the full-system arm's accuracy exceeds the bare
   arm's by at least the configured floor
 - **AND** a never-stored fact yields honest non-recall scored 0
-- **AND** with the Mnemos emptied the full-system advantage vanishes, proving the
+- **AND** with the Episodic memory emptied the full-system advantage vanishes, proving the
   advantage is produced by retrieval and not a hard-coded answer
 
 #### Scenario: The self-model runner validates the scorer
 
 - **WHEN** the self-model runner runs its battery of planted-signal / claim cases
-  through the calibrated Eidolon scorer
+  through the calibrated Self-model scorer
 - **THEN** the verdict reports the scorer's accuracy on the known cases
 - **AND** the record states that this validates the scorer's
   trait-keyword-vs-derived-signal arithmetic, not predicted-vs-actual self-knowledge
@@ -291,7 +291,7 @@ The system SHALL provide a controlled, seeded, offline runner for each of the A/
 #### Scenario: Offline, no entity boot
 
 - **WHEN** any of the three runners is invoked
-- **THEN** it uses only deterministic / echo clients and an in-memory Mnemos over
+- **THEN** it uses only deterministic / echo clients and an in-memory Episodic memory over
   no network
 - **AND** it does NOT boot an entity, attach to live modules, or open a network
   connection
@@ -311,7 +311,7 @@ When `[evaluation].workspace_trajectory` is enabled, `TrajectoryRecorder` SHALL 
 - **THEN** the row holds the member's entry id, source, type, salience and timestamp and neither the text nor the vector
 
 #### Scenario: No affect state
-- **WHEN** a Thymos state is available while a row is written
+- **WHEN** a Affect state is available while a row is written
 - **THEN** the row does not contain it
 
 ### Requirement: Workspace trajectory is filtered before persistence

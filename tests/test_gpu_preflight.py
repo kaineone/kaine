@@ -174,7 +174,7 @@ def test_shipped_config_ships_gpu_preflight_disabled():
     assert raw["gpu_preflight"]["enabled"] is False
 
 
-# --- Nexus read-only block ---------------------------------------------------
+# --- Dashboard read-only block ---------------------------------------------------
 
 
 def test_nexus_block_reads_blocked_state(tmp_path):

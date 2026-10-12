@@ -34,7 +34,7 @@ from typing import Any
 
 
 class ReplayWindowError(RuntimeError):
-    """Raised when replay() is called outside an active Hypnos window."""
+    """Raised when replay() is called outside an active Sleep window."""
 
 
 @dataclass
@@ -170,13 +170,13 @@ def _payload_log_base(payload: dict[str, Any]) -> float | None:
 
 
 class ReplayEngine:
-    """Stateful engine owned by the Mnemos module.
+    """Stateful engine owned by the Episodic memory module.
 
-    Tracks whether a Hypnos maintenance window is currently active and,
+    Tracks whether a Sleep maintenance window is currently active and,
     when asked to replay, selects traces from the short-term buffer /
     storage and publishes `mnemos.replay` events.
 
-    The window is opened and closed by Hypnos through
+    The window is opened and closed by Sleep through
     `Mnemos.open_replay_window()` and `Mnemos.close_replay_window()` around
     phase 2's replay; `hypnos.sleep.completed` also closes it.
     """
@@ -200,15 +200,15 @@ class ReplayEngine:
         self._window_active: bool = False
 
     # ------------------------------------------------------------------
-    # Window lifecycle (driven by Hypnos through Mnemos)
+    # Window lifecycle (driven by Sleep through Episodic memory)
     # ------------------------------------------------------------------
 
     def open_window(self) -> None:
-        """Signal that a Hypnos maintenance replay window has started."""
+        """Signal that a Sleep maintenance replay window has started."""
         self._window_active = True
 
     def close_window(self) -> None:
-        """Signal that the Hypnos maintenance window has ended."""
+        """Signal that the Sleep maintenance window has ended."""
         self._window_active = False
 
     @property
@@ -226,7 +226,7 @@ class ReplayEngine:
     def replay(self, candidates: list[ReplayEntry]) -> list[ReplayEvent]:
         """Select and package traces for replay.
 
-        MUST be called inside an active Hypnos maintenance window.
+        MUST be called inside an active Sleep maintenance window.
         Raises `ReplayWindowError` if called while awake.
 
         Returns a list of `ReplayEvent` objects (one per selected trace).

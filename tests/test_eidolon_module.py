@@ -87,8 +87,8 @@ async def test_workspace_below_threshold_no_event(bus: AsyncBus, tmp_path: Path)
     )
     await eidolon.initialize()
     try:
-        # Eidolon publishes an initial self-model seed to eidolon.out at boot
-        # (the bus-mediated persona snapshot a split-host Lingua consumes). Seek
+        # Self-model publishes an initial self-model seed to eidolon.out at boot
+        # (the bus-mediated persona snapshot a split-host Language consumes). Seek
         # past it so this test measures only the below-threshold drift behavior.
         tail = await bus.client.xrevrange("eidolon.out", count=1)
         cursor = (tail[0][0] if tail else "0")

@@ -110,7 +110,7 @@ def _host_allowed(host: str, allowlist: tuple[str, ...]) -> bool:
 
 
 class NexusCSRFMiddleware(BaseHTTPMiddleware):
-    """Origin/Host validation middleware for Nexus requests."""
+    """Origin/Host validation middleware for Dashboard requests."""
 
     def __init__(self, app: Any, config: NexusConfig) -> None:
         super().__init__(app)

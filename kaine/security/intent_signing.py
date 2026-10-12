@@ -51,7 +51,7 @@ def generate_intent_secret() -> bytes:
     """Return a fresh per-boot HMAC secret (32 cryptographically-random bytes).
 
     Called once by the cycle composition root. The returned bytes are held only
-    in-process and handed to Volition (to sign) and Praxis (to verify). They are
+    in-process and handed to Action selection (to sign) and Effectors (to verify). They are
     NEVER published to the bus, written to disk, or logged.
     """
     return os.urandom(_SECRET_BYTES)
@@ -126,9 +126,9 @@ class IntentSigner:
     """Signs executive ``act`` intents with a per-boot secret.
 
     Holds the shared secret, the run's ``run_id``, and a monotonic ``seq``
-    counter minted per signed intent. Injected into Volition at the composition
+    counter minted per signed intent. Injected into Action selection at the composition
     root. Each :meth:`sign` call returns the ``(run_id, seq, signature)`` triple
-    the intent must carry so Praxis can verify provenance and reject replays.
+    the intent must carry so Effectors can verify provenance and reject replays.
     """
 
     def __init__(self, secret: bytes, run_id: str) -> None:

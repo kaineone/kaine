@@ -5,15 +5,15 @@
 The base thesis says the mind is the workspace's competition and broadcast among predictive processors. A direct way to see what each faculty adds is to show the same being the same material while the faculties differ, and compare what reaches the workspace. That means the ignitions: which coalitions win and are broadcast, how often, and with which members.
 
 The operator's protocol, 2026-09-28:
-1. **Gestation.** Spawn one base-thesis entity and let it gestate in the local womb until it is born.
-2. **The seed.** At the moment it graduates gestation, preserve it. That snapshot is the seed.
-3. **Branch runs.** Revive the seed once per module set, one run at a time, each with one more module in a logical order. Show it the four films after a pleasant transition from the womb, recording everything.
-   - Every branch run starts from the same seed and sees the same media, so the runs show how the being diverges with each new faculty.
+1. **Gestation.** Spawn one base-thesis entity and let it gestate in the local stimulus source until it is born.
+2. **The seed.** At the moment it graduates development, preserve it. That snapshot is the seed.
+3. **Branch runs.** Revive the seed once per module set, one run at a time, each with one more module in a logical order. Show it the four films after a pleasant transition from the stimulus source, recording everything.
+   - Every branch run starts from the same seed and sees the same media, so the runs show how the entity diverges with each new faculty.
 4. **Accumulating line.** One being gains the next module after each viewing and rewatches the same films, building familiarity.
 5. **Noise reference.** A repeat of the base run from the seed shows how much two identical runs differ.
 6. **Analysis and write-up.** Compare the recorded data. Look for evidence of workspace ignition or sentient behaviour. Report it truthfully and in full in a new version of the paper and poster, whether or not it shows what was hoped for.
 
-The first version of this change (2026-09-26) forked a main line and a familiarity-control line from the gestation. This revision replaces that line structure with the operator's protocol. The prerequisite changes it tracked are done, and it keeps them.
+The first version of this change (2026-09-26) forked a main line and a familiarity-control line from the development. This revision replaces that line structure with the operator's protocol. The prerequisite changes it tracked are done, and it keeps them.
 
 ## What changes
 
@@ -25,27 +25,27 @@ The first version of this change (2026-09-26) forked a main line and a familiari
 
   One checksummed playlist manifest, about 243 minutes.
 - **Base set.** The operator's base-thesis configuration:
-  - the base: Soma, Chronos, Topos, Audition and Lingua, with Syneidesis and Volition;
-  - Thymos and Hypnos.
-- **Module order.** Mnemos, Phantasia, Nous, Eidolon, Empatheia, Vox, Praxis, Perception, Mundus, up to all sixteen modules.
-- **The seed.** One gestation in the local womb under the default gate. Birth is automatic when the gate's conditions hold; no operator acknowledgement delays it.
-  - The being is preserved once the birth bloom has completed. That preservation is the seed.
-  - The womb's time at birth is recorded, so the transition renders the field the being last perceived.
+  - the base: Interoception, Sequence, Vision, Audition and Language, with Workspace and Action selection;
+  - Affect and Sleep.
+- **Module order.** Episodic memory, World model, Planning, Self-model, Social cognition, Vocal, Effectors, Perceptual locus, Embodiment, up to all sixteen modules.
+- **The seed.** One development in the local stimulus source under the default gate. Maturation is automatic when the gate's conditions hold; no operator acknowledgement delays it.
+  - The entity is preserved once the maturation bloom has completed. That preservation is the seed.
+  - The stimulus source's time at maturation is recorded, so the transition renders the field the entity last perceived.
 - **Lines.** Each line has its own working directory and memory collections. Every step starts on an empty bus database.
   - **Branch (k = 0…9).** Revive the seed with the base set plus the first k modules of the order.
   - **Repeat.** A second base run revived from the seed: the noise reference.
   - **Accumulate (k = 1…9).** Step 1 revives branch 0's preservation. Each later step revives the previous accumulate step's preservation, gains the k-th module and rewatches the programme.
 - **Each viewing.**
-  1. The womb-to-world transition (change `womb-to-world-transition`).
+  1. The stimulus-source-to-world transition (change `womb-to-world-transition`).
   2. The four films.
   3. Preservation and a stop at the programme's end.
   4. A recorded step manifest.
 - **Recording** (change `run-recording`). Every run persists:
-  - everything Nexus displays, after the same privacy filter Nexus applies;
+  - everything Dashboard displays, after the same privacy filter Dashboard applies;
   - the research event log;
   - the workspace trajectory;
   - the film-aligned ignition log;
-  - Lingua's external utterances.
+  - Language's external utterances.
 
   Inner speech is never recorded.
 - **Hosting.** The study runner runs inside the cycle image as a compose service, so every cycle reaches the bus, the organ and the models the way the containerized cycle does. The study directory lives on a durable volume.
@@ -85,4 +85,4 @@ Portability program phases 1–4. By operator direction (2026-09-28), this leg i
 ## Impact
 
 - The study runner, its plan and its analysis change to the seed and branch protocol. No change to the entity's cognition.
-- The study creates one seed and one preserved being per run. It never deletes a being.
+- The study creates one seed and one preserved entity per run. It never deletes an entity.

@@ -12,8 +12,8 @@ Four consumers take their stream lists from the registry helpers:
 |---|---|---|
 | Research-event observer | `curated_module_streams()` | `kaine/evaluation/observers/research_event_observer.py` |
 | Raw bus archive | `raw_archive_module_streams()` | `kaine/evaluation/observers/raw_bus_archive_consumer.py` |
-| Nexus diagnostics panel | `diagnostics_streams()` | `kaine/nexus/__main__.py` |
-| Nexus record consumer | `diagnostics_streams()` | `kaine/evaluation/observers/nexus_record.py` |
+| Dashboard diagnostics panel | `diagnostics_streams()` | `kaine/nexus/__main__.py` |
+| Dashboard record consumer | `diagnostics_streams()` | `kaine/evaluation/observers/nexus_record.py` |
 
 All four call the registry helpers, so a stream added in one consumer and not in the registry fails the drift tests.
 
@@ -25,7 +25,7 @@ The registry treats each canonical module as one `<module>.out` stream. The list
 - The curated list leaves out `vox.out` (raw audio) and `lingua.out` (the language organ's text) so that the research log stays content-free. The raw archive keeps every produced stream.
 - `diagnostics_streams()` leaves out the low-signal operational streams `volition.out`, `mundus.out`, `perception.out`, `welfare.out`, `preservation.out` and `individuation.out`, and appends `workspace.broadcast`. It includes `cycle.out`, which carries the cycle's `cycle.tick`, `cycle.rates` and `cycle.time_scale` events.
 
-Lingua (`kaine/modules/lingua/module.py`) publishes on `lingua.external` and `lingua.internal` and mirrors every utterance to `lingua.out`, which the raw archive and the Nexus diagnostics tail follow.
+Language (`kaine/modules/lingua/module.py`) publishes on `lingua.external` and `lingua.internal` and mirrors every utterance to `lingua.out`, which the raw archive and the Dashboard diagnostics tail follow.
 
 ## Drift tests
 
@@ -37,7 +37,7 @@ Every event carries its intensity in the event's `salience` field (the code's na
 
 | Field | Events | Meaning |
 |---|---|---|
-| `alert` | `topos.report`, `audition.perception` (acoustic), `audition.emotion` (tone), `soma.report`, `chronos.report`; also the alert-level events of other modules, such as `thymos.drive`, `thymos.emotion`, `soma.fatigue`, `soma.regulation` and `hypnos.sleep.completed` | On a processor report, true when the report met the processor's alert criterion and was published at the module's alert intensity; on another module's event, true when the event was published at that module's alert level. False when the intensity was graded from the error ratio. For the tone event it is true for any non-neutral tone under the default tone rule and never under the tone variant's rule; for Soma it is true when a host metric is past its hard threshold. The access rate's phasic input counts only events with `alert` true. |
+| `alert` | `topos.report`, `audition.perception` (acoustic), `audition.emotion` (tone), `soma.report`, `chronos.report`; also the alert-level events of other modules, such as `thymos.drive`, `thymos.emotion`, `soma.fatigue`, `soma.regulation` and `hypnos.sleep.completed` | On a processor report, true when the report met the processor's alert criterion and was published at the module's alert intensity; on another module's event, true when the event was published at that module's alert level. False when the intensity was graded from the error ratio. For the tone event it is true for any non-neutral tone under the default tone rule and never under the tone variant's rule; for Interoception it is true when a host metric is past its hard threshold. The access rate's phasic input counts only events with `alert` true. |
 | `context_gain` | `topos.report`, `audition.perception`, `soma.report` | Cross-module broadcast information gain for this report: the forward model's error under the null context minus its error under the context it holds, divided by its running mean error. Positive values mean the other modules' share of the context helped the prediction. Null until the processor has adopted its first accessed broadcast. |
 | `null_prediction_error` | `topos.report`, `audition.perception`, `soma.report` | The error the scored prediction would have had under the null context, with the same weights. Null when `context_gain` is. |
 | `mean_prediction_error` | `topos.report`, `audition.perception`, `soma.report` | The running mean error that `context_gain` is divided by, so `context_gain` equals `null_prediction_error` minus `prediction_error`, over this value. Null when `context_gain` is. |
@@ -45,9 +45,9 @@ Every event carries its intensity in the event's `salience` field (the code's na
 | `prediction_broadcast_tick` | `topos.report`, `audition.perception`, `soma.report` | The tick index of the latest broadcast the processor had received, accessed or inhibited, when it formed the prediction this report scores. That prediction was formed at the previous report. Null when the report scores no prediction (the first report, or the first after a skipped reading). The contrast at threshold assigns each report to the broadcast whose receipt preceded its prediction (paper Appendix A.8). |
 | `prediction_context_age_s` | `topos.report`, `audition.perception`, `soma.report` | The age of the context the scored prediction used, read when the prediction was formed, in entity seconds. Null when `prediction_broadcast_tick` is, or when the processor held no context then. It differs from `context_age_s`, which is the age of the context held at this report and used for the next prediction. The contrast at threshold bins reports by this age. |
 | `entity_time_s` | `topos.report`, `audition.perception`, `soma.report` | The shared entity clock's reading at the report, in entity seconds since the run started. The planned test counts a report only after the learning period T_learn, which is measured on this clock (paper Appendix A.8). |
-| `awake` | `topos.report`, `audition.perception`, `soma.report` | False while Hypnos holds the processor asleep. The planned test counts only reports made while the entity was awake. |
+| `awake` | `topos.report`, `audition.perception`, `soma.report` | False while Sleep holds the processor asleep. The planned test counts only reports made while the entity was awake. |
 
-The null context keeps the reporting processor's own share of the context and replaces every other source's share with its mean over the contexts the processor has adopted so far in the run. Soma's null context also keeps Lingua's share, because the language organ's load on the host would otherwise let its share predict Soma's input. The context and its null are built from one reading of the clock, so they carry the same age and flags. Chronos publishes no `context_gain`, since the broadcast is its input. The context itself is computed in `kaine/modules/context.py`: a 24-component featurization of the accessed members of the latest accessed broadcast, weighted by the intensity each member reported, plus the context's age. An inhibited broadcast leaves the context unchanged.
+The null context keeps the reporting processor's own share of the context and replaces every other source's share with its mean over the contexts the processor has adopted so far in the run. Interoception's null context also keeps Language's share, because the language organ's load on the host would otherwise let its share predict Interoception's input. The context and its null are built from one reading of the clock, so they carry the same age and flags. Sequence publishes no `context_gain`, since the broadcast is its input. The context itself is computed in `kaine/modules/context.py`: a 24-component featurization of the accessed members of the latest accessed broadcast, weighted by the intensity each member reported, plus the context's age. An inhibited broadcast leaves the context unchanged.
 
 These fields are on the bus and in the raw archive. The curated research log keeps only the keys in its allowlist (below). It records `alert` on every processor report, `context_gain`, `null_prediction_error`, `mean_prediction_error`, `context_age_s`, `prediction_broadcast_tick`, `prediction_context_age_s`, `entity_time_s` and `awake` on `topos.report`, `soma.report` and `audition.perception` (logged with its numeric fields only, never the playlist item title), `alert` on `thymos.drive`, `thymos.emotion` and `hypnos.sleep.completed`, and, on each broadcast record, `published_at` and, when the broadcast had candidates, `access_threshold`. Competitive and matched broadcasts, empty ones included, also carry `coalition_capacity`, the coalition size K, which the calibration tool uses to tell whether competition ever operated in a run.
 
@@ -55,7 +55,7 @@ These fields are on the bus and in the raw archive. The curated research log kee
 
 The positive control of the information-gain measure (paper §6.3, Appendix A.8) is enabled only by the workspace-mediation study configurations, in one of three modes set by `[positive_control].mode`.
 
-**`estimate_pc`, the preliminary run.** Topos, Audition and Soma each accumulate the mean and covariance of their awake, finite inputs. At shutdown each writes its inputs' first principal component v_j (the unit direction along which they vary most) and their mean mu_j to `data/evaluation/positive_control/<run_id>/principal_component_<processor>.json`, with the number of inputs and the projection's variance. No input is stored. The terminal `positive_control.result` record carries the file's sha256 in `pc_sha256`.
+**`estimate_pc`, the preliminary run.** Vision, Audition and Interoception each accumulate the mean and covariance of their awake, finite inputs. At shutdown each writes its inputs' first principal component v_j (the unit direction along which they vary most) and their mean mu_j to `data/evaluation/positive_control/<run_id>/principal_component_<processor>.json`, with the number of inputs and the projection's variance. No input is stored. The terminal `positive_control.result` record carries the file's sha256 in `pc_sha256`.
 
 **`ladder`, the pilot runs of the on arm.** Each processor runs shadow copies of its forward model beside the live one, an informative and an uninformative one at each signal-to-noise ratio 4^-2, 4^-1, ..., 4^4 (fourteen shadows). Each shadow's context carries one extra component. The informative component is v_j^T (x - mu_j), the next input projected on the preliminary run's principal component, plus Gaussian noise whose variance is that of the earlier projections divided by the SNR. The uninformative component has the same running mean and variance and does not depend on the input. The noise is seeded from `[positive_control].seed` and the run's seed, so different runs draw independent noise. The shadows score in hindsight, forming at each report the prediction the previous report's state would have formed, so the extra component can carry the next input without the live model ever seeing it. After each awake report on which the live gain and every shadow's error difference are defined, the processor publishes a `positive_control.ladder` event with `processor`, `entity_time_s`, `gain` (the live `context_gain`), `gain_with` and `gain_noise` (each shadow's gain, one per rung, over the live model's running mean error), `snr` (the ladder) and `pc_sha256`. Every report is recorded; the calibration tool removes the reports before the learning period afterwards.
 
@@ -67,7 +67,7 @@ The live test runs only after the measure passes for every processor. `python -m
 
 ## Broadcast metadata
 
-Each `workspace.broadcast` event carries `tick_index`, `inhibited`, `time_scale`, `salience_scores` (the score of every candidate, keyed by the candidate's id `<stream>:<entry_id>`, which is also each coalition member's `entry_id`), the coalition under `selected`, and a `metadata` object. Syneidesis writes the access threshold into `metadata` as `access_threshold`. A coalition member is accessed when its score reaches that threshold, and a broadcast is accessed when at least one member is; this is how a processor tells accessed members from members that rode along below the threshold. When the oscillatory coherence layer is on, `metadata` also carries `coherence`.
+Each `workspace.broadcast` event carries `tick_index`, `inhibited`, `time_scale`, `salience_scores` (the score of every candidate, keyed by the candidate's id `<stream>:<entry_id>`, which is also each coalition member's `entry_id`), the coalition under `selected`, and a `metadata` object. Workspace writes the access threshold into `metadata` as `access_threshold`. A coalition member is accessed when its score reaches that threshold, and a broadcast is accessed when at least one member is; this is how a processor tells accessed members from members that rode along below the threshold. When the oscillatory coherence layer is on, `metadata` also carries `coherence`.
 
 The curated research log's `workspace.broadcast` record keeps `tick_index`, `inhibited`, `salience_scores` and, for each coalition member, `entry_id`, `source`, `type`, `salience` and `causal_parent`. It never copies a member's payload or the `metadata` object. A member's `entry_id` is the same `<stream>:<entry_id>` id that keys its score. Records from earlier versions key `salience_scores` by the bare bus entry id. Those ids were unique only within a stream, so where two streams issued the same id in one millisecond the table holds one score for the two candidates, and the lost score cannot be recovered. A reader that looks up a member's score with the member's own id reads old and new records alike, since that id has the same form as the keys in the same record; `kaine.bus.schema.split_stream_entry_key` returns a stream of None for a bare id. The tone analysis is the exception: it joins records on the qualified id and refuses a bare one. No pilot or live run was recorded before the change.
 
@@ -85,7 +85,7 @@ New event types must be added to the observer's `_TAXONOMY`; unlisted types are 
 
 ## Sleep-time realization audit
 
-Hypnos publishes `hypnos.ignition_audit` (the code keeps the name "ignition" for a realized intent) on `hypnos.out` at every sleep. The record is content-free and export-eligible. It is merged into the sleep's `PhaseResult` metadata and rides `hypnos.sleep.completed` into the sleep-snapshots JSONL, carrying `sleep_index`. See [Hypnos](../09-modules/hypnos.md) for how sleep is managed.
+Sleep publishes `hypnos.ignition_audit` (the code keeps the name "ignition" for a realized intent) on `hypnos.out` at every sleep. The record is content-free and export-eligible. It is merged into the sleep's `PhaseResult` metadata and rides `hypnos.sleep.completed` into the sleep-snapshots JSONL, carrying `sleep_index`. See [Sleep](../09-modules/sleep.md) for how sleep is managed.
 
 The audit classifies every realized speech, action or rest since the previous sleep into one of four buckets, checked in order:
 
@@ -105,12 +105,12 @@ The research log keeps only these fields:
 | `input_triggered` | Realizations triggered by an external input. |
 | `drive_triggered` | Realizations triggered by a drive. |
 | `self_initiated` | Realizations that were neither input- nor drive-triggered. |
-| `nous_initiated` | Realizations whose intent originated in Nous. |
-| `nous_proposals_realized` | Nous proposals that were realized. |
-| `nous_proposals_declined` | Nous proposals that were not realized. |
-| `nous_proposals_forwarded` | Nous proposals forwarded to Hypnos as a rest request. |
+| `nous_initiated` | Realizations whose intent originated in Planning. |
+| `nous_proposals_realized` | Planning proposals that were realized. |
+| `nous_proposals_declined` | Planning proposals that were not realized. |
+| `nous_proposals_forwarded` | Planning proposals forwarded to Sleep as a rest request. |
 | `unrealizable_nous_intents` | `intent.*` events on `nous.out`. No effector reads that stream, so this counter flags a wiring fault and should read zero. |
 | `realization_failed_count` | `realization_failed` events in the window. |
 | `audit_error` | A non-fatal error met while building the audit. |
 
-`nous_proposals_forwarded` is reported on its own because Hypnos decides whether a forwarded rest becomes sleep; an accepted one appears as a requested sleep. The per-category `entry_id` lists, event types and intensities stay inside the sleep-snapshots payload, and no text, transcript or latent vector leaves the audit.
+`nous_proposals_forwarded` is reported on its own because Sleep decides whether a forwarded rest becomes sleep; an accepted one appears as a requested sleep. The per-category `entry_id` lists, event types and intensities stay inside the sleep-snapshots payload, and no text, transcript or latent vector leaves the audit.

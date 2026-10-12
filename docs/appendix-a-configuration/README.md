@@ -16,17 +16,17 @@ A study configuration wins over everything, so a study run's settings cannot be 
 
 Select a profile with `KAINE_PROFILE=<name>` or `--profile <name>` on `python -m kaine.cycle`; the command-line flag wins over the environment variable. Running without a profile applies `config/profiles/thesis_test.toml` automatically. If the selected profile, tier or study file is missing, KAINE raises `ProfileError` instead of falling back silently. A study file may set only the `[lingua]`, `[syneidesis]`, `[experiment]`, `[individuation]`, `[planned_test]` and `[positive_control]` tables and the single key `[audition].tone_rule`; any other table or `[audition]` key, `[modules]` included, raises `ProfileError`. The run manifest records the study's name in `study`.
 
-Not every entry point uses the full stack. The cycle, the pre-boot check, `python -m kaine.lifecycle`, `python -m kaine.research` and the setup web app's cycle launches load the configuration through the runtime loader, with profile, tier and study. Nexus, setup provisioning (`python -m kaine.setup`), the organ server's launcher (`kaine.organ_server.lifecycle`) and the control command (`python -m kaine.cycle.control`) load only `config/kaine.toml` and the operator file, with no profile, tier or study, so they do not see a study's `[syneidesis].arm` or its `[lingua].temperature`. Lifecycle and revive commands (`python -m kaine.lifecycle ...`, `python -m kaine.cycle --revive ...`) read `KAINE_STUDY` from the environment, so run them with the same `KAINE_STUDY` as the run they act on; otherwise they act under a different configuration from the one the run used.
+Not every entry point uses the full stack. The cycle, the pre-boot check, `python -m kaine.lifecycle`, `python -m kaine.research` and the setup web app's cycle launches load the configuration through the runtime loader, with profile, tier and study. Dashboard, setup provisioning (`python -m kaine.setup`), the organ server's launcher (`kaine.organ_server.lifecycle`) and the control command (`python -m kaine.cycle.control`) load only `config/kaine.toml` and the operator file, with no profile, tier or study, so they do not see a study's `[syneidesis].arm` or its `[lingua].temperature`. Lifecycle and revive commands (`python -m kaine.lifecycle ...`, `python -m kaine.cycle --revive ...`) read `KAINE_STUDY` from the environment, so run them with the same `KAINE_STUDY` as the run they act on; otherwise they act under a different configuration from the one the run used.
 
 ## Module defaults
 
 The committed `config/kaine.toml` ships with every module `enabled` toggle set to `false`. Enabling modules is a local edit that is never committed. The guard test `test_committed_config_ships_all_modules_disabled` in [`tests/test_boot_wiring.py`](../../tests/test_boot_wiring.py) checks this on every CI run.
 
-With no profile selected, the loader applies the `thesis_test` profile automatically. That profile enables Soma, Chronos, Topos, Audition, Lingua, Thymos, and Hypnos; disables everything else (including Phantasia, Nous, Mnemos, Perception, and Mundus); sets `[perception_feed].mode` to `"seeded"` with `seed = 0`; sets `[topos].foveation = true`; sets `[chronos].forward_prediction = true`; sets `[audition].transcription_enabled = false` and `general_audition = true`; and sets `[volition].policy = "self_initiated_report"`, `drive_initiative = false`, and `sig_expiry_s = 300.0`. Every other value comes from the shipped config.
+With no profile selected, the loader applies the `thesis_test` profile automatically. That profile enables Interoception, Sequence, Vision, Audition, Language, Affect, and Sleep; disables everything else (including World model, Planning, Episodic memory, Perceptual locus, and Embodiment); sets `[perception_feed].mode` to `"seeded"` with `seed = 0`; sets `[topos].foveation = true`; sets `[chronos].forward_prediction = true`; sets `[audition].transcription_enabled = false` and `general_audition = true`; and sets `[volition].policy = "self_initiated_report"`, `drive_initiative = false`, and `sig_expiry_s = 300.0`. Every other value comes from the shipped config.
 
-The operator file `config/kaine.operator.toml` merges last and wins. The first-run wizard (`python -m kaine.setup`) always writes a full `[modules]` table there, so on a wizard-configured install the wizard's module choices replace the profile's. The wizard offers two presets. The base thesis copies the `[modules]` table of `config/profiles/thesis_test.toml`. The full entity turns on all fourteen cognitive modules and leaves Perception and Mundus off. The wizard recommends the full entity when the host's hardware tier is 2 or higher and fits every module without residency swapping, and the base thesis otherwise; `--defaults` takes the recommendation, and a custom choice starts from it. Echo is always off. If Vox uses Chatterbox and no voice id is available, the wizard turns Vox off rather than write a configuration that cannot speak.
+The operator file `config/kaine.operator.toml` merges last and wins. The first-run wizard (`python -m kaine.setup`) always writes a full `[modules]` table there, so on a wizard-configured install the wizard's module choices replace the profile's. The wizard offers two presets. The base thesis copies the `[modules]` table of `config/profiles/thesis_test.toml`. The full entity turns on all fourteen cognitive modules and leaves Perceptual locus and Embodiment off. The wizard recommends the full entity when the host's hardware tier is 2 or higher and fits every module without residency swapping, and the base thesis otherwise; `--defaults` takes the recommendation, and a custom choice starts from it. Recorder is always off. If Vocal uses Chatterbox and no voice id is available, the wizard turns Vocal off rather than write a configuration that cannot speak.
 
-A profile that enables modules still does not birth an entity: the cognitive cycle refuses to boot unless the operator is present (`KAINE_CYCLE_OPERATOR_PRESENT=1`), a verified research safety net is configured, or an unattended gate passes. A profile only decides which modules construct and how they are configured. See [The modules](../09-modules/README.md), [First boot](../04-getting-started/first-boot.md), and [Preservation and the safety net](../11-preservation.md).
+A profile that enables modules still does not maturation an entity: the cognitive cycle refuses to boot unless the operator is present (`KAINE_CYCLE_OPERATOR_PRESENT=1`), a verified research safety net is configured, or an unattended gate passes. A profile only decides which modules construct and how they are configured. See [The modules](../09-modules/README.md), [First boot](../04-getting-started/first-boot.md), and [Preservation and the safety net](../11-preservation.md).
 
 ## Optional dependency extras
 
@@ -37,8 +37,8 @@ Several features need a Python extra installed on top of the base package:
 | `[audio]` | `pip install -e .[audio]` | Live microphone capture and decoding (`sounddevice`, `webrtcvad`, `funasr`, `librosa`, `av`) |
 | `[speech-edge]` | `pip install -e .[speech-edge]` | Torch-free speech backends: sherpa-onnx (Moonshine STT, Kokoro TTS). Kokoro model: Apache-2.0 (model); GPL-3.0-or-later (espeak-ng-data and the espeak-ng engine built into sherpa-onnx) |
 | `[vision]` | `pip install -e .[vision]` | Live camera capture and model helpers (`opencv-python-headless`, `transformers`, `Pillow`) |
-| `[reasoning]` | `pip install -e .[reasoning]` | Active inference engine for Nous (`inferactively-pymdp`, `jax[cpu]`); needed only for the `pymdp` backend |
-| `[worldmodel]` | `pip install -e .[worldmodel]` | DreamerV3 JAX engine for Phantasia (`jax[cpu]`, `chex`, `einops`); the NumPy engine needs no extra |
+| `[reasoning]` | `pip install -e .[reasoning]` | Active inference engine for Planning (`inferactively-pymdp`, `jax[cpu]`); needed only for the `pymdp` backend |
+| `[worldmodel]` | `pip install -e .[worldmodel]` | DreamerV3 JAX engine for World model (`jax[cpu]`, `chex`, `einops`); the NumPy engine needs no extra |
 | `[oscillator]` | `pip install -e .[oscillator]` | Oscillatory binding layer (`snntorch`, `scipy`) |
 | `[training]` | `pip install -e .[training]` | Voice alignment DPO/QLoRA training (`unsloth`, `trl`, `peft`, `datasets`) |
 
@@ -46,13 +46,13 @@ Additional grouped extras are available for specific subsystem and hardware path
 
 ## Key validation
 
-Most module factories validate their section against an allowlist and raise `ValueError` on unknown keys, so typos are caught before any module starts. Some loaders do not enforce allowlists and simply read the keys they need; extra keys pass silently in `[bus]`, `[redis]`, `[cycle]`, `[volition]`, `[experiment]`, `[perception_feed]` and its `.video`/`.audio`/`.screen` subsections, `[perception_preview]`, `[developmental_stage]` and `[developmental_stage.regulation_thresholds]`, `[ignition_log]`, `[research]`, `[research_submission]`, `[mundus.control_surface]`, `[logging]`, `[storage]`, `[hardware]`, and `[services]` (shape checks only), plus the perception constructor, the mundus constructor, `[hypnos.voice_alignment]`, `[remote_bridge]`, `[nexus]`, the `[evaluation*]` sections, the `[research_event_log*]` sections, `[transfer]`, `[lifecycle]` and `[security.state_encryption]`. Nested tables read key by key inside a checked section, such as `[mnemos.qdrant]`, `[mnemos.replay]`, `[empatheia.qdrant]`, `[praxis.shell_whitelist.<name>]` and `[phantasia.world_model]`, also let an unknown key pass. A typo in those sections will not be caught at boot.
+Most module factories validate their section against an allowlist and raise `ValueError` on unknown keys, so typos are caught before any module starts. Some loaders do not enforce allowlists and simply read the keys they need; extra keys pass silently in `[bus]`, `[redis]`, `[cycle]`, `[volition]`, `[experiment]`, `[perception_feed]` and its `.video`/`.audio`/`.screen` subsections, `[perception_preview]`, `[developmental_stage]` and `[developmental_stage.regulation_thresholds]`, `[ignition_log]`, `[research]`, `[research_submission]`, `[mundus.control_surface]`, `[logging]`, `[storage]`, `[hardware]`, and `[services]` (shape checks only), plus the perception constructor, the embodiment constructor, `[hypnos.voice_alignment]`, `[remote_bridge]`, `[nexus]`, the `[evaluation*]` sections, the `[research_event_log*]` sections, `[transfer]`, `[lifecycle]` and `[security.state_encryption]`. Nested tables read key by key inside a checked section, such as `[mnemos.qdrant]`, `[mnemos.replay]`, `[empatheia.qdrant]`, `[praxis.shell_whitelist.<name>]` and `[phantasia.world_model]`, also let an unknown key pass. A typo in those sections will not be caught at boot.
 
 ## Profiles and deployment tiers
 
 | Overlay | Purpose | Enables modules? |
 |---|---|---|
-| `thesis_test` | The base-thesis default. It enables Soma, Chronos, Topos, Audition, Lingua, Thymos, and Hypnos; disables everything else; sets `[perception_feed].mode = "seeded"` with `seed = 0`; sets `[topos].foveation = true`; sets `[chronos].forward_prediction = true`; sets `[audition].transcription_enabled = false` and `general_audition = true`; and sets `[volition].policy = "self_initiated_report"`, `drive_initiative = false`, and `sig_expiry_s = 300.0`. See [`config/profiles/thesis_test.toml`](../../config/profiles/thesis_test.toml). | Yes, the seven base-thesis modules. |
+| `thesis_test` | The base-thesis default. It enables Interoception, Sequence, Vision, Audition, Language, Affect, and Sleep; disables everything else; sets `[perception_feed].mode = "seeded"` with `seed = 0`; sets `[topos].foveation = true`; sets `[chronos].forward_prediction = true`; sets `[audition].transcription_enabled = false` and `general_audition = true`; and sets `[volition].policy = "self_initiated_report"`, `drive_initiative = false`, and `sig_expiry_s = 300.0`. See [`config/profiles/thesis_test.toml`](../../config/profiles/thesis_test.toml). | Yes, the seven base-thesis modules. |
 | `workspace_mediation_competitive` / `workspace_mediation_matched` / `workspace_mediation_pooled` | Study configurations in `config/studies/`, selected by `KAINE_STUDY`, one per arm of the planned workspace-mediation test. Each sets `[lingua].temperature = 0.0` (greedy decoding), its `[syneidesis].arm` and `[planned_test].role = "test"` with the settings record, and is applied after the operator file. The boot refuses them without a valid settings record. | No, settings only. |
 | `workspace_mediation_preliminary`, `workspace_mediation_pilot_competitive` / `_pilot_matched` / `_pilot_pooled`, `workspace_mediation_positive_control` | The runs before the live test (paper Appendix A.8): the preliminary run (competitive arm, positive control in mode `estimate_pc`), one pilot study per arm (the competitive one with the positive control's SNR ladder; set its `principal_components_run` to the preliminary run's id first), and the positive control's runs (mode `control`, same settings record as the live arms). | No, settings only. |
 | `workspace_mediation_pilot_tone` / `workspace_mediation_tone` | The tone variant of the on arm (paper §6.3, A.8): the competitive arm with `[audition].tone_rule = "error_ratio"`, as a pilot (role `pilot`) and as a live run (role `test`, with the settings record). Every other workspace-mediation study runs the categorical tone rule, and the boot refuses a study whose tone rule is not its own. | No, settings only. |
@@ -88,7 +88,7 @@ Environment variables override the merged TOML where the code reads them. They d
 | `KAINE_REDIS_USERNAME` | Redis username for ACL setups |
 | `KAINE_REDIS_MAXMEMORY` | Redis memory limit |
 | `KAINE_QDRANT_API_KEY` | Qdrant API key |
-| `KAINE_NEXUS_TOKEN` | Nexus operator token |
+| `KAINE_NEXUS_TOKEN` | Dashboard operator token |
 | `KAINE_NEXUS_HOST` | `[nexus].host` |
 | `KAINE_NEXUS_PORT` | `[nexus].port` |
 | `KAINE_NEXUS_CONVERSATION_ENABLED` | `[nexus].conversation_enabled` |
@@ -99,7 +99,7 @@ Environment variables override the merged TOML where the code reads them. They d
 | `KAINE_NEXUS_EXTRA_HOSTS` | Extra tailnet or reverse-proxy host names |
 | `KAINE_STATE_KEY` | State encryption key |
 | `KAINE_MODEL_SERVER_API_KEY` | Model server API key, read when `[lingua].api_key` is unset |
-| `KAINE_ORGAN_URL` | Organ address for the Hypnos trainer service, which runs without the config |
+| `KAINE_ORGAN_URL` | Organ address for the Sleep trainer service, which runs without the config |
 | `KAINE_MODELS_DIR` | Directory holding provisioned model weights |
 | `KAINE_SMTP_PASSWORD` | SMTP password for email alerts |
 
@@ -115,11 +115,11 @@ Environment variables override the merged TOML where the code reads them. They d
 
 | Key | Purpose |
 |---|---|
-| `api_key` | Qdrant API key. Generate with `openssl rand -hex 32`. Must match `compose/.env`. Required by Mnemos and Empatheia when `backend = "qdrant"`. A per-consumer `[mnemos|empatheia.qdrant].api_key` takes precedence. |
+| `api_key` | Qdrant API key. Generate with `openssl rand -hex 32`. Must match `compose/.env`. Required by Episodic memory and Social cognition when `backend = "qdrant"`. A per-consumer `[mnemos|empatheia.qdrant].api_key` takes precedence. |
 
-### Nexus secrets
+### Dashboard secrets
 
-Put the Nexus operator token under `[nexus]` in `config/secrets.toml`, not in `config/kaine.toml` or `config/kaine.operator.toml`. If a non-empty `operator_token` appears in a non-secrets file, Nexus refuses to start. When a token is set, it must be at least 32 characters long. The shipped `[nexus].access` is `"open"`; set it to `"token"` (or set `KAINE_NEXUS_ACCESS=token`) to require the operator token. Full `[nexus]` network and token settings are on the [Security and Nexus](security-and-nexus.md) page.
+Put the Dashboard operator token under `[nexus]` in `config/secrets.toml`, not in `config/kaine.toml` or `config/kaine.operator.toml`. If a non-empty `operator_token` appears in a non-secrets file, Dashboard refuses to start. When a token is set, it must be at least 32 characters long. The shipped `[nexus].access` is `"open"`; set it to `"token"` (or set `KAINE_NEXUS_ACCESS=token`) to require the operator token. Full `[nexus]` network and token settings are on the [Security and Dashboard](security-and-dashboard.md) page.
 
 ### Caretaker tokens
 
@@ -133,6 +133,6 @@ The detailed reference is split across these pages:
 - [Modules](modules.md): per-module sections such as `[soma]`, `[chronos]`, `[topos]`, `[nous]`, `[mnemos]`, `[eidolon]`, `[thymos]`, `[praxis]`, `[lingua]`, `[audition]`, `[vox]`, `[empatheia]`, `[phantasia]`, `[mundus]`, `[perception]`, and `[embedding]`.
 - [Perception feed and sleep](perception-and-sleep.md): `[perception_feed]`, `[perception_feed.womb]`, `[perception_preview]`, `[hypnos]`, and `[hypnos.voice_alignment]`.
 - [Lifecycle, evaluation and research](lifecycle-and-research.md): `[evaluation]`, `[individuation]`, `[lifecycle]`, `[developmental_stage]`, `[caretaker]`, `[preservation]`, `[research]`, `[transfer]`, `[research_submission]`, `[research_event_log]`, and `[ignition_log]`.
-- [Security and Nexus](security-and-nexus.md): `[nexus]`, `[security.state_encryption]`, and related security settings.
+- [Security and Dashboard](security-and-dashboard.md): `[nexus]`, `[security.state_encryption]`, and related security settings.
 
 For the structure and behaviour of individual modules, see the module pages under [The modules](../09-modules/README.md).

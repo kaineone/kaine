@@ -1,4 +1,4 @@
-## 0. Stage 0: fixes (merges before the individuation calibration and any birth-reference capture)
+## 0. Stage 0: fixes (merges before the individuation calibration and any maturation-reference capture)
 
 - [x] 0.1 The persona and awareness heading (D1), with `PERSONA_TEMPLATE_VERSION` recorded in the individuation probe's conditions. Tests: no `value=` in any drive intent; the persona forbids invented states; the version is recorded.
 - [x] 0.2 Drive crossings as felt states (D2), through the faithful renderer's drive templates and `drive_policy`.
@@ -13,13 +13,13 @@
 
 ## 1. Stage 1: speaking from memory (off by default)
 
-- [ ] 1.1 Context assembly adds Eidolon values and norms, Mnemos recall of the entity's own utterances and episodes with affect, and recent dialogue, within the token budget.
+- [ ] 1.1 Context assembly adds Self-model values and norms, Episodic memory recall of the entity's own utterances and episodes with affect, and recent dialogue, within the token budget.
 - [ ] 1.2 Offline A/B on a frozen synthetic memory store against the Stage 0 persona, scored by the D8 measures; recorded under `docs/records/`.
 
 ## 2. Stage 2: learning to say what it means (off by default)
 
 - [ ] 2.1 K-candidate sampling at sleep from the entity's own organ.
-- [ ] 2.2 Ranking by the internal re-reading signal; listener uptake weighted by Empatheia only in full-entity configurations with conversation (V3).
+- [ ] 2.2 Ranking by the internal re-reading signal; listener uptake weighted by Social cognition only in full-entity configurations with conversation (V3).
 - [ ] 2.3 KTO or DPO from the previous adapter, on the accumulated corpus, with a fixed real-data anchor and the D3(e) monitors.
 - [ ] 2.4 Offline simulated-listener validation (D9); recorded under `docs/records/`.
 

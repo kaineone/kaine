@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: Replay draws on the sleep's consolidated traces
-When Hypnos phase 1 moves the short-term buffer into the episodic store,
-Mnemos SHALL keep the moved traces, each with the episodic point id it was
+When Sleep phase 1 moves the short-term buffer into the episodic store,
+Episodic memory SHALL keep the moved traces, each with the episodic point id it was
 stored under, and phase 2's replay SHALL include them among its candidates,
 alongside any trace still in the short-term buffer. Each consolidation pass
-SHALL replace the kept traces, and Mnemos SHALL drop them when the sleep
+SHALL replace the kept traces, and Episodic memory SHALL drop them when the sleep
 completes, so a sleep replays only traces consolidated in that sleep or still
 held short-term.
 
@@ -22,7 +22,7 @@ held short-term.
   nothing
 
 ### Requirement: A stored broadcast records a replay by id only
-When a `mnemos.replay` event is a member of a broadcast that Mnemos stores,
+When a `mnemos.replay` event is a member of a broadcast that Episodic memory stores,
 the stored text SHALL record the event and the replayed trace's `memory_id`
 and SHALL NOT include the replayed trace's text.
 

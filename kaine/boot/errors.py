@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 
 class ConfigurationError(ValueError):
-    """Raised at startup when a module's config is invalid (e.g. a Nous
+    """Raised at startup when a module's config is invalid (e.g. a Planning
     complexity envelope whose worst-case step count exceeds the threshold)."""
 
 

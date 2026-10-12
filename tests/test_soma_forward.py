@@ -62,7 +62,7 @@ def test_construction_rejects_invalid(backend):
 
 
 def test_force_cuda_ignored_soma_forward_stays_on_cpu(backend, monkeypatch):
-    """CPU-only by policy, mirroring Chronos's CfCNetwork pin."""
+    """CPU-only by policy, mirroring Sequence's CfCNetwork pin."""
     monkeypatch.setenv("KAINE_FORCE_DEVICE", "cuda")
     m = _model(backend=backend, feature_dim=4, units=8)
     assert m.device == "cpu"

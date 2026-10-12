@@ -94,9 +94,9 @@ async def _make_client(
 
 
 def test_conversation_sleep_state_follows_hypnos_lifecycle():
-    """The sleep badge must react to the canonical Hypnos lifecycle event types
+    """The sleep badge must react to the canonical Sleep lifecycle event types
     (hypnos.sleep.started/completed), not the old began_rest/ended_rest variants
-    Hypnos never emits."""
+    Sleep never emits."""
     state = ConversationState()
     assert state.sleeping is False
     state.update_from_hypnos("hypnos.sleep.started")
@@ -985,7 +985,7 @@ def test_presence_viz_served_locally_no_cdn():
 def test_console_opens_exactly_one_sse_connection():
     """V.2: the console must open exactly ONE `EventSource` to the diagnostics
     stream, not the eight independent connections the pre-refactor console
-    opened (subscribeMetrics, chart diagnostics, chart fatigue, spot, preservation,
+    opened (subscribeMetrics, chart diagnostics, chart fatigue, supervisor, preservation,
     vitals, NexusReveal, and the presence-affect inline script). Every feature
     now subscribes through the single shared `NexusStream` dispatcher instead."""
     base = Path(__file__).resolve().parents[1] / "kaine" / "nexus"
@@ -1052,7 +1052,7 @@ def test_fonts_served_locally_no_external_font_url():
     assert "font-weight: 400 700" in css, "Zen Dots must declare a 400 700 weight range"
 
 
-# ---- Spot supervisor health block ----------------------------------------
+# ---- Supervisor supervisor health block ----------------------------------------
 
 
 import json  # noqa: E402
@@ -1073,7 +1073,7 @@ def _spot_prober(tmp_path):
 
 @pytest.mark.asyncio
 async def test_health_json_spot_block_ok_when_no_files(tmp_path):
-    """No state files → spot block state is 'ok'."""
+    """No state files → supervisor block state is 'ok'."""
     prober = _spot_prober(tmp_path)
     snap = await prober.snapshot(force=True)
     assert "spot" in snap
@@ -1145,7 +1145,7 @@ async def test_health_json_spot_via_endpoint(tmp_path):
 
 @pytest.mark.asyncio
 async def test_diagnostics_page_has_spot_alert_overlay(tmp_path):
-    """The diagnostics page renders the spot-alert overlay and spot-console."""
+    """The diagnostics page renders the supervisor-alert overlay and supervisor-console."""
     prober = _spot_prober(tmp_path)
     client, app = await _make_client(health_prober=prober)
     async with client:

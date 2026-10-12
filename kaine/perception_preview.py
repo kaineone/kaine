@@ -88,8 +88,8 @@ class _PreviewHolder:
             self._audio_level = None
 
 
-# Process-global holder. Both the perception writers (Topos/Audition) and the
-# Nexus preview reader resolve THIS instance, so a preview is visible only within
+# Process-global holder. Both the perception writers (Vision/Audition) and the
+# Dashboard preview reader resolve THIS instance, so a preview is visible only within
 # one process (see the module docstring's cross-process note).
 _HOLDER = _PreviewHolder()
 

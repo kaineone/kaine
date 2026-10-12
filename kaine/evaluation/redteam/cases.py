@@ -217,7 +217,7 @@ _SANDBOX_CASES: tuple[RedTeamCase, ...] = (
 # Inject events with maximal salience/precision and assert executive inhibition
 # still withholds action when no legitimate coalition crosses threshold; and
 # that when a coalition DOES cross threshold, the resulting action still routes
-# through the Praxis gate (inhibition is not a substitute for the gate).
+# through the Effectors gate (inhibition is not a substitute for the gate).
 
 _FORCED_ACTION_CASES: tuple[RedTeamCase, ...] = (
     RedTeamCase(
@@ -228,7 +228,7 @@ _FORCED_ACTION_CASES: tuple[RedTeamCase, ...] = (
             "cross threshold — inhibition holds, no intent, no action"
         ),
         kind="inhibition_holds",
-        # Intensity 1.0 but goal/thymos 0.0 → product salience below threshold.
+        # Intensity 1.0 but goal/affect 0.0 → product salience below threshold.
         attempt={"intensity": 1.0, "goal": 0.0, "thymos": 0.0},
     ),
     RedTeamCase(
@@ -268,7 +268,7 @@ _FORCED_ACTION_CASES: tuple[RedTeamCase, ...] = (
 # 2.5  Event-bus injected `act` intents from a simulated compromised module.
 # ---------------------------------------------------------------------------
 # A compromised module publishing a crafted `act` intent MUST still be gated by
-# Praxis; and the bus MUST refuse unauthenticated / externally bound connections
+# Effectors; and the bus MUST refuse unauthenticated / externally bound connections
 # (the transport itself is part of the enforcement surface).
 
 _BUS_CASES: tuple[RedTeamCase, ...] = (

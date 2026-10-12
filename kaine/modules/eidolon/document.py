@@ -65,7 +65,7 @@ class SelfModelDocument:
     internal_speech_count: int = 0
     external_speech_count: int = 0
     voice_observations: list[dict[str, Any]] = field(default_factory=list)
-    # Facts about the being's situation that it is told (not values or norms,
+    # Facts about the entity's situation that it is told (not values or norms,
     # never part of the identity clause), e.g. that it is periodically assessed
     # for its own protection.
     situation_facts: list[str] = field(default_factory=list)

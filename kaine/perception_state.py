@@ -38,7 +38,7 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-# The entity's perceptual locus — which world its organs (Topos vision,
+# The entity's perceptual locus — which world its organs (Vision vision,
 # Audio-In hearing) bind to. Exactly one at a time:
 #   physical — real camera + mic (the room)
 #   virtual  — the embodied avatar (in-world feeds); real camera/mic OFF
@@ -47,8 +47,8 @@ def _now_iso() -> str:
 # never on while the entity is "away" in the virtual world.
 LOCI = ("physical", "virtual", "off")
 
-# Who holds the locus lock. The operator's Nexus lock and the developmental
-# gate's gestation confinement (`developmental-maturation-gate`) both set
+# Who holds the locus lock. The operator's Dashboard lock and the developmental
+# gate's development confinement (`developmental-maturation-gate`) both set
 # `locus_locked`, but a refused self-switch must be attributed HONESTLY — a
 # gestating entity is confined by the developmental gate, not by the operator.
 # Defaults to `operator` so an unmarked lock reads as before.
@@ -97,8 +97,8 @@ class DesiredState:
     # desired flags. `locus_locked` prevents the entity from self-switching.
     locus: str = "physical"
     locus_locked: bool = False
-    # Attribution of the lock (see LOCKED_BY): `operator` (a Nexus lock) or
-    # `gestation` (the developmental gate confining the entity to the womb).
+    # Attribution of the lock (see LOCKED_BY): `operator` (a Dashboard lock) or
+    # `gestation` (the developmental gate confining the entity to the stimulus source).
     # Only meaningful when `locus_locked` is true; drives honest denial logging.
     locked_by: str = "operator"
 
@@ -211,14 +211,14 @@ def write_desired_locus(
     back to `physical` so the camera/mic can never be left in an unknown state.
 
     ``locked_by`` records WHO holds the lock (``operator`` | ``gestation``); the
-    developmental gate passes ``gestation`` so a womb confinement is logged as a
+    developmental gate passes ``gestation`` so a stimulus source confinement is logged as a
     developmental-gate action, not an operator lock. When omitted the existing
     attribution is preserved.
 
     A lock held by ``gestation`` cannot be moved or re-attributed by any caller
-    other than the gestation holder: if the current desired state is locked by
+    other than the development holder: if the current desired state is locked by
     ``gestation`` and ``locked_by != "gestation"``, the locus stays ``virtual``
-    and the lock and attribution remain unchanged. The gestation holder itself
+    and the lock and attribution remain unchanged. The development holder itself
     (``locked_by="gestation"``) may set anything, including unlocking."""
     target = resolve(path or DESIRED_PATH)
     cur = read_desired(path)
@@ -279,7 +279,7 @@ def select_virtual_feed(path: Path | None = None) -> DesiredState:
     actually bind the senses to it. This translates ``[perception_feed].mode =
     seeded|playlist`` (the only knob the operator sets) into the runtime desired-
     state the locus-gated capture supervisors read. The operator can still mute
-    either modality or switch locus afterward via Nexus.
+    either modality or switch locus afterward via Dashboard.
 
     Honours the operator lock: if ``locus_locked`` is set, the locus is left
     untouched (the operator's explicit lock wins over the configured feed) and
@@ -311,9 +311,9 @@ def evaluate_locus_switch(
 ) -> tuple[bool, str]:
     """Decide whether an ENTITY-initiated locus switch is allowed.
 
-    Operator switches (via Nexus) bypass this — it gates only self-initiated
+    Operator switches (via Dashboard) bypass this — it gates only self-initiated
     `intent.perception.switch`. Returns (allowed, reason). ``locked_by``
-    attributes a lock denial honestly: a gestation-gate confinement is reported
+    attributes a lock denial honestly: a development-gate confinement is reported
     as such, not as an operator lock (`developmental-maturation-gate`).
     """
     if requested not in LOCI:

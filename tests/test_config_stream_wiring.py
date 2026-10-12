@@ -21,13 +21,13 @@ _MODULE_NAMES = [
     "mundus", "perception", "phantasia", "echo",
 ]
 # Canonical set of streams the live system actually publishes to.
-# ``lingua.out`` is Lingua's aggregate producer and is already included via
+# ``lingua.out`` is Language's aggregate producer and is already included via
 # ``module_stream("lingua")`` in the list above.
 _PRODUCER_STREAMS = {module_stream(m) for m in _MODULE_NAMES} | {
-    "workspace.broadcast",   # Syneidesis
+    "workspace.broadcast",   # Workspace
     "cycle.out",             # cycle engine
-    "lingua.external",       # Lingua external speech
-    "lingua.internal",       # Lingua internal speech
+    "lingua.external",       # Language external speech
+    "lingua.internal",       # Language internal speech
     "volition.out",          # executive action-selection intents
 }
 

@@ -81,7 +81,7 @@ published event.
 
 #### Scenario: End-to-end wiring delivers a published event
 - **WHEN** an event is published to the bus, the cycle runs one
-  experiential tick, and the cycle invokes Syneidesis with that event
+  experiential tick, and the cycle invokes Workspace with that event
 - **THEN** EchoModule's `snapshots` eventually contains a snapshot
   whose `selected_events` includes that event's `(entry_id, Event)`
   tuple

@@ -89,7 +89,7 @@ async def _default_mnemos_builder() -> Any:
 
 
 class _RetrievalCognitiveClient:
-    """Answer DERIVED from what the injected Mnemos returns.
+    """Answer DERIVED from what the injected Episodic memory returns.
 
     Recalls from episodic memory and echoes the retrieved text. If recall is empty
     it emits ``NON_RECALL_MARKER`` rather than confabulate. The answer is NOT
@@ -164,7 +164,7 @@ def _classify(
     config: MemoryCoherenceConfig,
 ) -> Verdict:
     """WIN iff retrieval advantage holds, non-recall is honest, and the advantage
-    is RETRIEVAL (vanishes when Mnemos is emptied)."""
+    is RETRIEVAL (vanishes when Episodic memory is emptied)."""
     advantages = [r["advantage"] for r in planted]
     min_advantage = min(advantages) if advantages else 0.0
     mean_advantage = (sum(advantages) / len(advantages)) if advantages else 0.0
@@ -229,7 +229,7 @@ async def run_memory_coherence(
     ``mnemos_builder`` returns a fresh, initialized real ``MnemosCore``; the
     runner builds two — one loaded with the battery (full-system arm) and one left
     empty (the retrieval proof). When omitted, a lazy default builds an in-memory
-    Mnemos so the CLI works out of the box.
+    Episodic memory so the CLI works out of the box.
     """
     config = config or MemoryCoherenceConfig()
     set_global_seed(config.seed)

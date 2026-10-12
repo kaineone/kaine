@@ -39,7 +39,7 @@ async def test_mnemos_short_term_accepts_external_speech():
             recall_top_k=3,
         )
         await h.register(mnemos)
-        # Mnemos observes the bus; a Lingua external_speech event should
+        # Episodic memory observes the bus; a Language external_speech event should
         # land in its short-term buffer (or at least not crash the module).
         await h.inject_to_stream(
             "lingua.external",
@@ -47,7 +47,7 @@ async def test_mnemos_short_term_accepts_external_speech():
             type="external_speech",
             payload={"text": "hello world"},
         )
-        # Drive Mnemos's workspace-driven consolidation by broadcasting.
+        # Drive Episodic memory's workspace-driven consolidation by broadcasting.
         await h.broadcast_workspace({"tick_index": 0, "selected": []})
         # Smoke check: the module is still alive and serializing.
         assert mnemos.serialize() is not None

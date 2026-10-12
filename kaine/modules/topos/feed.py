@@ -87,7 +87,7 @@ class SeededSchedule:
 
 @dataclass(frozen=True)
 class WombSchedule:
-    """Reproducible womb video schedule.
+    """Reproducible stimulus source video schedule.
 
     The rendered frame stream is a pure function of
     ``(seed, frame_index, params, lived_seconds)``.  Only these knobs are kept;
@@ -112,12 +112,12 @@ BIRTH_BLOOM_PEAK = 0.8
 
 
 class WombClock:
-    """Shared womb-time clock.
+    """Shared stimulus-source-time clock.
 
-    Womb time is the time axis every womb signal is evaluated on; both
+    Stimulus source time is the time axis every stimulus source signal is evaluated on; both
     sources consult one instance so the beat is seen and heard together.
     Delivery marks record what actually reached the senses, so a running
-    womb can prove itself; they are never rendered content.
+    stimulus source can prove itself; they are never rendered content.
     """
 
     def __init__(
@@ -142,7 +142,7 @@ class WombClock:
         self._origin: float | None = None
         self._lock = threading.Lock()
         self._deliveries: dict[str, tuple[float, int]] = {}
-        # Birth transition state.  None before any birth; _born short-circuits
+        # Maturation transition state.  None before any maturation; _born short-circuits
         # progress to 1.0 once the transition is acknowledged complete.
         self._birth_start: float | None = None
         self._birth_duration: float | None = None
@@ -186,7 +186,7 @@ class WombClock:
         return self._clock()
 
     def begin_birth(self, transition_seconds: float = 5.0) -> None:
-        """Record the start of the bounded birth transition.
+        """Record the start of the bounded maturation transition.
 
         One-shot: further calls are ignored.
         """
@@ -204,19 +204,19 @@ class WombClock:
             self._birth_duration = value
 
     def birth_end_womb_seconds(self) -> float | None:
-        """Return the womb time at which the birth bloom ends, or None before birth."""
+        """Return the stimulus source time at which the maturation bloom ends, or None before birth."""
         with self._lock:
             if self._birth_start is None:
                 return None
             return self._birth_start + self._birth_duration
 
     def mark_born(self) -> None:
-        """Acknowledge that the birth transition is already complete."""
+        """Acknowledge that the maturation transition is already complete."""
         with self._lock:
             self._born = True
 
     def birth_progress(self) -> float | None:
-        """Return the birth transition progress in [0, 1], or None before birth."""
+        """Return the maturation transition progress in [0, 1], or None before birth."""
         with self._lock:
             if self._born:
                 return 1.0
@@ -233,7 +233,7 @@ class WombClock:
         return progress
 
     def born(self) -> bool:
-        """True once the birth transition is finished or was already complete."""
+        """True once the maturation transition is finished or was already complete."""
         return self.birth_progress() == 1.0
 
 
@@ -449,12 +449,12 @@ class SeededProceduralSource:
 
 
 class WombProceduralSource:
-    """A ``_VideoSource`` that renders the womb visual feed.
+    """A ``_VideoSource`` that renders the stimulus source visual feed.
 
     The frame is a dim, low-contrast, seed-keyed luminance field pulsed by the
     external maternal heartbeat and tinted by the external maternal state.
-    It is deliberately *not* a high-fidelity reproduction of a womb interior;
-    the pulsing light is a cross-modal rhythmic drive, not a biological womb
+    It is deliberately *not* a high-fidelity reproduction of a stimulus source interior;
+    the pulsing light is a cross-modal rhythmic drive, not a biological stimulus source
     feature (Notbohm 2016 vs Duecker 2021; Frontiers 2022).  The maternal hue/
     flow is the external mother's emotional weather (Feldman 2007).  Colour
     saturation follows the biological sense-onset schedule (Hepper &
@@ -549,7 +549,7 @@ class WombProceduralSource:
         py = two_pi * _unit_float(_keyed_u64(seed, 0, SEED_SALT_VIDEO | 0x13))
 
         # The external maternal state drives hue and flow (Feldman 2007).
-        # Flow speed is integrated so hours of womb time do not alias the field.
+        # Flow speed is integrated so hours of stimulus source time do not alias the field.
         valence, arousal = maternal_state(seed, t, p)
         drift = float(flow_phase(seed, t, p))
 
@@ -558,7 +558,7 @@ class WombProceduralSource:
             + np.sin(two_pi * (fy * ys + drift * 0.7) + py)
         ) * 0.5
 
-        # Birth bloom: a bounded, one-shot photic activation transition cue.
+        # Maturation bloom: a bounded, one-shot photic activation transition cue.
         # The dim field rises toward a warm peak over the transition duration
         # (Frontiers 2022), the heartbeat pulse fades, and colour saturation
         # rises to full.  The result is clipped to BIRTH_BLOOM_PEAK so the
@@ -642,7 +642,7 @@ class PlaylistManifest:
         """Hash every item under ``root`` and compare to the manifest, failing
         CLOSED on the first missing file or sha256 mismatch.
 
-        Shared by both the video (topos) and audio (audition) playlist sources
+        Shared by both the video (vision) and audio (audition) playlist sources
         so the fail-closed reproducibility semantics — and the exact error
         messages — never diverge. ``root`` is the media root; absolute item
         paths are used as-is, relative ones are resolved against it.
@@ -755,7 +755,7 @@ class PlaylistClock:
     time while any holder holds the clock; ``resume(holder)`` releases that
     holder, and when the set empties playback continues from the pre-pause
     position with sub-millisecond error (one clock read; no re-origin, no
-    content skipped). Overlapping pauses — e.g. a Hypnos replay window and a
+    content skipped). Overlapping pauses — e.g. a Sleep replay window and a
     cycle freeze — keep the clock frozen until every holder has released it.
     The no-argument ``pause()`` / ``resume()`` calls act on holder ``default``.
     Pausing before the origin is fixed makes the clock born paused: ``start()``
@@ -790,7 +790,7 @@ class PlaylistClock:
         self._running = threading.Event()
         self._running.set()
         # Called with the new holder set after every change to it, outside the
-        # lock (the womb-to-world transition counts only unpaused time).
+        # lock (the stimulus-source-to-world transition counts only unpaused time).
         self._holder_listeners: list[Callable[[frozenset[str]], None]] = []
 
     def start(self, at: float | None = None) -> None:

@@ -51,7 +51,7 @@ def adapter_expected_from(adapter_output_dir: Path | None) -> Callable[[], bool]
     """Return a callable that is True when a current adapter.gguf exists.
 
     The returned callable is suitable for the ``adapter_expected`` argument of
-    :func:`build_probe_sampler`: True means the being should be using its
+    :func:`build_probe_sampler`: True means the entity should be using its
     adapter, so a response without ``lora_applied`` is a failure.
     """
     def _check() -> bool:

@@ -56,7 +56,7 @@ def _bus() -> AsyncBus:
 async def _drive_one_cycle_tick(
     bus: AsyncBus, soma: Soma, reader: FakeReader, wall_duration_ms: float
 ) -> None:
-    """Publish a single cycle.tick and run Soma's consumer until it is processed."""
+    """Publish a single cycle.tick and run Interoception's consumer until it is processed."""
     await bus.client.xadd(
         soma._cycle_stream,
         {

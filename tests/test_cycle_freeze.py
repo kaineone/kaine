@@ -83,7 +83,7 @@ async def test_freeze_watch_pauses_and_resumes(tmp_path, monkeypatch):
         await asyncio.wait_for(task, timeout=2.0)
 
 
-# ---- Nexus router -----------------------------------------------------------
+# ---- Dashboard router -----------------------------------------------------------
 
 
 @pytest.mark.asyncio

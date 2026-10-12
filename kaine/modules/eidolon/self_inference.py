@@ -51,7 +51,7 @@ _VADSample = tuple[float, float, float]
 # Constants
 # ---------------------------------------------------------------------------
 
-# Internal-speech type labels Eidolon tracks.  The label is the ``type``
+# Internal-speech type labels Self-model tracks.  The label is the ``type``
 # field of the bus event (e.g. "internal.thought", "speak.internal"), not
 # the text content.  We count occurrences of each label; when a label
 # accumulates >= speech_pattern_min_count observations it graduates into a
@@ -91,7 +91,7 @@ class SelfInferenceEngine:
         Optional path to an operator-seed JSONL (one JSON object per line).
         Applied once on first boot, never re-applied.
     whitelist_commands:
-        Command names from the Praxis effector whitelist.  Injected at
+        Command names from the Effectors effector whitelist.  Injected at
         construction time by ``module.py``.
     """
 
@@ -137,7 +137,7 @@ class SelfInferenceEngine:
         return self._enabled
 
     def set_whitelist_commands(self, commands: Optional[list[str]]) -> None:
-        """Inject the Praxis effector whitelist into the capability-map builder.
+        """Inject the Effectors effector whitelist into the capability-map builder.
 
         Wired once at boot (``boot._wire_eidolon_capabilities``), so the
         self-model's ``capability_map["effectors"]`` reflects what the entity can

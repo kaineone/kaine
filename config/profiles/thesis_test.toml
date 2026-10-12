@@ -12,13 +12,13 @@
 # module and the STT code remain built, just switched off, until the base thesis
 # is proven or disproven.
 #
-# Enabling modules here does NOT birth an entity: the cycle still refuses to boot
+# Enabling modules here does NOT maturation an entity: the cycle still refuses to boot
 # without KAINE_CYCLE_OPERATOR_PRESENT=1 (or the research safety net).
 
 [modules]
 # The diverse predictive processors the thesis needs: two internal (interoception,
-# time) and two externally grounded (foveated vision, raw sound). Syneidesis (the
-# workspace) and Volition (action) are always-on scaffolding. Lingua is the voice.
+# time) and two externally grounded (foveated vision, raw sound). Workspace (the
+# workspace) and Action selection (action) are always-on scaffolding. Language is the voice.
 soma = true
 chronos = true
 topos = true
@@ -92,6 +92,6 @@ drive_initiative = false
 sig_expiry_s = 300.0
 
 [chronos]
-# Chronos predicts the next broadcast and publishes temporal prediction errors.
+# Sequence predicts the next broadcast and publishes temporal prediction errors.
 # The shipped kaine.toml keeps the forward head off.
 forward_prediction = true

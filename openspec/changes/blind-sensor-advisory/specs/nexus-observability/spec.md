@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Live welfare status on the entity-care panel
-The Nexus dashboard SHALL surface a compact numeric welfare-counter row —
+The Dashboard dashboard SHALL surface a compact numeric welfare-counter row —
 unmaintained-fatigue crossings, sustained-VAD episodes, replay overload, and
 sustained interoceptive distress — on the diagnostics entity-care panel, sourced
 from the same aggregation as the evaluation tab. The row SHALL be numeric only

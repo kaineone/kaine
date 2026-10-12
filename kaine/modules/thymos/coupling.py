@@ -37,7 +37,7 @@ from typing import Tuple
 # Keys mirror kaine/modules/audition/emotion.py CATEGORIES.
 # Values are (valence, arousal, dominance) describing the *perceived other's*
 # emotion. Used only to derive the perceived pleasantness (valence) and
-# intensity (arousal) that enter Thymos's own appraisal — NOT a state target.
+# intensity (arousal) that enter Affect's own appraisal — NOT a state target.
 #   valence   ∈ [-1, 1]
 #   arousal   ∈ [0,  1]
 #   dominance ∈ [-1, 1]
@@ -91,7 +91,7 @@ class CouplingConfig:
 
     - ``enabled`` — master toggle; ships ``False``.
     - ``coupling_base`` — appraisal-influence weight with no known familiarity.
-    - ``coupling_familiarity_gain`` — extra weight per unit Empatheia familiarity.
+    - ``coupling_familiarity_gain`` — extra weight per unit Social cognition familiarity.
     - ``coupling_ceiling`` — hard clamp on the appraisal-influence weight.
     - ``decay_s`` — window over which a perceived-emotion signal decays to zero;
       once older than ``decay_s`` it contributes nothing to appraisal.

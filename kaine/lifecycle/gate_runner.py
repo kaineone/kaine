@@ -53,8 +53,8 @@ from kaine.perception_state import write_desired_locus
 
 log = logging.getLogger(__name__)
 
-# Default stream the womb module publishes ``gestation.readiness`` readouts to.
-# The womb change owns the measurement; the maturation gate only reads it.
+# Default stream the stimulus source module publishes ``gestation.readiness`` readouts to.
+# The stimulus source change owns the measurement; the maturation gate only reads it.
 DEFAULT_WOMB_READOUT_STREAM = "gestation.out"
 DEFAULT_WOMB_READOUT_TYPE = "gestation.readiness"
 
@@ -102,18 +102,18 @@ class MaturationGateRunner:
         )
         # Ensure the first tick anchors the stage file.
         self._stage_written = False
-        # Track whether we have already emitted the birth-ready "awaiting
+        # Track whether we have already emitted the maturation-ready "awaiting
         # embodiment" signal so the log is not spammed every cadence tick.
         self._awaiting_embodiment_logged = False
         self._awaiting_ack_logged = False
-        # Track whether we have already logged the single "birth deferred"
+        # Track whether we have already logged the single "maturation deferred"
         # info line for the current frozen spell.
         self._birth_deferred_logged = False
         # Optional one-shot hook handed over by the cycle entrypoint; called
-        # after the stage file is written as embodied so the womb can begin its
-        # birth transition.
+        # after the stage file is written as embodied so the stimulus source can begin its
+        # maturation transition.
         self._on_birth: Callable[[], None] | None = None
-        # Operator-supervised birth acknowledgement file paths and state.
+        # Operator-supervised maturation acknowledgement file paths and state.
         from kaine.lifecycle.birth_ack import BIRTH_ACK_PATH, BIRTH_REQUEST_PATH
 
         self._birth_request_path = birth_request_path or BIRTH_REQUEST_PATH
@@ -137,7 +137,7 @@ class MaturationGateRunner:
         self._lived.set_paused_source(paused_seconds)
 
     def set_birth_hook(self, fn: Callable[[], None] | None) -> None:
-        """Hand over the womb's ``begin_birth``; the runner calls it once, after the stage file says embodied."""
+        """Hand over the stimulus source's ``begin_birth``; the runner calls it once, after the stage file says embodied."""
         self._on_birth = fn
 
     @property
@@ -203,7 +203,7 @@ class MaturationGateRunner:
             )
 
     async def _count_new_sleeps(self) -> None:
-        """Count hypnos sleep completions from the bus, idempotently.
+        """Count sleep sleep completions from the bus, idempotently.
 
         A fresh cursor is anchored at the stream tail on the first tick.
         Thereafter we scan forward from the persisted cursor, counting each
@@ -251,7 +251,7 @@ class MaturationGateRunner:
             self._stage = replace(self._stage, lived_seconds=self._stage.lived_seconds + delta)
 
     async def _womb_readiness_readout(self) -> Mapping[str, Any] | None:
-        """Read the latest womb ``gestation.readiness`` event from the bus.
+        """Read the latest stimulus source ``gestation.readiness`` event from the bus.
 
         The stream also carries presence and probe events, so the newest entry is
         rarely the readout. We therefore search the stream window newest-first
@@ -423,7 +423,7 @@ class MaturationGateRunner:
             ", ".join(readiness.passed_markers),
         )
 
-        # Fail closed: no birth while the entity is paused/frozen.
+        # Fail closed: no maturation while the entity is paused/frozen.
         if self._is_paused is not None:
             try:
                 paused = self._is_paused()
@@ -531,7 +531,7 @@ class MaturationGateRunner:
         lived_seconds: float | None,
         faculties: Any = None,
     ) -> None:
-        """Perform the one-shot birth transition."""
+        """Perform the one-shot maturation transition."""
         if faculties is None:
             from kaine.lifecycle.maturation_gate import Faculties
             faculties = Faculties()
@@ -540,7 +540,7 @@ class MaturationGateRunner:
 
         # Start embodiment before the stage file is written, so the locus source
         # is actually available when the entity becomes embodied.
-        # Vox is activated before Mundus so the voice is available at birth.
+        # Vocal is activated before Embodiment so the voice is available at maturation.
         if "vox" in self._registry:
             vox = self._registry.get("vox")
             if hasattr(vox, "set_dormant"):
@@ -576,7 +576,7 @@ class MaturationGateRunner:
         lifecycle_stage.write_stage(after)
         self._stage = after
 
-        # Birth is complete: clear the operator acknowledgement files. The
+        # Maturation is complete: clear the operator acknowledgement files. The
         # request is tied to this boot and must not be reused later.
         from kaine.lifecycle.birth_ack import clear_ack, clear_request
 
@@ -587,7 +587,7 @@ class MaturationGateRunner:
             log.warning("could not clear birth acknowledgement files after birth: %s", exc)
         self._birth_request = None
 
-        # Unlock the gestation locus lock. The unlock is attributed to gestation,
+        # Unlock the development locus lock. The unlock is attributed to development,
         # not the operator; the locus stays virtual while the handoff continues.
         try:
             write_desired_locus("virtual", locked=False, locked_by="gestation")

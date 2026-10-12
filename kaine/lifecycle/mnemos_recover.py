@@ -27,7 +27,7 @@ import sys
 
 
 def main(argv: list[str] | None = None, *, out=None, err=None) -> int:
-    """Operator recovery command for a blocked Mnemos store."""
+    """Operator recovery command for a blocked Episodic memory store."""
     import argparse
     import asyncio
     import os

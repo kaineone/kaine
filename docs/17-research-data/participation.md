@@ -8,13 +8,13 @@ The default research bundle is numeric metrics only. It contains:
 
 | Included | Excluded (never) |
 |---|---|
-| A/B divergence scores (cosine divergence, numeric) | Lingua intent log (`state/lingua/intent_expression.jsonl`): the entity's prompts, utterances and internal monologue, with heard speech replaced by `[heard speech]`. |
-| Coherence PLV time series (numeric) | Mnemos and Qdrant memories: verbatim transcripts and episodic records. |
-| Welfare and gray-zone event counts (numeric) | Eidolon self-model (`state/eidolon/self_model.json`), including identity history. |
+| A/B divergence scores (cosine divergence, numeric) | Language intent log (`state/lingua/intent_expression.jsonl`): the entity's prompts, utterances and internal monologue, with heard speech replaced by `[heard speech]`. |
+| Coherence PLV time series (numeric) | Episodic memory and Qdrant memories: verbatim transcripts and episodic records. |
+| Welfare and gray-zone event counts (numeric) | Self-model self-model (`state/eidolon/self_model.json`), including identity history. |
 | Fatigue accumulator series (numeric) | Conversation content (any turn text). |
 | Prediction-error series (numeric) | Replay logs (they contain verbatim memory text when `replay_redact_content = false`). |
-| Nous policy logs (numeric) | Raw bus archive (`state/research/raw_bus_archive/`): verbatim events, including conversation content. |
-| Voice-alignment divergence (numeric) | External-utterance log and Nexus record, which are local only and never exported. |
+| Planning policy logs (numeric) | Raw bus archive (`state/research/raw_bus_archive/`): verbatim events, including conversation content. |
+| Voice-alignment divergence (numeric) | External-utterance log and Dashboard record, which are local only and never exported. |
 | Curated research event log (`data/evaluation/research_events/`): privacy-filtered numeric and categorical records | Individuation evidence (`state/individuation/`). Whether its content-free reports should be exported is an open operator decision; today they are not. |
 | Per-run manifest files (`runs/`) | |
 | `manifest.json` enumerating every included file | |
@@ -52,7 +52,7 @@ To answer session-spanning research questions, there is an opt-in durable event 
 
 - Each record carries `ts` (ISO-8601 UTC), `event_type`, `source`, and `tick_index`/`incident_id` when present, plus only the numeric/categorical fields named in the per-type allowlist. Event types not in the taxonomy produce no record at all.
 - Every record passes `PrivacyFilter.filter_for_diagnostics()` before field extraction, stripping `CONTENT_FIELDS`: `text`, `body`, `content`, `internal_speech`, `belief_text`, `memory_text`, `affect_reason`, `transcription`, `user_input`, `faithful_rendering`, `description`, `statement`, `values`, `behavioral_norms` and `situation_facts`. Per-type redaction then removes additional sensitive fields.
-- It never logs raw audio or video (`mundus.visual.raw`, PCM), `audition.transcription` text, Lingua intent content, memory text, the Eidolon self-model, conversation content, or operator host/IP/voice. Avatar proprioception is logged only as an opaque position hash plus a region label, never as raw coordinates.
+- It never logs raw audio or video (`mundus.visual.raw`, PCM), `audition.transcription` text, Language intent content, memory text, the Self-model self-model, conversation content, or operator host/IP/voice. Avatar proprioception is logged only as an opaque position hash plus a region label, never as raw coordinates.
 - Each line is encrypted at rest through the shared `AsyncJsonlSink` + `StateEncryptor` mechanism.
 - Because `research_events` is in `METRICS_ONLY_DIRS`, an operator-initiated metrics bundle can include it.
 - It runs on its own `[research_event_log].enabled` flag, independent of `[evaluation].enabled`.
@@ -69,9 +69,9 @@ To answer session-spanning research questions, there is an opt-in durable event 
 
 `[research_event_log.external_utterances]` ships disabled. It subscribes only to `lingua.external` and writes one record per external speech event: the entity's spoken text and its timestamps. It lands in `state/research/external_utterances/` on the `kaine-state` volume. It never records inner speech (`lingua.internal` is not subscribed), bystander input, or anything the privacy filter removes. Files are encrypted at rest when state encryption is on. `retention_days = 0` keeps records forever. This sink is local only and never part of the research bundle.
 
-### Nexus record (local only)
+### Dashboard record (local only)
 
-`[research_event_log.nexus_record]` ships disabled. It subscribes to the streams the Nexus bridge reads and writes exactly the payload Nexus displays after its privacy filter, with numeric vectors removed, plus the stream name and entry id. It lands in `data/nexus_record/` on the `kaine-nexus-record` volume. Studies never enable it. Files are encrypted at rest when state encryption is on. `retention_days = 0` keeps records forever. This sink is local only and never exported.
+`[research_event_log.nexus_record]` ships disabled. It subscribes to the streams the Dashboard bridge reads and writes exactly the payload Dashboard displays after its privacy filter, with numeric vectors removed, plus the stream name and entry id. It lands in `data/nexus_record/` on the `kaine-nexus-record` volume. Studies never enable it. Files are encrypted at rest when state encryption is on. `retention_days = 0` keeps records forever. This sink is local only and never exported.
 
 ### Ignition log (local only)
 
@@ -85,13 +85,13 @@ The ignition log is the graph-only broadcast log of a study: an optional per-bro
 - every candidate's score (`salience_scores`), the inhibition flag and the time scale;
 - each coalition member's entry id, source, type, reported intensity (`salience`) and original timestamp.
 
-The log never records event payloads, so no conversation content, transcripts, video frames, or audio samples are persisted. It is not placed on the bus and no module receives it. Records are encrypted at rest when state encryption is on, never auto-purged, and never exported. The module-addition study turns on the ignition log, the curated research event log and the external-utterance log, and forces the Nexus record, the raw archive and the workspace trajectory off; see [The module-addition study](../15-experiments/ignition-study.md).
+The log never records event payloads, so no conversation content, transcripts, video frames, or audio samples are persisted. It is not placed on the bus and no module receives it. Records are encrypted at rest when state encryption is on, never auto-purged, and never exported. The module-addition study turns on the ignition log, the curated research event log and the external-utterance log, and forces the Dashboard record, the raw archive and the workspace trajectory off; see [The module-addition study](../15-experiments/ignition-study.md).
 
-The programme clock pauses while the cycle is frozen (holder `freeze`) and while Hypnos holds a replay window (holder `hypnos`), so the film resumes where the entity left it. It is held at zero under `transition` while a born being's viewing opens with the crossfade from the gestational stimulus to the films. Each record names the current pause holders in `paused_by`, for example `["transition"]` or `["hypnos", "transition"]`, so analysis can tell the crossfade from sleep or a freeze.
+The programme clock pauses while the cycle is frozen (holder `freeze`) and while Sleep holds a replay window (holder `hypnos`), so the film resumes where the entity left it. It is held at zero under `transition` while a born entity's viewing opens with the crossfade from the developmental stimulus to the films. Each record names the current pause holders in `paused_by`, for example `["transition"]` or `["hypnos", "transition"]`, so analysis can tell the crossfade from sleep or a freeze.
 
 ## Media voices
 
-Heard audio is tagged with the channel it arrived on: `live_mic` for the microphone, `remote` for remote audio, and `playlist`, `seeded`, `womb`, or `screen` for the matching perception feed. Empatheia attributes operator channels to the configured speaker label and attributes every other channel to its own `media:<channel>` agent, so film dialogue does not shape the operator model. Volition treats only operator-channel transcriptions as speech addressed to the entity.
+Heard audio is tagged with the channel it arrived on: `live_mic` for the microphone, `remote` for remote audio, and `playlist`, `seeded`, `womb`, or `screen` for the matching perception feed. Social cognition attributes operator channels to the configured speaker label and attributes every other channel to its own `media:<channel>` agent, so film dialogue does not shape the operator model. Action selection treats only operator-channel transcriptions as speech addressed to the entity.
 
 ## How to enable and submit
 
@@ -132,7 +132,7 @@ Full configuration keys are in the [configuration reference](../appendix-a-confi
 
 The project uses the numeric metrics to:
 
-- measure how beings diverge across fork lineages;
+- measure how entities diverge across fork lineages;
 - study the welfare signal distribution, including gray-zone event frequency and fatigue patterns;
 - improve the evaluation instruments and publish results.
 

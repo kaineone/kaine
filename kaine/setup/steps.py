@@ -40,7 +40,7 @@ class Step:
     apply: Callable[[StepContext, dict[str, Any]], None]
 
 
-# Every module the wizard can enable or disable, in canonical order, plus echo.
+# Every module the wizard can enable or disable, in canonical order, plus recorder.
 _SETUP_MODULES = (
     "soma",
     "chronos",

@@ -105,7 +105,7 @@ class SeededAudioSchedule:
 
 @dataclass(frozen=True)
 class WombAudioSchedule:
-    """Reproducible womb audio schedule.
+    """Reproducible stimulus source audio schedule.
 
     The PCM stream is a pure function of ``(seed, block_index, params)``.
     Only these knobs persist; no samples are written to disk.
@@ -341,7 +341,7 @@ class SeededProceduralAudioStream:
 
 
 class WombProceduralAudioStream:
-    """An ``_AudioStream`` that emits the womb auditory feed.
+    """An ``_AudioStream`` that emits the stimulus source auditory feed.
 
     The soundscape is low-frequency-dominant and low-passed
     (Benzaquen 1990; Parga 2018; Webb 2015), with a periodic ~50 Hz thud
@@ -676,7 +676,7 @@ class PlaylistAudioStream:
 
         def _emit(pcm: bytes) -> None:
             nonlocal next_deadline
-            # Park while the shared clock is paused (Hypnos sleep): the clock
+            # Park while the shared clock is paused (Sleep sleep): the clock
             # is the one pause authority. next_deadline is NOT advanced while
             # paused; on resume re-anchor it so pacing continues cleanly (no
             # burst of back-to-back blocks). Stop wins over the park.

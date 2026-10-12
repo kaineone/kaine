@@ -116,7 +116,7 @@ def build_dependency_specs(
     vox_sherpa_num_threads = int(vox_cfg.get("sherpa_num_threads", 2))
     vox_sherpa_speaker_id = int(vox_cfg.get("sherpa_speaker_id", 0))
 
-    # The Nous probe needs the configured backend so it checks the right engine.
+    # The Planning probe needs the configured backend so it checks the right engine.
     nous_backend = str(nous_cfg.get("backend", "pymdp"))
 
     speech_rows: list[DependencySpec] = []

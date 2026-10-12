@@ -27,10 +27,10 @@ LOG_EVERY = 100
 
 
 class WetwarePolicyEngine:
-    """KAINE's Nous engine wrapped with a substrate policy proposal; forwards unknown
+    """KAINE's Planning engine wrapped with a substrate policy proposal; forwards unknown
     attributes to the inner engine. The tissue's answer is scored against the silicon choice
     its stimulation encoded: immediately before the substrate follows KAINE's cycle, one
-    Nous step later once it does.
+    Planning step later once it does.
     """
 
     def __init__(

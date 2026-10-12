@@ -112,17 +112,17 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "tick_count",
         }
     ),
-    # Real Volition intent types (kaine/workspace/volition.py) — EXACT keys,
+    # Real Action selection intent types (kaine/workspace/volition.py) — EXACT keys,
     # no prefix matching: an unknown intent.* subtype is NOT logged.
     "intent.speak": frozenset({"kind", "about_tag", "effector", "origin"}),
     "intent.think": frozenset({"kind", "about_tag", "effector", "origin"}),
     "intent.act": frozenset({"kind", "about_tag", "effector", "origin"}),
     "intent.rest": frozenset({"kind", "about_tag", "origin"}),
-    # Nous proposal / Volition feedback / Hypnos rest request (change nous-drives-action)
+    # Planning proposal / Action selection feedback / Sleep rest request (change nous-drives-action)
     "nous.proposal": frozenset({"proposal_id", "action", "kind", "step", "preference"}),
     "volition.proposal_outcome": frozenset({"proposal_id", "realized", "reason"}),
     "hypnos.rest_request": frozenset({"accepted", "reason", "origin"}),
-    # Womb-to-world transition outcome (perception.out): phase is
+    # Stimulus-source-to-world transition outcome (perception.out): phase is
     # started/completed/abandoned; reason is a fixed code on abandon.
     "perception.transition": frozenset({"phase", "transition_seconds", "reason"}),
     # --- Prediction / precision ---
@@ -161,7 +161,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "awake",
         }
     ),
-    # Chronos report (kaine/modules/chronos/module.py) — content-free
+    # Sequence report (kaine/modules/chronos/module.py) — content-free
     # aggregates ONLY: `temporal_context` and `feature_vector` are latent
     # content and are deliberately excluded.
     "chronos.report": frozenset(
@@ -331,7 +331,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
         }
     ),
     # --- Safety / ops ---
-    # Spot's structured freeze annotation (run<->incident cross-link). Field
+    # Supervisor's structured freeze annotation (run<->incident cross-link). Field
     # names mirror the durable incident_log transition records (incident_log.py
     # / spot.py). `incident_id` and `tick_index` are lifted to the top level by
     # _build_record; the rest are non-sensitive operational metadata. NO content
@@ -493,7 +493,7 @@ _SENSOR_SILENT_NUMERIC_FIELDS = frozenset(
 # Curated streams the observer follows (one cursor each). The specific
 # `event.type` strings ride on these `<module>.out` streams. Derived from the
 # canonical registry (kaine.evaluation.stream_registry) so the observer, the
-# raw archive, and the nexus monitor never drift. Curated exclusions
+# raw archive, and the dashboard monitor never drift. Curated exclusions
 # (vox.out — raw audio content; lingua.out — transcripts are never curated)
 # are documented in the registry and enforced by the drift test
 # (tests/test_stream_registry_drift.py).

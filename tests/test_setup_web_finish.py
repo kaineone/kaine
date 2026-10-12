@@ -465,7 +465,7 @@ def test_finish_token_refuses_an_unsaved_session(tmp_path, monkeypatch):
 
 
 def test_finish_routes_survive_an_unreadable_nexus_config(tmp_path, monkeypatch):
-    """A bad Nexus setting is reported on the page, never a 500."""
+    """A bad Dashboard setting is reported on the page, never a 500."""
     app = _mk_app(
         tmp_path,
         services_up_fn=lambda: {name: False for name in SERVICE_PORTS},

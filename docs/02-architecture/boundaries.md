@@ -43,19 +43,19 @@ The import contracts document and enforce the project's real layering. Violation
 
 ### Modules and the cycle
 
-The domain organs in `kaine/modules/` are leaf components driven by the cycle. They must not import the cycle runtime: the engine/loop, registry, preflight, boot, `__main__`, the Spot supervisor, or the preservation/research monitors. See [The modules](../09-modules/README.md) for what each module does.
+The domain organs in `kaine/modules/` are leaf components driven by the cycle. They must not import the cycle runtime: the engine/loop, registry, preflight, boot, `__main__`, the Supervisor supervisor, or the preservation/research monitors. See [The modules](../09-modules/README.md) for what each module does.
 
 The one allowed dependency is the pure data module `kaine.cycle.types` (`WorkspaceSnapshot`). That import is permitted directly and transitively, for example through `kaine.faithful` and `kaine.workspace.volition`, and it is the single declared exception to the rule that modules stay independent of the cycle.
 
 ### Workspace and cognitive modules
 
-`kaine/workspace/` holds Syneidesis selection and the `RuleBasedSalience` factors. It must not import `kaine/modules/`. Salience factors that need module-produced signals, such as Thymos arousal or the drive levels, receive them by dependency injection at boot: `kaine/boot/wiring.py` constructs the live `StateModulator`, and the cycle refreshes an `AffectStateProvider` each tick from `thymos.state`.
+`kaine/workspace/` holds Workspace selection and the `RuleBasedSalience` factors. It must not import `kaine/modules/`. Salience factors that need module-produced signals, such as Affect arousal or the drive levels, receive them by dependency injection at boot: `kaine/boot/wiring.py` constructs the live `StateModulator`, and the cycle refreshes an `AffectStateProvider` each tick from `thymos.state`.
 
 There are no `ignore_imports` exceptions for this rule. Any `from kaine.modules... import ...` inside `kaine/workspace/` is a boundary violation.
 
-### Evaluation and Nexus
+### Evaluation and Dashboard
 
-`kaine/evaluation/` must not import `kaine/nexus/` internals. The sidecar observes the bus and runs headless; Nexus is only a presentation seam.
+`kaine/evaluation/` must not import `kaine/nexus/` internals. The sidecar observes the bus and runs headless; Dashboard is only a presentation seam.
 
 ### The core runtime and edge features
 

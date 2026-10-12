@@ -70,7 +70,7 @@ def _empty_snapshot() -> WorkspaceSnapshot:
 
 
 def _make_thymos_with_coupling(bus: AsyncBus, fake_now, **coupling_kwargs) -> Thymos:
-    """Build a Thymos with coupling enabled at given settings + a synthetic clock."""
+    """Build a Affect with coupling enabled at given settings + a synthetic clock."""
     cfg = CouplingConfig(enabled=True, **coupling_kwargs)
     return Thymos(
         bus,
@@ -235,7 +235,7 @@ async def test_disabled_coupling_identical_appraisal_and_no_state_change(bus: As
 
 
 # ---------------------------------------------------------------------------
-# Scenario: No Empatheia → base weight
+# Scenario: No Social cognition → base weight
 # ---------------------------------------------------------------------------
 
 

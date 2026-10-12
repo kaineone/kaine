@@ -35,7 +35,7 @@ def _normalised_entropy(dist: Any) -> float:
 
 
 def _mean_posterior_entropy(state: dict[str, Any]) -> float:
-    """Mean normalised entropy across a serialized Nous posterior.
+    """Mean normalised entropy across a serialized Planning posterior.
 
     The posterior is a list (per hidden-state factor) of probability vectors.
     A missing/empty posterior is treated as maximally uncertain (1.0) so a fork
@@ -116,7 +116,7 @@ def _one_sided(state_a, state_b) -> Optional[dict[str, Any]]:
 
 
 class MnemosMergeStrategy:
-    """Mnemos: sum short_term_size, tag retrieved memories on next read."""
+    """Episodic memory: sum short_term_size, tag retrieved memories on next read."""
 
     def merge(self, state_a, state_b):
         one = _one_sided(state_a, state_b)
@@ -149,11 +149,11 @@ class MnemosMergeStrategy:
 
 
 class NousMergeStrategy:
-    """Nous (active inference): one-sided selection by posterior certainty.
+    """Planning (active inference): one-sided selection by posterior certainty.
 
-    Nous is now a pymdp/JAX active-inference engine — there is no NAR subprocess
+    Planning is now a pymdp/JAX active-inference engine — there is no NAR subprocess
     lifecycle, so the former ``restart_count`` / ``pending_revision`` fields are
-    gone. Two forked Nous states can hold *different* posteriors over the same
+    gone. Two forked Planning states can hold *different* posteriors over the same
     latent factors; merging probability distributions has no principled
     field-level union. Instead the strategy performs **one-sided selection**:
     keep the fork whose posterior is more *certain* (lower mean normalised
@@ -190,7 +190,7 @@ class NousMergeStrategy:
 
 
 class EidolonMergeStrategy:
-    """Eidolon: dedup values/norms, sum speech count, concatenate history."""
+    """Self-model: dedup values/norms, sum speech count, concatenate history."""
 
     def merge(self, state_a, state_b):
         one = _one_sided(state_a, state_b)
@@ -233,7 +233,7 @@ class EidolonMergeStrategy:
 
 
 class ThymosMergeStrategy:
-    """Thymos: average dimensional baseline, max drives, union goals."""
+    """Affect: average dimensional baseline, max drives, union goals."""
 
     def merge(self, state_a, state_b):
         one = _one_sided(state_a, state_b)
@@ -299,7 +299,7 @@ class EmpatheiaMergeStrategy:
     - last_seen: max (most recent observation).
 
     The merged profiles travel in the merged snapshot; restoring it loads
-    them into Empatheia's store.
+    them into Social cognition's store.
     """
 
     def merge(

@@ -282,11 +282,11 @@ def test_derive_seed_differs_across_master_seeds():
 
 
 def test_benchmark_source_does_not_reference_live_system_apis():
-    """The benchmark's own source must not touch the bus, the entity, the Nous
+    """The benchmark's own source must not touch the bus, the entity, the Planning
     module, or a running cognitive cycle.
 
     The AIF adapter deliberately reuses the live pymdp *engine* construction
-    path (``generative_model`` + ``PymdpEngine``), so the Nous package's
+    path (``generative_model`` + ``PymdpEngine``), so the Planning package's
     ``__init__`` transitively imports type/protocol modules — importing
     dataclasses/protocols is not "starting a cognitive cycle". The meaningful
     offline guarantee is that *the benchmark code itself* never connects a bus,
@@ -315,7 +315,7 @@ def test_benchmark_source_does_not_reference_live_system_apis():
         "from kaine.bus",
         "import kaine.entity",
         "from kaine.entity",
-        # constructing the live Nous *module* (the engine alone is allowed)
+        # constructing the live Planning *module* (the engine alone is allowed)
         "Nous(",
         "import Nous",
     )
@@ -326,7 +326,7 @@ def test_benchmark_source_does_not_reference_live_system_apis():
 
 
 def test_aif_adapter_only_imports_engine_not_module():
-    """The AIF adapter imports the engine + generative model, never the Nous
+    """The AIF adapter imports the engine + generative model, never the Planning
     module (which is what wires the bus). Pure engine reuse, no live wiring."""
     import inspect
 
@@ -397,7 +397,7 @@ def test_aif_agent_solves_exploitation():
 def test_aif_provably_outprobes_no_exploration_baseline_on_epistemic_task():
     """The harness exercises real active inference, not a mock.
 
-    On the epistemic T-maze, a correctly-wired EFE agent (driving the live Nous
+    On the epistemic T-maze, a correctly-wired EFE agent (driving the live Planning
     engine) probes the cue far more reliably than an epsilon=0 Q-learner, and
     its info-seeking measurably improves its return. If the AIF path were a mock
     (no real EFE epistemic term), it could not produce this gap.

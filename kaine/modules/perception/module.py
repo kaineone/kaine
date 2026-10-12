@@ -84,7 +84,7 @@ class PerceptionLocus(BaseModule):
         await super().shutdown()
 
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
-        # Belt-and-suspenders: volition already suppresses intents while
+        # Belt-and-suspenders: action selection already suppresses intents while
         # inhibited, but track it so the switch policy can refuse independently.
         self._inhibited = bool(getattr(snapshot, "inhibited", False))
 

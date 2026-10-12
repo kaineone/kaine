@@ -64,24 +64,24 @@ def has_prior_lived_history(
     state_root: Path | str = "state",
     bundle_roots: Iterable[Path | str] = (),
 ) -> bool:
-    """Detect whether this being has already lived.
+    """Detect whether this entity has already lived.
 
     A genuinely fresh entity has a known identity, no own lived artifacts in
     this tree, and no fork/preservation/bundle record naming it or one of its
     ancestors.
 
-    A being is treated as already-lived when:
+    An entity is treated as already-lived when:
 
       * its identity is unknown (``None``) — lineage is unavailable, so the
         non-regressing answer is ``True``;
       * any of this tree's own lived artifacts exist (lifecycle stage file,
-        Phantasia checkpoint, Hypnos divergence record, perception
+        World model checkpoint, Sleep divergence record, perception
         desired-state) — these prove the *current* tree has lived regardless
         of sidecars;
       * a fork sidecar, preservation manifest, or configured bundle manifest
-        records an entity ID that matches this being or one of its ancestors.
+        records an entity ID that matches this entity or one of its ancestors.
 
-    ``forks/`` and ``preservation/`` may hold other beings; they only count
+    ``forks/`` and ``preservation/`` may hold other entities; they only count
     when their identity metadata names this lineage. The implementation is
     imported lazily from ``kaine.lifecycle.identity`` so this module stays
     free of an import cycle.
@@ -93,8 +93,8 @@ def has_prior_lived_history(
 def _coerce_stage(value: Any) -> str:
     """Coerce a persisted stage value. An UNKNOWN value is read as ``embodied``,
     never ``gestation``: a garbled or forward-versioned file must never regress a
-    mind that has already lived into a womb (the load-bearing never-regress
-    invariant fails safe toward born, not toward the womb)."""
+    mind that has already lived into a stimulus source (the load-bearing never-regress
+    invariant fails safe toward born, not toward the stimulus source)."""
     return value if value in STAGES else EMBODIED
 
 
@@ -130,7 +130,7 @@ def _coerce_hypnos_cursor(value: Any) -> str | None:
 
 
 def _coerce_womb_t_at_birth(value: Any) -> float | None:
-    """Defensive coerce: a corrupt womb time is treated as unrecorded."""
+    """Defensive coerce: a corrupt stimulus source time is treated as unrecorded."""
     if isinstance(value, bool):
         return None
     try:
@@ -143,7 +143,7 @@ def _coerce_womb_t_at_birth(value: Any) -> float | None:
 
 
 def _coerce_womb_seed(value: Any) -> int | None:
-    """Defensive coerce: a corrupt womb seed is treated as unrecorded."""
+    """Defensive coerce: a corrupt stimulus source seed is treated as unrecorded."""
     if isinstance(value, bool) or not isinstance(value, int):
         return None
     return value
@@ -170,15 +170,15 @@ class StageState:
     """The persisted developmental stage.
 
     ``stage``                — ``gestation`` | ``embodied``.
-    ``gestation_started_at`` — ISO time gestation began (the C3 lived-time anchor).
-    ``born_at``              — ISO time of the birth transition (None until born).
-    ``lived_seconds``        — cumulative subjective lived time in gestation.
-    ``sleep_count``          — cumulative Hypnos sleep completions.
+    ``gestation_started_at`` — ISO time development began (the C3 lived-time anchor).
+    ``born_at``              — ISO time of the maturation transition (None until born).
+    ``lived_seconds``        — cumulative subjective lived time in development.
+    ``sleep_count``          — cumulative Sleep sleep completions.
     ``hypnos_cursor``        — last scanned ``hypnos.out`` stream id.
-    ``womb_t_at_birth``      — womb time in seconds when the birth bloom ended (None until recorded).
-    ``womb_seed``            — procedural womb seed active at birth (None until recorded).
-    ``womb_params_digest``   — sha256 hex digest of the womb parameters active at birth (None until recorded).
-    ``birth_bloom_ends_at``  — UTC wall time when the birth bloom ends (ISO-8601, None until recorded).
+    ``womb_t_at_birth``      — stimulus source time in seconds when the maturation bloom ended (None until recorded).
+    ``womb_seed``            — procedural stimulus source seed active at maturation (None until recorded).
+    ``womb_params_digest``   — sha256 hex digest of the stimulus source parameters active at maturation (None until recorded).
+    ``birth_bloom_ends_at``  — UTC wall time when the maturation bloom ends (ISO-8601, None until recorded).
     """
 
     stage: str = GESTATION
@@ -224,7 +224,7 @@ def read_stage(path: Path | None = None) -> StageState | None:
     """Read the persisted stage, or ``None`` if no stage file exists.
 
     Returning ``None`` (rather than a default) lets :func:`resolve_boot_stage`
-    apply the preserved-being invariant: the *absence* of a file is the signal,
+    apply the preserved-entity invariant: the *absence* of a file is the signal,
     and it means different things for a fresh entity versus one with prior lived
     history."""
     target = resolve(path or STAGE_PATH)
@@ -233,7 +233,7 @@ def read_stage(path: Path | None = None) -> StageState | None:
     except OSError:
         # If we cannot verify whether the stage file exists, we must fail safe
         # toward `embodied` rather than return `None` and risk regressing a
-        # possibly-lived mind into the womb.
+        # possibly-lived mind into the stimulus source.
         return StageState(stage=EMBODIED)
     if not exists:
         return None
@@ -241,7 +241,7 @@ def read_stage(path: Path | None = None) -> StageState | None:
         return StageState.from_dict(json.loads(target.read_text()))
     except (json.JSONDecodeError, OSError, ValueError, TypeError):
         # A corrupt, malformed or unreadable stage file must fail safe toward
-        # `embodied` (never regress a possibly-lived mind into the womb), not
+        # `embodied` (never regress a possibly-lived mind into the stimulus source), not
         # crash boot.
         return StageState(stage=EMBODIED)
 
@@ -261,7 +261,7 @@ def resolve_boot_stage(
 
     - An existing stage file is authoritative (a fork inherits it verbatim).
     - No stage file + prior lived history => ``embodied`` (NEVER ``gestation``):
-      a mind that has already lived is never regressed into a womb.
+      a mind that has already lived is never regressed into a stimulus source.
     - No stage file + genuinely fresh => ``gestation``, anchoring the lived-time
       clock at ``now``.
 
@@ -271,17 +271,17 @@ def resolve_boot_stage(
     if existing is not None:
         return existing
     if has_prior_lived_history:
-        # Preserved-being invariant (NORMATIVE): never regress a lived mind.
+        # Preserved-entity invariant (NORMATIVE): never regress a lived mind.
         return StageState(stage=EMBODIED)
     return StageState(stage=GESTATION, gestation_started_at=now_iso or _now_iso())
 
 
 def advance_to_embodied(state: StageState, *, now_iso: str | None = None) -> StageState:
-    """Return the state transitioned to ``embodied`` (the birth transition).
+    """Return the state transitioned to ``embodied`` (the maturation transition).
 
     Monotonic and one-shot: an already-``embodied`` state is returned UNCHANGED
-    (idempotent — birth fires at most once), and there is no inverse. The
-    caller checks :func:`birth_is_new` to decide whether to fire the birth event.
+    (idempotent — maturation fires at most once), and there is no inverse. The
+    caller checks :func:`birth_is_new` to decide whether to fire the maturation event.
     """
     if state.is_embodied:
         return state
@@ -290,7 +290,7 @@ def advance_to_embodied(state: StageState, *, now_iso: str | None = None) -> Sta
 
 def birth_is_new(before: StageState, after: StageState) -> bool:
     """True iff ``after`` represents a fresh gestation->embodied transition of
-    ``before`` — the one-shot guard the birth event/handoff keys off."""
+    ``before`` — the one-shot guard the maturation event/handoff keys off."""
     return before.is_gestating and after.is_embodied
 
 
@@ -302,7 +302,7 @@ def record_birth_womb(
     womb_params_digest: str | None,
     bloom_ends_at: str | None,
 ) -> StageState:
-    """Record the womb-state snapshot taken at birth.
+    """Record the stimulus-source-state snapshot taken at maturation.
 
     Raises:
         ValueError: if ``state`` is not already ``embodied``.
@@ -319,7 +319,7 @@ def record_birth_womb(
 
 
 def womb_params_digest(params: object) -> str:
-    """Return a stable sha256 hex digest of a womb parameters object.
+    """Return a stable sha256 hex digest of a stimulus source parameters object.
 
     ``params`` must be a dataclass instance (e.g. ``WombParams``); its fields are
     serialised as a compact sorted JSON object before hashing.

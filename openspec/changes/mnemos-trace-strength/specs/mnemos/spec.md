@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Persisted traces carry a strength
-Each trace in Mnemos's persisted collections SHALL carry a strength
+Each trace in Episodic memory's persisted collections SHALL carry a strength
 $h_i\in(0,1]$, stored as `log_base` in its payload with
 $h_i=\exp(\texttt{log\_base}_i+L)$, where $L$ is the store's log gain kept in
 a meta record beside the embedding-space stamp with the sleep count, the total
@@ -19,7 +19,7 @@ below the floor when $h_i<h_{\min}$; no such trace SHALL exist while the entity 
   ignored
 
 #### Scenario: Storage times continue across a restart
-- **WHEN** Mnemos restarts in the middle of a wake and stores another trace
+- **WHEN** Episodic memory restarts in the middle of a wake and stores another trace
 - **THEN** that trace's `entity_time` is later than every trace stored earlier
   in the same wake
 
@@ -75,7 +75,7 @@ and SHALL page past the extension's limit of 4096 rows.
   collection, in the right order
 
 ### Requirement: Sleep prunes at the floor and to the storage budget
-After the downscaling, in the same call, Mnemos SHALL delete every persisted
+After the downscaling, in the same call, Episodic memory SHALL delete every persisted
 trace with $h_i<h_{\min}$ (`[mnemos.strength].prune_floor`), and then, while
 the stores' size $S$ exceeds `[mnemos].storage_budget_bytes`, the trace outside
 the protected set with the lowest strength, the oldest by `entity_time` first
@@ -109,7 +109,7 @@ SHALL carry `memory_pruned_floor`, `memory_pruned_budget` and
 - **THEN** the captured bundle still holds every trace and restores them
 
 ### Requirement: Store size and imports stay consistent with what is stored
-Mnemos SHALL recompute the stores' size from a scan at initialize and at the
+Episodic memory SHALL recompute the stores' size from a scan at initialize and at the
 start of every downscaling, and SHALL change it, the total strength and the
 pruned counts only after a deletion has succeeded, writing the meta after each
 successful deletion. A preservation import SHALL mark the meta as pending
@@ -120,14 +120,14 @@ and a non-finite sum SHALL be a storage error.
 
 #### Scenario: A failed deletion does not cause over-pruning
 - **WHEN** a deletion fails part way through pruning, or the process stops
-  there, and Mnemos is started again
+  there, and Episodic memory is started again
 - **THEN** the stored size equals a scan and the next sleep prunes only what
   the budget requires
 
 #### Scenario: An interrupted import blocks sleep
 - **WHEN** an import fails after it began replacing collections
 - **THEN** every later sleep is blocked and counted in the sleep summary and
-  on the Nexus health board until a later import succeeds or the operator
+  on the Dashboard health board until a later import succeeds or the operator
   runs `python -m kaine.lifecycle.mnemos_recover --confirm-keep-current-store`
 
 #### Scenario: Disk growth stays bounded while blocked
@@ -136,7 +136,7 @@ and a non-finite sum SHALL be a storage error.
   welfare event is raised
 
 ### Requirement: Strength survives migration and preservation
-At initialize Mnemos SHALL backfill, idempotently, every persisted point
+At initialize Episodic memory SHALL backfill, idempotently, every persisted point
 without `log_base` to strength 1 with `born_sleep = -1`, and SHALL write a
 missing meta before the backfill. It SHALL refuse a store without the meta
 whose points already carry `log_base`. A preservation capture SHALL carry the

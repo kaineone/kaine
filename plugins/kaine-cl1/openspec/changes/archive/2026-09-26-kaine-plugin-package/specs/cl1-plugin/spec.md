@@ -10,7 +10,7 @@ The distribution SHALL export an entry point named `cl1` in the `kaine.plugins` 
 ### Requirement: Seams follow the backend selection
 The plugin's `seams(config)` SHALL return one seam per module set to `"cl1"` in `backends`, and SHALL raise `ValueError` naming the module when a module set to `"cl1"` has no implemented wetware backend or no channel territory. Modules absent from `backends` or set to `"silicon"` SHALL contribute no seam.
 
-#### Scenario: Chronos on the substrate
+#### Scenario: Sequence on the substrate
 - **WHEN** `backends = {chronos = "cl1"}` and `substrate.territories = {chronos = 12}`
 - **THEN** `seams` returns `{"chronos.network"}`
 
@@ -27,7 +27,7 @@ The plugin's `seams(config)` SHALL return one seam per module set to `"cl1"` in 
 
 #### Scenario: Repeated request after a restart
 - **WHEN** `injections("chronos", config)` is called three times
-- **THEN** each call returns a working network on the same channels, and the broker holds exactly one territory for Chronos
+- **THEN** each call returns a working network on the same channels, and the broker holds exactly one territory for Sequence
 
 #### Scenario: Unconverted module
 - **WHEN** `injections("lingua", config)` is called
@@ -52,4 +52,4 @@ The plugin SHALL raise `ValueError` from `seams` when any module is converted an
 
 #### Scenario: Loading the shipped example
 - **WHEN** `load_overlay` reads `config/kaine_cl1.example.toml`
-- **THEN** the overlay converts Chronos rather than coming back empty
+- **THEN** the overlay converts Sequence rather than coming back empty

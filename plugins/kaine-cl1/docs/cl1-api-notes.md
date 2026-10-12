@@ -73,7 +73,7 @@ turn a spike response into a **prediction-error / surprise** scalar:
 | **criticality** | order/disorder of the response → **free-energy / surprise** proxy |
 | **Lempel-Ziv complexity** | response unpredictability → prediction error |
 | information entropy | response uncertainty → precision weighting |
-| functional connectivity | relational / associative signal (Empatheia, Mnemos-assoc) |
+| functional connectivity | relational / associative signal (Social cognition, Episodic-memory-assoc) |
 | bursts | discrete "event" detection (onset salience) |
 | spike-triggered histogram | stimulus→response tuning (codec calibration) |
 | discrete cosine transform | oscillatory/phase content (Oscillator layer) |

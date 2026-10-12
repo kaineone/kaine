@@ -77,7 +77,7 @@ async def verify_served_organ(
     ChatResponse`` plus ``aclose()``) so the transport is testable without a
     server; the production path constructs an ``OpenAIChatClient`` against
     ``chat_url``. Reasoning is turned off (``think=False``) so a hybrid-thinking
-    model is scored on its actual answer, mirroring how Lingua serves it.
+    model is scored on its actual answer, mirroring how Language serves it.
     """
     from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
 

@@ -73,7 +73,7 @@ def _save_restore_data_root(tmp_path, monkeypatch, request):
 def _isolate_stage_file(tmp_path, monkeypatch):
     """Point the default developmental-stage file at this test's tmp_path.
 
-    The stage file decides gestation versus embodiment at boot. A test that
+    The stage file decides development versus embodiment at boot. A test that
     saves a stage without naming a path must never write the real
     ``state/lifecycle/stage.json`` of the checkout (or of whatever data root is
     installed). A test that sets ``STAGE_PATH`` itself still overrides this.

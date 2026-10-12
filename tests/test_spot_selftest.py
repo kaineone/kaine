@@ -149,7 +149,7 @@ def test_spot_selftest_unfreeze_never_released(tmp_path, monkeypatch):
     monkeypatch.setattr(control_state, "CONTROL_PATH", real_control)
     monkeypatch.setattr(escalation_state, "ESCALATION_PATH", real_escalation)
 
-    # Spot releases only its own freeze (pop_freeze with source "spot");
+    # Supervisor releases only its own freeze (pop_freeze with source "spot");
     # break that release so the self-test must report it.
     def fake_pop_freeze(path=None, *, source=None):
         return None
