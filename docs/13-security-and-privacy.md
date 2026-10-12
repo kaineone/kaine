@@ -69,8 +69,8 @@ KAINE provides application-layer AES-256-GCM encryption for the cognitive-state 
 | `data/workspace_trajectory` | Workspace trajectory data | App-layer AES-256-GCM per line |
 | `state/hypnos/voice_align_jobs/` (e.g. `pairs.jsonl`) | Voice-alignment trainer job data | OS-layer |
 | `kaine-organ-adapters` volume | Active voice adapter served by the organ (read-only to the organ) | OS-layer |
-| Qdrant collections (`kaine-qdrant-data`) | episodic memory embeddings and social cognition agent-model vectors | Qdrant API key; plain HTTP on the host or compose network (the client does not use TLS); app-layer encryption not implemented |
-| `state/praxis/audit.log` | effectors action audit | OS-layer; entries are hash-chained (`prev_hash`/`this_hash`) |
+| Qdrant collections (`kaine-qdrant-data`) | Episodic memory embeddings and social cognition agent-model vectors | Qdrant API key; plain HTTP on the host or compose network (the client does not use TLS); app-layer encryption not implemented |
+| `state/praxis/audit.log` | Effectors action audit | OS-layer; entries are hash-chained (`prev_hash`/`this_hash`) |
 | `state/lingua/intent_expression.jsonl` | Intent and expression pairs (high sensitivity) | App-layer AES-256-GCM per line from migration onward; see below |
 | `state/hypnos/adapters/` | Voice-alignment LoRA adapters | OS-layer |
 | `state/vox/` | Retained TTS clips if the sink is enabled | OS-layer |

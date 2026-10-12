@@ -26,7 +26,7 @@ without a key. Key sources, rotation and the cryptographic details are in
 
 | Store or file | Contents | Protection |
 |---|---|---|
-| `state/eidolon/self_model.json` | self-model: name, values, norms, identity history | App-layer AES-256-GCM |
+| `state/eidolon/self_model.json` | Self-model: name, values, norms, identity history | App-layer AES-256-GCM |
 | `state/forks/<id>/snapshot.json` | Fork and merge bundles, including world-model weights | App-layer AES-256-GCM |
 | `data/evaluation/<observer>/` | Evaluation sidecar observer JSONL logs | App-layer AES-256-GCM per line |
 | `state/phantasia/world_model.ckpt` | world-model weights | App-layer AES-256-GCM |

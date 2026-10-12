@@ -8,9 +8,9 @@ The default research bundle is numeric metrics only. It contains:
 
 | Included | Excluded (never) |
 |---|---|
-| A/B divergence scores (cosine divergence, numeric) | language intent log (`state/lingua/intent_expression.jsonl`): the entity's prompts, utterances and internal monologue, with heard speech replaced by `[heard speech]`. |
+| A/B divergence scores (cosine divergence, numeric) | Language intent log (`state/lingua/intent_expression.jsonl`): the entity's prompts, utterances and internal monologue, with heard speech replaced by `[heard speech]`. |
 | Coherence PLV time series (numeric) | Episodic memory and Qdrant memories: verbatim transcripts and episodic records. |
-| welfare and gray-zone event counts (numeric) | self-model (`state/eidolon/self_model.json`), including identity history. |
+| welfare and gray-zone event counts (numeric) | Self-model (`state/eidolon/self_model.json`), including identity history. |
 | Fatigue accumulator series (numeric) | Conversation content (any turn text). |
 | Prediction-error series (numeric) | Replay logs (they contain verbatim memory text when `replay_redact_content = false`). |
 | planning policy logs (numeric) | Raw bus archive (`state/research/raw_bus_archive/`): verbatim events, including conversation content. |
