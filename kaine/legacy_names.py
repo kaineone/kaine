@@ -20,6 +20,12 @@ SCOPE_STATUS = {
     "persisted": "pending",
 }
 
+# The last release that still reads old operator-facing names (config tables and
+# keys, environment variables, CLI flags, plugin seams). Deprecation warnings name
+# it. Placeholder until the close-out step (task 10.2) fixes it: the second release
+# after the one that ships the rename, and no earlier than 90 days after it.
+ALIAS_LAST_RELEASE = "27.01"
+
 MODULES = {
     "topos": {
         "old_class": "Topos",
@@ -865,9 +871,9 @@ STATE_PATHS = (
     {"old": "lifecycle/gestation_readout.json", "new": "lifecycle/development_readout.json", "scope": "persisted"},
     {"old": "lifecycle/birth_request.json", "new": "lifecycle/maturation_request.json", "scope": "persisted"},
     {"old": "lifecycle/birth_ack.json", "new": "lifecycle/maturation_ack.json", "scope": "persisted"},
-    {"old": "gestation_progress.json", "new": "development_progress.json", "scope": "persisted"},
-    {"old": "gestation_viability.json", "new": "development_viability.json", "scope": "persisted"},
-    {"old": "birth_adapter.gguf", "new": "maturation_adapter.gguf", "scope": "persisted"},
+    {"old": "lifecycle/gestation_progress.json", "new": "lifecycle/development_progress.json", "scope": "persisted"},
+    {"old": "lifecycle/gestation_viability.json", "new": "lifecycle/development_viability.json", "scope": "persisted"},
+    {"old": "individuation/birth_adapter.gguf", "new": "individuation/maturation_adapter.gguf", "scope": "persisted"},
 )
 
 COLLECTIONS = (
