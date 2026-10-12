@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Mundus — the body-agnostic embodiment control plane.
+"""The embodiment module — the body-agnostic control plane.
 
-Mundus routes the entity's perception and action to and from a *body* through a
+The embodiment module routes the entity's perception and action to and from a *body* through a
 pluggable :class:`~kaine.modules.mundus.adapter.EmbodimentAdapter`. The core owns
 the entity-facing contract — gating, locus, intent routing, the speech mirror,
 salience policy, and zero-raw-sense-data persistence — and knows nothing about
@@ -12,7 +12,7 @@ virtual world, VR runtime, or robot later) is a separate adapter, selected in
 config and injected here; adding a body never touches this core.
 
 Incoming perception (``FeedFrame``s from the adapter) becomes ``mundus.*`` bus
-events; ``intent.avatar.*`` intents from Volition become symbolic actions, and
+events; ``intent.avatar.*`` intents from the action selection module become symbolic actions, and
 (future) continuous setpoints become graded channel commands, both routed to the
 adapter's sinks. So the live cognitive loop perceives and acts through the body,
 not a script.
@@ -26,7 +26,7 @@ This module never blocks the cognitive cycle: all body I/O runs in its own
 asyncio tasks; bus publishes are fire-and-forget.
 
 **Producer gap — closed as continuous control:** The ``_intent_loop`` consumes
-``intent.avatar.*`` events from the Volition stream. Symbolic verb families still
+``intent.avatar.*`` events from the action selection module's stream. Symbolic verb families still
 have no producer wired into the entity's learned policy (they remain operator-only
 tools). The *continuous* producer gap, however, is closed by
 ``intuitive-embodiment-control-surface``: the

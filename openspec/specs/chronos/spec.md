@@ -171,7 +171,7 @@ The featurizer SHALL produce a 24-dimension vector under a numbered layout. Layo
 - **WHEN** the sequence module is restored from a snapshot that records no layout and then featurizes a snapshot containing an Audition event
 - **THEN** the Audition event's salience is added to the last source bin and slot 23 is zero
 
-#### Scenario: A new being uses layout 2
+#### Scenario: A new entity uses layout 2
 - **WHEN** a sequence module that restored no state featurizes a snapshot containing an Audition event
 - **THEN** the Audition event's salience is in slot 23 and not in the last source bin
 

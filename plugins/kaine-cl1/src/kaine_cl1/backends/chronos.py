@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-"""Chronos on wetware: the reference conversion.
+"""The sequence module on wetware: the reference conversion.
 
-Chronos is KAINE's interval-timing organ. Upstream it steps a small Closed-form
+The sequence module is KAINE's interval-timing organ. Upstream it steps a small Closed-form
 Continuous-time (CfC) network each tick and feeds the resulting hidden state to a
 linear prediction head that anticipates the next temporal feature; the prediction
 error becomes salience.
 
-Chronos already exposes the exact seam we need: its constructor takes
+The sequence module already exposes the exact seam we need: its constructor takes
 ``network=`` and only builds the silicon ``CfCNetwork`` when that is ``None``
 (``kaine/modules/chronos/module.py``). So the conversion is
 pure injection (``Chronos(bus, network=WetwareTimingModel(...))``), with the
@@ -15,9 +15,9 @@ module body, its bus subscriptions, and its ``chronos.out`` event shapes unchang
 
 ``WetwareTimingModel`` matches ``CfCNetwork``'s ``.tick(feature_vec) -> hidden``
 interface, but realises the hidden state on the shared biological substrate:
-population-code the temporal feature onto the Chronos territory, run one cognitive
+population-code the temporal feature onto the sequence module's territory, run one cognitive
 tick of the closed loop, and decode the territory's firing into the hidden vector.
-Chronos' own prediction head and error machinery then run on that hidden state.
+the sequence module's own prediction head and error machinery then run on that hidden state.
 
 See `openspec/changes/chronos-on-wetware/`.
 """

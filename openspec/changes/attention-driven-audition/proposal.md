@@ -160,4 +160,4 @@ Phase 1 shipped with a download-free spectral encoder behind the `AcousticEncode
 
 ### Research impact
 
-The thesis-profile default encoder changes the embedding space that acoustic salience is computed over, so the next study is re-baselined on it. Persisting the acoustic forward model means a revived being keeps its auditory expectations. No study is running, and no entity is booted for the bake-off.
+The thesis-profile default encoder changes the embedding space that acoustic salience is computed over, so the next study is re-baselined on it. Persisting the acoustic forward model means a revived entity keeps its auditory expectations. No study is running, and no entity is booted for the bake-off.

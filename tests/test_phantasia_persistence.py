@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Phantasia world-model weight persistence (opt-in, fail-closed, encrypted).
+"""world-model weight persistence (opt-in, fail-closed, encrypted).
 
 Covers the `phantasia-weight-persistence` change:
 

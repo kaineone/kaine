@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Offline tests for the Mundus embodiment control plane — no body/transport.
+"""Offline tests for the embodiment control plane — no body/transport.
 
-Mundus is body-agnostic: the core owns feed→bus mapping (raw-buffer stripping +
+The embodiment module is body-agnostic: the core owns feed→bus mapping (raw-buffer stripping +
 salience policy), symbolic-action gating (locus + exposure), the continuous-
 setpoint path, and cursor serialization, and knows nothing of any wire protocol.
 No transport-backed body ships today, so these tests drive the core through the

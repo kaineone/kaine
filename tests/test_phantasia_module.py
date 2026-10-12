@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Phantasia(BaseModule) — event-driven behavior with fakeredis.
+"""world model module (BaseModule) — event-driven behavior with fakeredis.
 
 Waking emits salience-only world_error; a mnemos.replay cue (during an open
-Hypnos window) emits phantasia.scenario re-injected onto phantasia.out; the
+sleep window) emits phantasia.scenario re-injected onto phantasia.out; the
 trajectory buffer is bounded; no raw sense data lands on the bus.
 """
 from __future__ import annotations

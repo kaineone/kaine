@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Recovery CLI for an interrupted Mnemos preservation import.
+"""Recovery CLI for an interrupted episodic memory module preservation import.
 
 Run as::
 

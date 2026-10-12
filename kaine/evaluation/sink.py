@@ -4,7 +4,7 @@
 """Async JSONL sink — re-exported from the shared persistence layer.
 
 The implementation lives in :mod:`kaine.persistence.jsonl_sink` so that core
-runtime code (e.g. the cycle's Spot incident log) can reuse it without importing
+runtime code (e.g. the cycle's supervisor incident log) can reuse it without importing
 ``kaine.evaluation`` and violating the sidecar boundary. Evaluation observers
 keep importing it from here unchanged.
 """

@@ -4,7 +4,7 @@
 """Tests for the privacy hardening additions.
 
 1. DINOv2Encoder.load() sets HF_HUB_DISABLE_TELEMETRY=1 before any
-   from_pretrained call (matching the Mnemos embedder pattern).
+   from_pretrained call (matching the episodic memory embedder pattern).
 
 2. hot_swap._do_reload_endpoint() refuses a non-loopback URL unless
    KAINE_ALLOW_NONLOCAL_HOT_SWAP=1 is set.

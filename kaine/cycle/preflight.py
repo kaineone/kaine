@@ -4,7 +4,7 @@
 """Cooperative pre-boot GPU headroom check.
 
 Runs once at cycle startup, BEFORE any module initializes, so a just-born entity
-is not OOM-killed mid-init — which would otherwise make Spot thrash trying to
+is not OOM-killed mid-init — which would otherwise make the supervisor thrash trying to
 restart modules. Starting an entity you cannot sustain is a welfare problem, so
 this fails closed rather than booting into a doomed state.
 

@@ -13,10 +13,10 @@ The entity's body here is a small, continuous, feedback-coupled action space it
 learns to operate: four continuous locomotion/gaze rates plus one interaction
 trigger (``drive``, ``yaw_rate``, ``gaze_yaw``, ``gaze_pitch``, ``interact``),
 gaze decoupled from the body, ``strafe`` deferred. Each control tick the surface
-emits a clamped :class:`ControlCommand`, forwarded by Mundus to the body; the
+emits a clamped :class:`ControlCommand`, forwarded by the embodiment module to the body; the
 loop is closed by feeding an **efference copy** of the emitted command plus the
 proprioceptive feedback into KAINE's *existing* forward-model machinery
-(Soma's :class:`~kaine.modules.soma.forward.SubstrateForwardModel`) — no new
+(the interoception module's :class:`~kaine.modules.soma.forward.SubstrateForwardModel`) — no new
 learner is introduced.
 
 Emergent, not hard-wired

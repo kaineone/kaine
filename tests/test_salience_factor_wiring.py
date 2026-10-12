@@ -3,7 +3,7 @@
 
 """Live four-factor salience wiring (wire-salience-goal-thymos).
 
-Covers the real Thymos factor (StateModulator, live by default) and the real
+Covers the real affect factor (StateModulator, live by default) and the real
 goal factor (DriveRelevanceGoalScorer, built but staged), the AffectStateProvider
 DI seam that feeds them without a workspace->modules import, the static negative
 control's bit-for-bit reproduction of the two-factor selection, and determinism.

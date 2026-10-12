@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-"""Tests for Nous/Volition rest-request handling in Hypnos."""
+"""Tests for planning / action selection rest-request handling in the sleep module."""
 
 import asyncio
 from dataclasses import dataclass

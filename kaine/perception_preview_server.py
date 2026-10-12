@@ -5,7 +5,7 @@
 perception PiP.
 
 The in-RAM preview holder (:mod:`kaine.perception_preview`) is process-local:
-``Topos``/``Audition`` populate it inside the CYCLE process, but Nexus is a
+``Topos``/``Audition`` populate it inside the CYCLE process, but the dashboard is a
 SEPARATE process, so its own holder is always empty. This module closes that gap
 in the *purest* way for the load-bearing zero-raw-sense-persistence invariant: it
 serves the holder's current single slot over a LOOPBACK socket. Frames never

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Pure, deterministic maternal-channel signal functions for the womb feed.
+"""Pure, deterministic maternal-channel signal functions for the stimulus source feed.
 
 Implements the external maternal-state signal, the maternal heartbeat phase,
 the beat pulse, the colour-onset saturation ramp, and the parameter contract.
@@ -18,9 +18,9 @@ Grounding citations placed at the relevant sites:
 - Colour/saturation onset schedule: Hepper & Shahidullah 1994; Teller /
   Bornstein (infant colour-vision development).
 - The luminance pulse coupled to the heartbeat is an external cross-modal
-  rhythmic drive / birth cue, NOT a reproduced womb feature. See Notbohm 2016
+  rhythmic drive / maturation cue, NOT a reproduced stimulus source feature. See Notbohm 2016
   vs Duecker 2021 (entrainment debate; do not overclaim) and Frontiers 2022
-  (photic activation at birth).
+  (photic activation at maturation).
 - Capacity to oscillate is the existing innate substrate; any entrainment,
   interoceptive sensitivity, or self-regulation is emergent and is NOT
   hardcoded here (Cantiani 2022; Power 2012; Craig 2003/2009; Maister 2017;

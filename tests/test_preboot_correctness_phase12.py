@@ -7,8 +7,8 @@ sleeps):
 
 - C1  freeze/resume restores the desired perception flags (the freeze path
       saves them; the resume path writes back exactly what was saved).
-- C2  stacked freeze sources: a welfare pause survives a Spot recovery
-      (Spot pops only its own entry), a pre-existing stack is restored intact,
+- C2  stacked freeze sources: a welfare pause survives a supervisor recovery
+      (supervisor pops only its own entry), a pre-existing stack is restored intact,
       and only an operator or welfare stand-down lifts a welfare freeze.
 - M3  the welfare ``notify`` rate limit (``_welfare_notify_allowed``).
 - C3  the refractory-scaled guard timeout clears speak/think in-flight guards

@@ -3,7 +3,7 @@
 
 """Operator freeze control for the cognitive cycle.
 
-`state/cycle/control.json` is written by the Nexus
+`state/cycle/control.json` is written by the dashboard
 `POST /diagnostics/cycle/freeze` endpoint — the operator's commanded freeze
 state. A freeze-watch task in the cycle entrypoint polls it and pauses/resumes
 the cycle to match (resume must come from outside the paused tick loop).
@@ -17,10 +17,10 @@ C2 — stacked freeze sources. The freeze is represented as a stack of entries
 (``stack``: each ``{source, reason, frozen_at}``, oldest first), with a legacy
 single-slot view (top of stack) exposed via ``frozen``/``frozen_at``/
 ``reason``/``source`` for existing readers, so the on-disk file stays
-backward-compatible. A recovery (e.g. Spot's) may pop only its own entry
+backward-compatible. A recovery (e.g. the supervisor's) may pop only its own entry
 (:func:`pop_freeze`) and never lifts a welfare or operator freeze. The
 operator's own resume lifts only operator entries via :func:`stand_down` with
-``source="operator"``; welfare, gestation and programme_end entries are lifted
+``source="operator"``; welfare, the developmental phase and programme_end entries are lifted
 only by :func:`override` naming them (or an explicit stand-down with the matching
 source). :func:`unfreeze` is reserved for the cycle's own clean boot.
 """

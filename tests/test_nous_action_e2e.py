@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""End-to-end test for Nous-driven action through Volition and Lingua."""
+"""End-to-end test for planning-driven action through the action selection and language modules."""
 
 from __future__ import annotations
 

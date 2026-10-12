@@ -5,7 +5,7 @@
 - [x] 1.3 `snapshot-completeness`: the affect module's goals saved; the sleep module's schedule restored; the planning module's posterior handed to its engine's fallback (the planning module has no other belief carry-over); revive-with-extra-module tests for every module. The world model module's training and weight persistence move to the study profile (2.1).
 - [x] 1.4 `film-aligned-ignition-log`: a content-free film-position event (item, offset, paused); the broadcast record keeps entry ids, the run id and the broadcast time.
 - [x] 1.5 `film-end-preserve`: the programme's end publishes an event and, in study mode, freezes, preserves and stops.
-- [x] 1.6 `study-confounds`: the social cognition module labels media speech as media, not the operator; a gestating entity's speech intents form but its outputs are held.
+- [x] 1.6 `study-confounds`: the social cognition module labels media speech as media, not the operator; an entity in its developmental phase forms speech intents but its outputs are held.
 - [x] 1.7 `ignition-world-model-check`: the runner refuses a step with the world model module whose bundle did not capture the world model.
 - [x] 1.8 `scoped-memory-preservation`: a bundle holds only the preserved entity's memories; revive restores them into the reviving line's own collections and replaces their contents; the social cognition module preserves its own profiles.
 - [x] 1.9 `numpy-text-embedder` task 3: every memory store, snapshot and bundle is stamped with its embedding space, and revive refuses to mix spaces.

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Phantasia — world-model / imagination module (DreamerV3 RSSM core).
+"""The world model module — imagination module (DreamerV3 RSSM core).
 
-Phantasia is KAINE's world model. It is NOT an agent: it has no actor, critic,
-reward, or return head — action selection is Nous's job (pymdp active
-inference). Phantasia only models and imagines.
+The world model module is KAINE's world model. It is NOT an agent: it has no actor, critic,
+reward, or return head — action selection is the planning module's job (pymdp active
+inference). The world model module only models and imagines.
 
 Two modes:
 
@@ -15,12 +15,12 @@ Two modes:
     carries no imagined content. The observation is appended to a bounded
     in-memory ring buffer (the training corpus), which is NEVER serialized.
 
-  * **Offline (scenario window only).** While the scenario window that Hypnos
-    opens around the sleep phases that cue Phantasia is open: (1) on a
+  * **Offline (scenario window only).** While the scenario window that the sleep module
+    opens around the sleep phases that cue the world model module is open: (1) on a
     ``mnemos.replay`` cue, seed the world model from the prior trajectory and
     roll out imagined trajectories, publishing ``phantasia.scenario`` events.
     Because those events are published on ``phantasia.out``, they are
-    re-injected into the workspace broadcast so Nous, Thymos, and Eidolon
+    re-injected into the workspace broadcast so the planning module, the affect module and the self-model module
     process them via ``on_workspace`` (associative consolidation); (2) training
     over the accumulated buffer runs when ``hypnos.sleep.started`` arrives,
     gated by ``training_enabled``. The waking path pauses from

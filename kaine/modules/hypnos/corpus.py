@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Intent-log rotation and corpus disk guard for the Hypnos voice-alignment pipeline."""
+"""Intent-log rotation and corpus disk guard for the sleep module's voice-alignment pipeline."""
 
 from __future__ import annotations
 

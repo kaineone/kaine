@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Canonical continuous-channel vocabulary for Mundus embodiment.
+"""Canonical continuous-channel vocabulary for the embodiment module.
 
 The clamp ranges for the entity's per-tick continuous motor channels live here,
-in a leaf module that both the Mundus core (`module.py`) and the control surface
+in a leaf module that both the embodiment module core (`module.py`) and the control surface
 (`control_surface.py`) import, so neither has to import the other for the shared
 vocabulary. `interact` is a single graded-reach trigger, so its range is
 non-negative; the locomotion and gaze rates are bidirectional.

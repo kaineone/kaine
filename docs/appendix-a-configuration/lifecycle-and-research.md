@@ -126,7 +126,7 @@ Only consulted when `adapter_merger` resolves to the real merger (`"auto"` with 
 
 ## `[developmental_stage]`
 
-The maturation gate that decides when a gestating entity is born. The reader has no key allowlist, so a misspelled key is silently ignored. See `kaine/lifecycle/maturation_gate.py`.
+The maturation gate that decides when an entity in its developmental phase matures. The reader has no key allowlist, so a misspelled key is silently ignored. See `kaine/lifecycle/maturation_gate.py`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -137,9 +137,9 @@ The maturation gate that decides when a gestating entity is born. The reader has
 | `gate_cadence_seconds` | float | `60.0` | How often the gate evaluates readiness. |
 | `readout_max_age_cadences` | float | `3.0` | How many gate cadences back the gate reads `gestation.readiness` markers from the bus; older readouts are ignored. |
 | `require_operator_ack_for_birth` | boolean | `false` | Hold a ready entity until the operator acknowledges maturation. |
-| `womb_ready_retry_seconds` | float | `5.0` | Retry interval while boot holds a gestating entity until the stimulus source is ready. Nothing is spawned during the hold. |
+| `womb_ready_retry_seconds` | float | `5.0` | Retry interval while boot holds an entity in its developmental phase until the stimulus source is ready. Nothing is spawned during the hold. |
 | `womb_check_seconds` | float | `1.0` | How often the stimulus-source-loss watcher checks that the stimulus source is still live. |
-| `womb_loss_after_seconds` | float | `5.0` | Seconds without stimulus source presence before the watcher freezes the gestating entity. It releases the freeze when the stimulus source returns. |
+| `womb_loss_after_seconds` | float | `5.0` | Seconds without stimulus source presence before the watcher freezes the entity in its developmental phase. It releases the freeze when the stimulus source returns. |
 | `womb_arm_timeout_seconds` | float | `120.0` | How long the watcher waits for the stimulus source to first appear before it arms. |
 | `womb_presence_window_seconds` | float | `3.0` | Window over which stimulus source presence is measured. |
 

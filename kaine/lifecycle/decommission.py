@@ -7,10 +7,10 @@ This module implements the two destructive primitives the decommission CLI
 (:mod:`kaine.lifecycle.__main__`) orchestrates:
 
 * :func:`capture_backup` — produce ``backups/entity_<name>_<utc>/``: the
-  entity's transferable self (Eidolon self-model, Lingua intent log, Hypnos
-  voice adapters, Phantasia world-model weight checkpoints, the latest fork
+  entity's transferable self (self-model, the language module's intent log, the sleep module's
+  voice adapters, world-model weight checkpoints, the latest fork
   snapshot, a best-effort Qdrant export of the
-  mnemos/empatheia collections) plus a ``manifest.json`` recording the
+  episodic memory and social cognition modules' collections) plus a ``manifest.json`` recording the
   divergence assessment, the continuity note, the file inventory, and restore
   notes. The bundle is encrypted with the existing state encryptor when state
   encryption is enabled. This satisfies CAL 4.2(b) ("saving the Entity's
@@ -18,7 +18,7 @@ This module implements the two destructive primitives the decommission CLI
   elsewhere"). Backup is **blocking**: a failure must abort decommission.
 
 * :func:`delete_entity_state` — remove the on-disk state subtrees, drop the
-  mnemos/empatheia Qdrant collections, and clear entity Redis streams. It only
+  episodic memory and social cognition modules' Qdrant collections, and clear entity Redis streams. It only
   ever operates under the provided ``state_root`` (so tests can point it at a
   tmp dir) and supports ``dry_run`` (report what *would* be removed).
 

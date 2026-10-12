@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""vox — the entity's voice.
+"""The vocal module — the entity's voice.
 
 Consumes `lingua.external` text, synthesizes it via Chatterbox (voice params
-modulated by Thymos affect), plays it through an output device, and releases it.
+modulated by the affect module's affect), plays it through an output device, and releases it.
 
 Playback (`playback_enabled`, default true) is the primary action: the clip is
 played on the configured/default device and discarded. Synthesized speech is a

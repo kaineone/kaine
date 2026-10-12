@@ -8,13 +8,13 @@ Three passive instruments promoted to controlled, seeded, offline runners:
 - A/B divergence: a fixed (utterance, conditioning) battery through the production
   ``divergence_control`` seam with a deterministic echo client; WIN iff the meter
   has dynamic range (empty ⇒ ~0, conditioned ⇒ large);
-- memory coherence: a fixed battery of planted facts in a REAL in-memory Mnemos;
+- memory coherence: a fixed battery of planted facts in a REAL in-memory episodic memory module;
   WIN iff full-system retrieval beats the bare arm AND the advantage vanishes when
-  Mnemos is emptied AND a never-stored fact yields honest non-recall;
+  the episodic memory module is emptied AND a never-stored fact yields honest non-recall;
 - self-model accuracy: a fixed planted-signal/claim battery through the calibrated
-  Eidolon scorer; WIN iff the scorer reproduces every expected score.
+  self-model scorer; WIN iff the scorer reproduces every expected score.
 
-All offline: deterministic / echo clients + an in-memory Mnemos, no network,
+All offline: deterministic / echo clients + an in-memory episodic memory module, no network,
 no entity boot.
 """
 from __future__ import annotations

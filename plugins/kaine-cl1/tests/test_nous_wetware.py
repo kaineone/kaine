@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""tests for Nous on wetware: the substrate policy proposer (OpenSpec nous-on-wetware)."""
+"""tests for the planning module on wetware: the substrate policy proposer (OpenSpec nous-on-wetware)."""
 
 import logging
 import os

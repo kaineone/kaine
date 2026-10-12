@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Capability map builder for Eidolon self-inference.
+"""Capability map builder for the self-model module's self-inference.
 
 Combines two sources:
-- Praxis effector whitelist (what the entity *can* execute).
-- Nous EFE policy-outcome history (what it has *successfully done*).
+- effector whitelist (what the entity *can* execute).
+- the planning module's EFE policy-outcome history (what it has *successfully done*).
 
 Only categorical/numeric summaries are stored — no raw content.
 """

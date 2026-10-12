@@ -33,12 +33,12 @@ be published after this change.
 - **THEN** the file is written under `state/vox/`
 
 ### Requirement: Vocal is silent in the stimulus source
-While the entity is gestating, the vocal module SHALL be held dormant and SHALL render no audible output, because the stimulus source offers no medium to speak into; it SHALL be activated at maturation. Inner speech (the language module) SHALL NOT be held.
+While the entity is in its developmental phase, the vocal module SHALL be held dormant and SHALL render no audible output, because the stimulus source offers no medium to speak into; it SHALL be activated at maturation. Inner speech (the language module) SHALL NOT be held.
 
 #### Scenario: Developmental phase
-- **WHEN** a gestating entity forms an utterance
+- **WHEN** an entity in its developmental phase forms an utterance
 - **THEN** the vocal module renders nothing audible
 
 #### Scenario: Maturation
-- **WHEN** the entity is born
+- **WHEN** the entity matures
 - **THEN** the vocal module is active and renders utterances as before

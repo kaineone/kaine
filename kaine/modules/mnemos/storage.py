@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Vector storage backends for Mnemos.
+"""Vector storage backends for the episodic memory module.
 
 `MemoryStorage` is the protocol; `QdrantStorage` is the production
 default (Tier 2); `InMemoryStorage` is the deterministic fallback for
@@ -9,7 +9,7 @@ tests; `SqliteVecStorage` is the in-process edge backend (Tier 0/1) —
 an ``asg017/sqlite-vec`` vector index with near-zero idle footprint and
 no server, selected by ``[mnemos].backend = "sqlite_vec"`` (openspec
 runtime-backends). All three satisfy the SAME protocol and store the same
-CLS collections, so selecting a backend never changes Mnemos's semantics.
+CLS collections, so selecting a backend never changes the episodic memory module's semantics.
 """
 from __future__ import annotations
 

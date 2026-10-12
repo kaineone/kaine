@@ -4,12 +4,12 @@
 """Affect/drive dependency-injection seam for the live salience factors.
 
 The paper's four-factor salience (`intensity × novelty × goal × thymos`) needs
-the entity's current affect (for the Thymos factor) and current drives (for the
-goal factor). Both are produced by Thymos and ride the ``thymos.out`` stream as
+the entity's current affect (for the affect factor) and current drives (for the
+goal factor). Both are produced by the affect module and ride the ``thymos.out`` stream as
 ``thymos.state`` events that the cognitive cycle already collects each tick.
 
-Rather than have the workspace/syneidesis layer import ``kaine.modules`` to read
-Thymos's interior (an architecture-boundary violation), the cycle — the
+Rather than have the workspace layer import ``kaine.modules`` to read
+the affect module's interior (an architecture-boundary violation), the cycle — the
 composition root that already knows about both layers — holds this small
 provider. The engine refreshes it each tick from the events it already has in
 hand (no new bus read), and the salience factors read it back through injected

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""A/B divergence observer: every Lingua external_speech is paired
+"""A/B divergence observer: every language module's external_speech is paired
 with a second 'bare LLM' inference and the cosine similarity logged.
 
-The bare output never reaches the user or Mnemos. We use the same
-chat endpoint as Lingua via httpx so behavior matches the real one.
+The bare output never reaches the user or the episodic memory module. We use the same
+chat endpoint as the language module via httpx so behavior matches the real one.
 """
 
 from __future__ import annotations

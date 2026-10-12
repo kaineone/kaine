@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Phantasia events render via named FaithfulRenderer templates (not fallback)."""
+"""world model events render via named FaithfulRenderer templates (not fallback)."""
 from __future__ import annotations
 
 from datetime import datetime, timezone

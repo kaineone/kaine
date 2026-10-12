@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Service & dependency health probing for the Nexus diagnostics surface.
+"""Service & dependency health probing for the dashboard diagnostics surface.
 
 This was a single 1,144-line ``health.py`` module; it is now a small package
 so the three concerns stay separable:
 
   * :mod:`.probes`  — individual dependency probe coroutines (Redis, Qdrant,
-    the chat LLM, Speaches, Chatterbox, Nous/pymdp, state encryption) + the
+    the chat LLM, Speaches, Chatterbox, planning/pymdp, state encryption) + the
     status vocabulary (``UP``/``DOWN``/``DEGRADED``/``NOT_CONFIGURED``).
-  * :mod:`.blocks`   — the per-block snapshot builders (spot, preservation,
+  * :mod:`.blocks`   — the per-block snapshot builders (supervisor, preservation,
     cycle pacing, entity care, research, perception feed, model server, GPU
     pre-flight, welfare, admissibility, module states).
   * :mod:`.prober`   — ``DependencySpec`` + ``HealthProber``, the caching,

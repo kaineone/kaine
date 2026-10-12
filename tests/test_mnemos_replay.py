@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for mnemos replay selection, re-injection, and window guard.
+"""Tests for episodic memory replay selection, re-injection, and window guard.
 
 Scenarios verified:
 - Selection ranks high-affect/recent traces first.

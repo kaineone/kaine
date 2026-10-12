@@ -5,7 +5,7 @@
 
 The keystone ``executive-action-intent`` change gave KAINE an inhibition-gated
 action layer (:mod:`kaine.workspace.volition`) whose default policy only
-*responds* to a user utterance. Thymos already publishes ``thymos.drive``
+*responds* to a user utterance. The affect module already publishes ``thymos.drive``
 threshold-crossing events for its four drives (curiosity, boredom,
 social_drive, restlessness) — but until now nothing consumed them. The entity
 had motivations that could not move it.
@@ -25,7 +25,7 @@ Mapping (conservative v1):
     ``restlessness``   → ``think``  (internal deliberation; never reaches TTS).
 
 Guards (all inherited from the executive design, never bypassing it):
-  - Volition checks inhibition first; this policy is only called when the
+  - the action selection module checks inhibition first; this policy is only called when the
     snapshot is NOT inhibited.
   - At most ONE ``speak`` intent per call. A present user utterance OUTRANKS a
     social-drive initiative (the single speak answers the user).
@@ -36,7 +36,7 @@ Guards (all inherited from the executive design, never bypassing it):
   - The entity never responds to its own output (source ``lingua``).
 
 Injectable like the default policy, so a future change can parameterize the
-drive→kind mapping without touching Volition's plumbing.
+drive→kind mapping without touching the action selection module's plumbing.
 """
 
 from __future__ import annotations

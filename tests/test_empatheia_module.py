@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for Empatheia(BaseModule) — event-driven behavior with fakeredis."""
+"""Tests for the social cognition module (BaseModule) — event-driven behavior with fakeredis."""
 from __future__ import annotations
 
 from datetime import datetime, timezone

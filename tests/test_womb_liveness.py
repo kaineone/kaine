@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for the womb liveness interface."""
+"""Tests for the stimulus source liveness interface."""
 from __future__ import annotations
 
 import asyncio

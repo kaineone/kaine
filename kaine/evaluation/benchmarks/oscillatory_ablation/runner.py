@@ -60,7 +60,7 @@ ground-truth label disagrees with (e.g. a mis-specified coalition), which is
 exactly the "the layer is tracking the wrong thing" failure the paper must be
 able to report.
 
-Offline: drives only the engine + Syneidesis + Volition over a scripted in-memory
+Offline: drives only the engine + the workspace + the action selection module over a scripted in-memory
 bus. No live modules, no entity boot, no network.
 """
 from __future__ import annotations

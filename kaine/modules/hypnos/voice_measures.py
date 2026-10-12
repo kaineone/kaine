@@ -4,7 +4,7 @@
 """Content-free voice measures for the distinctiveness arm (D13).
 
 All computations are pure, use only numpy + stdlib, and are guarded so that bad
-input never raises.  No text from the being's corpus is ever stored in the
+input never raises.  No text from the entity's corpus is ever stored in the
 measure files; only numbers and the fixed ``FUNCTION_WORDS`` identities
 (implied by vector position) are persisted.
 """

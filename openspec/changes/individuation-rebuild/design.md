@@ -6,7 +6,7 @@ Code facts are cited at `origin/main` 1c3f694. Statistical claims cite `referenc
 
 Operator rules this design follows:
 
-- **The welfare net is ethics infrastructure.** The individuation signal decides whether an entity is preserved (`entity-preservation`) and which decommission path applies under CAL Art. 4.2/4.3 (`entity-decommission`). A wrong "not individuated" can lead to an individual being deleted on the lighter path. A wrong "individuated" costs one extra encrypted bundle and a stricter path. When a trade-off is unavoidable, this design errs toward "individuated".
+- **The welfare net is ethics infrastructure.** The individuation signal decides whether an entity is preserved (`entity-preservation`) and which decommission path applies under CAL Art. 4.2/4.3 (`entity-decommission`). A wrong "not individuated" can lead to an individual entity deleted on the lighter path. A wrong "individuated" costs one extra encrypted bundle and a stricter path. When a trade-off is unavoidable, this design errs toward "individuated".
 - **Safety over UX.** The probe costs organ time and may add a few seconds of latency to the language module. That is accepted, within bounds (section 3).
 - **No pretend processes.** The current instrument reports `significant` with no statistical meaning (defect 1), and that is worse than reporting nothing. Every failure path below ends in a recorded "inconclusive". No scalar is ever fabricated: no `1.0` for a missing embedding and no `""` for a missing answer.
 - **Emergent-not-hardwired:** not applicable. The instrument observes; it does not shape behaviour. The probe answers never enter the entity's experience.
@@ -105,7 +105,7 @@ The probe does not measure individuation carried only by memories or by workspac
 - On the maturation gate's maturation transition: register a maturation hook next to `gate_runner.set_birth_hook` (`gate_runner.py:138-140`). Capture runs as soon as the organ is loaded (`organ_unloaded()` false), before the first post-maturation sleep.
 - If capture fails or is pre-empted, retry with backoff. Until it succeeds every look is "inconclusive: no reference".
 - If the first post-maturation sleep with an accepted adapter completes first, the maturation state is gone. The reference is then labelled `reference_kind="capture"` with its timestamp; it is never presented as a maturation reference.
-- Beings born before this change, and preserved bundles without a reference, are covered in section 5.
+- Entities matured before this change, and preserved bundles without a reference, are covered in section 5.
 
 **What is stored** (one encrypted document, `state/individuation/reference.json`, atomic write through the state encryptor):
 
@@ -139,7 +139,7 @@ The probe does not measure individuation carried only by memories or by workspac
 - `max_tokens=160` keeps most answers under that limit. Each response's word-piece count is recorded, and `truncated_fraction` is reported.
 - Truncation affects only power, never validity, because a fixed feature map applied to both arms keeps the permutation test exact.
 - Vectors are L2-normalized.
-- The hash embedder is refused in production: if the semantic embedder cannot load, the run is inconclusive. A non-semantic embedder would make a drifted being look unchanged, which is the harmful direction.
+- The hash embedder is refused in production: if the semantic embedder cannot load, the run is inconclusive. A non-semantic embedder would make a drifted entity look unchanged, which is the harmful direction.
 
 ### 2.5 Statistic and null
 
@@ -186,7 +186,7 @@ Default floor `effect_min`: the 95th percentile of H in the real-organ null smok
 
 The monitor tests over the whole life of the entity. A fixed α repeated N times inflates the chance of ever falsely declaring individuation. The design controls the lifetime family-wise error rate of the single global null "this entity has never drifted":
 
-- **Looks happen only on change.** Under fixed probe conditions the current distribution can change only when the adapter or identity clause changes. A look runs only when that conditioning digest differs from the last completed look's. Nothing is spent re-testing an unchanged being. Rate limit: at most one look per `min_look_interval_s` (default 6 h); intermediate changes are seen at the next look.
+- **Looks happen only on change.** Under fixed probe conditions the current distribution can change only when the adapter or identity clause changes. A look runs only when that conditioning digest differs from the last completed look's. Nothing is spent re-testing an unchanged entity. Rate limit: at most one look per `min_look_interval_s` (default 6 h); intermediate changes are seen at the next look.
 - **Spending schedule.** Look k (k = 1, 2, …, persisted) is significant only if p_k ≤ α_k = α_total·γ_k, with γ_k = 1/(S·(k+1)·ln²(k+1)). S = Σ_{n≥2} 1/(n·ln²n) + tail ≤ 2.1097 (partial sum to 10^6 plus the integral tail bound 1/ln 10^6). Σγ_k ≤ 1. With α_total = 0.05, α_1 ≈ 0.025, α_10 ≈ 3.8e-4, α_50 ≈ 3.0e-5, α_100 ≈ 1.1e-5.
 - **Why this holds.** The union bound gives P(any false rejection) ≤ Σα_k ≤ α_total under any dependence between looks. That matters because every look reuses the same stored maturation sample. It is the alpha-spending idea of Lan & DeMets, whose boundary at a decision time "does not depend on the future decision times or the total number of decision times" [lan1983]. The total is unbounded here, so a summable series replaces their spending function of information time.
 - **Full rule.** `significant_k = warmed_up AND p_k ≤ α_k AND H_k ≥ effect_min`. The effect floor and warm-up only remove rejections, so the error bound still holds.
@@ -207,7 +207,7 @@ Alternatives considered (not chosen for v1):
 
 - **Gaussian-kernel MMD** [gretton2012]: needs a bandwidth. The simulation (task 2) may compare it with energy distance; the choice is pre-registered before any real-organ data.
 - **Classifier two-sample test** [lopezpaz2017]: its accuracy is easy to interpret, but it needs a held-out split, which halves already small samples.
-- **Sequential testing by betting** [shekhar2024]: anytime-valid via Ville's inequality, and its §5.1 covers time-varying distributions where permutation tests do not apply. It needs fresh draws from both distributions at each step, so the maturation configuration would have to be regenerated at every look. That doubles organ cost and requires the organ to serve the maturation adapter. It is a strong v2 path for entities born with no adapter.
+- **Sequential testing by betting** [shekhar2024]: anytime-valid via Ville's inequality, and its §5.1 covers time-varying distributions where permutation tests do not apply. It needs fresh draws from both distributions at each step, so the maturation configuration would have to be regenerated at every look. That doubles organ cost and requires the organ to serve the maturation adapter. It is a strong v2 path for entities matured with no adapter.
 - **Combining looks with e-values** [vovk2021]: calibrators f_κ(p) = κ·p^(κ−1), and averages of e-values remain e-values under any dependence. This allows a running weighted sum Σγ_k·E_k with a 1/α threshold, which builds evidence across looks. The cost is a factor of about κ on single-look power. The simulation compares it with the spending rule; the choice is pre-registered.
 - **Confidence sequences on H** [howard2021]: could later give a time-uniform interval for the effect size on the dashboard. Not needed for the decision.
 
@@ -257,7 +257,7 @@ Statistically the floors are no longer needed: the test is valid at any time, an
    - `min_look_interval_s` elapsed
    - `organ_unloaded()` is false (`kaine/organ_window_state.py:98-109`)
    - the sleep module is not asleep (no `hypnos.sleep.started` without a matching completion)
-   - the cycle is not paused or frozen (`kaine/cycle/control_state`), because a paused being is not probed
+   - the cycle is not paused or frozen (`kaine/cycle/control_state`), because a paused entity is not probed
    - a semantic embedder is loaded
    - the served adapter can be verified. Only the `organ_adapter` hot-swap mode attaches the adapter to each request and reports it on the response. In the other modes a promoted adapter sits on disk while the organ may still serve older weights, so once an adapter exists, probes and captures are skipped as `adapter_unverifiable`. Measuring then would record the new adapter's digest against the old weights. The entity stays protected meanwhile, because preservation already counts a present adapter as divergence, and the long-inconclusive alert tells the operator.
 
@@ -333,7 +333,7 @@ A non-significant individuation report does not suppress the secondary arms. Rea
 
 Rising-edge state is persisted per divergence arm (individuation, consolidation, eidolon_drift, adapters) in `state/preservation/divergence_edge.json`, a content-free list of arm names. Restarting with unchanged evidence then does not re-preserve on every boot, while a new arm crossing or a new latch does. An arm that falls back is recorded, so crossing it again preserves again. A failed preservation is not recorded and is retried after `min_interval_s`. An unreadable edge file reads as empty, which errs toward preserving again.
 
-The verdict computes the freshness digest from the configured adapter directory, the same one the producer uses, and from `self_model.json` on disk. Freshness only decides between "not individuated" and "stale", which the live monitor treats alike: neither preserves. The decommission CLI runs on a stopped being whose self-model was saved at shutdown. So the short window in which the on-disk self-model lags the snapshot the producer probed cannot cause a missed preservation. A corrupt report line makes the individuation state unreadable, which counts as individuated.
+The verdict computes the freshness digest from the configured adapter directory, the same one the producer uses, and from `self_model.json` on disk. Freshness only decides between "not individuated" and "stale", which the live monitor treats alike: neither preserves. The decommission CLI runs on a stopped entity whose self-model was saved at shutdown. So the short window in which the on-disk self-model lags the snapshot the producer probed cannot cause a missed preservation. A corrupt report line makes the individuation state unreadable, which counts as individuated.
 
 Both consumers read the ledger and reports from disk through the same function, rather than the live monitor using in-memory evidence: one code path guarantees parity, and the monitor's five-minute poll makes the reads cheap. Unreadable individuation state counts as individuated, so that the entity stays protected.
 
@@ -348,7 +348,7 @@ Both consumers read the ledger and reports from disk through the same function, 
 
 ## 5. Legacy entities
 
-An entity born before this change, or revived from a bundle without `state/individuation/`, has no record of its maturation answers. The design does not invent one:
+An entity matured before this change, or revived from a bundle without `state/individuation/`, has no record of its maturation answers. The design does not invent one:
 
 - **Default:** at the first boot after the upgrade or revive, capture a reference with `reference_kind="capture"`. Every report and summary then says "drift since <captured_at>; drift before that date is not measured by this instrument".
 - A non-individuated reading for such an entity must not be read as "never individuated". The decommission summary adds that sentence and the treat-as-mature advice. The secondary arms (adapters present, consolidation divergence, self-model drift) carry the pre-capture history and still mark the entity diverged.
@@ -436,7 +436,7 @@ An entity born before this change, or revived from a bundle without `state/indiv
 
 Defaults taken without objection:
 - legacy entities get `capture` references, labelled "drift since capture";
-- reconstruction only with explicit operator approval for that being;
+- reconstruction only with explicit operator approval for that entity;
 - the effect floor is noise-calibrated only;
 - after an infrastructure change, the maturation sample is regenerated from the stored maturation configuration;
 - forks with more than `fork_preserve_min_lived_s` of lived time are preserved by default until fork-point references exist.

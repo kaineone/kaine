@@ -87,7 +87,7 @@ The ignition log is the graph-only broadcast log of a study: an optional per-bro
 
 The log never records event payloads, so no conversation content, transcripts, video frames, or audio samples are persisted. It is not placed on the bus and no module receives it. Records are encrypted at rest when state encryption is on, never auto-purged, and never exported. The module-addition study turns on the ignition log, the curated research event log and the external-utterance log, and forces the dashboard record, the raw archive and the workspace trajectory off; see [The module-addition study](../15-experiments/ignition-study.md).
 
-The programme clock pauses while the cycle is frozen (holder `freeze`) and while the sleep module holds a replay window (holder `hypnos`), so the film resumes where the entity left it. It is held at zero under `transition` while a born entity's viewing opens with the crossfade from the developmental stimulus to the films. Each record names the current pause holders in `paused_by`, for example `["transition"]` or `["hypnos", "transition"]`, so analysis can tell the crossfade from sleep or a freeze.
+The programme clock pauses while the cycle is frozen (holder `freeze`) and while the sleep module holds a replay window (holder `hypnos`), so the film resumes where the entity left it. It is held at zero under `transition` while a matured entity's viewing opens with the crossfade from the developmental stimulus to the films. Each record names the current pause holders in `paused_by`, for example `["transition"]` or `["hypnos", "transition"]`, so analysis can tell the crossfade from the sleep module or a freeze.
 
 ## Media voices
 

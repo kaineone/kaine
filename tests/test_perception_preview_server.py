@@ -4,7 +4,7 @@
 """Dev-gated LOOPBACK perception-preview server.
 
 The server bridges the in-RAM preview holder from the cycle process to the
-separate Nexus process over a 127.0.0.1-only socket. These tests prove:
+separate dashboard process over a 127.0.0.1-only socket. These tests prove:
 
   * OFF by default — ``start_preview_server`` returns None when the dev flag is
     unset, so nothing binds (connection refused) and the PiP stays hidden.

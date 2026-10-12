@@ -7,7 +7,7 @@ The operator revive order is:
 
   1. Parse ``--revive <bundle>``. Read the bundle's members.
   2. If the bundle carries ``stage.json``, its stage is handed to
-     ``_resolve_boot_stage`` in memory, so gestation, the womb hold, the womb
+     ``_resolve_boot_stage`` in memory, so the developmental phase, the stimulus source hold, the stimulus source
      clock and the gate all see the preserved stage. The stage file is NOT
      written yet. A bundle without a stage member resolves the stage from the
      stage file as today and logs that.
@@ -20,7 +20,7 @@ The operator revive order is:
   6. Start the cycle, recording ``revived_from`` in ``runtime.json`` and the
      run context.
 
-Module initialisation happens before revive because Eidolon's ``initialize()``
+Module initialisation happens before revive because the self-model module's ``initialize()``
 reloads its disk file; a revive before it would be overwritten. Background
 loops started during ``initialize()`` run briefly on fresh state before the
 revive lands, but the cognitive cycle (and so the workspace) has not started,

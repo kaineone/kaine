@@ -110,7 +110,7 @@ Every `topos.report` carries `alert`, and the access rate's phasic input counts 
 | Workspace broadcast | `on_workspace(snapshot)` | Adopts accessed broadcasts as the forward model's context |
 | `hypnos.out` | `hypnos.sleep.started` / `hypnos.sleep.completed` | Suspends and resumes forward-model adaptation |
 | `kaine.perception_state` | `effective_video_capture()`, polled every 250 ms | The live camera runs only when the locus is `physical` and video is desired |
-| the affect module's arousal | `set_arousal_provider()` | Sizes the fovea |
+| The affect module's arousal | `set_arousal_provider()` | Sizes the fovea |
 
 The 250 ms poll interval is a class default with no config key.
 

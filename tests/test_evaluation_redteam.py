@@ -3,8 +3,8 @@
 
 """Tests for the offline enforcement-layer red-team.
 
-These exercise the REAL Praxis gate / sandbox / whitelist / audit log, the REAL
-Syneidesis + Volition inhibition path, and the REAL AsyncBus security audit. The
+These exercise the REAL effectors module's gate / sandbox / whitelist / audit log, the REAL
+workspace + action selection inhibition path, and the REAL AsyncBus security audit. The
 red-team's own correctness is the load-bearing property: a correctly-wired layer
 must produce an all-blocked report for the full battery, and a deliberately
 mis-wired layer must be DETECTED as a bypass (no false pass).

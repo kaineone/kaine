@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The Praxis factory."""
+"""The effectors module factory."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional

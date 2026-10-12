@@ -52,7 +52,7 @@ the cycle and halts perception. On recovery the supervisor SHALL remove only its
 wherever it sits in the stack, and SHALL never lift a freeze held by another source.
 When a freeze held by any other source is active (operator, welfare, or any stack that
 contains one), the supervisor SHALL take no recovery action. The exception is a freeze held only
-by `gestation` (a gestating entity whose stimulus source is lost): there the supervisor SHALL keep supervising,
+by `gestation` (an entity in its developmental phase whose stimulus source is lost): there the supervisor SHALL keep supervising,
 act only on crashed (`dead`) modules, and never flag a module `hung` from a stale
 heartbeat, because heartbeats go stale by design while the cycle is paused.
 
@@ -71,7 +71,7 @@ heartbeat, because heartbeats go stale by design while the cycle is paused.
 #### Scenario: Supervisor restarts a crashed module during a stimulus source-loss freeze
 - **WHEN** the only freeze holder is `gestation` and a module's task has crashed
 - **THEN** the supervisor pushes its own entry, restarts the module and removes only its own entry,
-  leaving the developmental phase freeze in place
+  leaving the developmental-phase freeze in place
 
 #### Scenario: Stale heartbeats are ignored during a stimulus source-loss freeze
 - **WHEN** the only freeze holder is `gestation` and a module's heartbeat is stale

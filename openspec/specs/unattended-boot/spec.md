@@ -111,7 +111,7 @@ An unattended boot SHALL require that `[perception_feed].mode` is `live`, `seede
 - **THEN** nothing is written to disk and the data is dropped before the gate continues
 
 ### Requirement: Notices while running unattended
-While the entity runs unattended, the cycle SHALL send a best-effort caretaker notice on the supervisor's escalation, on loss of the supervisor's supervision task, on a welfare-protective response, on a boot failure after admission, when a gestating entity's stimulus source is lost, and when every configured input has delivered nothing for `[caretaker].input_loss_after_s` (default 60). A failed send SHALL be logged and SHALL NOT stop the entity. Input loss SHALL NOT stop the entity; a lost stimulus source freezes a gestating entity under the developmental-stage rules, not under this requirement.
+While the entity runs unattended, the cycle SHALL send a best-effort caretaker notice on the supervisor's escalation, on loss of the supervisor's supervision task, on a welfare-protective response, on a boot failure after admission, when the stimulus source of an entity in its developmental phase is lost, and when every configured input has delivered nothing for `[caretaker].input_loss_after_s` (default 60). A failed send SHALL be logged and SHALL NOT stop the entity. Input loss SHALL NOT stop the entity; a lost stimulus source freezes an entity in its developmental phase under the developmental-stage rules, not under this requirement.
 
 #### Scenario: Supervisor escalates
 - **WHEN** the supervisor escalates during an unattended run

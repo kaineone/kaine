@@ -4,7 +4,7 @@
 """Memory coherence prober.
 
 Picks an episodic memory older than the LLM's effective context
-window. Asks KAINE about it through Lingua (real cognitive stack)
+window. Asks KAINE about it through the language module (real cognitive stack)
 and through the bare bypass client. Logs which one got it right.
 """
 from __future__ import annotations

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Persistent birth request/acknowledgement records for operator-supervised birth.
+"""Persistent maturation request/acknowledgement records for operator-supervised maturation.
 
-The maturation gate writes the request record; Nexus writes ONLY the
+The maturation gate writes the request record; the dashboard writes ONLY the
 acknowledgement record. Both are small JSON files under ``state/lifecycle/``.
 Readers are forgiving: a missing or malformed file is treated as absent and
 never raises.

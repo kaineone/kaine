@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""NumPy CfC reservoir, step, and readout shared by Soma and Chronos.
+"""NumPy CfC reservoir, step, and readout shared by the interoception and sequence modules.
 
 This module intentionally uses only NumPy (and the Python standard library)
 so it can be imported on hosts without torch/ncps.  It replicates the default

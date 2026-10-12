@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nous proposal realization for Volition.
+"""The planning module proposal realization for the action selection module.
 
-This module implements the Volition side of ``nous-drives-action``: a policy
+This module implements the action selection module's side of ``nous-drives-action``: a policy
 wrapper that considers the most salient ``nous.proposal`` in the accessed
 coalition and, when appropriate, emits an intent with ``origin: "nous"``. For
-every proposal it sees it records a content-free outcome payload that Volition
-publishes to ``volition_feedback.out`` so Nous can learn from what actually
+every proposal it sees it records a content-free outcome payload that the action selection module
+publishes to ``volition_feedback.out`` so the planning module can learn from what actually
 happened.
 """
 from __future__ import annotations

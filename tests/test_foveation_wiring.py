@@ -4,9 +4,9 @@
 """Composition-root wiring of the fovea-size arousal seam (topos-foveation).
 
 The cognitive cycle holds the ``AffectStateProvider`` it refreshes each tick from
-``thymos.state``; ``_wire_topos_arousal`` hands Topos a read-only accessor to its
-arousal so the fovea size tracks affect (Easterbrook narrowing) without Topos
-importing the workspace or Thymos.
+``thymos.state``; ``_wire_topos_arousal`` hands the vision module a read-only accessor to its
+arousal so the fovea size tracks affect (Easterbrook narrowing) without the vision module
+importing the workspace or the affect module.
 """
 
 from __future__ import annotations

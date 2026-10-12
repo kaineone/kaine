@@ -1,6 +1,6 @@
 # Perception feed and sleep
 
-The `[perception_feed]`, `[perception_preview]`, and `[hypnos]` sections in `config/kaine.toml` control what the entity senses and how it sleeps. Use this page when you are running a reproducible stimulus, gestating an entity through the stimulus source channel, capturing the screen or desktop audio, or configuring offline consolidation and voice alignment.
+The `[perception_feed]`, `[perception_preview]`, and `[hypnos]` sections in `config/kaine.toml` control what the entity senses and how it sleeps. Use this page when you are running a reproducible stimulus, with an entity in its developmental phase through the stimulus source channel, capturing the screen or desktop audio, or configuring offline consolidation and voice alignment.
 
 ## Perception feed
 
@@ -86,7 +86,7 @@ Geometry is taken from `[topos]`.
 
 #### `[perception_feed.womb.readout]`
 
-The readout probes briefly change the maternal drive that a gestating entity perceives. They are bounded, announced on `gestation.out` as `gestation.probe` events, and never run while the entity is frozen (including during a welfare response), within a readout period after boot or thaw, or within 60 seconds of another probe. Their timing is jittered from the run seed so the entity cannot learn the schedule, while a research run with the same seed reproduces it exactly. All durations are entity seconds.
+The readout probes briefly change the maternal drive that an entity in its developmental phase perceives. They are bounded, announced on `gestation.out` as `gestation.probe` events, and never run while the entity is frozen (including during a welfare response), within a readout period after boot or thaw, or within 60 seconds of another probe. Their timing is jittered from the run seed so the entity cannot learn the schedule, while a research run with the same seed reproduces it exactly. All durations are entity seconds.
 
 The readout saves its progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) to `gestation_progress.json` beside its readout file, by default in `state/lifecycle/`. The file is keyed to the entity's seed and self-rhythm; on boot the readout restores it when the key matches, so the developmental phase continues where it left off after a restart. Preservation bundles carry this file and `gestation_readout.json`, so the progress also survives a revive.
 
@@ -191,7 +191,7 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 | `abliteration_probe_path` | string | `""` | Path to a welfare probe JSONL. Each line is `{"prompt": "...", "deflection_patterns": [...]}`, with optional `probe_id` and `in_character` fields. Empty uses the bundled default at `eval_probes/abliteration_probes.jsonl`. Must be non-empty when the real trainer is active. |
 | `preference_source` | string | `"none"` | Where preferred training examples come from. Only `"none"` is accepted (the phase trains nothing) until Stage 2 adds a validated source; any other value fails at boot. |
 | `corpus_ceiling_gb` | float | `10.0` | Size of the per-sleep intent-log corpus (`state/lingua/intent_log/`) at which a warning is logged at 80%. Nothing is ever deleted; `0` disables the warning. |
-| `distinctiveness_threshold` | float | `0.0` | Voice-arm threshold for the divergence assessment. 0 until calibrated: any being that has spoken counts as diverged by the voice arm. Must be at least 0. |
+| `distinctiveness_threshold` | float | `0.0` | Voice-arm threshold for the divergence assessment. 0 until calibrated: any entity that has spoken counts as diverged by the voice arm. Must be at least 0. |
 
 #### Training knobs
 

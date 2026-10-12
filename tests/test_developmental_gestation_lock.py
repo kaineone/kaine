@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Gestation womb-pinning + honest lock attribution (`developmental-maturation-gate`).
+"""Developmental-phase stimulus-source pinning + honest lock attribution (`developmental-maturation-gate`).
 
-Exercises the `perception_state` touch point: a gestation-gate lock is logged as
+Exercises the `perception_state` touch point: a developmental-phase gate lock is logged as
 a developmental-gate action, not an operator lock. No entity is booted.
 """
 from __future__ import annotations

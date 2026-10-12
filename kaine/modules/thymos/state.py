@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Dimensional affective state for Thymos.
+"""Dimensional affective state for the affect module.
 
 Three floats — valence, arousal, dominance — with homeostatic drift
 toward a configurable baseline. Pure data; no I/O.

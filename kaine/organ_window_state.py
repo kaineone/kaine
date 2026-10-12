@@ -6,16 +6,16 @@
 During the sleep-cycle voice-alignment training window the served language organ
 is unloaded to free the single GPU for the LoRA training step (see
 :mod:`kaine.modules.hypnos.organ_window`). Organ-dependent consumers that live on
-the OTHER side of the evaluation sidecar boundary — Lingua's chat client (core)
+the OTHER side of the evaluation sidecar boundary — the language module's chat client (core)
 and the A/B-divergence eval arm (sidecar) — need to know the organ is "resting"
 so they degrade gracefully (defer / skip) instead of crashing on the dead
 endpoint.
 
 This module is the shared, dependency-free home for that signal: a tiny state
 file plus pure readers. It depends only on the stdlib, so BOTH the core runtime
-(Hypnos writes it, Lingua reads it) and the evaluation sidecar (the A/B arm reads
+(the sleep module writes it, the language module reads it) and the evaluation sidecar (the A/B arm reads
 it) can use it without either side importing the other — the same written-record
-pattern Hypnos already uses for the consolidation-divergence metric.
+pattern the sleep module already uses for the consolidation-divergence metric.
 
 Content-free: only a phase tag + a short human detail + the last adapter verdict
 ever leave here. Never utterance text.

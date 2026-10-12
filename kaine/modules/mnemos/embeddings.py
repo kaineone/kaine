@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Text embedders for Mnemos — re-export of the single, boundary-neutral wrapper.
+"""Text embedders for the episodic memory module — re-export of the single, boundary-neutral wrapper.
 
 The sentence-transformer embedder used to be duplicated here. It now lives in
 :mod:`kaine.text_embedding`, the boundary-neutral home shared by the
-evaluation sidecar, Hypnos, Mnemos and Empatheia, so every subsystem embeds
+evaluation sidecar, the sleep module, the episodic memory module and the social cognition module, so every subsystem embeds
 on the SAME model (`sentence-transformers/all-MiniLM-L6-v2`, 384-dim,
 Apache-2.0, CPU-capable) and the SAME cosine scale. This module re-exports
-those names so existing Mnemos import sites keep working; there is no second
+those names so existing episodic memory module import sites keep working; there is no second
 implementation.
 
 ``SentenceTransformerEmbedder`` is kept as an alias of the canonical

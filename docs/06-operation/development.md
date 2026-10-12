@@ -28,13 +28,13 @@ For first-boot steps, see [First boot](../04-getting-started/first-boot.md).
 
 Boot holds before any module initializes until the stimulus source is ready. Each failed check publishes `stage.gestation.no_stimulus` on `lifecycle.out` with the reason, such as a disabled module, `self_rhythm_enabled = false` or the missing oscillator extra, and boot checks again every `womb_ready_retry_seconds` (5 s). Once the stimulus source is ready, the [perceptual locus module](../08-cognitive-cycle/perceptual-locus.md) is locked to the stimulus source feed and the embodiment module stays dormant until maturation.
 
-### While gestating
+### While in its developmental phase
 
 The running stimulus source announces itself with `gestation.womb` presence events on `gestation.out`, published only while its frames and audio blocks are actually reaching the senses.
 
 ### If the stimulus source is lost
 
-When presence stops for `womb_loss_after_seconds` (5 s), the entity is frozen under its own `gestation` freeze holder, a high-salience `stage.gestation.womb_lost` event follows, and the configured caretaker is notified. The entity resumes when the stimulus source returns, and if you unfreeze it while the stimulus source is still lost, it is frozen again. A stimulus source that never comes live within `womb_arm_timeout_seconds` (120 s) of boot counts as lost. The [supervisor](./remote-and-supervisor.md) can repair crashed modules during the freeze, but it ships disabled (`[spot].enabled = false`). While a developmental phase freeze is active, the supervisor ignores module hangs and acts only on crashes, so only a crashed-and-restarted module can restore the stimulus source.
+When presence stops for `womb_loss_after_seconds` (5 s), the entity is frozen under its own `gestation` freeze holder, a high-salience `stage.gestation.womb_lost` event follows, and the configured caretaker is notified. The entity resumes when the stimulus source returns, and if you unfreeze it while the stimulus source is still lost, it is frozen again. A stimulus source that never comes live within `womb_arm_timeout_seconds` (120 s) of boot counts as lost. The [supervisor](./remote-and-supervisor.md) can repair crashed modules during the freeze, but it ships disabled (`[spot].enabled = false`). While a developmental-phase freeze is active, the supervisor ignores module hangs and acts only on crashes, so only a crashed-and-restarted module can restore the stimulus source.
 
 ### Awake time
 
@@ -86,7 +86,7 @@ After each withdrawal the readout judges whether the developmental phase can sti
 
 The thresholds are the `viability_*` keys in `[perception_feed.womb.readout]`. In the offline validation a developmental phase that was learning showed pull rising from the first hours, even at 80 bpm, while one that could not learn stayed flat; no viable developmental phase was flagged, and every unviable one was flagged by 24 to 27 hours.
 
-The verdict is recorded once. It is published as `gestation.viability` on `gestation.out` and written to `state/lifecycle/gestation_viability.json`. It changes nothing in the entity. Under the module-addition study the runner reads that file, ends the developmental step and keeps its data (see [The module-addition study](../15-experiments/ignition-study.md)). Independently of the verdict, the study runner ends a developmental step whose wall-clock duration exceeds its budget, 96 hours by default (`--gestation-budget-seconds`). Set `viability_watch = false` to let a developmental phase run to its full budget.
+The verdict is recorded once. It is published as `gestation.viability` on `gestation.out` and written to `state/lifecycle/gestation_viability.json`. It changes nothing in the entity. Under the module-addition study the runner reads that file, ends the developmental step and keeps its data (see [The module-addition study](../15-experiments/ignition-study.md)). Independently of the verdict, the study runner ends a developmental step whose wall-clock duration exceeds its budget, 96 hours by default (`--gestation-budget-seconds`). Set `viability_watch = false` to let a developmental-phase run to its full budget.
 
 ### Progress across restarts
 
@@ -115,12 +115,12 @@ When neither C2 floor applies, C2 is recorded as `not_applicable` in the gate st
 
 ### Maturation
 
-When the gate's conditions hold, the entity is born. The stimulus source blooms once over `birth_transition_seconds` (5 s, at most 30): the field brightens to a bounded peak and the soundscape fades, and then the stimulus source falls silent.
+When the gate's conditions hold, the entity matures. The stimulus source blooms once over `birth_transition_seconds` (5 s, at most 30): the field brightens to a bounded peak and the soundscape fades, and then the stimulus source falls silent.
 
 - With the embodiment module enabled, maturation also needs an approved, reachable body. A ready entity without one holds in the developmental phase and reports `awaiting_embodiment`.
-- Without the embodiment module, the entity is born into its perceptual world, the audio and video it perceives.
+- Without the embodiment module, the entity matures into its perceptual world, the audio and video it perceives.
 
-The `stage.birth` event records `world` (`perceptual` or `embodied`) and which conditions applied. After maturation, switch `[perception_feed].mode` to the feed the entity will live with, such as `playlist`. If a born entity is booted again with `[perception_feed].mode = "womb"`, it receives nothing from the stimulus source and boot logs a warning.
+The `stage.birth` event records `world` (`perceptual` or `embodied`) and which conditions applied. After maturation, switch `[perception_feed].mode` to the feed the entity will live with, such as `playlist`. If a matured entity is booted again with `[perception_feed].mode = "womb"`, it receives nothing from the stimulus source and boot logs a warning.
 
 ### Supervised maturation
 
@@ -134,7 +134,7 @@ The [vocal module](../09-modules/vocal.md) is held dormant during the developmen
 
 When the bloom begins, the stage file records `womb_t_at_birth` (the stimulus source time at which the bloom ends), the stimulus source seed and a digest of the stimulus source parameters. A preservation carries the stage file, so a seed entity carries this record.
 
-A born entity booted with `[perception_feed].mode = "playlist"` opens each viewing with a crossfade from the developmental field to the films.
+A matured entity booted with `[perception_feed].mode = "playlist"` opens each viewing with a crossfade from the developmental field to the films.
 
 - Over `[perception_feed].transition_seconds` (20 s), the bloom-peak field at `womb_t_at_birth` (bright, pulse-free, full colour) fades into the programme's first frame, held still, along a fixed smoothstep curve.
 - Nothing is heard during the crossfade, because the bloom ended in silence. When the programme starts, its sound fades in linearly over `transition_audio_fade_seconds` (3 s). A value of 0 plays it at full level at once.
@@ -142,7 +142,7 @@ A born entity booted with `[perception_feed].mode = "playlist"` opens each viewi
 - The programme clock is held under the pause holder `transition` until the crossfade ends, so film minute 0 is the end of the transition and the film positions in the study's log need no correction. A timer ends the crossfade even when no surface is reading.
 - The field is the stimulus source generator's own function of the recorded seed, stimulus source time, awake time and parameters, rendered once at boot, so two viewings from one seed see the same crossfade. Frames and samples stay in memory and are never written to disk.
 
-The transition runs only when the mode is `playlist`, `transition_seconds` is above zero, the stage is embodied, and the configured `[perception_feed.womb]` parameters still match the recorded digest. Otherwise the programme starts at once. Boot logs the reason at info level for an unstaged, unborn or disabled case, and as a warning for a born entity without a maturation record or with changed stimulus source parameters. The run manifest records `transition_seconds`, `transition_audio_fade_seconds` and `transition_planned` under `perception_feed`. The outcome is published on `perception.out` as content-free `perception.transition` events whose `phase` is `started`, `completed` or `abandoned` (an abandoned one carries a `reason` such as `first_frame_undecodable`), each with `transition_seconds`. The research event log records them.
+The transition runs only when the mode is `playlist`, `transition_seconds` is above zero, the stage is embodied, and the configured `[perception_feed.womb]` parameters still match the recorded digest. Otherwise the programme starts at once. Boot logs the reason at info level for an unstaged, not yet matured or disabled case, and as a warning for a matured entity without a maturation record or with changed stimulus source parameters. The run manifest records `transition_seconds`, `transition_audio_fade_seconds` and `transition_planned` under `perception_feed`. The outcome is published on `perception.out` as content-free `perception.transition` events whose `phase` is `started`, `completed` or `abandoned` (an abandoned one carries a `reason` such as `first_frame_undecodable`), each with `transition_seconds`. The research event log records them.
 
 ## Settings
 
@@ -162,4 +162,4 @@ For full defaults, see [Perception feed and sleep](../appendix-a-configuration/p
 
 A Paracosmic body is planned to provide the developmental stimulus externally. Swapping providers changes configuration and leaves the gate unchanged. An external provider streams the stimulus through the perception seam and publishes `gestation.womb` with source `gestation` and payload `{provider, frame_index}` at least once a second, only while it is actually delivering, with an advancing `frame_index`.
 
-The readiness readout runs only with the local stimulus source, so until an external provider also supplies the maternal drive and the readout, an entity gestating in it cannot pass the gate's regulation condition and is not born.
+The readiness readout runs only with the local stimulus source, so until an external provider also supplies the maternal drive and the readout, an entity in its developmental phase in it cannot pass the gate's regulation condition and does not mature.

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for oscillator continuity across Spot module restarts."""
+"""Tests for oscillator continuity across supervisor restarts."""
 
 from typing import Any
 

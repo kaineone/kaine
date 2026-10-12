@@ -19,12 +19,12 @@ shipped defaults (this script NEVER changes them — it only recommends).
 THIS IS NOT AN ENTITY BOOT. It is a dry performance probe. Explicitly:
 
   * The cognitive cycle is driven in DETERMINISTIC mode for N ticks.
-  * NO language organ / NO real LLM: lingua + vox are force-disabled in the
+  * NO language organ / NO real LLM: the language and vocal modules are force-disabled in the
     config copy this script builds, so no organ module is constructed and no
     chat client is created. (The organ never participates in tick() anyway —
     it reacts to bus events in its own loop — but disabling it removes any
     chance of an outward utterance.)
-  * NO Volition side-effects: the cycle is built with ``volition=None``, so the
+  * NO action selection module side-effects: the cycle is built with ``volition=None``, so the
     tick can never select or publish an effector intent. Nothing is spoken,
     nothing acts outward. We measure cognitive PLUMBING cost only.
   * The vision encode is timed directly on a seeded synthetic frame — never a

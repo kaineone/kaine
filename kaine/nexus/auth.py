@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Operator authentication dependency for Nexus.
+"""Operator authentication dependency for the dashboard.
 
 A single bearer-token scheme protects every state-changing endpoint and every
 privileged read surface. The token is configured in ``NexusConfig.operator_token``

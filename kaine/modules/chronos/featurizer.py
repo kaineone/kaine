@@ -27,7 +27,7 @@ The dimensions break down as:
     [21]     : 1.0 if inhibited else 0.0
     [22]     : 1.0 if is_experiential else 0.0
     [23]     : Audition salience bin in layout 2; reserved / permanently
-               zero in layout 1. Trained beings keep layout 1 through the
+               zero in layout 1. Trained entities keep layout 1 through the
                versioned restore, so a trained network never sees the
                meaning of this slot change.
 

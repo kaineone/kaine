@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nexus router for the live-perception surface.
+"""The dashboard router for the live-perception surface.
 
 Two routes under /diagnostics/perception:
 

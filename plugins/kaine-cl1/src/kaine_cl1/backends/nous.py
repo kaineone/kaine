@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-"""Nous on wetware as a hybrid. The silicon engine keeps beliefs and expected free energy;
+"""The planning module on wetware as a hybrid. The silicon engine keeps beliefs and expected free energy;
 the substrate proposes a policy from per-action channel groups, with DishBrain-style
-agreement feedback on two feedback channels. Shadow mode (default) never changes what Nous
+agreement feedback on two feedback channels. Shadow mode (default) never changes what the planning module
 does; drive mode acts on the proposal. On Cortical Labs' simulator this proves wiring only,
 since the simulator does not learn. See openspec/changes/nous-on-wetware/.
 """

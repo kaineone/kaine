@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Encryption-aware read/write for Phantasia world-model checkpoints.
+"""Encryption-aware read/write for the world-model checkpoints.
 
 Used by the opt-in weight-persistence path (``[phantasia].persist_weights``;
 see ``module.py``): the shipped (``fake``) world model never checkpoints —
@@ -9,7 +9,7 @@ only the real DreamerV3 backend's exported param tree lands under
 ``state/phantasia/``, routed through the same
 :class:`~kaine.security.crypto.StateEncryptor` as every other at-rest state
 file: AES-256-GCM when ``[security.state_encryption].enabled`` is true, plain
-bytes otherwise. Phantasia's zero-persistence guarantee for *experience data*
+bytes otherwise. The world model module's zero-persistence guarantee for *experience data*
 (the trajectory buffer, anything raw-sense-derived) is unaffected — a
 checkpoint holds learned weights only.
 

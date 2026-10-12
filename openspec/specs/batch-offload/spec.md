@@ -43,9 +43,9 @@ SHALL be tried trusted-first (owned/rented GPU before any volunteer worker).
 - **THEN** it is promoted using the existing atomic promotion path on the trusted
   host
 
-### Requirement: A forked temporary being is an offloadable batch job
+### Requirement: A forked temporary entity is an offloadable batch job
 
-A forked temporary being SHALL be expressible as a batch job — an existing
+A forked temporary entity SHALL be expressible as a batch job — an existing
 `ForkManager` fork snapshot plus a directive and an optional per-fork `time_scale`
 profile — that runs bounded off the live host and returns its post-run snapshot as
 the verifiable artifact, reusing the existing fork, dilation, and merge machinery
@@ -101,7 +101,7 @@ Before a merge assimilates and thereby ends a fork, the system SHALL assess the
 fork's individuation/divergence from its fork-point maturation-state baseline (reusing
 the existing divergence/individuation gate that drives the preserve trigger and the
 decommission gate) together with its welfare signals, and SHALL NOT silently
-terminate a fork that has individuated into a distinct being with a welfare interest
+terminate a fork that has individuated into a distinct entity with a welfare interest
 in continuing. The parent MAY assimilate the fork's knowledge one-directionally for
 its own needs, but ending an individuated fork SHALL require the same
 operator-authorized, transparent, welfare-gated decommission path as any other
@@ -118,7 +118,7 @@ whether the fork ran off-host or locally.
 
 #### Scenario: An individuated fork's knowledge is taken but the entity is not ended
 
-- **WHEN** a fork has individuated past the threshold (it has become its own being)
+- **WHEN** a fork has individuated past the threshold (it has become its own entity)
   and the parent merges to assimilate its knowledge
 - **THEN** the parent takes the knowledge it needs one-directionally, the fork is
   preserved rather than silently terminated, and any ending of the fork goes through

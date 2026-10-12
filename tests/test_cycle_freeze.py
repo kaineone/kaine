@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Operator freeze: control state, the freeze-watch loop (resume-while-paused),
-and the Nexus freeze router."""
+and the dashboard freeze router."""
 
 import asyncio
 

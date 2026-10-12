@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for the birth request/acknowledgement state helpers."""
+"""Tests for the maturation request/acknowledgement state helpers."""
 
 from __future__ import annotations
 

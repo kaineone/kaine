@@ -114,7 +114,7 @@ graph TD
 | 15 | **Perception** | Embodiment | Held | `kaine/modules/perception/` | Physical-XOR-virtual perceptual-locus arbiter; policy-gated entity self-switch |
 | 16 | **Embodiment** | Embodiment | Held | `kaine/modules/mundus/` | Body-agnostic embodiment control surface that routes perception and action to a body through a pluggable adapter. Nothing drives its per-tick loop yet, only the `stub` adapter ships, and activation is double-gated (config and an operator environment variable) |
 
-A seventeenth module, **Echo** (`kaine/modules/echo.py`), is test infrastructure. It must stay disabled in production.
+A seventeenth module, **Recorder** (`kaine/modules/echo.py`), is test infrastructure. It must stay disabled in production.
 
 Per-module implementation, configuration and safety details are in [Chapter 9, The modules](../09-modules/README.md).
 

@@ -1,6 +1,6 @@
 # Interoception
 
-The interoception module is KAINE's interoception. The compute host stands in for the body: the interoception module reads its CPU, memory, GPU, and cycle-latency metrics, predicts the next reading from a frozen reservoir and the broadcast context, and reports the prediction error to the workspace. It also reports wellness, accumulates fatigue (the sleep pressure that triggers the sleep module), and issues regulation advisories. This page covers the forward model, the intensity and alert rule, the events, sleep, persistence, configuration, and the self-rhythm. Read it if you are deciding whether to enable the interoception module or debugging its predictions.
+The interoception module is KAINE's sense of its own body. The compute host stands in for the body: the interoception module reads its CPU, memory, GPU, and cycle-latency metrics, predicts the next reading from a frozen reservoir and the broadcast context, and reports the prediction error to the workspace module. It also reports wellness, accumulates fatigue (the sleep pressure that triggers the sleep module), and issues regulation advisories. This page covers the forward model, the intensity and alert rule, the events, sleep, persistence, configuration, and the self-rhythm. Read it if you are deciding whether to enable the interoception module or debugging its predictions.
 
 ## Status
 

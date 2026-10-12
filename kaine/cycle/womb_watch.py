@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Womb-loss watcher and pre-spawn hold for gestating entities.
+"""Stimulus-source-loss watcher and pre-spawn hold for entities in their developmental phase.
 
-A gestating entity depends on a womb stimulus.  Before spawn,
-:func:`hold_until_womb_ready` blocks module initialisation until the womb
+An entity in its developmental phase depends on a developmental stimulus.  Before spawn,
+:func:`hold_until_womb_ready` blocks module initialisation until the stimulus source
 is ready or shutdown is requested.  While running, :class:`WombLossWatcher`
-monitors womb liveness and freezes the cycle (under the ``gestation``
+monitors stimulus source liveness and freezes the cycle (under the ``gestation``
 freeze source) when the stimulus is lost for too long.  Because perception
-is left on during a gestation-only freeze, a local womb can prove its return
+is left on during a developmental-phase-only freeze, a local stimulus source can prove its return
 through real sensory deliveries.
 
 Before it judges loss, :class:`WombLossWatcher` arms itself on the first
-live observation of the womb, so a slow-starting womb is not condemned
-while it is still coming online.  If the womb never becomes live within
+live observation of the stimulus source, so a slow-starting stimulus source is not condemned
+while it is still coming online.  If the stimulus source never becomes live within
 ``arm_timeout_seconds`` the watcher treats it as lost immediately.
 """
 

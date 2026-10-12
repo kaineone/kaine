@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Rest scheduler for Hypnos.
+"""Rest scheduler for the sleep module.
 
 Per `docs/kaine-paper.md` §3.5, rest is "non-interruptible, and the
 system can defer rest during active interaction but must rest within a

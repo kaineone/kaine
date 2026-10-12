@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for womb perception-feed boot wiring."""
+"""Tests for stimulus source perception-feed boot wiring."""
 from __future__ import annotations
 
 import numpy as np

@@ -3,8 +3,8 @@
 
 """Individuation evidence store.
 
-Holds the birth-reference document, the look ledger, the encrypted report
-log and the conditioning digest used to decide whether the being is
+Holds the maturation-reference document, the look ledger, the encrypted report
+log and the conditioning digest used to decide whether the entity is
 individuated.
 
 The producer is the only writer of the ledger and reference in a running

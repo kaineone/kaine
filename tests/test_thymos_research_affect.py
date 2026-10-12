@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Research-affect tests for Thymos.
+"""Research-affect tests for the affect module.
 
 Validates the drive/relief dynamics and the valence/appraisal rules described
 in the 2026-10-08 OpenSpec proposal.

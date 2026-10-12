@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The womb-to-world transition (womb-to-world-transition).
+"""The stimulus-source-to-world transition (womb-to-world-transition).
 
-Covers the pure crossfade functions, the bloom-peak womb field, the shared
+Covers the pure crossfade functions, the bloom-peak stimulus source field, the shared
 controller's single release of the ``transition`` holder, the video and audio
 surfaces, the boot conditions (and their logged reasons), the run-manifest
 covariate, and zero persistence. No real camera, microphone or media decoder:

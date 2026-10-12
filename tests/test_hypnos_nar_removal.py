@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Hypnos fires no belief-revision burst and takes no Nous collaborator.
+"""The sleep module fires no belief-revision burst and takes no planning module collaborator.
 
-NARS is retired; Nous is pymdp now. Replayed traces reach Nous via the NORMAL
-cognitive-cycle path (re-injection -> syneidesis broadcast -> Nous pymdp
-update), so Hypnos has no Nous argument and no step-burst setting.
+NARS is retired; the planning module is pymdp now. Replayed traces reach the planning module via the NORMAL
+cognitive-cycle path (re-injection -> workspace broadcast -> planning module pymdp
+update), so the sleep module has no planning module argument and no step-burst setting.
 """
 from __future__ import annotations
 

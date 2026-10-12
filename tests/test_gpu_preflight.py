@@ -6,7 +6,7 @@
 The gate must: pass with ample VRAM, report (never evict — the single-resident
 OpenAI model backend has no unload API) the backend's resident models, fail
 closed when still short, honor the operator override, write a status snapshot
-for Nexus, and NEVER terminate any process.
+for dashboard, and NEVER terminate any process.
 """
 from __future__ import annotations
 

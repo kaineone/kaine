@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
-"""Chronos wetware backend against the simulator.
+"""The sequence wetware backend against the simulator.
 
 The acceptance criterion from `chronos-on-wetware`: on a temporally *structured*
 stimulus the prediction error is lower than on a *scrambled* one, i.e. the

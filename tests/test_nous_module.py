@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nous module tests.
+"""planning module tests.
 
 Module-level tests drive a :class:`FakeEngine` (no pymdp, no JAX), so the green
 build never requires the reasoning extra or a NAR binary. An opt-in

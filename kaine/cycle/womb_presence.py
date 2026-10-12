@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Running local womb presence publisher.
+"""Running local stimulus source presence publisher.
 
-A running local womb announces itself from real deliveries, with the same
+A running local stimulus source announces itself from real deliveries, with the same
 contract an external provider uses, so the maturation gate checks one
 interface for both. Publishes no content, only the provider name and a
 frame index.

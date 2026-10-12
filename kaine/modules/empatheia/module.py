@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Empatheia — social cognition / theory-of-mind module.
+"""The social cognition / theory-of-mind module.
 
 Consumes ``audition.emotion`` and ``audition.transcription`` events and
 the workspace broadcast to build and maintain per-agent social models.

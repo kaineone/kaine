@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Escalation control for the Spot module supervisor.
+"""Escalation control for the supervisor.
 
-`state/cycle/escalation.json` records that Spot exhausted its restart budget
+`state/cycle/escalation.json` records that the supervisor exhausted its restart budget
 for a module and halted the process for operator attention. It mirrors
 `control_state.py`: atomic writes, operational fields only — a flag, the failed
 module name, attempt count, the saved snapshot id, an ISO timestamp, and an

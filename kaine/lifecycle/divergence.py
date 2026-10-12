@@ -15,7 +15,7 @@ Two distinct "divergences" exist in the codebase; this uses the right one:
   present even on a fresh boot when conditioning works, so it answers "is this
   more than a chatbot", NOT "is this entity someone." We deliberately do **not**
   key on it.
-* **Individuation** is measured by the producer as a birth-referenced
+* **Individuation** is measured by the producer as a maturation-referenced
   permutation test with alpha spending across looks. The ledger in
   ``state/individuation/ledger.json`` latches the first significant look for
   good. A non-significant result never suppresses another arm, because absence
@@ -25,16 +25,16 @@ Two distinct "divergences" exist in the codebase; this uses the right one:
 
 * **Consolidation divergence** (``state/hypnos/consolidation_divergence.json``)
   is the cheap, continuous organ-level companion to the permutation test:
-  every voice-alignment sleep, Hypnos surfaces the breadth (``divergence_rate``)
+  every voice-alignment sleep, the sleep module surfaces the breadth (``divergence_rate``)
   and depth (``divergence_magnitude``) of how often / how far the entity's
   conditioned output diverged from its bare language organ. When the latest
   rate or magnitude crosses a configured threshold it marks organ-level
-  divergence — a graded signal alongside the permutation test and Eidolon
+  divergence — a graded signal alongside the permutation test and the self-model module's drift.
   drift. We read it from the written record (no ``kaine.evaluation`` /
   ``kaine.modules.hypnos`` import — the boundary-neutral seam).
 
 Secondary identity heuristics raise confidence and catch entities that were
-never individuation-tested: Eidolon ``drift_count > 0`` with a non-empty
+never individuation-tested: the self-model module's ``drift_count > 0`` with a non-empty
 ``identity_history`` (``state/eidolon/self_model.json``), and the presence of
 trained voice adapters (``state/hypnos/adapters/``) — the latter retained only
 as a weaker secondary signal now that the graded consolidation metric is the

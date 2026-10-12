@@ -11,7 +11,7 @@ self-model are ethically significant and a poisoned artifact would feed straight
 into the entity's voice and identity, so:
 
 * The gate re-runs, on the trusted host, the SAME checks the in-house path uses
-  — at minimum the Hypnos capability-loss veto plus an independent evaluation.
+  — at minimum the sleep module's capability-loss veto plus an independent evaluation.
 * Volunteer redundancy / quorum does NOT substitute for it: quorum cannot verify
   a non-deterministic training step and is Sybil-vulnerable. Trusted
   re-verification, not volunteer voting, is the gate for non-deterministic kinds.
@@ -20,7 +20,7 @@ into the entity's voice and identity, so:
 
 The concrete verifiers are injected (a :class:`CapabilityVerifier` and an
 :class:`IndependentEvaluator`) so this module stays free of the heavy training
-stack and testable with fakes. Forked-being snapshots are gated by the welfare /
+stack and testable with fakes. Forked-entity snapshots are gated by the welfare /
 individuation / admissibility path in :mod:`kaine.lifecycle.fork_merge_gate`,
 threaded in via ``fork_gate``.
 """

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Pre-build EFE latency benchmark for Nous (pymdp 1.0, JAX).
+"""Pre-build EFE latency benchmark for the planning module (pymdp 1.0, JAX).
 
 Runs the configured complexity envelope through belief updating + EFE policy
 selection 100 times on the target CPU and asserts the **median ≤ 200 ms**. Exits

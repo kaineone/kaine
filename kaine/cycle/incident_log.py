@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Durable, append-only incident log for the Spot module supervisor.
+"""Durable, append-only incident log for the supervisor.
 
-Spot already executes a well-defined fault-recovery lifecycle (detect a crash or
+The supervisor already executes a well-defined fault-recovery lifecycle (detect a crash or
 hang -> freeze the cycle -> snapshot last-good state -> run the restart ladder ->
 escalate). Every step has observable side effects, but none of them survive a
 clean boot: the crash exception read in ``Spot.assess`` was historically

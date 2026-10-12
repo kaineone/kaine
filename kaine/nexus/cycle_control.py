@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nexus router for the operator freeze control.
+"""The dashboard router for the operator freeze control.
 
 Three routes under /diagnostics/cycle:
 

@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""In-process coordination between vox and audition.
+"""In-process coordination between the vocal module and the audition module.
 
 When the entity speaks aloud through the speakers, an open microphone can
 capture that playback and transcribe it back as if a user had spoken —
 a self-hearing feedback loop. `SpeakingGate` is a tiny shared timestamp:
-vox marks a "speaking" window while a clip plays (when self-hearing
+The vocal module marks a "speaking" window while a clip plays (when self-hearing
 suppression is enabled), and audition drops any utterance that begins
 inside that window.
 
@@ -15,7 +15,7 @@ instance is created in `build_registry` and injected into both modules, so
 this is plain dependency injection, not a process global.
 
 Suppression is needed only when the mic can acoustically hear the speakers.
-With an isolated input (e.g. a headset mic) vox simply never marks the
+With an isolated input (e.g. a headset mic) the vocal module simply never marks the
 gate (`suppress_self_hearing = false`), leaving the entity full-duplex.
 """
 from __future__ import annotations

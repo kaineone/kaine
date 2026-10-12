@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Topos subsystem: vision encoder contract. Heavy transformers load is
+"""Vision subsystem: vision encoder contract. Heavy transformers load is
 deferred to `initialize`; this test only verifies construction + the
 change-detection pure-function pipeline."""
 from __future__ import annotations

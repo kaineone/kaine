@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for Thymos emergent affect coupling (thymos-emergent-affect-coupling).
+"""Tests for Affect emergent affect coupling (thymos-emergent-affect-coupling).
 
 A perceived speaker emotion (audition.emotion) is an INPUT to the entity's own
 Scherer appraisal, weighted by familiarity and decayed by recency — never a
@@ -13,7 +13,7 @@ Covers:
   (and, downstream, valence) — only when enabled.
 - Higher familiarity → strictly larger appraisal contribution.
 - Disabled coupling → appraisal scores identical to no-signal AND no state change.
-- No-Empatheia → base weight used.
+- No social cognition module → base weight used.
 - No code path writes the dimensional state toward EMOTION_VAD directly.
 """
 from __future__ import annotations

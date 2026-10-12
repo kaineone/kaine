@@ -3,7 +3,7 @@
 
 """Seeded, deterministic stimulus for the workspace-mediation development harness.
 
-The stimulus drives Soma with scripted metrics and Topos with scripted frame
+The stimulus drives the interoception module with scripted metrics and the vision module with scripted frame
 vectors. It also emits background candidate events each tick so the candidate
 count exceeds the workspace capacity and selection must exclude.
 """

@@ -1,6 +1,6 @@
 # Self-model
 
-The self-model module is KAINE's self-model. It keeps a persisted model of the entity (a name, values, behavioural norms, a personality baseline, a capability map, and an identity history) and watches for drift in which modules supply the broadcast coalitions. The design is inspired by Metzinger's self-model theory (Metzinger 2003) and draws on the self-referential processing of cortical midline structures (Northoff and Bermpohl 2004); the drift detector uses a symmetric Kullback-Leibler divergence (Kullback and Leibler 1951). Read this page if you are enabling the module, tuning its drift alerts, or connecting it to the language organ's persona.
+The self-model module holds KAINE's self-model. It keeps a persisted model of the entity (a name, values, behavioural norms, a personality baseline, a capability map, and an identity history) and watches for drift in which modules supply the broadcast coalitions. The design is inspired by Metzinger's self-model theory (Metzinger 2003) and draws on the self-referential processing of cortical midline structures (Northoff and Bermpohl 2004); the drift detector uses a symmetric Kullback-Leibler divergence (Kullback and Leibler 1951). Read this page if you are enabling the module, tuning its drift alerts, or connecting it to the language module's persona.
 
 ## Status
 

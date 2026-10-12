@@ -10,10 +10,10 @@ The load-bearing property of biological-timing-and-dilation Phase 2: one shared
 timers (watchdog polls, request timeouts, persistence cadences) stay on real
 wall time regardless. These tests prove BOTH halves with the same scale knob:
 
-  * a COGNITIVE timer scales — Soma's fatigue dt-integral accrues 2x at
-    scale 2.0 and 0.5x at scale 0.5 for the SAME real elapsed time; the Topos
+  * a COGNITIVE timer scales — the interoception module's fatigue dt-integral accrues 2x at
+    scale 2.0 and 0.5x at scale 0.5 for the SAME real elapsed time; the vision
     capture cadence's real sleep halves at scale 2.0 / doubles at scale 0.5;
-  * an INFRASTRUCTURE timer does NOT scale — a Spot liveness poll and a network
+  * an INFRASTRUCTURE timer does NOT scale — a supervisor liveness poll and a network
     request timeout are unchanged across scales;
   * ``build_registry`` injects ONE shared clock instance into every cognitive
     module AND exposes it on the registry so the cycle uses the same instance;

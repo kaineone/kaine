@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for the Soma _in_hypnos flag and weight-freeze behaviour.
+"""Tests for the interoception module's _in_hypnos flag and weight-freeze behaviour.
 
 Spec requirements (spec.md):
 - _in_hypnos is False at start.

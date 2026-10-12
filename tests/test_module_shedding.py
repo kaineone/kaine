@@ -5,7 +5,7 @@
 subsets of the twelve canonical modules.
 
 Runs against fakeredis. The point is to prove the cycle/registry/
-Syneidesis composition tolerates absent modules — the real per-module
+workspace composition tolerates absent modules — the real per-module
 behavior is covered by each module's own test file.
 """
 from __future__ import annotations

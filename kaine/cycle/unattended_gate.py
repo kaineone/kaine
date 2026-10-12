@@ -5,7 +5,7 @@
 
 The unattended supervision mode is *not* a research run: it reuses the
 research safety net's evaluator for conditions 1 to 5 and 9 (every check the net
-makes), then adds three more gates (Spot, caretaker notice, continuous input)
+makes), then adds three more gates (the supervisor, caretaker notice, continuous input)
 before the entity may start without a person present.
 
 This module is pure over its inputs except for the research-net round-trip,

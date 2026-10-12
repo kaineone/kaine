@@ -4,7 +4,7 @@
 """CLI: ``python -m kaine.evaluation.redteam``.
 
 Runs the offline red-team of KAINE's architectural enforcement layer — the
-Praxis action gate (operator whitelist + sandbox), executive inhibition, and the
+effectors module's action gate (operator whitelist + sandbox), executive inhibition, and the
 complete audit log — against the adversarial case battery, writes a seeded
 reproducible JSONL report, and prints a summary verdict table.
 

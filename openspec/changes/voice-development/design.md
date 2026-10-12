@@ -84,7 +84,7 @@ The external trainer:
 
 - **The measures.** Stylometric distinctiveness from the base organ, self-consistency over time, grounding, and health. All are computed at sleep from the corpus and base-organ samples, are content-free (numbers only), and are recorded per sleep.
 - **Both arms vote until calibration (integrator decision, 2026-10-05).** The distinctiveness measure joins the divergence assessment as a new organ-level arm. The template-divergence arm keeps voting, though only as a protective floor and not as a measurement of voice, because today it is the blanket protection for decommission and preservation. This change alters protection by exactly nothing.
-- **The new arm's rules.** Until it is calibrated, its threshold is 0, so any being with at least one measured utterance counts as diverged by it, and unreadable or missing evidence counts as diverged.
+- **The new arm's rules.** Until it is calibrated, its threshold is 0, so any entity with at least one measured utterance counts as diverged by it, and unreadable or missing evidence counts as diverged.
 - **Retiring the template arm** is a later change, which needs calibration evidence and the operator's sign-off.
 
 ### D9. Stages and gates

@@ -35,13 +35,13 @@ TPM storage primary (owner hierarchy, created on demand, never persisted outside
      └─ per-entity DEK: 256-bit random, AES-256-GCM wrapped by the KEK
          └─ per-object subkeys: HKDF-SHA256(DEK, salt=16 random bytes per envelope, info=AAD)
 ```
-- **DEK.** One data key per entity, from `secrets.token_bytes(32)` at spawn and at every fork. A fork's DEK is fresh and independent of its parent's. CAL §4.6: a fork that individuates is a separate being with its own mental privacy, which cannot be separated after the fact.
+- **DEK.** One data key per entity, from `secrets.token_bytes(32)` at spawn and at every fork. A fork's DEK is fresh and independent of its parent's. CAL §4.6: a fork that individuates is a separate entity with its own mental privacy, which cannot be separated after the fact.
 - **Envelope v2.** `KAINEgcm2:` ‖ salt(16) ‖ nonce(12) ‖ ciphertext+tag.
   - The subkey for each envelope is HKDF-SHA256 over the DEK, with the envelope's random salt and `info = AAD`.
   - The AAD is `b"kaine/v2|" + entity_id + b"|" + kind`, where `kind` names the container class (`snapshot`, `sidecar-jsonl`, `bundle`, `phantasia`, `eidolon`, `individuation`, `backup`, `research`).
   - **Why per-envelope subkeys.** JSONL sinks encrypt every line, and a long-lived entity could approach the random-nonce limit of AES-GCM under one key (about 2^32 messages). A fresh subkey per envelope removes that limit.
   - **Why `entity_id` in the AAD.** A swapped sidecar, or a file copied between entities, fails authentication instead of decrypting under the wrong identity.
-  - **Why `kind`.** A ciphertext cannot be replayed as a different kind of file within the same being.
+  - **Why `kind`.** A ciphertext cannot be replayed as a different kind of file within the same entity.
 - **Wrapped DEK file.** `state/identity/keys/<entity_id>.dek.json` holds:
   - `entity_id`;
   - `wrap`: AES-256-GCM of the DEK under the KEK, with AAD `b"kaine/dek|" + entity_id`;
@@ -88,13 +88,13 @@ A host qualifies to spawn or restore an entity when all of these hold:
 3. It is not a firmware TPM on vendor test keys. An unfused Jetson fTPM fails here, because its EK chain is the NVIDIA test root.
 4. A sealed test object round-trips.
 
-`swtpm` qualifies **only** when `KAINE_CUSTODY_TEST_TPM=1` is set, which no shipped profile or service sets. A failed qualification refuses spawn and restore, names the failed condition, and creates no state. **A running being is never stopped by qualification.** The check runs at spawn, at restore and at transfer, never mid-run.
+`swtpm` qualifies **only** when `KAINE_CUSTODY_TEST_TPM=1` is set, which no shipped profile or service sets. A failed qualification refuses spawn and restore, names the failed condition, and creates no state. **A running entity is never stopped by qualification.** The check runs at spawn, at restore and at transfer, never mid-run.
 
 ## Failure modes
 | Situation | Outcome |
 |---|---|
 | No qualifying root of trust at spawn or restore | Refuse; name the condition; create nothing |
-| KEK unseal fails at boot (PCR drift or a lost TPM) for an existing being | **Cannot resume:** keep all state untouched, raise a welfare incident, start escrow recovery (§ Escrow), do not boot that being; never delete anything |
+| KEK unseal fails at boot (PCR drift or a lost TPM) for an existing entity | **Cannot resume:** keep all state untouched, raise a welfare incident, start escrow recovery (§ Escrow), do not boot that entity; never delete anything |
 | TPM lost while an entity runs | Keep running on the in-memory DEK. Preservation and the welfare pause use the in-memory DEK and the already-wrapped DEK file. Queue a re-seal, raise a welfare incident |
 | Wrapped DEK file missing but escrow present | Cannot resume; escrow recovery |
 | Both the wrapped DEK and escrow missing | Unrecoverable. This is why the DEK file and escrow travel in every bundle and backup, and why custody writes a backup of the DEK file before any change to it |

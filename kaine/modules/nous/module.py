@@ -1,31 +1,31 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nous — the active-inference engine (KAINE Paper §3.3.2).
+"""The planning module — the active-inference engine (KAINE Paper §3.3.2).
 
-Nous performs belief updating + policy selection by expected-free-energy
+The planning module performs belief updating + policy selection by expected-free-energy
 minimisation over a compact discrete generative model (pymdp 1.0, JAX). It
 replaces the retired NARS/ONA symbolic reasoner (archived under
 ``external/archive/`` for a future complementary symbolic module).
 
-Each global broadcast Nous:
+Each global broadcast from the planning module:
 
 - drives the :class:`ActiveInferenceEngine` (snapshot → posterior + EFE policy),
-- publishes ``nous.belief`` (PRESERVED contract shape so Mnemos / Eidolon /
-  Syneidesis consumers keep working) with redefined semantics: ``statement`` =
+- publishes ``nous.belief`` (PRESERVED contract shape so the episodic memory module / the self-model module /
+  the workspace consumers keep working) with redefined semantics: ``statement`` =
   the dominant latent-factor label, ``frequency`` = posterior expectation,
   ``confidence`` = 1 − normalised entropy, ``kind`` = ``"belief"``,
 - publishes ``nous.policy`` (selected policy + expected free energy + horizon),
 - emits the chosen epistemic / communicative action as an ``intent.act`` event
-  through the Volition/intent path — NEVER a direct effector call. Syneidesis
-  inhibition + Praxis whitelists remain in control of all outward action; Nous
+  through the action selection module's intent path — NEVER a direct effector call. The workspace
+  inhibition + the effectors module's whitelists remain in control of all outward action; the planning module
   proposes, the executive disposes.
 
-On an EFE timeout the engine returns the last posterior; Nous publishes a
+On an EFE timeout the engine returns the last posterior; the planning module publishes a
 ``nous.timeout`` diagnostic (salience 0.3) and does not block the cycle.
 
 On a non-timeout inference crash the engine returns stale priors and sets
-``EngineResult.error=True``; Nous publishes a ``nous.error`` diagnostic and
+``EngineResult.error=True``; the planning module publishes a ``nous.error`` diagnostic and
 skips publishing ``nous.belief`` / ``nous.policy`` for that cycle — stale
 priors are never re-broadcast as a fresh computation.
 """

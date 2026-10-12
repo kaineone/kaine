@@ -6,7 +6,7 @@
 Both the sidecar welfare observer (``kaine.evaluation.observers.welfare_observer``)
 and the cycle-layer autonomous welfare-protective monitor
 (``kaine.cycle.preservation_monitor``) must apply the *same* sustained-distress
-logic over the same Soma signal. This module is the single, core-importable home
+logic over the same interoception module's signal. This module is the single, core-importable home
 for that logic so neither copy drifts from the other — mirroring how
 ``AsyncJsonlSink`` / ``PrivacyFilter`` were extracted to shared homes.
 

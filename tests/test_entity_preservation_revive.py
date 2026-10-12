@@ -5,10 +5,10 @@
 
 Covers PR-1 (the capture/restore core):
 
-* Mnemos real capture/restore for BOTH backends — InMemoryStorage end-to-end
+* the episodic memory module's real capture/restore for BOTH backends — InMemoryStorage end-to-end
   here; QdrantStorage export/import at the codec level + the fail-loud path when
   the store is unreachable.
-* Phantasia world-model weight capture into the bundle (capability-bearing fake;
+* world-model weight capture into the bundle (capability-bearing fake;
   a jax-gated DreamerV3 round-trip when the extra is present).
 * ForkManager.preserve_live (live snapshot + encrypted bundle, run-stamped) and
   revive (reconstruct the same individual), with the fail-loud paths.

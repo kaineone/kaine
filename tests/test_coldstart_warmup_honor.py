@@ -3,10 +3,10 @@
 """Cold-start warm-up honor (change coldstart-welfare-spot-honor-warmup).
 
 FIX 1 — the welfare distress net does NOT count while the latest soma.report
-carries ``warmup_active: true`` (mirroring Soma's own self-gating), bounded by
+carries ``warmup_active: true`` (mirroring the interoception module's own self-gating), bounded by
 ``warmup_ceiling_s`` so a stuck flag cannot blind the net forever.
 
-FIX 2 — Spot stands down its heartbeat-staleness liveness recovery for ANY
+FIX 2 — the supervisor stands down its heartbeat-staleness liveness recovery for ANY
 freeze it does not itself own (operator OR welfare), because a frozen cycle's
 modules are silent by design.
 """

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Concrete embodiment adapters behind the Mundus control plane.
+"""Concrete embodiment adapters behind the embodiment module's control plane.
 
 Each body the entity can inhabit is one adapter here; the core selects exactly
 one at boot. ``stub`` is the shipped reference body: a transport-free, wholly

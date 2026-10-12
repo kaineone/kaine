@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for Hypnos fatigue-triggered entry and safety-net interval (tasks 7.1).
+"""Tests for sleep fatigue-triggered entry and safety-net interval (tasks 7.1).
 
 Covers:
 - soma.fatigue crossed=true triggers a maintenance cycle (fatigue trigger)

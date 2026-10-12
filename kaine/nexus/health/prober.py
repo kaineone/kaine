@@ -23,7 +23,7 @@ The prober only *reads* dependencies (Redis PING, HTTP GETs, a file stat /
 ``os.access`` check). It never starts, stops, or mutates a service.
 
 The actual per-dependency probes live in :mod:`.probes`; the per-block
-snapshot builders (spot, preservation, cycle pacing, ...) live in
+snapshot builders (supervisor, preservation, cycle pacing, ...) live in
 :mod:`.blocks`. This module is the caching/scheduling orchestrator that ties
 them to instance config and exposes the single :meth:`HealthProber.snapshot`
 entrypoint the diagnostics route calls.

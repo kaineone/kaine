@@ -4,12 +4,12 @@
 """Apply a fork's subjective-time profile at spawn (Phase 4 of biological timing).
 
 When a fork carrying a :class:`~kaine.lifecycle.timing_profile.ForkTimingProfile`
-is restored to run, the runtime applies that profile so the being runs at its own
+is restored to run, the runtime applies that profile so the entity runs at its own
 subjective speed. This seam owns the wiring between the *parsed* profile (a pure
 lifecycle data object) and the *runtime* it must touch — the shared
 ``EntityClock`` and the ``CognitiveCycle`` — which is why it lives in
 ``kaine.cycle`` (the runtime layer that may legally import the clock, the cycle,
-and the Topos perception knob) rather than in the boundary-neutral lifecycle
+and the vision module's perception knob) rather than in the boundary-neutral lifecycle
 profile module.
 
 It reuses **only existing seams** — it introduces no new throttle, freeze, or
@@ -24,7 +24,7 @@ rate mechanism:
 
 A ``time_scale > 1`` keeps the existing aspirational-target-then-throttle
 semantics: the cycle attempts the faster real rate and the Phase-3 pacing report
-+ Soma ``reduce_rate`` honestly surface/throttle an overrun. This seam adds no
++ the interoception module's ``reduce_rate`` honestly surface/throttle an overrun. This seam adds no
 second throttle.
 
 It is a deliberate **no-op for a profile-less fork** (``profile is None``), so a

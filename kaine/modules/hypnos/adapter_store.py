@@ -7,7 +7,7 @@ Training writes a LoRA adapter to `<adapter_output_dir>/<timestamp>.tmp/`.
 Once the capability-loss eval passes, `promote()` atomically renames
 the tmp dir to its final `<timestamp>/` and re-points
 `<adapter_output_dir>/current` to it. Both operations use
-`os.replace` so concurrent readers (Lingua in any future auto-reload
+`os.replace` so concurrent readers (the language module in any future auto-reload
 mode) never see a partial state.
 
 `prune()` enforces an operator-set retention cap, removing the oldest

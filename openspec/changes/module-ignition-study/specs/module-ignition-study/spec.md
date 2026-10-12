@@ -38,7 +38,7 @@ The analysis SHALL compute, for every completed viewing:
 - data-quality counts.
 
 It SHALL compare branch k against branch 0, branch 0 against the repeat, and accumulate k against branch k. Its report SHALL be content-free. It SHALL state the study's limits:
-- one being per condition, with a noise floor from a single repeat;
+- one entity per condition, with a noise floor from a single repeat;
 - a fixed module order;
 - familiarity mixed with history on the accumulate line;
 - expected nulls for faculties without an input channel.
@@ -53,12 +53,12 @@ It SHALL compare branch k against branch 0, branch 0 against the repeat, and acc
 
 ## ADDED Requirements
 
-### Requirement: The seed is the entity at the moment it is born
+### Requirement: The seed is the entity at the moment it matures
 The study SHALL gestate one entity in the local stimulus source with automatic maturation. It SHALL preserve that entity once the maturation transition has completed, and SHALL use that preservation as the start of every branch step and of the repeat. The seed SHALL record the stimulus source's time at maturation.
 
 #### Scenario: Maturation needs no operator
 - **WHEN** the seed's maturation gate passes
-- **THEN** the entity is born without waiting for an operator acknowledgement
+- **THEN** the entity matures without waiting for an operator acknowledgement
 - **AND** it is preserved after the maturation bloom completes
 
 #### Scenario: Branches share one seed

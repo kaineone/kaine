@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nous policy observer — logs nous.policy events to daily-rotated JSONL.
+"""The planning module policy observer — logs nous.policy events to daily-rotated JSONL.
 
 Subscribes to ``nous.out`` and records every ``nous.policy`` event:
 - ``expected_free_energy`` (EFE value)
@@ -10,7 +10,7 @@ Subscribes to ``nous.out`` and records every ``nous.policy`` event:
 
 These are numeric/string metadata only — no raw content.
 
-When Nous is absent or disabled the stream produces no events and the
+When the planning module is absent or disabled the stream produces no events and the
 observer runs silently.
 
 READ-ONLY: never publishes to the bus.

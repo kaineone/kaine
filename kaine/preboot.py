@@ -17,7 +17,7 @@ It checks, WITHOUT booting the entity (no cognitive cycle, no bus consumer
 loop — only read-only probes and throwaway round-trips):
 
   1. SERVICES   — Redis / Qdrant / the organ's OpenAI endpoint / Speaches /
-                  Chatterbox are reachable. Reuses the exact probes the Nexus
+                  Chatterbox are reachable. Reuses the exact probes the dashboard
                   health board uses (``kaine.nexus.health``).
   2. ORGAN      — the configured language organ actually GENERATES content
                   (not merely listed/served-but-mute). Reuses the boot-time

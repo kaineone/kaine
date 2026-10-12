@@ -3,7 +3,7 @@
 
 """Conditioning the language organ on the conscious workspace.
 
-Covers the ContextAssembler (persona + working memory + input) and the Lingua
+Covers the ContextAssembler (persona + working memory + input) and the language module
 wiring that feeds the rolling-latest coalition into each generation.
 """
 

@@ -6,7 +6,7 @@
 The factories map TOML keys to each module's constructor kwargs explicitly, and
 unknown TOML keys raise at boot rather than being silently dropped.
 `build_registry` walks the `[modules]` toggles and calls the right factory for
-each enabled module. Hypnos depends on the Mnemos, Nous and Thymos instances, so
+each enabled module. The sleep module depends on the episodic memory, planning and affect modules' instances, so
 it is constructed in a second pass after the others are in the registry.
 
 This package re-exports every name its submodules define, so callers keep
@@ -16,7 +16,7 @@ importing from ``kaine.boot``:
 * ``common``: the factory type and helpers every factory shares.
 * ``factories``: one ``make_<module>`` factory per module; factories never import
   each other.
-* ``perception_feed``: the stimulus feed and the womb-to-world transition.
+* ``perception_feed``: the stimulus feed and the stimulus-source-to-world transition.
 * ``security``: state-encryption install.
 * ``registry``: the factory tables and registry construction.
 * ``wiring``: oscillators, coherence and salience, and cross-module wiring.

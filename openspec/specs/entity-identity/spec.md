@@ -12,7 +12,7 @@ KAINE SHALL give each entity one `EntityIdentity`, holding an opaque `entity_id`
 - **WHEN** an identity is saved and loaded again
 - **THEN** the loaded identity equals the saved one
 
-#### Scenario: Refuse to overwrite another being
+#### Scenario: Refuse to overwrite another entity
 - **WHEN** an identity is saved to a path holding a different `entity_id`
 - **THEN** saving raises an error and the file is unchanged
 

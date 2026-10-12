@@ -7,7 +7,7 @@ A generic, dependency-light persistence primitive: writes go through an
 asyncio.Queue and a background flush task batches them out, so the caller is
 never blocked on disk I/O. Each line is AES-256-GCM-encrypted when state
 encryption is enabled. Used by the evaluation sidecar observers and by the
-cycle's Spot incident log; it depends only on stdlib, ``kaine.security.crypto``
+cycle's supervisor incident log; it depends only on stdlib, ``kaine.security.crypto``
 (a lazy import), and ``kaine.experiment.run_context`` (stdlib-only, for record
 stamping), so importing it never pulls in the evaluation subsystem.
 """

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Voice alignment tracker: captures Hypnos cycle stats per sleep."""
+"""Voice alignment tracker: captures the sleep module's cycle stats per sleep."""
 
 from __future__ import annotations
 

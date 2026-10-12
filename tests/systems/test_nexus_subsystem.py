@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nexus subsystem: routes return expected shapes with the privacy boundary."""
+"""The dashboard subsystem: routes return expected shapes with the privacy boundary."""
 from __future__ import annotations
 
 from datetime import datetime, timezone

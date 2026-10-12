@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nexus operator token helpers for setup."""
+"""Dashboard operator token helpers for setup."""
 from __future__ import annotations
 
 import os

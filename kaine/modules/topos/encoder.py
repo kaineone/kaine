@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Vision encoders for Topos.
+"""Vision encoders for the vision module.
 
 The ``Encoder`` protocol is the seam for swapping encoders without touching
-the Topos module. InternVideo-Next is the shipped default clip encoder.
+the vision module. InternVideo-Next is the shipped default clip encoder.
 ``DINOv2Encoder`` is the per-frame fallback; it loads `facebook/dinov2-small`
 lazily on first init, so the rest of the package imports without requiring
 `transformers`.

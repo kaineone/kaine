@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Load-bearing: a Phantasia training pass writes NO files to disk.
+"""Load-bearing: a world model training pass writes NO files to disk.
 
 Training is in-memory only. The trajectory buffer is never serialized. This test
 snapshots /tmp and the project directory before a training pass and asserts that

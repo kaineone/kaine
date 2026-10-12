@@ -1,7 +1,7 @@
 # affect Specification
 
 ## Purpose
-The affect module is KAINE's affect module. This capability covers its dimensional affect state and homeostatic drift, appraisal into categorical emotions, its four drives, the goal ledger and goal relevance, and the salience multiplier it gives the workspace.
+The affect module holds KAINE's affect. This capability covers its dimensional affect state and homeostatic drift, appraisal into categorical emotions, its four drives, the goal ledger and goal relevance, and the salience multiplier it gives the workspace.
 
 ## Requirements
 

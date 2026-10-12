@@ -5,13 +5,13 @@
 
 Regression guard for the "awake but senseless" boot: with
 ``[perception_feed].mode = "seeded"`` and the perception module enabled, the
-entity's vision (Topos) and hearing (Audition) published NOTHING because the
+entity's vision and hearing (the vision and audition modules) published NOTHING because the
 deterministic (virtual-world) feed was gated behind the PHYSICAL-locus reader
 (``effective_*_capture`` requires ``locus == "physical"``) while the shipped
 desired-state defaults to ``locus = "physical"`` with both modality flags off.
 
 This harness wires the SAME locus-gated capture supervisors the live boot uses
-(Topos -> LiveCamera, Audition -> LiveMicrophone, plus the passive
+(the vision module -> LiveCamera, the audition module -> LiveMicrophone, plus the passive
 PerceptionLocus arbiter) against an in-memory bus, selects the virtual feed the
 way boot now does (``perception_state.select_virtual_feed``), and asserts that
 within a bounded wait visual events land on ``topos.out`` and auditory events on

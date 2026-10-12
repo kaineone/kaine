@@ -71,10 +71,10 @@ Preservation and backup bundles SHALL encrypt all entity-interior content at res
 ## ADDED Requirements
 
 ### Requirement: The individuation reference, ledger and reports are part of the preserved individual
-A preservation bundle SHALL include the whole `state/individuation/` directory (reference, adapter copy, ledger and reports), with owner-only permissions. A preservation that cannot copy that directory when it exists SHALL fail loudly rather than write a bundle that looks complete. Revive SHALL restore the directory so the revived being keeps its reference, look index, alpha spent, lived counters and latch. A bundle without `state/individuation/` SHALL revive without error, and the producer SHALL then take a `capture` reference at the first boot, labelled "drift since capture".
+A preservation bundle SHALL include the whole `state/individuation/` directory (reference, adapter copy, ledger and reports), with owner-only permissions. A preservation that cannot copy that directory when it exists SHALL fail loudly rather than write a bundle that looks complete. Revive SHALL restore the directory so the revived entity keeps its reference, look index, alpha spent, lived counters and latch. A bundle without `state/individuation/` SHALL revive without error, and the producer SHALL then take a `capture` reference at the first boot, labelled "drift since capture".
 
 #### Scenario: A preserved entity keeps its latch
-- **WHEN** a latched being is preserved and revived into a fresh registry
+- **WHEN** a latched entity is preserved and revived into a fresh registry
 - **THEN** the revived entity's ledger is latched with the same look index and reference id
 
 #### Scenario: An older bundle gets a capture reference

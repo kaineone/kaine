@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for the Thymos goal-significance drive-relevance change.
+"""Tests for the affect goal-significance drive-relevance change.
 
 Covers dominant-drive injection, the signed drive score, ledger fallback,
 method disclosure, and cycle wiring.

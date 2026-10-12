@@ -18,7 +18,7 @@ profile lives in the **existing** free ``ForkSnapshot.metadata`` dict under a
 This module is the **typed parse/validate boundary**: callers go through
 ``fork_timing_profile`` and never poke the raw dict, so an invalid value
 (``time_scale <= 0`` for a runnable fork, a non-numeric rate) fails loudly here
-rather than silently mis-pacing a being. ``time_scale == 0`` is the existing
+rather than silently mis-pacing an entity. ``time_scale == 0`` is the existing
 freeze path (``control_state.py``), not a runnable profile, so it is rejected.
 
 Boundary-neutral: this module imports nothing from ``kaine.cycle``,

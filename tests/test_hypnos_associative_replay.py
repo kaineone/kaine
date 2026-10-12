@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for Hypnos phase-3 associative cross-period replay.
+"""Tests for sleep phase-3 associative cross-period replay.
 
 Phase 3 selects traces from at least two distinct memory periods, cues
-Phantasia for scenario extensions, consumes the resulting scenarios, and
-re-injects the novel associations into the workspace. When Phantasia is
+the world model module for scenario extensions, consumes the resulting scenarios, and
+re-injects the novel associations into the workspace. When the world model module is
 disabled/absent the cue degrades to a no-op.
 
-All collaborators are tiny fakes — no real Mnemos / Phantasia / LLM.
+All collaborators are tiny fakes — no real episodic memory module / world model module / LLM.
 """
 from __future__ import annotations
 

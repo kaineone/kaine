@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Two-arm workspace-mediation development harness over REAL Soma and Topos.
+"""Two-arm workspace-mediation development harness over the REAL interoception and vision modules.
 
-The workspace-on arm uses Syneidesis to competitively select a coalition each
-tick from the candidate events (Soma's report, Topos's report, and scripted
+The workspace-on arm uses the workspace to competitively select a coalition each
+tick from the candidate events (the interoception module's report, the vision module's report, and scripted
 background events). The pooled arm admits every candidate weighted by its own
 salience, with no scoring, selection, access gate, or inhibition.
 
 Both arms use the same seed, the same stimulus, and identically initialized
 modules. They diverge only through the snapshots they receive.
 
-The measure is the cross-module broadcast information gain. Soma and Topos
+The measure is the cross-module broadcast information gain. The interoception and vision modules
 each publish ``context_gain`` on their report payload. IG_j is the mean gain
 for processor j over post-warmup reports with finite gains. The headline IG is
 the mean of IG_j across processors and is undefined when any IG_j is

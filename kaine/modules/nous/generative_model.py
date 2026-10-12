@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Discrete generative model for Nous active inference (pymdp 1.0, JAX).
+"""Discrete generative model for the planning module's active inference (pymdp 1.0, JAX).
 
-Nous reframes reasoning as active inference (KAINE Paper §3.3.2): belief
+The planning module reframes reasoning as active inference (KAINE Paper §3.3.2): belief
 updating + policy selection by expected-free-energy (EFE) minimisation, using
 **pymdp 1.0**'s JAX-native :class:`pymdp.agent.Agent`.
 
@@ -19,7 +19,7 @@ Hidden state factors
    uncontrollable (a single, identity transition).
 1. ``salience_band`` — coarse salience of the dominant coalition member
    (low / medium / high by default).
-2. ``affect_quadrant`` — Thymos valence×arousal quadrant
+2. ``affect_quadrant`` — the affect module's valence×arousal quadrant
    (calm-pleasant / excited-pleasant / calm-unpleasant / excited-unpleasant).
 3. ``event_cluster`` — a small set of recurring event-type clusters (the open
    seam; see :func:`register_event_cluster`).

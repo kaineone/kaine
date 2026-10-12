@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Integration tests for the Hypnos/Mnemos replay window path.
+"""Integration tests for the sleep / episodic memory replay window path.
 
-These run a real Hypnos sleep against a real Mnemos on the bus so the replay
+These run a real sleep against a real episodic memory module on the bus so the replay
 window is exercised the same way a running system does.
 """
 

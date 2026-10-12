@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""JavaScript tests for the Nexus caretaker banner."""
+"""JavaScript tests for the dashboard caretaker banner."""
 
 from __future__ import annotations
 

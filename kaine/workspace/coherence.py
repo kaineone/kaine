@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Oscillatory coherence for Syneidesis selection (oscillatory-binding).
+"""Oscillatory coherence for the workspace's selection (oscillatory-binding).
 
 This module computes the **phase-locking value (PLV)** among the modules
 contributing to a candidate coalition, over a sliding window of recent phases,

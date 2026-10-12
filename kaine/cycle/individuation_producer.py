@@ -3,7 +3,7 @@
 
 """Individuation producer core.
 
-Captures the birth reference and runs one individuation look.  All
+Captures the maturation reference and runs one individuation look.  All
 dependencies are injected; this module has no organ, scheduler or wiring.
 """
 

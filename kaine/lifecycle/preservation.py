@@ -9,15 +9,15 @@ into a fresh (already-built) registry as the same individual.
 
 What "the whole individual" means here (design.md §2):
 
-* **self-model** — Eidolon ``serialize()`` (identity + values + drift).
-* **memories** — Mnemos full store (short-term buffer + persisted episodic/
+* **self-model** — ``serialize()`` (identity + values + drift).
+* **memories** — the episodic memory module's full store (short-term buffer + persisted episodic/
   semantic/procedural points), captured via the async
   ``export_preservation_state`` (which FAILS LOUDLY on an unreachable store).
-* **world model** — Phantasia learned weights, when a learning backend +
+* **world model** — learned weights, when a learning backend +
   ``persist_weights`` are configured (flushed to the checkpoint and copied into
   the bundle); recorded HONESTLY as not-captured for the fake/off case.
-* **affect / drives** — Thymos and Soma ``serialize()``.
-* **adapters** — Hypnos voice adapters (already on disk; copied by the bundle).
+* **affect / drives** — the affect and interoception modules' ``serialize()`` .
+* **adapters** — the sleep module's voice adapters (already on disk; copied by the bundle).
 
 Honesty invariants (feedback_no_pretend_processes):
 
@@ -124,7 +124,7 @@ async def _capture_module_state(module: Any) -> dict[str, Any]:
     return state
 
 
-# Developmental phase files that travel with the entity. The viability verdict is not one:
+# Developmental-phase files that travel with the entity. The viability verdict is not one:
 # it already rides inside the progress file.
 BUNDLED_GESTATION_FILES = ("gestation_progress.json", "gestation_readout.json")
 GESTATION_STATE_FILES = BUNDLED_GESTATION_FILES + ("gestation_viability.json",)
@@ -757,7 +757,7 @@ def _extract_stage_from_bundle(bundle: Path) -> bytes | None:
 
 
 def set_aside_gestation_files(dest_dir: Path) -> list[Path]:
-    """Move any developmental phase state files in ``dest_dir`` aside (renamed, never deleted) so a revived entity never inherits another entity's progress, readout baselines or verdict; return the new paths."""
+    """Move any developmental-phase state files in ``dest_dir`` aside (renamed, never deleted) so a revived entity never inherits another entity's progress, readout baselines or verdict; return the new paths."""
     import uuid
 
     moved: list[Path] = []
@@ -773,7 +773,7 @@ def set_aside_gestation_files(dest_dir: Path) -> list[Path]:
 
 
 def extract_bundle_gestation(bundle: Path, dest_dir: Path) -> list[str]:
-    """Restore the bundled developmental phase files into ``dest_dir``; return the names restored.
+    """Restore the bundled developmental-phase files into ``dest_dir``; return the names restored.
 
     Opens the bundle tar as :func:`_extract_stage_from_bundle` does. A legacy
     loose layout or a bundle without a ``gestation/`` member restores nothing.

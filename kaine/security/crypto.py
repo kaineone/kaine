@@ -4,8 +4,8 @@
 """Application-layer encryption-at-rest for KAINE's persisted cognitive state.
 
 `StateEncryptor` is an AES-256-GCM envelope around the bytes a module would
-otherwise write to disk in the clear (the Eidolon self-model, fork/merge
-snapshot bundles, sidecar observer JSONL, Phantasia checkpoints). It is
+otherwise write to disk in the clear (the self-model, fork/merge
+snapshot bundles, sidecar observer JSONL, world model checkpoints). It is
 deliberately small and dependency-light: the only third-party import is
 :mod:`cryptography` (``AESGCM``), and that import is lazy so a disabled
 deployment never touches it.

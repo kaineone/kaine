@@ -9,7 +9,7 @@ Detects and counts four welfare-relevant conditions:
     but no ``hypnos.sleep.completed`` (maintenance) follows within a
     configurable window (``maintenance_window_s``, default 900 s / 15 min).
 
-(b) Sustained extreme Thymos VAD — the Thymos VAD (valence + arousal)
+(b) Sustained extreme affect module VAD — the affect module's VAD (valence + arousal)
     remains in an extreme zone (both |valence| > extreme_vad_threshold AND
     arousal > extreme_vad_threshold) for longer than ``extreme_vad_duration_s``
     (default 60 s).
@@ -24,11 +24,11 @@ Detects and counts four welfare-relevant conditions:
     least ``interoceptive_distress_duration_s`` (default 30 s).  The sustain
     timer resets whenever the magnitude drops below the threshold, so a single
     sustained episode produces a single event rather than one per tick.
-    ``prediction_error`` is already a scalar float published by Soma's
+    ``prediction_error`` is already a scalar float published by the interoception module's
     forward model — no reduction is required.
 
 Each of the four gray-zone conditions surfaces as an in-memory count exposed as a property for
-Nexus diagnostics, is written to the JSONL log, AND is published to the bus as a
+dashboard diagnostics, is written to the JSONL log, AND is published to the bus as a
 ``welfare.gray_zone`` event on ``welfare.out`` (source ``welfare``) so the
 cycle-layer autonomous welfare-protective monitor can act on ALL four categories.
 

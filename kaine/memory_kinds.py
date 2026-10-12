@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Boundary-neutral canonical list of Mnemos memory-collection kinds.
+"""Boundary-neutral canonical list of the episodic memory module's memory-collection kinds.
 
 The four memory collection kinds were defined in
 ``kaine.modules.mnemos.memory`` and separately *mirrored* (hand-copied) in

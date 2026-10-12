@@ -4,9 +4,9 @@
 """Snapshot-completeness tests for KAINE module state.
 
 Covers:
-- Thymos goal ledger round-trip and restore semantics.
-- Hypnos rest-schedule persistence as time-remaining.
-- Nous posterior restoration into the inference engine fallback.
+- affect goal ledger round-trip and restore semantics.
+- sleep rest-schedule persistence as time-remaining.
+- planning posterior restoration into the inference engine fallback.
 """
 from __future__ import annotations
 

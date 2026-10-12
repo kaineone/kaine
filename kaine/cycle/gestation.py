@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Gestation owner: readiness readout and bounded probe protocol.
+"""Developmental phase owner: readiness readout and bounded probe protocol.
 
-This component measures a gestating entity's readiness for birth. It does not
+This component measures the readiness of an entity in its developmental phase for maturation. It does not
 actuate the entity, push it toward any target, or change lifecycle stage.
 The probe protocol is bounded (hard maxima), disclosed via ``gestation.probe``
 events, and never runs while the cycle is frozen (which covers a welfare
@@ -23,9 +23,9 @@ Markers and their research sites:
     Duecker 2021).
   * ``hrv_variability`` — coefficient of variation of self-rhythm wrap
     intervals (Feldman & Eidelman 2003).
-  * ``womb_prediction_error`` — Topos raw prediction-error ratio across
-    gestation (Ciaunica 2021).
-  * ``return_to_baseline_seconds`` — Soma interoceptive surprise recovery after
+  * ``womb_prediction_error`` — the vision module's raw prediction-error ratio across
+    the developmental phase (Ciaunica 2021).
+  * ``return_to_baseline_seconds`` — the interoception module's interoceptive surprise recovery after
     perturbation (Feldman 2012).
 """
 

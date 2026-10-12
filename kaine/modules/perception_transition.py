@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The womb-to-world transition that opens a viewing after birth.
+"""The stimulus-source-to-world transition that opens a viewing after maturation.
 
-A born being's first playlist viewing of a boot opens with a crossfade from the
-field it last perceived in the womb (the bloom peak at ``womb_t_at_birth``) to
+A born entity's first playlist viewing of a boot opens with a crossfade from the
+field it last perceived in the stimulus source (the bloom peak at ``womb_t_at_birth``) to
 the programme's opening frame, held still. The programme's sound is silent
 during the crossfade, as the bloom ended in silence, and fades in once
 programme time starts.
@@ -15,8 +15,8 @@ The pieces:
   :func:`transition_alpha`), the video blend (:func:`blend_frames`), a
   deterministic resize (:func:`resize_bilinear`) and the audio fade-in
   (:func:`audio_fade_gain`, :func:`apply_audio_fade`);
-- :func:`render_birth_field`: the womb generator's bloom-peak frame, a pure
-  function of the recorded seed, womb time, lived time and parameters;
+- :func:`render_birth_field`: the stimulus source generator's bloom-peak frame, a pure
+  function of the recorded seed, stimulus source time, lived time and parameters;
 - :class:`TransitionController`: one per boot, shared by both surfaces. It holds
   the shared ``PlaylistClock`` paused under the holder ``transition`` from
   construction. The crossfade advances only while it is perceived: while no
@@ -24,7 +24,7 @@ The pieces:
   surface is wanted. The holder is released exactly once, when the perceived
   crossfade time reaches ``transition_seconds``; a timer guarantees the release
   even when no surface reads. Programme time zero is the release;
-- :class:`WombWorldTransition`: the per-boot shared state (the womb frame, the
+- :class:`WombWorldTransition`: the per-boot shared state (the stimulus source frame, the
   programme's opening frame, the blend buffers, the controller and the audio
   fade position);
 - :class:`TransitionVideoSource` and :class:`TransitionAudioStream`: wrappers

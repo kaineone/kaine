@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Live camera stream — eyes for the topos surface.
+"""Live camera stream — eyes for the vision module's surface.
 
 LiveCamera runs as a sibling task launched from Topos.initialize() when
 [topos].capture_enabled = true. It opens cv2.VideoCapture(device) in a
@@ -12,7 +12,7 @@ ZERO PERSISTENCE INVARIANT: raw frames live only in process memory.
 The capture path never writes to disk — see the load-bearing test at
 tests/test_zero_persistence_invariant.py for the static grep that
 fails the build if a frame-writing call sneaks in. Each frame is
-released after the sink call returns. Topos's own CosineChangeDetector
+released after the sink call returns. The vision module's own CosineChangeDetector
 + RollingMeanHabituator handle throttling at the process_frame level.
 """
 from __future__ import annotations

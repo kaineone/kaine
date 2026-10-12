@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Spot durable incident log — one JSONL record per lifecycle transition.
+"""supervisor durable incident log — one JSONL record per lifecycle transition.
 
 Covers the spec-delta scenarios in
 ``openspec/changes/spot-incident-log/specs/spot-supervisor/spec.md``:
 
 * Log survives reboot + ``clear_escalation()`` does not touch it.
-* Disabled Spot writes nothing.
-* Enabled Spot + disabled incident log writes nothing, but bus events persist.
+* Disabled supervisor writes nothing.
+* Enabled supervisor + disabled incident log writes nothing, but bus events persist.
 * Dead module -> exception captured; operator paths scrubbed to ``<PATH>``.
 * Hung module -> ``exception_repr`` is null.
 * Health metrics present in the detect record.
@@ -17,7 +17,7 @@ Covers the spec-delta scenarios in
 * Encryption on/off reflected in the snapshot record + on-disk bytes.
 * Retention purge disabled (no file deleted regardless of age).
 
-The bus/registry/ForkManager are real lightweight objects (as the existing spot
+The bus/registry/ForkManager are real lightweight objects (as the existing supervisor
 tests use); state encryption is toggled via the process-global StateEncryptor.
 """
 from __future__ import annotations

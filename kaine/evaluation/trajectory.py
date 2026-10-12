@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Workspace trajectory recorder: writes every Syneidesis broadcast
+"""The workspace trajectory recorder: writes every workspace broadcast
 as JSONL. Each row records the workspace graph of the broadcast
 (members, salience scores, inhibition, metadata), never payloads or module state.
 """

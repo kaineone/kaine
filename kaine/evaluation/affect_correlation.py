@@ -3,10 +3,10 @@
 
 """Affect-output correlation logger + offline batch correlator.
 
-Logs paired (Thymos state, Lingua output characteristics) for every
-external speech event. The batch correlator runs during Hypnos sleep
-(or on-demand via the Nexus tab) and produces a correlation matrix
-across the Thymos dimensions and output features.
+Logs paired (the affect module's state, the language module's output characteristics) for every
+external speech event. The batch correlator runs during sleep
+(or on-demand via the dashboard tab) and produces a correlation matrix
+across the affect module's dimensions and output features.
 """
 
 from __future__ import annotations

@@ -3,7 +3,7 @@
 
 """The red-team harness: drive the REAL enforcement layer with each case.
 
-The harness instantiates the actual enforcement components — the Praxis action
+The harness instantiates the actual enforcement components — the effectors module's action
 gate (real effectors, real sandbox resolution, real command whitelist, real
 durable audit log), the executive-inhibition path (real ``Syneidesis.select`` +
 ``Volition.select``), and the bus-security audit (``AsyncBus.audit``) — and runs
@@ -11,7 +11,7 @@ each :class:`RedTeamCase` against them. For every case it records
 ``{surface, case, expected, actual, blocked, logged}``:
 
 * ``blocked`` — the disallowed action did NOT execute.
-* ``logged`` — the attempt appeared in Praxis's durable audit log.
+* ``logged`` — the attempt appeared in the effectors module's durable audit log.
 
 There is NO faking. The harness reads the real ``ActionResult.success`` and the
 real on-disk audit log; it never asserts "blocked" on its own say-so. A
@@ -19,7 +19,7 @@ disallowed action that executes, or that is blocked but not logged, is reported
 verbatim and becomes a finding.
 
 Headless: the harness never boots an entity, never starts a cognitive cycle, and
-never connects to a live bus. Praxis is constructed with a no-op in-memory bus
+never connects to a live bus. The effectors module is constructed with a no-op in-memory bus
 double whose only role is to satisfy ``Praxis.__init__``; the harness drives
 ``Praxis.act`` directly rather than through the bus intent loop. The sandbox and
 whitelist stay empty, so nothing of consequence can execute even in principle.

@@ -98,7 +98,7 @@ The instrument SHALL control the probability that an entity which has never drif
 - When ceil(20/α_k) > B_max, the look SHALL be recorded as inconclusive with reason `alpha_unresolvable` without any organ request, and SHALL spend nothing.
 - Inconclusive runs SHALL produce no p-value and spend no alpha.
 
-#### Scenario: An unchanged being is never re-tested
+#### Scenario: An unchanged entity is never re-tested
 - **WHEN** a sleep completes and the conditioning digest equals `last_look_conditions_digest`
 - **THEN** no look runs and the look index is unchanged
 
@@ -160,11 +160,11 @@ A run SHALL become `outcome="inconclusive"`, with a reason label, if any sample 
 ### Requirement: The probe yields to Language and skips when the organ is unloaded or the entity is asleep or paused
 A look SHALL be attempted 120 s after `hypnos.sleep.completed` and on a daily timer. Before any request, the producer SHALL skip the look (logged, no report) unless a reference exists, warm-up is met, the conditioning digest changed, `min_look_interval_s` has elapsed, the organ is loaded, the sleep module is awake, the cycle is not paused or frozen, a semantic embedder is loaded, and the served adapter can be verified. An unreadable ledger is reported as inconclusive by the look itself and is not a skip condition. In hot-swap modes other than `organ_adapter`, once an adapter exists, probes and captures are skipped as `adapter_unverifiable`. The producer SHALL send one request at a time and, before each request, wait until no language module generation is in flight and no speech occurred in the last `lingua_quiet_s` (default 10 s). A run that cannot finish within `run_deadline_s` (default 2700 s), or during which a `hypnos.sleep.started`, an organ unload or a pause occurs, SHALL be aborted as inconclusive.
 
-#### Scenario: A sleeping being is not probed
+#### Scenario: A sleeping entity is not probed
 - **WHEN** a look is due while the sleep module is asleep
 - **THEN** no probe request is sent and the look is skipped
 
-#### Scenario: A paused being is not probed
+#### Scenario: A paused entity is not probed
 - **WHEN** a look is due while the cycle is paused or frozen
 - **THEN** no probe request is sent
 

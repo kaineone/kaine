@@ -5,7 +5,7 @@
 
 Coverage (task 6.2):
 - Whitelist entries appear in capability_map.
-- EFE outcomes (Nous policy events) are recorded.
+- EFE outcomes (planning policy events) are recorded.
 - Empty state produces empty map.
 """
 from __future__ import annotations

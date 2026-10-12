@@ -10,8 +10,8 @@ tests do not:
 
   - ``make_lingua`` threads the ``[lingua]`` persona / context-budget config
     into the ``ContextAssembler`` (tasks 3.4, 4.1, 4.2).
-  - ``_wire_lingua_self_model`` seeds the first-person persona from the Eidolon
-    self-model, and is a safe no-op when Eidolon is absent (task 3.4).
+  - ``_wire_lingua_self_model`` seeds the first-person persona from the self-model module
+    self-model, and is a safe no-op when the self-model module is absent (task 3.4).
 
 The offline analogue of operator step 6.1 ("the captured prompt contains the
 conscious coalition") is asserted here: a wired ``speak`` produces a request

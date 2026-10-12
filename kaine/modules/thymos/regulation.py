@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Regulation policy for Thymos.
+"""Regulation policy for the affect module.
 
 Build prompt §4.1: "regulation (hook for RL policy, passive drift only
 for now)." The protocol exposes one async method that returns a

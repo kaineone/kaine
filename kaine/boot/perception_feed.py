@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The perception stimulus feed and the womb-to-world transition."""
+"""The perception stimulus feed and the stimulus-source-to-world transition."""
 from __future__ import annotations
 
 import logging
@@ -26,7 +26,7 @@ def _womb_params(feed: dict[str, Any]) -> WombParams:
     audio = womb.pop("audio", None)
     if audio is not None and not isinstance(audio, dict):
         raise ValueError("[perception_feed.womb.audio] must be a table")
-    # [perception_feed.womb.readout] belongs to the developmental phase owner, which
+    # [perception_feed.womb.readout] belongs to the developmental-phase owner, which
     # validates it itself (GestationReadoutConfig).
     readout = womb.pop("readout", None)
     if readout is not None and not isinstance(readout, dict):

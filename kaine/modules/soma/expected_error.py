@@ -8,7 +8,7 @@ it weights each prediction error by its expected precision, the inverse of
 its expected variance (Feldman & Friston 2010, "Attention, uncertainty, and
 free-energy", *Front. Hum. Neurosci.* 4:215; Seth 2013, "Interoceptive
 inference, emotion, and the embodied self", *Trends Cogn. Sci.* 17:565).
-Soma learns that expected precision separately for each interoceptive
+The interoception module learns that expected precision separately for each interoceptive
 channel from the channel's own history of absolute residuals. It is not a
 fixed, hardwired sensitivity.
 """

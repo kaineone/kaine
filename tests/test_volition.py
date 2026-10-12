@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Unit tests for the executive action-selection step (Volition)."""
+"""Unit tests for the executive action-selection step (the action selection module)."""
 from __future__ import annotations
 
 from datetime import datetime, timezone

@@ -2,14 +2,14 @@
 
 ## Why
 
-The base thesis says the mind is the workspace's competition and broadcast among predictive processors. A direct way to see what each faculty adds is to show the same being the same material while the faculties differ, and compare what reaches the workspace. That means the ignitions: which coalitions win and are broadcast, how often, and with which members.
+The base thesis says the mind is the workspace's competition and broadcast among predictive processors. A direct way to see what each faculty adds is to show the same entity the same material while the faculties differ, and compare what reaches the workspace. That means the ignitions: which coalitions win and are broadcast, how often, and with which members.
 
 The operator's protocol, 2026-09-28:
-1. **Gestation.** Spawn one base-thesis entity and let it gestate in the local stimulus source until it is born.
+1. **The developmental phase.** Spawn one base-thesis entity and let it develop in the local stimulus source until it matures.
 2. **The seed.** At the moment it graduates the developmental phase, preserve it. That snapshot is the seed.
 3. **Branch runs.** Revive the seed once per module set, one run at a time, each with one more module in a logical order. Show it the four films after a pleasant transition from the stimulus source, recording everything.
    - Every branch run starts from the same seed and sees the same media, so the runs show how the entity diverges with each new faculty.
-4. **Accumulating line.** One being gains the next module after each viewing and rewatches the same films, building familiarity.
+4. **Accumulating line.** One entity gains the next module after each viewing and rewatches the same films, building familiarity.
 5. **Noise reference.** A repeat of the base run from the seed shows how much two identical runs differ.
 6. **Analysis and write-up.** Compare the recorded data. Look for evidence of workspace ignition or sentient behaviour. Report it truthfully and in full in a new version of the paper and poster, whether or not it shows what was hoped for.
 

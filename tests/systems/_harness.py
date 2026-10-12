@@ -8,8 +8,8 @@ Usage:
     @pytest.mark.asyncio
     async def test_some_subsystem():
         async with SubsystemHarness() as h:
-            soma = Soma(h.bus)
-            await h.register(soma)
+            interoception = Interoception(h.bus)
+            await h.register(interoception)
             await h.inject_cycle_event(...)
             events = await h.collect("soma.out", count=1, timeout=1.0)
             assert events[0].type == "soma.tick"

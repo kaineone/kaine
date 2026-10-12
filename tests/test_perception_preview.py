@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Dev-gated perception preview: in-memory holder, Topos/Audition taps, and the
-Nexus preview routes.
+"""Dev-gated perception preview: in-memory holder, vision and audition taps, and the
+dashboard preview routes.
 
 Load-bearing invariants exercised here:
   * OFF by default — no capture, no bytes, nothing on disk.
   * ON (KAINE_PERCEPTION_PREVIEW=1) — a single overwritten in-memory JPEG /
     audio level exists, but STILL nothing lands on disk.
-  * The Nexus routes 404 when the flag is off or the slot is empty, and serve
+  * The dashboard routes 404 when the flag is off or the slot is empty, and serve
     the in-memory bytes / level when populated.
 """
 

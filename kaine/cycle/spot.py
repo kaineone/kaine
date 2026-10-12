@@ -1,41 +1,41 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Spot — KAINE's module supervisor (the watchdog).
+"""The supervisor — KAINE's watchdog.
 
-Spot is a cycle-layer component, NOT a registry module: it must keep running
+The supervisor is a cycle-layer component, NOT a registry module: it must keep running
 precisely when modules fail, so it cannot be subject to its own liveness checks
 or torn down by the shutdown it orchestrates. The entrypoint constructs and runs
 it alongside ``cycle.run_forever`` and the freeze-watch loop.
 
-Per poll Spot assesses each module (alive | dead | hung), and on a fault it
+Per poll the supervisor assesses each module (alive | dead | hung), and on a fault it
 freezes the cycle (humane suspend) with ``source="spot"``, snapshots last-good
 state, and runs the restart ladder (light ``BaseModule.restart`` for pure
 modules; heavy rebuild via the injected ``rebuild_module`` closure +
 ``registry.replace`` + ``rewire_module`` + snapshot restore for modules holding
 external resources). One incident is handled per poll. After
-``max_restart_attempts`` failures Spot escalates: a final snapshot, shutdown of
+``max_restart_attempts`` failures the supervisor escalates: a final snapshot, shutdown of
 every module, ``escalation.json``, a CRITICAL ``spot.status``, and a halt signal
-so the entrypoint exits non-zero. Spot never reboots the host — it only asks.
+so the entrypoint exits non-zero. The supervisor never reboots the host — it only asks.
 
 Incident annotation (research log)
 ----------------------------------
-At each lifecycle transition Spot also publishes a structured ``spot.incident``
+At each lifecycle transition the supervisor also publishes a structured ``spot.incident``
 bus event (source ``"spot"``) IN ADDITION to the ephemeral ``spot.status`` /
 ``spot.log`` events. The curated research-event observer captures it (privacy-
 filtered) into ``data/evaluation/research_events/``, where the run-context sink
 stamping stamps it with the active ``run_id`` — so a run whose data was collected
-across a Spot freeze carries the annotation, joined to the run by ``run_id`` and
+across a supervisor freeze carries the annotation, joined to the run by ``run_id`` and
 to the incident by ``incident_id``. The event carries a best-effort cycle
-position: Spot's ``poll_index`` always, plus the cycle's ``tick_index`` when a
+position: the supervisor's ``poll_index`` always, plus the cycle's ``tick_index`` when a
 ``tick_index_provider`` is wired at construction (no tick is fabricated without
 one). Free-text fields are path-scrubbed before publish.
 
 Durable incident log
 --------------------
-Alongside the ephemeral ``spot.status`` / ``spot.log`` bus events (which Nexus
+Alongside the ephemeral ``spot.status`` / ``spot.log`` bus events (which the dashboard
 shows live but which are trimmed away on every publish) and the ``spot.incident``
-annotation, Spot writes a durable, append-only JSONL record at each lifecycle
+annotation, the supervisor writes a durable, append-only JSONL record at each lifecycle
 transition (detect, freeze, snapshot, restart, escalate) to
 ``state/cycle/incidents/`` via ``kaine.cycle.incident_log.IncidentLog``. Every record for one module fault
 window shares a generated ``incident_id``. Unlike ``escalation.json`` /

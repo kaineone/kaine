@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Latent forward model for Topos.
+"""Latent forward model for the vision module.
 
 Predicts the next visual latent vector from the current latent, a
 recurrent visual buffer, and an optional broadcast context vector.
@@ -11,7 +11,7 @@ The latent dimension follows the active encoder (``latent_dim`` — 768 for the
 default InternVideo-Next clip encoder, 384 for the DINOv2 fallback); nothing
 here hardcodes a dimension.
 
-Design constraints (matching the Chronos ForwardPredictionHead pattern)
+Design constraints (matching the sequence module's ForwardPredictionHead pattern)
 -----------------------------------------------------------------------
 - CPU-only: all tensors stay on CPU regardless of host hardware.
 - Zero raw-sense-data persistence: ``state_dict()`` / ``load_state_dict()``
@@ -20,7 +20,7 @@ Design constraints (matching the Chronos ForwardPredictionHead pattern)
 - Non-finite guard: adaptation is skipped when the loss or any gradient is
   non-finite, protecting against degenerate inputs. A non-finite input is
   skipped entirely (no buffer append, no weight update, no prediction kept).
-- Adaptation can be suspended externally (e.g. during Hypnos sleep) by
+- Adaptation can be suspended externally (e.g. during sleep) by
   setting ``suspended = True``.
 - The visual encoder is NEVER touched by this module — it is frozen by its
   own class and nothing here requests gradients for it.

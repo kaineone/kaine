@@ -4,16 +4,16 @@
 """Live maturation-gate runner (`developmental-maturation-gate`).
 
 This component is constructed in ``kaine.cycle.__main__`` after the bus and
-module registry exist. It runs a periodic task during gestation that:
+module registry exist. It runs a periodic task during the developmental phase that:
 
-  1. Gathers injected readiness signals (womb readout, Hypnos sleep count,
-     Phantasia consolidation passes, EntityClock lived time).
+  1. Gathers injected readiness signals (stimulus source readout, sleep count,
+     the world model module's consolidation passes, EntityClock lived time).
   2. Evaluates the fail-closed readiness predicate C1∧C2∧C3.
-  3. Decides whether to birth, hold awaiting embodiment, hold awaiting operator
+  3. Decides whether to mature, hold awaiting embodiment, hold awaiting operator
      ack, or keep gestating.
   4. Emits observable lifecycle events on ``lifecycle.out`` and writes the
      stage file on its first tick, when accumulated evidence changes, and at
-     birth.
+     maturation.
 
 The runner itself changes no cognitive-module state; it only reads signals and
 triggers the monotonic stage transition. Development remains emergent and is

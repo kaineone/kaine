@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Praxis subsystem: file write + notify + shell whitelist, with audit."""
+"""The effectors subsystem: file write + notify + shell whitelist, with audit."""
 from __future__ import annotations
 
 import pytest

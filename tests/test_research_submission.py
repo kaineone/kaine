@@ -4,7 +4,7 @@
 """Tests for the research submission module.
 
 PARAMOUNT: the default (metrics) bundle must be allowlist-based and contain
-NONE of the deny patterns (intent_expression, mnemos, qdrant, eidolon/self_model,
+NONE of the deny patterns (intent_expression, episodic memory, qdrant, eidolon/self_model,
 conversation, replay). These tests verify the guarantee holds even when decoy
 sensitive files are present in eval_root.
 """

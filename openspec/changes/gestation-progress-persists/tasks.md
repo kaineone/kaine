@@ -6,4 +6,4 @@
 
 ## 2. Tests
 
-- [x] 2.1 A new readout for the same being continues the awake clock and the pass count; a different being starts fresh.
+- [x] 2.1 A new readout for the same entity continues the awake clock and the pass count; a different entity starts fresh.

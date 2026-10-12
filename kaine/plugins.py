@@ -10,7 +10,7 @@ constructor injections to module factories.
 
 Recognized injectable seams are ``chronos.network``, ``soma.forward_model``,
 ``nous.engine`` (a replacement engine), ``nous.engine_wrapper`` (a callable that
-receives KAINE's default Nous engine and returns the engine to use), and
+receives KAINE's default planning engine and returns the engine to use), and
 ``audition.acoustic_encoder`` (an ``AcousticEncoder`` instance).
 """
 from __future__ import annotations

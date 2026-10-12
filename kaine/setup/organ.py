@@ -21,7 +21,7 @@ hunt against a wrong default. It mirrors the detect-and-guide pattern in
     Unsloth Studio direction, ROCm → unsloth-core, anything else → guide-only).
   - ``plan_organ_download()`` decides which repo(s)+format(s) are needed for the
     host's role (GGUF always; +safetensors iff Stage-2 training is enabled) and
-    returns the EXACT command(s) plus a size estimate — nothing for a non-lingua
+    returns the EXACT command(s) plus a size estimate — nothing for a non-language
     install.
   - ``run_organ_download()`` runs a **real** ``hf download`` (real subprocess,
     real success/failure; never a faked/no-op "installed" result) and captures the

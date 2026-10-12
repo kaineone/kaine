@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Operator entrypoint: `python -m kaine.nexus` boots uvicorn against
-the configured Nexus app. NOT invoked by first-boot scripts.
+the configured dashboard app. NOT invoked by first-boot scripts.
 """
 
 from __future__ import annotations

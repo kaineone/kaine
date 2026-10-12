@@ -14,7 +14,7 @@ The embodiment module is built and tested, and held: it is off in the shipped `c
 
 No transport-backed adapter exists yet. The included adapter is a transport-free stub that pins the protocol locally, so on the reference host the embodiment module has no body to perceive or act through. It is therefore not in the default order of the [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code), where it would be an expected null; it joins the study only once a body is attached, through an explicit `--order`. The planned experiment asks whether motor-contingency learning through the control surface, following a freeze-then-free motor curriculum (Bernstein 1967) and treating perception as sensorimotor mastery (O'Regan and Noë 2001), changes the workspace's dynamics. To build a body adapter, see [Building embodiment adapters for the embodiment module](../20-embodiment-adapters.md).
 
-`probe_available()` checks whether activation is possible, `activate()` starts the feed, intent and speech loops, and `set_dormant()` holds them for the next `initialize()`. While an entity is gestating, boot holds the embodiment module dormant (it is listed in `GESTATION_DORMANT_EFFECTORS` with the vocal module), and the gate runner activates it at maturation. Otherwise `initialize()` opens the body as soon as the gates pass.
+`probe_available()` checks whether activation is possible, `activate()` starts the feed, intent and speech loops, and `set_dormant()` holds them for the next `initialize()`. While an entity is in its developmental phase, boot holds the embodiment module dormant (it is listed in `GESTATION_DORMANT_EFFECTORS` with the vocal module), and the gate runner activates it at maturation. Otherwise `initialize()` opens the body as soon as the gates pass.
 
 Continuous motor control can be produced but is off, and nothing drives it at runtime. The control surface ships off (`[mundus.control_surface].enabled = false`), its default policy emits nothing, and continuous channels are unexposed by default. The symbolic verb families, such as `move`, `turn` and `say`, have no learned producer and remain operator tools.
 
@@ -132,7 +132,7 @@ The core reads the current locus through `locus_reader()`, by default `perceptio
 
 ## Gates and what is kept
 
-- Both `[mundus].enabled` and `KAINE_MUNDUS_OPERATOR_APPROVED=1` must be set, and while an entity is gestating the embodiment module stays dormant until maturation.
+- Both `[mundus].enabled` and `KAINE_MUNDUS_OPERATOR_APPROVED=1` must be set, and while an entity is in its developmental phase the embodiment module stays dormant until maturation.
 - The core removes every raw sense buffer named in the descriptor from the event payload before publishing.
 - Symbolic families that change a world, and continuous channels, need the operator's opt-in.
 - The entity cannot use the real camera and microphone while the locus is `virtual`.

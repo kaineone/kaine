@@ -7,9 +7,9 @@ Two files under `state/perception/`:
 
   runtime.json — written by the perception tasks (LiveMicrophone,
                  LiveCamera) on every start/stop. Source of truth for
-                 the Nexus on-air banner.
+                 the dashboard on-air banner.
 
-  desired.json — written by the Nexus POST /diagnostics/perception/toggle
+  desired.json — written by the dashboard POST /diagnostics/perception/toggle
                  endpoint. Operator's commanded state. Perception tasks
                  poll it and start/stop themselves to match.
 

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Lingua hot-swap dispatcher.
+"""The language module's hot-swap dispatcher.
 
-After a voice-alignment adapter is accepted, Hypnos calls
+After a voice-alignment adapter is accepted, the sleep module calls
 `dispatch()` with the new adapter path. The behavior depends on the
 operator-configured `hot_swap_mode`:
 

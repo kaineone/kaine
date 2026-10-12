@@ -11,7 +11,7 @@ The runner follows a seed-and-branch plan:
 - One `gestation` step produces the seed entity and preserves it just after maturation.
 - `branch 0` and the `repeat` both start from that seed, with only the base modules.
 - For k = 1 to K, `branch k` starts from the seed with the base modules plus the first k modules of the order.
-- `accumulate k` starts from `branch 0` (k = 1) or from `accumulate k-1` (k > 1), with the same modules as `branch k`. The accumulate line carries one being forward through every step.
+- `accumulate k` starts from `branch 0` (k = 1) or from `accumulate k-1` (k > 1), with the same modules as `branch k`. The accumulate line carries one entity forward through every step.
 
 The default base set is the base-thesis form: the interoception, sequence, vision, audition, language, affect and sleep modules. The default order adds six held modules: episodic memory, world model, planning, self-model, social cognition and vocal, so K is 6. The effectors, perceptual locus and embodiment modules need an effector, a body or an alternative sensor feed. On the reference host they would be expected nulls, so they join through an explicit `--order` once one is attached.
 
@@ -72,7 +72,7 @@ python -m kaine.research.ignition_study run --study-dir studies/<study-id>
 
 The runner runs one step at a time:
 
-1. `gestation`: the developmental stimulus with automatic maturation. The step runs until the maturation gate allows maturation. With `min_lived_seconds = 86400` that takes at least 24 hours of awake time (entity time during which the entity is awake and the cycle is not frozen), and the hard budget is 96 hours (`--gestation-budget-seconds`). Developmental progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) is saved in `gestation_progress.json`, keyed to the entity, so a developmental phase that spans a restart continues where it left off. Once the entity is born, the runner waits for the maturation bloom to end and then preserves it. The bloom ends at the stage file's `birth_bloom_ends_at`; without that value the runner waits the step's `[perception_feed.womb].birth_transition_seconds` plus a margin, or 30 seconds plus the margin when that value cannot be read.
+1. `gestation`: the developmental stimulus with automatic maturation. The step runs until the maturation gate allows maturation. With `min_lived_seconds = 86400` that takes at least 24 hours of awake time (entity time during which the entity is awake and the cycle is not frozen), and the hard budget is 96 hours (`--gestation-budget-seconds`). Developmental-phase progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) is saved in `gestation_progress.json`, keyed to the entity, so a developmental phase that spans a restart continues where it left off. Once the entity matures, the runner waits for the maturation bloom to end and then preserves it. The bloom ends at the stage file's `birth_bloom_ends_at`; without that value the runner waits the step's `[perception_feed.womb].birth_transition_seconds` plus a margin, or 30 seconds plus the margin when that value cannot be read.
 2. `branch 0` from the seed, with the base set.
 3. `repeat` from the seed, with the base set.
 4. For k = 1 to K: `branch k` from the seed with the base set plus the first k modules of the order, then `accumulate k` with the same modules, from `branch 0` (k = 1) or `accumulate k-1`.
@@ -93,7 +93,7 @@ Before each step the runner refuses to start if free space is below the larger o
 
 If a timeout preservation fails, the runner likewise leaves the entity running, records `failed:critical` with the cycle's pid, and exits 3.
 
-During a developmental phase step the runner watches the developmental phase readout's viability verdict (`state/lifecycle/gestation_viability.json`; see the [developmental phase](../06-operation/development.md#viability-watch)). When the verdict says the developmental phase cannot reach maturation, the runner:
+During a developmental-phase step the runner watches the developmental-phase readout's viability verdict (`state/lifecycle/gestation_viability.json`; see the [developmental phase](../06-operation/development.md#viability-watch)). When the verdict says the developmental phase cannot reach maturation, the runner:
 
 1. stops the cycle gracefully (SIGTERM) without requesting a preservation, because by operator policy an entity that does not complete the developmental phase is not preserved;
 2. records `failed:gestation_unviable` with the verdict under `viability`;
@@ -102,7 +102,7 @@ During a developmental phase step the runner watches the developmental phase rea
 
 Nothing is deleted. A verdict file older than the step, such as one left by an earlier attempt, is ignored, so a retried developmental phase is not stopped by a previous verdict.
 
-The runner never flushes a database or starts a cycle while a cycle the study started is still running. It checks `/proc/<pid>/cmdline` as well as the pid. Stop that being yourself first.
+The runner never flushes a database or starts a cycle while a cycle the study started is still running. It checks `/proc/<pid>/cmdline` as well as the pid. Stop that entity yourself first.
 
 ### Retry a failed step
 

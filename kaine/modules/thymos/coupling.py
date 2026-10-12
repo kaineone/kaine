@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Affect coupling for Thymos: familiarity-weighted perceived emotion as
+"""Affect coupling for the affect module: familiarity-weighted perceived emotion as
 an *input to the entity's own Scherer appraisal*.
 
 A detected speaker emotion (``audition.emotion``) is not written onto the

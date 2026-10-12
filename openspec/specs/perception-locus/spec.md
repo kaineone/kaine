@@ -17,7 +17,7 @@ The system SHALL maintain a single `perception_locus` (`physical`, `virtual`, or
 `off`) as the sole authority for which world the entity's perceptual organs bind to,
 and it MUST enforce mutual exclusion so the physical and virtual sources are never
 active together. When the locus is `virtual` the real camera and microphone capture
-are off and Topos/Audio_In consume in-world feeds; when `physical` the in-world
+are off and the vision module and Audio_In consume in-world feeds; when `physical` the in-world
 feeds are not consumed and `intent.avatar.*` is not forwarded. The shipped default
 SHALL be `physical`.
 
@@ -32,7 +32,7 @@ SHALL be `physical`.
 
 - **WHEN** the locus is `physical`
 - **THEN** `intent.avatar.*` intents are not forwarded to the body
-- **AND** in-world visual and chat feeds are not consumed by Topos/Audio_In
+- **AND** in-world visual and chat feeds are not consumed by the vision module and Audio_In
 
 ### Requirement: The operator controls and can lock the perceptual locus from Dashboard
 

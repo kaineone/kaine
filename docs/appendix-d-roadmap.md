@@ -42,7 +42,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | thymos-research-affect | 13/13 (100%) | Setpoint drive dynamics with relief, grounded in the affect literature. |
 | topos-tile-precision-real-clips | 5/5 (100%) | Per-tile precision in the vision module's spatial saliency, tested on real clips. |
 | broadcast-context | 6/7 (86%) | Broadcast context for the vision, audition and interoception modules, with a null context and a per-report information gain. |
-| gestation-progress-persists | 4/4 (100%) | Developmental progress persists across restarts. |
+| gestation-progress-persists | 4/4 (100%) | Developmental-phase progress persists across restarts. |
 | ignition-first-round-six | 3/3 (100%) | The module-addition study's first round adds six held modules by default. |
 | categorical-alerts-all-modules | 2/2 (100%) | Every module's alert-level events count as categorical alerts for the access rate. |
 | sleep-pauses-feed | 3/3 (100%) | Sleep pauses the perceptual feed for its whole duration. |
@@ -51,7 +51,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | context-age-from-publication | 4/4 (100%) | Context age is entity time since the broadcast's publication. |
 | research-log-access-fields | 4/4 (100%) | The research log carries the access and context fields the planned test reads. |
 | awake-time-excludes-sleep | 4/4 (100%) | Awake time excludes sleep as well as freezes. |
-| gestation-progress-in-bundles | 3/3 (100%) | Developmental progress travels in preservation bundles. |
+| gestation-progress-in-bundles | 3/3 (100%) | Developmental-phase progress travels in preservation bundles. |
 | footprint-test-spawn-timeout | 1/1 (100%) | Give the footprint test's spawned child time to report. |
 | config-dead-keys | 9/9 (100%) | Remove configuration keys and an environment variable that drive nothing, and point the host probe at KAINE_TIER. |
 | mediation-harness-information-gain | 12/12 (100%) | Rebuild the offline development harness of the workspace-mediation test around the information-gain measure, with a pooled arm, and retire the coupling and utterance measures. |

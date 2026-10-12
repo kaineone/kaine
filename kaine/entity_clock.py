@@ -25,7 +25,7 @@ cognitive timers desynchronize from each other:
                         scale 0 is a no-op (see ``sleep`` below).
 
 Infrastructure timers that must track *real* wall-clock time regardless of the
-entity's subjective rate — the Spot liveness watchdog, the preservation monitor
+entity's subjective rate — the supervisor liveness watchdog, the preservation monitor
 poll, network request timeouts, the voice-alignment GPU window — deliberately do
 NOT use this clock (a watchdog must not slow down because the mind sped up, nor
 speed up because it slowed). Wiring those cognitive-vs-infrastructural sites is

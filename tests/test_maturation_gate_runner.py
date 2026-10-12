@@ -4,7 +4,7 @@
 """Live maturation-gate runner (`developmental-maturation-gate`).
 
 Tests the periodic gate component without booting a full entity. The runner only
-reads injected signals and triggers the monotonic birth transition.
+reads injected signals and triggers the monotonic maturation transition.
 """
 
 from __future__ import annotations
@@ -174,7 +174,7 @@ def _make_clock(now: float = 0.0) -> Any:
 
 
 def _fresh_gestation_state(tmp_path: Path) -> lifecycle_stage.StageState:
-    """Build a fresh developmental phase state without mutating the global STAGE_PATH."""
+    """Build a fresh developmental-phase state without mutating the global STAGE_PATH."""
     p = tmp_path / "stage.json"
     return lifecycle_stage.resolve_boot_stage(has_prior_lived_history=False, path=p)
 

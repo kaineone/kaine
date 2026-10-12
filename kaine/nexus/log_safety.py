@@ -3,7 +3,7 @@
 
 """Neutralize caller-supplied text before it reaches a log line.
 
-Nexus HTTP routers log operator-supplied fields (e.g. a freeze reason). A raw
+The dashboard HTTP routers log operator-supplied fields (e.g. a freeze reason). A raw
 value may embed CR/LF or other control characters and forge or split log
 records (log injection, CWE-117). :func:`sanitize_log_value` collapses those to
 spaces so an untrusted value can only ever occupy the single line the caller

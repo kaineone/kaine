@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Goal ledger for Thymos.
+"""Goal ledger for the affect module.
 
 Goals carry priority, relevance, and lifecycle state. The `relevance`
 score against an event is token-overlap-weighted-by-priority — crude

@@ -3,7 +3,7 @@
 
 """Workspace-snapshot -> fixed-width observation vector.
 
-Phantasia's world model does NOT see pixels or audio. Its "observation" is a
+The world model module does NOT see pixels or audio. Its "observation" is a
 small fixed-width vector of DERIVED NUMERIC SUMMARIES of the accessed
 content of one :class:`WorkspaceSnapshot`:
 

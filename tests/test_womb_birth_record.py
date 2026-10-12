@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for recording the womb-state snapshot at birth."""
+"""Tests for recording the stimulus-source-state snapshot at maturation."""
 
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone

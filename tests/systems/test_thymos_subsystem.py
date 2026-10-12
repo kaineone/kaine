@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Thymos subsystem: dimensional state updates + drive accumulation."""
+"""The affect subsystem: dimensional state updates + drive accumulation."""
 from __future__ import annotations
 
 import pytest

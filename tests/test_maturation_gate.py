@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The maturation (birth) gate — `developmental-maturation-gate`.
+"""The maturation gate — `developmental-maturation-gate`.
 
-Pure predicate + birth decision; no entity is booted, no GPU/network.
+Pure predicate + maturation decision; no entity is booted, no GPU/network.
 """
 from __future__ import annotations
 

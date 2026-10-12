@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for gestation viability watch."""
+"""Tests for developmental phase viability watch."""
 
 from __future__ import annotations
 

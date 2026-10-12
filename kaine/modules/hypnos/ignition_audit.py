@@ -4,7 +4,7 @@
 
 Change ``sleep-ignition-audit``. Everything here is a PURE classification over
 lists of already-collected event records: no bus, no I/O, no imports beyond
-the stdlib/dataclasses, so the audit core is trivially testable and the Hypnos
+the stdlib/dataclasses, so the audit core is trivially testable and the sleep module
 wiring stays thin.
 
 Taxonomy:
@@ -19,11 +19,11 @@ Taxonomy:
   excluded;
 * ``intent.*`` on ``nous.out`` is unrealizable — no effector reads
   ``nous.out`` — and is counted separately, never as executed;
-* Nous-originated intents (``origin == "nous"``) are classified
+* planning-originated intents (``origin == "nous"``) are classified
   ``nous_initiated`` before the input/drive/self rules;
 * ``volition.proposal_outcome`` events contribute ``nous_proposals_realized``,
   ``nous_proposals_declined`` and ``nous_proposals_forwarded`` counts;
-  forwarded rests are counted separately because Hypnos decides them, and
+  forwarded rests are counted separately because the sleep module decides them, and
   an accepted one shows up as a requested sleep.
 """
 

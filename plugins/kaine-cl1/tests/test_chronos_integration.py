@@ -4,7 +4,7 @@ the substrate, over a real (fake-backed) bus.
 
 Skips cleanly where the `kaine` stack (and `fakeredis`) is not installed,
 so the sim-only suite still runs anywhere. Where kaine IS installed (the build
-machine), this proves the conversion is pure injection: stock Chronos +
+machine), this proves the conversion is pure injection: stock sequence module +
 `WetwareTimingModel` publishes the same `chronos.out` contract as silicon.
 """
 from __future__ import annotations

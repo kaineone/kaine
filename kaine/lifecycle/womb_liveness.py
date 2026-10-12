@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Womb liveness probe for the maturation gate.
+"""Stimulus source liveness probe for the maturation gate.
 
 There are two distinct moments:
 
@@ -11,11 +11,11 @@ There are two distinct moments:
 * ``check_womb_live`` is called while the entity is gestating.  It checks the
   presence contract for both local and external providers.
 
-A running local womb is proven by
+A running local stimulus source is proven by
 ``kaine.cycle.womb_presence.WombPresencePublisher`` from real deliveries.
 Presence contract: an event with ``source == "gestation"`` and
 ``type == "gestation.womb"`` must be published to ``gestation.out``.  The
-payload must contain ``provider`` and ``frame_index``.  A live womb must
+payload must contain ``provider`` and ``frame_index``.  A live stimulus source must
 publish at least once per second and ``frame_index`` must advance.  The whole
 configured window is read, not only the newest entry, because ``gestation.out``
 also carries ``gestation.readiness`` events.

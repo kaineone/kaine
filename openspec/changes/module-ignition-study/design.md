@@ -9,8 +9,8 @@
   4. then, for k = 1…9, branch k followed by accumulate k.
 
   One start at a time.
-- **The seed.** A developmental phase run with staging on, the local stimulus source and automatic maturation (`require_operator_ack_for_birth = false`).
-  - When `runtime.json` reports the embodied stage, the runner waits until the maturation bloom has completed (the stimulus source reports born), then requests a preservation with stop.
+- **The seed.** A developmental-phase run with staging on, the local stimulus source and automatic maturation (`require_operator_ack_for_birth = false`).
+  - When `runtime.json` reports the embodied stage, the runner waits until the maturation bloom has completed (the stimulus source reports matured), then requests a preservation with stop.
   - That preservation is the seed, S. The stage file in S carries the stimulus source's time at maturation.
 - **Branch k.** Revive S with the base set plus `order[:k]`.
 - **Repeat.** Revive S with the base set, exactly as branch 0.
@@ -54,7 +54,7 @@
 
 ## What this study cannot show
 
-- **One being per condition.** Every comparison is n = 1, and the noise floor comes from one repeat. Differences smaller than the repeat's are not evidence of anything.
+- **One entity per condition.** Every comparison is n = 1, and the noise floor comes from one repeat. Differences smaller than the repeat's are not evidence of anything.
 - **Branch k adds modules in a fixed order.** Its effect is the k-th module's effect given the modules before it, not in isolation.
 - **The accumulate line mixes familiarity with module history.** No line rewatches without gaining modules.
 - **Faculties without an input channel on this host are expected nulls:** the effectors module without effectors, Perception without locus requests, and the embodiment module without an approved body.

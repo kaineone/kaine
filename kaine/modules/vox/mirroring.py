@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Prosodic mirroring for Vox — identity-preserving accommodation.
+"""Prosodic mirroring for the vocal module — identity-preserving accommodation.
 
 Blends a bounded residual of the latest ``audition.prosody`` features into
 the affect-driven ``ChatterboxParams`` produced by ``affect_to_chatterbox``.

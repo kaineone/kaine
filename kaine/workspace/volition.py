@@ -3,17 +3,17 @@
 
 """Executive action selection ("Volition").
 
-KAINE's global workspace (Syneidesis) decides *what is accessed* and flags
+KAINE's global workspace decides *what is accessed* and flags
 executive inhibition (`WorkspaceSnapshot.inhibited`) when the winning coalition
 fails to clear the publication threshold. Per the paper (§37, §147) a winning
 coalition must clear that threshold *before reaching the action layer* - "the
 system can consider speaking and decide that silence is the better choice."
 
 This module is that action layer. Each experiential tick the cognitive cycle
-hands ``Volition.select`` the broadcast ``WorkspaceSnapshot`` and Volition
+hands ``Volition.select`` the broadcast ``WorkspaceSnapshot`` and the action selection module
 returns zero or more :class:`Intent` objects describing what the entity has
 decided to DO. The cycle publishes those intents to the ``volition.out`` stream;
-effectors (Lingua, Praxis) realize them. Effectors never self-trigger off the
+effectors (the language and effectors modules) realize them. Effectors never self-trigger off the
 raw broadcast — the only path to action is an intent, and intents only exist
 when the snapshot is *not* inhibited.
 

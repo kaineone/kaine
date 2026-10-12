@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The cognitive cycle invokes Volition after the experiential broadcast and
+"""The cognitive cycle invokes the action selection module after the experiential broadcast and
 publishes intents to volition.out, gated by inhibition."""
 from __future__ import annotations
 

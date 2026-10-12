@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The five Hypnos sleep phases (paper §3.5).
+"""The five sleep phases (paper §3.5).
 
 Phase ordering (non-negotiable; paper-canonical):
   1. light_consolidation: short-term to episodic transfer (nothing dropped);
      oscillator frequency reduction across all active modules.
   2. deep_consolidation: replay of the consolidated traces inside a replay
-     window that Hypnos opens through Mnemos, then the downscaling of trace
+     window that the sleep module opens through the episodic memory module, then the downscaling of trace
      strengths that protects the replayed traces (paper A.10).
-  3. associative_replay: cross-period trace selection + Phantasia-cued
+  3. associative_replay: cross-period trace selection + world-model-cued
      re-injection (hypnos-consolidation).
-  4. voice_alignment: orchestrated by the Hypnos module directly.
-  5. affective_reset: Thymos reset; sleep ends with it. Soma's fatigue
+  4. voice_alignment: orchestrated by the sleep module directly.
+  5. affective_reset: the affect module reset; sleep ends with it. The interoception module's fatigue
      resets on the hypnos.sleep.completed event that follows.
 
 Each phase is async, takes its specific collaborator(s), and returns a

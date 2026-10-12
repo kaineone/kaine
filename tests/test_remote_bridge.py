@@ -5,8 +5,8 @@
 
 Real localhost WebSocket server in every networked test — nothing mocked at
 the transport layer. Covers: shipped-disabled guard, no-kill source guard,
-token auth, video → Topos, PCM → VAD → Audition (source_label="remote"),
-Vox speech tap broadcast, transcript forwarding, claim/restore of physical
+token auth, video → the vision module, PCM → VAD → the audition module (source_label="remote"),
+vocal speech tap broadcast, transcript forwarding, claim/restore of physical
 senses, and zero-persistence during a full exchange.
 """
 

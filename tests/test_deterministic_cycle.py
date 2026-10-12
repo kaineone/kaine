@@ -7,9 +7,9 @@ These tests prove that in deterministic mode the cognitive trajectory is a PURE
 FUNCTION of the scripted input: two runs over the same scripted input produce an
 identical cognitive trajectory — the same selected coalitions (entry_id, source,
 type, salience), the same salience scores, the same inhibition decisions, the
-same volition decisions, and the same *logical* event timestamps, tick by tick.
+same action selection module decisions, and the same *logical* event timestamps, tick by tick.
 (The seed is pinned via `set_global_seed` for hygiene, but the rule-based
-Syneidesis/Volition path samples nothing from it, so reproducibility here comes
+workspace/action selection module path samples nothing from it, so reproducibility here comes
 from the scripted input and logical clock, NOT from the seed — see
 `test_different_seeds_same_scripted_stimulus_documents_seed_independence`.)
 Wall-clock latency fields (`wall_duration_ms`, `slip_ms`) are explicitly EXCLUDED

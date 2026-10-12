@@ -186,7 +186,7 @@ The planning module's generative model SHALL let every perceptual factor's trans
 ### Requirement: Uncertainty about its own actions drives exploration
 The planning module's expected free energy SHALL include the information to be gained about its actions' consequences, so that actions whose effects it is less sure of are worth trying, and its choices SHALL NOT collapse to a single action while its model of those consequences is uncertain.
 
-#### Scenario: A new being samples its actions
+#### Scenario: A new entity samples its actions
 - **WHEN** an entity with an unlearned model of its actions steps through ordinary observations
 - **THEN** it chooses more than one action
 

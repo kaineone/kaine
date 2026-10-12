@@ -9,7 +9,7 @@ and an optional broadcast context vector.  Adapts online with a single
 small gradient step per utterance; skips any non-finite update
 (non-finite guard).
 
-Design constraints (matching the Topos LatentForwardModel and Chronos
+Design constraints (matching the vision module's LatentForwardModel and the sequence module's
 ForwardPredictionHead pattern)
 -----------------------------------------------------------------------
 - CPU-only: all tensors stay on CPU regardless of host hardware.
@@ -19,7 +19,7 @@ ForwardPredictionHead pattern)
 - Non-finite guard: adaptation is skipped when the loss or any gradient is
   non-finite, protecting against degenerate inputs. A non-finite input is
   skipped entirely (no buffer append, no weight update, no prediction kept).
-- Adaptation can be suspended externally (e.g. during Hypnos sleep) by
+- Adaptation can be suspended externally (e.g. during sleep) by
   setting ``suspended = True``.
 """
 from __future__ import annotations

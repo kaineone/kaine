@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for the gestation locus lock holder in perception_state."""
+"""Tests for the developmental phase locus lock holder in perception_state."""
 
 from __future__ import annotations
 
@@ -49,11 +49,11 @@ def test_gestation_holder_can_unlock_and_then_normal_writes_work(desired_path: P
     state = read_desired(desired_path)
     assert state.locus == "physical"
     assert state.locus_locked is False
-    # The unlock is recorded as the developmental phase holder's action (spec: the unlock
+    # The unlock is recorded as the developmental-phase holder's action (spec: the unlock
     # is attributed to the developmental phase, not the operator).
     assert state.locked_by == "gestation"
 
-    # After the developmental phase holder unlocks, normal writes apply.
+    # After the developmental-phase holder unlocks, normal writes apply.
     write_desired_locus("off", path=desired_path)
     assert read_desired(desired_path).locus == "off"
 

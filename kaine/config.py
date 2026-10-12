@@ -10,9 +10,9 @@ accident or trip the guard. Instead, the first-run wizard
 (``python -m kaine.setup``) writes a gitignored ``config/kaine.operator.toml``
 that this loader deep-merges over the shipped file — operator values win.
 
-The cognitive cycle entrypoint and Nexus route through
+The cognitive cycle entrypoint and the dashboard route through
 :func:`load_kaine_config`, so an operator override applies wherever the
-configuration is consumed. Nexus's own ``[nexus]`` section is the exception:
+configuration is consumed. The dashboard's own ``[nexus]`` section is the exception:
 :mod:`kaine.nexus.config` reads it from ``config/kaine.toml``,
 ``config/kaine.operator.toml`` and ``config/secrets.toml`` directly.
 

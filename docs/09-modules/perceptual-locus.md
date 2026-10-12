@@ -125,7 +125,7 @@ With the locus `off`, every capture function returns false. A locus switch keeps
 
 `locus_locked` is a boolean. `locked_by` is always a string, `"operator"` by default, and records who holds the lock, for example `"gestation"`. An invalid locus value is read as `"physical"`, which keeps the real camera and microphone out of an undefined state.
 
-Writes are atomic (write, then rename). An operator write to `locus` bypasses the self-switch gates unless the developmental phase holds the lock. While the developmental phase holds it, `read_desired()` forces the locus to `virtual` and writes from anyone else are ignored, which keeps a gestating entity on the developmental feed.
+Writes are atomic (write, then rename). An operator write to `locus` bypasses the self-switch gates unless the developmental phase holds the lock. While the developmental phase holds it, `read_desired()` forces the locus to `virtual` and writes from anyone else are ignored, which keeps an entity in its developmental phase on the developmental feed.
 
 ## Enabling
 
@@ -156,7 +156,7 @@ The events `perception.locus.changed` and `perception.locus.denied` carry the lo
 | File | What it checks |
 |---|---|
 | `tests/test_perception_locus.py` | The default locus is `physical`; `virtual` turns real capture off; returning to `physical` restores it |
-| `tests/test_perception_state.py` | `read_desired()`, `write_desired_locus()`, atomic writes, runtime state, the developmental phase lock |
+| `tests/test_perception_state.py` | `read_desired()`, `write_desired_locus()`, atomic writes, runtime state, the developmental-phase lock |
 | `tests/systems/test_live_perception_subsystem.py` | Locus gating with live camera and microphone on the bus |
 
 ## Spec and related

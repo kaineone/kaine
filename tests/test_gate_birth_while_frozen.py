@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Birth must not occur while the cycle is paused/frozen."""
+"""Maturation must not occur while the cycle is paused/frozen."""
 
 from __future__ import annotations
 
@@ -165,7 +165,7 @@ def _make_clock(now: float = 0.0) -> Any:
 
 
 def _fresh_gestation_state(tmp_path: Path) -> lifecycle_stage.StageState:
-    """Build a fresh developmental phase state without mutating the global STAGE_PATH."""
+    """Build a fresh developmental-phase state without mutating the global STAGE_PATH."""
     p = tmp_path / "stage.json"
     return lifecycle_stage.resolve_boot_stage(has_prior_lived_history=False, path=p)
 

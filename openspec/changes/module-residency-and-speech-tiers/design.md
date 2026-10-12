@@ -163,7 +163,7 @@ Reversible unload is cheap only when a reload does not copy weights again. The i
 
 - **NumPy text embedder.** `read_safetensors` in `kaine/text_embedding_numpy.py` reads the whole file with `read_bytes()`, a private copy. It maps the file read-only with `numpy.memmap` and builds each tensor as a view at its header offset, so the pages are shared with the page cache and with any other process using the same file. `unload()` drops the views and the map; a reload maps again. Tensors that need a dtype conversion are converted once on load, and the conversion is recorded in the footprint.
 - **Torch engines** (the emotion classifier, the vision encoders). Weights load through `safetensors.safe_open` on CPU. On a GPU the device copy still costs memory; the map only removes the host copy, and the footprint records which.
-- **Lazy Topos.** The vision encoder is built on first use through `ensure_loaded()`, not when the module starts, so a host that multiplexes the vision module does not pay for it until a frame needs encoding.
+- **Lazy Vision.** The vision encoder is built on first use through `ensure_loaded()`, not when the module starts, so a host that multiplexes the vision module does not pay for it until a frame needs encoding.
 - **ONNX Runtime sessions KAINE creates.**
   - External initializers are memory-mapped on CPU.
   - `session.save_external_prepacked_constant_initializers = 1` maps prepacked weights too.
@@ -285,7 +285,7 @@ The effect: a host that keeps swapping models runs at a lower `time_scale`, so s
 7. **Fail closed.**
    - Boot refuses lockstep when any enabled module lacks lockstep support, and names the modules. A run never becomes silently non-deterministic.
    - A participant that does not finish within `[cycle].lockstep_timeout_s` (default 300 s, above every calibrated load bound) records an incident naming the module and tick, marks the run inadmissible, and freezes the cycle (item 12). It never kills the entity.
-8. **Spot.** A module waiting on the barrier, or on a model load inside `on_workspace`, does not beat its heartbeat. The supervisor therefore treats a module as alive while the residency ledger shows its rung `loading` within the bound (task 5.2), and while the engine is waiting at the barrier for a reason other than that module's own timeout.
+8. **The supervisor.** A module waiting on the barrier, or on a model load inside `on_workspace`, does not beat its heartbeat. The supervisor therefore treats a module as alive while the residency ledger shows its rung `loading` within the bound (task 5.2), and while the engine is waiting at the barrier for a reason other than that module's own timeout.
 
 9. **Interoception stays real.**
    - the interoception module reads the real body: CPU, RAM, GPU temperature and cycle latency. Those readings differ between an all-resident run and a multiplexed run by nature, because multiplexing really does change the host's load.
@@ -327,7 +327,7 @@ The effect: a host that keeps swapping models runs at a lower `time_scale`, so s
 ## Integration with what already runs
 
 - **the sleep module's organ window.** Voice-alignment training unloads the organ, trains, and reloads it (`run_with_organ_window`). There must be one owner of the organ's memory. The window therefore requests the organ's release and re-admission through the manager, and the manager counts the training footprint in the ledger for the window's duration. The window's shared state file and the consumers' `organ_resting` deferral stay as they are. When the manager is passive (everything fits, or a second GPU has room), the window behaves exactly as today.
-- **Spot.** The supervisor calls a module hung when its heartbeat is older than `heartbeat_timeout_s` while a task runs and the entity is not sleeping. A residency wait must never look like a hang:
+- **The supervisor.** The supervisor calls a module hung when its heartbeat is older than `heartbeat_timeout_s` while a task runs and the entity is not sleeping. A residency wait must never look like a hang:
   - a module awaiting admission or a load keeps its heartbeat;
   - the manager publishes its `loading` state, and the supervisor treats a module whose model is loading within the load's measured bound as alive;
   - a load that exceeds its bound is a residency failure (ladder-down, surfaced), not a supervisor restart.

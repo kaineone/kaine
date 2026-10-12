@@ -13,7 +13,7 @@ active-inference benchmark, whose env/RL rng is derived from the master via
 emits one combined report.
 
 The seven experiments (docs/18-verification.md):
-  1. active-inference (Nous AIF vs tuned RL) — the p-value producer (Mann-Whitney
+  1. active-inference (the planning module's AIF vs tuned RL) — the p-value producer (Mann-Whitney
      per task);
   2. oscillatory ablation (coherence layer on vs off);
   3. A/B divergence (controlled dynamic-range battery);
@@ -21,7 +21,7 @@ The seven experiments (docs/18-verification.md):
   5. self-model accuracy (fixed-threshold scorer battery);
   6. multi-seed stability (the longitudinal control's machinery, run offline);
   7. enforcement red-team (the real enforcement layer vs a case battery);
-  8. workspace-mediation development harness (a reduced pair, Soma and Topos,
+  8. workspace-mediation development harness (a reduced pair, the interoception and vision modules,
      with the workspace on against a pooled arm, measured by information gain;
      development tooling that does not test the thesis; the second p-value
      producer via the WIN sign test over per-seed dIG).

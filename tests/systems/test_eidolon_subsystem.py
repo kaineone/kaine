@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Eidolon subsystem: observes internal speech + workspace, persists self-model."""
+"""The self-model subsystem: observes internal speech + workspace, persists self-model."""
 from __future__ import annotations
 
 import json

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Homeostatic regulation detector for Soma.
+"""Homeostatic regulation detector for the interoception module.
 
 When prediction error remains above ``regulation_threshold`` for
 ``sustain_window_s`` seconds, emits a ``soma.regulation`` advisory
-event.  Soma NEVER actuates directly; it publishes intents and the
+event.  The interoception module NEVER actuates directly; it publishes intents and the
 cycle engine acts on them (separation of perception from control).
 
 Advisory action ladder

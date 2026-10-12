@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Controlled self-model (Eidolon) accuracy runner.
+"""Controlled self-model accuracy runner.
 
-The Eidolon accuracy scorer normally runs as a passive live sidecar: it asks the
+The self-model module accuracy scorer normally runs as a passive live sidecar: it asks the
 entity "describe yourself", parses trait claims, and scores each against the
 currently derived affect/activity signals in the evaluation logs. This runner
 promotes it to a CONTROLLED experiment that VALIDATES the scorer on a fixed

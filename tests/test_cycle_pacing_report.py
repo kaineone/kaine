@@ -6,7 +6,7 @@
 When the configured tick rate (or a ``time_scale > 1`` target) overruns what the
 hardware can sustain, the shortfall must be VISIBLE — surfaced as an
 achieved-rate / slip field via ``CognitiveCycle.pacing_stats`` (and from there
-into runtime.json + Nexus health), never silently capped or faked. These tests
+into runtime.json + dashboard health), never silently capped or faked. These tests
 assert:
 
   * a sustainable rate reports ``overrunning=False`` and achieved ≈ target;

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Vox subsystem: TTS request observed by Fake client when
+"""Vocal subsystem: TTS request observed by Fake client when
 Chatterbox is absent."""
 from __future__ import annotations
 

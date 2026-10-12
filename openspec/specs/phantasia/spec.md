@@ -1,7 +1,7 @@
 # world model Specification
 
 ## Purpose
-The world model module is KAINE's world model and imagination module. It is a DreamerV3-style recurrent state-space model that predicts the next workspace observation while the entity is awake, publishing its prediction error as a salience signal. During sleep it imagines trajectories seeded by replayed memories and trains in memory on waking experience. It is a world model only: it has no actor, critic or reward, and the planning module selects actions. This capability defines the model and its engines (JAX, and a NumPy engine that trains the same model), what its events disclose, zero persistence of experience data, and the opt-in persistence of its learned weights.
+The world model module is KAINE's learned model of its world, and its imagination. It is a DreamerV3-style recurrent state-space model that predicts the next workspace observation while the entity is awake, publishing its prediction error as a salience signal. During sleep it imagines trajectories seeded by replayed memories and trains in memory on waking experience. It is a world model only: it has no actor, critic or reward, and the planning module selects actions. This capability defines the model and its engines (JAX, and a NumPy engine that trains the same model), what its events disclose, zero persistence of experience data, and the opt-in persistence of its learned weights.
 
 ## Requirements
 

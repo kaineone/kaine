@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Four drive accumulators for Thymos.
+"""Four drive accumulators for the affect module.
 
 Each drive is a float in [0, 1] with a build rate (scaled by an
 external signal), a decay rate, a threshold, a relief gain, and a

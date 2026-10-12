@@ -4,8 +4,8 @@
 """Shared persistence primitives usable by any layer.
 
 These primitives carry no dependency on the evaluation/sidecar subsystem, so
-core runtime code (e.g. the cycle's Spot incident log) may use them without
-violating the sidecar boundary (only the cycle/nexus entrypoints may import
+core runtime code (e.g. the cycle's supervisor incident log) may use them without
+violating the sidecar boundary (only the cycle/dashboard entrypoints may import
 ``kaine.evaluation``).
 """
 from kaine.persistence.jsonl_sink import AsyncJsonlSink, _utc_date_str

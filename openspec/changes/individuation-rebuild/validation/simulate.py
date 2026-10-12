@@ -3,7 +3,7 @@
 
 """Offline validation simulation for the individuation instrument.
 
-This script generates synthetic beings and uses only
+This script generates synthetic entities and uses only
 ``kaine/lifecycle/individuation_stats.py`` to exercise the statistics core
 before any real organ data exists.
 """

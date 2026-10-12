@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The Hypnos factory, with the voice-alignment trainer resolvers, probe-set checks and organ-window runner it needs."""
+"""The sleep module factory, with the voice-alignment trainer resolvers, probe-set checks and organ-window runner it needs."""
 from __future__ import annotations
 
 import logging

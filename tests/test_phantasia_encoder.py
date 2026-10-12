@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Phantasia observation encoder: fixed-width, no raw sense data, versioned."""
+"""world model observation encoder: fixed-width, no raw sense data, versioned."""
 from __future__ import annotations
 
 from datetime import datetime, timezone

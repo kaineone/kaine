@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Faculty-relative birth decisions.
+"""Faculty-relative maturation decisions.
 
-A base-thesis entity without Hypnos, Phantasia or Mundus must still be able to
-birth once developmental readiness (C1, C3) is met. The gate skips the checks
+A base-thesis entity without the sleep, world model or embodiment modules must still be able to
+maturation once developmental readiness (C1, C3) is met. The gate skips the checks
 and embodiment guards that depend on absent faculties.
 """
 

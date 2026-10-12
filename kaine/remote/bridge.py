@@ -3,7 +3,7 @@
 
 """Remote perception bridge — WebSocket ingress/egress for operator clients.
 
-A cycle-layer component (like Spot, not a registry module) that lets the
+A cycle-layer component (like the supervisor, not a registry module) that lets the
 operator stream a remote camera/microphone into the entity's perception and
 hear its speech / read the transcript back, over the operator's Tailscale
 tailnet. Started by ``kaine.cycle.__main__`` when ``[remote_bridge].enabled``
@@ -22,7 +22,7 @@ Channels (path-routed on one port):
     ``stream_factory``), so the EXISTING VAD/utterance assembly produces
     in-memory WAV utterances for ``Audition.process_audio(...,
     source_label="remote")``. No duplicated segmentation logic.
-  * ``/speech``        — entity→client binary WAV clips, tapped from Vox via
+  * ``/speech``        — entity→client binary WAV clips, tapped from the vocal module via
     ``Vox.add_playback_tap`` (local playback unaffected).
   * ``/transcript``    — entity→client JSON: entity utterances
     (``lingua.external``) and heard transcriptions (``audition.out``).

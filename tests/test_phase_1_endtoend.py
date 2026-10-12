@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Phase 1 end-to-end: bus + cycle + Syneidesis + EchoModule.
+"""Phase 1 end-to-end: bus + cycle + workspace + EchoModule.
 
 Runs entirely against fakeredis — does not require the operator's
 hardened Redis. The live-Redis integration tests live in

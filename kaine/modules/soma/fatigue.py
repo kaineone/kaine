@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Fatigue accumulator for Soma.
+"""Fatigue accumulator for the interoception module.
 
 Integrates prediction error over waking time with continuous decay.
 Crossing the maintenance threshold triggers a ``soma.fatigue`` event

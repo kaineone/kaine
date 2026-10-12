@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The forked-temporary-being batch job kind (``batch-offload``).
+"""The forked-temporary-entity batch job kind (``batch-offload``).
 
-The operator's "temporary beings" — fork a copy, let it run a directive
+The operator's "temporary entities" — fork a copy, let it run a directive
 (possibly time-dilated), then remerge and assimilate — is a *batch job, not the
 live loop*: bounded, runs to completion off-host, returns a verifiable artifact
 (its post-run snapshot). So it slots into the batch-offload contract, reusing

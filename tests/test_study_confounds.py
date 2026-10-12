@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for the study-confounds change: audio channel labels, channel-aware
-Empatheia/Volition attribution, and Vox dormancy in the womb."""
+social cognition and action selection attribution, and vocal dormancy in the stimulus source."""
 from __future__ import annotations
 
 from datetime import datetime, timezone

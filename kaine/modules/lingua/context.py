@@ -6,7 +6,7 @@
 The LLM is KAINE's language organ, not its brain: it should speak *from* the
 accessed contents of the global workspace, not from the bare triggering text.
 ``ContextAssembler`` turns the current accessed coalition (+ a first-person
-persona seeded from the Eidolon self-model + the triggering input) into the
+persona seeded from the self-model + the triggering input) into the
 ``(system, prompt)`` pair sent to the model - the
 ``persona ∪ working-memory ∪ input`` shape used by CoALA / Generative Agents /
 GWA "Theater of Mind".

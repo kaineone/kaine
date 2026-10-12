@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for the NumPy-only Nous active-inference backend."""
+"""Tests for the NumPy-only planning active-inference backend."""
 from __future__ import annotations
 
 import json

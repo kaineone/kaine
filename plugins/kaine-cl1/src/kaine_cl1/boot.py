@@ -7,11 +7,11 @@ through the seam KAINE already exposes. Different modules inject through differe
 seams, so each backend declares *what* to inject and *which* constructor keyword
 carries it:
 
-- **Chronos** injects a forward model through ``network=`` (Chronos builds its
+- **Sequence** injects a forward model through ``network=`` (the sequence module builds its
   silicon ``CfCNetwork`` only when ``network is None``).
-- **Soma** injects its interoceptive forward model through ``forward_model=``
+- **Interoception** injects its interoceptive forward model through ``forward_model=``
   (kaine's ``soma.forward_model`` seam).
-- **Nous** injects an engine wrapper through ``engine_wrapper=`` (kaine's
+- **Planning** injects an engine wrapper through ``engine_wrapper=`` (kaine's
   ``nous.engine_wrapper`` seam): kaine's own engine keeps beliefs and expected
   free energy, and the wrapper adds the substrate's policy proposal.
 - **Oscillator** runs through the plugin's ``make_oscillator`` hook on

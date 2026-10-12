@@ -10,7 +10,7 @@ measured effect of precision modulation on selection. The determinism keystone
 bit-for-bit reproducible, so the ONLY difference between the two arms is the
 coherence layer — any trajectory difference is attributable to it alone.
 
-Offline: drives only the engine + Syneidesis over a scripted in-memory bus. No
+Offline: drives only the engine + the workspace over a scripted in-memory bus. No
 live modules, no entity boot, no network.
 """
 from __future__ import annotations

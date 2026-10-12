@@ -8,7 +8,7 @@ mirroring `scripts/first-boot.sh`'s safety gate. When invoked under
 that flag, loads `config/kaine.toml`, constructs the AsyncBus,
 builds the module registry from `[modules]` toggles, builds the
 CognitiveCycle from `[cycle]` rates, writes a small runtime JSON
-file so Nexus can pick up live metrics, and runs forever until
+file so the dashboard can pick up live metrics, and runs forever until
 SIGINT/SIGTERM.
 
 This file does NOT initialize any module's entity state. It only
@@ -2501,7 +2501,7 @@ async def _phase_caretaker(ctx: BootContext) -> int | None:
 
 
 async def _phase_gestation(ctx: BootContext) -> int | None:
-    """Start stimulus source presence and the developmental phase owner."""
+    """Start stimulus source presence and the developmental-phase owner."""
     # A running local stimulus source proves itself from real deliveries: presence events
     # on gestation.out (the same contract an external provider uses), which the
     # maturation gate reads to detect stimulus source loss. gestation.out is not a module

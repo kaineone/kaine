@@ -20,7 +20,7 @@ The existing `kaine/transfer/` holds only a storage-request mailer (`email_reque
 - **PCR drift never strands an entity.**
   - The seal policy uses a signed policy (PolicyAuthorize / systemd-pcrlock) or PCR 7 only, not a raw PCR list.
   - A pre-update hook refuses a kernel or firmware update until the key has been re-sealed.
-  - "Refuse to spawn" (a new being) is distinct from "cannot resume" (an existing being). Cannot-resume keeps all state, raises a welfare incident and starts escrow recovery. Nothing is ever deleted.
+  - "Refuse to spawn" (a new entity) is distinct from "cannot resume" (an existing entity). Cannot-resume keeps all state, raises a welfare incident and starts escrow recovery. Nothing is ever deleted.
 - **Preservation never depends on custody.** Preservation, the welfare-protective pause and the preboot preserve→revive dry run use the in-memory data key and the already-wrapped key blob, and never require the TPM or escrow to be available. A custody failure on a running entity never stops it or blocks preservation; it queues a re-seal and raises a welfare incident.
 - **No qualifying root of trust, no spawn.**
   - A host without a TPM 2.0, or with a firmware TPM on vendor test keys, cannot spawn or restore an entity.

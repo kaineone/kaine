@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Lingua seeds its persona from the *bus-mediated* Eidolon self-model snapshot,
-not an in-process Eidolon reference (``distributed-deployment`` task 2.2 / 5.1).
+"""The language module seeds its persona from the *bus-mediated* self-model snapshot,
+not an in-process self-model reference (``distributed-deployment`` task 2.2 / 5.1).
 
 This is the decoupling that lets the language organ run in a separate process /
-on a separate trusted host from Eidolon: the two coordinate over the shared
+on a separate trusted host from the self-model module: the two coordinate over the shared
 authenticated bus, never through a boot-time Python object handle.
 """
 from __future__ import annotations

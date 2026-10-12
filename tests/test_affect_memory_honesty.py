@@ -6,10 +6,10 @@
 Covers findings:
   H2 — thymos.emotion carries norm_compatibility_available=False
   H3 — audition.emotion carries degraded=True when model absent
-  L2 — empatheia skips fold on degraded emotion events
-  M3 — thymos PassiveDecay no-op is visible (first-use debug log)
+  L2 — the social cognition module skips fold on degraded emotion events
+  M3 — the affect module PassiveDecay no-op is visible (first-use debug log)
   M4 — thymos.emotion carries goal_significance_method; no-goals guard
-  M7 — mnemos recall surfaces StorageError instead of fake empty result
+  M7 — the episodic memory module recall surfaces StorageError instead of fake empty result
 """
 from __future__ import annotations
 

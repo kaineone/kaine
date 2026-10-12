@@ -6,8 +6,8 @@
 PARAMOUNT SAFETY INVARIANT
 --------------------------
 The default bundle is ALLOWLIST-BASED and contains NUMERIC METRICS ONLY.
-It never includes speech transcripts, the Lingua intent log
-(intent_expression.jsonl), Mnemos/Qdrant memories, the Eidolon self-model,
+It never includes speech transcripts, the language intent log
+(intent_expression.jsonl), episodic memory/Qdrant memories, the self-model,
 or any conversation content.
 
 Only the subdirectories enumerated in ``METRICS_ONLY_DIRS`` are ever copied

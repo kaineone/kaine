@@ -56,6 +56,6 @@ The current conditioning digest SHALL be computed by a shared pure helper from i
 - **WHEN** a file whose name sorts last holds an older report than another file
 - **THEN** the newest report by `ts` is returned as the latest
 
-#### Scenario: A changed being makes old evidence stale
+#### Scenario: A changed entity makes old evidence stale
 - **WHEN** the latest scored report is not significant and the adapter has changed since that look
 - **THEN** the evidence is stale and the decommission summary says STALE with the treat-as-mature advice

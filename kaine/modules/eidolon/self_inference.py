@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Self-inference engine for Eidolon.
+"""Self-inference engine for the self-model module.
 
 Populates ``SelfModelDocument.behavioral_norms``, ``personality_baseline``,
 ``values``, and ``capability_map`` from observed signals already present
@@ -14,7 +14,7 @@ Privacy boundary (load-bearing):
   categorical labels, not transcript excerpts.
 - VAD values from ``thymos.report`` / ``thymos.drive`` are aggregated
   into rolling mean/variance.  Individual samples are not stored.
-- Nous EFE policy labels and counts are stored; raw policy payloads are
+- the planning module's EFE policy labels and counts are stored; raw policy payloads are
   discarded after the numeric summary is extracted.
 
 The engine is disabled by default (``enabled = false`` in config).  When

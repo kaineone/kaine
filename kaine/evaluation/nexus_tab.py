@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Evaluation tab for the Nexus diagnostics surface.
+"""Evaluation tab for the dashboard diagnostics surface.
 
 Privacy boundary: NEVER reads or renders message text from the A/B
 bare-LLM logs or any logged event body. Only metrics (counts, ratios,

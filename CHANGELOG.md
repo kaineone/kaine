@@ -12,8 +12,8 @@ The public brand is **26.06.0a1**; pip normalizes this to `26.6.0a1` (expected).
 
 ### The base-thesis reconfiguration (July 2026)
 - The default configuration became the base-thesis test (#71): six diverse
-  predictive processors (the interoception, sequence, vision, audition, affect #79/#84,
-  language module) competing through the workspace, everything richer gated off.
+  predictive processors (the interoception, sequence, vision, audition, affect (#79/#84) and
+  language modules) competing through the workspace, everything richer gated off.
 - STT and the conversation surface deactivated by default (#77); the language module's
   prompt became a neutral state-verbalizer with no roleplay persona (#73);
   interruptible, redirectable utterance landed (#81).

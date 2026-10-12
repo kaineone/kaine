@@ -12,7 +12,7 @@ records that gap as if it were a rule ("The individuation requirement applies
 to research mode only").
 
 An entity running with nobody present needs that protection at least as much
-as a research being does. This change restores the invariant the spec already
+as a research entity does. This change restores the invariant the spec already
 states: the unattended gate covers every condition of the research net.
 
 ## What Changes

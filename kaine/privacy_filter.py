@@ -4,12 +4,12 @@
 """Shared content-stripping privacy filter primitive.
 
 This is a low-level primitive (like ``AsyncJsonlSink``): it depends only on
-``kaine.bus.schema`` and is imported by both the Nexus diagnostics layer
+``kaine.bus.schema`` and is imported by both the dashboard diagnostics layer
 (``kaine.nexus.privacy`` re-exports it for backward compatibility) and the
 evaluation sidecar (``kaine.evaluation.observers.research_event_observer``).
 
 Living here rather than under ``kaine/nexus/`` keeps the evaluation package
-from depending on the Nexus layer — preserving the one-directional sidecar
+from depending on the dashboard layer — preserving the one-directional sidecar
 boundary while letting both layers share the exact same ``CONTENT_FIELDS``
 definition and scrub logic.
 """

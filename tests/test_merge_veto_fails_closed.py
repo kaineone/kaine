@@ -4,7 +4,7 @@
 """Fail-closed tests for adapter-merge rejection/failure handling.
 
 A rejected or failed real adapter merge must not be silently persisted,
-and the Nexus diagnostics handler must not run the synchronous merger on
+and the dashboard diagnostics handler must not run the synchronous merger on
 the async event-loop thread.
 """
 from __future__ import annotations

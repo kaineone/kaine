@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Spot freeze integration — source attribution, operator-freeze short-circuit."""
+"""supervisor freeze integration — source attribution, operator-freeze short-circuit."""
 from __future__ import annotations
 
 import asyncio

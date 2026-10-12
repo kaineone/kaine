@@ -1,7 +1,7 @@
 ## Why
 
 The paper (§7, A.7) defines awake time as the entity time during which the
-being is awake and the cycle is not frozen, accumulated across boots and
+entity is awake and the cycle is not frozen, accumulated across boots and
 persisted with the entity, and one awake-time clock serves every rule that
 reads it. In the code every awake-time reader excludes freezes only: the
 maturation gate's lived seconds, the individuation ledger, the developmental phase
@@ -17,7 +17,7 @@ the stimulus source's colour ramp (which excludes nothing). sleep counts as awak
   tick and on every pause, resume and query.
 - The maturation gate and the individuation ledger subtract that account in
   place of frozen time alone.
-- The developmental phase readout treats sleep like a freeze: its awake time stops and a
+- The developmental-phase readout treats sleep like a freeze: its awake time stops and a
   running probe is aborted, as its docstring already states.
 - The stimulus source's colour ramp subtracts the same account, so colour rises with
   awake time.

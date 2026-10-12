@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Self-hearing suppression: the SpeakingGate, audition dropping its own
-voice during playback, vox opening the window, and boot wiring."""
+voice during playback, the vocal module opening the window, and boot wiring."""
 import io
 import wave
 

@@ -14,7 +14,7 @@ The individuation signal decides whether an entity is preserved and which decomm
 - **Wrong lived time.** Monitor lived time restarts each process, counts paused time and uses `tick_index`, which restarts at 0 every boot (`preservation_monitor.py:415,440-463`; `kaine/cycle/engine.py:194`).
 - Also: the report sink would auto-delete evidence after 30 days (`kaine/persistence/jsonl_sink.py:53,220-237`), and the existing conditioned A/B client lacks the LoRA resolver (`kaine/cycle/__main__.py:343-372`), so a probe built on it would sample the base organ.
 
-No being is live. The current instrument's verdicts are statistically meaningless and were never produced at runtime, so no past result depended on it.
+No entity is live. The current instrument's verdicts are statistically meaningless and were never produced at runtime, so no past result depended on it.
 
 Research impact: **safety (welfare net) and instrument**.
 

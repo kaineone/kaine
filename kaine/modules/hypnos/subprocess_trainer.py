@@ -5,7 +5,7 @@
 
 ``SubprocessVoiceTrainer`` implements the same minimal :class:`Trainer`
 protocol as :class:`~kaine.modules.hypnos.voice_alignment.FakeTrainer`,
-so it drops into the same slot in ``boot.py::make_hypnos`` and Hypnos calls it
+so it drops into the same slot in ``boot.py::make_hypnos`` and the sleep module calls it
 identically. It runs the real unsloth DPO in an operator-configured EXTERNAL
 Python environment as a subprocess, or loads the same
 ``scripts/hypnos_external_train.py`` by path and calls its entry point in a

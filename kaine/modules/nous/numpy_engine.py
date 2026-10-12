@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""NumPy-only active-inference engine for Nous.
+"""NumPy-only active-inference engine for the planning module.
 
 This backend shares all guard/bookkeeping logic with :class:`PymdpEngine`
 through :class:`_EngineBase`. It uses :class:`NumpyAgent` for the numerics and
-imports no JAX / pymdp code, so Nous can run on hosts without the ``reasoning``
+imports no JAX / pymdp code, so the planning module can run on hosts without the ``reasoning``
 extra.
 """
 from __future__ import annotations

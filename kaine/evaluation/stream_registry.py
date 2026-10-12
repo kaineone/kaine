@@ -3,7 +3,7 @@
 
 """Canonical module-stream registry — the single source of truth for the
 ``<module>.out`` stream set, so the research-event observer, the raw bus
-archive, and the nexus monitor never drift (shared-logic precedent:
+archive, and the dashboard monitor never drift (shared-logic precedent:
 welfare_observer.py re-exports the welfare signal core for the same reason).
 
 Stream names are derived from registered module names via
@@ -17,7 +17,7 @@ Documented exclusions:
 
 - Curated research log: ``vox.out`` (raw audio content) and ``lingua.out``
   (transcripts) are NEVER curated — the research log stays content-free.
-- Nexus diagnostics additionally excludes the low-signal operational streams
+- dashboard diagnostics additionally excludes the low-signal operational streams
   (``volition.out``, ``mundus.out``, ``perception.out``, ``welfare.out``,
   ``preservation.out``, ``individuation.out``) and adds the non-module
   ``workspace.broadcast`` stream. It tails ``cycle.out``, which carries the

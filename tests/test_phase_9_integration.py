@@ -5,7 +5,7 @@
 
 All twelve canonical module names are registered via the same fakes
 the module-shedding tests use. The cycle runs 50 ticks against
-fakeredis, Syneidesis composes broadcasts, ForkManager snapshots and
+fakeredis, workspace composes broadcasts, ForkManager snapshots and
 restores the whole registry, and every check stays within fakeredis —
 no real Redis, no real services, no module entity-state init.
 """

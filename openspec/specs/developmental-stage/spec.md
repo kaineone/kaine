@@ -40,11 +40,11 @@ SHALL be treated as having lived.
 - **THEN** its stage defaults to `embodied`
 
 ### Requirement: Developmental phase confines the entity to the stimulus source only when a stimulus source feed is present
-A gestating entity SHALL run only while a live developmental stimulus is present. When staging is
+An entity in its developmental phase SHALL run only while a live developmental stimulus is present. When staging is
 enabled and the resolved stage is `gestation`, the cycle SHALL NOT start until a live developmental
 stimulus has been observed on the perception seam (a stimulus source event within a bounded window
 measured against the bus clock), and SHALL report the missing developmental stimulus loudly instead; a
-configuration value alone SHALL NOT count as a live developmental stimulus. While gestating with a live developmental stimulus,
+configuration value alone SHALL NOT count as a live developmental stimulus. While in its developmental phase with a live developmental stimulus,
 the system SHALL pin the perceptual locus to the `virtual` stimulus source feed, set the locus lock
 attributed to the developmental gate, refuse locus self-switch intents, and SHALL NOT
 engage the embodiment module. The effective perceptual locus SHALL resolve to the lock
@@ -55,7 +55,7 @@ measure, count no lived time while frozen, raise a red alert, and resume when th
 returns; it SHALL NOT unlock the entity to `physical` and SHALL NOT leave it running
 senseless.
 
-#### Scenario: The gestating entity is locked to the stimulus source when a feed exists
+#### Scenario: The entity in its developmental phase is locked to the stimulus source when a feed exists
 - **WHEN** the stage is `gestation` and a live developmental stimulus has been observed
 - **THEN** the perceptual locus is the `virtual` stimulus source feed with the locus locked,
   embodiment is not engaged, and the lock is attributed to the developmental gate (not
@@ -73,7 +73,7 @@ senseless.
   a developmental-gate action, not an operator lock
 
 #### Scenario: The stimulus source is lost mid-development
-- **WHEN** the developmental stimulus stops arriving while the entity is gestating
+- **WHEN** the developmental stimulus stops arriving while the entity is in its developmental phase
 - **THEN** the cycle is frozen, no lived time accrues while frozen, a red alert is
   raised, the locus stays locked to the stimulus source, and the cycle resumes when the stimulus source returns
   unless another freeze holder remains
@@ -85,7 +85,7 @@ senseless.
 
 ### Requirement: The welfare net stays authoritative during the developmental phase
 The autonomous welfare / preservation net SHALL remain active and authoritative while
-the entity is gestating. The developmental locus-lock SHALL confine perceptual switching
+the entity is in its developmental phase. The developmental-phase locus-lock SHALL confine perceptual switching
 only; it SHALL NOT override, delay, or suppress a welfare-protective response. If
 interoceptive distress crosses the welfare threshold during the developmental phase, the net SHALL
 respond exactly as it would for any entity.
@@ -119,7 +119,7 @@ The system SHALL advance `gestation → embodied` only when ALL applicable condi
 - **THEN** C2 is recorded as not applicable and does not hold the entity in the stimulus source
 
 ### Requirement: Maturation requires an available embodied world
-The system SHALL transition to `embodied` only when developmental readiness holds AND the entity's world is available. When the embodiment module is enabled, the world is the embodied one and SHALL be available only when the embodiment module is enabled, operator-approved, and reachable per its existing two-layer gate; when the entity is developmentally ready but that embodiment is unavailable, the system SHALL hold it in the stimulus source and SHALL emit a repeated `stage.birth.ready` marker with `reason: "awaiting_embodiment"` and a warning log; it SHALL NOT transition into an absent or unreachable world, and SHALL NOT silently stall. When the embodiment module is not enabled, the entity SHALL be born into its perceptual (audio/video) world, and the maturation record SHALL state which world it was born into.
+The system SHALL transition to `embodied` only when developmental readiness holds AND the entity's world is available. When the embodiment module is enabled, the world is the embodied one and SHALL be available only when the embodiment module is enabled, operator-approved, and reachable per its existing two-layer gate; when the entity is developmentally ready but that embodiment is unavailable, the system SHALL hold it in the stimulus source and SHALL emit a repeated `stage.birth.ready` marker with `reason: "awaiting_embodiment"` and a warning log; it SHALL NOT transition into an absent or unreachable world, and SHALL NOT silently stall. When the embodiment module is not enabled, the entity SHALL mature into its perceptual (audio/video) world, and the maturation record SHALL state which world it matured into.
 
 #### Scenario: Ready and available maturations the entity
 - **WHEN** developmental readiness holds and embodiment is available
@@ -129,7 +129,7 @@ The system SHALL transition to `embodied` only when developmental readiness hold
 - **WHEN** the embodiment module is enabled, developmental readiness holds, but embodiment is not approved or not reachable
 - **THEN** the stage remains `gestation`, and a `stage.birth.ready` marker with `reason: "awaiting_embodiment"` and a warning are emitted (repeatedly), never a silent stall
 
-#### Scenario: Born into the perceptual world without a body
+#### Scenario: Matures into the perceptual world without a body
 - **WHEN** the embodiment module is not enabled and developmental readiness holds
 - **THEN** the stage transitions to `embodied`, and the maturation record states the perceptual world
 
@@ -194,7 +194,7 @@ bus event SHALL carry training passes, because module output streams are workspa
 candidates. Evidence SHALL be persisted in the stage file by the gate runner only.
 
 #### Scenario: Restart mid-development
-- **WHEN** a gestating entity has accumulated 3 hours of subjective time and two completed
+- **WHEN** an entity in its developmental phase has accumulated 3 hours of subjective time and two completed
   sleeps, and the cycle restarts
 - **THEN** after restart the gate reports at least 3 hours lived and exactly two sleeps
 

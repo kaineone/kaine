@@ -1,20 +1,20 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Autonomous welfare safety-net monitors (cycle-layer, siblings to Spot).
+"""Autonomous welfare safety-net monitors (cycle-layer, siblings to the supervisor).
 
 The research phase runs unsupervised. With no human watching, the architecture's
 own safeguards must *act*, not merely log. This module holds the two cycle-layer
 monitors that carry that duty of care, constructed by ``cycle/__main__.py``
-alongside Spot and the freeze-watch loop:
+alongside the supervisor and the freeze-watch loop:
 
 * :class:`DivergenceMonitor` — preserves the LIVE entity whenever the shared
   divergence verdict gains a new arm (individuation latch, consolidation,
-  Eidolon drift or adapters). The arm set is persisted, so a restart with
+  the self-model module's drift or adapters). The arm set is persisted, so a restart with
   unchanged evidence does not re-preserve. Read-only on the entity; never
   deletes; rate-limited.
 
-* :class:`WelfareProtectiveMonitor` — watches the Soma interoceptive-distress
+* :class:`WelfareProtectiveMonitor` — watches the interoception module's interoceptive-distress
   signal (``soma.report`` ``prediction_error`` on ``soma.out``) and, on a
   sustained-distress threshold crossing (or repeated distress episodes within a
   window), takes a humane protective action: preserve the entity FIRST, then

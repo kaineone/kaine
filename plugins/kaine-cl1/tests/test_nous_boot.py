@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-"""Boot stock KAINE's Nous through kaine's own plugin loader.
+"""Boot stock KAINE's planning module through kaine's own plugin loader.
 
 This file validates that the CL1 plugin wraps KAINE's engine through the
 ``nous.engine_wrapper`` seam defined by the OpenSpec nous-on-wetware contract.

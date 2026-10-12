@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Entity identity for a being.
+"""Entity identity for an entity.
 
 KAINE needs a stable notion of which being a piece of state belongs to. Each
 being has one :class:`EntityIdentity`, persisted in its state tree at
@@ -19,10 +19,10 @@ The ID format and the legacy derivation are intentionally frozen:
 Changing either the format or the derivation requires a migration change of its
 own, because custody uses the ID in ciphertext bindings and key-file names.
 
-``state/forks/`` and ``state/preservation/`` hold other beings as well as this
+``state/forks/`` and ``state/preservation/`` hold other entities as well as this
 one, so they are never treated as evidence that *this* tree has already lived.
-Only this tree's own lived artifacts (the developmental stage file, the Phantasia
-world-model checkpoint, the Hypnos consolidation-divergence record and the
+Only this tree's own lived artifacts (the developmental stage file, the world-model checkpoint,
+the sleep module's consolidation-divergence record and the
 perception desired-state) count as evidence for deriving a legacy identity.
 """
 

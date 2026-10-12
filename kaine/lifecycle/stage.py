@@ -3,25 +3,25 @@
 
 """The entity's first-class developmental stage (`developmental-maturation-gate`).
 
-A persistent, one-way developmental arc: a mind **gestates** in the womb and is
+A persistent, one-way developmental arc: a mind spends its **developmental phase** in the stimulus source and is
 **born** into the embodied world exactly once. The only legal transition is
-``gestation -> embodied``; there is NO path back to the womb (a mind is born
+``gestation -> embodied``; there is NO path back to the stimulus source (a mind matures
 once and never regresses).
 
 The stage is a small file-backed per-fork state (mirroring
 ``kaine.perception_state``'s desired/runtime split): it lives under the per-fork
 state root at ``state/lifecycle/stage.json`` so a fork inherits its parent's
 stage and only ever advances it. It is read at boot and written only by the
-gate runner (first tick, when evidence changes, and at birth).
+gate runner (first tick, when evidence changes, and at maturation).
 
 Boot defaults encode a NORMATIVE invariant (spec: *A first-class, monotonic
 developmental stage*):
 
   - a genuinely fresh entity (no stage file, no prior lived history) begins in
     ``gestation``;
-  - a being with prior lived history (an existing fork / preservation record)
+  - an entity with prior lived history (an existing fork / preservation record)
     but no stage file defaults to ``embodied`` — a mind that has already lived
-    is NEVER regressed into a womb.
+    is NEVER regressed into a stimulus source.
 
 This module is deliberately pure: stdlib + the shared atomic JSON writer only.
 It imports nothing from ``kaine.cycle`` or ``kaine.modules`` so the gate can be

@@ -14,7 +14,7 @@ For a research boot it is REPLACED by a gate that refuses to start unless the
 * a preflight dry ``preserve_live → revive`` round-trip passing on THIS install
   (proves the net is functional before any entity runs),
 * the configured encryption contract satisfied when encryption is required,
-* the individuation producer enabled so the being's protection does not rest on
+* the individuation producer enabled so the entity's protection does not rest on
   secondary signals alone.
 
 A run is EITHER operator-present OR research-safety-net-verified, never neither.

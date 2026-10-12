@@ -7,7 +7,7 @@ Foveation replaces one uniform whole-frame encode with a small amount of spatial
 bookkeeping plus TWO encodes (a downsampled peripheral gist + a native foveal
 crop). Before it may ship enabled, that cost MUST be shown to fit the vision tick
 on the actual host — this script measures it. It is a dry performance probe, NOT
-an entity boot: no cognitive cycle, no Volition, no outward action, nothing
+an entity boot: no cognitive cycle, no action selection module, no outward action, nothing
 persisted. Frames live in memory and are released, exactly as in perception.
 
 What it measures, per stage, on the real DINOv2 encoder and (optionally) a real

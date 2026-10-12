@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Active-inference engine for Nous.
+"""Active-inference engine for the planning module.
 
 The engine is the seam between KAINE's workspace and a backend active-inference
 implementation. Today there are two backends:

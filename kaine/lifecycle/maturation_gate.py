@@ -1,29 +1,29 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The maturation (birth) gate — `developmental-maturation-gate`.
+"""The maturation gate — `developmental-maturation-gate`.
 
-A readiness predicate evaluated on a cadence during gestation. It advances the
+A readiness predicate evaluated on a cadence during the developmental phase. It advances the
 developmental stage ``gestation -> embodied`` only when ALL of three conditions
 hold, and it treats any missing or stale evidence as NOT ready (**fail-closed**):
 
-  C1  Regulation baseline met — every marker on the womb change's
+  C1  Regulation baseline met — every marker on the stimulus source change's
       ``gestation.readiness`` readout crosses its configured threshold.
   C2  A reality model consolidated over several sleep cycles, required only
       when the matching faculties are present — sleep cycles are checked iff
-      Hypnos is present and consolidation is checked iff both Hypnos and
-      Phantasia are present. Reading BOTH signals avoids counting empty sleeps.
+      the sleep module is present and consolidation is checked iff both the sleep module and
+      the world model module are present. Reading BOTH signals avoids counting empty sleeps.
       When neither faculty is present, C2 is not applicable.
   C3  Minimum lived subjective time — >= ``min_lived_seconds`` of lived
-      ``EntityClock`` time has accrued since gestation began (the warmed-up-
-      signal floor against a fast-forwarded false birth).
+      ``EntityClock`` time has accrued since the developmental phase began (the warmed-up-
+      signal floor against a fast-forwarded false maturation).
 
-Birth is additionally guarded by **embodiment availability** when Mundus is
+Maturation is additionally guarded by **embodiment availability** when the embodiment module is
 present: developmental readiness is necessary but not sufficient. The stage flips
 only when readiness AND an available embodied world both hold; a ready-but-
-unavailable entity holds in the womb and the operator is told (loudly,
-repeatedly) that it has outgrown the womb — it is never thrown into an absent
-world, nor silently stalled. Without Mundus, the embodiment guard is skipped and
+unavailable entity holds in the stimulus source and the operator is told (loudly,
+repeatedly) that it has outgrown the stimulus source — it is never thrown into an absent
+world, nor silently stalled. Without the embodiment module, the embodiment guard is skipped and
 the entity is born into its perceptual world.
 
 **The gate measures; it never imposes.** This module only READS signals passed
@@ -33,7 +33,7 @@ thresholds are a readiness gate — a *warmed-up-signal*, not a loss the entity 
 optimised against — exactly the discipline of the individuation boundary
 (paper §6.6) and ``soma-coldstart-regulation-warmup``: lived-time-gated,
 fail-closed grace, now promoted to a persistent developmental stage. Development
-remains emergent and is only observed here. Every held-in-womb decision is
+remains emergent and is only observed here. Every held-in-stimulus-source decision is
 reported by the caller; nothing here is a silent no-op.
 
 Boundary-neutral and pure (stdlib only): all runtime signals — the readiness

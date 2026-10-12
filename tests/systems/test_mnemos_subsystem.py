@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Mnemos subsystem: store + recall via the in-memory backend."""
+"""The episodic memory subsystem: store + recall via the in-memory backend."""
 from __future__ import annotations
 
 import pytest

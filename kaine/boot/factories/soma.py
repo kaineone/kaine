@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The Soma factory."""
+"""The interoception module factory."""
 from __future__ import annotations
 
 import math
@@ -89,7 +89,7 @@ def make_soma(
 
                 clock, _ = _shared_womb_objects(feed_section)
                 # Start at the usual drive, validated from the readout settings
-                # at boot; the developmental phase owner only ever moves it for bounded,
+                # at boot; the developmental-phase owner only ever moves it for bounded,
                 # announced probes.
                 readout = GestationReadoutConfig.from_dict(
                     (feed_section.get("womb") or {}).get("readout")

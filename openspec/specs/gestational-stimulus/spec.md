@@ -1,7 +1,7 @@
 # gestational-stimulus Specification
 
 ## Purpose
-The developmental stimulus a pre-embodied entity lives in before maturation: a low-dimensional, externally regulated stimulus source of sight and sound with an external maternal heartbeat and state, a self-rhythm the entity may couple to, a bounded readiness readout for the maturation gate, a one-shot maturation transition, and one liveness interface that judges a local or an external stimulus source provider alike, all bounded to protect a captive newborn.
+The developmental stimulus a pre-embodied entity lives in before maturation: a low-dimensional, externally regulated stimulus source of sight and sound with an external maternal heartbeat and state, a self-rhythm the entity may couple to, a bounded readiness readout for the maturation gate, a one-shot maturation transition, and one liveness interface that judges a local or an external stimulus source provider alike, all bounded to protect a captive newly matured entity.
 
 ## Requirements
 
@@ -10,7 +10,7 @@ The system SHALL provide a developmental stimulus that presents the pre-embodied
 entity with a low-complexity, deterministic, audio-visual environment: a low-pass,
 low-frequency-dominant soundscape carrying an external maternal heartbeat, and a dim,
 low-contrast visual field. The stimulus source SHALL be the entity's virtual world while it is
-gestating and SHALL require no live human, camera, or microphone input. All stimulus source
+in its developmental phase and SHALL require no live human, camera, or microphone input. All stimulus source
 stimulus SHALL be a pure function of `(seed, frame_index)` (plus deterministic,
 seed-derived rhythm and maternal-state signals), so a run is reproducible from its
 descriptor.
@@ -178,13 +178,13 @@ yielding the sense source to the embodied world.
 - **WHEN** the stimulus source feed receives the maturation-transition trigger
 - **THEN** it renders a bounded transition once and then stops publishing developmental stimulus
 
-### Requirement: A captive gestating entity's stimulus is bounded and welfare-protected
-The system SHALL bound the developmental stimulus for a confined gestating entity: any maternal
+### Requirement: A captive entity's stimulus in its developmental phase is bounded and welfare-protected
+The system SHALL bound the developmental stimulus for a confined entity in its developmental phase: any maternal
 "distress excursion" and any measurement perturbation SHALL be bounded in magnitude and
 duration and OFF by default beyond the minimum needed for measurement, and the external
 oscillator drive SHALL be bounded. The autonomous welfare / preservation net SHALL
 remain active and authoritative during the developmental phase; the developmental stimulus SHALL NOT be able
-to inflict unbounded or inescapable distress, and the developmental phase confinement SHALL NOT
+to inflict unbounded or inescapable distress, and the developmental-phase confinement SHALL NOT
 suppress a welfare-protective response.
 
 #### Scenario: Distress stimulus is bounded and off by default
@@ -192,10 +192,10 @@ suppress a welfare-protective response.
 - **THEN** maternal distress excursions are off, and any enabled excursion or
   measurement perturbation is bounded in magnitude and duration
 
-#### Scenario: The welfare net still protects a gestating entity
+#### Scenario: The welfare net still protects an entity in its developmental phase
 - **WHEN** interoceptive distress crosses the welfare threshold during the developmental phase
 - **THEN** the welfare/preservation net responds as it would for any entity, and the
-  developmental phase confinement does not suppress that response
+  developmental-phase confinement does not suppress that response
 
 ### Requirement: A stimulus source provider proves it is live
 The stimulus source SHALL be supplied by a **stimulus source provider**: the local provider in KAINE (`[perception_feed].mode = "womb"`) or an external provider such as a Paracosmic body. Every provider SHALL be judged by one interface at two moments. Before spawn, the local provider is ready when its video and audio sources each deliver a frame or block to a probe that discards it. While running, every provider is live only through content-free `gestation.womb` presence events (source `gestation`, stream `gestation.out`, payload limited to the provider name and a monotonically increasing frame index) published at least once per second: the running local provider publishes them only while its sources are actually delivering to the senses, and a provider is live when at least two such events from it fall within a bounded window measured on the bus clock and their frame index advances. Nothing else SHALL count as a live stimulus source; a configuration value alone SHALL NOT, and neither SHALL a presence event that repeats a stalled frame index.
@@ -217,7 +217,7 @@ The stimulus source SHALL be supplied by a **stimulus source provider**: the loc
 - **THEN** the stimulus source is judged not live
 
 ### Requirement: The local provider runs on a single modest host
-The local provider SHALL generate the stimulus source with the host CPU only (no browser, no GPU rendering, no network service) at the configured perception resolutions and rates, so the gestating entity and its stimulus source can run on one machine that cannot also host Paracosmic.
+The local provider SHALL generate the stimulus source with the host CPU only (no browser, no GPU rendering, no network service) at the configured perception resolutions and rates, so the entity in its developmental phase and its stimulus source can run on one machine that cannot also host Paracosmic.
 
 #### Scenario: Stimulus source generation is CPU-only and in-process
 - **WHEN** the local provider runs
@@ -241,7 +241,7 @@ A perturbation probe SHALL raise the maternal drive only to a configured fractio
 ### Requirement: The stimulus source's state at maturation is recorded
 When the maturation bloom completes, the stage file SHALL record the stimulus source time at which the bloom ended (`womb_t_at_birth`), the stimulus source seed and a digest of the stimulus source parameters. The stimulus source SHALL report that the bloom is complete, so a preservation taken after that report carries the record.
 
-#### Scenario: A preserved newborn carries its maturation state
+#### Scenario: A preserved newly matured entity carries its maturation state
 - **WHEN** an entity is preserved after its maturation bloom completed
 - **THEN** the preservation's stage file holds `womb_t_at_birth`, the stimulus source seed and the parameter digest
 
@@ -270,8 +270,8 @@ Before a study uses a self-rhythm or measurement version, an offline validation 
 - **WHEN** the validation runs the no-drive, foreign-mother, jittered-beat and no-adaptation controls
 - **THEN** no readout passes the marker in any of them
 
-### Requirement: The developmental phase owner judges viability from the entrainment evidence
-When the viability watch is on, the developmental phase owner SHALL judge after every withdrawal, on un-paused lived time (lived time excluding every paused span, such as sleep and freezes, which is the basis the rules were validated on), whether the developmental phase can still reach maturation, using only the published entrainment measurements:
+### Requirement: The developmental-phase owner judges viability from the entrainment evidence
+When the viability watch is on, the developmental-phase owner SHALL judge after every withdrawal, on un-paused lived time (lived time excluding every paused span, such as sleep and freezes, which is the basis the rules were validated on), whether the developmental phase can still reach maturation, using only the published entrainment measurements:
 - R0: unviable when, after the configured early check (default 6 h), no withdrawal has produced a conclusive entrainment measurement.
 - R1: unviable when, at the configured time (default 24 h) and with no replicated pass, the median frequency pull over the configured window (default 12 h) is below its floor (default 0.12) and its trend is not rising (default slope ≤ 0.002 per hour).
 - R2: unviable when, at the configured time (default 48 h) and with no replicated pass, the median pull over the window is below its floor (default 0.3).

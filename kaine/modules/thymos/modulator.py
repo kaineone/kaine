@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""ThymosModulator implementation for Syneidesis.
+"""ThymosModulator implementation for the workspace.
 
-Syneidesis ships `kaine.workspace.strategies.ThymosModulator` as a
+The workspace ships `kaine.workspace.strategies.ThymosModulator` as a
 Protocol with a static default. Phase 4 supplies the real implementation
-that reads Thymos's current dimensional state and returns a salience
+that reads the affect module's current dimensional state and returns a salience
 multiplier biased by arousal.
 """
 from __future__ import annotations

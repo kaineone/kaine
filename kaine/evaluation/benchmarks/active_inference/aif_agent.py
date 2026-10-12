@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Active-inference agent adapter — drives the *live* Nous pymdp engine.
+"""Active-inference agent adapter — drives the *live* planning module's pymdp engine.
 
 This adapter is the head-to-head subject under test. It does NOT re-implement
 active inference: it constructs a :class:`kaine.modules.nous.generative_model.

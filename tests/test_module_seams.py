@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for boot-time module seams and the parity between registry boot,
-individual construction, and Spot's heavy-restart rebuild path.
+individual construction, and the supervisor's heavy-restart rebuild path.
 """
 
 from __future__ import annotations

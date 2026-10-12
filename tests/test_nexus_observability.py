@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for nexus observability.
+"""Tests for dashboard observability.
 
 Covers:
 - Section 1: DEFAULT_DIAGNOSTICS_STREAMS includes the four new streams.

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Syneidesis coherence-multiplier tests (oscillatory-layer).
+"""workspace coherence-multiplier tests (oscillatory-layer).
 
 The load-bearing safety test: with the layer DISABLED (no CoherenceScorer)
 selection is bit-for-bit identical to the baseline — same selected events, same

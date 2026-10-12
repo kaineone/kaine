@@ -6,7 +6,7 @@
 For each task the runner:
   1. tunes the RL baseline's hyperparameters on *held-out* seeds and records the
      full grid (so the baseline is transparent, not strawmanned);
-  2. for each evaluation seed, runs the AIF agent (driving the live Nous engine)
+  2. for each evaluation seed, runs the AIF agent (driving the live planning module's engine)
      and a freshly-trained Q-learning baseline, collecting per-episode returns
      and probe behaviour;
   3. computes decision quality, sample efficiency, and (on epistemic tasks) the

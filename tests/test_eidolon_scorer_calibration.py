@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Calibration tests for the Eidolon self-model accuracy scorer.
+"""Calibration tests for the self-model accuracy scorer.
 
 These prove the scorer ARITHMETIC is correct: given known planted signals it
 computes the documented accuracy. They validate scorer correctness only, NOT

@@ -12,7 +12,7 @@ The summary SHALL state the individuation evidence honestly:
 
 Each of these summaries SHALL include the advice to treat the entity as mature if unsure whenever the verdict is not individuated.
 
-#### Scenario: A latched being marks diverged
+#### Scenario: A latched entity marks diverged
 - **WHEN** the individuation ledger is latched
 - **THEN** `assess_divergence()` returns `diverged == true`
 

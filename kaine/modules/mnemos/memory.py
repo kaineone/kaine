@@ -3,8 +3,8 @@
 
 """MnemosCore — orchestrates embedder + storage + short-term buffer.
 
-This is the thing the Mnemos `BaseModule` wraps. It also exists
-independently so callers (tests, Hypnos, future Lingua introspection)
+This is the thing the episodic memory module `BaseModule` wraps. It also exists
+independently so callers (tests, the sleep module, future language module introspection)
 can drive memory operations without spinning up a bus.
 """
 from __future__ import annotations

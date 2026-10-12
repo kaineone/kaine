@@ -8,7 +8,7 @@ Dispatches to one of the three controlled instrument runners — ``ab_divergence
 writes seeded reproducible JSONL, and prints the verdict summary.
 
 These are OFFLINE research instruments: they drive only deterministic / echo
-clients and an in-memory Mnemos. They do NOT boot an entity, attach to live
+clients and an in-memory episodic memory module. They do NOT boot an entity, attach to live
 modules, start a real bus connection, or open a network connection.
 """
 from __future__ import annotations

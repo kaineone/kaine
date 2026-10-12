@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Thymos affect → Chatterbox expressivity controls.
+"""The affect module's affect → Chatterbox expressivity controls.
 
 Pure function. Documented monotonicity:
   - higher arousal → strictly higher exaggeration

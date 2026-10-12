@@ -8,7 +8,7 @@ Exercises the signing/verification primitives in
 round-trip verify, rejection of every tampered field, wrong-secret rejection,
 malformed-signature handling (returns False, never raises), and the
 ``IntentSigner`` monotonic ``seq`` that makes a captured intent non-replayable.
-These are the guarantees Praxis relies on when it authenticates an intent's
+These are the guarantees the effectors module relies on when it authenticates an intent's
 provenance before running any effector.
 """
 from __future__ import annotations

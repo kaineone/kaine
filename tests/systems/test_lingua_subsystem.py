@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Lingua subsystem: workspace → external/internal speech via FakeChatClient
+"""Language subsystem: workspace → external/internal speech via FakeChatClient
 when Unsloth is not available."""
 from __future__ import annotations
 

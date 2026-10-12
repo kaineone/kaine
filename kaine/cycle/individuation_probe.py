@@ -3,8 +3,8 @@
 
 """Sampler for individuation probes.
 
-The sampler draws one answer from the being for a battery prompt, through
-Lingua's own chat client with the current adapter, without touching the intent
+The sampler draws one answer from the entity for a battery prompt, through
+the language module's own chat client with the current adapter, without touching the intent
 log or the bus. The persona and conditioning digest are taken from the same
 self-model snapshot; if the snapshot has not arrived, or a required disclosure
 fact is missing, the run is marked inconclusive. Every failure becomes a

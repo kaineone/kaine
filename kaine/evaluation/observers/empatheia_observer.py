@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Empatheia observer — tracks agent-model prediction accuracy.
+"""The social cognition module observer — tracks agent-model prediction accuracy.
 
 Subscribes to ``empatheia.out`` (type ``empatheia.agent_model``) and, when
 a subsequent ``audition.out`` emotion event arrives for the same agent,

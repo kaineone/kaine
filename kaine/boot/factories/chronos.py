@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The Chronos factory."""
+"""The sequence module factory."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Mapping, Optional

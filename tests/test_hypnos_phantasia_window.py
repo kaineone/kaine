@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Integration tests for the Hypnos/Phantasia scenario window path.
+"""Integration tests for the sleep / world model scenario window path.
 
-These run a real Hypnos sleep against real Mnemos and Phantasia instances on
+These run a real sleep against real episodic memory and world model module instances on
 the bus so the explicit open/close window path is exercised like a running
 system.
 """

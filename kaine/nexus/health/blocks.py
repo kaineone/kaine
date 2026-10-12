@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Per-block snapshot builders for the Nexus health board.
+"""Per-block snapshot builders for the dashboard health board.
 
 Each function here builds ONE named block of
 :meth:`~kaine.nexus.health.prober.HealthProber.snapshot`'s result (the

@@ -3,7 +3,7 @@
 
 """World-model protocol + a zero-dep fake + the real DreamerV3 adapters.
 
-`WorldModelBackend` is the thin contract Phantasia depends on:
+`WorldModelBackend` is the thin contract the world model module depends on:
 
   * ``observe(obs)``  — fold one observation into the recurrent state, returning
     the world-prediction error (||predicted - actual|| of the latent) as a
@@ -32,7 +32,7 @@ random set of parameters than the JAX engine for the same constructor seed,
 while both engines read and write one checkpoint format, so checkpoints interchange.
 
 WORLD MODEL ONLY: neither implementation has an actor, critic, reward head, or
-return head. Nous owns action selection. ``parameter_names()`` exposes the param
+return head. The planning module owns action selection. ``parameter_names()`` exposes the param
 tree's top-level names so tests can assert no actor/critic tensors exist.
 """
 from __future__ import annotations

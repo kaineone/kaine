@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""CSRF / Origin / Host-header validation for Nexus.
+"""CSRF / Origin / Host-header validation for the dashboard.
 
 Mounted as a FastAPI middleware. The ``Host`` header is validated on **every**
 request, including read-only GET/HEAD/OPTIONS surfaces, to prevent DNS-rebinding

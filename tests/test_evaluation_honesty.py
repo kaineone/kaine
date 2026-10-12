@@ -8,8 +8,8 @@ Covers:
        require_semantic_embedder fail-closed behaviour.
   H4 — eidolon_accuracy no longer advertises honest/open claims.
   M6 — curiosity is labelled a proxy in eidolon_accuracy output.
-  L3 — empatheia observer skips pairings with absent confidence.
-  L5 — Nous health probe performs a generative-model build check.
+  L3 — the social cognition module's observer skips pairings with absent confidence.
+  L5 — the planning module's health probe performs a generative-model build check.
 """
 from __future__ import annotations
 

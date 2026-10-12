@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""End-to-end proof that the WOMB perception feed actually delivers.
+"""End-to-end proof that the stimulus source perception feed actually delivers.
 
 Regression guard for the "awake but senseless" boot: with
 ``[perception_feed].mode = "womb"`` and the perception module enabled, the
-entity's vision (Topos) and hearing (Audition) publish real events when the
+entity's vision and audition modules publish real events when the
 virtual locus is selected. This harness wires the same locus-gated capture
 supervisors against an in-memory bus, selects the virtual feed via
 ``perception_state.select_virtual_feed()``, and asserts that within a bounded
 wait visual events land on ``topos.out`` and auditory events on
-``audition.out`` — deterministically driven by the womb source.
+``audition.out`` — deterministically driven by the stimulus source.
 
 Only the encoder / STT / emotion collaborators are faked (heavy models, not the
-thing under test). The womb sources, the LiveCamera/LiveMicrophone supervisors,
+thing under test). The stimulus sources, the LiveCamera/LiveMicrophone supervisors,
 the BGR->RGB conversion, the VAD/segmentation, and the locus gate are all REAL.
 """
 from __future__ import annotations

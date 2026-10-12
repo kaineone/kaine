@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""SelfModelDocument document for Eidolon.
+"""SelfModelDocument document for the self-model module.
 
 A frozen JSON-serializable dataclass that describes who KAINE is.
-Every field starts empty — Eidolon discovers identity through
+Every field starts empty — the self-model module discovers identity through
 observation; it prescribes nothing.
 """
 from __future__ import annotations

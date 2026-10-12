@@ -1,7 +1,7 @@
 # sleep Specification
 
 ## Purpose
-The sleep module is KAINE's sleep and consolidation module. This capability defines the five-phase sleep pipeline and its fixed order, non-interruptible sleep, bounded rest deferral, the voice-alignment trainer and its capability-loss veto, lifecycle events and their canonical types, the default configuration, a sleep schedule that survives preservation, and rate-limited rest requests from the action selection module.
+The sleep module holds KAINE's sleep and consolidation. This capability defines the five-phase sleep pipeline and its fixed order, non-interruptible sleep, bounded rest deferral, the voice-alignment trainer and its capability-loss veto, lifecycle events and their canonical types, the default configuration, a sleep schedule that survives preservation, and rate-limited rest requests from the action selection module.
 
 ## Requirements
 

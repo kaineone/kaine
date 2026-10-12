@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Eidolon self-model accuracy check.
+"""The self-model accuracy check.
 
 Periodically asks "describe yourself" through an internal channel,
 parses claims, and scores each against the evaluation logs.
