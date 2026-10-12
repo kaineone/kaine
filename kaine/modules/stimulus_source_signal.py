@@ -35,6 +35,7 @@ from typing import Any
 import numpy as np
 
 from kaine.config import require_known_keys
+from kaine.legacy_aliases import parameter_for_config_key
 from kaine.modules.perception_prng import keyed_u64 as _keyed_u64
 from kaine.modules.perception_prng import unit_float as _unit_float
 
@@ -140,7 +141,12 @@ class StimulusSourceParams:
         kwargs: dict[str, Any] = {
             field: getattr(cls, field) for field in cls.__dataclass_fields__
         }
-        kwargs.update(merged)
+        kwargs.update(
+            {
+                parameter_for_config_key(name, cls.__dataclass_fields__): value
+                for name, value in merged.items()
+            }
+        )
 
         def _float_field(name: str, lo: float, hi: float, open_lo: bool = False) -> None:
             value = kwargs[name]
@@ -171,7 +177,7 @@ class StimulusSourceParams:
         _float_field("maternal_distress_max_seconds", 0.0, math.inf, open_lo=True)
         _float_field("external_drive_max_amplitude", 0.0, 1.0)
         # The bounded maturation bloom (StimulusSourceClock.begin_birth enforces the same range).
-        _float_field("birth_transition_seconds", 0.0, 30.0, open_lo=True)
+        _float_field("maturation_transition_seconds", 0.0, 30.0, open_lo=True)
 
         for name in (
             "maternal_state_drives_heartbeat",

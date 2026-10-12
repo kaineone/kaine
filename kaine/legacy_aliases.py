@@ -14,7 +14,7 @@ import copy
 import json
 import logging
 import os
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from typing import Any
 
 from kaine import legacy_names
@@ -592,3 +592,44 @@ def lived_artifact_paths() -> tuple[str, ...]:
                 seen.add(name)
                 ordered.append(name)
     return tuple(ordered)
+
+
+def parameter_for_config_key(key: str, parameters: Collection[str]) -> str:
+    """The constructor parameter that config ``key`` feeds.
+
+    ``key`` itself when the constructor accepts it. Otherwise the key with every
+    underscore-separated component that is an old module key (from
+    ``legacy_names.MODULES``) or an old developmental term (from
+    ``legacy_names.DEVELOPMENTAL``) replaced by that entry's ``new_key``, when the
+    constructor accepts that name. Otherwise ``key`` unchanged (the constructor
+    then reports it). Once the config keys are renamed too, the first rule
+    applies and the map is the identity.
+    """
+    if key in parameters:
+        return key
+
+    old_to_new = {
+        old: entry["new_key"]
+        for old, entry in {**legacy_names.MODULES, **legacy_names.DEVELOPMENTAL}.items()
+    }
+
+    parts = key.split("_")
+    max_old_len = max((len(name.split("_")) for name in old_to_new), default=1)
+
+    mapped_parts: list[str] = []
+    i = 0
+    n = len(parts)
+    while i < n:
+        for length in range(min(max_old_len, n - i), 0, -1):
+            run = "_".join(parts[i : i + length])
+            new = old_to_new.get(run)
+            if new is not None:
+                mapped_parts.append(new)
+                i += length
+                break
+        else:
+            mapped_parts.append(parts[i])
+            i += 1
+
+    mapped = "_".join(mapped_parts)
+    return mapped if mapped in parameters else key
