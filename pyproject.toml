@@ -68,7 +68,7 @@ test = [
     # tests/test_import_boundary_contracts.py). See docs/02-architecture/boundaries.md.
     "import-linter>=2.15",
 ]
-# Real-browser layout tests for the dashboard (tests/test_nexus_detail_layout.py).
+# Real-browser layout tests for the dashboard (tests/test_dashboard_detail_layout.py).
 # Kept out of `test` because the runtime images install that extra and a browser
 # driver does not belong there. The tests drive the system Google Chrome
 # (Playwright channel "chrome") and skip when no browser is available.
@@ -171,7 +171,7 @@ include = ["kaine*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.jinja"]
-"kaine.nexus" = [
+"kaine.dashboard" = [
     "templates/*.html",
     "static/*.css",
     "static/*.js",
@@ -213,7 +213,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # The dashboard __main__ dependency check deliberately runs before the heavy
 # FastAPI/uvicorn imports so the module can fail fast on a slim host.
-"kaine/nexus/__main__.py" = ["E402"]
+"kaine/dashboard/__main__.py" = ["E402"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -259,7 +259,7 @@ include_external_packages = true
 # itself (evaluation submodules legitimately import each other). The two seams
 # stay in the source list but their imports of kaine.evaluation are declared as
 # the only allowed exceptions via ignore_imports — so adding a forbidden import
-# anywhere else (e.g. kaine/nexus/health.py -> kaine.evaluation) breaks this
+# anywhere else (e.g. kaine/dashboard/health.py -> kaine.evaluation) breaks this
 # contract immediately. If a NEW top-level kaine package is added it must be
 # listed here (the dedicated CI job and the grep belt-and-suspenders catch a
 # stale list).
@@ -298,7 +298,7 @@ source_modules = [
     "kaine.faithful",
     "kaine.lifecycle",
     "kaine.modules",
-    "kaine.nexus",
+    "kaine.dashboard",
     "kaine.oscillator",
     "kaine.persistence",
     "kaine.remote",
@@ -321,8 +321,8 @@ forbidden_modules = ["kaine.evaluation"]
 ignore_imports = [
     "kaine.cycle.__main__ -> kaine.evaluation",
     "kaine.cycle.__main__ -> kaine.evaluation.**",
-    "kaine.nexus.__main__ -> kaine.evaluation",
-    "kaine.nexus.__main__ -> kaine.evaluation.**",
+    "kaine.dashboard.__main__ -> kaine.evaluation",
+    "kaine.dashboard.__main__ -> kaine.evaluation.**",
 ]
 unmatched_ignore_imports_alerting = "none"
 
@@ -371,7 +371,7 @@ forbidden_modules = ["kaine_cl1"]
 name = "Evaluation must not import Nexus internals"
 type = "forbidden"
 source_modules = ["kaine.evaluation"]
-forbidden_modules = ["kaine.nexus"]
+forbidden_modules = ["kaine.dashboard"]
 
 # Boundary-neutral shared homes hold cross-cutting primitives that BOTH the
 # core runtime and the evaluation sidecar need (the JSONL sink, privacy filter,
@@ -410,7 +410,7 @@ source_modules = [
 forbidden_modules = [
     "kaine.cycle",
     "kaine.modules",
-    "kaine.nexus",
+    "kaine.dashboard",
     "kaine.workspace",
     "kaine.evaluation",
 ]

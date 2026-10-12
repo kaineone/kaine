@@ -12,7 +12,7 @@ desired-state defaults to ``locus = "physical"`` with both modality flags off.
 
 This harness wires the SAME locus-gated capture supervisors the live boot uses
 (the vision module -> LiveCamera, the audition module -> LiveMicrophone, plus the passive
-PerceptionLocus arbiter) against an in-memory bus, selects the virtual feed the
+PerceptualLocusLocus arbiter) against an in-memory bus, selects the virtual feed the
 way boot now does (``perception_state.select_virtual_feed``), and asserts that
 within a bounded wait visual events land on ``topos.out`` and auditory events on
 ``audition.out`` — deterministically driven by the seeded source.
@@ -36,7 +36,7 @@ from kaine.modules.audition import (
     FakeSTTClient,
 )
 from kaine.modules.audition.live import LiveMicConfig
-from kaine.modules.perception.module import PerceptionLocus
+from kaine.modules.perceptual_locus.module import PerceptualLocus
 from kaine.modules.vision.live import LiveCameraConfig
 from kaine.modules.vision.module import Vision
 
@@ -159,11 +159,11 @@ async def test_seeded_feed_delivers_vision_and_hearing(bus, virtual_feed_state):
     publishes to topos.out and Audition publishes to audition.out."""
     vision = _make_vision(bus)
     audition = _make_audition(bus)
-    perception = PerceptionLocus(bus, desired_path=virtual_feed_state)
+    perceptual_locus = PerceptualLocus(bus, desired_path=virtual_feed_state)
 
     await vision.initialize()
     await audition.initialize()
-    await perception.initialize()
+    await perceptual_locus.initialize()
     try:
         vision_events = await _wait_for_events(bus, "topos.out")
         audition_events = await _wait_for_events(bus, "audition.out")
@@ -177,7 +177,7 @@ async def test_seeded_feed_delivers_vision_and_hearing(bus, virtual_feed_state):
     finally:
         await vision.shutdown()
         await audition.shutdown()
-        await perception.shutdown()
+        await perceptual_locus.shutdown()
 
 
 @pytest.mark.asyncio

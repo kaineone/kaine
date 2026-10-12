@@ -1,0 +1,1 @@
+A web asset or template file name in a Python string (a /static/ path, an HTML snippet that loads a script, or the last operand of a / chain) follows the identifiers scope so it keeps naming the moved file, while a state file path in the same shape stays persisted.

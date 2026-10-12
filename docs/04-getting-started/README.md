@@ -196,7 +196,7 @@ bash scripts/install.sh --python /path/to/python3.12
 | `core` | Vision; Interoception and Sequence with `cfc_backend = "torch"` (`torch`, `ncps`) | |
 | `memory` | Episodic memory, Social cognition, Sleep (`qdrant-client`, `sentence-transformers`) | |
 | `memory-edge` | Episodic memory `backend = "sqlite_vec"` (`sqlite-vec`) | |
-| `nexus` | `python -m kaine.nexus` (`fastapi`, `uvicorn`, `jinja2`) |
+| `nexus` | `python -m kaine.dashboard` (`fastapi`, `uvicorn`, `jinja2`) |
 | `nvidia` | Interoception GPU telemetry (`pynvml`) | |
 | `vision` | Vision capture and playlist (`opencv-python-headless`, `transformers`, `Pillow`) | |
 | `audio` | Audition capture and playlist (`sounddevice`, `webrtcvad`, `funasr`, `librosa`, `av`) |

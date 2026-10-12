@@ -21,7 +21,7 @@ import pytest
 from fastapi import FastAPI
 
 from kaine import perception_preview
-from kaine.nexus.perception import build_perception_router
+from kaine.dashboard.perception import build_perception_router
 
 
 @pytest.fixture(autouse=True)
@@ -280,7 +280,7 @@ async def test_preview_audio_proxies_level_when_on(preview_server, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_perception_snapshot_exposes_preview_flag(monkeypatch):
-    from kaine.nexus.perception import perception_snapshot
+    from kaine.dashboard.perception import perception_snapshot
 
     _enable(monkeypatch)
     assert perception_snapshot()["preview_enabled"] is True

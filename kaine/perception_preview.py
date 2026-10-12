@@ -19,7 +19,7 @@ Load-bearing invariants (zero raw-sense persistence):
     can land raw sense data on durable storage.
   * Because it is process-local, the holder only carries a preview when the
     perception module and the reader run in the SAME process. A reader in a
-    separate process (a standalone ``python -m kaine.nexus``) sees an empty slot
+    separate process (a standalone ``python -m kaine.dashboard``) sees an empty slot
     and its route 404s / the PiP stays hidden — an honest "no preview" rather
     than a cross-process frame channel (which would require a named RAM segment,
     i.e. a file, and is therefore intentionally NOT built here).

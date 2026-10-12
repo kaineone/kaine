@@ -12,11 +12,11 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from kaine.dashboard import diagnostics
+from kaine.dashboard.health import blocks
+from kaine.dashboard.health.prober import HealthProber
 from kaine.lifecycle.episodic_memory_recover import main
 from kaine.modules.episodic_memory import FakeEmbedder, InMemoryStorage
-from kaine.nexus import diagnostics
-from kaine.nexus.health import blocks
-from kaine.nexus.health.prober import HealthProber
 
 
 def test_episodic_memory_store_block_states(tmp_path):
@@ -129,7 +129,7 @@ async def test_health_prober_episodic_memory_store(tmp_path):
 
 def test_episodic_memory_store_template_critical(tmp_path):
     """The episodic memory module's store template renders a critical block with a down chip."""
-    env = Environment(loader=FileSystemLoader("kaine/nexus/templates"), autoescape=select_autoescape(["html"]))
+    env = Environment(loader=FileSystemLoader("kaine/dashboard/templates"), autoescape=select_autoescape(["html"]))
     template = env.get_template("_episodic_memory_store.html")
     html = template.render(
         **{"mnemos_store": {
@@ -149,7 +149,7 @@ def test_episodic_memory_store_template_critical(tmp_path):
 
 def test_episodic_memory_store_template_unavailable(tmp_path):
     """The episodic memory module's store template shows unavailable when the block is missing."""
-    env = Environment(loader=FileSystemLoader("kaine/nexus/templates"), autoescape=select_autoescape(["html"]))
+    env = Environment(loader=FileSystemLoader("kaine/dashboard/templates"), autoescape=select_autoescape(["html"]))
     template = env.get_template("_episodic_memory_store.html")
     html = template.render(**{"mnemos_store": None})
     assert "unavailable" in html.lower()

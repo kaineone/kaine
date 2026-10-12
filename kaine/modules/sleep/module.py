@@ -595,7 +595,7 @@ class Sleep(BaseModule):
         """Set locus to 'off' to suspend external perception for the sleep.
 
         Reuses the perception_state.write_desired_locus machinery (the same
-        path used by PerceptionLocus and the dashboard operator toggle).  Zero
+        path used by PerceptualLocusLocus and the dashboard operator toggle).  Zero
         raw-sense-data persistence is preserved: we only write the desired
         locus flag, never any sensory content.
 

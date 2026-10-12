@@ -144,7 +144,7 @@ The trainer container ([`Dockerfile`](../Dockerfile)) installs its own copy of `
 | Dasheng modeling code | [`external/dasheng/`](../external/dasheng/) | Apache-2.0 | Verbatim vendor; frozen self-supervised acoustic encoder (Audition, selectable) |
 | WavJEPA modeling code | [`external/wavjepa/`](../external/wavjepa/) | MIT (per the upstream Hugging Face model tag; the repository carries no LICENSE file) | Vendored with three safety changes; frozen self-supervised acoustic encoder (Audition, selectable, student path only) |
 | jlens | [`external/jlens/`](../external/jlens/) | Apache-2.0 | |
-| dashboard front-end assets | [`kaine/nexus/static/`](../kaine/nexus/static/) | mixed | JavaScript libraries in `vendor/`; fonts in `fonts/`. Includes three.js, uPlot, and `viz.js` (GPL-3.0-or-later). See [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md). |
+| dashboard front-end assets | [`kaine/dashboard/static/`](../kaine/dashboard/static/) | mixed | JavaScript libraries in `vendor/`; fonts in `fonts/`. Includes three.js, uPlot, and `viz.js` (GPL-3.0-or-later). See [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md). |
 
 The project `NOTICE` file lists each vendored component above. Check [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md) for the full vendored set.
 
@@ -154,4 +154,4 @@ The project `NOTICE` file lists each vendored component above. Check [`THIRD_PAR
 
 The replacement is `librosa` (ISC), which provides equivalent prosody extraction with no copyleft conflict. The reason for choosing `librosa` is in [Technology choices](02-architecture/tech-choices.md) under the Audition section.
 
-KAINE does not depend on any GPL-licensed Python package. One vendored front-end asset, [`viz.js`](../kaine/nexus/static/vendor/viz.js), is GPL-3.0-or-later; it is recorded in [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md).
+KAINE does not depend on any GPL-licensed Python package. One vendored front-end asset, [`viz.js`](../kaine/dashboard/static/vendor/viz.js), is GPL-3.0-or-later; it is recorded in [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md).

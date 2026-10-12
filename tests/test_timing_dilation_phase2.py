@@ -191,13 +191,13 @@ async def test_vision_capture_cadence_real_sleep_scales():
 # ---------------------------------------------------------------------------
 
 
-def test_spot_liveness_poll_does_not_scale():
+def test_supervisor_liveness_poll_does_not_scale():
     """The module-supervisor poll/heartbeat-timeout are read straight off
-    SpotConfig and never routed through the EntityClock — a watchdog must keep
+    SupervisorConfig and never routed through the EntityClock — a watchdog must keep
     real wall-clock cadence even if the mind dilates."""
-    from kaine.cycle.spot import SpotConfig
+    from kaine.cycle.supervisor import SupervisorConfig
 
-    cfg = SpotConfig.from_section({"poll_interval_s": 1.5, "heartbeat_timeout_s": 9.0})
+    cfg = SupervisorConfig.from_section({"poll_interval_s": 1.5, "heartbeat_timeout_s": 9.0})
     # These are plain config floats; there is no clock multiplier anywhere on the
     # path, so the values the watchdog uses are identical regardless of scale.
     assert cfg.poll_interval_s == pytest.approx(1.5)
@@ -205,9 +205,9 @@ def test_spot_liveness_poll_does_not_scale():
     # The supervisor source must not reach for the subjective clock at all.
     import inspect
 
-    import kaine.cycle.spot as spot_mod
+    import kaine.cycle.supervisor as supervisor_mod
 
-    assert "EntityClock" not in inspect.getsource(spot_mod)
+    assert "EntityClock" not in inspect.getsource(supervisor_mod)
 
 
 def test_request_timeout_does_not_scale():

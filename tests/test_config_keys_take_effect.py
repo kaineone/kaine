@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from kaine.boot import _resolve_job_queue_trainer, make_mundus, make_sleep, make_vision
+from kaine.boot import _resolve_job_queue_trainer, make_embodiment, make_sleep, make_vision
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.__main__ import _apply_log_level
@@ -125,8 +125,8 @@ def test_apply_log_level_rejects_invalid_level() -> None:
         _apply_log_level({"logging": {"level": "LOUD"}})
 
 
-def test_make_mundus_routes_expose_keys_by_capabilities(bus: AsyncBus) -> None:
-    m = make_mundus(
+def test_make_embodiment_routes_expose_keys_by_capabilities(bus: AsyncBus) -> None:
+    m = make_embodiment(
         bus,
         {
             "adapter": "stub",
@@ -138,9 +138,9 @@ def test_make_mundus_routes_expose_keys_by_capabilities(bus: AsyncBus) -> None:
     assert m._expose["say"] is False
 
 
-def test_make_mundus_rejects_unknown_expose_key(bus: AsyncBus) -> None:
+def test_make_embodiment_rejects_unknown_expose_key(bus: AsyncBus) -> None:
     with pytest.raises(ValueError, match="expose_drvie"):
-        make_mundus(
+        make_embodiment(
             bus,
             {"adapter": "stub", "stub": {"expose_drvie": True}},
         )

@@ -247,7 +247,7 @@ The extras declared in `pyproject.toml` include at least the following. For the 
 | `worldmodel` | `jax[cpu]`, `chex`, `einops` |
 | `oscillator` | `snntorch`, `scipy` |
 | `test` | `pytest`, `pytest-asyncio`, `pytest-xdist`, `fakeredis`, `import-linter` |
-| `browser-test` | `playwright`, for the real-browser dashboard layout tests in `tests/test_nexus_detail_layout.py`. They drive the system Google Chrome and skip when no browser is available. Kept out of `test` because the runtime images install that extra. |
+| `browser-test` | `playwright`, for the real-browser dashboard layout tests in `tests/test_dashboard_detail_layout.py`. They drive the system Google Chrome and skip when no browser is available. Kept out of `test` because the runtime images install that extra. |
 | `core`, `memory`, `memory-edge`, `speech-edge`, `nexus`, `nvidia`, `internvideo`, `internvideo-flash`, `perception`, `full` | See `pyproject.toml` |
 
 ## Local config rule

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Phase 1 end-to-end: bus + cycle + workspace + EchoModule.
+"""Phase 1 end-to-end: bus + cycle + workspace + RecorderModule.
 
 Runs entirely against fakeredis — does not require the operator's
 hardened Redis. The live-Redis integration tests live in
@@ -14,7 +14,7 @@ import pytest
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle import CognitiveCycle
-from kaine.modules import EchoModule, ModuleRegistry
+from kaine.modules import ModuleRegistry, RecorderModule
 from kaine.workspace import (
     NoveltyTracker,
     RuleBasedSalience,
@@ -40,8 +40,8 @@ async def test_phase_1_end_to_end_delivery():
         publication_threshold=0.0,
     )
     registry = ModuleRegistry()
-    echo = EchoModule(bus)
-    registry.register(echo)
+    recorder = RecorderModule(bus)
+    registry.register(recorder)
 
     import time
     cycle = CognitiveCycle(
@@ -54,10 +54,10 @@ async def test_phase_1_end_to_end_delivery():
         sleep=asyncio.sleep,
     )
 
-    await echo.initialize()
+    await recorder.initialize()
     try:
         # 1. The recorder module publishes one event into its own stream.
-        await echo.publish_one(salience=0.8)
+        await recorder.publish_one(salience=0.8)
 
         # 2. Run one cycle tick. The cycle should collect the event from
         #    echo.out, hand it to the workspace, broadcast the resulting
@@ -69,12 +69,12 @@ async def test_phase_1_end_to_end_delivery():
         # 3. Wait for the recorder module's background workspace consumer to receive the
         #    broadcast.
         for _ in range(50):
-            if echo.snapshots:
+            if recorder.snapshots:
                 break
             await asyncio.sleep(0.01)
-        assert echo.snapshots, "echo never received a workspace broadcast"
+        assert recorder.snapshots, "echo never received a workspace broadcast"
 
-        snap = echo.snapshots[-1]
+        snap = recorder.snapshots[-1]
         assert any(
             ev.source == "echo" and ev.type == "echo.ping"
             for _, ev in snap.selected_events
@@ -82,7 +82,7 @@ async def test_phase_1_end_to_end_delivery():
         assert snap.tick_index == 0
         assert snap.inhibited is False
     finally:
-        await echo.shutdown()
+        await recorder.shutdown()
         await bus.close()
 
 
@@ -102,14 +102,14 @@ async def test_phase_1_end_to_end_with_multiple_modules():
         publication_threshold=0.0,
     )
     registry = ModuleRegistry()
-    echo_a = EchoModule(bus)
+    recorder_a = RecorderModule(bus)
 
-    class EchoB(EchoModule):
+    class RecorderB(RecorderModule):
         name = "echo-b"
 
-    echo_b = EchoB(bus)
-    registry.register(echo_a)
-    registry.register(echo_b)
+    recorder_b = RecorderB(bus)
+    registry.register(recorder_a)
+    registry.register(recorder_b)
 
     import time
     cycle = CognitiveCycle(
@@ -122,22 +122,22 @@ async def test_phase_1_end_to_end_with_multiple_modules():
         sleep=asyncio.sleep,
     )
 
-    await echo_a.initialize()
-    await echo_b.initialize()
+    await recorder_a.initialize()
+    await recorder_b.initialize()
     try:
-        await echo_a.publish_one(salience=0.6)
-        await echo_b.publish_one(salience=0.8)
+        await recorder_a.publish_one(salience=0.6)
+        await recorder_b.publish_one(salience=0.8)
 
         result = await cycle.tick()
         assert result.events_collected == 2
         assert result.modules_seen == 2
 
         for _ in range(50):
-            if echo_a.snapshots and echo_b.snapshots:
+            if recorder_a.snapshots and recorder_b.snapshots:
                 break
             await asyncio.sleep(0.01)
-        assert echo_a.snapshots and echo_b.snapshots
+        assert recorder_a.snapshots and recorder_b.snapshots
     finally:
-        await echo_a.shutdown()
-        await echo_b.shutdown()
+        await recorder_a.shutdown()
+        await recorder_b.shutdown()
         await bus.close()

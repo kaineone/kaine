@@ -211,15 +211,15 @@ def _extract_nonce(text: str) -> str:
     return m.group(1)
 
 
-def _mock_nexus(monkeypatch, port=12345):
+def _mock_dashboard(monkeypatch, port=12345):
     monkeypatch.setattr(
-        "kaine.setup.web.app.load_nexus_config",
+        "kaine.setup.web.app.load_dashboard_config",
         lambda path, **kwargs: SimpleNamespace(port=port, operator_token="x" * 40),
     )
 
 
 @pytest.fixture(autouse=True)
-def _no_cwd_nexus_log():
+def _no_cwd_dashboard_log():
     """The dashboard job spec must never place its log under the current cwd."""
     log = Path.cwd() / "state" / "logs" / "nexus.log"
     existed_before = log.exists()
@@ -399,7 +399,7 @@ def test_spawn_confirm_refuses_failing_preboot(tmp_path, monkeypatch):
 
 
 def test_spawn_full_run_starts_once(tmp_path, monkeypatch, spawn_fakes):
-    _mock_nexus(monkeypatch)
+    _mock_dashboard(monkeypatch)
 
     with _saved_client(tmp_path) as (client, _app):
         r1 = _spawn_post(client, keep_info="true")
@@ -415,7 +415,7 @@ def test_spawn_full_run_starts_once(tmp_path, monkeypatch, spawn_fakes):
 
 
 def test_spawn_double_submit_same_nonce(tmp_path, monkeypatch, spawn_fakes):
-    _mock_nexus(monkeypatch)
+    _mock_dashboard(monkeypatch)
 
     with _saved_client(tmp_path) as (client, _app):
         r1 = _spawn_post(client)
@@ -431,7 +431,7 @@ def test_spawn_double_submit_same_nonce(tmp_path, monkeypatch, spawn_fakes):
 
 
 def test_spawn_confirm_lock_serializes(tmp_path, monkeypatch, spawn_fakes):
-    _mock_nexus(monkeypatch)
+    _mock_dashboard(monkeypatch)
 
     with _saved_client(tmp_path) as (client, app):
         r1 = _spawn_post(client)
@@ -455,7 +455,7 @@ def test_spawn_confirm_lock_serializes(tmp_path, monkeypatch, spawn_fakes):
 
 
 def test_spawn_confirm_expired_nonce(tmp_path, monkeypatch, spawn_fakes):
-    _mock_nexus(monkeypatch)
+    _mock_dashboard(monkeypatch)
 
     with _saved_client(tmp_path) as (client, _app):
         r1 = _spawn_post(client)
@@ -471,7 +471,7 @@ def test_spawn_confirm_expired_nonce(tmp_path, monkeypatch, spawn_fakes):
 
 
 def test_spawn_confirm_nonce_from_other_session(tmp_path, monkeypatch, spawn_fakes):
-    _mock_nexus(monkeypatch)
+    _mock_dashboard(monkeypatch)
 
     with _saved_client(tmp_path) as (client, app):
         r1 = _spawn_post(client)
@@ -736,8 +736,8 @@ def test_install_private_log_file(tmp_path, monkeypatch):
             root.addHandler(h)
 
 
-def test_preboot_nexus_live_row(monkeypatch):
-    import kaine.nexus.health.probes as probes
+def test_preboot_dashboard_live_row(monkeypatch):
+    import kaine.dashboard.health.probes as probes
     import kaine.preboot as preboot
 
     class FakeProber:
@@ -751,30 +751,30 @@ def test_preboot_nexus_live_row(monkeypatch):
     class Cfg:
         port = 12345
 
-    monkeypatch.setattr(preboot, "load_nexus_config", lambda *a, **k: Cfg())
+    monkeypatch.setattr(preboot, "load_dashboard_config", lambda *a, **k: Cfg())
 
     monkeypatch.setattr(preboot, "port_listening", lambda port, timeout_s=1.0: True)
     results = asyncio.run(preboot.check_services())
-    nexus = next(r for r in results if r.name == "Nexus (live)")
-    assert nexus.status == preboot.PASS
-    assert "listening" in nexus.detail
+    dashboard = next(r for r in results if r.name == "Nexus (live)")
+    assert dashboard.status == preboot.PASS
+    assert "listening" in dashboard.detail
 
     monkeypatch.setattr(preboot, "port_listening", lambda port, timeout_s=1.0: False)
     results = asyncio.run(preboot.check_services())
-    nexus = next(r for r in results if r.name == "Nexus (live)")
-    assert nexus.status == preboot.FAIL
-    assert "not running" in nexus.detail
+    dashboard = next(r for r in results if r.name == "Nexus (live)")
+    assert dashboard.status == preboot.FAIL
+    assert "not running" in dashboard.detail
 
     monkeypatch.setattr(
         preboot,
-        "load_nexus_config",
+        "load_dashboard_config",
         lambda *a, **k: (_ for _ in ()).throw(ValueError("boom")),
     )
     results = asyncio.run(preboot.check_services())
-    nexus = next(r for r in results if r.name == "Nexus (live)")
-    assert nexus.status == preboot.FAIL
-    assert "could not be read" in nexus.detail
-    assert "ValueError" in nexus.detail
+    dashboard = next(r for r in results if r.name == "Nexus (live)")
+    assert dashboard.status == preboot.FAIL
+    assert "could not be read" in dashboard.detail
+    assert "ValueError" in dashboard.detail
 
 
 def test_preboot_json_output(monkeypatch, capsys):
@@ -833,7 +833,7 @@ def test_spawn_guard_checks_the_saved_config_state_dir(tmp_path, monkeypatch, sp
 
 
 def test_spawn_exited_start_keeps_setup_open(tmp_path, monkeypatch, spawn_fakes):
-    _mock_nexus(monkeypatch)
+    _mock_dashboard(monkeypatch)
 
     async def exited(proc, runtime_path, *, timeout_s=30.0, poll_s=0.5, not_before=None):
         return ("exited", 1)
@@ -848,7 +848,7 @@ def test_spawn_exited_start_keeps_setup_open(tmp_path, monkeypatch, spawn_fakes)
 
 
 def test_spawn_ready_start_closes_setup(tmp_path, monkeypatch, spawn_fakes):
-    _mock_nexus(monkeypatch)
+    _mock_dashboard(monkeypatch)
     with _saved_client(tmp_path) as (client, app):
         nonce = _extract_nonce(_spawn_post(client).text)
         assert _confirm_post(client, nonce).status_code == 200
@@ -961,9 +961,9 @@ def test_only_the_spawn_confirm_route_starts_a_cycle(tmp_path, monkeypatch):
 
     monkeypatch.setattr(spawn, "start_cycle", recording_start_cycle)
 
-    _mock_nexus(monkeypatch)
+    _mock_dashboard(monkeypatch)
     monkeypatch.setattr(
-        "kaine.nexus.config.load_nexus_config",
+        "kaine.dashboard.config.load_dashboard_config",
         lambda *a, **k: SimpleNamespace(port=12345, operator_token="x" * 40),
     )
 
@@ -1159,15 +1159,15 @@ def test_record_acknowledgement_tightens_an_existing_file(tmp_path):
     assert record["at"] == "2030-01-02T00:00:00+00:00"
 
 
-def test_nexus_job_log_lives_under_the_state_dir(tmp_path, monkeypatch):
+def test_dashboard_job_log_lives_under_the_state_dir(tmp_path, monkeypatch):
     from kaine.setup.web.job_specs import build_job_specs
 
-    def fake_load_nexus_config(shipped, *, operator_path=None):
+    def fake_load_dashboard_config(shipped, *, operator_path=None):
         return SimpleNamespace(port=12345, operator_token="x" * 40)
 
     monkeypatch.setattr(
-        "kaine.nexus.config.load_nexus_config",
-        fake_load_nexus_config,
+        "kaine.dashboard.config.load_dashboard_config",
+        fake_load_dashboard_config,
     )
 
     state_dir = tmp_path / "data" / "state"
@@ -1179,9 +1179,9 @@ def test_nexus_job_log_lives_under_the_state_dir(tmp_path, monkeypatch):
         operator_path=tmp_path / "kaine.operator.toml",
         state_dir=state_dir,
     )
-    nexus_specs = [s for s in specs if s.name == "nexus"]
-    assert len(nexus_specs) == 1
-    assert nexus_specs[0].log_path == state_dir / "logs" / "nexus.log"
+    dashboard_specs = [s for s in specs if s.name == "nexus"]
+    assert len(dashboard_specs) == 1
+    assert dashboard_specs[0].log_path == state_dir / "logs" / "nexus.log"
 
 
 def test_private_log_handler_has_its_own_level(tmp_path):

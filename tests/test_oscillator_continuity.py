@@ -18,7 +18,7 @@ from tests.test_plugins_integration import (
     _FakeEP,
     _FreshPlanningOscillatorPlugin,
     _PlanningEnginePlugin,
-    _spot,
+    _supervisor,
 )
 
 
@@ -100,9 +100,9 @@ async def test_plugin_oscillator_not_re_requested(monkeypatch, bus):
     assert original_osc is not None and original_osc.call_id == 1
     assert osc_plugin.calls == 1
 
-    spot = _spot(registry, config, bus)
-    first = await spot._restart_module("nous")
-    second = await spot._restart_module("nous")
+    supervisor = _supervisor(registry, config, bus)
+    first = await supervisor._restart_module("nous")
+    second = await supervisor._restart_module("nous")
     assert first.ok and first.path == "heavy"
     assert second.ok and second.path == "heavy"
 
@@ -149,9 +149,9 @@ async def test_default_oscillator_continuity(monkeypatch, bus):
     for _ in range(3):
         original["nous"].step(0.5)
 
-    spot = _spot(registry, config, bus)
-    first = await spot._restart_module("nous")
-    second = await spot._restart_module("nous")
+    supervisor = _supervisor(registry, config, bus)
+    first = await supervisor._restart_module("nous")
+    second = await supervisor._restart_module("nous")
     assert first.ok and first.path == "heavy"
     assert second.ok and second.path == "heavy"
 
@@ -193,8 +193,8 @@ async def test_light_restart_keeps_oscillator(monkeypatch, bus):
     original_sequence_osc = registry.get("chronos").oscillator
     assert factory.calls == 2
 
-    spot = _spot(registry, config, bus)
-    result = await spot._restart_module("chronos")
+    supervisor = _supervisor(registry, config, bus)
+    result = await supervisor._restart_module("chronos")
     assert result.ok and result.path == "light"
     assert registry.get("chronos").oscillator is original_sequence_osc
     assert factory.calls == 2
@@ -229,9 +229,9 @@ async def test_layer_disabled_no_oscillator_built(monkeypatch, bus):
     assert registry.get("nous").oscillator is None
     assert factory.calls == 0
 
-    spot = _spot(registry, config, bus)
-    first = await spot._restart_module("nous")
-    second = await spot._restart_module("nous")
+    supervisor = _supervisor(registry, config, bus)
+    first = await supervisor._restart_module("nous")
+    second = await supervisor._restart_module("nous")
     assert first.ok and first.path == "heavy"
     assert second.ok and second.path == "heavy"
 

@@ -39,7 +39,7 @@ def test_config_defaults():
     assert cfg.channels == ()
     assert cfg.reminder_interval_s == 14400.0
     assert cfg.input_loss_after_s == 60.0
-    assert cfg.nexus_url == "http://127.0.0.1:8088/"
+    assert cfg.dashboard_url == "http://127.0.0.1:8088/"
 
 
 def test_config_unknown_key():
@@ -174,7 +174,7 @@ def test_is_allowed_address(ip, expected):
 
 
 def test_build_notice_has_exactly_notice_fields():
-    cfg = CaretakerConfig(install_label="lab", nexus_url="http://127.0.0.1:8088/")
+    cfg = CaretakerConfig(install_label="lab", dashboard_url="http://127.0.0.1:8088/")
     notice = build_notice(
         "starting_unattended", cfg, conditions={"1_x": True, "2_y": False}
     )
@@ -345,7 +345,7 @@ def test_send_http_accepted():
     server = _start_server(store)
     try:
         _, port = server.server_address
-        cfg = CaretakerConfig(install_label="lab", nexus_url="http://127.0.0.1:8088/")
+        cfg = CaretakerConfig(install_label="lab", dashboard_url="http://127.0.0.1:8088/")
         notice = build_notice(
             "starting_unattended", cfg, conditions={"1_x": True}
         )

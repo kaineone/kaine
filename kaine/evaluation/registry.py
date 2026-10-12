@@ -32,9 +32,9 @@ from kaine.evaluation.memory_probes import (
 )
 from kaine.evaluation.observers.ablation_observer import AblationObserver
 from kaine.evaluation.observers.coherence_observer import CoherenceObserver
+from kaine.evaluation.observers.dashboard_record import DashboardRecord
 from kaine.evaluation.observers.external_utterance_log import ExternalUtteranceLog
 from kaine.evaluation.observers.fatigue_observer import FatigueObserver
-from kaine.evaluation.observers.nexus_record import NexusRecord
 from kaine.evaluation.observers.planning_policy_observer import PlanningPolicyObserver
 from kaine.evaluation.observers.prediction_error_observer import PredictionErrorObserver
 from kaine.evaluation.observers.raw_bus_archive_consumer import RawBusArchiveConsumer
@@ -122,7 +122,7 @@ class SidecarRegistry:
             self._research_cfg.enabled
             or self._research_cfg.raw_archive.enabled
             or self._research_cfg.external_utterances.enabled
-            or self._research_cfg.nexus_record.enabled
+            or self._research_cfg.dashboard_record.enabled
         )
 
     @property
@@ -244,15 +244,15 @@ class SidecarRegistry:
             self._observers.append(
                 ExternalUtteranceLog(self._bus, sink, rcfg.external_utterances)
             )
-        if rcfg.nexus_record.enabled:
+        if rcfg.dashboard_record.enabled:
             # LOCAL-ONLY: exact dashboard-diagnostics display after privacy filter.
             sink = self._make_sink_at(
-                rcfg.nexus_record.log_dir,
+                rcfg.dashboard_record.log_dir,
                 "nexus_record",
-                rcfg.nexus_record.retention_days,
+                rcfg.dashboard_record.retention_days,
             )
             self._observers.append(
-                NexusRecord(self._bus, sink, rcfg.nexus_record)
+                DashboardRecord(self._bus, sink, rcfg.dashboard_record)
             )
 
     def build(self) -> None:

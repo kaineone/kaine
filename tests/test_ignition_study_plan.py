@@ -11,7 +11,7 @@ import pytest
 
 from kaine.research.ignition_study.__main__ import main
 from kaine.research.ignition_study.plan import (
-    DEFAULT_GESTATION_BUDGET_SECONDS,
+    DEFAULT_DEVELOPMENT_BUDGET_SECONDS,
     DEFAULT_VIEWING_BUDGET_SECONDS,
     LINES,
     init_study,
@@ -84,7 +84,7 @@ def test_init_creates_layout_and_symlinks(base_plan, tmp_path):
     loaded = load_plan(study_dir)
     assert loaded["study_id"] == "ignite-test"
     assert loaded["viewing_budget_seconds"] == DEFAULT_VIEWING_BUDGET_SECONDS
-    assert loaded["gestation_budget_seconds"] == DEFAULT_GESTATION_BUDGET_SECONDS
+    assert loaded["gestation_budget_seconds"] == DEFAULT_DEVELOPMENT_BUDGET_SECONDS
 
     step_dirs = [study_dir / "gestation", study_dir / "repeat", study_dir / "accumulate"]
     step_dirs += [study_dir / "branch" / str(k) for k in range(len(plan["order"]) + 1)]
@@ -232,7 +232,7 @@ def test_voice_alignment_explicit_list_kept(nine_module_plan):
     assert plan["voice_alignment_steps"] == steps
 
 
-def test_voice_alignment_gestation_refused(nine_module_plan):
+def test_voice_alignment_development_refused(nine_module_plan):
     entry = {"line": "gestation", "k": 0}
     nine_module_plan["voice_alignment_steps"] = [entry]
     with pytest.raises(ValueError) as exc_info:

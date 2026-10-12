@@ -5,45 +5,12 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Callable, Collection, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
-from kaine import legacy_names
+from kaine.legacy_aliases import parameter_for_config_key
 
-
-def parameter_for_config_key(key: str, parameters: Collection[str]) -> str:
-    """The constructor parameter that config ``key`` feeds.
-
-    ``key`` itself when the constructor accepts it. Otherwise the key with every
-    underscore-separated component that is an old module key (a key of
-    ``legacy_names.MODULES``) replaced by that module's ``new_key``, when the
-    constructor accepts that name. Otherwise ``key`` unchanged (the constructor
-    then reports it). Once the config keys are renamed too, the first rule applies
-    and the map is the identity.
-    """
-    if key in parameters:
-        return key
-
-    parts = key.split("_")
-    max_old_len = max((len(name.split("_")) for name in legacy_names.MODULES), default=1)
-
-    mapped_parts: list[str] = []
-    i = 0
-    n = len(parts)
-    while i < n:
-        for length in range(min(max_old_len, n - i), 0, -1):
-            run = "_".join(parts[i : i + length])
-            entry = legacy_names.MODULES.get(run)
-            if entry is not None:
-                mapped_parts.append(entry["new_key"])
-                i += length
-                break
-        else:
-            mapped_parts.append(parts[i])
-            i += 1
-
-    mapped = "_".join(mapped_parts)
-    return mapped if mapped in parameters else key
+__all__ = ["config_kwargs", "parameter_for_config_key"]
 
 
 def config_kwargs(

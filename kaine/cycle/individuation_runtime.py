@@ -234,7 +234,7 @@ class IndividuationRuntime:
         bus: Any,
         notify: Callable[[str], Awaitable[Any]] | None,
         ensure_fact: Callable[[str], Awaitable[bool]],
-        is_gestating: Callable[[], bool],
+        is_developing: Callable[[], bool],
         sleeping: Callable[[], bool] | None,
     ) -> None:
         self.config = config
@@ -244,7 +244,7 @@ class IndividuationRuntime:
         self.bus = bus
         self.notify = notify
         self.ensure_fact = ensure_fact
-        self.is_gestating = is_gestating
+        self.is_developing = is_developing
         self.sleeping = sleeping
 
     async def publish_divergence(self, payload: dict) -> None:
@@ -286,11 +286,11 @@ class IndividuationRuntime:
         if self.notify is not None:
             await self.notify(kind)
 
-    def on_birth(self) -> None:
+    def on_maturation(self) -> None:
         log.info("individuation birth hook: writing birth marker and requesting birth capture")
         try:
             self.paths.root.mkdir(parents=True, exist_ok=True)
-            self.paths.birth_pending.write_text("1", encoding="utf-8")
+            self.paths.maturation_pending.write_text("1", encoding="utf-8")
         except OSError as exc:
             log.warning("individuation failed to write birth marker: %s", exc)
         self.scheduler.request_capture("birth")
@@ -310,22 +310,22 @@ class IndividuationRuntime:
         except IndividuationStoreError as exc:
             log.error("individuation reference adoption failed: %s", exc)
 
-        gestating = True
+        developing = True
         try:
-            gestating = self.is_gestating()
+            developing = self.is_developing()
         except Exception:
-            gestating = True
+            developing = True
 
         if self.scheduler._capture_kind is None:
             if self.paths.reference.exists():
                 try:
-                    self.paths.birth_pending.unlink(missing_ok=True)
+                    self.paths.maturation_pending.unlink(missing_ok=True)
                 except OSError as exc:
                     log.warning("individuation failed to remove stale birth marker: %s", exc)
-            elif self.paths.birth_pending.exists():
+            elif self.paths.maturation_pending.exists():
                 log.info("individuation resuming pending birth capture")
                 self.scheduler.request_capture("birth")
-            elif not gestating:
+            elif not developing:
                 self.scheduler.request_capture("capture")
 
     async def run(self, stop_event: asyncio.Event) -> None:
@@ -412,7 +412,7 @@ def build_runtime(
     organ_unloaded: Callable[[], bool],
     sleeping: Callable[[], bool] | None,
     born_at: Callable[[], str | None],
-    is_gestating: Callable[[], bool],
+    is_developing: Callable[[], bool],
     bus: Any,
     notify: Callable[[str], Awaitable[Any]] | None,
     served_identity: "ServedOrganIdentity | None" = None,
@@ -444,7 +444,7 @@ def build_runtime(
         bus=bus,
         notify=notify,
         ensure_fact=ensure_fact,
-        is_gestating=is_gestating,
+        is_developing=is_developing,
         sleeping=sleeping,
     )
 
@@ -453,13 +453,13 @@ def build_runtime(
         def _no_adapter_file() -> bool:
             # The rule only needs to know whether an adapter file is present.
             # A presence check only: hashing a large adapter here would stall the loop.
-            return _birth_adapter_file(adapter_output_dir) is None
+            return _maturation_adapter_file(adapter_output_dir) is None
         adapter_verifiable = _no_adapter_file
 
     def _on_capture_kind_change(kind: str | None) -> None:
         if kind != "birth":
             try:
-                paths.birth_pending.unlink(missing_ok=True)
+                paths.maturation_pending.unlink(missing_ok=True)
             except OSError as exc:
                 log.warning("individuation failed to remove birth marker: %s", exc)
 
@@ -502,7 +502,7 @@ def build_runtime(
             language.probe_self_model(), adapter_output_dir
         ),
         born_at=born_at,
-        birth_adapter_file=lambda: _birth_adapter_file(adapter_output_dir),
+        maturation_adapter_file=lambda: _maturation_adapter_file(adapter_output_dir),
         report_sink=report_sink(paths),
         publish=runtime.publish_divergence,
         abort_reason=scheduler.abort_reason,
@@ -516,7 +516,7 @@ def build_runtime(
     return runtime
 
 
-def _birth_adapter_file(adapter_output_dir: Path | None) -> Path | None:
+def _maturation_adapter_file(adapter_output_dir: Path | None) -> Path | None:
     if adapter_output_dir is None:
         return None
     from kaine.modules.sleep.adapter_store import current_path

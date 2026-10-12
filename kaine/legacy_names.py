@@ -14,7 +14,7 @@ SCOPES = ("prose", "identifiers", "keys", "operator", "persisted")
 
 SCOPE_STATUS = {
     "prose": "pending",
-    "identifiers": "pending",
+    "identifiers": "done",
     "keys": "pending",
     "operator": "pending",
     "persisted": "pending",
@@ -184,6 +184,13 @@ DEVELOPMENTAL = {
         "new_prose": "developmental",
         "layer": "5d",
     },
+    "gestating": {
+        "old_class": "Gestating",
+        "new_class": "Developing",
+        "new_key": "developing",
+        "new_prose": "developing",
+        "layer": "5d",
+    },
     "womb": {
         "old_class": "Womb",
         "new_class": "StimulusSource",
@@ -285,6 +292,11 @@ GUARDED = {
                 "pattern": r"`spot`",
                 "why": "module key in a code span",
             },
+            {
+                "action": "keep",
+                "pattern": r"SPOT (?:RECOVERY|CRITICAL)",
+                "why": "dashboard banner text, renamed with the UI strings",
+            },
         ],
         "default": "queue",
     },
@@ -348,6 +360,23 @@ GUARDED = {
                 "files": list(MODULE_LIST_FILES),
                 "pattern": r"[\"']echo[\"']",
                 "why": "module key in a module list",
+            },
+            {
+                "action": "rename",
+                "contexts": ["py_name"],
+                "files": ["tests/test_phase_1_endtoend.py", "tests/systems/test_cycle_subsystem.py"],
+                "pattern": r"(?<![A-Za-z0-9_])(?:echo_a|echo_b|EchoB|echo)(?![A-Za-z0-9_])",
+                "why": "EchoModule instances and subclasses in these tests",
+            },
+            {
+                "action": "keep",
+                "pattern": r"(?<![A-Za-z0-9_])(?:EchoConditionedClient|_EchoModelClient|_NamedEcho)(?![A-Za-z0-9_])",
+                "why": "echo as a verbatim repeat, not the recorder module",
+            },
+            {
+                "action": "keep",
+                "contexts": ["py_name"],
+                "why": "echo as a verbatim repeat, not the recorder module",
             },
         ],
         "default": "queue",
@@ -437,6 +466,57 @@ GUARDED = {
                 "pattern": r"state/perception/",
                 "why": "locus state directory",
             },
+            {
+                "action": "rename",
+                "contexts": ["py_name", "py_string"],
+                "pattern": r"(?<![A-Za-z0-9_])make_perception(?![A-Za-z0-9_])",
+                "why": "locus module factory",
+            },
+            {
+                "action": "rename",
+                "contexts": ["py_name", "py_string"],
+                "pattern": r"(?<![A-Za-z0-9_])PERCEPTION_STREAM(?![A-Za-z0-9_])",
+                "why": "locus module stream constant",
+            },
+            {
+                "action": "rename",
+                "contexts": ["py_name"],
+                "files": ["tests/test_revive_each_module.py"],
+                "pattern": r"(?<![A-Za-z0-9_])(?:_build_perception|_mutate_perception|test_roundtrip_perception)(?![A-Za-z0-9_])",
+                "why": "locus module identifiers in revive tests",
+            },
+            {
+                "action": "rename",
+                "contexts": ["py_name"],
+                "files": ["tests/test_perception_feed_integration.py", "tests/test_womb_feed_integration.py"],
+                "pattern": r"(?<![A-Za-z0-9_])perception(?![A-Za-z0-9_])",
+                "why": "PerceptionLocus local variable in integration tests",
+            },
+            {
+                "action": "keep",
+                "pattern": r"(?<![A-Za-z0-9_])_perception_banner(?![A-Za-z0-9_])",
+                "why": "operator-facing template, not the locus module",
+            },
+            {
+                "action": "keep",
+                "pattern": r"(?<![A-Za-z0-9_])PerceptionState(?![A-Za-z0-9_])",
+                "why": "feed state class in kaine/perception_state.py",
+            },
+            {
+                "action": "keep",
+                "pattern": r"(?<![A-Za-z0-9_])check_perception(?![A-Za-z0-9_])",
+                "why": "preboot sensor check",
+            },
+            {
+                "action": "keep",
+                "pattern": r"[\"']PERCEPTION[\"']",
+                "why": "preboot group label",
+            },
+            {
+                "action": "keep",
+                "contexts": ["py_name", "path", "md_code"],
+                "why": "the perception subsystem, not the locus module",
+            },
         ],
         "default": "queue",
     },
@@ -479,8 +559,41 @@ GUARDED = {
 
 _MODULE_CLASSES = "Topos|Soma|Chronos|Thymos|Hypnos|Mnemos|Phantasia|Lingua|Vox|Nous|Volition|Eidolon|Empatheia|Syneidesis|Praxis|Mundus|Spot|Nexus|Echo|Audition"
 
+# Dashboard JavaScript globals (window.NexusAuth, NexusBirth, ...).
+_DASHBOARD_JS_GLOBALS = r"(?<![A-Za-z0-9_])Nexus(?:Auth|Birth|Caretaker|ChartRouting|Charts|Conn|Controls|Flow|Freeze|LiveSeries|Metrics|Perception|Preservation|Preview|RedAlert|RelTime|Reveal|Sections|Spot|SSE|Stream|Visibility|Vitals)(?![A-Za-z0-9_])"
+
 # Explicit overrides for review-queue items are added by later pull requests.
 RESOLUTIONS = [
+    {
+        "name": "nexus",
+        "action": "keep",
+        "pattern": r"kaine\.nexus\.sessionKey",
+        "why": "browser storage key held in the operator's browser; renamed with the UI strings",
+    },
+    {
+        "name": "nexus",
+        "action": "keep",
+        "pattern": _DASHBOARD_JS_GLOBALS,
+        "why": "dashboard JavaScript global; renamed with the UI strings",
+    },
+    {
+        "name": "spot",
+        "action": "keep",
+        "pattern": _DASHBOARD_JS_GLOBALS,
+        "why": "dashboard JavaScript global; renamed with the UI strings",
+    },
+    {
+        "name": "birth",
+        "action": "keep",
+        "pattern": _DASHBOARD_JS_GLOBALS,
+        "why": "dashboard JavaScript global; renamed with the UI strings",
+    },
+    {
+        "name": "perception",
+        "action": "keep",
+        "pattern": _DASHBOARD_JS_GLOBALS,
+        "why": "dashboard JavaScript global; renamed with the UI strings",
+    },
     {
         "name": "perception",
         "action": "keep",
@@ -684,6 +797,10 @@ PATH_OVERRIDES = {
     "tests/test_phantasia_world_model.py": "tests/test_world_model_backend.py",
     "tests/test_praxis_effectors.py": "tests/test_effectors.py",
     "tests/test_workspace_syneidesis.py": "tests/test_workspace_core.py",
+    "tests/test_perception_locus.py": "tests/test_perceptual_locus.py",
+    # Test names that would otherwise read badly after the rename.
+    "tests/test_developmental_gestation_lock.py": "tests/test_development_lock.py",
+    "tests/test_womb_sources.py": "tests/test_stimulus_sources.py",
     # Keys ending in "/" are directory prefixes.
     "openspec/specs/spot-supervisor/": "openspec/specs/supervisor/",
     "docs/08-cognitive-cycle/perception-locus.md": "docs/08-cognitive-cycle/perceptual-locus.md",
@@ -726,6 +843,8 @@ EXCLUDED_GLOBS = (
     "*/docs/records/*",
     "kaine/nexus/static/vendor/",
     "kaine/nexus/static/fonts/",
+    "kaine/dashboard/static/vendor/",
+    "kaine/dashboard/static/fonts/",
     "external/",
     "THIRD_PARTY_LICENSES.md",
     "unsloth_compiled_cache/",
@@ -742,6 +861,11 @@ EXCLUDED_GLOBS = (
     "kaine/legacy_names.py",
     # The deprecated recovery-command shim keeps its old module name on purpose.
     "kaine/lifecycle/mnemos_recover.py",
+    # The deprecated dashboard command shim keeps its old package name on purpose.
+    "kaine/nexus/__init__.py",
+    "kaine/nexus/__main__.py",
+    # Stored field names stay byte-identical for good.
+    "kaine/lifecycle/stored_field_names.py",
     "tests/fixtures/rename_modules/",
     # These documents record the rename itself and must keep the old names.
     "openspec/changes/functional-module-names/",
@@ -839,10 +963,17 @@ SURVEY_EXTRA = (
 )
 
 # The survey measures the tree as it was before the rename, so these keep the old paths.
-SURVEY_UI_PREFIXES = ("kaine/nexus/static/", "kaine/nexus/templates/")
+SURVEY_UI_PREFIXES = (
+    "kaine/nexus/static/",
+    "kaine/nexus/templates/",
+    "kaine/dashboard/static/",
+    "kaine/dashboard/templates/",
+)
 SURVEY_THIRD_PARTY_PREFIXES = (
     "kaine/nexus/static/vendor/",
     "kaine/nexus/static/fonts/",
+    "kaine/dashboard/static/vendor/",
+    "kaine/dashboard/static/fonts/",
     "external/",
     "unsloth_compiled_cache/",
     "THIRD_PARTY_LICENSES.md",
@@ -963,6 +1094,7 @@ STATE_PATHS = (
     {"old": "lifecycle/gestation_progress.json", "new": "lifecycle/development_progress.json", "scope": "persisted"},
     {"old": "lifecycle/gestation_viability.json", "new": "lifecycle/development_viability.json", "scope": "persisted"},
     {"old": "individuation/birth_adapter.gguf", "new": "individuation/maturation_adapter.gguf", "scope": "persisted"},
+    {"old": "individuation/birth_pending", "new": "individuation/maturation_pending", "scope": "persisted"},
 )
 
 COLLECTIONS = (
@@ -999,6 +1131,7 @@ PACKAGING = (
     {"kind": "quadlet_unit", "old": "kaine-nexus.container", "new": "kaine-dashboard.container", "scope": "operator"},
     {"kind": "compose_service", "old": "nexus", "new": "dashboard", "scope": "operator"},
     {"kind": "module_shim", "old": "kaine.lifecycle.mnemos_recover", "new": "kaine.lifecycle.episodic_memory_recover", "scope": "operator"},
+    {"kind": "module_shim", "old": "kaine.nexus", "new": "kaine.dashboard", "scope": "operator"},
 )
 
 del _MODULE_CLASSES

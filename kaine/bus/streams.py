@@ -34,16 +34,16 @@ LANGUAGE_INTERNAL_STREAM = "lingua.internal"
 
 AUDITION_STREAM = module_stream("audition")
 SEQUENCE_STREAM = module_stream("chronos")
-ECHO_STREAM = module_stream("echo")
+RECORDER_STREAM = module_stream("echo")
 SELF_MODEL_STREAM = module_stream("eidolon")
 SOCIAL_COGNITION_STREAM = module_stream("empatheia")
 SLEEP_STREAM = module_stream("hypnos")
 #: The language module's aggregate stream: a copy of every utterance on either channel.
 LANGUAGE_STREAM = module_stream("lingua")
 EPISODIC_MEMORY_STREAM = module_stream("mnemos")
-MUNDUS_STREAM = module_stream("mundus")
+EMBODIMENT_STREAM = module_stream("mundus")
 PLANNING_STREAM = module_stream("nous")
-PERCEPTION_STREAM = module_stream("perception")
+PERCEPTUAL_LOCUS_STREAM = module_stream("perception")
 WORLD_MODEL_STREAM = module_stream("phantasia")
 EFFECTORS_STREAM = module_stream("praxis")
 INTEROCEPTION_STREAM = module_stream("soma")
@@ -54,15 +54,15 @@ VOCAL_STREAM = module_stream("vox")
 # --- Cycle-layer and lifecycle producers -----------------------------------
 
 #: The stimulus source rhythm, readiness readouts and presence, written during the developmental phase.
-GESTATION_STREAM = module_stream("gestation")
+DEVELOPMENT_STREAM = module_stream("gestation")
 #: Individuation divergence verdicts (kaine.cycle.individuation_runtime).
 INDIVIDUATION_STREAM = module_stream("individuation")
 #: Developmental-stage transitions (kaine.lifecycle.maturation_gate).
 LIFECYCLE_STREAM = module_stream("lifecycle")
 #: Preservation events from the divergence and welfare monitors.
 PRESERVATION_STREAM = module_stream("preservation")
-#: The supervisor module-supervisor incidents (kaine.cycle.spot).
-SPOT_STREAM = module_stream("spot")
+#: The supervisor module-supervisor incidents (kaine.cycle.supervisor).
+SUPERVISOR_STREAM = module_stream("spot")
 #: Welfare-protective responses (kaine.cycle.preservation_monitor).
 WELFARE_STREAM = module_stream("welfare")
 
@@ -70,15 +70,15 @@ MODULE_STREAMS: frozenset[str] = frozenset(
     {
         AUDITION_STREAM,
         SEQUENCE_STREAM,
-        ECHO_STREAM,
+        RECORDER_STREAM,
         SELF_MODEL_STREAM,
         SOCIAL_COGNITION_STREAM,
         SLEEP_STREAM,
         LANGUAGE_STREAM,
         EPISODIC_MEMORY_STREAM,
-        MUNDUS_STREAM,
+        EMBODIMENT_STREAM,
         PLANNING_STREAM,
-        PERCEPTION_STREAM,
+        PERCEPTUAL_LOCUS_STREAM,
         WORLD_MODEL_STREAM,
         EFFECTORS_STREAM,
         INTEROCEPTION_STREAM,
@@ -96,11 +96,11 @@ KNOWN_STREAMS: frozenset[str] = MODULE_STREAMS | frozenset(
         ACTION_SELECTION_FEEDBACK_STREAM,
         LANGUAGE_EXTERNAL_STREAM,
         LANGUAGE_INTERNAL_STREAM,
-        GESTATION_STREAM,
+        DEVELOPMENT_STREAM,
         INDIVIDUATION_STREAM,
         LIFECYCLE_STREAM,
         PRESERVATION_STREAM,
-        SPOT_STREAM,
+        SUPERVISOR_STREAM,
         WELFARE_STREAM,
     }
 )
@@ -109,10 +109,10 @@ __all__ = [
     "AUDITION_STREAM",
     "SEQUENCE_STREAM",
     "CYCLE_STREAM",
-    "ECHO_STREAM",
+    "RECORDER_STREAM",
     "SELF_MODEL_STREAM",
     "SOCIAL_COGNITION_STREAM",
-    "GESTATION_STREAM",
+    "DEVELOPMENT_STREAM",
     "SLEEP_STREAM",
     "INDIVIDUATION_STREAM",
     "KNOWN_STREAMS",
@@ -122,14 +122,14 @@ __all__ = [
     "LANGUAGE_STREAM",
     "EPISODIC_MEMORY_STREAM",
     "MODULE_STREAMS",
-    "MUNDUS_STREAM",
+    "EMBODIMENT_STREAM",
     "PLANNING_STREAM",
-    "PERCEPTION_STREAM",
+    "PERCEPTUAL_LOCUS_STREAM",
     "WORLD_MODEL_STREAM",
     "EFFECTORS_STREAM",
     "PRESERVATION_STREAM",
     "INTEROCEPTION_STREAM",
-    "SPOT_STREAM",
+    "SUPERVISOR_STREAM",
     "AFFECT_STREAM",
     "VISION_STREAM",
     "ACTION_SELECTION_FEEDBACK_STREAM",

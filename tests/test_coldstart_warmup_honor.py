@@ -27,7 +27,7 @@ from kaine.cycle.preservation_monitor import (
     WelfareProtectiveMonitor,
     WelfareResponseConfig,
 )
-from kaine.cycle.spot import Spot, SpotConfig
+from kaine.cycle.supervisor import Supervisor, SupervisorConfig
 from kaine.lifecycle.manager import ForkManager
 from kaine.modules.base import BaseModule
 from kaine.modules.registry import ModuleRegistry
@@ -181,12 +181,12 @@ async def _crashed_module(bus):
     return mod
 
 
-def _spot(registry, fm, bus):
-    return Spot(
+def _supervisor(registry, fm, bus):
+    return Supervisor(
         registry=registry,
         fork_manager=fm,
         kaine_config={},
-        config=SpotConfig(enabled=True, restart_backoff_s=0.0),
+        config=SupervisorConfig(enabled=True, restart_backoff_s=0.0),
         rebuild_module=lambda name: None,
         bus=bus,
     )
@@ -201,17 +201,17 @@ def _spot(registry, fm, bus):
         ("spot", True),  # The supervisor's OWN recovery freeze keeps working
     ],
 )
-async def test_spot_stands_down_for_non_spot_freeze(bus, tmp_path, source, should_act):
+async def test_supervisor_stands_down_for_non_supervisor_freeze(bus, tmp_path, source, should_act):
     mod = await _crashed_module(bus)
     reg = ModuleRegistry()
     reg.register(mod)
-    spot = _spot(reg, ForkManager(tmp_path / "forks"), bus)
+    supervisor = _supervisor(reg, ForkManager(tmp_path / "forks"), bus)
     control_state.freeze(reason=f"{source} freeze", source=source)
 
-    await spot._poll_once(asyncio.Event())
+    await supervisor._poll_once(asyncio.Event())
 
     if should_act:
-        assert "crashy" in spot._incidents  # The supervisor assessed + acted
+        assert "crashy" in supervisor._incidents  # The supervisor assessed + acted
     else:
-        assert "crashy" not in spot._incidents  # stood down, no assessment
+        assert "crashy" not in supervisor._incidents  # stood down, no assessment
     await mod.shutdown()

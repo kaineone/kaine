@@ -95,12 +95,12 @@ async def test_full_stack_unbooted_runs_50_ticks_and_round_trips_snapshot(tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_full_stack_with_nexus_co_existence(tmp_path):
+async def test_full_stack_with_dashboard_co_existence(tmp_path):
     """Cycle + the dashboard on the same fakeredis. The dashboard bridge reads streams
     without disrupting the cycle's reads."""
     fakeredis = pytest.importorskip("fakeredis.aioredis")
-    from kaine.nexus.bridge import BusBridge
-    from kaine.nexus.privacy import PrivacyFilter
+    from kaine.dashboard.bridge import BusBridge
+    from kaine.dashboard.privacy import PrivacyFilter
 
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)

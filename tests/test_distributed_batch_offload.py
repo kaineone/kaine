@@ -72,11 +72,11 @@ def test_deterministic_override_cannot_promote_nondeterministic_kind():
     assert eval_job.deterministic is False
 
 
-def test_only_forked_being_is_entity_bearing():
+def test_only_forked_entity_is_entity_bearing():
     assert _voice_job().is_entity_bearing is False
     fork = BatchJob(
-        kind=JobKind.FORKED_BEING,
-        expected_artifact=default_artifact_for(JobKind.FORKED_BEING, "snap.json"),
+        kind=JobKind.FORKED_ENTITY,
+        expected_artifact=default_artifact_for(JobKind.FORKED_ENTITY, "snap.json"),
     )
     assert fork.is_entity_bearing is True
 
@@ -116,8 +116,8 @@ def test_select_prefers_trusted():
 def test_entity_bearing_fork_never_goes_to_volunteer_by_default():
     volunteer = _FakeVolunteer()
     fork = BatchJob(
-        kind=JobKind.FORKED_BEING,
-        expected_artifact=default_artifact_for(JobKind.FORKED_BEING, "s.json"),
+        kind=JobKind.FORKED_ENTITY,
+        expected_artifact=default_artifact_for(JobKind.FORKED_ENTITY, "s.json"),
     )
     with pytest.raises(NoEligibleRunner):
         select_runner(fork, [volunteer])
@@ -264,8 +264,8 @@ def test_boinc_packages_nondeterministic_job_without_quorum():
 def test_boinc_withholds_entity_bearing_fork():
     runner = BoincRunner()
     fork = BatchJob(
-        kind=JobKind.FORKED_BEING,
-        expected_artifact=default_artifact_for(JobKind.FORKED_BEING, "s.json"),
+        kind=JobKind.FORKED_ENTITY,
+        expected_artifact=default_artifact_for(JobKind.FORKED_ENTITY, "s.json"),
     )
     assert runner.accepts(fork) is False
     with pytest.raises(OutputBoundaryViolation):

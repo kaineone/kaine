@@ -15,7 +15,7 @@ import pytest
 from kaine.bus.schema import Event
 from kaine.lifecycle import stage as lifecycle_stage
 from kaine.lifecycle.gate_runner import (
-    DEFAULT_WOMB_READOUT_STREAM,
+    DEFAULT_STIMULUS_SOURCE_READOUT_STREAM,
     MaturationGateRunner,
 )
 
@@ -104,8 +104,8 @@ def _event(
 
 
 @pytest.mark.asyncio
-async def test_default_stream_is_gestation_out():
-    assert DEFAULT_WOMB_READOUT_STREAM == "gestation.out"
+async def test_default_stream_is_development_out():
+    assert DEFAULT_STIMULUS_SOURCE_READOUT_STREAM == "gestation.out"
 
 
 @pytest.mark.asyncio
@@ -124,10 +124,10 @@ async def test_readout_found_behind_presence(tmp_path: Path):
         registry=_make_registry(),
         entity_clock=MagicMock(),
         stage_state=_fresh_stage(tmp_path),
-        womb_readout_stream="gestation.out",
+        stimulus_source_readout_stream="gestation.out",
     )
     await runner._begin_boot()
-    result = await runner._womb_readiness_readout()
+    result = await runner._stimulus_source_readiness_readout()
     assert result == readout_payload
 
 
@@ -143,10 +143,10 @@ async def test_readout_older_than_max_age_ignored(tmp_path: Path):
         registry=_make_registry(),
         entity_clock=MagicMock(),
         stage_state=_fresh_stage(tmp_path),
-        womb_readout_stream="gestation.out",
+        stimulus_source_readout_stream="gestation.out",
     )
     await runner._begin_boot()
-    result = await runner._womb_readiness_readout()
+    result = await runner._stimulus_source_readiness_readout()
     assert result is None
 
 
@@ -162,10 +162,10 @@ async def test_readout_older_than_boot_ignored(tmp_path: Path):
         registry=_make_registry(),
         entity_clock=MagicMock(),
         stage_state=_fresh_stage(tmp_path),
-        womb_readout_stream="gestation.out",
+        stimulus_source_readout_stream="gestation.out",
     )
     await runner._begin_boot()
-    result = await runner._womb_readiness_readout()
+    result = await runner._stimulus_source_readiness_readout()
     assert result is None
 
 
@@ -181,8 +181,8 @@ async def test_readout_from_wrong_source_ignored(tmp_path: Path):
         registry=_make_registry(),
         entity_clock=MagicMock(),
         stage_state=_fresh_stage(tmp_path),
-        womb_readout_stream="gestation.out",
+        stimulus_source_readout_stream="gestation.out",
     )
     await runner._begin_boot()
-    result = await runner._womb_readiness_readout()
+    result = await runner._stimulus_source_readiness_readout()
     assert result is None

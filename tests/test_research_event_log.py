@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 import pytest
 
 from kaine.bus.schema import Event
+from kaine.dashboard.privacy import CONTENT_FIELDS
 from kaine.evaluation.config import (
     EvaluationConfig,
     RawArchiveConfig,
@@ -36,7 +37,6 @@ from kaine.evaluation.observers.research_event_observer import (
 from kaine.evaluation.registry import SidecarRegistry
 from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.experiment.log_schema import NONNEG, _bound_for
-from kaine.nexus.privacy import CONTENT_FIELDS
 from kaine.research.submission import (
     DENY_PATTERNS,
     METRICS_ONLY_DIRS,
@@ -336,7 +336,7 @@ async def test_audition_transcription_never_logged():
 
 
 @pytest.mark.asyncio
-async def test_mundus_visual_raw_never_logged():
+async def test_embodiment_visual_raw_never_logged():
     """6.6 — mundus.visual.raw is not in the taxonomy → no record."""
     bus = FakeBus()
     sink = FakeSink()
@@ -474,7 +474,7 @@ async def test_self_model_drift_scalar_only_no_self_model():
 
 
 @pytest.mark.asyncio
-async def test_mundus_proprio_no_raw_coordinates():
+async def test_embodiment_proprio_no_raw_coordinates():
     """mundus.proprio → opaque position hash + region label, never x/y/z."""
     bus = FakeBus()
     sink = FakeSink()
@@ -540,7 +540,7 @@ async def test_workspace_broadcast_metadata_only():
 
 
 @pytest.mark.asyncio
-async def test_spot_incident_captured_with_incident_id():
+async def test_supervisor_incident_captured_with_incident_id():
     """freeze-run-annotation — spot.incident is captured into a record carrying
     incident_id + operational fields, with content/paths absent."""
     bus = FakeBus()
@@ -576,7 +576,7 @@ async def test_spot_incident_captured_with_incident_id():
 
 
 @pytest.mark.asyncio
-async def test_spot_incident_subtype_prefix_captured():
+async def test_supervisor_incident_subtype_prefix_captured():
     """The spot.incident.* prefix family also routes to the spot.incident
     taxonomy entry."""
     bus = FakeBus()
@@ -605,7 +605,7 @@ async def test_spot_incident_subtype_prefix_captured():
 
 
 @pytest.mark.asyncio
-async def test_spot_incident_record_stamped_with_run_id(tmp_path):
+async def test_supervisor_incident_record_stamped_with_run_id(tmp_path):
     """When a run context is set, the captured spot.incident record is stamped
     with the run's run_id (via the A1 sink stamping) — the run<->incident link.
     Without a context, no run_id is added."""
@@ -677,7 +677,7 @@ async def test_spot_incident_record_stamped_with_run_id(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_spot_incident_content_field_never_logged():
+async def test_supervisor_incident_content_field_never_logged():
     """A content field smuggled into a spot.incident payload never reaches the
     record (allowlist-by-construction)."""
     bus = FakeBus()

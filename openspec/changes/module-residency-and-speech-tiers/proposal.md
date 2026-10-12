@@ -60,7 +60,7 @@ The design assumed automatic dilation absorbs model loads. It cannot: the contro
 - **Changed code:**
   - engine clients gain `ensure_loaded()` / `unload()`: `kaine/modules/audition/sherpa_stt.py`, `kaine/modules/vocal/sherpa_tts.py`, `kaine/modules/vision/encoder.py`, `kaine/modules/audition/emotion.py`, `kaine/text_embedding.py`;
   - `kaine/modules/sleep/organ_window.py` routes through the manager;
-  - `kaine/cycle/spot.py` treats residency waits as liveness;
+  - `kaine/cycle/supervisor.py` treats residency waits as liveness;
   - `kaine/modules/audition/module.py` gets the bounded audio queue;
   - `kaine/preboot.py` gets the `Residency fit` row;
   - `kaine/hardware.py` gets the recommender reason text;

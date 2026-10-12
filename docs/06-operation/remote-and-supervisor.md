@@ -36,7 +36,7 @@ A boot outside research mode is either operator-supervised (`KAINE_CYCLE_OPERATO
 
 ## Module supervisor (Supervisor)
 
-The supervisor is the cycle-layer watchdog in [`kaine/cycle/spot.py`](../../kaine/cycle/spot.py), outside the module registry. It polls every module for liveness every `[spot].poll_interval_s` seconds (2 by default).
+The supervisor is the cycle-layer watchdog in [`kaine/cycle/supervisor.py`](../../kaine/cycle/supervisor.py), outside the module registry. It polls every module for liveness every `[spot].poll_interval_s` seconds (2 by default).
 
 The shipped config disables the supervisor (`[spot].enabled = false`). Enable it in `config/kaine.operator.toml`.
 

@@ -24,10 +24,10 @@ import pytest
 from kaine.boot import (
     _build_perception_feed_audio_factory,
     _build_perception_feed_video_factory,
-    _build_womb_world_transition,
-    _install_womb_world_transition,
-    _plan_womb_world_transition,
-    _womb_params,
+    _build_stimulus_source_world_transition,
+    _install_stimulus_source_world_transition,
+    _plan_stimulus_source_world_transition,
+    _stimulus_source_params,
     gather_perception_feed_descriptor,
 )
 from kaine.cycle.ignition_log import playlist_position_provider
@@ -41,7 +41,7 @@ from kaine.modules.perception_transition import (
     apply_audio_fade,
     audio_fade_gain,
     blend_frames,
-    render_birth_field,
+    render_maturation_field,
     resize_bilinear,
     smoothstep,
     transition_alpha,
@@ -49,15 +49,15 @@ from kaine.modules.perception_transition import (
 from kaine.modules.vision.feed import (
     PlaylistClock,
     PlaylistSource,
-    WombClock,
-    WombProceduralSource,
-    WombSchedule,
+    StimulusSourceClock,
+    StimulusSourceProceduralSource,
+    StimulusSourceSchedule,
     load_playlist_manifest,
 )
 
 FILM_H, FILM_W = 20, 30
 FPS = 30
-WOMB_W, WOMB_H = 32, 24
+STIMULUS_SOURCE_W, STIMULUS_SOURCE_H = 32, 24
 
 # ---------------------------------------------------------------------------
 # Fakes and fixtures
@@ -187,7 +187,7 @@ def _born_stage(feed: dict, **overrides) -> lifecycle_stage.StageState:  # noqa:
         "lived_seconds": 5000.0,
         "womb_t_at_birth": 5003.2,
         "womb_seed": 7,
-        "womb_params_digest": lifecycle_stage.womb_params_digest(_womb_params(feed)),
+        "womb_params_digest": lifecycle_stage.womb_params_digest(_stimulus_source_params(feed)),
     }
     fields.update(overrides)
     return lifecycle_stage.StageState(**fields)
@@ -195,12 +195,12 @@ def _born_stage(feed: dict, **overrides) -> lifecycle_stage.StageState:  # noqa:
 
 def _build(feed: dict, stage, clock: _FakeClock, timers: _TimerFactory, n_items: int = 1, **kw):  # noqa: ANN001, ANN003, ANN202
     pclock = _CountingClock(n_items, clock=clock)
-    transition = _build_womb_world_transition(
+    transition = _build_stimulus_source_world_transition(
         feed,
         pclock,
         stage_state=stage,
-        width=WOMB_W,
-        height=WOMB_H,
+        width=STIMULUS_SOURCE_W,
+        height=STIMULUS_SOURCE_H,
         clock=clock,
         timer_factory=timers,
         **kw,
@@ -298,24 +298,24 @@ def test_apply_audio_fade_ramps_each_frame_and_passes_after_the_fade():
     assert apply_audio_fade(mono, start_frame=0, channels=1, fade_frames=0) == mono
 
 
-def test_birth_field_is_the_womb_bloom_peak_at_the_recorded_time():
+def test_maturation_field_is_the_stimulus_source_bloom_peak_at_the_recorded_time():
     feed = _feed()
-    params = _womb_params(feed)
-    field = render_birth_field(
+    params = _stimulus_source_params(feed)
+    field = render_maturation_field(
         seed=7, womb_t_at_birth=5003.2, lived_seconds=5000.0, params=params,
-        width=WOMB_W, height=WOMB_H,
+        width=STIMULUS_SOURCE_W, height=STIMULUS_SOURCE_H,
     )
-    schedule = WombSchedule(seed=7, width=WOMB_W, height=WOMB_H)
-    womb = WombProceduralSource(
+    schedule = StimulusSourceSchedule(seed=7, width=STIMULUS_SOURCE_W, height=STIMULUS_SOURCE_H)
+    stimulus_source = StimulusSourceProceduralSource(
         schedule, params=params,
-        clock=WombClock(lived_offset_seconds=5000.0), lived_seconds=lambda: 5000.0,
+        clock=StimulusSourceClock(lived_offset_seconds=5000.0), lived_seconds=lambda: 5000.0,
     )
-    i_birth = math.floor(5003.2 * schedule.frame_rate_hz)
-    assert np.array_equal(field, womb.frame_at(i_birth, birth_progress=1.0))
-    assert field.shape == (WOMB_H, WOMB_W, 3) and field.dtype == np.uint8
+    i_maturation = math.floor(5003.2 * schedule.frame_rate_hz)
+    assert np.array_equal(field, stimulus_source.frame_at(i_maturation, maturation_progress=1.0))
+    assert field.shape == (STIMULUS_SOURCE_H, STIMULUS_SOURCE_W, 3) and field.dtype == np.uint8
     # Bright bloom (well above the dim developmental field) and bounded.
     assert field.max() <= int(0.8 * 255) + 1
-    assert field.mean() > womb.frame_at(i_birth).mean()
+    assert field.mean() > stimulus_source.frame_at(i_maturation).mean()
 
 
 # ---------------------------------------------------------------------------
@@ -392,17 +392,17 @@ def test_video_source_crossfades_then_plays_from_programme_zero(tmp_path):
     source, transition, pclock, manifest = _video(tmp_path, feed, clock, timers)
     position = playlist_position_provider(pclock, manifest)
     film0 = _film_frame(0)
-    womb = resize_bilinear(transition.womb_frame, FILM_H, FILM_W)
+    stimulus_source = resize_bilinear(transition.stimulus_source_frame, FILM_H, FILM_W)
 
     clock.t = 100.0
     ok, frame = source.read()  # first read starts the transition
-    assert ok and np.array_equal(frame, womb)
+    assert ok and np.array_equal(frame, stimulus_source)
     assert source.current_item is None
     assert position() == (0, 0, "film.mp4", 0.0, True, ("transition",))
 
     clock.t = 102.0
     ok, frame = source.read()
-    assert np.array_equal(frame, blend_frames(womb, film0, 0.5))
+    assert np.array_equal(frame, blend_frames(stimulus_source, film0, 0.5))
     assert pclock.locate() == (0, 0.0)
 
     clock.t = 104.0  # transition_seconds elapsed: the read releases
@@ -549,7 +549,7 @@ def test_fade_continues_across_blocks_to_full_gain():
     clock, timers = _FakeClock(), _TimerFactory()
     pclock = PlaylistClock(1, clock=clock)
     feed = _feed()
-    transition = _build_womb_world_transition(
+    transition = _build_stimulus_source_world_transition(
         dict(feed, transition_audio_fade_seconds=0.001), pclock,
         stage_state=_born_stage(feed), width=8, height=6, clock=clock, timer_factory=timers,
     )
@@ -594,7 +594,7 @@ def test_no_transition_logs_why(case, level, fragment, caplog):
     elif case == "no_stage":
         stage = None
     elif case == "gestating":
-        stage = lifecycle_stage.StageState(stage=lifecycle_stage.GESTATION)
+        stage = lifecycle_stage.StageState(stage=lifecycle_stage.DEVELOPMENT)
     elif case == "never_born":
         stage = lifecycle_stage.StageState(stage=lifecycle_stage.EMBODIED)
     elif case == "missing_record":
@@ -612,9 +612,9 @@ def test_no_transition_logs_why(case, level, fragment, caplog):
     assert fragment in records[0].getMessage()
 
 
-def test_the_conditions_hold_for_a_recorded_birth():
+def test_the_conditions_hold_for_a_recorded_maturation():
     feed = _feed()
-    active, _reason, level = _plan_womb_world_transition(feed, _born_stage(feed))
+    active, _reason, level = _plan_stimulus_source_world_transition(feed, _born_stage(feed))
     assert active and level == logging.INFO
 
 
@@ -622,10 +622,10 @@ def test_the_conditions_hold_for_a_recorded_birth():
 def test_invalid_transition_settings_are_refused(bad):
     feed = _feed(transition_seconds=bad)
     with pytest.raises(ValueError):
-        _plan_womb_world_transition(feed, _born_stage(_feed()))
+        _plan_stimulus_source_world_transition(feed, _born_stage(_feed()))
     feed = _feed(transition_audio_fade_seconds=bad)
     with pytest.raises(ValueError):
-        _plan_womb_world_transition(feed, _born_stage(_feed()))
+        _plan_stimulus_source_world_transition(feed, _born_stage(_feed()))
 
 
 def test_boot_hands_one_transition_to_both_surfaces(tmp_path):
@@ -634,13 +634,13 @@ def test_boot_hands_one_transition_to_both_surfaces(tmp_path):
     kaine_config = {"perception_feed": dict(feed), "topos": {"capture_width": 16, "capture_height": 12}}
     local = dict(feed)
     pclock = PlaylistClock(1)
-    transition = _install_womb_world_transition(
+    transition = _install_stimulus_source_world_transition(
         local, kaine_config, pclock, stage_state=_born_stage(feed)
     )
     assert transition is not None
     assert local["_womb_world_transition"] is transition
     assert kaine_config["perception_feed"]["_womb_world_transition"] is transition
-    assert pclock.paused and transition.womb_frame.shape == (12, 16, 3)
+    assert pclock.paused and transition.stimulus_source_frame.shape == (12, 16, 3)
     section = dict(kaine_config["perception_feed"], _shared_playlist_clock=pclock)
     video = _build_perception_feed_video_factory("playlist", section, width=16, height=12)(
         0, width=16, height=12
@@ -902,11 +902,11 @@ def test_the_blend_reuses_its_buffer_and_matches_the_pure_function(tmp_path):
     feed = _feed(_write_manifest(tmp_path))
     clock, timers = _FakeClock(), _TimerFactory()
     source, transition, _pclock, _m = _video(tmp_path, feed, clock, timers)
-    womb = resize_bilinear(transition.womb_frame, FILM_H, FILM_W)
+    stimulus_source = resize_bilinear(transition.stimulus_source_frame, FILM_H, FILM_W)
     buf = transition._buf
     for alpha in (0.0, 0.3, 0.77, 1.0):
         frame = transition.frame_at(alpha)
-        assert np.array_equal(frame, blend_frames(womb, _film_frame(0), alpha))
+        assert np.array_equal(frame, blend_frames(stimulus_source, _film_frame(0), alpha))
         assert frame.shape == (FILM_H, FILM_W, 3)  # native film resolution
     assert transition._buf is buf
     first = transition.frame_at(0.5)
@@ -1074,7 +1074,7 @@ def test_build_registry_wires_one_transition_end_to_end(tmp_path, monkeypatch, v
     transition = section["_womb_world_transition"]
     pclock = section["_shared_playlist_clock"]
     assert pclock.holders == frozenset({TRANSITION_HOLDER})
-    assert transition.womb_frame.shape == (12, 16, 3)
+    assert transition.stimulus_source_frame.shape == (12, 16, 3)
     for name in ("topos", "audition"):
         assert captured[name]["perception_feed"]["_womb_world_transition"] is transition
         assert captured[name]["perception_feed"]["_shared_playlist_clock"] is pclock

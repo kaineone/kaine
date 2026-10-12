@@ -73,7 +73,7 @@ def test_boundary_no_core_module_imports_evaluation():
     matches = [
         line for line in proc.stdout.strip().splitlines() if line
     ]
-    allowed = {"kaine/cycle/__main__.py", "kaine/nexus/__main__.py"}
+    allowed = {"kaine/cycle/__main__.py", "kaine/dashboard/__main__.py"}
     unexpected = {
         m for m in matches
         if m not in allowed and not m.startswith("kaine/evaluation/")

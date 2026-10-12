@@ -9,8 +9,8 @@ import builtins
 
 import pytest
 
-from kaine.nexus.health import DEGRADED, DOWN, UP, planning_health_probe
-from kaine.nexus.health.config import build_dependency_specs
+from kaine.dashboard.health import DEGRADED, DOWN, UP, planning_health_probe
+from kaine.dashboard.health.config import build_dependency_specs
 
 
 def _block_jax_and_pymdp(monkeypatch):

@@ -18,19 +18,19 @@ from kaine.cycle.escalation_state import (
 )
 from kaine.cycle.preserve_watch import REQUEST_PATH as PRESERVE_REQUEST_PATH
 from kaine.cycle.preserve_watch import new_request, read_request, write_request
-from kaine.lifecycle.birth_ack import (
-    BIRTH_ACK_PATH,
-    BIRTH_REQUEST_PATH,
-    BirthAck,
+from kaine.lifecycle.maturation_ack import (
+    MATURATION_ACK_PATH,
+    MATURATION_REQUEST_PATH,
+    MaturationAck,
     read_ack,
     write_ack,
 )
-from kaine.lifecycle.birth_ack import new_request as new_birth_request
-from kaine.lifecycle.birth_ack import (
-    read_request as read_birth_request,
+from kaine.lifecycle.maturation_ack import new_request as new_maturation_request
+from kaine.lifecycle.maturation_ack import (
+    read_request as read_maturation_request,
 )
-from kaine.lifecycle.birth_ack import (
-    write_request as write_birth_request,
+from kaine.lifecycle.maturation_ack import (
+    write_request as write_maturation_request,
 )
 from kaine.modules.sleep.voice_alignment import (
     CONSOLIDATION_DIVERGENCE_STATE,
@@ -101,19 +101,19 @@ def test_state_files_round_trip_under_data_root(tmp_path, monkeypatch):
     assert stage_module.read_stage() == stage
 
     # maturation request / ack
-    birth_req = new_birth_request(_now_iso())
-    write_birth_request(birth_req)
-    assert (root / BIRTH_REQUEST_PATH).is_file()
-    assert not (cwd / BIRTH_REQUEST_PATH).exists()
-    assert read_birth_request() == birth_req
+    maturation_req = new_maturation_request(_now_iso())
+    write_maturation_request(maturation_req)
+    assert (root / MATURATION_REQUEST_PATH).is_file()
+    assert not (cwd / MATURATION_REQUEST_PATH).exists()
+    assert read_maturation_request() == maturation_req
 
-    birth_ack = BirthAck(
-        request_id=birth_req.request_id,
+    maturation_ack = MaturationAck(
+        request_id=maturation_req.request_id,
         acknowledged_at=_now_iso(),
     )
-    write_ack(birth_ack)
-    assert (root / BIRTH_ACK_PATH).is_file()
-    assert read_ack() == birth_ack
+    write_ack(maturation_ack)
+    assert (root / MATURATION_ACK_PATH).is_file()
+    assert read_ack() == maturation_ack
 
     # organ window state
     write_window_state("ready")
@@ -171,8 +171,8 @@ def test_health_prober_paths_derived_from_defaults(tmp_path: Path) -> None:
     """Built HealthProber path fields are derived from its own dataclass defaults."""
     import dataclasses
 
-    from kaine.nexus.health.config import load_health_prober
-    from kaine.nexus.health.prober import HealthProber
+    from kaine.dashboard.health.config import load_health_prober
+    from kaine.dashboard.health.prober import HealthProber
 
     set_data_root(tmp_path / "root")
     toml = tmp_path / "kaine.toml"

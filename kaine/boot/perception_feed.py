@@ -9,32 +9,32 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
-    from kaine.modules.vision.feed import WombClock
-    from kaine.modules.womb_signal import WombParams
+    from kaine.modules.stimulus_source_signal import StimulusSourceParams
+    from kaine.modules.vision.feed import StimulusSourceClock
 from kaine.entity_clock import EntityClock
 
 log = logging.getLogger(__name__)
 
 
-def _womb_params(feed: dict[str, Any]) -> WombParams:
-    from kaine.modules.womb_signal import WombParams
+def _stimulus_source_params(feed: dict[str, Any]) -> StimulusSourceParams:
+    from kaine.modules.stimulus_source_signal import StimulusSourceParams
 
-    womb = dict(feed.get("womb") or {})
-    video = womb.pop("video", None)
+    stimulus_source = dict(feed.get("womb") or {})
+    video = stimulus_source.pop("video", None)
     if video is not None and not isinstance(video, dict):
         raise ValueError("[perception_feed.womb.video] must be a table")
-    audio = womb.pop("audio", None)
+    audio = stimulus_source.pop("audio", None)
     if audio is not None and not isinstance(audio, dict):
         raise ValueError("[perception_feed.womb.audio] must be a table")
     # [perception_feed.womb.readout] belongs to the developmental-phase owner, which
-    # validates it itself (GestationReadoutConfig).
-    readout = womb.pop("readout", None)
+    # validates it itself (DevelopmentReadoutConfig).
+    readout = stimulus_source.pop("readout", None)
     if readout is not None and not isinstance(readout, dict):
         raise ValueError("[perception_feed.womb.readout] must be a table")
-    return WombParams.from_sections(womb, video or {}, audio or {})
+    return StimulusSourceParams.from_sections(stimulus_source, video or {}, audio or {})
 
 
-def _womb_lived_offset(stage_path: Path | None = None) -> float:
+def _stimulus_source_lived_offset(stage_path: Path | None = None) -> float:
     import math
 
     from kaine.lifecycle.stage import read_stage
@@ -48,18 +48,18 @@ def _womb_lived_offset(stage_path: Path | None = None) -> float:
     return value
 
 
-def _shared_womb_objects(feed: dict[str, Any]) -> tuple[WombClock, Callable[[], float]]:
-    from kaine.modules.vision.feed import WombClock
+def _shared_stimulus_source_objects(feed: dict[str, Any]) -> tuple[StimulusSourceClock, Callable[[], float]]:
+    from kaine.modules.vision.feed import StimulusSourceClock
 
     clock = feed.get("_shared_womb_clock")
     lived = feed.get("_womb_lived_seconds")
     if clock is not None and lived is not None:
         return (clock, lived)
-    offset = _womb_lived_offset()
-    return (WombClock(lived_offset_seconds=offset), lambda: offset)
+    offset = _stimulus_source_lived_offset()
+    return (StimulusSourceClock(lived_offset_seconds=offset), lambda: offset)
 
 
-def _install_shared_womb_clock(
+def _install_shared_stimulus_source_clock(
     perception_feed: dict[str, Any],
     kaine_config: dict[str, Any] | None,
     entity_clock: EntityClock | None,
@@ -77,14 +77,14 @@ def _install_shared_womb_clock(
     import math
 
     from kaine.lifecycle import stage as _lifecycle_stage
-    from kaine.modules.vision.feed import WombClock
+    from kaine.modules.vision.feed import StimulusSourceClock
 
     if stage_state is not None:
         lived = float(stage_state.lived_seconds)
         offset = lived if math.isfinite(lived) and lived >= 0.0 else 0.0
     else:
-        offset = _womb_lived_offset(stage_path)
-    clock = WombClock(lived_offset_seconds=offset)
+        offset = _stimulus_source_lived_offset(stage_path)
+    clock = StimulusSourceClock(lived_offset_seconds=offset)
 
     if stage_state is not None:
         if stage_state.is_embodied:
@@ -136,7 +136,7 @@ def _install_shared_womb_clock(
         target["_womb_unawake"] = unawake
 
 
-def bind_womb_unawake_source(kaine_config: dict[str, Any] | None, fn: Callable[[], float]) -> None:
+def bind_stimulus_source_unawake_source(kaine_config: dict[str, Any] | None, fn: Callable[[], float]) -> None:
     """Hand the cycle's time-not-awake account to the stimulus source's colour schedule.
 
     The cycle is built after the feed.
@@ -165,7 +165,7 @@ def _transition_setting(feed: dict[str, Any], key: str, default: float) -> float
     return value
 
 
-def _plan_womb_world_transition(
+def _plan_stimulus_source_world_transition(
     feed: dict[str, Any], stage_state: Any | None
 ) -> tuple[bool, str, int]:
     """Decide whether this boot opens with the stimulus-source-to-world transition.
@@ -212,7 +212,7 @@ def _plan_womb_world_transition(
             logging.WARNING,
         )
     try:
-        digest = _lifecycle_stage.womb_params_digest(_womb_params(feed))
+        digest = _lifecycle_stage.womb_params_digest(_stimulus_source_params(feed))
     except Exception as exc:
         return (
             False,
@@ -230,7 +230,7 @@ def _plan_womb_world_transition(
     return True, "the being was born from the womb and its birth state is recorded", logging.INFO
 
 
-def _build_womb_world_transition(
+def _build_stimulus_source_world_transition(
     feed: dict[str, Any],
     playlist_clock: Any,
     *,
@@ -252,12 +252,12 @@ def _build_womb_world_transition(
     ``on_event`` pass through to the ``TransitionController``.
     """
     from kaine.modules.perception_transition import (
+        StimulusSourceWorldTransition,
         TransitionController,
-        WombWorldTransition,
-        render_birth_field,
+        render_maturation_field,
     )
 
-    active, reason, level = _plan_womb_world_transition(feed, stage_state)
+    active, reason, level = _plan_stimulus_source_world_transition(feed, stage_state)
     if not active:
         log.log(level, "no womb-to-world transition: %s", reason)
         return None
@@ -266,11 +266,11 @@ def _build_womb_world_transition(
         feed, "transition_audio_fade_seconds", _TRANSITION_DEFAULT_AUDIO_FADE_SECONDS
     )
     try:
-        womb_frame = render_birth_field(
+        stimulus_source_frame = render_maturation_field(
             seed=int(stage_state.womb_seed),
             womb_t_at_birth=float(stage_state.womb_t_at_birth),
             lived_seconds=float(stage_state.lived_seconds),
-            params=_womb_params(feed),
+            params=_stimulus_source_params(feed),
             width=int(width),
             height=int(height),
         )
@@ -298,8 +298,8 @@ def _build_womb_world_transition(
         float(stage_state.womb_t_at_birth),
         fade,
     )
-    return WombWorldTransition(
-        womb_frame=womb_frame, controller=controller, audio_fade_seconds=fade
+    return StimulusSourceWorldTransition(
+        stimulus_source_frame=stimulus_source_frame, controller=controller, audio_fade_seconds=fade
     )
 
 
@@ -371,7 +371,7 @@ def _transition_event_publisher(bus: Any) -> Callable[[str, dict[str, Any]], Non
     return _emit
 
 
-def _install_womb_world_transition(
+def _install_stimulus_source_world_transition(
     perception_feed: dict[str, Any],
     kaine_config: dict[str, Any] | None,
     playlist_clock: Any,
@@ -396,7 +396,7 @@ def _install_womb_world_transition(
     if stage_state is None:
         stage_state = _lifecycle_stage.read_stage(stage_path)
     vision = (kaine_config or {}).get("topos") or {}
-    transition = _build_womb_world_transition(
+    transition = _build_stimulus_source_world_transition(
         perception_feed,
         playlist_clock,
         stage_state=stage_state,
@@ -430,8 +430,8 @@ def _build_perception_feed_video_factory(
         PlaylistSource,
         SeededProceduralSource,
         SeededSchedule,
-        WombProceduralSource,
-        WombSchedule,
+        StimulusSourceProceduralSource,
+        StimulusSourceSchedule,
         load_playlist_manifest,
     )
 
@@ -439,20 +439,20 @@ def _build_perception_feed_video_factory(
         return _build_screen_source_factory(feed)
 
     if mode == "womb":
-        params = _womb_params(feed)
-        schedule = WombSchedule(
+        params = _stimulus_source_params(feed)
+        schedule = StimulusSourceSchedule(
             seed=int(feed.get("seed", 0)),
             width=width,
             height=height,
         )
-        clock, lived = _shared_womb_objects(feed)
+        clock, lived = _shared_stimulus_source_objects(feed)
 
-        def _womb_factory(device, *, width, height):  # noqa: ANN001
-            return WombProceduralSource(
+        def _stimulus_source_factory(device, *, width, height):  # noqa: ANN001
+            return StimulusSourceProceduralSource(
                 schedule, params=params, clock=clock, lived_seconds=lived
             )
 
-        return _womb_factory
+        return _stimulus_source_factory
 
     video = dict(feed.get("video") or {})
     if mode == "seeded":
@@ -616,16 +616,16 @@ def _build_perception_feed_audio_factory(
         PlaylistAudioStream,
         SeededAudioSchedule,
         SeededProceduralAudioStream,
-        WombAudioSchedule,
-        WombProceduralAudioStream,
+        StimulusSourceAudioSchedule,
+        StimulusSourceProceduralAudioStream,
     )
+    from kaine.modules.stimulus_source_signal import _LOWPASS_TAPS
     from kaine.modules.vision.feed import load_playlist_manifest
-    from kaine.modules.womb_signal import _LOWPASS_TAPS
 
     video = dict(feed.get("video") or {})
     audio = dict(feed.get("audio") or {})
     if mode == "womb":
-        params = _womb_params(feed)
+        params = _stimulus_source_params(feed)
         sr = int(audio.get("sample_rate", sample_rate))
         ch = int(audio.get("channels", channels))
         fpb = int(frames_per_block)
@@ -640,20 +640,20 @@ def _build_perception_feed_audio_factory(
                 f"[perception_feed.womb] requires lowpass_hz < sample_rate/2; "
                 f"got {params.lowpass_hz} Hz with sample_rate {sr} Hz"
             )
-        schedule = WombAudioSchedule(
+        schedule = StimulusSourceAudioSchedule(
             seed=int(feed.get("seed", 0)),
             sample_rate=sr,
             channels=ch,
             frames_per_block=fpb,
         )
-        clock, lived = _shared_womb_objects(feed)
+        clock, lived = _shared_stimulus_source_objects(feed)
 
-        def _womb_factory(*, device, sample_rate, channels, frames_per_block, callback):  # noqa: ANN001
-            return WombProceduralAudioStream(
+        def _stimulus_source_factory(*, device, sample_rate, channels, frames_per_block, callback):  # noqa: ANN001
+            return StimulusSourceProceduralAudioStream(
                 schedule, params=params, clock=clock, callback=callback
             )
 
-        return _womb_factory
+        return _stimulus_source_factory
 
     if mode == "seeded":
         schedule = SeededAudioSchedule(
@@ -769,22 +769,21 @@ def gather_perception_feed_descriptor(
             surprise_strength=float(audio.get("surprise_strength", 1.0)),
         ).as_descriptor()
     elif mode == "womb":
-        import dataclasses
-
-        from kaine.modules.audition.feed import WombAudioSchedule
-        from kaine.modules.vision.feed import WombSchedule
+        from kaine.lifecycle.stored_field_names import stimulus_source_params_record
+        from kaine.modules.audition.feed import StimulusSourceAudioSchedule
+        from kaine.modules.vision.feed import StimulusSourceSchedule
 
         seed = int(feed.get("seed", 0))
         audio = dict(feed.get("audio") or {})
         descriptor["seed"] = seed
         try:
-            params = _womb_params(feed)
-            descriptor["womb"] = dataclasses.asdict(params)
+            params = _stimulus_source_params(feed)
+            descriptor["womb"] = stimulus_source_params_record(params)
         except Exception:
             # The stimulus source parameters are validated for real at boot time; the
             # covariate must not crash the run if they can't be read here.
             descriptor["womb"] = {"invalid": True}
-        descriptor["video"] = WombSchedule(
+        descriptor["video"] = StimulusSourceSchedule(
             seed=seed,
             width=int(vision.get("capture_width", 640)),
             height=int(vision.get("capture_height", 480)),
@@ -792,13 +791,13 @@ def gather_perception_feed_descriptor(
         sample_rate = int(audio.get("sample_rate", audition.get("capture_sample_rate", 16000)))
         channels = int(audio.get("channels", audition.get("capture_channels", 1)))
         vad_frame_ms = int(audition.get("vad_frame_ms", 30))
-        descriptor["audio"] = WombAudioSchedule(
+        descriptor["audio"] = StimulusSourceAudioSchedule(
             seed=seed,
             sample_rate=sample_rate,
             channels=channels,
             frames_per_block=max(1, sample_rate * vad_frame_ms // 1000),
         ).as_descriptor()
-        descriptor["lived_offset_seconds"] = _womb_lived_offset()
+        descriptor["lived_offset_seconds"] = _stimulus_source_lived_offset()
     elif mode == "playlist":
         manifest_path = str(feed.get("playlist_manifest", "")).strip()
         try:
@@ -824,7 +823,7 @@ def gather_perception_feed_descriptor(
                 from kaine.lifecycle.stage import read_stage
 
                 stage_state = read_stage()
-            active, _reason, _level = _plan_womb_world_transition(feed, stage_state)
+            active, _reason, _level = _plan_stimulus_source_world_transition(feed, stage_state)
             descriptor["transition_planned"] = bool(active)
         except Exception:
             # Invalid settings are refused for real at boot; the covariate

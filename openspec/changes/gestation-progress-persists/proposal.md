@@ -16,5 +16,5 @@ A developmental phase runs for many hours of awake time (the budget is 96 hours)
 
 ## Impact
 
-- **Code:** `kaine/cycle/gestation.py`.
+- **Code:** `kaine/cycle/development.py`.
 - **Behaviour:** a developmental phase continues where it left off after a restart.

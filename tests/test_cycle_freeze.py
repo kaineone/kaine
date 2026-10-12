@@ -90,12 +90,12 @@ async def test_freeze_watch_pauses_and_resumes(tmp_path, monkeypatch):
 async def test_cycle_control_router(tmp_path):
     from fastapi import FastAPI
 
-    from kaine.nexus.config import NexusConfig
-    from kaine.nexus.cycle_control import build_cycle_control_router
+    from kaine.dashboard.config import DashboardConfig
+    from kaine.dashboard.cycle_control import build_cycle_control_router
 
     ctrl = tmp_path / "control.json"
     app = FastAPI()
-    app.state.config = NexusConfig(
+    app.state.config = DashboardConfig(
         operator_token="test-token",
         host_allowlist=("127.0.0.1", "localhost", "t"),
     )
@@ -130,12 +130,12 @@ async def test_freeze_reason_is_sanitized_in_log(tmp_path, caplog):
 
     from fastapi import FastAPI
 
-    from kaine.nexus.config import NexusConfig
-    from kaine.nexus.cycle_control import build_cycle_control_router
+    from kaine.dashboard.config import DashboardConfig
+    from kaine.dashboard.cycle_control import build_cycle_control_router
 
     ctrl = tmp_path / "control.json"
     app = FastAPI()
-    app.state.config = NexusConfig(
+    app.state.config = DashboardConfig(
         operator_token="test-token",
         host_allowlist=("127.0.0.1", "localhost", "t"),
     )
@@ -143,7 +143,7 @@ async def test_freeze_reason_is_sanitized_in_log(tmp_path, caplog):
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
-        with caplog.at_level(logging.INFO, logger="kaine.nexus.cycle_control"):
+        with caplog.at_level(logging.INFO, logger="kaine.dashboard.cycle_control"):
             await client.post(
                 "/diagnostics/cycle/freeze",
                 json={"frozen": True, "reason": "ok\nINFO forged log line"},
@@ -159,7 +159,7 @@ async def test_freeze_reason_is_sanitized_in_log(tmp_path, caplog):
 
 
 def test_freeze_banner_renders_only_when_frozen():
-    from kaine.nexus.conversation import _templates
+    from kaine.dashboard.conversation import _templates
 
     env = _templates().env
     tpl = env.get_template("_freeze_banner.html")

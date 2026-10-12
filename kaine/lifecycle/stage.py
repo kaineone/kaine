@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable
 
 from kaine import legacy_aliases, legacy_names
+from kaine.lifecycle.stored_field_names import stimulus_source_params_record
 from kaine.state_io import write_json_atomic
 
 if TYPE_CHECKING:
@@ -51,9 +52,9 @@ from kaine.storage import resolve
 DEFAULT_STAGE_PATH = Path("state/lifecycle/stage.json")
 STAGE_PATH = DEFAULT_STAGE_PATH
 
-GESTATION = "gestation"
+DEVELOPMENT = "gestation"
 EMBODIED = "embodied"
-STAGES = (GESTATION, EMBODIED)
+STAGES = (DEVELOPMENT, EMBODIED)
 
 
 class StageValueError(Exception):
@@ -182,7 +183,7 @@ def _coerce_sleep_cursor(value: Any) -> str | None:
     return value
 
 
-def _coerce_womb_t_at_birth(value: Any) -> float | None:
+def _coerce_stimulus_source_t_at_maturation(value: Any) -> float | None:
     """Defensive coerce: a corrupt stimulus source time is treated as unrecorded."""
     if isinstance(value, bool):
         return None
@@ -195,14 +196,14 @@ def _coerce_womb_t_at_birth(value: Any) -> float | None:
     return value
 
 
-def _coerce_womb_seed(value: Any) -> int | None:
+def _coerce_stimulus_source_seed(value: Any) -> int | None:
     """Defensive coerce: a corrupt stimulus source seed is treated as unrecorded."""
     if isinstance(value, bool) or not isinstance(value, int):
         return None
     return value
 
 
-def _coerce_womb_params_digest(value: Any) -> str | None:
+def _coerce_stimulus_source_params_digest(value: Any) -> str | None:
     """Defensive coerce: a corrupt digest is treated as unrecorded."""
     if not isinstance(value, str):
         return None
@@ -211,7 +212,7 @@ def _coerce_womb_params_digest(value: Any) -> str | None:
     return value
 
 
-def _coerce_birth_bloom_ends_at(value: Any) -> str | None:
+def _coerce_maturation_bloom_ends_at(value: Any) -> str | None:
     """Defensive coerce: a corrupt bloom end time is treated as unrecorded."""
     if not isinstance(value, str):
         return None
@@ -234,7 +235,7 @@ class StageState:
     ``birth_bloom_ends_at``  — UTC wall time when the maturation bloom ends (ISO-8601, None until recorded).
     """
 
-    stage: str = GESTATION
+    stage: str = DEVELOPMENT
     gestation_started_at: str | None = None
     born_at: str | None = None
     lived_seconds: float = 0.0
@@ -246,8 +247,8 @@ class StageState:
     birth_bloom_ends_at: str | None = None
 
     @property
-    def is_gestating(self) -> bool:
-        return self.stage == GESTATION
+    def is_developing(self) -> bool:
+        return self.stage == DEVELOPMENT
 
     @property
     def is_embodied(self) -> bool:
@@ -264,7 +265,7 @@ class StageState:
         if "stage" in data:
             stage = _coerce_stage(data["stage"])
         else:
-            stage = GESTATION
+            stage = DEVELOPMENT
         return cls(
             stage=stage,
             gestation_started_at=data.get("gestation_started_at"),
@@ -272,10 +273,10 @@ class StageState:
             lived_seconds=_coerce_lived_seconds(data.get("lived_seconds", 0.0)),
             sleep_count=_coerce_sleep_count(data.get("sleep_count", 0)),
             hypnos_cursor=_coerce_sleep_cursor(data.get("hypnos_cursor")),
-            womb_t_at_birth=_coerce_womb_t_at_birth(data.get("womb_t_at_birth")),
-            womb_seed=_coerce_womb_seed(data.get("womb_seed")),
-            womb_params_digest=_coerce_womb_params_digest(data.get("womb_params_digest")),
-            birth_bloom_ends_at=_coerce_birth_bloom_ends_at(data.get("birth_bloom_ends_at")),
+            womb_t_at_birth=_coerce_stimulus_source_t_at_maturation(data.get("womb_t_at_birth")),
+            womb_seed=_coerce_stimulus_source_seed(data.get("womb_seed")),
+            womb_params_digest=_coerce_stimulus_source_params_digest(data.get("womb_params_digest")),
+            birth_bloom_ends_at=_coerce_maturation_bloom_ends_at(data.get("birth_bloom_ends_at")),
         )
 
 
@@ -343,7 +344,7 @@ def resolve_boot_stage(
     if has_prior_lived_history:
         # Preserved-entity invariant (NORMATIVE): never regress a lived mind.
         return StageState(stage=EMBODIED)
-    return StageState(stage=GESTATION, gestation_started_at=now_iso or _now_iso())
+    return StageState(stage=DEVELOPMENT, gestation_started_at=now_iso or _now_iso())
 
 
 def advance_to_embodied(state: StageState, *, now_iso: str | None = None) -> StageState:
@@ -358,13 +359,13 @@ def advance_to_embodied(state: StageState, *, now_iso: str | None = None) -> Sta
     return replace(state, stage=EMBODIED, born_at=now_iso or _now_iso())
 
 
-def birth_is_new(before: StageState, after: StageState) -> bool:
+def maturation_is_new(before: StageState, after: StageState) -> bool:
     """True iff ``after`` represents a fresh gestation->embodied transition of
     ``before`` — the one-shot guard the maturation event/handoff keys off."""
-    return before.is_gestating and after.is_embodied
+    return before.is_developing and after.is_embodied
 
 
-def record_birth_womb(
+def record_maturation_stimulus_source(
     state: StageState,
     *,
     womb_t_at_birth: float | None,
@@ -391,8 +392,11 @@ def record_birth_womb(
 def womb_params_digest(params: object) -> str:
     """Return a stable sha256 hex digest of a stimulus source parameters object.
 
-    ``params`` must be a dataclass instance (e.g. ``WombParams``); its fields are
-    serialised as a compact sorted JSON object before hashing.
+    ``params`` must be a dataclass instance (e.g. ``StimulusSourceParams``); its fields are
+    serialised under their stored names (see :mod:`kaine.lifecycle.stored_field_names`) as a
+    compact sorted JSON object before hashing.
     """
-    payload = json.dumps(asdict(params), sort_keys=True, separators=(",", ":"))
+    payload = json.dumps(
+        stimulus_source_params_record(params), sort_keys=True, separators=(",", ":")
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()

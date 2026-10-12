@@ -204,13 +204,13 @@ async def test_capture_refused_when_reference_and_ledger_exist(tmp_path):
     assert sampler.calls == calls
 
 
-async def test_birth_adapter_not_copied_if_save_reference_fails(
+async def test_maturation_adapter_not_copied_if_save_reference_fails(
     tmp_path, monkeypatch
 ):
     core, paths = make_core(tmp_path)
     source = tmp_path / "source_adapter.txt"
     source.write_text("adapter content")
-    core._birth_adapter_file = lambda: source
+    core._maturation_adapter_file = lambda: source
 
     def raising_save(*_args, **_kwargs):
         raise OSError("save failed")
@@ -222,7 +222,7 @@ async def test_birth_adapter_not_copied_if_save_reference_fails(
     with pytest.raises(OSError):
         await core.capture_reference("birth")
 
-    assert not paths.birth_adapter.exists()
+    assert not paths.maturation_adapter.exists()
 
 
 async def test_changed_battery_is_inconclusive(tmp_path):

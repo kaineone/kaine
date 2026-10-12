@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     pass
 from kaine.boot.common import _check_injections
 from kaine.boot.errors import _pop
-from kaine.boot.perception_feed import _shared_womb_objects, _womb_params
+from kaine.boot.perception_feed import _shared_stimulus_source_objects, _stimulus_source_params
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
@@ -26,7 +26,7 @@ def make_interoception(
     injections: Optional[Mapping[str, Any]] = None,
 ) -> BaseModule:
     from kaine.modules.interoception.module import Interoception
-    from kaine.modules.womb_drive import MaternalDriveProvider
+    from kaine.modules.stimulus_source_drive import MaternalDriveProvider
     from kaine.oscillator.module_oscillator import make_self_rhythm_oscillator
 
     allowed = {
@@ -83,15 +83,15 @@ def make_interoception(
         kw["self_rhythm"] = osc
         kw["self_rhythm_step_hz"] = step_hz
         if feed_section.get("mode") == "womb":
-            params = _womb_params(feed_section)
+            params = _stimulus_source_params(feed_section)
             if params.external_drive_to_self_rhythm:
-                from kaine.cycle.gestation import GestationReadoutConfig
+                from kaine.cycle.development import DevelopmentReadoutConfig
 
-                clock, _ = _shared_womb_objects(feed_section)
+                clock, _ = _shared_stimulus_source_objects(feed_section)
                 # Start at the usual drive, validated from the readout settings
                 # at boot; the developmental-phase owner only ever moves it for bounded,
                 # announced probes.
-                readout = GestationReadoutConfig.from_dict(
+                readout = DevelopmentReadoutConfig.from_dict(
                     (feed_section.get("womb") or {}).get("readout")
                 )
                 kw["maternal_drive"] = MaternalDriveProvider(

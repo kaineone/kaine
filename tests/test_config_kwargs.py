@@ -8,6 +8,8 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
+import pytest
+
 from kaine import legacy_names
 from kaine.boot.config_kwargs import config_kwargs, parameter_for_config_key
 
@@ -79,3 +81,32 @@ def test_config_kwargs_convert_applies_to_values() -> None:
     )
     assert result == {f"{new}_stream": "x", "rate": "3"}
     assert isinstance(result["rate"], str)
+
+
+def test_parameter_for_config_key_renames_developmental_component():
+    from kaine import legacy_names
+
+    old, entry = next(iter(legacy_names.DEVELOPMENTAL.items()))
+    new = entry["new_key"]
+    assert (
+        parameter_for_config_key(f"{old}_budget_seconds", {f"{new}_budget_seconds"})
+        == f"{new}_budget_seconds"
+    )
+
+
+def test_old_config_key_reaches_renamed_params_field():
+    from kaine.modules.stimulus_source_signal import StimulusSourceParams
+
+    params = StimulusSourceParams.from_sections(
+        {"birth_transition_seconds": 7.5}, None, None
+    )
+    assert params.maturation_transition_seconds == 7.5
+
+
+def test_params_validation_names_the_config_key():
+    from kaine.modules.stimulus_source_signal import StimulusSourceParams
+
+    with pytest.raises(ValueError) as exc:
+        StimulusSourceParams.from_sections({"birth_transition_seconds": 99.0}, None, None)
+    assert "birth_transition_seconds" in str(exc.value)
+    assert "maturation_transition_seconds" not in str(exc.value)

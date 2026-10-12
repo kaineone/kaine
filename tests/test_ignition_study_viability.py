@@ -67,7 +67,7 @@ def _create_study(
     tmp_path: Path,
     viewings: int = 1,
     *,
-    gestation_budget_seconds: float = 1000.0,
+    development_budget_seconds: float = 1000.0,
     viewing_budget_seconds: float = 1000.0,
 ) -> Path:
     repo_root = tmp_path / "repo"
@@ -92,7 +92,7 @@ def _create_study(
             "accumulate": "r_a_",
         },
         "viewing_budget_seconds": viewing_budget_seconds,
-        "gestation_budget_seconds": gestation_budget_seconds,
+        "gestation_budget_seconds": development_budget_seconds,
     }
     study_dir = tmp_path / "study"
     init_study(study_dir, validate_plan(plan))
@@ -107,7 +107,7 @@ def _runner(
         "control_command": [sys.executable, str(script), "control"],
         "poll_seconds": 0.01,
         "preserve_wait_seconds": 2.0,
-        "birth_bloom_margin_seconds": 0.0,
+        "maturation_bloom_margin_seconds": 0.0,
         "flush_db": lambda url: None,
     }
     if wall_clock is not None:
@@ -196,10 +196,10 @@ def _run_step_capture(
         return exc.record, proc, line_dir
 
 
-def test_gestation_unviable_stops_gracefully(tmp_path: Path, known_modules, monkeypatch):
+def test_development_unviable_stops_gracefully(tmp_path: Path, known_modules, monkeypatch):
     # A short budget: if the runner failed to stop the cycle it would reach the
     # timeout path and request a preservation, which fails this test quickly.
-    study_dir = _create_study(tmp_path, viewings=1, gestation_budget_seconds=5.0)
+    study_dir = _create_study(tmp_path, viewings=1, development_budget_seconds=5.0)
     script = tmp_path / "dummy.py"
     script.write_text("")
     runner = _runner(study_dir, script)
@@ -240,7 +240,7 @@ def test_gestation_unviable_stops_gracefully(tmp_path: Path, known_modules, monk
 
 
 def test_malformed_viability_file_is_ignored(tmp_path: Path, known_modules, monkeypatch):
-    study_dir = _create_study(tmp_path, viewings=1, gestation_budget_seconds=1000.0)
+    study_dir = _create_study(tmp_path, viewings=1, development_budget_seconds=1000.0)
     script = tmp_path / "dummy.py"
     script.write_text("")
     runner = _runner(study_dir, script)
@@ -267,7 +267,7 @@ def test_malformed_viability_file_is_ignored(tmp_path: Path, known_modules, monk
 
 
 def test_viability_file_during_viewing_is_ignored(tmp_path: Path, known_modules, monkeypatch):
-    study_dir = _create_study(tmp_path, viewings=1, gestation_budget_seconds=1000.0)
+    study_dir = _create_study(tmp_path, viewings=1, development_budget_seconds=1000.0)
     script = tmp_path / "dummy.py"
     script.write_text("")
     runner = _runner(study_dir, script)
@@ -311,7 +311,7 @@ def test_verdict_from_an_earlier_attempt_is_ignored(tmp_path: Path, known_module
     import os
     import time
 
-    study_dir = _create_study(tmp_path, viewings=1, gestation_budget_seconds=1000.0)
+    study_dir = _create_study(tmp_path, viewings=1, development_budget_seconds=1000.0)
     script = tmp_path / "dummy.py"
     script.write_text("")
     runner = _runner(study_dir, script)
@@ -339,10 +339,10 @@ def test_verdict_from_an_earlier_attempt_is_ignored(tmp_path: Path, known_module
     assert record["outcome"] != "failed:gestation_unviable"
 
 
-def test_verdict_after_birth_is_ignored(
+def test_verdict_after_maturation_is_ignored(
     tmp_path: Path, known_modules, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    study_dir = _create_study(tmp_path, viewings=1, gestation_budget_seconds=5.0)
+    study_dir = _create_study(tmp_path, viewings=1, development_budget_seconds=5.0)
     script = tmp_path / "dummy.py"
     script.write_text("")
     runner = _runner(study_dir, script)
@@ -355,7 +355,7 @@ def test_verdict_after_birth_is_ignored(
         "_read_child_runtime",
         lambda *args, **kwargs: {"run_id": "r1", "developmental_stage": {"stage": "embodied"}},
     )
-    monkeypatch.setattr(runner, "_birth_bloom_over", lambda *args, **kwargs: True)
+    monkeypatch.setattr(runner, "_maturation_bloom_over", lambda *args, **kwargs: True)
 
     reasons: list[str] = []
 
@@ -397,7 +397,7 @@ def test_verdict_after_birth_is_ignored(
 def test_failed_terminate_is_retried(
     tmp_path: Path, known_modules, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    study_dir = _create_study(tmp_path, viewings=1, gestation_budget_seconds=5.0)
+    study_dir = _create_study(tmp_path, viewings=1, development_budget_seconds=5.0)
     script = tmp_path / "dummy.py"
     script.write_text("")
     runner = _runner(study_dir, script)
@@ -446,7 +446,7 @@ def test_coarse_mtime_accepted_with_slack(
     On kernels with coarse file timestamps the wall clock can lead the file
     mtime by a tick. The runner tolerates this without accepting stale files.
     """
-    study_dir = _create_study(tmp_path, viewings=1, gestation_budget_seconds=5.0)
+    study_dir = _create_study(tmp_path, viewings=1, development_budget_seconds=5.0)
     script = tmp_path / "dummy.py"
     script.write_text("")
     runner = _runner(
@@ -493,7 +493,7 @@ def test_stale_verdict_rejected(
     tmp_path: Path, known_modules, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A verdict written long before the step started is still treated as stale."""
-    study_dir = _create_study(tmp_path, viewings=1, gestation_budget_seconds=5.0)
+    study_dir = _create_study(tmp_path, viewings=1, development_budget_seconds=5.0)
     script = tmp_path / "dummy.py"
     script.write_text("")
     runner = _runner(

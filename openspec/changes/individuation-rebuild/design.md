@@ -18,7 +18,7 @@ Operator rules this design follows:
   - Individuation is drift from the entity's own maturation state, never from the pretrained organ (`individuation-boundary`, `entity-decommission`).
   - The live trigger and the decommission gate must agree (`divergence-assessment`).
 - **Import boundaries.**
-  - Core code must not import `kaine.evaluation`; only `kaine/cycle/__main__.py` and `kaine/nexus/__main__.py` may (pyproject import-linter, contract 1).
+  - Core code must not import `kaine.evaluation`; only `kaine/cycle/__main__.py` and `kaine/dashboard/__main__.py` may (pyproject import-linter, contract 1).
   - `kaine.modules` must not import `kaine.cycle`.
   - The welfare net is core, so the statistics and storage go in `kaine/lifecycle/`, the producer in `kaine/cycle/`, and the language-module-specific sampler is wired in `kaine/cycle/__main__.py`.
 
@@ -43,7 +43,7 @@ Operator rules this design follows:
    - `_newest_individuation_report` reads the file with `read_text` and no decryption (`kaine/lifecycle/divergence.py:129`). `AsyncJsonlSink` encrypts each line when state encryption is on (`kaine/persistence/jsonl_sink.py:158-165`), and research mode requires state encryption. Every line would fail `json.loads` and be skipped, so the reader returns None.
    - There is no staleness bound, no run or entity binding, and no filter on record kind.
    - It ignores `[evaluation.individuation].output_dir`; the monitor uses its own `eval_root` (`kaine/cycle/preservation_monitor.py:108,550`).
-   - `kaine/evaluation/nexus_tab.py:279-306` has the same missing-decrypt bug, and it sorts by name, not mtime (`:287`).
+   - `kaine/evaluation/dashboard_tab.py:279-306` has the same missing-decrypt bug, and it sorts by name, not mtime (`:287`).
 5. **The embedding is wrong.**
    - The 12 answers are joined into one string (`individuation.py:453-467`) and embedded once with all-MiniLM-L6-v2. That model truncates input beyond 256 word pieces [minilm_card], and the NumPy implementation truncates silently (`kaine/text_embedding_numpy.py:132,238-241`). In practice only the first one or two answers are measured.
    - Concatenation also gives the test n=1 per run.

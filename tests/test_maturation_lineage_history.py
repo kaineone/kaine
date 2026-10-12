@@ -71,7 +71,7 @@ def test_lived_before_false_for_fresh_identity_with_only_foreign_records(
     assert lived_before(me, tmp_path, bundle_roots=[tmp_path / "backups"]) is False
 
 
-def test_lived_before_true_when_fork_sidecar_names_this_being(tmp_path: Path) -> None:
+def test_lived_before_true_when_fork_sidecar_names_this_entity(tmp_path: Path) -> None:
     me = mint_identity()
     forks = tmp_path / "forks" / "mine"
     forks.mkdir(parents=True)
@@ -90,7 +90,7 @@ def test_lived_before_true_when_fork_sidecar_names_ancestor(tmp_path: Path) -> N
     assert lived_before(child, tmp_path) is True
 
 
-def test_lived_before_true_when_bundle_names_this_being(tmp_path: Path) -> None:
+def test_lived_before_true_when_bundle_names_this_entity(tmp_path: Path) -> None:
     me = mint_identity()
     bundle_root = tmp_path / "alt_backups"
     bundle = bundle_root / "b1"
@@ -117,7 +117,7 @@ def test_lived_before_true_for_legacy_tree_without_sidecars(tmp_path: Path) -> N
     assert lived_before(identity, tmp_path) is True
 
 
-def test_lived_before_true_for_minted_being_with_only_desired_state(
+def test_lived_before_true_for_minted_entity_with_only_desired_state(
     tmp_path: Path,
 ) -> None:
     me = mint_identity()
@@ -127,7 +127,7 @@ def test_lived_before_true_for_minted_being_with_only_desired_state(
     assert lived_before(me, tmp_path) is True
 
 
-def test_resolve_boot_stage_gestation_for_fresh_identity_with_foreign_records(
+def test_resolve_boot_stage_development_for_fresh_identity_with_foreign_records(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     data_root = tmp_path
@@ -159,9 +159,9 @@ def test_resolve_boot_stage_gestation_for_fresh_identity_with_foreign_records(
         lived_state, _, lived_fresh = _resolve_boot_stage(config, identity=me)
 
     assert enabled is True
-    assert stage_state.stage == st.GESTATION
+    assert stage_state.stage == st.DEVELOPMENT
     assert fresh is True
-    assert lived_state.stage != st.GESTATION
+    assert lived_state.stage != st.DEVELOPMENT
     assert lived_fresh is False
 
 
@@ -226,7 +226,7 @@ def test_resolve_boot_stage_finds_own_bundle_under_configured_out_root(
     assert fresh is False
 
 
-def test_lived_before_true_when_a_descendant_record_names_this_being(tmp_path: Path) -> None:
+def test_lived_before_true_when_a_descendant_record_names_this_entity(tmp_path: Path) -> None:
     """A fork or bundle whose lineage names this entity proves it lived."""
     me = mint_identity()
     child = fork_identity(me)
@@ -301,15 +301,15 @@ def test_resolve_start_stage_revived_bundle_outside_roots_is_embodied(
     with _data_root(data_root):
         # Without a revive the same tree, holding only foreign/out-of-root
         # records, still gestates.
-        gestation_state, gestation_enabled, gestation_fresh = _resolve_boot_stage(
+        development_state, development_enabled, development_fresh = _resolve_boot_stage(
             config, identity=me
         )
         # A revival of the bundle treats the entity as already-lived.
         stage_state, enabled, fresh = _resolve_start_stage(config, revive, identity=me)
 
-    assert gestation_enabled is True
-    assert gestation_state.stage == st.GESTATION
-    assert gestation_fresh is True
+    assert development_enabled is True
+    assert development_state.stage == st.DEVELOPMENT
+    assert development_fresh is True
     assert enabled is True
     assert stage_state.stage == st.EMBODIED
     assert fresh is False

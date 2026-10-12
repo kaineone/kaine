@@ -45,7 +45,7 @@ from kaine.lifecycle.individuation_store import (
     battery_digest_of,
     build_report,
     conditioning_digest,
-    copy_birth_adapter,
+    copy_maturation_adapter,
     load_ledger,
     load_reference,
     new_reference_id,
@@ -126,7 +126,7 @@ class IndividuationCore:
             [], tuple[str | None, list[str], list[str]]
         ],
         born_at: Callable[[], str | None],
-        birth_adapter_file: Callable[[], Path | None],
+        maturation_adapter_file: Callable[[], Path | None],
         report_sink: Any,
         publish: Callable[[dict], Awaitable[None]],
         abort_reason: Callable[[], str | None],
@@ -144,7 +144,7 @@ class IndividuationCore:
         self._conditions = conditions
         self._conditioning_inputs = conditioning_inputs
         self._born_at = born_at
-        self._birth_adapter_file = birth_adapter_file
+        self._maturation_adapter_file = maturation_adapter_file
         self._report_sink = report_sink
         self._publish = publish
         self._abort_reason = abort_reason
@@ -251,7 +251,7 @@ class IndividuationCore:
         save_reference(self._paths, doc, overwrite=regenerate or replace_incomplete)
 
         if kind == "birth":
-            copy_birth_adapter(self._paths, self._birth_adapter_file())
+            copy_maturation_adapter(self._paths, self._maturation_adapter_file())
 
         existing = load_ledger(self._paths)
         if existing is None:

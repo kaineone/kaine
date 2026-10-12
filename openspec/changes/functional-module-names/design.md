@@ -570,6 +570,71 @@ are the ones the sections above leave open; each follows from those sections.
   kind has a driver. Comments and docstrings that name a renamed function (such as
   `make_lingua` or `_phase_volition`) keep the old name, as in 5a and 5b, because
   comments take the prose rules; the close-out sweeps them.
+- **After PR 5c.** Review found two side effects. The string rule for exact class
+  names also renamed three dashboard labels (`role="Vox"` in the health probe
+  config). Those are operator text, so they are back to their old value, and a
+  string passed as a `role=`, `title=` or `label=` keyword argument now takes the
+  operator scope (fixture `label_kwargs`); the dashboard labels move in PR 7. The
+  `recorded_by` field in `tests/fixtures/planning_golden/*.json` names the script
+  that recorded the fixture, and it changed with the script's rename. That is
+  accepted: recorded provenance strings in test fixtures follow script renames,
+  since they name a file in this repository rather than a value any reader
+  compares.
+- **Found in PR 5d.** The guarded names needed decisions. Only the perception
+  locus module's own handles rename (its factory, its stream constant, and test
+  names and locals that hold the module); every other perception identifier names
+  the wider perception subsystem and keeps its name, as do the template
+  `_perception_banner.html`, `PerceptionState`, `check_perception` and the preboot
+  group label. Only the test locals that hold `EchoModule` rename; the other echo
+  names mean a verbatim repeat. `SPOT RECOVERY` and the dashboard's JavaScript
+  globals (`window.NexusVitals` and the rest) wait for the UI strings in PR 7. The
+  413 matches still in the review queue are strings, prose and UI files for the
+  keys, operator and prose steps: a probe run that renames every queued match
+  changes nothing in the identifiers scope. Five more codemod rules, each with a
+  fixture: a web asset or template file name, or a `.py` file name, in a Python
+  string or a `/` chain follows the identifiers scope (`web_asset_names`,
+  `source_file_operands`); dotted module paths in an import-linter contract follow
+  it (`import_contracts`); a dotted class-name string such as a nested-class
+  annotation follows it (`string_annotations`); and a module path segment that
+  equals a persisted name (`kaine.cycle.gestation`) is not held by the persisted
+  rule (`persisted_names_in_import_paths`). Path overrides keep test names
+  readable (`test_perceptual_locus.py`, `test_development_lock.py`,
+  `test_stimulus_sources.py`). The dashboard's font and vendor folders are
+  excluded from rewriting and moved by hand. `python -m kaine.nexus` keeps
+  working through a deprecation shim, brought forward from PR 7 because the
+  package moved here; it is listed in `PACKAGING` and excluded from the codemod.
+  `parameter_for_config_key` moves to `kaine.legacy_aliases` and also maps the
+  developmental terms, so `[perception_feed.womb].birth_transition_seconds` feeds
+  `maturation_transition_seconds`. Fixed by hand, because no codemod rule reaches
+  them: argparse attributes whose flag keeps its old name (`--db-gestation` now
+  has an explicit `dest`), a dict built from dataclass field names and read with
+  an old key (the dashboard health config), keyword arguments that a test helper
+  merges into a config dict, a module imported by its bare name
+  (`from kaine.cycle import gestation`), a program held in a string, and the
+  JavaScript test harness paths. The sentinel file
+  `individuation/birth_pending` is persisted state that `STATE_PATHS` does not
+  list yet; the persisted step should add it. With every layer renamed, the
+  table marks the identifiers scope done, so `tests/test_module_names_guard.py`
+  now fails on any change that brings an old identifier back.
+- **After review of PR 5d.** A renamed dataclass field can change stored bytes
+  when the whole dataclass is serialized. `womb_params_digest` hashed
+  `asdict(StimulusSourceParams)` and the feed descriptor wrote it to run
+  manifests, so renaming `birth_transition_seconds` changed the digest that every
+  matured entity keeps in `stage.json`. Both now go through
+  `kaine/lifecycle/stored_field_names.py`, which maps renamed fields back to their
+  stored names, is excluded from the codemod and stays fixed for good (later
+  steps must not rename those stored names either); a golden test pins the
+  default digest and the descriptor bytes. An audit of every record class field
+  renamed in PRs 5a to 5d against every `asdict`, `fields`, `vars`, `__dict__`,
+  `model_dump`, `_asdict`, keyword-built dict and structure digest found no other
+  case: the rest are written through explicit old keys or never reach disk, a
+  hash, a manifest, the bus or a record. Also after review: `gestating` joins the
+  developmental table (`is_gestating` becomes `is_developing`; the gate action
+  value `"gestating"` keeps its text and is pinned); a Markdown link whose target
+  is a directory now follows its path (fixture `directory_link_targets`); the
+  codemod exclusions name the moved vendor and font folders; the done-scope guard
+  plans once for all done scopes, is slow-marked, and runs on every pull request
+  in CI and in the gate; and `individuation/birth_pending` joins `STATE_PATHS`.
 - **Local data.** `tests/test_legacy_local_data.py` runs only when
   `KAINE_LOCAL_DATA_ROOT` is set. It copies `backups/` and `state/forks/` to a
   temporary directory, reads everything from the copy with every read-map on,

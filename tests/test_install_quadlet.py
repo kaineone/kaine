@@ -88,9 +88,9 @@ def test_install_renders_units_for_checkout(tmp_path: Path):
     assert "kaine-qdrant.container" in installed
 
     cycle = (dest / "kaine-cycle.container").read_text()
-    nexus = (dest / "kaine-nexus.container").read_text()
+    dashboard = (dest / "kaine-nexus.container").read_text()
     assert f"Volume={checkout}/config/kaine.operator.toml" in cycle
-    assert f"Volume={checkout}/config/kaine.operator.toml" in nexus
+    assert f"Volume={checkout}/config/kaine.operator.toml" in dashboard
     for p in dest.iterdir():
         text = p.read_text()
         assert "@KAINE_ROOT@" not in text, p.name

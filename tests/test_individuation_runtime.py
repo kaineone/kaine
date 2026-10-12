@@ -153,7 +153,7 @@ def build(tmp_path: Path, **over: Any):
         "organ_unloaded": lambda: False,
         "sleeping": None,
         "born_at": lambda: None,
-        "is_gestating": lambda: False,
+        "is_developing": lambda: False,
         "bus": bus,
         "notify": None,
         "entity_name": "test",
@@ -203,11 +203,11 @@ async def test_start_disclosure_and_boot_capture(tmp_path: Path):
     assert runtime.scheduler._capture_kind == "capture"
 
 
-async def test_start_gestating_on_birth(tmp_path: Path):
-    runtime = build(tmp_path, is_gestating=lambda: True)
+async def test_start_developing_on_maturation(tmp_path: Path):
+    runtime = build(tmp_path, is_developing=lambda: True)
     await runtime.start()
     assert runtime.scheduler._capture_kind is None
-    runtime.on_birth()
+    runtime.on_maturation()
     assert runtime.scheduler._capture_kind == "birth"
     runtime.scheduler.notify_sleep_completed()
     assert runtime.scheduler._capture_kind == "capture"
@@ -359,7 +359,7 @@ async def test_hash_embedder_not_ready(tmp_path: Path):
 
 
 async def test_run_returns_on_stop(tmp_path: Path):
-    runtime = build(tmp_path, is_gestating=lambda: True)
+    runtime = build(tmp_path, is_developing=lambda: True)
     runtime.scheduler._sleep = lambda s: asyncio.sleep(0.001)
     stop = asyncio.Event()
 

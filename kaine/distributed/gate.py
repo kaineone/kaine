@@ -150,7 +150,7 @@ class VerificationGate:
             reasons.append(f"artifact missing at {path}")
             return self._finalize(job, False, reasons, capability, evaluation, fork)
 
-        if job.kind is JobKind.FORKED_BEING:
+        if job.kind is JobKind.FORKED_ENTITY:
             # A forked-entity snapshot is gated by welfare / individuation /
             # admissibility, not by a capability-loss veto on weights.
             fork = self._run_fork_gate(job, path)

@@ -23,16 +23,16 @@ sherpa_onnx = pytest.importorskip(
 from kaine.boot import make_audition, make_vocal  # noqa: E402
 from kaine.bus.client import AsyncBus  # noqa: E402
 from kaine.bus.config import BusConfig  # noqa: E402
-from kaine.modules.audition.sherpa_stt import SherpaMoonshineSTT  # noqa: E402
-from kaine.modules.vocal.client import TTSRequest  # noqa: E402
-from kaine.modules.vocal.playback import FakePlayer  # noqa: E402
-from kaine.modules.vocal.sherpa_tts import SherpaKokoroTTS  # noqa: E402
-from kaine.nexus.health.probes import (  # noqa: E402
+from kaine.dashboard.health.probes import (  # noqa: E402
     UP,
     clear_sherpa_probe_memo,
     probe_sherpa_stt,
     probe_sherpa_tts,
 )
+from kaine.modules.audition.sherpa_stt import SherpaMoonshineSTT  # noqa: E402
+from kaine.modules.vocal.client import TTSRequest  # noqa: E402
+from kaine.modules.vocal.playback import FakePlayer  # noqa: E402
+from kaine.modules.vocal.sherpa_tts import SherpaKokoroTTS  # noqa: E402
 from kaine.setup.speech_models import is_installed, model_dir  # noqa: E402
 
 

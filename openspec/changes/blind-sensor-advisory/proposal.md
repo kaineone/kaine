@@ -28,6 +28,6 @@ The advisories are not sent to the caretaker as push notices. Caretaker notices 
 
 ## Impact
 
-- `kaine/lifecycle/welfare_signal.py`, `kaine/evaluation/observers/welfare_observer.py`, `kaine/evaluation/config.py`, `kaine/evaluation/observers/research_event_observer.py`, `kaine/experiment/welfare_counts.py`, `kaine/nexus/health/blocks.py`, `kaine/evaluation/nexus_tab.py`, `kaine/nexus/templates/_entity_care.html`, docs, tests.
+- `kaine/lifecycle/welfare_signal.py`, `kaine/evaluation/observers/welfare_observer.py`, `kaine/evaluation/config.py`, `kaine/evaluation/observers/research_event_observer.py`, `kaine/experiment/welfare_counts.py`, `kaine/dashboard/health/blocks.py`, `kaine/evaluation/dashboard_tab.py`, `kaine/dashboard/templates/_entity_care.html`, docs, tests.
 - The cognitive loop is untouched: `welfare.out` is not a workspace candidate stream, and no module reads it.
 - The advisories need the welfare observer to run, which happens when `[preservation.welfare_response].enabled` is true, or under `[evaluation].enabled` with `[evaluation.observers].welfare`.

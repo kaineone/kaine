@@ -106,7 +106,7 @@ still-unbuilt foveation Phase 3–4._
       so screen gaze, camera gaze, and sound direction share one mechanism.
       _Blocked: depends on 3.1, and on the vision side first wiring the fovea into
       the shared gaze control. The control surface now exists
-      (`kaine/modules/mundus/control_surface.py` `gaze_yaw`/`gaze_pitch`), but
+      (`kaine/modules/embodiment/control_surface.py` `gaze_yaw`/`gaze_pitch`), but
       foveation's own routing task (foveation `4.1`) is still unchecked, so there
       is no established shared seam to join yet._
 

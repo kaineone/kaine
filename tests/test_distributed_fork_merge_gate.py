@@ -9,9 +9,9 @@ from typing import Any
 
 import pytest
 
-from kaine.distributed.fork_being import (
-    build_forked_being_job,
-    forked_being_gate,
+from kaine.distributed.fork_entity import (
+    build_forked_entity_job,
+    forked_entity_gate,
 )
 from kaine.distributed.job import ArtifactKind, JobKind
 from kaine.lifecycle.divergence import DivergenceAssessment
@@ -138,11 +138,11 @@ def test_assess_fork_empty_state_is_not_diverged(tmp_path):
 # --------------------------------------------------------------------------- #
 # Forked-entity job kind
 # --------------------------------------------------------------------------- #
-def test_build_forked_being_job_carries_fork_directive_and_time_scale():
-    job = build_forked_being_job(
+def test_build_forked_entity_job_carries_fork_directive_and_time_scale():
+    job = build_forked_entity_job(
         "snap-123", "explore the corpus", time_scale=2.0
     )
-    assert job.kind is JobKind.FORKED_BEING
+    assert job.kind is JobKind.FORKED_ENTITY
     assert job.fork_snapshot_id == "snap-123"
     assert job.directive == "explore the corpus"
     assert job.time_scale == 2.0
@@ -152,45 +152,45 @@ def test_build_forked_being_job_carries_fork_directive_and_time_scale():
     assert job.inputs["timing"]["time_scale"] == 2.0
 
 
-def test_build_forked_being_job_rejects_bad_time_scale():
+def test_build_forked_entity_job_rejects_bad_time_scale():
     with pytest.raises(Exception):
-        build_forked_being_job("snap-1", "do a thing", time_scale=0.0)
+        build_forked_entity_job("snap-1", "do a thing", time_scale=0.0)
 
 
-def test_build_forked_being_job_requires_directive():
+def test_build_forked_entity_job_requires_directive():
     with pytest.raises(ValueError):
-        build_forked_being_job("snap-1", "   ")
+        build_forked_entity_job("snap-1", "   ")
 
 
-def test_forked_being_gate_accepts_wellformed_snapshot(tmp_path):
-    job = build_forked_being_job("snap-1", "run")
+def test_forked_entity_gate_accepts_wellformed_snapshot(tmp_path):
+    job = build_forked_entity_job("snap-1", "run")
     snap = tmp_path / "post_run.json"
     snap.write_text(json.dumps({"id": "x", "modules": {"eidolon": {"name": "K"}}}))
-    outcome = forked_being_gate(job, snap)
+    outcome = forked_entity_gate(job, snap)
     assert outcome.passed is True
 
 
-def test_forked_being_gate_rejects_empty_snapshot(tmp_path):
-    job = build_forked_being_job("snap-1", "run")
+def test_forked_entity_gate_rejects_empty_snapshot(tmp_path):
+    job = build_forked_entity_job("snap-1", "run")
     snap = tmp_path / "post_run.json"
     snap.write_text(json.dumps({"id": "x", "modules": {}}))
-    outcome = forked_being_gate(job, snap)
+    outcome = forked_entity_gate(job, snap)
     assert outcome.passed is False
 
 
-def test_forked_being_gate_rejects_missing_snapshot(tmp_path):
-    job = build_forked_being_job("snap-1", "run")
-    outcome = forked_being_gate(job, tmp_path / "nope.json")
+def test_forked_entity_gate_rejects_missing_snapshot(tmp_path):
+    job = build_forked_entity_job("snap-1", "run")
+    outcome = forked_entity_gate(job, tmp_path / "nope.json")
     assert outcome.passed is False
 
 
-def test_verification_gate_routes_forked_being_through_fork_gate(tmp_path):
+def test_verification_gate_routes_forked_entity_through_fork_gate(tmp_path):
     from kaine.distributed.gate import VerificationGate
 
-    job = build_forked_being_job("snap-1", "run")
+    job = build_forked_entity_job("snap-1", "run")
     snap = tmp_path / "post_run.json"
     snap.write_text(json.dumps({"id": "x", "modules": {"eidolon": {}}}))
-    gate = VerificationGate(fork_gate=forked_being_gate)
+    gate = VerificationGate(fork_gate=forked_entity_gate)
     result = gate.verify(job, snap)
     assert result.promotable is True
     assert result.fork is not None and result.fork.passed is True

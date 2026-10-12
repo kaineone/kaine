@@ -5,10 +5,10 @@
 
 This is a low-level primitive (like ``AsyncJsonlSink``): it depends only on
 ``kaine.bus.schema`` and is imported by both the dashboard diagnostics layer
-(``kaine.nexus.privacy`` re-exports it for backward compatibility) and the
+(``kaine.dashboard.privacy`` re-exports it for backward compatibility) and the
 evaluation sidecar (``kaine.evaluation.observers.research_event_observer``).
 
-Living here rather than under ``kaine/nexus/`` keeps the evaluation package
+Living here rather than under ``kaine/dashboard/`` keeps the evaluation package
 from depending on the dashboard layer — preserving the one-directional sidecar
 boundary while letting both layers share the exact same ``CONTENT_FIELDS``
 definition and scrub logic.
@@ -32,7 +32,7 @@ from kaine.bus.schema import Event
 # to verify against, for two reasons found in the code audit:
 #   1. The diagnostics consumers read DYNAMIC nested keys that cannot be
 #      enumerated statically — e.g. `payload.metadata.coherence.<pair-label>`
-#      (per-module-pair PLV floats, nexus.js) and `payload.state.valence/arousal`
+#      (per-module-pair PLV floats, dashboard.js) and `payload.state.valence/arousal`
 #      (console.html). A key-name allowlist would blank the coherence chart and
 #      the presence visualizer.
 #   2. The recursion below is LOAD-BEARING: `workspace.broadcast` embeds entire
@@ -44,7 +44,7 @@ from kaine.bus.schema import Event
 #   - genuinely content-bearing keys the audit found leaking are added below
 #     (`description`, `statement`), matching how the research taxonomy and the
 #     eval dashboard tab already treat them as content; and
-#   - a CI guard (tests/test_nexus_privacy.py::test_no_uncovered_content_key_in_
+#   - a CI guard (tests/test_dashboard_privacy.py::test_no_uncovered_content_key_in_
 #     module_publishers) scans every module `publish()` payload and fails when a
 #     new content-capable key is introduced without being added here.
 # `agent_label` is deliberately NOT here: the research taxonomy keeps it as an

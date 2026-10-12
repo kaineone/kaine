@@ -162,4 +162,10 @@ jobs:
 
       - name: Run the slow tests
         if: steps.lane.outputs.slow == 'true'
-        run: python -m pytest -q -m slow -o faulthandler_timeout=600
+        run: python -m pytest -q -m slow -o faulthandler_timeout=600 ${{ !(matrix.python-version == '3.12' && matrix.torch-bound == 'max') && '--ignore=tests/test_module_names_guard.py' || '' }}
+
+      - name: Run the rename guard
+        # The guard is slow-marked to keep the fast suite fast, but it must run on
+        # every pull request; run it in the py3.12 leg only.
+        if: steps.lane.outputs.slow != 'true' && matrix.python-version == '3.12' && matrix.torch-bound == 'max'
+        run: python -m pytest -q -m slow tests/test_module_names_guard.py -o faulthandler_timeout=600

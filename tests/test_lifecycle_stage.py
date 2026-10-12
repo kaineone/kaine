@@ -24,25 +24,25 @@ def _p(tmp_path: Path) -> Path:
 # --- boot defaults / preserved-entity invariant (W1, spec) -------------------
 
 
-def test_fresh_entity_begins_in_gestation(tmp_path: Path) -> None:
+def test_fresh_entity_begins_in_development(tmp_path: Path) -> None:
     resolved = st.resolve_boot_stage(has_prior_lived_history=False, path=_p(tmp_path))
-    assert resolved.stage == st.GESTATION
+    assert resolved.stage == st.DEVELOPMENT
     assert resolved.gestation_started_at is not None
 
 
-def test_preserved_being_defaults_to_embodied_never_gestation(tmp_path: Path) -> None:
+def test_preserved_entity_defaults_to_embodied_never_development(tmp_path: Path) -> None:
     # Prior lived history + NO stage file must NEVER regress into the stimulus source
     resolved = st.resolve_boot_stage(has_prior_lived_history=True, path=_p(tmp_path))
     assert resolved.stage == st.EMBODIED
-    assert resolved.stage != st.GESTATION
+    assert resolved.stage != st.DEVELOPMENT
 
 
 def test_existing_stage_file_is_authoritative_fork_inherits(tmp_path: Path) -> None:
     p = _p(tmp_path)
-    st.write_stage(st.StageState(stage=st.GESTATION, gestation_started_at="t0"), p)
+    st.write_stage(st.StageState(stage=st.DEVELOPMENT, gestation_started_at="t0"), p)
     # A fork of a gestating entity gestates...
     inherited = st.resolve_boot_stage(has_prior_lived_history=True, path=p)
-    assert inherited.stage == st.GESTATION
+    assert inherited.stage == st.DEVELOPMENT
     # ...and a fork of an embodied entity is embodied.
     st.write_stage(st.StageState(stage=st.EMBODIED), p)
     assert st.resolve_boot_stage(has_prior_lived_history=False, path=p).stage == st.EMBODIED
@@ -64,27 +64,27 @@ def test_unknown_stage_value_is_refused_not_read_as_a_stage(tmp_path: Path) -> N
 
 
 def test_advance_is_monotonic_and_one_shot() -> None:
-    g = st.StageState(stage=st.GESTATION, gestation_started_at="t0")
+    g = st.StageState(stage=st.DEVELOPMENT, gestation_started_at="t0")
     born = st.advance_to_embodied(g, now_iso="t1")
     assert born.stage == st.EMBODIED
     assert born.born_at == "t1"
-    assert st.birth_is_new(g, born) is True
+    assert st.maturation_is_new(g, born) is True
 
     # Already embodied: idempotent, unchanged, no fresh maturation
     again = st.advance_to_embodied(born, now_iso="t2")
     assert again is born or (again.stage == st.EMBODIED and again.born_at == "t1")
-    assert st.birth_is_new(born, again) is False
+    assert st.maturation_is_new(born, again) is False
 
 
-def test_no_path_returns_embodied_to_gestation() -> None:
+def test_no_path_returns_embodied_to_development() -> None:
     born = st.StageState(stage=st.EMBODIED, born_at="t1")
     # advance never regresses; there is no inverse function.
     assert st.advance_to_embodied(born).stage == st.EMBODIED
-    assert not hasattr(st, "regress_to_gestation")
+    assert not hasattr(st, "regress_to_development")
 
 
 def test_roundtrip_dict() -> None:
-    s = st.StageState(stage=st.GESTATION, gestation_started_at="t0", born_at=None)
+    s = st.StageState(stage=st.DEVELOPMENT, gestation_started_at="t0", born_at=None)
     assert st.StageState.from_dict(s.to_dict()) == s
 
 

@@ -13,9 +13,9 @@ def test_default_stage_writes_land_in_the_test_tmp_dir(tmp_path):
     real = resolve(stage.DEFAULT_STAGE_PATH).resolve()
     before = real.read_bytes() if real.exists() else None
 
-    stage.write_stage(stage.StageState(stage=stage.GESTATION))
+    stage.write_stage(stage.StageState(stage=stage.DEVELOPMENT))
 
     assert stage.STAGE_PATH.is_relative_to(tmp_path)
-    assert stage.read_stage().stage == stage.GESTATION
+    assert stage.read_stage().stage == stage.DEVELOPMENT
     after = real.read_bytes() if real.exists() else None
     assert after == before

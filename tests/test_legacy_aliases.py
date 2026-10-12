@@ -457,6 +457,11 @@ def test_lived_artifact_paths() -> None:
         "empatheia",
         "syneidesis",
         "praxis",
+        "mundus",
+        "perception",
+        "spot",
+        "nexus",
+        "echo",
     ],
 )
 def test_renamed_modules_read_old_names(monkeypatch, caplog, old) -> None:

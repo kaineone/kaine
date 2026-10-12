@@ -26,7 +26,7 @@ from kaine.lifecycle.individuation_store import (
     battery_digest_of,
     build_report,
     conditioning_digest,
-    copy_birth_adapter,
+    copy_maturation_adapter,
     individuation_evidence,
     load_ledger,
     load_reference,
@@ -603,19 +603,19 @@ def test_read_conditioning_inputs_corrupt_self_model(tmp_path, monkeypatch):
         )
 
 
-def test_copy_birth_adapter(tmp_path):
+def test_copy_maturation_adapter(tmp_path):
     paths = IndividuationPaths(tmp_path / "individuation")
     source = tmp_path / "src.gguf"
     source.write_bytes(b"adapter body")
-    sha = copy_birth_adapter(paths, source)
+    sha = copy_maturation_adapter(paths, source)
     assert sha == hashlib.sha256(b"adapter body").hexdigest()
-    assert paths.birth_adapter.read_bytes() == b"adapter body"
-    assert (paths.birth_adapter.stat().st_mode & 0o777) == 0o600
+    assert paths.maturation_adapter.read_bytes() == b"adapter body"
+    assert (paths.maturation_adapter.stat().st_mode & 0o777) == 0o600
 
 
-def test_copy_birth_adapter_none(tmp_path):
+def test_copy_maturation_adapter_none(tmp_path):
     paths = IndividuationPaths(tmp_path / "individuation")
-    assert copy_birth_adapter(paths, None) == "none"
+    assert copy_maturation_adapter(paths, None) == "none"
 
 
 def test_default_root():

@@ -20,13 +20,13 @@ import pytest
 from kaine.bus.schema import Event
 from kaine.lifecycle import stage as lifecycle_stage
 from kaine.lifecycle.gate_runner import (
-    DEFAULT_WOMB_READOUT_STREAM,
+    DEFAULT_STIMULUS_SOURCE_READOUT_STREAM,
     MaturationGateRunner,
 )
 from kaine.lifecycle.maturation_gate import (
-    STAGE_BIRTH,
-    STAGE_BIRTH_READY,
-    STAGE_GESTATION_NO_STIMULUS,
+    STAGE_DEVELOPMENT_NO_STIMULUS,
+    STAGE_MATURATION,
+    STAGE_MATURATION_READY,
     MaturationConfig,
 )
 from kaine.perception_state import read_desired
@@ -45,7 +45,7 @@ def _make_bus(
     readout: dict[str, Any] | None = None,
     sleep_count: int = 0,
     boot_ms: int = 1_000_000,
-    womb_stream: str = DEFAULT_WOMB_READOUT_STREAM,
+    stimulus_source_stream: str = DEFAULT_STIMULUS_SOURCE_READOUT_STREAM,
     sleep_stream: str = "hypnos.out",
 ) -> Any:
     """Return a minimal async bus double with the new cursor API surface."""
@@ -71,7 +71,7 @@ def _make_bus(
         )
 
     async def _latest(stream: str) -> tuple[str, Event] | None:
-        if stream == womb_stream and readout is not None:
+        if stream == stimulus_source_stream and readout is not None:
             return _readout_entry()
         return None
 
@@ -82,7 +82,7 @@ def _make_bus(
     async def _range(
         stream: str, start: str = "-", end: str = "+", count: int | None = None
     ) -> list[tuple[str, Event]]:
-        if stream == womb_stream and readout is not None:
+        if stream == stimulus_source_stream and readout is not None:
             return [_readout_entry()]
         return []
 
@@ -136,28 +136,28 @@ def _make_registry(
     *,
     sleep_count: int = 0,
     consolidation_passes: int = 0,
-    mundus_enabled: bool = False,
-    mundus_approved: bool = False,
-    mundus_reachable: bool = False,
+    embodiment_enabled: bool = False,
+    embodiment_approved: bool = False,
+    embodiment_reachable: bool = False,
 ) -> Any:
     registry = MagicMock()
 
     world_model = MagicMock()
     world_model.successful_training_passes = consolidation_passes
-    mundus = MagicMock()
+    embodiment = MagicMock()
     # Public embodiment module API the gate uses (operator approval itself is read from
     # KAINE_MUNDUS_OPERATOR_APPROVED; tests that need it set the variable).
-    mundus.enabled_by_config = mundus_enabled
-    mundus.probe_available = AsyncMock(
-        return_value=mundus_enabled and mundus_approved and mundus_reachable
+    embodiment.enabled_by_config = embodiment_enabled
+    embodiment.probe_available = AsyncMock(
+        return_value=embodiment_enabled and embodiment_approved and embodiment_reachable
     )
-    mundus.activate = AsyncMock(return_value=mundus_enabled and mundus_approved)
+    embodiment.activate = AsyncMock(return_value=embodiment_enabled and embodiment_approved)
 
     vocal = MagicMock()
     vocal.set_dormant = MagicMock()
 
     # The sleep module is present so the gate applies the sleep and consolidation floors.
-    modules = {"hypnos": MagicMock(), "phantasia": world_model, "mundus": mundus, "vox": vocal}
+    modules = {"hypnos": MagicMock(), "phantasia": world_model, "mundus": embodiment, "vox": vocal}
 
     def _get(name: str):
         return modules[name]
@@ -173,17 +173,17 @@ def _make_clock(now: float = 0.0) -> Any:
     return clock
 
 
-def _fresh_gestation_state(tmp_path: Path) -> lifecycle_stage.StageState:
+def _fresh_development_state(tmp_path: Path) -> lifecycle_stage.StageState:
     """Build a fresh developmental-phase state without mutating the global STAGE_PATH."""
     p = tmp_path / "stage.json"
     return lifecycle_stage.resolve_boot_stage(has_prior_lived_history=False, path=p)
 
 
 @pytest.mark.asyncio
-async def test_no_stimulus_when_gestating_without_womb_feed(tmp_path: Path) -> None:
+async def test_no_stimulus_when_developing_without_stimulus_source_feed(tmp_path: Path) -> None:
     published: list[Event] = []
     bus = _make_bus(published=published)
-    state = _fresh_gestation_state(tmp_path)
+    state = _fresh_development_state(tmp_path)
     runner = MaturationGateRunner(
         bus=bus,
         config=MaturationConfig(enabled=True, gate_cadence_seconds=0.01),
@@ -191,7 +191,7 @@ async def test_no_stimulus_when_gestating_without_womb_feed(tmp_path: Path) -> N
         entity_clock=_make_clock(0.0),
         stage_state=state,
         staging_enabled=True,
-        womb_feed_configured=False,
+        stimulus_source_feed_configured=False,
     )
     stop = asyncio.Event()
     asyncio.get_running_loop().call_later(0.05, stop.set)
@@ -199,14 +199,14 @@ async def test_no_stimulus_when_gestating_without_womb_feed(tmp_path: Path) -> N
 
     assert len(published) == 1
     assert published[0].source == "lifecycle"
-    assert published[0].type == STAGE_GESTATION_NO_STIMULUS
+    assert published[0].type == STAGE_DEVELOPMENT_NO_STIMULUS
 
 
 @pytest.mark.asyncio
-async def test_gate_keeps_gestating_when_conditions_unmet(tmp_path: Path) -> None:
+async def test_gate_keeps_developing_when_conditions_unmet(tmp_path: Path) -> None:
     published: list[Event] = []
     bus = _make_bus(published=published, readout={"endogenous_self_sustain": True}, sleep_count=1)
-    state = _fresh_gestation_state(tmp_path)
+    state = _fresh_development_state(tmp_path)
     runner = MaturationGateRunner(
         bus=bus,
         config=MaturationConfig(
@@ -220,18 +220,18 @@ async def test_gate_keeps_gestating_when_conditions_unmet(tmp_path: Path) -> Non
         entity_clock=_make_clock(0.0),
         stage_state=state,
         staging_enabled=True,
-        womb_feed_configured=True,
+        stimulus_source_feed_configured=True,
     )
 
     await runner._evaluate_once()
     await runner._evaluate_once()
 
     assert not published
-    assert runner.stage.is_gestating
+    assert runner.stage.is_developing
 
 
 @pytest.mark.asyncio
-async def test_gate_holds_awaiting_embodiment_when_ready_but_mundus_unavailable(
+async def test_gate_holds_awaiting_embodiment_when_ready_but_embodiment_unavailable(
     tmp_path: Path,
 ) -> None:
     readout = {
@@ -243,7 +243,7 @@ async def test_gate_holds_awaiting_embodiment_when_ready_but_mundus_unavailable(
     }
     published: list[Event] = []
     bus = _make_bus(published=published, readout=readout, sleep_count=1)
-    state = _fresh_gestation_state(tmp_path)
+    state = _fresh_development_state(tmp_path)
     runner = MaturationGateRunner(
         bus=bus,
         config=MaturationConfig(
@@ -253,24 +253,24 @@ async def test_gate_holds_awaiting_embodiment_when_ready_but_mundus_unavailable(
             min_lived_seconds=0,
             gate_cadence_seconds=0.01,
         ),
-        registry=_make_registry(consolidation_passes=1, mundus_enabled=False),
+        registry=_make_registry(consolidation_passes=1, embodiment_enabled=False),
         entity_clock=_make_clock(),
         stage_state=state,
         staging_enabled=True,
-        womb_feed_configured=True,
+        stimulus_source_feed_configured=True,
     )
 
     await runner._evaluate_once()
     await runner._evaluate_once()
 
     assert len(published) == 1
-    assert published[0].type == STAGE_BIRTH_READY
+    assert published[0].type == STAGE_MATURATION_READY
     assert published[0].payload["reason"] == "awaiting_embodiment"
-    assert runner.stage.is_gestating
+    assert runner.stage.is_developing
 
 
 @pytest.mark.asyncio
-async def test_gate_births_when_ready_and_embodiment_available(tmp_path: Path, monkeypatch) -> None:
+async def test_gate_maturations_when_ready_and_embodiment_available(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
     readout = {
         "endogenous_self_sustain": True,
@@ -281,7 +281,7 @@ async def test_gate_births_when_ready_and_embodiment_available(tmp_path: Path, m
     }
     published: list[Event] = []
     bus = _make_bus(published=published, readout=readout, sleep_count=1)
-    state = _fresh_gestation_state(tmp_path)
+    state = _fresh_development_state(tmp_path)
     runner = MaturationGateRunner(
         bus=bus,
         config=MaturationConfig(
@@ -293,21 +293,21 @@ async def test_gate_births_when_ready_and_embodiment_available(tmp_path: Path, m
         ),
         registry=_make_registry(
             consolidation_passes=1,
-            mundus_enabled=True,
-            mundus_approved=True,
-            mundus_reachable=True,
+            embodiment_enabled=True,
+            embodiment_approved=True,
+            embodiment_reachable=True,
         ),
         entity_clock=_make_clock(),
         stage_state=state,
         staging_enabled=True,
-        womb_feed_configured=True,
+        stimulus_source_feed_configured=True,
     )
 
     await runner._evaluate_once()
     await runner._evaluate_once()
 
     assert len(published) == 1
-    assert published[0].type == STAGE_BIRTH
+    assert published[0].type == STAGE_MATURATION
     assert runner.stage.is_embodied
     # Maturation gives the entity its voice.
     runner._registry.get("vox").set_dormant.assert_called_once_with(False)
@@ -318,7 +318,7 @@ async def test_gate_births_when_ready_and_embodiment_available(tmp_path: Path, m
 
 
 @pytest.mark.asyncio
-async def test_birth_unlocks_gestation_locus(tmp_path: Path, monkeypatch) -> None:
+async def test_maturation_unlocks_development_locus(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
     readout = {
         "endogenous_self_sustain": True,
@@ -329,7 +329,7 @@ async def test_birth_unlocks_gestation_locus(tmp_path: Path, monkeypatch) -> Non
     }
     published: list[Event] = []
     bus = _make_bus(published=published, readout=readout, sleep_count=1)
-    state = _fresh_gestation_state(tmp_path)
+    state = _fresh_development_state(tmp_path)
 
     desired_path = tmp_path / "desired.json"
     monkeypatch.setattr("kaine.perception_state.DESIRED_PATH", desired_path)
@@ -348,14 +348,14 @@ async def test_birth_unlocks_gestation_locus(tmp_path: Path, monkeypatch) -> Non
         ),
         registry=_make_registry(
             consolidation_passes=1,
-            mundus_enabled=True,
-            mundus_approved=True,
-            mundus_reachable=True,
+            embodiment_enabled=True,
+            embodiment_approved=True,
+            embodiment_reachable=True,
         ),
         entity_clock=_make_clock(),
         stage_state=state,
         staging_enabled=True,
-        womb_feed_configured=True,
+        stimulus_source_feed_configured=True,
     )
 
     await runner._evaluate_once()
@@ -366,7 +366,7 @@ async def test_birth_unlocks_gestation_locus(tmp_path: Path, monkeypatch) -> Non
     assert desired.locus_locked is False
 
 
-class _RecordingMundus:
+class _RecordingEmbodiment:
     def __init__(self, *, probe_result: bool = True, activate_result: bool = True) -> None:
         self.probe_result = probe_result
         self.activate_result = activate_result
@@ -389,7 +389,7 @@ class _RecordingMundus:
         return self.activate_result
 
 
-def _make_registry_with_mundus(mundus: _RecordingMundus) -> Any:
+def _make_registry_with_embodiment(embodiment: _RecordingEmbodiment) -> Any:
     registry = MagicMock()
 
     world_model = MagicMock()
@@ -399,7 +399,7 @@ def _make_registry_with_mundus(mundus: _RecordingMundus) -> Any:
     vocal.set_dormant = MagicMock()
 
     # The sleep module is present so the gate applies the sleep and consolidation floors.
-    modules = {"hypnos": MagicMock(), "phantasia": world_model, "mundus": mundus, "vox": vocal}
+    modules = {"hypnos": MagicMock(), "phantasia": world_model, "mundus": embodiment, "vox": vocal}
 
     def _get(name: str):
         return modules[name]
@@ -410,7 +410,7 @@ def _make_registry_with_mundus(mundus: _RecordingMundus) -> Any:
 
 
 @pytest.mark.asyncio
-async def test_birth_calls_mundus_activate_before_stage_file_and_unlocks_as_gestation(
+async def test_maturation_calls_embodiment_activate_before_stage_file_and_unlocks_as_development(
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
@@ -423,7 +423,7 @@ async def test_birth_calls_mundus_activate_before_stage_file_and_unlocks_as_gest
     }
     published: list[Event] = []
     bus = _make_bus(published=published, readout=readout, sleep_count=1)
-    state = _fresh_gestation_state(tmp_path)
+    state = _fresh_development_state(tmp_path)
 
     desired_path = tmp_path / "desired.json"
     monkeypatch.setattr("kaine.perception_state.DESIRED_PATH", desired_path)
@@ -431,7 +431,7 @@ async def test_birth_calls_mundus_activate_before_stage_file_and_unlocks_as_gest
 
     _ps.write_desired_locus("virtual", locked=True, locked_by="gestation", path=desired_path)
 
-    mundus = _RecordingMundus(probe_result=True, activate_result=True)
+    embodiment = _RecordingEmbodiment(probe_result=True, activate_result=True)
     runner = MaturationGateRunner(
         bus=bus,
         config=MaturationConfig(
@@ -441,11 +441,11 @@ async def test_birth_calls_mundus_activate_before_stage_file_and_unlocks_as_gest
             min_lived_seconds=0,
             gate_cadence_seconds=0.01,
         ),
-        registry=_make_registry_with_mundus(mundus),
+        registry=_make_registry_with_embodiment(embodiment),
         entity_clock=_make_clock(),
         stage_state=state,
         staging_enabled=True,
-        womb_feed_configured=True,
+        stimulus_source_feed_configured=True,
     )
 
     # First tick anchors the sleep cursor; the second counts the sleep.
@@ -454,9 +454,9 @@ async def test_birth_calls_mundus_activate_before_stage_file_and_unlocks_as_gest
 
     # activate ran while the stage was still the developmental phase, then the stage file
     # was written as embodied.
-    assert mundus.activate_calls
-    at_activation = mundus.activate_calls[0]
-    assert at_activation is None or at_activation.is_gestating
+    assert embodiment.activate_calls
+    at_activation = embodiment.activate_calls[0]
+    assert at_activation is None or at_activation.is_developing
     persisted = lifecycle_stage.read_stage(tmp_path / "stage.json")
     assert persisted is not None
     assert persisted.is_embodied
@@ -469,7 +469,7 @@ async def test_birth_calls_mundus_activate_before_stage_file_and_unlocks_as_gest
 
 
 @pytest.mark.asyncio
-async def test_birth_deferred_when_mundus_activate_fails(
+async def test_maturation_deferred_when_embodiment_activate_fails(
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
@@ -482,7 +482,7 @@ async def test_birth_deferred_when_mundus_activate_fails(
     }
     published: list[Event] = []
     bus = _make_bus(published=published, readout=readout, sleep_count=1)
-    state = _fresh_gestation_state(tmp_path)
+    state = _fresh_development_state(tmp_path)
 
     desired_path = tmp_path / "desired.json"
     monkeypatch.setattr("kaine.perception_state.DESIRED_PATH", desired_path)
@@ -490,7 +490,7 @@ async def test_birth_deferred_when_mundus_activate_fails(
 
     _ps.write_desired_locus("virtual", locked=True, locked_by="gestation", path=desired_path)
 
-    mundus = _RecordingMundus(probe_result=True, activate_result=False)
+    embodiment = _RecordingEmbodiment(probe_result=True, activate_result=False)
     runner = MaturationGateRunner(
         bus=bus,
         config=MaturationConfig(
@@ -500,25 +500,25 @@ async def test_birth_deferred_when_mundus_activate_fails(
             min_lived_seconds=0,
             gate_cadence_seconds=0.01,
         ),
-        registry=_make_registry_with_mundus(mundus),
+        registry=_make_registry_with_embodiment(embodiment),
         entity_clock=_make_clock(),
         stage_state=state,
         staging_enabled=True,
-        womb_feed_configured=True,
+        stimulus_source_feed_configured=True,
     )
 
     await runner._evaluate_once()
     await runner._evaluate_once()
 
-    assert mundus.activate_calls
+    assert embodiment.activate_calls
     assert len(published) == 1
-    assert published[0].type == STAGE_BIRTH_READY
+    assert published[0].type == STAGE_MATURATION_READY
     assert published[0].payload["reason"] == "awaiting_embodiment"
-    assert runner.stage.is_gestating
+    assert runner.stage.is_developing
 
     persisted = lifecycle_stage.read_stage(tmp_path / "stage.json")
     assert persisted is not None
-    assert persisted.is_gestating
+    assert persisted.is_developing
 
     # Locus should stay locked and attributed to the developmental phase
     desired = read_desired(desired_path)

@@ -605,8 +605,8 @@ def test_cycle_running_unreadable_cmdline_counts_running(tmp_path, monkeypatch):
     assert guard.cycle_running(state_root) is True
 
 
-def test_static_style_is_nexus_stylesheet(tmp_path):
-    import kaine.nexus
+def test_static_style_is_dashboard_stylesheet(tmp_path):
+    import kaine.dashboard
 
     app = _mk_app(tmp_path)
     client = _session_client(app)
@@ -619,8 +619,8 @@ def test_static_style_is_nexus_stylesheet(tmp_path):
         follow_redirects=False,
     )
     assert r2.status_code == 200
-    nexus_css = Path(kaine.nexus.__file__).parent / "static" / "style.css"
-    assert r2.content == nexus_css.read_bytes()
+    dashboard_css = Path(kaine.dashboard.__file__).parent / "static" / "style.css"
+    assert r2.content == dashboard_css.read_bytes()
 
 
 def test_setup_css_uses_only_design_tokens(tmp_path):

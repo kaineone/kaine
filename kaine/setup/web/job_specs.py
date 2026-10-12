@@ -111,26 +111,26 @@ def build_job_specs(
         )
 
     try:
-        from kaine.nexus.config import load_nexus_config
+        from kaine.dashboard.config import load_dashboard_config
 
-        nexus_cfg = load_nexus_config(
+        dashboard_cfg = load_dashboard_config(
             shipped_config_path, operator_path=operator_path
         )
-        nexus_port = nexus_cfg.port
+        dashboard_port = dashboard_cfg.port
     except Exception:
         # The dashboard configuration is unsafe/invalid/malformed; do not offer the start job.
         return specs
 
-    nexus_log = state_dir / "logs" / "nexus.log"
+    dashboard_log = state_dir / "logs" / "nexus.log"
     specs.append(
         JobSpec(
             name="nexus",
             title="Start Nexus",
-            argv=(sys.executable, "-m", "kaine.nexus"),
+            argv=(sys.executable, "-m", "kaine.dashboard"),
             detach=True,
-            ready_probe=lambda port=nexus_port: net.port_listening(port),
-            log_path=nexus_log,
-            details=f"{sys.executable} -m kaine.nexus (port {nexus_port}; log {nexus_log})",
+            ready_probe=lambda port=dashboard_port: net.port_listening(port),
+            log_path=dashboard_log,
+            details=f"{sys.executable} -m kaine.dashboard (port {dashboard_port}; log {dashboard_log})",
         )
     )
 

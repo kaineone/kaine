@@ -833,7 +833,7 @@ def test_shipped_language_model_id_is_published_kaine_organ():
     )
 
 
-def test_shipped_config_ships_spot_disabled():
+def test_shipped_config_ships_supervisor_disabled():
     """Guard: the shipped config/kaine.toml must keep the supervisor off.
 
     Reads the working-copy file directly (the [spot] section may not yet be in
@@ -843,14 +843,14 @@ def test_shipped_config_ships_spot_disabled():
 
     root = Path(__file__).parent.parent
     config = tomllib.loads((root / "config" / "kaine.toml").read_text())
-    spot = config.get("spot", {})
-    assert spot.get("enabled", False) is False, (
+    supervisor = config.get("spot", {})
+    assert supervisor.get("enabled", False) is False, (
         "shipped config must ship [spot].enabled = false (operator-supervised first boot)"
     )
     # [spot.incident_log] ships enabled = true, but it is dormant because the supervisor
     # itself ships disabled — turning the supervisor on later gives the operator the
     # durable incident log automatically.
-    incident_log = spot.get("incident_log", {})
+    incident_log = supervisor.get("incident_log", {})
     assert incident_log.get("enabled", False) is True, (
         "shipped config must ship [spot.incident_log].enabled = true (dormant "
         "while [spot].enabled = false)"

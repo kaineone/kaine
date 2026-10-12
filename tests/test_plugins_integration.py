@@ -239,7 +239,7 @@ async def test_build_registry_plugin_fills_sequence_network(caplog, bus):
 
 
 @pytest.mark.asyncio
-async def test_spot_restart_re_requests_fresh_plugin_network(bus):
+async def test_supervisor_restart_re_requests_fresh_plugin_network(bus):
     pytest.importorskip("torch")
     plugin = _SequenceNetworkPlugin(_FakeNetwork)
     lp = load_plugins(
@@ -462,21 +462,21 @@ async def test_planning_falsy_injected_engine_held_not_default(monkeypatch, bus)
     assert planning.engine is engine
 
 
-def _spot(registry, config, bus):
-    from kaine.cycle.spot import IncidentLogConfig, Spot, SpotConfig
+def _supervisor(registry, config, bus):
+    from kaine.cycle.supervisor import IncidentLogConfig, Supervisor, SupervisorConfig
 
-    return Spot(
+    return Supervisor(
         registry=registry,
         fork_manager=_DummyForkManager(),
         kaine_config=config,
-        config=SpotConfig(incident_log=IncidentLogConfig(enabled=False)),
+        config=SupervisorConfig(incident_log=IncidentLogConfig(enabled=False)),
         rebuild_module=_make_rebuild_module(bus, config, registry, None),
         bus=bus,
     )
 
 
 @pytest.mark.asyncio
-async def test_spot_planning_heavy_restart_refreshes_engine_keeps_oscillator(monkeypatch, bus):
+async def test_supervisor_planning_heavy_restart_refreshes_engine_keeps_oscillator(monkeypatch, bus):
     """Two real supervisor heavy restarts of the planning module each request a fresh engine from the
     plugin (tasks 4.5 / 4.10), while the plugin oscillator is requested once at
     boot and carried over unchanged (oscillator-continuity-on-restart)."""
@@ -505,9 +505,9 @@ async def test_spot_planning_heavy_restart_refreshes_engine_keeps_oscillator(mon
     assert planning._oscillator is not None and planning._oscillator.call_id == 1
     boot_oscillator = planning._oscillator
 
-    spot = _spot(registry, config, bus)
-    first = await spot._restart_module("nous")
-    second = await spot._restart_module("nous")
+    supervisor = _supervisor(registry, config, bus)
+    first = await supervisor._restart_module("nous")
+    second = await supervisor._restart_module("nous")
     assert first.ok and first.path == "heavy"
     assert second.ok and second.path == "heavy"
 
@@ -521,7 +521,7 @@ async def test_spot_planning_heavy_restart_refreshes_engine_keeps_oscillator(mon
 
 
 @pytest.mark.asyncio
-async def test_spot_sequence_light_restart_keeps_same_network(bus):
+async def test_supervisor_sequence_light_restart_keeps_same_network(bus):
     """The sequence module restarts in place: it keeps its injected network and the plugin
     is not asked again."""
     network_plugin = _SequenceNetworkPlugin(_FakeNetwork)
@@ -538,8 +538,8 @@ async def test_spot_sequence_light_restart_keeps_same_network(bus):
     before = registry.get("chronos")._network
     assert network_plugin.calls == 1
 
-    spot = _spot(registry, config, bus)
-    result = await spot._restart_module("chronos")
+    supervisor = _supervisor(registry, config, bus)
+    result = await supervisor._restart_module("chronos")
     assert result.ok and result.path == "light"
     assert network_plugin.calls == 1
     assert registry.get("chronos")._network is before

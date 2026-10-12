@@ -127,8 +127,8 @@ async def _capture_module_state(module: Any) -> dict[str, Any]:
 
 # Developmental-phase files that travel with the entity. The viability verdict is not one:
 # it already rides inside the progress file.
-BUNDLED_GESTATION_FILES = ("gestation_progress.json", "gestation_readout.json")
-GESTATION_STATE_FILES = BUNDLED_GESTATION_FILES + ("gestation_viability.json",)
+BUNDLED_DEVELOPMENT_FILES = ("gestation_progress.json", "gestation_readout.json")
+DEVELOPMENT_STATE_FILES = BUNDLED_DEVELOPMENT_FILES + ("gestation_viability.json",)
 
 
 async def preserve_live(
@@ -351,19 +351,19 @@ async def preserve_live(
 
         # Developmental progress and readout: awake time persists with the entity.
         if stage_source_path is not None:
-            gestation_copied = False
-            for name in BUNDLED_GESTATION_FILES:
+            development_copied = False
+            for name in BUNDLED_DEVELOPMENT_FILES:
                 src = stage_source_path.parent / name
                 if src.is_file():
-                    if not gestation_copied:
+                    if not development_copied:
                         (bundle_dir / "gestation").mkdir(
                             mode=0o700, parents=True, exist_ok=True
                         )
-                        gestation_copied = True
+                        development_copied = True
                     dest = bundle_dir / "gestation" / name
                     shutil.copy2(src, dest)
                     _chmod_quietly(dest, 0o600)
-            if gestation_copied:
+            if development_copied:
                 inventory.append("gestation/ (gestation progress and readout)")
         # Individuation evidence: encrypted maturation reference, ledger, reports,
         # and the stored maturation adapter. This evidence travels with the entity.
@@ -757,14 +757,14 @@ def _extract_stage_from_bundle(bundle: Path) -> bytes | None:
     return None
 
 
-def set_aside_gestation_files(dest_dir: Path) -> list[Path]:
+def set_aside_development_files(dest_dir: Path) -> list[Path]:
     """Move any developmental-phase state files in ``dest_dir`` aside (renamed, never deleted) so a revived entity never inherits another entity's progress, readout baselines or verdict; return the new paths."""
     import uuid
 
     moved: list[Path] = []
     if not dest_dir.exists():
         return moved
-    for name in GESTATION_STATE_FILES:
+    for name in DEVELOPMENT_STATE_FILES:
         src = dest_dir / name
         if src.is_file():
             dst = dest_dir / f"{name}.replaced-{uuid.uuid4().hex[:8]}"
@@ -773,7 +773,7 @@ def set_aside_gestation_files(dest_dir: Path) -> list[Path]:
     return moved
 
 
-def extract_bundle_gestation(bundle: Path, dest_dir: Path) -> list[str]:
+def extract_bundle_development(bundle: Path, dest_dir: Path) -> list[str]:
     """Restore the bundled developmental-phase files into ``dest_dir``; return the names restored.
 
     Opens the bundle tar as :func:`_extract_stage_from_bundle` does. A legacy
@@ -806,7 +806,7 @@ def extract_bundle_gestation(bundle: Path, dest_dir: Path) -> list[str]:
     restored: dict[str, bytes] = {}
     try:
         with tarfile.open(fileobj=io.BytesIO(data), mode="r") as tar:
-            targets = set(BUNDLED_GESTATION_FILES)
+            targets = set(BUNDLED_DEVELOPMENT_FILES)
             for member in tar.getmembers():
                 if not member.isfile():
                     continue

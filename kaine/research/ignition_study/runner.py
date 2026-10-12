@@ -46,9 +46,9 @@ STUDY_OWNER_KEY = "kaine:study:owner"
 #: The runner's record of the cycle it started, in the step's working directory.
 CHILD_FILE = ".study_child.json"
 
-#: The longest maturation bloom the stimulus source accepts (``WombParams`` and
-#: ``WombClock.begin_birth`` both bound ``birth_transition_seconds`` to (0, 30]).
-BIRTH_BLOOM_MAX_SECONDS = 30.0
+#: The longest maturation bloom the stimulus source accepts (``StimulusSourceParams`` and
+#: ``StimulusSourceClock.begin_birth`` both bound ``birth_transition_seconds`` to (0, 30]).
+MATURATION_BLOOM_MAX_SECONDS = 30.0
 
 
 class StudyComplete(Exception):
@@ -89,7 +89,7 @@ class StudyRunner:
         control_command: list[str] | None = None,
         poll_seconds: float = 5.0,
         preserve_wait_seconds: float = 600.0,
-        birth_bloom_margin_seconds: float = 2.0,
+        maturation_bloom_margin_seconds: float = 2.0,
         clock: Callable[[], float] = time.monotonic,
         wall_clock: Callable[[], float] = time.time,
         sleep: Callable[[float], None] = time.sleep,
@@ -117,7 +117,7 @@ class StudyRunner:
         )
         self.poll_seconds = poll_seconds
         self.preserve_wait_seconds = preserve_wait_seconds
-        self.birth_bloom_margin_seconds = birth_bloom_margin_seconds
+        self.maturation_bloom_margin_seconds = maturation_bloom_margin_seconds
         self.clock = clock
         self.wall_clock = wall_clock
         self.sleep = sleep
@@ -287,7 +287,7 @@ class StudyRunner:
             self.study_dir, line, k, Path(self.plan["repo_root"])
         )
 
-    def _read_birth_bloom_deadline(self, line_dir: Path) -> float | None:
+    def _read_maturation_bloom_deadline(self, line_dir: Path) -> float | None:
         """``birth_bloom_ends_at`` from the step's stage file, as a wall-clock
         timestamp, or ``None`` when the file or the field is absent or bad."""
         path = line_dir / "state" / "lifecycle" / "stage.json"
@@ -311,26 +311,26 @@ class StudyRunner:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.timestamp()
 
-    def _birth_bloom_over(
+    def _maturation_bloom_over(
         self, line_dir: Path, first_embodied_wall: float, fallback_seconds: float
     ) -> bool:
         """Whether the maturation bloom has ended: at the stage file's
         ``birth_bloom_ends_at`` when it has one, else ``fallback_seconds``
         after the runner first saw the embodied stage."""
         now = self.wall_clock()
-        deadline = self._read_birth_bloom_deadline(line_dir)
+        deadline = self._read_maturation_bloom_deadline(line_dir)
         if deadline is not None:
             return now >= deadline
         return now - first_embodied_wall >= fallback_seconds
 
-    def _birth_bloom_fallback_seconds(self, line_dir: Path, env: Mapping[str, str]) -> float:
+    def _maturation_bloom_fallback_seconds(self, line_dir: Path, env: Mapping[str, str]) -> float:
         """How long to wait after the embodied stage when the stage file does
         not name the bloom's end: the child's own
         ``[perception_feed.womb].birth_transition_seconds`` (loaded exactly as
         the cycle loads it from the step's working directory) plus the margin.
         When that value cannot be resolved, the longest bloom the stimulus source accepts
         plus the margin, so the seed is never preserved mid-bloom."""
-        from kaine.boot import _womb_params
+        from kaine.boot import _stimulus_source_params
         from kaine.config import load_runtime_config
 
         cfg = line_dir / "config"
@@ -344,15 +344,15 @@ class StudyRunner:
             feed = config.get("perception_feed") or {}
             if not isinstance(feed, dict):
                 raise ValueError("[perception_feed] must be a table")
-            seconds = float(_womb_params(feed).birth_transition_seconds)
+            seconds = float(_stimulus_source_params(feed).maturation_transition_seconds)
         except Exception as exc:
             log.warning(
                 "birth bloom length unresolved (%s); waiting the %.0f s maximum",
                 type(exc).__name__,
-                BIRTH_BLOOM_MAX_SECONDS,
+                MATURATION_BLOOM_MAX_SECONDS,
             )
-            seconds = BIRTH_BLOOM_MAX_SECONDS
-        return seconds + self.birth_bloom_margin_seconds
+            seconds = MATURATION_BLOOM_MAX_SECONDS
+        return seconds + self.maturation_bloom_margin_seconds
 
     def _check_operator_bus(self) -> None:
         """Refuse when a study database is the operator's bus database, as the
@@ -396,7 +396,7 @@ class StudyRunner:
                     f"pid {pid}); stop it before running the study again"
                 )
 
-    def _adopt_birth_preservation(
+    def _adopt_maturation_preservation(
         self, line_dir: Path, modules_set: set[str]
     ) -> dict[str, Any] | None:
         """A developmental phase whose maturation preservation succeeded before the runner
@@ -490,7 +490,7 @@ class StudyRunner:
             and not step.get("is_retry")
             and not any(rec.get("line") == "gestation" for rec in self.steps)
         ):
-            adopted = self._adopt_birth_preservation(line_dir, modules_set)
+            adopted = self._adopt_maturation_preservation(line_dir, modules_set)
             if adopted is not None:
                 log.info("Adopting the recorded birth preservation %s", adopted["bundle"])
                 return self._finish_record(adopted)
@@ -532,7 +532,7 @@ class StudyRunner:
         env["KAINE_MODELS_DIR"] = models_dir
 
         bloom_fallback = (
-            self._birth_bloom_fallback_seconds(line_dir, env)
+            self._maturation_bloom_fallback_seconds(line_dir, env)
             if step_kind == "gestation"
             else 0.0
         )
@@ -599,7 +599,7 @@ class StudyRunner:
         timeout_requested = False
         disk_low_requested = False
         disk_low_preserved: bool | None = None
-        birth_requested = False
+        maturation_requested = False
         first_embodied_wall: float | None = None
         unviable_verdict: dict[str, Any] | None = None
         unviable_terminated = False
@@ -635,15 +635,15 @@ class StudyRunner:
                     if (
                         step_kind == "gestation"
                         and stage == "embodied"
-                        and not birth_requested
+                        and not maturation_requested
                     ):
                         if first_embodied_wall is None:
                             first_embodied_wall = self.wall_clock()
                         # The seed is the entity once its maturation bloom is over.
-                        if self._birth_bloom_over(
+                        if self._maturation_bloom_over(
                             line_dir, first_embodied_wall, bloom_fallback
                         ):
-                            birth_requested = True
+                            maturation_requested = True
                             _, _, _, ok = self._request_preserve(
                                 line_dir,
                                 "birth",
@@ -747,7 +747,7 @@ class StudyRunner:
                             f"pid {child_pid} is still running"
                         )
 
-            if step_kind == "gestation" and unviable_verdict is None and not timeout_requested and not birth_requested and not disk_low_requested:
+            if step_kind == "gestation" and unviable_verdict is None and not timeout_requested and not maturation_requested and not disk_low_requested:
                 viability_path = line_dir / "state" / "lifecycle" / "gestation_viability.json"
                 try:
                     if viability_path.stat().st_mtime < step_started_wall - VIABILITY_MTIME_SLACK_S:
@@ -808,7 +808,7 @@ class StudyRunner:
             disk_low_preserved=disk_low_preserved,
         )
 
-        if unviable_verdict is not None and not birth_requested:
+        if unviable_verdict is not None and not maturation_requested:
             outcome = "failed:gestation_unviable"
             extra_viability = unviable_verdict
             try:

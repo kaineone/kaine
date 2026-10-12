@@ -170,7 +170,7 @@ def test_make_text_embedder_can_build_sentence_transformers_backend():
     assert embedder._device_preference == "cpu"
 
 
-def test_boot_wires_same_shared_embedder_for_modules_and_spot_rebuild():
+def test_boot_wires_same_shared_embedder_for_modules_and_supervisor_rebuild():
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)

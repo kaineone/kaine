@@ -342,7 +342,7 @@ To restore the desktop later, run `sudo systemctl set-default graphical.target &
 
 ## 7. Reach the dashboard over the private network
 
-The dashboard listens on loopback by default: `[nexus].host = "127.0.0.1"` in `config/kaine.toml`, and `PublishPort=127.0.0.1:8088:8088` in `quadlet/kaine-nexus.container`. No other device can reach it. The shipped `[nexus].access` is `"open"` (no token) because the dashboard is reachable only from the host.
+The dashboard listens on loopback by default: `[nexus].host = "127.0.0.1"` in `config/kaine.toml`, and `PublishPort=127.0.0.1:8088:8088` in `quadlet/kaine-dashboard.container`. No other device can reach it. The shipped `[nexus].access` is `"open"` (no token) because the dashboard is reachable only from the host.
 
 Do not widen the bind to `0.0.0.0`, which would expose the port on every interface the host has. Keep the loopback bind and proxy to it from the private network.
 
@@ -359,7 +359,7 @@ In `config/kaine.operator.toml`, add the tailnet hostname to `host_allowlist` an
 host_allowlist = ["127.0.0.1", "localhost", "::1", "myhost.tail1234.ts.net"]
 ```
 
-In `quadlet/kaine-nexus.container`, add the HTTPS origin to `KAINE_NEXUS_ALLOWED_ORIGINS`:
+In `quadlet/kaine-dashboard.container`, add the HTTPS origin to `KAINE_NEXUS_ALLOWED_ORIGINS`:
 
 ```ini
 Environment=KAINE_NEXUS_ALLOWED_ORIGINS=http://127.0.0.1:8088,http://localhost:8088,https://myhost.tail1234.ts.net

@@ -37,7 +37,7 @@ _INSTALL_LABEL_RE = re.compile(
     r"^[A-Za-z0-9._-](?:[A-Za-z0-9 ._-]{0,62}[A-Za-z0-9._-])?$"
 )
 _TOKEN_NAME_RE = re.compile(r"^[a-z0-9_]{1,64}$")
-_NEXUS_URL_RE = re.compile(r"^https?://[A-Za-z0-9.\-:\[\]/_]+$")
+_DASHBOARD_URL_RE = re.compile(r"^https?://[A-Za-z0-9.\-:\[\]/_]+$")
 _EVENT_TITLE = {
     "starting_unattended": "starting unattended",
     "unattended_refused": "unattended start refused",
@@ -86,7 +86,7 @@ class CaretakerConfig:
     channels: tuple[ChannelConfig, ...] = ()
     reminder_interval_s: float = 14400.0
     input_loss_after_s: float = 60.0
-    nexus_url: str = "http://127.0.0.1:8088/"
+    dashboard_url: str = "http://127.0.0.1:8088/"
 
     @classmethod
     def from_section(cls, section: dict) -> "CaretakerConfig":
@@ -132,8 +132,8 @@ class CaretakerConfig:
                 "invalid [caretaker].input_loss_after_s: must be a number > 0"
             )
 
-        nexus_url = section.get("nexus_url", cls.nexus_url)
-        if not isinstance(nexus_url, str) or not _NEXUS_URL_RE.fullmatch(nexus_url):
+        dashboard_url = section.get("nexus_url", cls.dashboard_url)
+        if not isinstance(dashboard_url, str) or not _DASHBOARD_URL_RE.fullmatch(dashboard_url):
             raise CaretakerConfigError(
                 "invalid [caretaker].nexus_url: must match ^https?://[A-Za-z0-9.\\-:\\[\\]/_]+$"
             )
@@ -220,7 +220,7 @@ class CaretakerConfig:
             channels=tuple(channel_configs),
             reminder_interval_s=float(reminder_interval_s),
             input_loss_after_s=float(input_loss_after_s),
-            nexus_url=nexus_url,
+            dashboard_url=dashboard_url,
         )
 
 
@@ -259,7 +259,7 @@ def build_notice(
         "time": now.isoformat(),
         "event": event,
         "conditions": dict(conditions) if conditions is not None else None,
-        "nexus_url": config.nexus_url,
+        "nexus_url": config.dashboard_url,
     }
 
 

@@ -281,7 +281,7 @@ def test_audition_playlist_requires_av_and_webrtcvad_not_sounddevice(monkeypatch
     assert not any(m.import_name == "sounddevice" for m in missing)
 
 
-def test_audition_webrtcvad_needed_in_seeded_womb_or_screen_not_sounddevice(monkeypatch):
+def test_audition_webrtcvad_needed_in_seeded_stimulus_source_or_screen_not_sounddevice(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
     for mode in ("seeded", "womb", "screen"):
         config = {
@@ -423,7 +423,7 @@ def test_build_registry_logs_warnings_and_continues(monkeypatch, caplog):
     assert "nvidia" in caplog.text
 
 
-def test_nexus_service_check_reports_missing_nexus(monkeypatch):
+def test_dashboard_service_check_reports_missing_dashboard(monkeypatch):
     monkeypatch.setattr(
         importlib.util,
         "find_spec",
@@ -441,7 +441,7 @@ def test_nexus_service_check_reports_missing_nexus(monkeypatch):
     assert 'pip install "kaine[nexus]"' in message
 
 
-def test_nexus_main_refuses_without_nexus(monkeypatch):
+def test_dashboard_main_refuses_without_dashboard(monkeypatch):
     from kaine import extras as extras_mod
 
     fake_missing = [
@@ -461,16 +461,16 @@ def test_nexus_main_refuses_without_nexus(monkeypatch):
 
     # The module checks dependencies before importing FastAPI/uvicorn, so the
     # refusal happens at import time.
-    sys.modules.pop("kaine.nexus.__main__", None)
+    sys.modules.pop("kaine.dashboard.__main__", None)
     try:
         with pytest.raises(SystemExit) as excinfo:
-            importlib.import_module("kaine.nexus.__main__")
+            importlib.import_module("kaine.dashboard.__main__")
         # SystemExit carrying the message: the interpreter prints it to stderr
         # and exits with status 1.
         assert "fastapi" in str(excinfo.value.code)
         assert "kaine[nexus]" in str(excinfo.value.code)
     finally:
-        sys.modules.pop("kaine.nexus.__main__", None)
+        sys.modules.pop("kaine.dashboard.__main__", None)
 
 
 def _collect_top_level_imports(*paths: Path) -> set[str]:
@@ -524,16 +524,16 @@ def test_table_matches_real_module_imports():
             )
 
 
-def test_nexus_table_matches_real_imports():
-    nexus_dir = _repo_root() / "kaine" / "nexus"
-    imports = _collect_top_level_imports(nexus_dir)
+def test_dashboard_table_matches_real_imports():
+    dashboard_dir = _repo_root() / "kaine" / "dashboard"
+    imports = _collect_top_level_imports(dashboard_dir)
     for req in extras_module.REQUIREMENTS["nexus"]:
         if req.transitive_for:
             # installed for a direct dependency (e.g. jinja2 for fastapi.templating)
             continue
         assert req.import_name in imports, (
             f"nexus declares {req.import_name!r} in extras table "
-            f"but kaine/nexus does not import that name"
+            f"but kaine/dashboard does not import that name"
         )
 
 

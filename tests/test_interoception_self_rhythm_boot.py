@@ -19,9 +19,9 @@ def test_make_interoception_raises_without_snntorch(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_make_interoception_builds_self_rhythm_with_womb_drive():
+async def test_make_interoception_builds_self_rhythm_with_stimulus_source_drive():
     pytest.importorskip("snntorch")
-    from kaine.modules.womb_drive import MaternalDriveProvider
+    from kaine.modules.stimulus_source_drive import MaternalDriveProvider
 
     bus = types.SimpleNamespace()
     section = {
@@ -39,7 +39,7 @@ async def test_make_interoception_builds_self_rhythm_with_womb_drive():
 
 
 @pytest.mark.asyncio
-async def test_make_interoception_self_rhythm_without_womb_has_no_maternal_drive():
+async def test_make_interoception_self_rhythm_without_stimulus_source_has_no_maternal_drive():
     pytest.importorskip("snntorch")
     bus = types.SimpleNamespace()
     section = {

@@ -8,21 +8,21 @@ The embodiment module is a body-agnostic control plane. It routes perception and
 
 A body is a small adapter that:
 
-- implements the `EmbodimentAdapter` protocol in [`kaine/modules/mundus/adapter.py`](../kaine/modules/mundus/adapter.py);
+- implements the `EmbodimentAdapter` protocol in [`kaine/modules/embodiment/adapter.py`](../kaine/modules/embodiment/adapter.py);
 - declares an `EmbodimentCapabilities` descriptor that tells the core, at runtime, what the body can perceive and do.
 
 ```
- entity ──intent.avatar.*──▶  Mundus core  ──apply_action / apply_setpoints──▶  YOUR ADAPTER ──▶ body
- entity ◀──mundus.* events──  Mundus core  ◀──────── feed() yields FeedFrame ───  YOUR ADAPTER ◀── body
+ entity ──intent.avatar.*──▶  Embodiment core  ──apply_action / apply_setpoints──▶  YOUR ADAPTER ──▶ body
+ entity ◀──mundus.* events──  Embodiment core  ◀──────── feed() yields FeedFrame ───  YOUR ADAPTER ◀── body
 ```
 
-The core reads the descriptor instead of hardcoding any platform's tables, so adding a body never touches the core. You add one file under [`kaine/modules/mundus/adapters/`](../kaine/modules/mundus/adapters/), register it in [`kaine/boot/factories/mundus.py`](../kaine/boot/factories/mundus.py), and select it in [`config/kaine.toml`](../config/kaine.toml).
+The core reads the descriptor instead of hardcoding any platform's tables, so adding a body never touches the core. You add one file under [`kaine/modules/embodiment/adapters/`](../kaine/modules/embodiment/adapters/), register it in [`kaine/boot/factories/embodiment.py`](../kaine/boot/factories/embodiment.py), and select it in [`config/kaine.toml`](../config/kaine.toml).
 
-The shipped reference body is the transport-free stub in [`kaine/modules/mundus/adapters/stub.py`](../kaine/modules/mundus/adapters/stub.py). It pins the whole protocol, including the continuous-control path, with no socket and no external dependency. Use it as a template and as a conformance-test baseline. A virtual-world (Paracosmic) adapter is planned behind the same contract; only the old Kosmos connector design was archived as superseded. The only adapter that ships today is `stub`.
+The shipped reference body is the transport-free stub in [`kaine/modules/embodiment/adapters/stub.py`](../kaine/modules/embodiment/adapters/stub.py). It pins the whole protocol, including the continuous-control path, with no socket and no external dependency. Use it as a template and as a conformance-test baseline. A virtual-world (Paracosmic) adapter is planned behind the same contract; only the old Kosmos connector design was archived as superseded. The only adapter that ships today is `stub`.
 
 ## The `EmbodimentAdapter` protocol
 
-[`kaine/modules/mundus/adapter.py`](../kaine/modules/mundus/adapter.py) defines the protocol the core drives every body through. It is `runtime_checkable`, so your adapter needs no base class. It needs these members, and may also implement an optional `probe()`:
+[`kaine/modules/embodiment/adapter.py`](../kaine/modules/embodiment/adapter.py) defines the protocol the core drives every body through. It is `runtime_checkable`, so your adapter needs no base class. It needs these members, and may also implement an optional `probe()`:
 
 ```python
 class EmbodimentAdapter(Protocol):
@@ -33,7 +33,7 @@ class EmbodimentAdapter(Protocol):
     async def apply_action(self, family: str, params: dict) -> bool: ...   # symbolic sink
     async def apply_setpoints(self, channels: dict[str, float]) -> bool: ...  # continuous sink
 
-# Optional, outside the protocol: Mundus looks it up with getattr.
+# Optional, outside the protocol: Embodiment looks it up with getattr.
 async def probe(self) -> bool: ...  # reachability check without staying open
 ```
 
@@ -80,7 +80,7 @@ class EmbodimentCapabilities:
 | `transitional` | `True` marks a body expected to be retired, such as a reference or conformance body. `False` marks a real body. | `False` |
 | `feed_events` | feed `kind` → `(bus event type, baseline intensity in [0,1])`. The core maps each `FeedFrame.kind` to this event type and publishes it at that intensity (the event's `salience` field). A `kind` not in this map is dropped with a debug log. | `{"proprio": ("mundus.proprio", 0.3), "frame": ("mundus.visual.raw", 0.1)}` |
 | `action_families` | symbolic family → default exposure (bool). World-mutating or consent-sensitive verbs should default to `False`; the operator opts in. The core merges operator overrides on top. | `{"move": True, "say": True, "teleport": False}` |
-| `continuous_channels` | Names of the graded continuous channels this body supports (empty for symbolic-only). The canonical vocabulary lives in `kaine/modules/mundus/channels.py`. `__post_init__` rejects repeats and empty names; unknown names are accepted and fall back to a default range of `(-1, 1)`. | `("drive", "yaw_rate")` |
+| `continuous_channels` | Names of the graded continuous channels this body supports (empty for symbolic-only). The canonical vocabulary lives in `kaine/modules/embodiment/channels.py`. `__post_init__` rejects repeats and empty names; unknown names are accepted and fall back to a default range of `(-1, 1)`. | `("drive", "yaw_rate")` |
 | `raw_buffer_keys` | Payload keys naming raw sense buffers the core must strip before publishing. | `("frame_bytes", "pcm")` |
 
 The current consumers of `mundus.*` feed events are the research observer (`mundus.proprio`, `mundus.scene`, `mundus.notice`), and the sleep module's realization audit and the external-input redaction list, which treat `mundus.chat` as external input. Reusing those names lets those modules consume your feed directly. Other event names are accepted, but nothing built-in listens to them.
@@ -138,7 +138,7 @@ Your `apply_setpoints` receives a clamped, gated dict only when the body declare
 
 ### Canonical continuous channels
 
-The vocabulary and clamp ranges live in [`kaine/modules/mundus/channels.py`](../kaine/modules/mundus/channels.py) (`CONTINUOUS_CHANNEL_RANGE`). You may declare any subset:
+The vocabulary and clamp ranges live in [`kaine/modules/embodiment/channels.py`](../kaine/modules/embodiment/channels.py) (`CONTINUOUS_CHANNEL_RANGE`). You may declare any subset:
 
 | Channel | Range | Meaning |
 |---|---|---|
@@ -152,7 +152,7 @@ The vocabulary and clamp ranges live in [`kaine/modules/mundus/channels.py`](../
 
 ### How the loop closes
 
-The continuous embodiment control surface in [`kaine/modules/mundus/control_surface.py`](../kaine/modules/mundus/control_surface.py) is built but inert at runtime. Its `emit()` returns a `ControlCommand`; it does not publish a bus event. `on_birth()` is not called by the runtime, so the surface stays dormant and nothing drives the per-tick loop.
+The continuous embodiment control surface in [`kaine/modules/embodiment/control_surface.py`](../kaine/modules/embodiment/control_surface.py) is built but inert at runtime. Its `emit()` returns a `ControlCommand`; it does not publish a bus event. `on_birth()` is not called by the runtime, so the surface stays dormant and nothing drives the per-tick loop.
 
 When the loop is wired, the surface will run the entity's learned `MotorPolicy`, mask channels the freeze-then-free `MotorCurriculum` has not yet freed, clamp the rest, and hand the command to the core. The loop is closed by `EfferenceLoop.observe()` (via `observe_feedback`) on the surface's own `SubstrateForwardModel` instance, not on the interoception module's forward model. The core publishes the efference copy on `mundus.efference` with a `forwarded` flag; nothing consumes that event at runtime.
 
@@ -175,7 +175,7 @@ Design your descriptor defaults conservatively: expose only benign families and 
 
 ## Wiring at boot
 
-Adapters are constructed in `make_mundus` in [`kaine/boot/factories/mundus.py`](../kaine/boot/factories/mundus.py). It:
+Adapters are constructed in `make_mundus` in [`kaine/boot/factories/embodiment.py`](../kaine/boot/factories/embodiment.py). It:
 
 1. reads `[mundus].adapter` (default `"stub"`);
 2. reads that adapter's own nested `[mundus.<adapter>]` table for adapter-specific settings and `expose_<family>` overrides;
@@ -188,10 +188,10 @@ To register a new adapter named `robot`, add a branch:
 ```python
 # in make_mundus(), alongside the stub branch
 if adapter_name == "stub":
-    from kaine.modules.mundus.adapters.stub import StubAdapter
+    from kaine.modules.embodiment.adapters.stub import StubAdapter
     adapter = StubAdapter()
 elif adapter_name == "robot":
-    from kaine.modules.mundus.adapters.robot import RobotAdapter
+    from kaine.modules.embodiment.adapters.robot import RobotAdapter
     adapter = RobotAdapter(**adapter_section)   # host/port etc. from [mundus.robot]
 else:
     raise ValueError(f"mundus: unknown adapter {adapter_name!r}; ... (fail-closed)")
@@ -214,7 +214,7 @@ expose_move = true      # symbolic-family exposure override (merged over descrip
 
 ## Testing a new adapter
 
-The whole contract is exercisable without any real body. Model your tests on [`tests/test_mundus_module.py`](../tests/test_mundus_module.py) and [`tests/test_mundus_control_surface.py`](../tests/test_mundus_control_surface.py), which drive the core through the transport-free `StubAdapter` and a small in-file `FakeAdapter`.
+The whole contract is exercisable without any real body. Model your tests on [`tests/test_embodiment_module.py`](../tests/test_embodiment_module.py) and [`tests/test_embodiment_control_surface.py`](../tests/test_embodiment_control_surface.py), which drive the core through the transport-free `StubAdapter` and a small in-file `FakeAdapter`.
 
 The recipe:
 
@@ -229,7 +229,7 @@ The core tests use a `fakeredis`-backed bus fixture and set `KAINE_MUNDUS_OPERAT
 
 ## Worked example of a robot over a local socket
 
-A minimal continuous-capable adapter for a robot base reached over a local TCP socket. It steers with `drive` and `yaw_rate`, and reports proprioception back. Copy it to `kaine/modules/mundus/adapters/robot.py` and fill in the four `TODO`s.
+A minimal continuous-capable adapter for a robot base reached over a local TCP socket. It steers with `drive` and `yaw_rate`, and reports proprioception back. Copy it to `kaine/modules/embodiment/adapters/robot.py` and fill in the four `TODO`s.
 
 ```python
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
@@ -239,7 +239,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, AsyncIterator
 
-from kaine.modules.mundus.adapter import EmbodimentCapabilities, FeedFrame
+from kaine.modules.embodiment.adapter import EmbodimentCapabilities, FeedFrame
 
 
 class RobotAdapter:
@@ -350,11 +350,11 @@ The adapter above is a complete, contract-conformant body. To bring it up: add t
 - [ ] `open` and `close` own the transport; `close` is idempotent and survives a probe-time `open()`.
 - [ ] Optional `probe()` is implemented and leaves the transport closed.
 - [ ] Adapter is registered in `make_mundus`; unknown names still fail closed.
-- [ ] Adapter is conformance-tested transport-free against the core, modeled on [`tests/test_mundus_module.py`](../tests/test_mundus_module.py) and [`tests/test_mundus_control_surface.py`](../tests/test_mundus_control_surface.py).
+- [ ] Adapter is conformance-tested transport-free against the core, modeled on [`tests/test_embodiment_module.py`](../tests/test_embodiment_module.py) and [`tests/test_embodiment_control_surface.py`](../tests/test_embodiment_control_surface.py).
 
 ## See also
 
 - [the embodiment module](09-modules/embodiment.md): the control plane, gating, and the continuous control surface.
 - [the perceptual locus module](08-cognitive-cycle/perceptual-locus.md): how KAINE chooses between physical and virtual perception.
 - [Configuration reference](appendix-a-configuration/modules.md): `[mundus]`, `[mundus.control_surface]`, and adapter tables.
-- [`kaine/modules/mundus/adapters/stub.py`](../kaine/modules/mundus/adapters/stub.py): the shipped reference body to copy.
+- [`kaine/modules/embodiment/adapters/stub.py`](../kaine/modules/embodiment/adapters/stub.py): the shipped reference body to copy.

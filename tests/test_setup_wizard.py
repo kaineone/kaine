@@ -746,12 +746,12 @@ def _isolate_secrets_path(monkeypatch, tmp_path) -> None:
     monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
 
 
-def test_nexus_token_generated_on_fresh_install(tmp_path: Path) -> None:
-    from kaine.setup.__main__ import _ensure_nexus_token
+def test_dashboard_token_generated_on_fresh_install(tmp_path: Path) -> None:
+    from kaine.setup.__main__ import _ensure_dashboard_token
 
     path = tmp_path / "secrets.toml"
     out = io.StringIO()
-    status = _ensure_nexus_token(path, out=out.write, env={})
+    status = _ensure_dashboard_token(path, out=out.write, env={})
     assert status == "generated"
     with path.open("rb") as f:
         data = tomllib.load(f)
@@ -762,13 +762,13 @@ def test_nexus_token_generated_on_fresh_install(tmp_path: Path) -> None:
     assert token not in out.getvalue()
 
 
-def test_nexus_token_generated_keeps_other_tables(tmp_path: Path) -> None:
-    from kaine.setup.__main__ import _ensure_nexus_token
+def test_dashboard_token_generated_keeps_other_tables(tmp_path: Path) -> None:
+    from kaine.setup.__main__ import _ensure_dashboard_token
 
     path = tmp_path / "secrets.toml"
     path.write_text('[redis]\npassword = "abc"\n', encoding="utf-8")
     out = io.StringIO()
-    status = _ensure_nexus_token(path, out=out.write, env={})
+    status = _ensure_dashboard_token(path, out=out.write, env={})
     assert status == "generated"
     with path.open("rb") as f:
         data = tomllib.load(f)
@@ -777,52 +777,52 @@ def test_nexus_token_generated_keeps_other_tables(tmp_path: Path) -> None:
     assert len(data["nexus"]["operator_token"]) >= 32
 
 
-def test_nexus_token_existing_is_kept(tmp_path: Path) -> None:
-    from kaine.setup.__main__ import _ensure_nexus_token
+def test_dashboard_token_existing_is_kept(tmp_path: Path) -> None:
+    from kaine.setup.__main__ import _ensure_dashboard_token
 
     path = tmp_path / "secrets.toml"
     original = b'[nexus]\noperator_token = "' + b"x" * 40 + b'"\n'
     path.write_bytes(original)
     out = io.StringIO()
-    status = _ensure_nexus_token(path, out=out.write, env={})
+    status = _ensure_dashboard_token(path, out=out.write, env={})
     assert status == "kept"
     assert path.read_bytes() == original
 
 
-def test_nexus_token_env_var_wins(tmp_path: Path) -> None:
-    from kaine.setup.__main__ import _ensure_nexus_token
+def test_dashboard_token_env_var_wins(tmp_path: Path) -> None:
+    from kaine.setup.__main__ import _ensure_dashboard_token
 
     path = tmp_path / "secrets.toml"
     out = io.StringIO()
     env = {"KAINE_NEXUS_TOKEN": "y" * 40}
-    status = _ensure_nexus_token(path, out=out.write, env=env)
+    status = _ensure_dashboard_token(path, out=out.write, env=env)
     assert status == "env"
     assert not path.exists()
 
 
-def test_nexus_token_malformed_file_untouched(tmp_path: Path) -> None:
-    from kaine.setup.__main__ import _ensure_nexus_token
+def test_dashboard_token_malformed_file_untouched(tmp_path: Path) -> None:
+    from kaine.setup.__main__ import _ensure_dashboard_token
 
     path = tmp_path / "secrets.toml"
     original = b"[nexus\nbroken"
     path.write_bytes(original)
     out = io.StringIO()
-    status = _ensure_nexus_token(path, out=out.write, env={})
+    status = _ensure_dashboard_token(path, out=out.write, env={})
     assert status == "malformed"
     assert path.read_bytes() == original
 
 
-def test_nexus_token_generated_token_is_accepted_by_nexus(
+def test_dashboard_token_generated_token_is_accepted_by_dashboard(
     tmp_path: Path, monkeypatch
 ) -> None:
-    from kaine.nexus.config import load_nexus_config
-    from kaine.setup.__main__ import _ensure_nexus_token
+    from kaine.dashboard.config import load_dashboard_config
+    from kaine.setup.__main__ import _ensure_dashboard_token
 
     secrets_path = tmp_path / "secrets.toml"
     out = io.StringIO()
-    assert _ensure_nexus_token(secrets_path, out=out.write, env={}) == "generated"
+    assert _ensure_dashboard_token(secrets_path, out=out.write, env={}) == "generated"
     monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
-    config = load_nexus_config(
+    config = load_dashboard_config(
         tmp_path / "kaine.toml",
         operator_path=tmp_path / "none.toml",
         secrets_path=secrets_path,
@@ -853,25 +853,25 @@ def test_defaults_run_generates_token_in_redirected_path(tmp_path: Path) -> None
     assert len(token) >= 32
 
 
-def test_nexus_token_too_short_in_file_is_reported_not_kept(tmp_path: Path) -> None:
-    from kaine.setup.__main__ import _ensure_nexus_token
+def test_dashboard_token_too_short_in_file_is_reported_not_kept(tmp_path: Path) -> None:
+    from kaine.setup.__main__ import _ensure_dashboard_token
 
     path = tmp_path / "secrets.toml"
     path.write_text('[nexus]\noperator_token = "short-token"\n')
     before = path.read_bytes()
     out = io.StringIO()
-    status = _ensure_nexus_token(path, out=out.write, env={})
+    status = _ensure_dashboard_token(path, out=out.write, env={})
     assert status == "too_short"
     assert path.read_bytes() == before
     assert "short-token" not in out.getvalue()
     assert "shorter than 32" in out.getvalue()
 
 
-def test_nexus_token_too_short_env_is_reported(tmp_path: Path) -> None:
-    from kaine.setup.__main__ import _ensure_nexus_token
+def test_dashboard_token_too_short_env_is_reported(tmp_path: Path) -> None:
+    from kaine.setup.__main__ import _ensure_dashboard_token
 
     out = io.StringIO()
-    status = _ensure_nexus_token(
+    status = _ensure_dashboard_token(
         tmp_path / "secrets.toml", out=out.write, env={"KAINE_NEXUS_TOKEN": "tiny"}
     )
     assert status == "too_short"

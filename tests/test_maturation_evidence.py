@@ -23,7 +23,7 @@ from kaine.cycle.__main__ import _resolve_boot_stage
 from kaine.entity_clock import EntityClock
 from kaine.lifecycle.gate_runner import MaturationGateRunner
 from kaine.lifecycle.maturation_gate import MaturationConfig
-from kaine.lifecycle.stage import GESTATION, StageState, read_stage
+from kaine.lifecycle.stage import DEVELOPMENT, StageState, read_stage
 
 
 class _FakeRegistry:
@@ -59,7 +59,7 @@ def _runner(
         entity_clock=clock,
         stage_state=stage_state,
         staging_enabled=True,
-        womb_feed_configured=True,
+        stimulus_source_feed_configured=True,
     )
 
 
@@ -76,7 +76,7 @@ async def test_lived_time_accumulates_and_survives_downtime(
 ) -> None:
     """Subjective lived time accumulates from the second tick and survives a restart."""
     t = [0.0]
-    runner = _runner(fake_async_bus, _make_clock(t), StageState(stage=GESTATION), stage_path)
+    runner = _runner(fake_async_bus, _make_clock(t), StageState(stage=DEVELOPMENT), stage_path)
     await runner._evaluate_once()
     t[0] += 100.0
     await runner._evaluate_once()
@@ -110,7 +110,7 @@ async def test_frozen_clock_adds_no_lived_time(
 ) -> None:
     t = [0.0]
     clock = EntityClock(scale=0.0, monotonic=lambda: t[0])
-    runner = _runner(fake_async_bus, clock, StageState(stage=GESTATION), stage_path)
+    runner = _runner(fake_async_bus, clock, StageState(stage=DEVELOPMENT), stage_path)
     await runner._evaluate_once()
     t[0] += 100.0
     await runner._evaluate_once()
@@ -132,7 +132,7 @@ async def test_sleeps_before_first_tick_are_ignored(
             )
         )
 
-    runner = _runner(fake_async_bus, _make_clock([0.0]), StageState(stage=GESTATION), stage_path)
+    runner = _runner(fake_async_bus, _make_clock([0.0]), StageState(stage=DEVELOPMENT), stage_path)
     await runner._evaluate_once()
     assert runner._stage.sleep_count == 0
     assert runner._stage.hypnos_cursor is not None
@@ -155,7 +155,7 @@ async def test_sleeps_before_first_tick_are_ignored(
 async def test_only_sleep_completed_events_count(
     fake_async_bus: Any, stage_path: Path
 ) -> None:
-    runner = _runner(fake_async_bus, _make_clock([0.0]), StageState(stage=GESTATION), stage_path)
+    runner = _runner(fake_async_bus, _make_clock([0.0]), StageState(stage=DEVELOPMENT), stage_path)
     await runner._evaluate_once()  # anchor cursor at the (empty) stream tail
 
     await fake_async_bus.publish(
@@ -193,7 +193,7 @@ async def test_only_sleep_completed_events_count(
 async def test_sleep_count_resumes_across_restarts(
     fake_async_bus: Any, stage_path: Path
 ) -> None:
-    runner = _runner(fake_async_bus, _make_clock([0.0]), StageState(stage=GESTATION), stage_path)
+    runner = _runner(fake_async_bus, _make_clock([0.0]), StageState(stage=DEVELOPMENT), stage_path)
     await runner._evaluate_once()
 
     for _ in range(2):
@@ -231,18 +231,18 @@ async def test_sleep_count_resumes_across_restarts(
 
 
 @pytest.mark.asyncio
-async def test_womb_readiness_readout_trustworthiness(
+async def test_stimulus_source_readiness_readout_trustworthiness(
     fake_async_bus: Any, stage_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     bus = fake_async_bus
     monkeypatch.setattr(bus, "server_time_ms", AsyncMock(return_value=1_000_000))
 
-    runner = _runner(bus, _make_clock([0.0]), StageState(stage=GESTATION), stage_path)
+    runner = _runner(bus, _make_clock([0.0]), StageState(stage=DEVELOPMENT), stage_path)
     await runner._evaluate_once()
     assert runner._boot_ms == 1_000_000
 
     # No readout at all.
-    assert await runner._womb_readiness_readout() is None
+    assert await runner._stimulus_source_readiness_readout() is None
 
     # Wrong event type is ignored.
     await bus.client.xadd(
@@ -258,7 +258,7 @@ async def test_womb_readiness_readout_trustworthiness(
         ),
         id="1000001-0",
     )
-    assert await runner._womb_readiness_readout() is None
+    assert await runner._stimulus_source_readiness_readout() is None
     await bus.client.delete("gestation.out")
 
     # A readout from just before this boot is ignored even though it is young
@@ -276,7 +276,7 @@ async def test_womb_readiness_readout_trustworthiness(
         ),
         id="999500-0",
     )
-    assert await runner._womb_readiness_readout() is None
+    assert await runner._stimulus_source_readiness_readout() is None
     await bus.client.delete("gestation.out")
 
     # A readout from a source other than the developmental-phase owner is ignored.
@@ -293,7 +293,7 @@ async def test_womb_readiness_readout_trustworthiness(
         ),
         id="1000500-0",
     )
-    assert await runner._womb_readiness_readout() is None
+    assert await runner._stimulus_source_readiness_readout() is None
     await bus.client.delete("gestation.out")
 
     # Fresh valid readout -> the embedded readout dict.
@@ -310,7 +310,7 @@ async def test_womb_readiness_readout_trustworthiness(
         ),
         id="1001000-0",
     )
-    readout = await runner._womb_readiness_readout()
+    readout = await runner._stimulus_source_readiness_readout()
     assert readout == {"x": 1}
 
     # Stale by age (default 3 cadences * 1.0 s).
@@ -329,7 +329,7 @@ async def test_womb_readiness_readout_trustworthiness(
         ),
         id="1001000-0",
     )
-    assert await runner._womb_readiness_readout() is None
+    assert await runner._stimulus_source_readiness_readout() is None
 
 
 def test_resolve_boot_stage_does_not_write_file(
@@ -344,7 +344,7 @@ def test_resolve_boot_stage_does_not_write_file(
     stage, staging_enabled, is_fresh = _resolve_boot_stage(
         {"developmental_stage": {"enabled": True}}, identity=mint_identity()
     )
-    assert stage.is_gestating
+    assert stage.is_developing
     assert staging_enabled is True
     assert is_fresh is True
     assert not (tmp_path / "stage.json").exists()

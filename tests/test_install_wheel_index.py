@@ -964,7 +964,7 @@ def test_install_proceeds_past_constraints_to_editable_install(tmp_path: Path) -
     )
 
 
-def _assert_no_torch_and_nexus_editable(
+def _assert_no_torch_and_dashboard_editable(
     proc: subprocess.CompletedProcess, pip_log: str
 ) -> None:
     for line in pip_log.splitlines():
@@ -994,11 +994,11 @@ def _assert_no_torch_and_nexus_editable(
     assert "unbound variable" not in proc.stderr, _context(proc, pip_log)
 
 
-def test_install_sh_torch_free_extras_nexus_does_not_install_torch(tmp_path: Path) -> None:
+def test_install_sh_torch_free_extras_dashboard_does_not_install_torch(tmp_path: Path) -> None:
     proc, pip_log = _run_install(
         tmp_path, ["--extras", "nexus", "--no-wizard"], installer="install.sh"
     )
-    _assert_no_torch_and_nexus_editable(proc, pip_log)
+    _assert_no_torch_and_dashboard_editable(proc, pip_log)
 
 
 def test_selftest_fallback_writes_marker_and_force_reinstalls_cpu(tmp_path: Path) -> None:

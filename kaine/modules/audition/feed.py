@@ -56,8 +56,8 @@ from kaine.modules.vision.feed import (
 )
 
 if TYPE_CHECKING:  # numpy-importing; loaded lazily at render time
-    from kaine.modules.vision.feed import WombClock
-    from kaine.modules.womb_signal import WombParams
+    from kaine.modules.stimulus_source_signal import StimulusSourceParams
+    from kaine.modules.vision.feed import StimulusSourceClock
 
 log = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ class SeededAudioSchedule:
 
 
 @dataclass(frozen=True)
-class WombAudioSchedule:
+class StimulusSourceAudioSchedule:
     """Reproducible stimulus source audio schedule.
 
     The PCM stream is a pure function of ``(seed, block_index, params)``.
@@ -340,7 +340,7 @@ class SeededProceduralAudioStream:
         return [i for i in range(count) if self._is_surprise_block(i)]
 
 
-class WombProceduralAudioStream:
+class StimulusSourceProceduralAudioStream:
     """An ``_AudioStream`` that emits the stimulus source auditory feed.
 
     The soundscape is low-frequency-dominant and low-passed
@@ -356,10 +356,10 @@ class WombProceduralAudioStream:
 
     def __init__(
         self,
-        schedule: WombAudioSchedule,
+        schedule: StimulusSourceAudioSchedule,
         *,
-        params: WombParams,
-        clock: WombClock,
+        params: StimulusSourceParams,
+        clock: StimulusSourceClock,
         callback: Callable[[bytes], None],
     ) -> None:
         self._schedule = schedule
@@ -370,7 +370,7 @@ class WombProceduralAudioStream:
         self._stopped = threading.Event()
 
     @property
-    def schedule(self) -> WombAudioSchedule:
+    def schedule(self) -> StimulusSourceAudioSchedule:
         return self._schedule
 
     def start(self) -> None:
@@ -400,7 +400,7 @@ class WombProceduralAudioStream:
         are replayed; a lag larger than ``_MAX_LAG_BLOCKS`` jumps forward to
         the clock so the producer never falls arbitrarily far behind.
         """
-        if k is None or now_k - k > WombProceduralAudioStream._MAX_LAG_BLOCKS:
+        if k is None or now_k - k > StimulusSourceProceduralAudioStream._MAX_LAG_BLOCKS:
             return now_k
         return k
 
@@ -412,13 +412,13 @@ class WombProceduralAudioStream:
             if self._clock.born():
                 log.info("womb audio: birth transition complete; the womb falls silent")
                 return
-            now_k = int(self._clock.womb_seconds() / bs)
+            now_k = int(self._clock.stimulus_source_seconds() / bs)
             k = self._advance(k, now_k)
             if k > now_k:
                 self._stopped.wait(timeout=(k - now_k) * bs)
                 continue
             try:
-                pcm = self.pcm_at(k, birth_progress=self._clock.birth_progress())
+                pcm = self.pcm_at(k, maturation_progress=self._clock.maturation_progress())
             except Exception:
                 log.error(
                     "womb audio: synthesis failed at block %d; the womb audio stream stops",
@@ -437,7 +437,7 @@ class WombProceduralAudioStream:
             k += 1
 
     def pcm_at(
-        self, block_index: int, *, birth_progress: float | None = None
+        self, block_index: int, *, maturation_progress: float | None = None
     ) -> bytes:
         """Synthesize the int16 LE PCM block at ``block_index``.
 
@@ -449,7 +449,7 @@ class WombProceduralAudioStream:
 
         from kaine.modules.perception_prng import keyed_u64 as _keyed_u64
         from kaine.modules.perception_prng import unit_float as _unit_float
-        from kaine.modules.womb_signal import (
+        from kaine.modules.stimulus_source_signal import (
             SEED_SALT_AUDIO,
             beat_pulse,
             heartbeat_phase,
@@ -510,8 +510,8 @@ class WombProceduralAudioStream:
         samples = np.clip(samples * gain, -_INT16_MAX, _INT16_MAX)
 
         q = np.rint(samples).astype(np.int16)
-        if birth_progress is not None:
-            scale = 1.0 - float(birth_progress)
+        if maturation_progress is not None:
+            scale = 1.0 - float(maturation_progress)
             q = (q.astype(np.float64) * scale).astype(np.int16)
         if channels > 1:
             q = np.repeat(q, channels)

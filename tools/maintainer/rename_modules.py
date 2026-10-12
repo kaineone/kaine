@@ -1204,10 +1204,10 @@ def _repo_top_prefixes(table) -> tuple[str, ...]:
     return tuple(f"{d}/" for d in dirs)
 
 
-def _link_target(rel_path: str, T: str, table) -> str | None:
-    """Resolve a markdown link target to a repo-relative path if it ends in .md."""
+def _link_target(rel_path: str, T: str, table, *, in_link: bool = False) -> str | None:
+    """Resolve a markdown link target to a repo-relative path if it names a .md file, or a directory (ends in /) when ``in_link`` says the term is a Markdown link target."""
     target = T.rsplit("#", 1)[0]
-    if not target.endswith(".md"):
+    if not (target.endswith(".md") or (in_link and target.endswith("/"))):
         return None
     top_dirs = set(getattr(table, "REPO_TOP_DIRS", ()))
     parts = target.split("/")
@@ -1220,6 +1220,14 @@ def _link_target(rel_path: str, T: str, table) -> str | None:
     if resolved.startswith(".."):
         return None
     return resolved
+
+
+def _in_markdown_link_target(text: str, start: int) -> bool:
+    """True when the term containing ``start`` directly follows ``](``, the start of a Markdown link target."""
+    pos = start
+    while pos > 0 and _is_token_char(text[pos - 1]):
+        pos -= 1
+    return text[pos - 2:pos] == "]("
 
 
 def _in_pip_extra(text: str, start: int, end: int) -> bool:
@@ -1293,6 +1301,30 @@ def _name_token_at(tokens: list[dict], offset: int) -> str | None:
         ):
             return tok.get("string")
     return None
+
+
+def _in_repo_dotted_chain(tokens: list[dict], offset: int) -> bool:
+    """Return True when ``offset`` is inside a dotted NAME chain rooted at kaine or tests."""
+    for i, tok in enumerate(tokens):
+        if (
+            tok.get("type") == tokenize.NAME
+            and tok.get("start", 0) <= offset < tok.get("end", 0)
+        ):
+            break
+    else:
+        return False
+
+    dot_count = 0
+    while (
+        i >= 2
+        and tokens[i - 1].get("type") == tokenize.OP
+        and tokens[i - 1].get("string") == "."
+        and tokens[i - 2].get("type") == tokenize.NAME
+    ):
+        i -= 2
+        dot_count += 1
+
+    return tokens[i].get("string") in {"kaine", "tests"} and dot_count > 0
 
 
 def _file_chain_path(tokens: list[dict], start: int, rel_path: str, parts: list[str]) -> str | None:
@@ -1402,6 +1434,8 @@ def _assign_scope(
     lower_path = rel_path.lower().replace("\\", "/")
 
     if ctx in {"py_string", "py_text", "toml_string", "toml_text"}:
+        if re.fullmatch(r"[\w./-]*\.(?:html|js|css|jinja|j2|py)", T):
+            return "identifiers"
         full_content = _enclosing_string_content(text, start, ctx, tokens)
         if full_content is not None:
             persisted = getattr(table, "PERSISTED_EXACT", {})
@@ -1460,7 +1494,7 @@ def _assign_scope(
     if _in_pip_extra(text, start, end):
         return "operator"
 
-    if ctx == "py_text" and _is_dotted_python_path(T):
+    if ctx in {"py_text", "toml_text"} and _is_dotted_python_path(T):
         return "identifiers"
     if ctx == "py_text" and any(
         T.startswith(d + "/") for d in getattr(table, "REPO_TOP_DIRS", ())
@@ -1477,14 +1511,16 @@ def _assign_scope(
                 top_dirs = getattr(table, "REPO_TOP_DIRS", ())
                 if not any(T.startswith(d + "/") for d in top_dirs):
                     return "prose"
-    target = _link_target(rel_path, T, table)
+    target = _link_target(rel_path, T, table, in_link=_in_markdown_link_target(text, start))
     if target is not None:
         return _path_move_scope(target)
     if T.startswith("docs/"):
         return "prose"
 
-    if ctx == "py_name" and _name_token_at(tokens, start) in getattr(
-        table, "PERSISTED_EXACT", {}
+    if (
+        ctx == "py_name"
+        and _name_token_at(tokens, start) in getattr(table, "PERSISTED_EXACT", {})
+        and not _in_repo_dotted_chain(tokens, start)
     ):
         return "persisted"
     if ctx == "py_name":
@@ -1497,11 +1533,13 @@ def _assign_scope(
             return "identifiers"
     if T.endswith(".py"):
         return "identifiers"
+    if ctx in {"py_string", "py_text"} and _is_label_kwarg_value(tokens, start):
+        return "operator"
     if ctx in {"py_string", "py_text"}:
         full = _enclosing_string_content(text, start, ctx, tokens)
-        if full is not None and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", full) and any(
-            ch.isupper() for ch in full
-        ):
+        if full is not None and re.fullmatch(
+            r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*", full
+        ) and any(ch.isupper() for ch in full.split(".")[0]):
             return "identifiers"
     if ctx == "md_code" and any(ch.isupper() for ch in W):
         return "identifiers"
@@ -1635,6 +1673,42 @@ def _div_chain_strings(tokens: list[dict], start: int) -> list[str]:
         if isinstance(val, str):
             result.append(val)
     return result
+
+
+# These keyword arguments carry operator-facing labels, which the operator scope renames.
+LABEL_KWARGS = ("role", "title", "label")
+
+
+def _is_label_kwarg_value(tokens: list[dict], start: int) -> bool:
+    """Return True when the string at ``start`` is the value of a label keyword argument."""
+    if not tokens:
+        return False
+
+    string_index = -1
+    for i, tok in enumerate(tokens):
+        if tok["type"] == tokenize.STRING and tok["start"] <= start < tok["end"]:
+            string_index = i
+            break
+    if string_index == -1:
+        return False
+
+    def _prev_significant(idx: int):
+        while idx >= 0:
+            if tokens[idx]["type"] not in {tokenize.NL, tokenize.NEWLINE, tokenize.COMMENT}:
+                return idx
+            idx -= 1
+        return None
+
+    prev = _prev_significant(string_index - 1)
+    if prev is None or tokens[prev]["type"] != tokenize.OP or tokens[prev]["string"] != "=":
+        return False
+    prev = _prev_significant(prev - 1)
+    if prev is None or tokens[prev]["type"] != tokenize.NAME or tokens[prev]["string"] not in LABEL_KWARGS:
+        return False
+    prev = _prev_significant(prev - 1)
+    if prev is None or tokens[prev]["type"] != tokenize.OP or tokens[prev]["string"] not in {"(", ","}:
+        return False
+    return True
 
 
 def _names_python_symbol(tokens: list[dict], start: int) -> bool:

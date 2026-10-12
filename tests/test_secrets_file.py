@@ -131,7 +131,7 @@ def test_toml_upsert_redis_password_only(tmp_path):
     assert new_lines[other_idx] == 'password = "keep-me"'
 
 
-def test_toml_upsert_nexus_token_parses_and_comment_remains(tmp_path):
+def test_toml_upsert_dashboard_token_parses_and_comment_remains(tmp_path):
     path = tmp_path / "secrets.toml"
     path.write_text(EXAMPLE_TOML, newline="")
     token = "tok_" + "a" * 40

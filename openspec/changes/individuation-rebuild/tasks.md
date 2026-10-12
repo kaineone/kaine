@@ -70,7 +70,7 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 - [x] 8.6 Tests for each of the above, with encryption on.
 
 ## 9. Dashboard, config and docs
-- [x] 9.1 `kaine/evaluation/nexus_tab.py` `_aggregate_individuation` uses the shared reader and shows only outcome, H clipped at 0, p, α_k, k, reference kind and date, latched, last inconclusive reason, warm-up state and the inconclusive alert.
+- [x] 9.1 `kaine/evaluation/dashboard_tab.py` `_aggregate_individuation` uses the shared reader and shows only outcome, H clipped at 0, p, α_k, k, reference kind and date, latched, last inconclusive reason, warm-up state and the inconclusive alert.
 - [x] 9.2 `config/kaine.toml` `[individuation]` with defaults, `enabled = false`.
 - [x] 9.3 Retire `kaine/evaluation/individuation.py` or reduce it to a re-export of the lifecycle code.
 - [ ] 9.6 Operator decision: whether research bundles export the producer's content-free individuation reports. The old instrument's reports were in the research metrics tier (`data/evaluation/individuation/`); the producer's are encrypted welfare evidence under `state/individuation/`.

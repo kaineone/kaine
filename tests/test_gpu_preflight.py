@@ -177,8 +177,8 @@ def test_shipped_config_ships_gpu_preflight_disabled():
 # --- Dashboard read-only block ---------------------------------------------------
 
 
-def test_nexus_block_reads_blocked_state(tmp_path):
-    from kaine.nexus.health import HealthProber
+def test_dashboard_block_reads_blocked_state(tmp_path):
+    from kaine.dashboard.health import HealthProber
 
     sp = tmp_path / "gpu_preflight.json"
     PreflightResult(
@@ -207,8 +207,8 @@ def test_nexus_block_reads_blocked_state(tmp_path):
     assert block["devices"][0]["device"] == "cuda:0"
 
 
-def test_nexus_block_unknown_when_no_file(tmp_path):
-    from kaine.nexus.health import HealthProber
+def test_dashboard_block_unknown_when_no_file(tmp_path):
+    from kaine.dashboard.health import HealthProber
 
     prober = HealthProber(
         modules_enabled={},

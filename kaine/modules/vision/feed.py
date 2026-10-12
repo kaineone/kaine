@@ -49,7 +49,7 @@ from kaine.modules.perception_prng import unit_float as _unit_float
 log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:  # numpy-importing; loaded lazily at render time
-    from kaine.modules.womb_signal import WombParams
+    from kaine.modules.stimulus_source_signal import StimulusSourceParams
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +86,7 @@ class SeededSchedule:
 
 
 @dataclass(frozen=True)
-class WombSchedule:
+class StimulusSourceSchedule:
     """Reproducible stimulus source video schedule.
 
     The rendered frame stream is a pure function of
@@ -108,10 +108,10 @@ class WombSchedule:
         }
 
 
-BIRTH_BLOOM_PEAK = 0.8
+MATURATION_BLOOM_PEAK = 0.8
 
 
-class WombClock:
+class StimulusSourceClock:
     """Shared stimulus-source-time clock.
 
     Stimulus source time is the time axis every stimulus source signal is evaluated on; both
@@ -144,8 +144,8 @@ class WombClock:
         self._deliveries: dict[str, tuple[float, int]] = {}
         # Maturation transition state.  None before any maturation; _born short-circuits
         # progress to 1.0 once the transition is acknowledged complete.
-        self._birth_start: float | None = None
-        self._birth_duration: float | None = None
+        self._maturation_start: float | None = None
+        self._maturation_duration: float | None = None
         self._born = False
 
     def start(self) -> None:
@@ -154,7 +154,7 @@ class WombClock:
             if self._origin is None:
                 self._origin = self._clock()
 
-    def womb_seconds(self) -> float:
+    def stimulus_source_seconds(self) -> float:
         """Return ``lived_offset_seconds + (clock() - origin)``.
 
         Starts the clock first if the origin has not been fixed yet.
@@ -185,7 +185,7 @@ class WombClock:
         """
         return self._clock()
 
-    def begin_birth(self, transition_seconds: float = 5.0) -> None:
+    def begin_maturation(self, transition_seconds: float = 5.0) -> None:
         """Record the start of the bounded maturation transition.
 
         One-shot: further calls are ignored.
@@ -196,35 +196,35 @@ class WombClock:
         if not math.isfinite(value) or value <= 0.0 or value > 30.0:
             raise ValueError("transition_seconds must be finite and in (0, 30]")
         # womb_seconds() takes the same lock, so read it before locking.
-        start = self.womb_seconds()
+        start = self.stimulus_source_seconds()
         with self._lock:
-            if self._birth_start is not None or self._born:
+            if self._maturation_start is not None or self._born:
                 return
-            self._birth_start = start
-            self._birth_duration = value
+            self._maturation_start = start
+            self._maturation_duration = value
 
-    def birth_end_womb_seconds(self) -> float | None:
+    def maturation_end_stimulus_source_seconds(self) -> float | None:
         """Return the stimulus source time at which the maturation bloom ends, or None before birth."""
         with self._lock:
-            if self._birth_start is None:
+            if self._maturation_start is None:
                 return None
-            return self._birth_start + self._birth_duration
+            return self._maturation_start + self._maturation_duration
 
     def mark_born(self) -> None:
         """Acknowledge that the maturation transition is already complete."""
         with self._lock:
             self._born = True
 
-    def birth_progress(self) -> float | None:
+    def maturation_progress(self) -> float | None:
         """Return the maturation transition progress in [0, 1], or None before birth."""
         with self._lock:
             if self._born:
                 return 1.0
-            if self._birth_start is None:
+            if self._maturation_start is None:
                 return None
-            start = self._birth_start
-            duration = self._birth_duration
-        current = self.womb_seconds()
+            start = self._maturation_start
+            duration = self._maturation_duration
+        current = self.stimulus_source_seconds()
         progress = (current - start) / duration
         if progress < 0.0:
             return 0.0
@@ -234,7 +234,7 @@ class WombClock:
 
     def born(self) -> bool:
         """True once the maturation transition is finished or was already complete."""
-        return self.birth_progress() == 1.0
+        return self.maturation_progress() == 1.0
 
 
 @dataclass(frozen=True)
@@ -448,7 +448,7 @@ class SeededProceduralSource:
         return [i for i in range(count) if self._is_surprise_frame(i)]
 
 
-class WombProceduralSource:
+class StimulusSourceProceduralSource:
     """A ``_VideoSource`` that renders the stimulus source visual feed.
 
     The frame is a dim, low-contrast, seed-keyed luminance field pulsed by the
@@ -466,10 +466,10 @@ class WombProceduralSource:
 
     def __init__(
         self,
-        schedule: WombSchedule,
+        schedule: StimulusSourceSchedule,
         *,
-        params: WombParams,
-        clock: WombClock,
+        params: StimulusSourceParams,
+        clock: StimulusSourceClock,
         lived_seconds: Callable[[], float],
     ) -> None:
         self._schedule = schedule
@@ -479,7 +479,7 @@ class WombProceduralSource:
         self._opened = False
 
     @property
-    def schedule(self) -> WombSchedule:
+    def schedule(self) -> StimulusSourceSchedule:
         return self._schedule
 
     def open(self) -> bool:
@@ -495,9 +495,9 @@ class WombProceduralSource:
 
         s = self._schedule
         i = int(
-            math.floor(self._clock.womb_seconds() * float(s.frame_rate_hz))
+            math.floor(self._clock.stimulus_source_seconds() * float(s.frame_rate_hz))
         )
-        frame = self.frame_at(i, birth_progress=self._clock.birth_progress())
+        frame = self.frame_at(i, maturation_progress=self._clock.maturation_progress())
         self._clock.mark_delivered("video", i)
         return True, frame
 
@@ -505,7 +505,7 @@ class WombProceduralSource:
         self._opened = False
 
     def frame_at(
-        self, frame_index: int, *, birth_progress: float | None = None
+        self, frame_index: int, *, maturation_progress: float | None = None
     ) -> Any:
         """Render ``frame(seed, i)`` as a BGR uint8 ndarray.
 
@@ -519,7 +519,7 @@ class WombProceduralSource:
 
         from kaine.modules.perception_prng import keyed_u64 as _keyed_u64
         from kaine.modules.perception_prng import unit_float as _unit_float
-        from kaine.modules.womb_signal import (
+        from kaine.modules.stimulus_source_signal import (
             SEED_SALT_VIDEO,
             beat_pulse,
             colour_saturation,
@@ -561,24 +561,24 @@ class WombProceduralSource:
         # Maturation bloom: a bounded, one-shot photic activation transition cue.
         # The dim field rises toward a warm peak over the transition duration
         # (Frontiers 2022), the heartbeat pulse fades, and colour saturation
-        # rises to full.  The result is clipped to BIRTH_BLOOM_PEAK so the
+        # rises to full.  The result is clipped to MATURATION_BLOOM_PEAK so the
         # bloom is bounded and cannot startle.
         schedule_saturation = float(colour_saturation(self._lived(), p)) * float(
             p.maternal_state_hue_gain
         )
-        if birth_progress is None:
+        if maturation_progress is None:
             mean = float(p.luminance_mean)
             pulse_depth = float(p.luminance_pulse_depth)
             saturation = schedule_saturation
             clip_limit = 1.0
         else:
-            progress = float(birth_progress)
+            progress = float(maturation_progress)
             mean = float(p.luminance_mean) + progress * (
-                BIRTH_BLOOM_PEAK - float(p.luminance_mean)
+                MATURATION_BLOOM_PEAK - float(p.luminance_mean)
             )
             pulse_depth = (1.0 - progress) * float(p.luminance_pulse_depth)
             saturation = max(schedule_saturation, progress)
-            clip_limit = BIRTH_BLOOM_PEAK
+            clip_limit = MATURATION_BLOOM_PEAK
 
         contrast = float(p.luminance_contrast)
         luminance = mean + contrast * field

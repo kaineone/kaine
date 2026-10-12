@@ -242,7 +242,7 @@ def test_seeded_pass():
 
 
 
-def test_womb_is_continuous_input():
+def test_stimulus_source_is_continuous_input():
     # The stimulus source never ends (unlike a playlist), so it satisfies condition 8
     # when its sources deliver.
     def _check(config: dict[str, Any]) -> list[CheckResult]:

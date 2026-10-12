@@ -42,7 +42,7 @@ class AdvancingCaptureCore(FakeCore):
         return (None, "request_failed")
 
 
-class BirthCaptureCore(FakeCore):
+class MaturationCaptureCore(FakeCore):
     def __init__(
         self,
         clock: Clock,
@@ -112,7 +112,7 @@ async def test_capture_retry_counts_from_attempt_end(tmp_path: Path):
 
 async def test_capture_time_is_not_lived_time(tmp_path: Path):
     sched, _core, clock = make(tmp_path)
-    core = BirthCaptureCore(clock, sched._paths, sched)
+    core = MaturationCaptureCore(clock, sched._paths, sched)
     sched.bind(core)
     sched.request_capture("birth")
     await sched.tick()

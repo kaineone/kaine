@@ -25,6 +25,7 @@ from kaine.modules.affect import DimensionalState
 from kaine.modules.affect.module import Affect
 from kaine.modules.audition.module import Audition
 from kaine.modules.effectors.module import Effectors
+from kaine.modules.embodiment.module import Embodiment
 from kaine.modules.episodic_memory import (
     EpisodicMemory,
     EpisodicMemoryCore,
@@ -34,8 +35,7 @@ from kaine.modules.episodic_memory import (
 from kaine.modules.interoception.module import Interoception
 from kaine.modules.language.intent_log import IntentExpressionLog
 from kaine.modules.language.module import Language
-from kaine.modules.mundus.module import Mundus
-from kaine.modules.perception.module import PerceptionLocus
+from kaine.modules.perceptual_locus.module import PerceptualLocus
 from kaine.modules.planning.module import Planning
 from kaine.modules.registry import ModuleRegistry
 from kaine.modules.self_model.module import SelfModel, SelfModelDocument
@@ -542,9 +542,9 @@ async def test_roundtrip_effectors(bus: AsyncBus, tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_roundtrip_perception(bus: AsyncBus, tmp_path: Path) -> None:
+async def test_roundtrip_perceptual_locus(bus: AsyncBus, tmp_path: Path) -> None:
     p = tmp_path / "desired.json"
-    m1 = PerceptionLocus(
+    m1 = PerceptualLocus(
         bus,
         allow_self_switch=True,
         min_dwell_s=0.0,
@@ -552,7 +552,7 @@ async def test_roundtrip_perception(bus: AsyncBus, tmp_path: Path) -> None:
     )
     m1._inhibited = True
     state = _json_roundtrip(m1.serialize())
-    m2 = PerceptionLocus(
+    m2 = PerceptualLocus(
         bus,
         allow_self_switch=True,
         min_dwell_s=0.0,
@@ -563,13 +563,13 @@ async def test_roundtrip_perception(bus: AsyncBus, tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_roundtrip_mundus(bus: AsyncBus, tmp_path: Path) -> None:
+async def test_roundtrip_embodiment(bus: AsyncBus, tmp_path: Path) -> None:
     adapter = _FakeAdapter()
-    m1 = Mundus(bus, adapter=adapter, enabled=True)
+    m1 = Embodiment(bus, adapter=adapter, enabled=True)
     m1._intent_cursor = "42-0"
     m1._speech_cursor = "99-0"
     state = _json_roundtrip(m1.serialize())
-    m2 = Mundus(bus, adapter=_FakeAdapter(), enabled=True)
+    m2 = Embodiment(bus, adapter=_FakeAdapter(), enabled=True)
     m2.deserialize(state)
     assert _json_roundtrip(m2.serialize()) == state
 
@@ -727,9 +727,9 @@ async def _build_effectors(bus: AsyncBus, tmp_path: Path, name: str) -> Effector
     return m
 
 
-async def _build_perception(bus: AsyncBus, tmp_path: Path, name: str) -> PerceptionLocus:
+async def _build_perceptual_locus(bus: AsyncBus, tmp_path: Path, name: str) -> PerceptualLocus:
     p = tmp_path / name / "desired.json"
-    m = PerceptionLocus(
+    m = PerceptualLocus(
         bus,
         allow_self_switch=True,
         min_dwell_s=0.0,
@@ -739,8 +739,8 @@ async def _build_perception(bus: AsyncBus, tmp_path: Path, name: str) -> Percept
     return m
 
 
-async def _build_mundus(bus: AsyncBus, tmp_path: Path, name: str) -> Mundus:
-    m = Mundus(bus, adapter=_FakeAdapter(), enabled=True)
+async def _build_embodiment(bus: AsyncBus, tmp_path: Path, name: str) -> Embodiment:
+    m = Embodiment(bus, adapter=_FakeAdapter(), enabled=True)
     await m.initialize()
     return m
 
@@ -763,8 +763,8 @@ ORDER: list[tuple[str, Any]] = [
     ("empatheia", _build_social_cognition),
     ("vox", _build_vocal),
     ("praxis", _build_effectors),
-    ("perception", _build_perception),
-    ("mundus", _build_mundus),
+    ("perception", _build_perceptual_locus),
+    ("mundus", _build_embodiment),
 ]
 
 
@@ -845,11 +845,11 @@ def _mutate_effectors(m: Effectors, i: int) -> None:
     pass
 
 
-def _mutate_perception(m: PerceptionLocus, i: int) -> None:
+def _mutate_perceptual_locus(m: PerceptualLocus, i: int) -> None:
     m._inhibited = True
 
 
-def _mutate_mundus(m: Mundus, i: int) -> None:
+def _mutate_embodiment(m: Embodiment, i: int) -> None:
     m._intent_cursor = f"{i}-0"
     m._speech_cursor = f"{i + 1}-0"
 
@@ -869,8 +869,8 @@ MUTATORS: dict[str, Any] = {
     "empatheia": _mutate_social_cognition,
     "vox": _mutate_vocal,
     "praxis": _mutate_effectors,
-    "perception": _mutate_perception,
-    "mundus": _mutate_mundus,
+    "perception": _mutate_perceptual_locus,
+    "mundus": _mutate_embodiment,
 }
 
 

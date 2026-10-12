@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 from starlette.testclient import TestClient
 
-import kaine.nexus
+import kaine.dashboard
 from kaine import secrets_file
 from kaine.net import SERVICE_PORTS
 from kaine.setup.web import guard
@@ -141,15 +141,15 @@ def test_finish_status_lights(tmp_path):
             assert f"{name} on port {port}" in text
 
 
-def test_finish_start_nexus_button(tmp_path, monkeypatch):
+def test_finish_start_dashboard_button(tmp_path, monkeypatch):
     app = _mk_app(
         tmp_path,
         services_up_fn=lambda: {name: False for name in SERVICE_PORTS},
     )
-    nexus_port = 11111
+    dashboard_port = 11111
     monkeypatch.setattr(
-        "kaine.setup.web.app.load_nexus_config",
-        lambda path, **kwargs: SimpleNamespace(port=nexus_port, operator_token="x" * 40),
+        "kaine.setup.web.app.load_dashboard_config",
+        lambda path, **kwargs: SimpleNamespace(port=dashboard_port, operator_token="x" * 40),
     )
 
     with _saved_client(app) as client:
@@ -163,7 +163,7 @@ def test_finish_start_nexus_button(tmp_path, monkeypatch):
 
         monkeypatch.setattr(
             "kaine.setup.web.app.port_listening",
-            lambda port, timeout_s=1.0: port == nexus_port,
+            lambda port, timeout_s=1.0: port == dashboard_port,
         )
         r2 = client.get("/finish", headers={"Host": "127.0.0.1:8000"})
         assert r2.status_code == 200
@@ -175,7 +175,7 @@ def test_finish_token_reveal(tmp_path, monkeypatch):
     token = "operator-token-value-with-enough-characters-1234"
     app = _mk_app(tmp_path)
     monkeypatch.setattr(
-        "kaine.setup.web.app.load_nexus_config",
+        "kaine.setup.web.app.load_dashboard_config",
         lambda path, **kwargs: SimpleNamespace(port=11111, operator_token=token),
     )
 
@@ -220,7 +220,7 @@ def test_finish_token_missing(tmp_path, monkeypatch):
     app = _mk_app(tmp_path)
     secrets_path = app.state.setup.secrets_path
     monkeypatch.setattr(
-        "kaine.setup.web.app.load_nexus_config",
+        "kaine.setup.web.app.load_dashboard_config",
         lambda path, **kwargs: SimpleNamespace(port=11111, operator_token=""),
     )
 
@@ -464,7 +464,7 @@ def test_finish_token_refuses_an_unsaved_session(tmp_path, monkeypatch):
         assert token_value not in r2.text
 
 
-def test_finish_routes_survive_an_unreadable_nexus_config(tmp_path, monkeypatch):
+def test_finish_routes_survive_an_unreadable_dashboard_config(tmp_path, monkeypatch):
     """A bad dashboard setting is reported on the page, never a 500."""
     app = _mk_app(
         tmp_path,
@@ -488,12 +488,12 @@ def test_finish_routes_survive_an_unreadable_nexus_config(tmp_path, monkeypatch)
         assert "Nexus config could not be read (ValueError)" in r2.text
 
 
-def test_setup_css_uses_only_nexus_tokens():
+def test_setup_css_uses_only_dashboard_tokens():
     setup_css = Path(guard.__file__).parent / "static" / "setup.css"
-    nexus_css = Path(kaine.nexus.__file__).parent / "static" / "style.css"
+    dashboard_css = Path(kaine.dashboard.__file__).parent / "static" / "style.css"
     used = set(re.findall(r"var\(--([\w-]+)\)", setup_css.read_text(encoding="utf-8")))
     defined = set(
-        re.findall(r"--([\w-]+):", nexus_css.read_text(encoding="utf-8"))
+        re.findall(r"--([\w-]+):", dashboard_css.read_text(encoding="utf-8"))
     )
     undefined = used - defined
     assert not undefined, f"setup.css uses undefined Nexus tokens: {sorted(undefined)}"

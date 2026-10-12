@@ -200,7 +200,7 @@ def test_c1_freeze_resume_restores_desired_perception_flags(monkeypatch):
 # --------------------------------------------------------------------------
 
 
-def test_c2_welfare_pause_survives_spot_recovery(tmp_path: Path):
+def test_c2_welfare_pause_survives_supervisor_recovery(tmp_path: Path):
     """A supervisor recovery pops only the supervisor's own entry; the welfare freeze below
     it stays in force, so the cycle remains frozen."""
     path = tmp_path / "control.json"
@@ -230,7 +230,7 @@ def test_c2_welfare_pause_survives_spot_recovery(tmp_path: Path):
     assert on_disk["frozen"] is True
 
 
-def test_c2_spot_recovery_restores_pre_existing_stack(tmp_path: Path):
+def test_c2_supervisor_recovery_restores_pre_existing_stack(tmp_path: Path):
     """The supervisor stacking its freeze and popping it restores any pre-existing
     stack byte-for-byte in structure (sources, reasons, timestamps)."""
     path = tmp_path / "control.json"

@@ -13,7 +13,7 @@ import pytest
 from kaine import legacy_aliases, legacy_names
 from kaine.evaluation.affect_correlation import correlate_from_log
 from kaine.experiment.run_records import load_run_records
-from kaine.lifecycle.preservation import _read_bundle_members, extract_bundle_gestation
+from kaine.lifecycle.preservation import _read_bundle_members, extract_bundle_development
 from kaine.lifecycle.snapshot import ForkSnapshot
 from kaine.security import crypto
 from kaine.security.crypto import CryptoConfig, StateEncryptor
@@ -95,7 +95,7 @@ def test_bundle_members_pending_old_name_not_mapped(monkeypatch, tmp_path):
     assert "phantasia/world_model.ckpt" not in members
 
 
-def test_extract_bundle_gestation_maps_state_path(monkeypatch, tmp_path):
+def test_extract_bundle_development_maps_state_path(monkeypatch, tmp_path):
     monkeypatch.setattr(crypto, "_active", StateEncryptor(CryptoConfig(enabled=False)))
     monkeypatch.setattr(
         legacy_names,
@@ -116,19 +116,19 @@ def test_extract_bundle_gestation_maps_state_path(monkeypatch, tmp_path):
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "keys", "done")
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "persisted", "done")
     monkeypatch.setattr(
-        "kaine.lifecycle.preservation.BUNDLED_GESTATION_FILES",
+        "kaine.lifecycle.preservation.BUNDLED_DEVELOPMENT_FILES",
         {"gestation_progress.json"},
     )
     bundle = tmp_path / "b" / "bundle.tar"
     _plain_bundle(bundle, {"oldgest/old_progress.json": b"{}"})
     dest = tmp_path / "dest"
-    written = extract_bundle_gestation(bundle.parent, dest)
+    written = extract_bundle_development(bundle.parent, dest)
     assert written == ["gestation_progress.json"]
     assert (dest / "gestation_progress.json").read_bytes() == b"{}"
 
 
 @pytest.mark.parametrize("first, second", [("old", "new"), ("new", "old")])
-def test_extract_bundle_gestation_new_file_name_beats_old(monkeypatch, tmp_path, first, second):
+def test_extract_bundle_development_new_file_name_beats_old(monkeypatch, tmp_path, first, second):
     monkeypatch.setattr(crypto, "_active", StateEncryptor(CryptoConfig(enabled=False)))
     monkeypatch.setattr(legacy_names, "BUNDLE_MEMBERS", ())
     monkeypatch.setattr(
@@ -145,7 +145,7 @@ def test_extract_bundle_gestation_new_file_name_beats_old(monkeypatch, tmp_path,
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "keys", "done")
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "persisted", "done")
     monkeypatch.setattr(
-        "kaine.lifecycle.preservation.BUNDLED_GESTATION_FILES",
+        "kaine.lifecycle.preservation.BUNDLED_DEVELOPMENT_FILES",
         {"gestation_progress.json"},
     )
     bundle = tmp_path / "b" / "bundle.tar"
@@ -158,7 +158,7 @@ def test_extract_bundle_gestation_new_file_name_beats_old(monkeypatch, tmp_path,
         ordered["gestation/old_progress.json"] = b"old"
     _plain_bundle(bundle, ordered)
     dest = tmp_path / "dest"
-    written = extract_bundle_gestation(bundle.parent, dest)
+    written = extract_bundle_development(bundle.parent, dest)
     assert written == ["gestation_progress.json"]
     assert (dest / "gestation_progress.json").read_bytes() == b"new"
 
@@ -202,7 +202,7 @@ def test_correlate_from_log_maps_record_fields(monkeypatch, tmp_path):
 
 def test_latest_lines_reads_old_sidecar_directory(monkeypatch, tmp_path):
     pytest.importorskip("fastapi")
-    from kaine.evaluation.nexus_tab import _latest_lines
+    from kaine.evaluation.dashboard_tab import _latest_lines
 
     monkeypatch.setattr(
         legacy_names,

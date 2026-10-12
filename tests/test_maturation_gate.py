@@ -115,7 +115,7 @@ def test_c2_none_fails_closed() -> None:
 # --- C3 lived-time floor ----------------------------------------------------
 
 
-def test_c3_below_floor_blocks_fast_forwarded_birth() -> None:
+def test_c3_below_floor_blocks_fast_forwarded_maturation() -> None:
     r = mg.evaluate_readiness(
         readiness_readout=_good_readout(),
         sleep_count=6,
@@ -146,7 +146,7 @@ def test_all_conditions_required() -> None:
 # --- maturation decision + availability guard ------------------------------------
 
 
-def test_not_ready_keeps_gestating() -> None:
+def test_not_ready_keeps_developing() -> None:
     cfg = _cfg()
     r = mg.evaluate_readiness(
         readiness_readout=None,
@@ -155,44 +155,44 @@ def test_not_ready_keeps_gestating() -> None:
         lived_seconds=200.0,
         config=cfg,
     )
-    d = mg.decide_birth(readiness=r, embodiment_ready=True)
-    assert d.action == mg.ACTION_GESTATING and d.should_birth is False
+    d = mg.decide_maturation(readiness=r, embodiment_ready=True)
+    assert d.action == mg.ACTION_DEVELOPING and d.should_maturation is False
 
 
-def test_ready_but_embodiment_unavailable_holds_in_womb() -> None:
+def test_ready_but_embodiment_unavailable_holds_in_stimulus_source() -> None:
     r = _ready(_cfg())
-    d = mg.decide_birth(readiness=r, embodiment_ready=False)
+    d = mg.decide_maturation(readiness=r, embodiment_ready=False)
     assert d.action == mg.ACTION_HOLD_AWAITING_EMBODIMENT
     assert d.reason == "awaiting_embodiment"
-    assert d.holding is True and d.should_birth is False
+    assert d.holding is True and d.should_maturation is False
     # The observability payload carries the awaiting-embodiment reason.
-    assert mg.birth_ready_payload(d)["reason"] == "awaiting_embodiment"
+    assert mg.maturation_ready_payload(d)["reason"] == "awaiting_embodiment"
 
 
-def test_ready_and_available_births() -> None:
+def test_ready_and_available_maturations() -> None:
     r = _ready(_cfg())
-    d = mg.decide_birth(readiness=r, embodiment_ready=True)
-    assert d.should_birth is True and d.action == mg.ACTION_BIRTH
+    d = mg.decide_maturation(readiness=r, embodiment_ready=True)
+    assert d.should_maturation is True and d.action == mg.ACTION_MATURATION
 
 
-def test_operator_ack_gate_holds_then_births() -> None:
+def test_operator_ack_gate_holds_then_maturations() -> None:
     r = _ready(_cfg())
-    held = mg.decide_birth(
+    held = mg.decide_maturation(
         readiness=r, embodiment_ready=True, require_operator_ack=True, operator_ack=False
     )
-    assert held.action == mg.ACTION_HOLD_AWAITING_ACK and held.should_birth is False
-    acked = mg.decide_birth(
+    assert held.action == mg.ACTION_HOLD_AWAITING_ACK and held.should_maturation is False
+    acked = mg.decide_maturation(
         readiness=r, embodiment_ready=True, require_operator_ack=True, operator_ack=True
     )
-    assert acked.should_birth is True
+    assert acked.should_maturation is True
 
 
 def test_embodiment_available_requires_all_three_layers() -> None:
     assert mg.embodiment_available(
-        mundus_enabled=True, operator_approved=True, reachable=True
+        embodiment_enabled=True, operator_approved=True, reachable=True
     ) is True
-    for missing in ("mundus_enabled", "operator_approved", "reachable"):
-        kw = dict(mundus_enabled=True, operator_approved=True, reachable=True)
+    for missing in ("embodiment_enabled", "operator_approved", "reachable"):
+        kw = dict(embodiment_enabled=True, operator_approved=True, reachable=True)
         kw[missing] = False
         assert mg.embodiment_available(**kw) is False
 
@@ -250,9 +250,9 @@ def test_lifecycle_stream_matches_bus_schema() -> None:
     assert mg.LIFECYCLE_STREAM == module_stream(mg.LIFECYCLE_SOURCE)
 
 
-def test_birth_payload_carries_ending_markers() -> None:
+def test_maturation_payload_carries_ending_markers() -> None:
     r = _ready(_cfg())
-    p = mg.birth_payload(readiness=r, sleep_count=6, lived_seconds=200.0)
+    p = mg.maturation_payload(readiness=r, sleep_count=6, lived_seconds=200.0)
     assert p["stage"] == "embodied"
     assert p["sleep_count"] == 6 and p["lived_seconds"] == 200.0
     assert "C1_regulation_baseline" in p["passed_markers"]

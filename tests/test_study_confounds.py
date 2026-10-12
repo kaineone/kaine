@@ -328,8 +328,8 @@ async def test_vocal_dormant_suppresses_output_and_resumes(bus, tmp_path):
         await vocal.shutdown()
 
 
-def test_gestation_holds_mundus_and_vocal_dormant():
-    from kaine.cycle.__main__ import _hold_effectors_for_gestation
+def test_development_holds_embodiment_and_vocal_dormant():
+    from kaine.cycle.__main__ import _hold_effectors_for_development
     from kaine.modules.registry import ModuleRegistry
 
     class _Effector:
@@ -341,12 +341,12 @@ def test_gestation_holds_mundus_and_vocal_dormant():
             self.dormant = dormant
 
     registry = ModuleRegistry()
-    vocal, mundus, interoception = _Effector("vox"), _Effector("mundus"), _Effector("soma")
-    for module in (vocal, mundus, interoception):
+    vocal, embodiment, interoception = _Effector("vox"), _Effector("mundus"), _Effector("soma")
+    for module in (vocal, embodiment, interoception):
         registry.register(module)
 
-    held = _hold_effectors_for_gestation(registry)
+    held = _hold_effectors_for_development(registry)
 
     assert sorted(held) == ["mundus", "vox"]
-    assert vocal.dormant is True and mundus.dormant is True
+    assert vocal.dormant is True and embodiment.dormant is True
     assert interoception.dormant is None

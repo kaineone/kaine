@@ -24,7 +24,7 @@ The pieces:
   surface is wanted. The holder is released exactly once, when the perceived
   crossfade time reaches ``transition_seconds``; a timer guarantees the release
   even when no surface reads. Programme time zero is the release;
-- :class:`WombWorldTransition`: the per-boot shared state (the stimulus source frame, the
+- :class:`StimulusSourceWorldTransition`: the per-boot shared state (the stimulus source frame, the
   programme's opening frame, the blend buffers, the controller and the audio
   fade position);
 - :class:`TransitionVideoSource` and :class:`TransitionAudioStream`: wrappers
@@ -44,8 +44,8 @@ from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     import numpy as np
 
+    from kaine.modules.stimulus_source_signal import StimulusSourceParams
     from kaine.modules.vision.feed import PlaylistClock, PlaylistPosition
-    from kaine.modules.womb_signal import WombParams
 
 log = logging.getLogger(__name__)
 
@@ -87,21 +87,21 @@ def transition_alpha(elapsed: float, transition_seconds: float) -> float:
     return smoothstep(float(elapsed) / seconds)
 
 
-def blend_frames(womb: np.ndarray, film: np.ndarray, alpha: float) -> np.ndarray:
+def blend_frames(stimulus_source: np.ndarray, film: np.ndarray, alpha: float) -> np.ndarray:
     """Return ``womb + alpha * (film - womb)`` as uint8.
 
     ``alpha`` is clamped to [0, 1]. Both frames must have the same shape. The
     endpoints are exact: alpha 0 returns the stimulus source frame's values and alpha 1 the
-    film frame's. :class:`WombWorldTransition` computes the same arithmetic in
+    film frame's. :class:`StimulusSourceWorldTransition` computes the same arithmetic in
     preallocated buffers.
     """
     import numpy as np
 
-    if womb.shape != film.shape:
+    if stimulus_source.shape != film.shape:
         raise ValueError(
-            f"blend_frames needs equal shapes, got {womb.shape} and {film.shape}"
+            f"blend_frames needs equal shapes, got {stimulus_source.shape} and {film.shape}"
         )
-    base = womb.astype(np.float32)
+    base = stimulus_source.astype(np.float32)
     delta = film.astype(np.float32) - base
     return _blend_into(base, delta, np.empty_like(delta), alpha)
 
@@ -193,40 +193,40 @@ def apply_audio_fade(
     return out
 
 
-def render_birth_field(
+def render_maturation_field(
     *,
     seed: int,
     womb_t_at_birth: float,
     lived_seconds: float,
-    params: WombParams,
+    params: StimulusSourceParams,
     width: int,
     height: int,
 ) -> np.ndarray:
     """Render the stimulus source's bloom-peak field at ``womb_t_at_birth``.
 
-    The stimulus source generator's own pure function (``WombProceduralSource.frame_at``
+    The stimulus source generator's own pure function (``StimulusSourceProceduralSource.frame_at``
     at ``birth_progress = 1.0``: bright, pulse-free, full colour) at frame index
     ``floor(womb_t_at_birth * frame_rate_hz)``, with the recorded seed and the
     entity's lived developmental time.
     """
     from kaine.modules.vision.feed import (
-        WombClock,
-        WombProceduralSource,
-        WombSchedule,
+        StimulusSourceClock,
+        StimulusSourceProceduralSource,
+        StimulusSourceSchedule,
     )
 
     lived = float(lived_seconds)
     if not math.isfinite(lived) or lived < 0.0:
         lived = 0.0
-    schedule = WombSchedule(seed=int(seed), width=int(width), height=int(height))
-    source = WombProceduralSource(
+    schedule = StimulusSourceSchedule(seed=int(seed), width=int(width), height=int(height))
+    source = StimulusSourceProceduralSource(
         schedule,
         params=params,
-        clock=WombClock(lived_offset_seconds=lived),
+        clock=StimulusSourceClock(lived_offset_seconds=lived),
         lived_seconds=lambda: lived,
     )
     index = int(math.floor(float(womb_t_at_birth) * float(schedule.frame_rate_hz)))
-    return source.frame_at(index, birth_progress=1.0)
+    return source.frame_at(index, maturation_progress=1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -491,7 +491,7 @@ class TransitionController:
 # ---------------------------------------------------------------------------
 
 
-class WombWorldTransition:
+class StimulusSourceWorldTransition:
     """The per-boot stimulus-source-to-world transition shared by both surfaces.
 
     Holds the stimulus source's bloom-peak frame (rendered once, at construction), the
@@ -503,14 +503,14 @@ class WombWorldTransition:
     def __init__(
         self,
         *,
-        womb_frame: np.ndarray,
+        stimulus_source_frame: np.ndarray,
         controller: TransitionController,
         audio_fade_seconds: float,
     ) -> None:
         fade = float(audio_fade_seconds)
         if not math.isfinite(fade) or fade < 0.0:
             raise ValueError("audio_fade_seconds must be finite and non-negative")
-        self._womb_source = womb_frame
+        self._stimulus_source_source = stimulus_source_frame
         self._controller = controller
         self._audio_fade_seconds = fade
         self._lock = threading.Lock()
@@ -538,9 +538,9 @@ class WombWorldTransition:
         return self._controller.released
 
     @property
-    def womb_frame(self) -> np.ndarray:
+    def stimulus_source_frame(self) -> np.ndarray:
         """The bloom-peak frame as rendered (before any resize)."""
-        return self._womb_source
+        return self._stimulus_source_source
 
     @property
     def prepared(self) -> bool:
@@ -569,20 +569,20 @@ class WombWorldTransition:
             reason = ABANDON_FIRST_FRAME_UNDECODABLE
         if film is not None:
             film_shape = getattr(film, "shape", None)
-            womb_shape = self._womb_source.shape
+            stimulus_source_shape = self._stimulus_source_source.shape
             if (
                 film_shape is None
-                or len(film_shape) != len(womb_shape)
-                or tuple(film_shape[2:]) != tuple(womb_shape[2:])
+                or len(film_shape) != len(stimulus_source_shape)
+                or tuple(film_shape[2:]) != tuple(stimulus_source_shape[2:])
                 or str(getattr(film, "dtype", "")) != "uint8"
             ):
                 reason = ABANDON_FIRST_FRAME_UNBLENDABLE
-                detail = f"shape {film_shape} against the womb's {womb_shape}"
+                detail = f"shape {film_shape} against the womb's {stimulus_source_shape}"
             else:
-                womb = resize_bilinear(
-                    self._womb_source, int(film_shape[0]), int(film_shape[1])
+                stimulus_source = resize_bilinear(
+                    self._stimulus_source_source, int(film_shape[0]), int(film_shape[1])
                 )
-                base = womb.astype(np.float32)
+                base = stimulus_source.astype(np.float32)
                 delta = film.astype(np.float32)
                 np.subtract(delta, base, out=delta)
         with self._lock:
@@ -639,7 +639,7 @@ class TransitionVideoSource:
     frame; once released, it reads the playlist as usual.
     """
 
-    def __init__(self, inner: Any, transition: WombWorldTransition) -> None:
+    def __init__(self, inner: Any, transition: StimulusSourceWorldTransition) -> None:
         self._inner = inner
         self._t = transition
 
@@ -692,7 +692,7 @@ class TransitionAudioStream:
         make_inner: Callable[[Callable[[bytes], None]], Any],
         *,
         callback: Callable[[bytes], None],
-        transition: WombWorldTransition,
+        transition: StimulusSourceWorldTransition,
         sample_rate: int,
         channels: int,
     ) -> None:
@@ -747,11 +747,11 @@ __all__ = [
     "TransitionAudioStream",
     "TransitionController",
     "TransitionVideoSource",
-    "WombWorldTransition",
+    "StimulusSourceWorldTransition",
     "apply_audio_fade",
     "audio_fade_gain",
     "blend_frames",
-    "render_birth_field",
+    "render_maturation_field",
     "resize_bilinear",
     "smoothstep",
     "transition_alpha",

@@ -193,7 +193,7 @@ class ExternalUtterancesConfig:
 
 
 @dataclass(frozen=True)
-class NexusRecordConfig:
+class DashboardRecordConfig:
     """Parameters for the OPTIONAL local-only dashboard diagnostics recorder.
 
     Subscribes to the same streams as the dashboard diagnostics bridge and writes
@@ -225,7 +225,7 @@ class NexusRecordConfig:
         data: dict[str, Any] | None,
         *,
         export_roots: tuple[str, ...] = (),
-    ) -> "NexusRecordConfig":
+    ) -> "DashboardRecordConfig":
         data = dict(data or {})
         log_dir = str(data.get("log_dir", cls.log_dir))
         # Fail closed at config-load: local-only recorders must never resolve
@@ -282,7 +282,7 @@ class ResearchEventLogConfig:
     retention_days: int = 0
     raw_archive: RawArchiveConfig = field(default_factory=RawArchiveConfig)
     external_utterances: ExternalUtterancesConfig = field(default_factory=ExternalUtterancesConfig)
-    nexus_record: NexusRecordConfig = field(default_factory=NexusRecordConfig)
+    dashboard_record: DashboardRecordConfig = field(default_factory=DashboardRecordConfig)
 
     @classmethod
     def from_mapping(
@@ -302,7 +302,7 @@ class ResearchEventLogConfig:
             external_utterances=ExternalUtterancesConfig.from_mapping(
                 data.get("external_utterances"), export_roots=export_roots
             ),
-            nexus_record=NexusRecordConfig.from_mapping(
+            dashboard_record=DashboardRecordConfig.from_mapping(
                 data.get("nexus_record"), export_roots=export_roots
             ),
         )

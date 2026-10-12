@@ -242,7 +242,7 @@ def test_every_report_policy_branch_tags_its_intent_as_an_event():
 
 
 @pytest.mark.asyncio
-async def test_mundus_chat_never_leaves_language(bus: AsyncBus, tmp_path: Path):
+async def test_embodiment_chat_never_leaves_language(bus: AsyncBus, tmp_path: Path):
     """Other avatars' chat and their identifiers are redacted like heard
     speech and never reach the bus or the log."""
     sentinel = "PURPLE-HERON-4471 said this"
