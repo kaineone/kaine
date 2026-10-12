@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     pass
 from kaine.boot.errors import _require_keys
+from kaine.boot.factories.config_kwargs import config_kwargs
 from kaine.boot.perception_feed import _build_perception_feed_video_factory
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
@@ -117,14 +118,18 @@ def make_vision(
             )
     if "device" in section:
         kwargs["device_preference"] = section["device"]
-    for k in (
-        "change_alert_threshold",
-        "change_alert_factor",
-        "baseline_salience",
-        "alert_salience",
-    ):
-        if k in section:
-            kwargs[k] = section[k]
+    kwargs.update(
+        config_kwargs(
+            section,
+            (
+                "change_alert_threshold",
+                "change_alert_factor",
+                "baseline_salience",
+                "alert_salience",
+            ),
+            Vision,
+        )
+    )
     if "habituation_window" in section:
         from kaine.modules.vision.habituation import RollingMeanHabituator
 
@@ -135,14 +140,18 @@ def make_vision(
             )
         kwargs["habituator"] = RollingMeanHabituator(window=window)
     # Forward prediction knobs
-    for k in (
-        "forward_prediction",
-        "forward_model_units",
-        "prediction_error_window",
-        "visual_buffer_size",
-    ):
-        if k in section:
-            kwargs[k] = section[k]
+    kwargs.update(
+        config_kwargs(
+            section,
+            (
+                "forward_prediction",
+                "forward_model_units",
+                "prediction_error_window",
+                "visual_buffer_size",
+            ),
+            Vision,
+        )
+    )
     kwargs["capture_enabled"] = bool(section.get("capture_enabled", False))
 
     # Attention-driven foveation (topos-foveation). Off by default → the vision module runs

@@ -19,6 +19,7 @@ from kaine.boot.errors import (
     _require_keys,
     _warn_retired_keys,
 )
+from kaine.boot.factories.config_kwargs import config_kwargs
 from kaine.bus.client import AsyncBus
 from kaine.defaults import lingua_section_api_key, lingua_section_chat_url
 from kaine.entity_clock import EntityClock
@@ -208,15 +209,19 @@ def make_hypnos(
             )
             voice_config = replace(voice_config, hot_swap_mode=effective)
     kwargs: dict[str, Any] = {}
-    for k in (
-        "interval_seconds",
-        "max_deferral_seconds",
-        "per_defer_seconds",
-        "baseline_salience",
-        "alert_salience",
-    ):
-        if k in section:
-            kwargs[k] = section[k]
+    kwargs.update(
+        config_kwargs(
+            section,
+            (
+                "interval_seconds",
+                "max_deferral_seconds",
+                "per_defer_seconds",
+                "baseline_salience",
+                "alert_salience",
+            ),
+            Hypnos,
+        )
+    )
     if "requested_rest_min_interval_s" in section:
         raw_interval = section["requested_rest_min_interval_s"]
         if (

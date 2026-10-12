@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     pass
+from kaine.boot.factories.config_kwargs import config_kwargs
 from kaine.bus.client import AsyncBus
 from kaine.modules.base import BaseModule
 
@@ -55,9 +56,9 @@ def make_mundus(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
             )
 
     kwargs: dict[str, Any] = {}
-    for key in ("mirror_speech", "speech_stream"):
-        if key in section:
-            kwargs[key] = section[key]
+    kwargs.update(
+        config_kwargs(section, ("mirror_speech", "speech_stream"), Mundus)
+    )
 
     # Continuous embodiment control surface (`intuitive-embodiment-control-surface`):
     # the entity's per-tick continuous motor producer + freeze-then-free curriculum

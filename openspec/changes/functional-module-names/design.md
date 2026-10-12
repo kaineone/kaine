@@ -510,6 +510,20 @@ are the ones the sections above leave open; each follows from those sections.
   and its siblings follows the identifiers scope. While PRs 5a to 5d are in
   flight a module's package can differ from its key; `tests/_module_packages.py`
   maps one to the other for the tests that relied on them being equal.
+- **Config keys feeding constructor arguments.** Several factories copy config
+  keys straight into constructor keyword arguments. An identifiers PR renames the
+  parameter (`interoception_stream`) one step before the keys PR renames the key
+  (`soma_stream`), which broke the affect module's build from the shipped config
+  in PR 5a before it merged. `kaine/boot/factories/config_kwargs.py` maps each key
+  to the parameter it feeds by renaming its old module-key components through the
+  table, so there is no second list and the map becomes the identity once the keys
+  are renamed. `tests/test_factories_from_shipped_config.py` builds every module
+  factory from the shipped config, the base-thesis profile and each tier profile.
+- **Close-out by hand (PR 9).** `external/internvideo_next/UPSTREAM` (line 47) and
+  `external/internvideo_next/__init__.py` (line 9) name
+  `kaine/modules/topos/internvideo_next_loader.py`, which moved to
+  `kaine/modules/vision/`. The codemod excludes `external/`, but these are our own
+  pointer comments, so the close-out fixes them by hand.
 - **Local data.** `tests/test_legacy_local_data.py` runs only when
   `KAINE_LOCAL_DATA_ROOT` is set. It copies `backups/` and `state/forks/` to a
   temporary directory, reads everything from the copy with every read-map on,

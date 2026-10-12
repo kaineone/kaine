@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     pass
 from kaine.boot.errors import ConfigurationError, _require_keys
+from kaine.boot.factories.config_kwargs import config_kwargs
 from kaine.bus.client import AsyncBus
 from kaine.modules.base import BaseModule
 
@@ -32,20 +33,24 @@ def make_phantasia(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     }
     _require_keys(section, allowed)
     kwargs: dict[str, Any] = {}
-    for k in (
-        "backend",
-        "engine",
-        "training_enabled",
-        "training_device",
-        "trajectory_buffer_size",
-        "rollout_horizon",
-        "persist_weights",
-        "checkpoint_path",
-        "mnemos_stream",
-        "hypnos_stream",
-    ):
-        if k in section:
-            kwargs[k] = section[k]
+    kwargs.update(
+        config_kwargs(
+            section,
+            (
+                "backend",
+                "engine",
+                "training_enabled",
+                "training_device",
+                "trajectory_buffer_size",
+                "rollout_horizon",
+                "persist_weights",
+                "checkpoint_path",
+                "mnemos_stream",
+                "hypnos_stream",
+            ),
+            Phantasia,
+        )
+    )
     salience = section.get("salience") or {}
     if "baseline" in salience:
         kwargs["baseline_salience"] = float(salience["baseline"])
