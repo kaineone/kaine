@@ -1,0 +1,1 @@
+A module path segment that happens to equal a persisted name (`gestation`) follows the identifiers scope inside a `kaine.` import path, while a field with that exact name and its attribute accesses stay persisted.

@@ -1295,6 +1295,30 @@ def _name_token_at(tokens: list[dict], offset: int) -> str | None:
     return None
 
 
+def _in_repo_dotted_chain(tokens: list[dict], offset: int) -> bool:
+    """Return True when ``offset`` is inside a dotted NAME chain rooted at kaine or tests."""
+    for i, tok in enumerate(tokens):
+        if (
+            tok.get("type") == tokenize.NAME
+            and tok.get("start", 0) <= offset < tok.get("end", 0)
+        ):
+            break
+    else:
+        return False
+
+    dot_count = 0
+    while (
+        i >= 2
+        and tokens[i - 1].get("type") == tokenize.OP
+        and tokens[i - 1].get("string") == "."
+        and tokens[i - 2].get("type") == tokenize.NAME
+    ):
+        i -= 2
+        dot_count += 1
+
+    return tokens[i].get("string") in {"kaine", "tests"} and dot_count > 0
+
+
 def _file_chain_path(tokens: list[dict], start: int, rel_path: str, parts: list[str]) -> str | None:
     """The repository path a `__file__`-relative `/` chain points at, or None."""
     from pathlib import PurePosixPath
@@ -1402,7 +1426,7 @@ def _assign_scope(
     lower_path = rel_path.lower().replace("\\", "/")
 
     if ctx in {"py_string", "py_text", "toml_string", "toml_text"}:
-        if re.fullmatch(r"[\w./-]*\.(?:html|js|css|jinja|j2)", T):
+        if re.fullmatch(r"[\w./-]*\.(?:html|js|css|jinja|j2|py)", T):
             return "identifiers"
         full_content = _enclosing_string_content(text, start, ctx, tokens)
         if full_content is not None:
@@ -1485,8 +1509,10 @@ def _assign_scope(
     if T.startswith("docs/"):
         return "prose"
 
-    if ctx == "py_name" and _name_token_at(tokens, start) in getattr(
-        table, "PERSISTED_EXACT", {}
+    if (
+        ctx == "py_name"
+        and _name_token_at(tokens, start) in getattr(table, "PERSISTED_EXACT", {})
+        and not _in_repo_dotted_chain(tokens, start)
     ):
         return "persisted"
     if ctx == "py_name":
