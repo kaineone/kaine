@@ -1,0 +1,1 @@
+A string passed as a role=, title= or label= keyword argument is an operator-facing label, so the identifiers scope leaves it alone even when it holds exactly a class name; the same string in another keyword argument or in __all__ still follows the identifiers scope.

@@ -172,7 +172,7 @@ def build_dependency_specs(
         speech_rows.append(
             DependencySpec(
                 name="Chatterbox (TTS)",
-                role="Vocal",
+                role="Vox",
                 module="vox",
                 probe=lambda: probe_chatterbox(base_url=chatterbox_url),
             )
@@ -181,7 +181,7 @@ def build_dependency_specs(
         speech_rows.append(
             DependencySpec(
                 name="sherpa-onnx (Kokoro)",
-                role="Vocal",
+                role="Vox",
                 module="vox",
                 probe=(
                     lambda _mdir=_vocal_sherpa_model_dir(),
@@ -200,7 +200,7 @@ def build_dependency_specs(
         speech_rows.append(
             DependencySpec(
                 name=f"Vox backend {vocal_backend!r}",
-                role="Vocal",
+                role="Vox",
                 module="vox",
                 probe=lambda: _async_degraded(
                     f"unknown [vox].backend {vocal_backend!r}; expected \"chatterbox\" or \"sherpa_onnx\""

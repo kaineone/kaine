@@ -1497,6 +1497,8 @@ def _assign_scope(
             return "identifiers"
     if T.endswith(".py"):
         return "identifiers"
+    if ctx in {"py_string", "py_text"} and _is_label_kwarg_value(tokens, start):
+        return "operator"
     if ctx in {"py_string", "py_text"}:
         full = _enclosing_string_content(text, start, ctx, tokens)
         if full is not None and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", full) and any(
@@ -1635,6 +1637,42 @@ def _div_chain_strings(tokens: list[dict], start: int) -> list[str]:
         if isinstance(val, str):
             result.append(val)
     return result
+
+
+# These keyword arguments carry operator-facing labels, which the operator scope renames.
+LABEL_KWARGS = ("role", "title", "label")
+
+
+def _is_label_kwarg_value(tokens: list[dict], start: int) -> bool:
+    """Return True when the string at ``start`` is the value of a label keyword argument."""
+    if not tokens:
+        return False
+
+    string_index = -1
+    for i, tok in enumerate(tokens):
+        if tok["type"] == tokenize.STRING and tok["start"] <= start < tok["end"]:
+            string_index = i
+            break
+    if string_index == -1:
+        return False
+
+    def _prev_significant(idx: int):
+        while idx >= 0:
+            if tokens[idx]["type"] not in {tokenize.NL, tokenize.NEWLINE, tokenize.COMMENT}:
+                return idx
+            idx -= 1
+        return None
+
+    prev = _prev_significant(string_index - 1)
+    if prev is None or tokens[prev]["type"] != tokenize.OP or tokens[prev]["string"] != "=":
+        return False
+    prev = _prev_significant(prev - 1)
+    if prev is None or tokens[prev]["type"] != tokenize.NAME or tokens[prev]["string"] not in LABEL_KWARGS:
+        return False
+    prev = _prev_significant(prev - 1)
+    if prev is None or tokens[prev]["type"] != tokenize.OP or tokens[prev]["string"] not in {"(", ","}:
+        return False
+    return True
 
 
 def _names_python_symbol(tokens: list[dict], start: int) -> bool:
