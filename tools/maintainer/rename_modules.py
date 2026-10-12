@@ -623,11 +623,17 @@ def _python_contexts(text: str) -> list[tuple[int, int, str]]:
             }
         )
 
-    significant = {tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT}
+    docstring_prev_ok = {
+        tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT, tokenize.ENCODING
+    }
+    skip_back = {tokenize.NL, tokenize.COMMENT}
     for idx, tok in enumerate(token_infos):
         if tok["type"] != tokenize.STRING:
             continue
-        prev_ok = idx == 0 or token_infos[idx - 1]["type"] in significant
+        j = idx - 1
+        while j >= 0 and token_infos[j]["type"] in skip_back:
+            j -= 1
+        prev_ok = j < 0 or token_infos[j]["type"] in docstring_prev_ok
         if not prev_ok:
             continue
         next_ok = False
@@ -2575,25 +2581,34 @@ def tracked_files(root: Path) -> list[str]:
 
 def change_ids(root: Path, files: Iterable[str]) -> frozenset[str]:
     """Collect active and archived change IDs that contain a hyphen."""
+    del root
     active: set[str] = set()
     archived: set[str] = set()
     for rel in files:
         rel_norm = rel.replace("\\", "/")
-        if rel_norm.startswith("openspec/changes/"):
-            parts = rel_norm.split("/")
-            if len(parts) > 2:
-                cid = parts[2]
-                if cid != "archive":
-                    active.add(cid)
-        if rel_norm.startswith("openspec/changes/archive/"):
-            parts = rel_norm.split("/")
-            if len(parts) > 3:
-                cid = parts[3]
-                m = re.match(r"^\d{4}-\d{2}-\d{2}-(.+)$", cid)
-                if m:
-                    archived.add(m.group(1))
+        parts = rel_norm.split("/")
+        # Only segments that are directories (not the final path part) may be IDs.
+        max_dir_idx = len(parts) - 1
+        if max_dir_idx <= 0:
+            continue
+        for i in range(max_dir_idx - 1):
+            if parts[i] == "openspec" and parts[i + 1] == "changes":
+                next_idx = i + 2
+                if next_idx >= max_dir_idx:
+                    continue
+                candidate = parts[next_idx]
+                if candidate == "archive":
+                    archive_idx = next_idx + 1
+                    if archive_idx >= max_dir_idx:
+                        continue
+                    cid = parts[archive_idx]
+                    m = re.match(r"^\d{4}-\d{2}-\d{2}-(.+)$", cid)
+                    if m:
+                        archived.add(m.group(1))
+                    else:
+                        archived.add(cid)
                 else:
-                    archived.add(cid)
+                    active.add(candidate)
     return frozenset(cid for cid in (active | archived) if "-" in cid)
 
 

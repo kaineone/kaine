@@ -693,6 +693,9 @@ REPO_TOP_DIRS = (
 EXCLUDED_GLOBS = (
     "openspec/changes/archive/",
     "docs/records/",
+    # archives and records are excluded at any depth, including OpenSpec trees inside plugins
+    "*/openspec/changes/archive/*",
+    "*/docs/records/*",
     "kaine/nexus/static/vendor/",
     "kaine/nexus/static/fonts/",
     "external/",
