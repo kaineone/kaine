@@ -1,0 +1,12 @@
+[tool.importlinter]
+root_package = "kaine"
+
+[[tool.importlinter.contracts]]
+name = "evaluation stays out of the core"
+type = "forbidden"
+source_modules = ["kaine.cycle"]
+forbidden_modules = ["kaine.evaluation"]
+ignore_imports = [
+    "kaine.nexus.__main__ -> kaine.evaluation",
+    "kaine.nexus.__main__ -> kaine.evaluation.**",
+]

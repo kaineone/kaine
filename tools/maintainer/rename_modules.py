@@ -1402,6 +1402,8 @@ def _assign_scope(
     lower_path = rel_path.lower().replace("\\", "/")
 
     if ctx in {"py_string", "py_text", "toml_string", "toml_text"}:
+        if re.fullmatch(r"[\w./-]*\.(?:html|js|css|jinja|j2)", T):
+            return "identifiers"
         full_content = _enclosing_string_content(text, start, ctx, tokens)
         if full_content is not None:
             persisted = getattr(table, "PERSISTED_EXACT", {})
@@ -1460,7 +1462,7 @@ def _assign_scope(
     if _in_pip_extra(text, start, end):
         return "operator"
 
-    if ctx == "py_text" and _is_dotted_python_path(T):
+    if ctx in {"py_text", "toml_text"} and _is_dotted_python_path(T):
         return "identifiers"
     if ctx == "py_text" and any(
         T.startswith(d + "/") for d in getattr(table, "REPO_TOP_DIRS", ())
