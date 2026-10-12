@@ -171,3 +171,13 @@ def test_never_regress_with_synthetic_alias(monkeypatch) -> None:
 def test_pending_scope_keeps_gestation_readable() -> None:
     assert legacy_names.SCOPE_STATUS.get("persisted") != "done"
     assert stage._coerce_stage("gestation") == "gestation"
+
+
+def test_stage_alias_and_constants_move_together() -> None:
+    """Each stage-value alias is live only when the code reads its new value."""
+    for entry in legacy_names.STAGE_VALUES:
+        if legacy_names.SCOPE_STATUS.get(entry["scope"]) == "done":
+            assert entry["new"] in stage.STAGES
+            assert entry["old"] not in stage.STAGES
+        else:
+            assert entry["old"] in stage.STAGES

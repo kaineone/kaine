@@ -402,6 +402,9 @@ source_modules = [
     # The old-to-new module name table (pure data): the rename codemod and the
     # runtime alias readers on both sides read it.
     "kaine.legacy_names",
+    # The runtime alias readers over that table: config, environment, CLI,
+    # seams, and read-maps for preserved state and recorded datasets.
+    "kaine.legacy_aliases",
 ]
 forbidden_modules = [
     "kaine.cycle",
