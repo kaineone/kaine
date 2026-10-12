@@ -14,7 +14,7 @@ SCOPES = ("prose", "identifiers", "keys", "operator", "persisted")
 
 SCOPE_STATUS = {
     "prose": "pending",
-    "identifiers": "pending",
+    "identifiers": "done",
     "keys": "pending",
     "operator": "pending",
     "persisted": "pending",
