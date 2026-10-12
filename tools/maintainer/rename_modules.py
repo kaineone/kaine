@@ -1232,6 +1232,19 @@ def _in_pip_extra(text: str, start: int, end: int) -> bool:
     return False
 
 
+def _is_dotted_python_path(term: str) -> bool:
+    """True for a dotted Python path into this repository, e.g. kaine.modules.x.y."""
+    if not re.fullmatch(
+        r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+", term
+    ):
+        return False
+    return (
+        term.startswith("kaine.")
+        or term.startswith("tests.")
+        or term.startswith("plugins.")
+    )
+
+
 def _assign_scope(
     rel_path: str,
     ctx: str | None,
@@ -1297,6 +1310,8 @@ def _assign_scope(
     if _in_pip_extra(text, start, end):
         return "operator"
 
+    if ctx == "py_text" and _is_dotted_python_path(T):
+        return "identifiers"
     if ctx in {"py_text", "toml_text"}:
         return "operator"
 

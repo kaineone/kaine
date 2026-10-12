@@ -506,3 +506,18 @@ def test_main_reports_errors_without_traceback(tmp_path, monkeypatch, capsys, ex
     assert len(lines) == 1
     assert lines[0].startswith(f"kaine.lifecycle.rename_state: {exc_class.__name__}")
     assert "Traceback" not in captured.err
+
+
+def test_write_json_durable_finishes_short_writes(tmp_path, monkeypatch):
+    real_write = rename_state.os.write
+    calls = 0
+
+    def capped_write(fd, data):
+        nonlocal calls
+        calls += 1
+        return real_write(fd, bytes(data)[:7])
+
+    monkeypatch.setattr(rename_state.os, "write", capped_write)
+    rename_state._write_json_durable(tmp_path / "m.json", {"a": "x" * 50})
+    assert json.loads((tmp_path / "m.json").read_text()) == {"a": "x" * 50}
+    assert calls > 1

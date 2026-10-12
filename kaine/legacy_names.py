@@ -742,7 +742,13 @@ EXCLUDED_TOML_KEYS = (
     ("individuation", "disclosure"),
 )
 
-ACCEPTED_COLLISIONS = []
+# Collisions the codemod reports that are safe by construction. The sequence
+# module's own file defines the class `Sequence` and binds no other `Sequence`
+# (no typing or collections.abc import), so the class name shadows nothing there;
+# every other file that binds `Sequence` gets the `SequenceModule` import alias.
+ACCEPTED_COLLISIONS = [
+    ("kaine/modules/sequence/module.py", "Sequence"),
+]
 
 SURVEY_EXTRA = (
     ("audition", "audition (unchanged)"),

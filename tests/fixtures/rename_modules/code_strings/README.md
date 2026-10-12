@@ -1,0 +1,1 @@
+This fixture checks that dotted module paths inside code strings follow the identifiers scope. Plain words in UI text remain untouched because they belong to the operator scope, which this test case does not run.
