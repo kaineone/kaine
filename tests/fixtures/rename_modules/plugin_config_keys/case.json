@@ -1,0 +1,6 @@
+{
+  "args": ["--apply", "--scope", "identifiers", "--only", "chronos"],
+  "expect_exit": 0,
+  "moves": [],
+  "report_contains": ["## moves (0)", "files=0", "replacements=0"]
+}
