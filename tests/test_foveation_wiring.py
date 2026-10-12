@@ -18,7 +18,7 @@ from kaine.cycle.__main__ import _wire_audition_arousal, _wire_vision_arousal
 from kaine.cycle.affect_state import AffectStateProvider
 
 
-class _FakeTopos:
+class _FakeVision:
     name = "topos"
 
     def __init__(self, foveation_enabled: bool) -> None:
@@ -59,18 +59,18 @@ def test_no_vision_is_a_noop():
 
 
 def test_foveation_off_does_not_wire():
-    vision = _FakeTopos(foveation_enabled=False)
+    vision = _FakeVision(foveation_enabled=False)
     provider = AffectStateProvider()
     assert (
-        _wire_vision_arousal(_FakeRegistry(**{_FakeTopos.name: vision}), provider) is False
+        _wire_vision_arousal(_FakeRegistry(**{_FakeVision.name: vision}), provider) is False
     )
     assert vision.arousal_provider is None
 
 
 def test_foveation_on_wires_live_arousal():
-    vision = _FakeTopos(foveation_enabled=True)
+    vision = _FakeVision(foveation_enabled=True)
     provider = AffectStateProvider()
-    wired = _wire_vision_arousal(_FakeRegistry(**{_FakeTopos.name: vision}), provider)
+    wired = _wire_vision_arousal(_FakeRegistry(**{_FakeVision.name: vision}), provider)
     assert wired is True
     assert vision.arousal_provider is not None
     # Before any thymos.state, the accessor reports the affect module's baseline (0.3).

@@ -101,7 +101,7 @@ remaining events on the same tick.
 
 `RuleBasedSalience` SHALL emit a one-time `log.warning` at construction when
 the injected `goal_scorer` is a `StaticGoalScorer` or the `thymos_modulator`
-is a `StaticThymosModulator`, naming which factor(s) are bypassed and the
+is a `StaticAffectModulator`, naming which factor(s) are bypassed and the
 constant value returned. This makes the degraded two-factor salience mode
 visible in operator logs without requiring source inspection.
 
@@ -117,8 +117,8 @@ this requirement governs disclosure only.
   bypassed `goal_relevance` factor
 
 #### Scenario: Static affect modulator warns at construction
-- **WHEN** `RuleBasedSalience` is constructed with a `StaticThymosModulator`
-- **THEN** a `WARNING`-level log message names `StaticThymosModulator` and the
+- **WHEN** `RuleBasedSalience` is constructed with a `StaticAffectModulator`
+- **THEN** a `WARNING`-level log message names `StaticAffectModulator` and the
   bypassed `thymos_modulation` factor
 
 #### Scenario: Real scorers emit no warning

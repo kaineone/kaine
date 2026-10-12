@@ -25,7 +25,7 @@ class _Trace:
     text: str
 
 
-class FakeMnemos:
+class FakeEpisodicMemory:
     """Yields traces grouped by memory period."""
 
     def __init__(self, by_period: dict[str, list[_Trace]]) -> None:
@@ -40,7 +40,7 @@ class FakeMnemos:
         }
 
 
-class FakePhantasia:
+class FakeWorldModel:
     """Records cue seeds and returns scripted scenario payloads."""
 
     def __init__(self, *, scenarios_per_cue: int = 1) -> None:
@@ -65,14 +65,14 @@ async def test_disabled_is_noop():
 
 @pytest.mark.asyncio
 async def test_selects_cross_period_traces():
-    episodic_memory = FakeMnemos(
+    episodic_memory = FakeEpisodicMemory(
         {
             "short_term": [_Trace("st:0", "a"), _Trace("st:1", "b")],
             "episodic": [_Trace("ep:0", "c")],
             "semantic": [_Trace("se:0", "d")],
         }
     )
-    world_model = FakePhantasia()
+    world_model = FakeWorldModel()
     result = await associative_replay(
         enabled=True, episodic_memory=episodic_memory, world_model=world_model
     )
@@ -85,13 +85,13 @@ async def test_selects_cross_period_traces():
 
 @pytest.mark.asyncio
 async def test_cues_world_model_and_reinjects():
-    episodic_memory = FakeMnemos(
+    episodic_memory = FakeEpisodicMemory(
         {
             "short_term": [_Trace("st:0", "a")],
             "episodic": [_Trace("ep:0", "c")],
         }
     )
-    world_model = FakePhantasia(scenarios_per_cue=2)
+    world_model = FakeWorldModel(scenarios_per_cue=2)
     reinjected: list[dict] = []
 
     async def _reinject(scenario):
@@ -111,7 +111,7 @@ async def test_cues_world_model_and_reinjects():
 
 @pytest.mark.asyncio
 async def test_world_model_absent_is_noop_cue():
-    episodic_memory = FakeMnemos({"short_term": [_Trace("st:0", "a")], "episodic": [_Trace("ep:0", "b")]})
+    episodic_memory = FakeEpisodicMemory({"short_term": [_Trace("st:0", "a")], "episodic": [_Trace("ep:0", "b")]})
     result = await associative_replay(enabled=True, episodic_memory=episodic_memory, world_model=None)
     assert result.success is True
     assert "no-op" in result.metadata["phantasia_cue"]
@@ -122,9 +122,9 @@ async def test_world_model_absent_is_noop_cue():
 
 @pytest.mark.asyncio
 async def test_no_cross_period_surface_skips_cleanly():
-    class BareMnemos:
+    class BareEpisodicMemory:
         pass
 
-    result = await associative_replay(enabled=True, episodic_memory=BareMnemos(), world_model=None)
+    result = await associative_replay(enabled=True, episodic_memory=BareEpisodicMemory(), world_model=None)
     assert result.success is True
     assert "cross_period_skipped" in result.metadata

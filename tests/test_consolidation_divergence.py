@@ -63,7 +63,7 @@ _MIXED = [
 ]
 
 
-class _FakeMnemos:
+class _FakeEpisodicMemory:
     async def consolidate_now(self) -> int:
         return 0
 
@@ -74,7 +74,7 @@ class _FakeMnemos:
         return []
 
 
-class _FakeThymos:
+class _FakeAffect:
     async def affective_reset(self) -> None:
         return None
 
@@ -107,8 +107,8 @@ def _make_sleep(
     )
     return Sleep(
         bus,
-        episodic_memory=_FakeMnemos(),
-        affect=_FakeThymos(),
+        episodic_memory=_FakeEpisodicMemory(),
+        affect=_FakeAffect(),
         trainer=trainer or FakeTrainer(),
         voice_alignment_config=config,
         consolidation_embedder=embedder,

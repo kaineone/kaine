@@ -11,8 +11,8 @@ from kaine.modules import ModuleRegistry
 from kaine.workspace import (
     NoveltyTracker,
     RuleBasedSalience,
+    StaticAffectModulator,
     StaticGoalScorer,
-    StaticThymosModulator,
     Syneidesis,
 )
 from tests.systems._harness import SubsystemHarness
@@ -23,7 +23,7 @@ def _syneidesis():
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
-            affect_modulator=StaticThymosModulator(),
+            affect_modulator=StaticAffectModulator(),
         ),
         top_k=5,
         publication_threshold=0.0,

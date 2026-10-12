@@ -23,8 +23,8 @@ from kaine.modules import ModuleRegistry
 from kaine.workspace import (
     NoveltyTracker,
     RuleBasedSalience,
+    StaticAffectModulator,
     StaticGoalScorer,
-    StaticThymosModulator,
     Syneidesis,
 )
 
@@ -37,7 +37,7 @@ async def _measure_rate(target_hz: float, n_ticks: int) -> float:
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
-            affect_modulator=StaticThymosModulator(),
+            affect_modulator=StaticAffectModulator(),
         ),
         top_k=5,
         publication_threshold=0.0,

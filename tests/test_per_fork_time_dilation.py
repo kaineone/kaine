@@ -251,7 +251,7 @@ def test_apply_vision_via_vision_handle():
     cycle = _FakeCycle()
     camera = _FakeCamera()
 
-    class _FakeTopos:
+    class _FakeVision:
         def __init__(self, cam):
             self.live_camera = cam
 
@@ -259,7 +259,7 @@ def test_apply_vision_via_vision_handle():
         {"timing": {"time_scale": 2.0, "vision_sample_hz": 8.0}}
     )
     summary = apply_fork_timing_profile(
-        profile, clock, cycle, vision_rate_sink=_FakeTopos(camera)
+        profile, clock, cycle, vision_rate_sink=_FakeVision(camera)
     )
     assert camera.vision_sample_hz == 8.0
     assert summary["vision_sample_hz"] == 8.0

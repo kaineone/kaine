@@ -114,8 +114,8 @@ def make_salience_factors(
     from kaine.modules.affect.modulator import StateModulator
     from kaine.workspace import (
         DriveRelevanceGoalScorer,
+        StaticAffectModulator,
         StaticGoalScorer,
-        StaticThymosModulator,
     )
 
     section = dict(kaine_config.get("syneidesis") or {})
@@ -139,7 +139,7 @@ def make_salience_factors(
             baseline_arousal=baseline_arousal,
         )
     elif affect_factor == "static":
-        affect_modulator = StaticThymosModulator()
+        affect_modulator = StaticAffectModulator()
     else:
         raise ConfigurationError(
             "unknown [syneidesis].salience_thymos_factor "

@@ -24,7 +24,7 @@ from kaine.modules.sleep.phases import (
 )
 
 
-class FakeMnemos:
+class FakeEpisodicMemory:
     def __init__(self, moved: int = 7) -> None:
         self.moved = moved
         self.called = 0
@@ -34,7 +34,7 @@ class FakeMnemos:
         return self.moved
 
 
-class FakeThymos:
+class FakeAffect:
     def __init__(self) -> None:
         self.reset_calls = 0
 
@@ -53,7 +53,7 @@ class FakeResetter:
 
 @pytest.mark.asyncio
 async def test_consolidate_memory_success():
-    m = FakeMnemos(moved=4)
+    m = FakeEpisodicMemory(moved=4)
     r = await consolidate_memory(m)
     assert r.success is True
     assert r.phase == "memory_consolidation"
@@ -69,11 +69,11 @@ async def test_consolidate_memory_no_episodic_memory():
 
 @pytest.mark.asyncio
 async def test_consolidate_memory_error():
-    class BoomMnemos:
+    class BoomEpisodicMemory:
         async def consolidate_now(self):
             raise RuntimeError("boom")
 
-    r = await consolidate_memory(BoomMnemos())
+    r = await consolidate_memory(BoomEpisodicMemory())
     assert r.success is False
     assert "RuntimeError" in (r.error or "")
 
@@ -81,7 +81,7 @@ async def test_consolidate_memory_error():
 
 @pytest.mark.asyncio
 async def test_reset_affect_calls_reset():
-    t = FakeThymos()
+    t = FakeAffect()
     r = await reset_affect(t)
     assert r.success is True
     assert t.reset_calls == 1
@@ -131,7 +131,7 @@ async def test_recalibrate_time_partial_failure():
 
 # --- Phase 1: light_consolidation ---
 
-class FakeFullMnemos:
+class FakeFullEpisodicMemory:
     """Full-protocol episodic memory module fake for new-phase tests."""
 
     def __init__(self, moved: int = 3) -> None:
@@ -167,7 +167,7 @@ class FakeModule:
 
 @pytest.mark.asyncio
 async def test_light_consolidation_calls_consolidate_and_oscillator():
-    m = FakeFullMnemos(moved=4)
+    m = FakeFullEpisodicMemory(moved=4)
     mod_a = FakeModule("a")
     mod_b = FakeModule("b")
     r = await light_consolidation(m, active_modules=[mod_a, mod_b], frequency_scale=0.5)
@@ -189,7 +189,7 @@ async def test_light_consolidation_no_episodic_memory():
 
 @pytest.mark.asyncio
 async def test_light_consolidation_empty_module_list():
-    m = FakeFullMnemos()
+    m = FakeFullEpisodicMemory()
     r = await light_consolidation(m, active_modules=[], frequency_scale=0.5)
     assert r.success is True
     assert r.metadata["modules_frequency_called"] == 0
@@ -199,7 +199,7 @@ async def test_light_consolidation_empty_module_list():
 
 @pytest.mark.asyncio
 async def test_deep_consolidation_calls_downscale_and_replay():
-    m = FakeFullMnemos()
+    m = FakeFullEpisodicMemory()
     r = await deep_consolidation(m, replay_window_s=1.0)
     assert r.phase == "deep_consolidation"
     assert r.success is True
@@ -218,7 +218,7 @@ async def test_deep_consolidation_calls_downscale_and_replay():
 @pytest.mark.asyncio
 async def test_deep_consolidation_suspends_and_restores_perception():
     """suspend_perception is called before replay; restore_perception after."""
-    m = FakeFullMnemos()
+    m = FakeFullEpisodicMemory()
     calls: list[str] = []
 
     def suspend():
@@ -240,7 +240,7 @@ async def test_deep_consolidation_suspends_and_restores_perception():
 @pytest.mark.asyncio
 async def test_deep_consolidation_restores_even_on_replay_error():
     """restore_perception is called even when replay_now raises; no downscale."""
-    class ReplayBoom(FakeFullMnemos):
+    class ReplayBoom(FakeFullEpisodicMemory):
         def __init__(self) -> None:
             super().__init__()
             self.calls: list[str] = []
@@ -278,7 +278,7 @@ async def test_deep_consolidation_restores_even_on_replay_error():
 @pytest.mark.asyncio
 async def test_deep_consolidation_replays_inside_its_window_then_downscales():
     """The replay window opens, replays, closes, and only then activations downscale."""
-    class OrderedMnemos(FakeFullMnemos):
+    class OrderedEpisodicMemory(FakeFullEpisodicMemory):
         def __init__(self) -> None:
             super().__init__()
             self.calls: list[str] = []
@@ -297,7 +297,7 @@ async def test_deep_consolidation_replays_inside_its_window_then_downscales():
             self.calls.append("downscale")
             return {"n_new": 0, "factor": 1.0, "protected": len(protect), "total_before": 0.0, "total_after": 0.0, "silent": 0}
 
-    m = OrderedMnemos()
+    m = OrderedEpisodicMemory()
     r = await deep_consolidation(m)
     assert r.success is True
     assert m.calls == ["open", "replay", "close", "downscale"]
@@ -306,7 +306,7 @@ async def test_deep_consolidation_replays_inside_its_window_then_downscales():
 @pytest.mark.asyncio
 async def test_deep_consolidation_closes_its_window_when_replay_raises():
     """A replay error still closes the window before reporting failure."""
-    class ReplayBoomOrdered(FakeFullMnemos):
+    class ReplayBoomOrdered(FakeFullEpisodicMemory):
         def __init__(self) -> None:
             super().__init__()
             self.calls: list[str] = []
@@ -394,7 +394,7 @@ async def test_associative_replay_stub_enabled():
 
 @pytest.mark.asyncio
 async def test_affective_reset_calls_affect():
-    t = FakeThymos()
+    t = FakeAffect()
     r = await affective_reset(t)
     assert r.phase == "affective_reset"
     assert r.success is True
@@ -421,8 +421,8 @@ async def test_five_phase_pipeline_order_via_module(tmp_path: Path):
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
 
-    episodic_memory = FakeFullMnemos()
-    affect = FakeThymos()
+    episodic_memory = FakeFullEpisodicMemory()
+    affect = FakeAffect()
     config = VoiceAlignmentConfig(
         intent_log_path=tmp_path / "intent.jsonl",
         adapter_output_dir=tmp_path / "adapters",
@@ -481,8 +481,8 @@ async def test_fatigue_reset_on_sleep_completed(tmp_path: Path):
     )
     sleep = Sleep(
         bus,
-        episodic_memory=FakeFullMnemos(),
-        affect=FakeThymos(),
+        episodic_memory=FakeFullEpisodicMemory(),
+        affect=FakeAffect(),
         trainer=FakeTrainer(),
         voice_alignment_config=config,
     )

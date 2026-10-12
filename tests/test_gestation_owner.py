@@ -90,7 +90,7 @@ class FakeBus:
         return self._ms
 
 
-class FakeSoma:
+class FakeInteroception:
     def __init__(self, phase: float = 0.0, amplitude: float = 1.0) -> None:
         self.phase = phase
         self.amplitude = amplitude
@@ -152,7 +152,7 @@ def owner_factory(tmp_path: Path):
         clock: FakeClock | None = None,
         bus: FakeBus | None = None,
         drive: FakeDrive | None = None,
-        interoception: FakeSoma | None = None,
+        interoception: FakeInteroception | None = None,
         beat_phase: Any = None,
         surrogate_beat_phases: Any = None,
         is_paused: Any = None,
@@ -162,7 +162,7 @@ def owner_factory(tmp_path: Path):
         clock = clock or FakeClock()
         bus = bus or FakeBus()
         drive = drive or FakeDrive()
-        interoception = interoception or FakeSoma()
+        interoception = interoception or FakeInteroception()
         beat_phase = beat_phase or (lambda: 0.0)
         is_paused = is_paused or (lambda: False)
         config = config or _config()
@@ -463,7 +463,7 @@ async def test_pause_aborts_withdrawal(owner_factory):
         clock=clock,
         bus=bus,
         drive=drive,
-        interoception=FakeSoma(),
+        interoception=FakeInteroception(),
         beat_phase=lambda: clock.t * 2 * np.pi,
         is_paused=lambda: paused["value"],
         config=config,
@@ -537,7 +537,7 @@ async def test_readout_persists_vision_baseline(owner_factory, tmp_path: Path):
         clock=clock,
         bus=bus,
         drive=drive,
-        interoception=FakeSoma(),
+        interoception=FakeInteroception(),
         beat_phase=lambda: 0.0,
         config=config,
         state_path=state_path,
@@ -608,7 +608,7 @@ async def test_new_owner_restores_baseline(owner_factory, tmp_path: Path):
     owner = owner_factory(
         clock=clock,
         bus=bus,
-        interoception=FakeSoma(),
+        interoception=FakeInteroception(),
         beat_phase=lambda: 0.0,
         state_path=state_path,
     )
@@ -654,7 +654,7 @@ async def test_perturbation_sets_full_drive(owner_factory):
         clock=clock,
         bus=bus,
         drive=drive,
-        interoception=FakeSoma(),
+        interoception=FakeInteroception(),
         beat_phase=lambda: 0.0,
         config=config,
     )

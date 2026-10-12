@@ -63,7 +63,7 @@ async def _new_episodic_memory(bus: AsyncBus, *, capacity: int = 8, **kwargs) ->
     return EpisodicMemory(bus, core=core, **kwargs)
 
 
-class FakeThymos:
+class FakeAffect:
     """Stand-in affect module that only counts affective resets."""
 
     def __init__(self) -> None:
@@ -77,7 +77,7 @@ def _make_sleep(
     bus: AsyncBus,
     tmp_path: Path,
     episodic_memory: EpisodicMemory,
-    affect: FakeThymos,
+    affect: FakeAffect,
     *,
     world_model=None,
     associative_replay_enabled: bool = False,
@@ -98,7 +98,7 @@ def _make_sleep(
     )
 
 
-class RecordingMnemos:
+class RecordingEpisodicMemory:
     """The episodic memory module fake that records call order for phase sequencing tests."""
 
     def __init__(
@@ -144,7 +144,7 @@ class RecordingMnemos:
         return {"episodic": [{"point_id": "p1", "text": "t"}]}
 
 
-class RecordingPhantasia:
+class RecordingWorldModel:
     """The world model module fake that records window calls and scenario generation."""
 
     def __init__(self, calls: list[str]) -> None:
@@ -165,7 +165,7 @@ async def test_sleep_cues_world_model_through_the_bus(bus: AsyncBus, tmp_path: P
     """A real sleep produces a phantasia.scenario for every mnemos.replay cue."""
     episodic_memory = await _new_episodic_memory(bus, replay_selection_top_k=5, replay_redact_content=False)
     world_model = WorldModel(bus, backend="fake", rollout_horizon=4)
-    sleep = _make_sleep(bus, tmp_path, episodic_memory, FakeThymos(), world_model=world_model)
+    sleep = _make_sleep(bus, tmp_path, episodic_memory, FakeAffect(), world_model=world_model)
 
     await episodic_memory.initialize()
     await world_model.initialize()
@@ -218,13 +218,13 @@ async def test_sleep_cues_world_model_through_the_bus(bus: AsyncBus, tmp_path: P
 async def test_window_is_open_during_phases_two_and_three(bus: AsyncBus, tmp_path: Path):
     """The world model module's window wraps deep consolidation and associative replay."""
     calls: list = []
-    episodic_memory = RecordingMnemos(calls)
-    world_model = RecordingPhantasia(calls)
+    episodic_memory = RecordingEpisodicMemory(calls)
+    world_model = RecordingWorldModel(calls)
     sleep = _make_sleep(
         bus,
         tmp_path,
         episodic_memory,
-        FakeThymos(),
+        FakeAffect(),
         world_model=world_model,
         associative_replay_enabled=True,
     )
@@ -246,13 +246,13 @@ async def test_window_is_open_during_phases_two_and_three(bus: AsyncBus, tmp_pat
 async def test_cancel_in_phase_two_closes_the_window(bus: AsyncBus, tmp_path: Path):
     """Cancellation during phase 2 still runs the world model module's window cleanup."""
     calls: list = []
-    episodic_memory = RecordingMnemos(calls, hang_in="replay")
-    world_model = RecordingPhantasia(calls)
+    episodic_memory = RecordingEpisodicMemory(calls, hang_in="replay")
+    world_model = RecordingWorldModel(calls)
     sleep = _make_sleep(
         bus,
         tmp_path,
         episodic_memory,
-        FakeThymos(),
+        FakeAffect(),
         world_model=world_model,
         associative_replay_enabled=True,
     )
@@ -270,7 +270,7 @@ async def test_cancel_in_phase_two_closes_the_window(bus: AsyncBus, tmp_path: Pa
 
 async def test_world_model_without_window_methods_is_still_cued(bus: AsyncBus, tmp_path: Path):
     """A world model module collaborator that only implements generate_scenario still works."""
-    class CueOnlyPhantasia:
+    class CueOnlyWorldModel:
         def __init__(self) -> None:
             self.calls: list[str] = []
 
@@ -278,13 +278,13 @@ async def test_world_model_without_window_methods_is_still_cued(bus: AsyncBus, t
             self.calls.append(seed_memory_id)
             return []
 
-    world_model = CueOnlyPhantasia()
-    episodic_memory = RecordingMnemos([])
+    world_model = CueOnlyWorldModel()
+    episodic_memory = RecordingEpisodicMemory([])
     sleep = _make_sleep(
         bus,
         tmp_path,
         episodic_memory,
-        FakeThymos(),
+        FakeAffect(),
         world_model=world_model,
         associative_replay_enabled=True,
     )

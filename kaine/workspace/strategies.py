@@ -53,7 +53,7 @@ class StaticGoalScorer:
         return self._default
 
 
-class StaticThymosModulator:
+class StaticAffectModulator:
     """Dev-only fallback / negative-control affect modulator.
 
     Returns a constant, bypassing affect-weighting. NOT the live default — the

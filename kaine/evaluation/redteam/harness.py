@@ -50,7 +50,7 @@ from kaine.modules.praxis.module import Praxis
 from kaine.modules.praxis.whitelist import CommandWhitelist
 from kaine.security.intent_signing import generate_intent_secret
 from kaine.workspace.salience import RuleBasedSalience
-from kaine.workspace.strategies import StaticGoalScorer, StaticThymosModulator
+from kaine.workspace.strategies import StaticAffectModulator, StaticGoalScorer
 from kaine.workspace.syneidesis import Syneidesis
 from kaine.workspace.volition import Volition
 
@@ -526,7 +526,7 @@ class RedTeamHarness:
         strategy = RuleBasedSalience(
             novelty=NoveltyTracker(),
             goal_scorer=StaticGoalScorer(goal),
-            affect_modulator=StaticThymosModulator(affect),
+            affect_modulator=StaticAffectModulator(affect),
         )
         syneidesis = Syneidesis(strategy)
         event = Event(

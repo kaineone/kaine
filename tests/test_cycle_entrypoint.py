@@ -395,7 +395,7 @@ class _FakeRegistry:
         return self._m[k]
 
 
-class _FakeMnemos:
+class _FakeEpisodicMemory:
     async def recall(self, *a, **k):
         return []
 
@@ -415,7 +415,7 @@ def test_eval_provider_factories_present_with_episodic_memory():
     _memory_source_factory = cycle_main._memory_source_factory
     from kaine.evaluation.config import EvaluationConfig
 
-    reg = _FakeRegistry({"mnemos": _FakeMnemos()})
+    reg = _FakeRegistry({"mnemos": _FakeEpisodicMemory()})
     ms = _memory_source_factory(reg)
     cq = _cognitive_query_client_factory(reg, EvaluationConfig())
     assert hasattr(ms, "sample_old_memory")

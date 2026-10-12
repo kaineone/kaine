@@ -81,8 +81,8 @@ from kaine.experiment.verdict import Outcome, Verdict
 from kaine.workspace import (
     NoveltyTracker,
     RuleBasedSalience,
+    StaticAffectModulator,
     StaticGoalScorer,
-    StaticThymosModulator,
     Syneidesis,
 )
 from kaine.workspace.coherence import CoherenceScorer
@@ -166,7 +166,7 @@ def _build_syneidesis(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=32),
             goal_scorer=StaticGoalScorer(),
-            affect_modulator=StaticThymosModulator(),
+            affect_modulator=StaticAffectModulator(),
         ),
         top_k=config.top_k,
         publication_threshold=config.publication_threshold,

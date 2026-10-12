@@ -18,8 +18,8 @@ from kaine.modules import EchoModule, ModuleRegistry
 from kaine.workspace import (
     NoveltyTracker,
     RuleBasedSalience,
+    StaticAffectModulator,
     StaticGoalScorer,
-    StaticThymosModulator,
     Syneidesis,
 )
 
@@ -34,7 +34,7 @@ async def test_phase_1_end_to_end_delivery():
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
-            affect_modulator=StaticThymosModulator(),
+            affect_modulator=StaticAffectModulator(),
         ),
         top_k=5,
         publication_threshold=0.0,
@@ -96,7 +96,7 @@ async def test_phase_1_end_to_end_with_multiple_modules():
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
-            affect_modulator=StaticThymosModulator(),
+            affect_modulator=StaticAffectModulator(),
         ),
         top_k=5,
         publication_threshold=0.0,

@@ -26,7 +26,7 @@ async def bus():
     await bus.close()
 
 
-class FakeThymos:
+class FakeAffect:
     name = "thymos"
 
     def __init__(self) -> None:
@@ -40,7 +40,7 @@ class FakeThymos:
         self.reset_while_up = not self.down
 
 
-class RecordingMnemos:
+class RecordingEpisodicMemory:
     def __init__(
         self,
         calls: list[str],
@@ -111,8 +111,8 @@ def test_shutdown_order_puts_sleep_first():
 async def test_cycle_shuts_sleep_down_while_affect_is_up(bus, tmp_path):
     """The sleep module's shutdown calls affective_reset while the affect module is still up."""
     calls: list[str] = []
-    episodic_memory = RecordingMnemos(calls, hang_in="replay")
-    affect = FakeThymos()
+    episodic_memory = RecordingEpisodicMemory(calls, hang_in="replay")
+    affect = FakeAffect()
     sleep = _make_sleep(bus, tmp_path, episodic_memory=episodic_memory, affect=affect)
     await sleep.initialize()
     sleep._sleep_pending = True

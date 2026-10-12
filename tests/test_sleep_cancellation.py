@@ -29,7 +29,7 @@ async def bus():
     await bus.close()
 
 
-class RecordingThymos:
+class RecordingAffect:
     def __init__(
         self,
         calls: list[str] | None = None,
@@ -48,7 +48,7 @@ class RecordingThymos:
         self.calls.append("reset")
 
 
-class RecordingMnemos:
+class RecordingEpisodicMemory:
     def __init__(
         self,
         calls: list[str],
@@ -122,8 +122,8 @@ async def _cancel_and_expect(task: asyncio.Task) -> None:
 @pytest.mark.asyncio
 async def test_sleep_runs_the_phases_in_the_paper_order(bus, tmp_path):
     calls: list[str] = []
-    episodic_memory = RecordingMnemos(calls)
-    affect = RecordingThymos(calls)
+    episodic_memory = RecordingEpisodicMemory(calls)
+    affect = RecordingAffect(calls)
     sleep = _make_sleep(
         bus,
         tmp_path,
@@ -158,8 +158,8 @@ async def test_sleep_runs_the_phases_in_the_paper_order(bus, tmp_path):
 async def test_cancel_during_voice_alignment_still_resets_and_reports(
     bus, tmp_path
 ):
-    episodic_memory = RecordingMnemos([])
-    affect = RecordingThymos()
+    episodic_memory = RecordingEpisodicMemory([])
+    affect = RecordingAffect()
     sleep = _make_sleep(bus, tmp_path, episodic_memory=episodic_memory, affect=affect)
 
     entered = asyncio.Event()
@@ -184,8 +184,8 @@ async def test_cancel_during_voice_alignment_still_resets_and_reports(
 
 @pytest.mark.asyncio
 async def test_cancel_in_phase_one_still_resets_and_reports(bus, tmp_path):
-    episodic_memory = RecordingMnemos(calls=[], hang_in="consolidate")
-    affect = RecordingThymos()
+    episodic_memory = RecordingEpisodicMemory(calls=[], hang_in="consolidate")
+    affect = RecordingAffect()
     sleep = _make_sleep(bus, tmp_path, episodic_memory=episodic_memory, affect=affect)
 
     task = asyncio.create_task(sleep.enter_sleep())
@@ -209,7 +209,7 @@ async def test_cancel_mid_replay_closes_the_replay_window(bus, tmp_path):
         short_term_capacity=8,
     )
     episodic_memory = EpisodicMemory(bus, core=core)
-    affect = RecordingThymos()
+    affect = RecordingAffect()
     sleep = _make_sleep(bus, tmp_path, episodic_memory=episodic_memory, affect=affect)
 
     seen_open: list[bool] = []
@@ -238,11 +238,11 @@ async def test_cancel_mid_replay_closes_the_replay_window(bus, tmp_path):
 @pytest.mark.asyncio
 async def test_affective_reset_survives_a_second_cancel(bus, tmp_path):
     gate = asyncio.Event()
-    affect = RecordingThymos(gate=gate)
+    affect = RecordingAffect(gate=gate)
     sleep = _make_sleep(
         bus,
         tmp_path,
-        episodic_memory=RecordingMnemos([]),
+        episodic_memory=RecordingEpisodicMemory([]),
         affect=affect,
     )
 

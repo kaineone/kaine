@@ -41,7 +41,7 @@ async def _new_episodic_memory(bus: AsyncBus, *, capacity: int = 8, **kwargs) ->
     return EpisodicMemory(bus, core=core, **kwargs)
 
 
-class FakeThymos:
+class FakeAffect:
     """Stand-in affect module that only counts affective resets."""
 
     def __init__(self) -> None:
@@ -51,7 +51,7 @@ class FakeThymos:
         self.resets += 1
 
 
-def _make_sleep(bus: AsyncBus, tmp_path: Path, episodic_memory: EpisodicMemory, affect: FakeThymos) -> Sleep:
+def _make_sleep(bus: AsyncBus, tmp_path: Path, episodic_memory: EpisodicMemory, affect: FakeAffect) -> Sleep:
     return Sleep(
         bus,
         episodic_memory=episodic_memory,
@@ -98,7 +98,7 @@ async def test_quick_phase_one_does_not_fail_phase_two(bus: AsyncBus, tmp_path: 
     episodic_memory = await _new_episodic_memory(bus, replay_selection_top_k=5)
     await episodic_memory.initialize()
     try:
-        sleep = _make_sleep(bus, tmp_path, episodic_memory, FakeThymos())
+        sleep = _make_sleep(bus, tmp_path, episodic_memory, FakeAffect())
         summary = await sleep.enter_sleep()
 
         deep = next(p for p in summary["phases"] if p["phase"] == "deep_consolidation")
@@ -137,7 +137,7 @@ async def test_sleep_replays_consolidated_traces_through_the_bus(bus: AsyncBus, 
                 collection="short_term",
             )
 
-        sleep = _make_sleep(bus, tmp_path, episodic_memory, FakeThymos())
+        sleep = _make_sleep(bus, tmp_path, episodic_memory, FakeAffect())
         summary = await sleep.enter_sleep()
 
         deep = next(p for p in summary["phases"] if p["phase"] == "deep_consolidation")
@@ -167,7 +167,7 @@ async def test_sleep_ends_with_the_affective_reset(bus: AsyncBus, tmp_path: Path
     episodic_memory = await _new_episodic_memory(bus)
     await episodic_memory.initialize()
     try:
-        affect = FakeThymos()
+        affect = FakeAffect()
         sleep = _make_sleep(bus, tmp_path, episodic_memory, affect)
         summary = await sleep.enter_sleep()
 

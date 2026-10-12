@@ -49,7 +49,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 # ---------------------------------------------------------------------------
 
 
-class _StubTopos:
+class _StubVision:
     def __init__(self) -> None:
         self.frames: list = []
 
@@ -153,7 +153,7 @@ def test_network_audio_stream_rechunks_exactly():
 
 @pytest.mark.asyncio
 async def test_token_rejects_and_accepts(bus):
-    vision = _StubTopos()
+    vision = _StubVision()
     bridge = RemoteBridge(_config(token="s3cret"), bus=bus, vision=vision)
     url = await _started(bridge)
     try:
@@ -182,7 +182,7 @@ async def test_token_rejects_and_accepts(bus):
 
 @pytest.mark.asyncio
 async def test_video_frame_reaches_vision_as_pil_image(bus):
-    vision = _StubTopos()
+    vision = _StubVision()
     bridge = RemoteBridge(_config(), bus=bus, vision=vision)
     url = await _started(bridge)
     try:
@@ -198,7 +198,7 @@ async def test_video_frame_reaches_vision_as_pil_image(bus):
 
 @pytest.mark.asyncio
 async def test_video_rate_limit_drops_excess_frames(bus):
-    vision = _StubTopos()
+    vision = _StubVision()
     bridge = RemoteBridge(_config(video_max_fps=1.0), bus=bus, vision=vision)
     url = await _started(bridge)
     try:
@@ -531,7 +531,7 @@ async def test_claim_senses_sets_and_restores_physical_video(bus, monkeypatch):
         ps, "write_desired_audio", lambda active, path=None: writes.append(("audio", active))
     )
 
-    vision = _StubTopos()
+    vision = _StubVision()
     bridge = RemoteBridge(_config(claim_senses=True), bus=bus, vision=vision)
     url = await _started(bridge)
     try:
@@ -565,7 +565,7 @@ async def test_full_exchange_writes_nothing_to_disk(bus, monkeypatch, tmp_path):
     """ZERO-PERSISTENCE: a complete ingest/egress exchange writes no media
     artifacts to disk, even transiently. Deterministic: uses a private temp
     directory and a system audit hook instead of the machine-wide /tmp."""
-    vision = _StubTopos()
+    vision = _StubVision()
     audition = _StubAudition()
     bridge = RemoteBridge(_config(), bus=bus, vision=vision, audition=audition)
 
@@ -681,7 +681,7 @@ async def test_subprotocol_token_is_rejected(bus):
     """Subprotocol token channels are intentionally disabled: they leak the
     secret into handshake logs and browser history. Only Authorization: Bearer
     is accepted."""
-    vision = _StubTopos()
+    vision = _StubVision()
     bridge = RemoteBridge(_config(token="s3cret"), bus=bus, vision=vision)
     url = await _started(bridge)
     try:
@@ -700,7 +700,7 @@ async def test_subprotocol_token_is_rejected(bus):
 async def test_query_param_token_is_rejected(bus):
     """Query-string tokens are intentionally disabled: they appear in proxy
     and server logs. Only Authorization: Bearer is accepted."""
-    vision = _StubTopos()
+    vision = _StubVision()
     bridge = RemoteBridge(_config(token="s3cret"), bus=bus, vision=vision)
     url = await _started(bridge)
     try:
@@ -716,7 +716,7 @@ async def test_query_param_token_is_rejected(bus):
 @pytest.mark.asyncio
 async def test_bearer_header_path_works(bus):
     """The Authorization: Bearer path remains valid (constant-time compare)."""
-    vision = _StubTopos()
+    vision = _StubVision()
     bridge = RemoteBridge(_config(token="s3cret"), bus=bus, vision=vision)
     url = await _started(bridge)
     try:
@@ -733,13 +733,13 @@ async def test_bearer_header_path_works(bus):
 def test_constant_time_token_predicate():
     """_token_ok uses hmac.compare_digest semantics: exact match only, empty
     never matches, and the no-token-configured fast path still allows."""
-    bridge = RemoteBridge(_config(token="s3cret"), bus=None, vision=_StubTopos())
+    bridge = RemoteBridge(_config(token="s3cret"), bus=None, vision=_StubVision())
     assert bridge._token_ok("s3cret") is True
     assert bridge._token_ok("s3crxt") is False
     assert bridge._token_ok("") is False
     assert bridge._token_ok("s3cret-longer") is False
     # No token configured → _authorized short-circuits to allow.
-    open_bridge = RemoteBridge(_config(token=""), bus=None, vision=_StubTopos())
+    open_bridge = RemoteBridge(_config(token=""), bus=None, vision=_StubVision())
 
     class _Conn:
         class request:
@@ -753,7 +753,7 @@ def test_constant_time_token_predicate():
 async def test_origin_allowlist_refuses_and_accepts(bus):
     """A disallowed browser Origin is refused at handshake; an allowed Origin
     and a no-Origin native client are accepted."""
-    vision = _StubTopos()
+    vision = _StubVision()
     bridge = RemoteBridge(
         # High fps ceiling so back-to-back accepted frames aren't rate-dropped.
         _config(allowed_origins=(None, "http://127.0.0.1:17893"), video_max_fps=1000.0),
@@ -794,7 +794,7 @@ def test_parse_origins_maps_null_and_empty_to_none():
 async def test_oversized_image_is_dropped_without_reaching_vision(bus):
     """A frame whose declared size exceeds the pixel cap is dropped (counted)
     without raising and without calling topos.process_frame."""
-    vision = _StubTopos()
+    vision = _StubVision()
     bridge = RemoteBridge(_config(), bus=bus, vision=vision)
     url = await _started(bridge)
     try:
@@ -832,11 +832,11 @@ def test_ssl_context_built_only_when_cert_and_key_present(tmp_path):
     neither) yields None (plain ws, unchanged behavior)."""
     import ssl as _ssl
 
-    bridge_none = RemoteBridge(_config(), bus=None, vision=_StubTopos())
+    bridge_none = RemoteBridge(_config(), bus=None, vision=_StubVision())
     assert bridge_none._build_ssl_context() is None
 
     # Only one of the pair → still plain ws.
-    bridge_partial = RemoteBridge(_config(ssl_certfile="/x/cert.pem"), bus=None, vision=_StubTopos())
+    bridge_partial = RemoteBridge(_config(ssl_certfile="/x/cert.pem"), bus=None, vision=_StubVision())
     assert bridge_partial._build_ssl_context() is None
 
     # A real self-signed cert+key → a usable SSLContext.
@@ -844,7 +844,7 @@ def test_ssl_context_built_only_when_cert_and_key_present(tmp_path):
     bridge_tls = RemoteBridge(
         _config(ssl_certfile=str(cert_path), ssl_keyfile=str(key_path)),
         bus=None,
-        vision=_StubTopos(),
+        vision=_StubVision(),
     )
     ctx = bridge_tls._build_ssl_context()
     assert isinstance(ctx, _ssl.SSLContext)

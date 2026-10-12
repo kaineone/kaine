@@ -24,8 +24,8 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.workspace import (
     NoveltyTracker,
     RuleBasedSalience,
+    StaticAffectModulator,
     StaticGoalScorer,
-    StaticThymosModulator,
     Syneidesis,
 )
 from kaine.workspace.coherence import CoherenceScorer
@@ -46,7 +46,7 @@ def _strategy() -> RuleBasedSalience:
     return RuleBasedSalience(
         novelty=NoveltyTracker(window=64),
         goal_scorer=StaticGoalScorer(),
-        affect_modulator=StaticThymosModulator(),
+        affect_modulator=StaticAffectModulator(),
     )
 
 

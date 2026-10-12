@@ -63,7 +63,7 @@ def _set_key(monkeypatch, key):
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=True)))
 
 
-class FakeMnemos:
+class FakeEpisodicMemory:
     def __init__(self) -> None:
         self.consolidated = 0
         self.downscale_calls = []
@@ -83,7 +83,7 @@ class FakeMnemos:
         return []
 
 
-class FakeThymos:
+class FakeAffect:
     def __init__(self) -> None:
         self.resets = 0
 
@@ -120,8 +120,8 @@ def _make_sleep(
     )
     return Sleep(
         bus,
-        episodic_memory=episodic_memory or FakeMnemos(),
-        affect=FakeThymos(),
+        episodic_memory=episodic_memory or FakeEpisodicMemory(),
+        affect=FakeAffect(),
         sequence_resetters=[FakeResetter(), FakeResetter()],
         trainer=trainer or FakeTrainer(),
         voice_alignment_config=config,

@@ -98,7 +98,7 @@ async def test_gestation_interoception_reader_advances_past_undecodable_batch(
         def __init__(self) -> None:
             self.scale = 0.0
 
-    class FakeSoma:
+    class FakeInteroception:
         def self_rhythm_state(self) -> tuple[float, float] | None:
             return (0.0, 1.0)
 
@@ -128,7 +128,7 @@ async def test_gestation_interoception_reader_advances_past_undecodable_batch(
 
     owner = GestationOwner(
         bus,
-        interoception=FakeSoma(),
+        interoception=FakeInteroception(),
         drive=FakeDrive(),
         beat_phase=lambda: 0.0,
         surrogate_beat_phases=None,

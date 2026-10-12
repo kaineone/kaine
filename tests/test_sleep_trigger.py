@@ -40,7 +40,7 @@ async def bus():
     await bus.close()
 
 
-class FakeMnemos:
+class FakeEpisodicMemory:
     def __init__(self) -> None:
         self.consolidated = 0
         self.downscale_calls: list[float] = []
@@ -60,7 +60,7 @@ class FakeMnemos:
         return []
 
 
-class FakeThymos:
+class FakeAffect:
     def __init__(self) -> None:
         self.resets = 0
 
@@ -76,8 +76,8 @@ def _make_sleep(bus: AsyncBus, tmp_path: Path, **kwargs) -> Sleep:
     )
     return Sleep(
         bus,
-        episodic_memory=FakeMnemos(),
-        affect=FakeThymos(),
+        episodic_memory=FakeEpisodicMemory(),
+        affect=FakeAffect(),
         trainer=FakeTrainer(),
         voice_alignment_config=config,
         **kwargs,
@@ -277,7 +277,7 @@ async def test_safety_net_interval_fires_without_fatigue(bus: AsyncBus, tmp_path
 @pytest.mark.asyncio
 async def test_non_interruptibility_during_fatigue_sleep(bus: AsyncBus, tmp_path: Path):
     """While a fatigue-triggered sleep is in progress, a second call raises."""
-    class SlowMnemos(FakeMnemos):
+    class SlowEpisodicMemory(FakeEpisodicMemory):
         async def consolidate_now(self) -> int:
             await asyncio.sleep(0.1)
             return 0
@@ -289,8 +289,8 @@ async def test_non_interruptibility_during_fatigue_sleep(bus: AsyncBus, tmp_path
     )
     sleep = Sleep(
         bus,
-        episodic_memory=SlowMnemos(),
-        affect=FakeThymos(),
+        episodic_memory=SlowEpisodicMemory(),
+        affect=FakeAffect(),
         trainer=FakeTrainer(),
         voice_alignment_config=config,
     )
