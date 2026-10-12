@@ -131,6 +131,15 @@ def artifacts_dir(root: Path, snapshot_id: str, module_name: str) -> Path:
     return snapshot_dir(root, snapshot_id) / ARTIFACTS_DIRNAME / module_name
 
 
+def find_artifacts_dir(root: Path, snapshot_id: str, module_name: str) -> Path:
+    """The existing artifact directory for ``module_name`` under any of its names, else the canonical one."""
+    for form in legacy_aliases.name_forms(module_name):
+        candidate = artifacts_dir(root, snapshot_id, form)
+        if candidate.is_dir() and not candidate.is_symlink():
+            return candidate
+    return artifacts_dir(root, snapshot_id, module_name)
+
+
 def copy_artifacts(src: Path, dst: Path) -> None:
     """Copy one module's artifact directory; dirs 0700, files 0600. No symlinks followed."""
     if Path(src).is_symlink():

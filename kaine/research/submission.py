@@ -50,6 +50,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
+from kaine import legacy_aliases
 from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
@@ -100,10 +101,9 @@ METRICS_ONLY_GLOBS: tuple[str, ...] = tuple(
 DENY_PATTERNS: tuple[str, ...] = (
     "intent_expression",
     "intent_log",
-    "mnemos",
+    *legacy_aliases.name_forms("mnemos"),
     "qdrant",
-    "eidolon",
-    "self_model",
+    *legacy_aliases.name_forms("eidolon"),
     "conversation",
     "replay",
 )

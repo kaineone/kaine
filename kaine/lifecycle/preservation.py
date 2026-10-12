@@ -318,27 +318,28 @@ async def preserve_live(
         inventory.append(f"snapshot.json (preservation snapshot {snap.id})")
 
         # The world model module's learned-weight checkpoint (only when actually captured).
+        wm_member = "phantasia"
         if world_model_checkpoint is not None and world_model_checkpoint.is_file():
-            (bundle_dir / "phantasia").mkdir(mode=0o700, exist_ok=True)
-            _chmod_quietly(bundle_dir / "phantasia", 0o700)
+            (bundle_dir / wm_member).mkdir(mode=0o700, exist_ok=True)
+            _chmod_quietly(bundle_dir / wm_member, 0o700)
             shutil.copy2(
                 world_model_checkpoint,
-                bundle_dir / "phantasia" / world_model_checkpoint.name,
+                bundle_dir / wm_member / world_model_checkpoint.name,
             )
-            _chmod_quietly(bundle_dir / "phantasia" / world_model_checkpoint.name, 0o600)
+            _chmod_quietly(bundle_dir / wm_member / world_model_checkpoint.name, 0o600)
             inventory.append(
-                f"phantasia/{world_model_checkpoint.name} (world-model weights)"
+                f"{wm_member}/{world_model_checkpoint.name} (world-model weights)"
             )
             # Pass-count sidecar travels with the weights.
             passes_sidecar = world_model_checkpoint.with_suffix(
                 world_model_checkpoint.suffix + ".passes.json"
             )
             if passes_sidecar.is_file():
-                dest_sidecar = bundle_dir / "phantasia" / passes_sidecar.name
+                dest_sidecar = bundle_dir / wm_member / passes_sidecar.name
                 shutil.copy2(passes_sidecar, dest_sidecar)
                 _chmod_quietly(dest_sidecar, 0o600)
                 inventory.append(
-                    f"phantasia/{passes_sidecar.name} (world-model pass count)"
+                    f"{wm_member}/{passes_sidecar.name} (world-model pass count)"
                 )
 
         # Developmental stage: when present, copy it into the bundle so revive
@@ -394,8 +395,8 @@ async def preserve_live(
         encryptor = get_state_encryptor()
         bundle_encrypted = bool(getattr(encryptor, "enabled", False))
         tar_member_names = ["snapshot.json"]
-        if (bundle_dir / "phantasia").is_dir():
-            tar_member_names.append("phantasia")
+        if (bundle_dir / wm_member).is_dir():
+            tar_member_names.append(wm_member)
         if (bundle_dir / "stage.json").is_file():
             tar_member_names.append("stage.json")
         if (bundle_dir / "gestation").is_dir():

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import kaine.boot
+from kaine import legacy_aliases
 from kaine.config import deep_merge
 from kaine.research.ignition_study.plan import voice_alignment_steps
 
@@ -131,7 +132,7 @@ def build_overlay(
 
 def _load_toml(path: Path) -> dict[str, Any]:
     with open(path, "rb") as f:
-        return tomllib.load(f)
+        return legacy_aliases.normalize_config_layer(tomllib.load(f), str(path))
 
 
 def _absolute_encoder_dir(repo_root: Path, base_config: dict[str, Any]) -> str:

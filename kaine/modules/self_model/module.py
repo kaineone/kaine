@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from typing import Any, ClassVar, Optional
 
+from kaine import legacy_aliases
 from kaine.bus.client import AsyncBus
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.base import BaseModule
@@ -271,7 +272,7 @@ class SelfModel(BaseModule):
             and isinstance(last, dict)
             and last.get("kind") == "drift_episode"
         ):
-            sources = dict(last.get("sources") or {})
+            sources = legacy_aliases.map_module_keys(dict(last.get("sources") or {}))
             for source in top:
                 sources[source] = int(sources.get(source, 0)) + 1
             peak = max(float(last.get("peak_score", score)), score)

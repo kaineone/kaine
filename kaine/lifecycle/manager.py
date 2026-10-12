@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Callable, Iterable, Protocol, runtime_che
 if TYPE_CHECKING:
     from kaine.lifecycle.preservation import PreservationResult
 
+from kaine import legacy_aliases
 from kaine.lifecycle._merge_base import AdapterMerger, FakeAdapterMerger
 from kaine.lifecycle.identity import (
     EntityIdentity,
@@ -31,6 +32,7 @@ from kaine.lifecycle.snapshot import (
     _chmod_quietly,
     artifacts_dir,
     copy_artifacts,
+    find_artifacts_dir,
     list_snapshots,
     load_snapshot,
     save_snapshot,
@@ -240,7 +242,7 @@ class ForkManager:
         for module in registry.all_modules():
             hook = getattr(module, "import_snapshot_artifacts", None)
             if callable(hook):
-                hook(artifacts_dir(self._root, snapshot_id, module.name))
+                hook(find_artifacts_dir(self._root, snapshot_id, module.name))
         return snap
 
     def fork(
@@ -342,8 +344,8 @@ class ForkManager:
                 b_identity,
             )
 
-        a_ph_dir = artifacts_dir(self._root, snap_a.id, "phantasia")
-        b_ph_dir = artifacts_dir(self._root, snap_b.id, "phantasia")
+        a_ph_dir = find_artifacts_dir(self._root, snap_a.id, "phantasia")
+        b_ph_dir = find_artifacts_dir(self._root, snap_b.id, "phantasia")
         a_has = a_ph_dir.is_dir() and not a_ph_dir.is_symlink()
         b_has = b_ph_dir.is_dir() and not b_ph_dir.is_symlink()
         if a_has and b_has and world_model_from is None:
@@ -436,19 +438,27 @@ class ForkManager:
         )
         a_root = snapshot_dir(self._root, snap_a.id) / ARTIFACTS_DIRNAME
         b_root = snapshot_dir(self._root, snap_b.id) / ARTIFACTS_DIRNAME
-        a_names = {p.name for p in a_root.iterdir() if p.is_dir() and not p.is_symlink()} if a_root.is_dir() else set()
-        b_names = {p.name for p in b_root.iterdir() if p.is_dir() and not p.is_symlink()} if b_root.is_dir() else set()
+        a_paths = {
+            legacy_aliases.map_module_key(p.name): p
+            for p in a_root.iterdir()
+            if p.is_dir() and not p.is_symlink()
+        } if a_root.is_dir() else {}
+        b_paths = {
+            legacy_aliases.map_module_key(p.name): p
+            for p in b_root.iterdir()
+            if p.is_dir() and not p.is_symlink()
+        } if b_root.is_dir() else {}
         sources: dict[str, str] = {}
-        for name in sorted(a_names | b_names):
+        for name in sorted(a_paths.keys() | b_paths.keys()):
             if name == "phantasia" and a_has and b_has:
                 chosen = "a" if world_model_from == "a" else "b"
                 src = a_ph_dir if chosen == "a" else b_ph_dir
-            elif name in a_names:
+            elif name in a_paths:
                 chosen = "a"
-                src = a_root / name
+                src = a_paths[name]
             else:
                 chosen = "b"
-                src = b_root / name
+                src = b_paths[name]
             dst = artifacts_dir(self._root, merged.id, name)
             if src.is_symlink():
                 log.warning("skipping symlinked artifact directory: %s", src)

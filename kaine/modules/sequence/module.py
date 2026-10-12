@@ -10,6 +10,7 @@ import time
 from collections import deque
 from typing import Any, ClassVar, Iterable, Optional
 
+from kaine import legacy_aliases
 from kaine.bus.client import AsyncBus
 from kaine.bus.schema import OPERATOR_SOURCES, Event
 from kaine.cycle.types import WorkspaceSnapshot
@@ -409,7 +410,7 @@ class Sequence(BaseModule):
             )
         if "user_input_cursors" in state:
             self._user_input_cursors.update(
-                {str(k): str(v) for k, v in state["user_input_cursors"].items()}
+                legacy_aliases.map_stream_keys({str(k): str(v) for k, v in state["user_input_cursors"].items()})
             )
 
         if "reservoir_seed" in state:

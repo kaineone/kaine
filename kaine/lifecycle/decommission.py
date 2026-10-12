@@ -39,6 +39,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from kaine import legacy_aliases
 from kaine.lifecycle.divergence import DivergenceAssessment
 from kaine.lifecycle.identity import IdentityError, load_identity
 from kaine.memory_kinds import (
@@ -697,14 +698,16 @@ def update_manifest_continuity_note(backup: BackupResult, note: str) -> bool:
 # ---------------------------------------------------------------------------
 
 # Entity state subtrees removed on decommission, relative to state_root.
-_STATE_SUBTREES = (
-    "eidolon",
-    "lingua",
-    Path("hypnos") / "adapters",
-    "phantasia",
-    "forks",
-    "perception",
-    "individuation",
+_STATE_SUBTREES = tuple(
+    [
+        *legacy_aliases.name_forms("eidolon"),
+        *legacy_aliases.name_forms("lingua"),
+        *(Path(form) / "adapters" for form in legacy_aliases.name_forms("hypnos")),
+        *legacy_aliases.name_forms("phantasia"),
+        "forks",
+        *legacy_aliases.name_forms("perception"),
+        "individuation",
+    ]
 )
 
 # Files under state/cycle that belong to the entity run (not the dir itself,
