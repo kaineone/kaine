@@ -440,7 +440,24 @@ def test_lived_artifact_paths() -> None:
 
 
 @pytest.mark.parametrize(
-    "old", ["topos", "soma", "chronos", "thymos", "hypnos", "mnemos", "phantasia"]
+    "old",
+    [
+        "topos",
+        "soma",
+        "chronos",
+        "thymos",
+        "hypnos",
+        "mnemos",
+        "phantasia",
+        "lingua",
+        "vox",
+        "nous",
+        "volition",
+        "eidolon",
+        "empatheia",
+        "syneidesis",
+        "praxis",
+    ],
 )
 def test_renamed_modules_read_old_names(monkeypatch, caplog, old) -> None:
     _set_scope(monkeypatch, "keys")

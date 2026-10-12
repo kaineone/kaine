@@ -546,7 +546,7 @@ def test_h4_sig_expiry_is_wired_from_action_selection_config():
     import kaine.cycle.__main__ as cycle_main
 
     src = Path(cycle_main.__file__).read_text(encoding="utf-8")
-    assert 'volition_cfg.get("sig_expiry_s")' in src
+    assert 'action_selection_cfg.get("sig_expiry_s")' in src
     assert "sig_expiry_s=(" in src
 
 

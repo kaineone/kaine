@@ -137,7 +137,7 @@ def make(tmp_path: Path, **overrides):
         "organ_unloaded": lambda: False,
         "paused": lambda: False,
         "embedder_ready": lambda: True,
-        "lingua_idle": lambda: True,
+        "language_idle": lambda: True,
         "alert": lambda d: None,
         "monotonic": clock,
         "now": wall,

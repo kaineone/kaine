@@ -53,6 +53,13 @@ def test_every_case_expects_blocked():
     assert all(c.expected is Outcome.BLOCKED for c in all_cases())
 
 
+def test_every_case_has_driver():
+    for case in all_cases():
+        assert hasattr(RedTeamHarness, f"_drive_{case.kind}"), (
+            f"case {case.case_id} has no driver for kind {case.kind}"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Clean run against the genuinely-wired enforcement layer → all blocked + logged.
 # ---------------------------------------------------------------------------

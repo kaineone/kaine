@@ -140,7 +140,7 @@ def build(tmp_path: Path, **over: Any):
     kwargs: dict[str, Any] = {
         "config": config,
         "battery": ["q1", "q2"],
-        "lingua": language,
+        "language": language,
         "ensure_fact": ef,
         "embedder": embedder,
         "adapter_output_dir": None,

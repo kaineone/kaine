@@ -7,11 +7,14 @@ from pathlib import Path
 
 import kaine.lifecycle.divergence as _divergence_mod
 import kaine.memory_kinds as _memory_kinds
+import kaine.modules.self_model.module as _self_model_module
 import kaine.organ_window_state as _organ_window_state
 from kaine import legacy_names
+from kaine.modules.effectors.module import Effectors
 from kaine.modules.episodic_memory.memory import EpisodicMemoryCore, recover_interrupted_import
 from kaine.modules.episodic_memory.module import EpisodicMemory
 from kaine.modules.episodic_memory.storage import SqliteVecStorage
+from kaine.modules.language.module import Language
 from kaine.modules.social_cognition.module import SocialCognition
 from kaine.modules.world_model.module import WorldModel
 
@@ -131,3 +134,34 @@ def test_divergence_source_uses_divergence_state_dir():
     source = Path(_divergence_mod.__file__).read_text(encoding="utf-8")
     expected = f'state_root / "{_state_dir(divergence_dir_key)}" / "consolidation_divergence.json"'
     assert expected in source
+
+
+def test_language_intent_log_path_pinned():
+    """The Language intent log path default must follow the legacy table."""
+    assert (
+        inspect.signature(Language.__init__).parameters["intent_log_path"].default
+        == _state_path("lingua/intent_expression.jsonl")
+    )
+
+
+def test_effectors_audit_log_path_pinned():
+    """The Effectors audit log path default must follow the legacy table."""
+    assert (
+        inspect.signature(Effectors.__init__).parameters["audit_log_path"].default
+        == _state_path("praxis/audit.log")
+    )
+
+
+def test_effectors_notification_log_path_pinned():
+    """The Effectors notification fallback log path default must follow the legacy table."""
+    assert (
+        inspect.signature(Effectors.__init__).parameters["notification_fallback_log"].default
+        == _state_path("praxis/notifications.log")
+    )
+
+
+def test_self_model_persistence_path_pinned():
+    """The self-model default persistence path must follow the legacy table."""
+    assert _self_model_module.DEFAULT_PERSISTENCE_PATH == Path(
+        _state_path("eidolon/self_model.json")
+    )

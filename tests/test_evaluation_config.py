@@ -296,4 +296,4 @@ def test_cycle_main_wires_interrupt_threshold():
 
     src = pathlib.Path(cycle_main.__file__).read_text(encoding="utf-8")
     assert "interrupt_threshold" in src
-    assert 'volition_cfg.get("interrupt_threshold")' in src
+    assert 'action_selection_cfg.get("interrupt_threshold")' in src
