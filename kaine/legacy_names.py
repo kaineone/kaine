@@ -663,6 +663,11 @@ PHRASES = (
 
 PATH_OVERRIDES = {
     "kaine/workspace/syneidesis.py": "kaine/workspace/core.py",
+
+    # The key override "phantasia.world_model" -> "world_model.backend" also renames
+    # the dotted import path kaine.modules.phantasia.world_model, so the file that
+    # holds WorldModelBackend moves to backend.py to match it.
+    "kaine/modules/phantasia/world_model.py": "kaine/modules/world_model/backend.py",
     # Keys ending in "/" are directory prefixes.
     "openspec/specs/spot-supervisor/": "openspec/specs/supervisor/",
     "docs/08-cognitive-cycle/perception-locus.md": "docs/08-cognitive-cycle/perceptual-locus.md",
