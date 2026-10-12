@@ -34,14 +34,22 @@ CODEMOD = _load_codemod()
 TABLE = CODEMOD.load_table(REPO_ROOT / "kaine" / "legacy_names.py")
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def codemod() -> types.ModuleType:
     return CODEMOD
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def table(codemod) -> types.ModuleType:
     return TABLE
+
+
+@pytest.fixture(scope="session")
+def done_plan(codemod, table):
+    done_scopes = [scope for scope in table.SCOPES if table.SCOPE_STATUS[scope] == "done"]
+    if not done_scopes:
+        return None
+    return codemod.plan(REPO_ROOT, table, set(done_scopes))
 
 
 def test_scope_status_is_well_formed(table):
@@ -49,18 +57,20 @@ def test_scope_status_is_well_formed(table):
     assert all(value in ("pending", "done") for value in table.SCOPE_STATUS.values())
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("scope", TABLE.SCOPES)
-def test_done_scope_is_clean(codemod, table, scope):
+def test_done_scope_is_clean(done_plan, table, scope):
     if table.SCOPE_STATUS[scope] != "done":
         pytest.skip(f"scope {scope} pending")
 
-    plan = codemod.plan(REPO_ROOT, table, {scope})
     messages = []
-    for result in plan.results.values():
+    for result in done_plan.results.values():
         for change in result.changes:
-            messages.append(f"{change.path}:{change.line} {change.rule}")
-    for old, new, move_scope in plan.moves:
-        messages.append(f"{old} -> {new} {move_scope}")
+            if change.scope == scope:
+                messages.append(f"{change.path}:{change.line} {change.rule}")
+    for old, new, move_scope in done_plan.moves:
+        if move_scope == scope:
+            messages.append(f"{old} -> {new} {move_scope}")
 
     assert not messages, "\n".join(messages)
 
