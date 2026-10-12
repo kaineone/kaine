@@ -492,6 +492,18 @@ are the ones the sections above leave open; each follows from those sections.
   `kaine/nexus/health/config.py` (raw TOML reads). A plugin that declares both
   an old seam and its new seam must be refused rather than deduplicated, so a
   plugin cannot fill one seam twice under two names.
+- **Before the persisted scope flips (PR 8).**
+  `kaine/research/ignition_study/runner.py` reads `birth_bloom_ends_at`
+  straight from a line's `stage.json`, outside `StageState.from_dict`, so it
+  does not see the stage field map; it must read through the stage reader or
+  map the field before the persisted scope is done.
+- **Codemod fixes found in PR 5a.** Three scope rules were corrected before the
+  first identifiers run, each with a fixture case: a dotted module path inside
+  code held in a string (`"from kaine.modules.x import Y"`) follows the
+  identifiers scope; a string holding exactly a class or constant name (an
+  `__all__` entry, a quoted forward reference) is read as a whole string and
+  follows the identifiers scope; and a plugin's own OpenSpec spec folders move
+  with the keys scope, like the repository's.
 - **Local data.** `tests/test_legacy_local_data.py` runs only when
   `KAINE_LOCAL_DATA_ROOT` is set. It copies `backups/` and `state/forks/` to a
   temporary directory, reads everything from the copy with every read-map on,
