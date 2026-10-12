@@ -182,7 +182,7 @@ def _extra_host_origins(
     return tuple(result)
 
 
-def _normalize_nexus_layer(layer: dict[str, Any], source: Path) -> dict[str, Any]:
+def _normalize_nexus_layer(layer: dict[str, Any], source: Path | str) -> dict[str, Any]:
     """Apply legacy name aliases to a parsed TOML layer."""
     try:
         return legacy_aliases.normalize_config_layer(layer, str(source))
@@ -291,7 +291,8 @@ def load_nexus_config(
                 raise NexusConfigError(
                     f"malformed Nexus secrets file: {secrets_target}"
                 ) from e
-            secrets_raw = _normalize_nexus_layer(secrets_raw, secrets_target)
+            # Name the file by role, never by path: the path is derived from the secrets location.
+            secrets_raw = _normalize_nexus_layer(secrets_raw, "the dashboard secrets file")
             secrets_token = (secrets_raw.get("nexus") or {}).get("operator_token")
             if secrets_token:
                 token = str(secrets_token).strip()
