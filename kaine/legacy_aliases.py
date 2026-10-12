@@ -504,6 +504,33 @@ def map_sidecar_dir(name: str) -> str:
     return name
 
 
+def sidecar_dir_candidates(name: str) -> list[str]:
+    """Directory names a reader should look in for the sidecar ``name``.
+
+    ``name`` first, then every active SIDECAR_DIRS old name whose new name is
+    ``name`` (recorded data written under an old directory name stays readable).
+    """
+    candidates: list[str] = [name]
+    if not scope_done("keys"):
+        return candidates
+    for entry in active(_table().SIDECAR_DIRS):
+        if entry["new"] == name and entry["old"] not in candidates:
+            candidates.append(entry["old"])
+    return candidates
+
+
+def map_state_path(rel: str) -> str:
+    """Map a state-root relative path through the active STATE_PATHS entries.
+
+    Returns the entry's "new" when ``rel`` equals an active entry's "old";
+    otherwise ``rel``. Scope "persisted".
+    """
+    for entry in active(_table().STATE_PATHS):
+        if rel == entry["old"]:
+            return entry["new"]
+    return rel
+
+
 def map_bundle_member(name: str) -> str:
     """Map a bundle member path, including module-key prefixes."""
     if not scope_done("keys"):

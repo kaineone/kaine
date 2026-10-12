@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
+from kaine import legacy_aliases
 from kaine.storage import resolve
 
 #: Default evaluation root. Sink files live under this (directly or nested).
@@ -82,6 +83,14 @@ def _stream_name_for(path: Path) -> str:
         if y.isdigit() and m.isdigit() and d.isdigit() and head:
             return head
     return stem
+
+
+def _mapped_stream_name(path: Path) -> str:
+    """Stream name for ``path`` with old module and stream names mapped (read-map)."""
+    s = _stream_name_for(path)
+    if "." in s:
+        return legacy_aliases.map_stream(s)
+    return legacy_aliases.map_module_key(s)
 
 
 def _iter_jsonl_files(root: Path) -> Iterable[Path]:
@@ -195,7 +204,7 @@ def load_run_records(
     target = str(run_id)
 
     for path in _iter_jsonl_files(root):
-        stream = _stream_name_for(path)
+        stream = _mapped_stream_name(path)
         try:
             # Stream the file line-by-line rather than reading it whole into RAM
             # — a long-running sink file can be large, and only the matching
@@ -213,6 +222,7 @@ def load_run_records(
                     if not isinstance(record, dict):
                         out.parse_errors += 1
                         continue
+                    record = legacy_aliases.map_record(record)
                     if str(record.get("run_id", "")) != target:
                         continue
                     out.by_stream.setdefault(stream, []).append(record)
@@ -248,7 +258,7 @@ def load_records_for_runs(
     out = {run_id: RunRecords(run_id=run_id) for run_id in run_ids}
 
     for path in _iter_jsonl_files(root):
-        stream = _stream_name_for(path)
+        stream = _mapped_stream_name(path)
         try:
             # Stream the file line-by-line rather than reading it whole into RAM.
             with path.open("r", encoding="utf-8") as fh:
@@ -266,6 +276,7 @@ def load_records_for_runs(
                         for run_records in out.values():
                             run_records.parse_errors += 1
                         continue
+                    record = legacy_aliases.map_record(record)
                     rid = str(record.get("run_id", ""))
                     if rid not in targets:
                         continue

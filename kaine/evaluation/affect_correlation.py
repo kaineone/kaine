@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from kaine import legacy_aliases
 from kaine.bus.schema import Event
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.proactive_audit import LINGUA_EXTERNAL_STREAM
@@ -163,6 +164,9 @@ def correlate_from_log(log_path: Path) -> dict[str, dict[str, float]]:
                 entry = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if not isinstance(entry, dict):
+                continue
+            entry = legacy_aliases.map_record(entry)
             thymos = entry.get("thymos_state") or {}
             chars = entry.get("characteristics") or {}
             if not isinstance(thymos, dict) or not chars:

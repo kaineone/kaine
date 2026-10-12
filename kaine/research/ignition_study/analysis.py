@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from kaine import legacy_aliases
 from kaine.experiment.run_records import load_run_records
 from kaine.experiment.stats import mean as _mean
 from kaine.experiment.stats import percentile as _percentile
@@ -327,6 +328,8 @@ def _analyse_viewing(
             source = member.get("source")
             if source is None:
                 continue
+            if isinstance(source, str):
+                source = legacy_aliases.map_module_key(source)
             seen_sources.add(source)
             salience = member.get("salience")
             if isinstance(salience, (int, float)):
