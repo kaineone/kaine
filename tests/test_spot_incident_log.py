@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Spot durable incident log — one JSONL record per lifecycle transition.
+"""supervisor durable incident log — one JSONL record per lifecycle transition.
 
 Covers the spec-delta scenarios in
 ``openspec/changes/spot-incident-log/specs/spot-supervisor/spec.md``:
 
 * Log survives reboot + ``clear_escalation()`` does not touch it.
-* Disabled Spot writes nothing.
-* Enabled Spot + disabled incident log writes nothing, but bus events persist.
+* Disabled supervisor writes nothing.
+* Enabled supervisor + disabled incident log writes nothing, but bus events persist.
 * Dead module -> exception captured; operator paths scrubbed to ``<PATH>``.
 * Hung module -> ``exception_repr`` is null.
 * Health metrics present in the detect record.
@@ -17,7 +17,7 @@ Covers the spec-delta scenarios in
 * Encryption on/off reflected in the snapshot record + on-disk bytes.
 * Retention purge disabled (no file deleted regardless of age).
 
-The bus/registry/ForkManager are real lightweight objects (as the existing spot
+The bus/registry/ForkManager are real lightweight objects (as the existing supervisor
 tests use); state encryption is toggled via the process-global StateEncryptor.
 """
 from __future__ import annotations
@@ -233,7 +233,7 @@ def test_scrub_paths_replaces_non_home_posix_roots():
 
 
 async def test_disabled_spot_writes_no_incident_files(bus, tmp_path):
-    # Scenario: Disabled Spot produces no log.
+    # Scenario: Disabled supervisor produces no log.
     incidents = tmp_path / "incidents"
     mod = _LightDeadMod(bus)
     await mod.initialize()
@@ -258,7 +258,7 @@ async def test_disabled_spot_writes_no_incident_files(bus, tmp_path):
 
 
 async def test_enabled_spot_disabled_log_writes_nothing_but_keeps_bus(bus, tmp_path):
-    # Scenario: Enabled Spot with disabled incident log.
+    # Scenario: Enabled supervisor with disabled incident log.
     incidents = tmp_path / "incidents"
     mod = _LightDeadMod(bus)
     await mod.initialize()
@@ -707,7 +707,7 @@ async def test_log_survives_reboot_and_clear_escalation(bus, tmp_path):
     assert files_after == files_before
     assert records_after == records_before
 
-    # A second Spot instance (a new run) appends rather than wiping.
+    # A second supervisor instance (a new run) appends rather than wiping.
     mod2 = _LightDeadMod(bus)
     await mod2.initialize()
     reg2 = ModuleRegistry()

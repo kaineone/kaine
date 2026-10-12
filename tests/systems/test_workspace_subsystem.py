@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Workspace/Syneidesis subsystem: candidates → top-k coalition."""
+"""The workspace subsystem: candidates → top-k coalition."""
 from __future__ import annotations
 
 from datetime import datetime, timezone

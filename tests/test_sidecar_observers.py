@@ -343,7 +343,7 @@ async def test_empatheia_observer_computes_accuracy(tmp_path):
 
 @pytest.mark.asyncio
 async def test_empatheia_observer_noop_when_streams_absent(tmp_path):
-    """task 5.2 — no empatheia or audition events → silent no-op."""
+    """task 5.2 — no social cognition module or audition module events → silent no-op."""
     bus = FakeBus()
     sink = FakeSink()
     obs = EmpatheiaObserver(bus, sink)
@@ -359,7 +359,7 @@ async def test_empatheia_observer_noop_when_streams_absent(tmp_path):
 
 @pytest.mark.asyncio
 async def test_voice_alignment_divergence_observer_records_cycle(tmp_path):
-    """A real Hypnos-shaped summary produces a record with metrics from the
+    """A real sleep-shaped summary produces a record with metrics from the
     top level and the gate outcome from the ``voice_alignment`` sub-dict."""
     bus = FakeBus()
     sink = AsyncJsonlSink(tmp_path, name="vad", flush_interval_s=0.05)
@@ -523,7 +523,7 @@ async def test_voice_alignment_divergence_noop_when_no_va_field(tmp_path):
 
 @pytest.mark.asyncio
 async def test_voice_alignment_divergence_noop_when_stream_absent(tmp_path):
-    """task 5.2 — no hypnos events → silent no-op."""
+    """task 5.2 — no sleep module events → silent no-op."""
     bus = FakeBus()
     sink = AsyncJsonlSink(tmp_path, name="vad", flush_interval_s=0.05)
     obs = VoiceAlignmentDivergenceObserver(bus, sink)
@@ -597,7 +597,7 @@ async def test_fatigue_observer_logs_soma_report(tmp_path):
 
 @pytest.mark.asyncio
 async def test_fatigue_observer_noop_when_stream_absent(tmp_path):
-    """task 5.2 — no soma events → silent no-op."""
+    """task 5.2 — no interoception module events → silent no-op."""
     bus = FakeBus()
     sink = AsyncJsonlSink(tmp_path, name="fatigue", flush_interval_s=0.05)
     obs = FatigueObserver(bus, sink)
@@ -616,7 +616,7 @@ async def test_fatigue_observer_noop_when_stream_absent(tmp_path):
 
 @pytest.mark.asyncio
 async def test_prediction_error_observer_computes_statistics(tmp_path):
-    """task 5.1 — scripted errors from soma and chronos → mean/p95/p99."""
+    """task 5.1 — scripted errors from the interoception and sequence modules → mean/p95/p99."""
     bus = FakeBus()
     sink = FakeSink()
     obs = PredictionErrorObserver(
@@ -700,7 +700,7 @@ async def test_welfare_observer_flags_unmaintained_fatigue():
 
 @pytest.mark.asyncio
 async def test_welfare_observer_flags_sustained_extreme_vad():
-    """task 5.4 (b) — thymos VAD in extreme zone longer than threshold → count."""
+    """task 5.4 (b) — affect VAD in extreme zone longer than threshold → count."""
     bus = FakeBus()
     sink = FakeSink()
     obs = WelfareObserver(
@@ -1062,7 +1062,7 @@ async def test_nous_policy_observer_logs_efe_and_action(tmp_path):
 
 @pytest.mark.asyncio
 async def test_nous_policy_observer_noop_when_stream_absent(tmp_path):
-    """task 5.2 — no nous events → silent no-op."""
+    """task 5.2 — no planning module events → silent no-op."""
     bus = FakeBus()
     sink = AsyncJsonlSink(tmp_path, name="nous_policy", flush_interval_s=0.05)
     obs = NousPolicyObserver(bus, sink)

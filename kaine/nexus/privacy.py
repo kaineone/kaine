@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nexus privacy boundary.
+"""The dashboard privacy boundary.
 
 The content-stripping primitive lives in :mod:`kaine.privacy_filter` so that the
 evaluation sidecar can reuse the exact same ``CONTENT_FIELDS`` and scrub logic
-without depending on the Nexus layer (mirroring how ``AsyncJsonlSink`` is a
+without depending on the dashboard layer (mirroring how ``AsyncJsonlSink`` is a
 shared primitive). This module re-exports it for backward compatibility — every
 existing ``from kaine.nexus.privacy import PrivacyFilter, CONTENT_FIELDS`` site
 continues to work unchanged.

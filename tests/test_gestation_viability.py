@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for gestation viability watch."""
+"""Tests for developmental phase viability watch."""
 
 from __future__ import annotations
 
@@ -112,7 +112,7 @@ def test_ever_replicated_suppresses_r1_r2_r3() -> None:
 
 def test_ever_replicated_suppresses_r1_for_a_flat_history() -> None:
     # The same flat history that triggers R1 must not trigger it once the
-    # gestation has replicated: R1-R3 apply only before any replicated pass.
+    # the developmental phase has replicated: R1-R3 apply only before any replicated pass.
     cfg = CFG
     assert assess_viability(_history_flat(24.0), 24.0, False, cfg)["rule"] == "R1"
     assert assess_viability(_history_flat(24.0), 24.0, True, cfg) is None

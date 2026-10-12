@@ -5,10 +5,10 @@
 
 Covers PR-1 (the capture/restore core):
 
-* Mnemos real capture/restore for BOTH backends — InMemoryStorage end-to-end
+* the episodic memory module's real capture/restore for BOTH backends — InMemoryStorage end-to-end
   here; QdrantStorage export/import at the codec level + the fail-loud path when
   the store is unreachable.
-* Phantasia world-model weight capture into the bundle (capability-bearing fake;
+* world-model weight capture into the bundle (capability-bearing fake;
   a jax-gated DreamerV3 round-trip when the extra is present).
 * ForkManager.preserve_live (live snapshot + encrypted bundle, run-stamped) and
   revive (reconstruct the same individual), with the fail-loud paths.
@@ -130,13 +130,13 @@ async def _build_synthetic_entity(
     *,
     persist_phantasia: bool,
 ) -> tuple[ModuleRegistry, Path]:
-    """A synthetic-but-REAL entity: Eidolon + Mnemos(in-memory) + Phantasia.
+    """A synthetic-but-REAL entity: self-model + episodic memory(in-memory) + world model.
 
     Returns (registry, phantasia_checkpoint_path).
     """
     reg = ModuleRegistry()
 
-    # Eidolon self-model with concrete identity + values.
+    # The self-model module with concrete identity + values.
     eidolon = Eidolon(
         bus, persistence_path=tmp_path / "self_model.json", save_interval_s=60
     )
@@ -145,7 +145,7 @@ async def _build_synthetic_entity(
     eidolon._drift_count = 3
     reg.register(eidolon)
 
-    # Mnemos with planted memories (short-term + persisted episodic).
+    # The episodic memory module with planted memories (short-term + persisted episodic).
     mnemos = await _build_mnemos(bus)
     await mnemos.core.store("I remember the blue door", collection="short_term")
     await mnemos.core.store(
@@ -155,7 +155,7 @@ async def _build_synthetic_entity(
     )
     reg.register(mnemos)
 
-    # Phantasia — capability-bearing fake so weights can be captured w/o jax.
+    # The world model module — capability-bearing fake so weights can be captured w/o jax.
     ckpt = tmp_path / "phantasia" / "wm.ckpt"
     wm = _PersistableFake(obs_dim=observation_dim(), decay=0.42)
     phantasia = Phantasia(
@@ -172,7 +172,7 @@ async def _build_synthetic_entity(
 
 
 # ---------------------------------------------------------------------------
-# Mnemos capture/restore — InMemoryStorage (end-to-end)
+# Episodic memory capture/restore — InMemoryStorage (end-to-end)
 # ---------------------------------------------------------------------------
 
 
@@ -190,7 +190,7 @@ async def test_mnemos_inmemory_export_import_roundtrip(bus: AsyncBus):
         assert captured["memory_state"]["short_term"]
         assert any(captured["memory_state"]["persisted"].values())
 
-        # Restore into a fresh, empty Mnemos.
+        # Restore into a fresh, empty episodic memory module.
         m2 = await _build_mnemos(bus)
         n = await m2.import_preservation_state(captured)
         assert n >= 1
@@ -202,7 +202,7 @@ async def test_mnemos_inmemory_export_import_roundtrip(bus: AsyncBus):
 
 
 # ---------------------------------------------------------------------------
-# Mnemos capture/restore — QdrantStorage (codec + fail-loud)
+# Episodic memory capture/restore — QdrantStorage (codec + fail-loud)
 # ---------------------------------------------------------------------------
 
 
@@ -408,7 +408,7 @@ async def test_preserve_live_then_revive_scopes_memory_and_restores_empatheia(
     assert result.preservation_id
     bundle = tmp_path / "backups" / f"preservation_{result.preservation_id}_aria"
 
-    # Revive into a fresh registry with a differently-prefixed Mnemos.
+    # Revive into a fresh registry with a differently-prefixed episodic memory module.
     reg2 = ModuleRegistry()
     eid2 = Eidolon(
         bus, persistence_path=tmp_path / "self_model2.json", save_interval_s=60
@@ -447,12 +447,12 @@ async def test_preserve_live_then_revive_scopes_memory_and_restores_empatheia(
     ep_results, _ = await mnemos2.core.recall("lighthouse keeper", collection="episodic")
     assert any("lighthouse keeper" in r.text for r in ep_results)
 
-    # The memory lives under the reviving being's prefix, and nothing was
-    # written under the preserved being's original prefix.
+    # The memory lives under the reviving entity's prefix, and nothing was
+    # written under the preserved entity's original prefix.
     assert await storage2.count("other_episodic") == 1
     assert await storage2.export(["mnemos_episodic", "mnemos_semantic"]) == {}
 
-    # Empatheia profile is restored.
+    # The social cognition module's profile is restored.
     restored = await empatheia2.store.get("operator")
     assert restored is not None
     assert restored.label == "operator"
@@ -548,13 +548,13 @@ async def test_revive_routes_async_importer_by_state_key_and_fallback_to_deseria
 
     await fm.revive(bundle, reg2)
 
-    # Empatheia declares preservation_state_key="profiles", so revive routes to
+    # The social cognition module declares preservation_state_key="profiles", so revive routes to
     # its async importer.
     assert len(imported_states) == 1
     assert "profiles" in imported_states[0]
     assert imported_states[0]["profiles"]["operator"]["label"] == "operator"
 
-    # Eidolon has no preservation_state_key and no "memory_state" in its bundle,
+    # The self-model module has no preservation_state_key and no "memory_state" in its bundle,
     # so it must fall back to deserialize.
     assert len(deserialized_states) >= 1
     assert all("memory_state" not in s for s in deserialized_states)
@@ -982,7 +982,7 @@ async def test_revive_fails_loud_when_module_missing(bus: AsyncBus, tmp_path: Pa
         )
         bundle = tmp_path / "backups" / f"preservation_{result.preservation_id}_aria"
 
-        # Target registry missing mnemos (a captured module) → fail loud.
+        # Target registry missing the episodic memory module (a captured module) → fail loud.
         reg2 = ModuleRegistry()
         eid2 = Eidolon(
             bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60
@@ -1002,7 +1002,7 @@ async def test_revive_fails_loud_when_captured_weights_absent_from_bundle(
     bus: AsyncBus, tmp_path: Path
 ):
     """Coverage gap: the bundle's snapshot RECORDS captured world-model weights
-    but the phantasia checkpoint is missing from the tar. Revive must raise
+    but the world model module's checkpoint is missing from the tar. Revive must raise
     ReviveError ("…absent…") — never silently revive a world-model-less lesser
     individual. (Bundles are now tar; we rewrite bundle.tar to drop the
     phantasia/ member while keeping snapshot.json's captured=True record.)"""
@@ -1019,7 +1019,7 @@ async def test_revive_fails_loud_when_captured_weights_absent_from_bundle(
         bundle = tmp_path / "backups" / f"preservation_{result.preservation_id}_aria"
         tar_path = bundle / "bundle.tar"
 
-        # Rewrite the (plaintext) tar keeping ONLY snapshot.json — the phantasia
+        # Rewrite the (plaintext) tar keeping ONLY snapshot.json — the world model module's
         # checkpoint the snapshot claims is captured is now absent from the tar.
         with tarfile.open(tar_path) as tf:
             snap_member = tf.getmember("snapshot.json")
@@ -1032,7 +1032,7 @@ async def test_revive_fails_loud_when_captured_weights_absent_from_bundle(
             import io as _io
 
             tf.addfile(info, _io.BytesIO(snap_bytes))
-        # Sanity: the phantasia checkpoint really is gone from the bundle.
+        # Sanity: the world model module's checkpoint really is gone from the bundle.
         with tarfile.open(tar_path) as tf:
             assert not any(n.startswith("phantasia/") for n in tf.getnames())
 
@@ -1224,7 +1224,7 @@ async def test_real_dreamerv3_weight_capture_restore(bus: AsyncBus, tmp_path: Pa
     bundle = tmp_path / "backups" / f"preservation_{result.preservation_id}_aria"
     captured_arrays = _npz_arrays(wm.export_params(extra={"encoder_version": _enc()}))
 
-    # Revive into a fresh phantasia with a different random init.
+    # Revive into a fresh world model module with a different random init.
     reg2 = ModuleRegistry()
     wm2 = DreamerV3WorldModel(
         observation_dim(), deter_dim=8, stoch_dim=4, stoch_classes=3,

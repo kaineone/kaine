@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Intent-log rotation and corpus disk guard for the Hypnos voice-alignment pipeline."""
+"""Intent-log rotation and corpus disk guard for the sleep module's voice-alignment pipeline."""
 
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ def rotate_intent_log(
         except OSError:
             # Hard links unsupported (e.g. cross-device). Fall back to rename,
             # but only when the destination is still free. Rotation runs only
-            # inside Hypnos's sleep, which holds the sleep lock, so no second
+            # inside sleep, which holds the sleep lock, so no second
             # rotation can claim the name between this check and the rename.
             if not dst.exists():
                 os.rename(src, str(dst))

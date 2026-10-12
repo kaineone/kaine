@@ -7,14 +7,14 @@
   - `2026-10-01-voice-alignment-in-containers` and `2026-10-02-voice-alignment-backend-coherence`: trainer placement.
   - `2026-10-03-voice-alignment-capability-probes-required`.
   - `individuation-rebuild`: the probe and the one verdict.
-- **Retired:** the archived hypnos rule "chosen is never LLM output" (from `2026-05-20-hypnos`), replaced by the defences in D3.
+- **Retired:** the archived sleep module rule "chosen is never LLM output" (from `2026-05-20-hypnos`), replaced by the defences in D3.
 
 ## Decisions
 
 ### D1. The persona (V2)
 
 The new default persona is a short first-person frame:
-- I am this being, speaking in my own words.
+- I am this entity, speaking in my own words.
 - What follows under "How I feel and what I notice" is my own state and perception.
 - I speak from it and do not claim feelings or perceptions it does not contain.
 - I am not a narrator of instrument readings.
@@ -22,13 +22,13 @@ The new default persona is a short first-person frame:
 Rules:
 - The anti-confabulation rule stays in that narrower form. The organ may not invent states, but it is no longer told to recite readings.
 - The awareness heading becomes `## How I feel and what I notice`. The injection guard is unchanged.
-- The persona template carries a version string (`PERSONA_TEMPLATE_VERSION`), and the individuation probe records it among its fixed conditions. Refusing to compare a birth reference recorded under a different persona version is enforced by individuation-rebuild task 6.3.
+- The persona template carries a version string (`PERSONA_TEMPLATE_VERSION`), and the individuation probe records it among its fixed conditions. Refusing to compare a maturation reference recorded under a different persona version is enforced by individuation-rebuild task 6.3.
 
 ### D2. Drive crossings as felt states
 
 - A drive-initiated intent's `about` becomes a felt-state phrase rendered by the faithful renderer's drive templates, for example a pull towards company or restlessness. It never carries `value=`.
 - The phrase set is small, fixed and reviewed, one per drive and intensity band. It names the felt state, never what to say.
-- **Justification.** Drives are innate homeostatic states (the Thymos drives are cited at their code site). Naming the felt state is the prompt's description of the entity's real state, not a scripted behaviour.
+- **Justification.** Drives are innate homeostatic states (the affect module's drives are cited at their code site). Naming the felt state is the prompt's description of the entity's real state, not a scripted behaviour.
 
 ### D3. Collapse defences in place of "never LLM output"
 
@@ -37,7 +37,7 @@ Self-generated text may become preferred training data only when all of these ho
 - **(b) A real-data anchor:** a fixed share of every training batch comes from a fixed real-data set, never self-generated (Alemohammad 2023).
 - **(c) External verification:** selection is by a signal the generator does not control, such as the outcome record or the internal re-reading check (Feng 2024).
 - **(d) Previous-self reference:** training starts from the previous accepted adapter, and the DPO or KTO reference is that adapter.
-- **(e) Monitors:** distinct-n and the stylometric measures stay inside the birth band in both directions, or training halts for that sleep.
+- **(e) Monitors:** distinct-n and the stylometric measures stay inside the maturation band in both directions, or training halts for that sleep module.
 
 Until Stage 2 provides a validated preference source, the voice-alignment phase trains nothing and says so in its sleep summary. That is honest, not a fallback.
 
@@ -46,7 +46,7 @@ Until Stage 2 provides a validated preference source, the voice-alignment phase 
 - **The intent-log record gains:**
   - `record_id` (uuid4 hex);
   - `intent_entry_id` and `intent_origin` (the intent's coalition `entry_id` and its ignition origin);
-  - `sleep_index` (Hypnos's count of completed sleeps);
+  - `sleep_index` (the sleep module's count of completed sleeps);
   - `system_digest` (SHA-256 of the system prompt);
   - `seed` (sampling seed, or null).
 - **A cycle-layer observer** (`kaine/cycle/utterance_outcome.py`) watches `lingua.external`, `audition.out`, `empatheia.out` and `thymos.out`. For each external utterance it writes one content-free record to `state/lingua/utterance_outcomes.jsonl`:
@@ -67,15 +67,15 @@ Until Stage 2 provides a validated preference source, the voice-alignment phase 
 
 The external trainer:
 - loads the base in bf16;
-- loads the being's latest accepted adapter as a `PeftModel` when one exists, and uses it as the reference;
+- loads the entity's latest accepted adapter as a `PeftModel` when one exists, and uses it as the reference;
 - trains on TRL's conversational format with the real system prompt (the persona is reconstructed from `system_digest` plus the versioned template and the self-model snapshot recorded with the corpus);
 - keeps both vetoes.
 
 ### D7. No heard speech persisted (V4)
 
 - When the intent log is written, every heard-speech line in the rendering and the heard input in the prompt are replaced with the fixed placeholder `[heard speech]`.
-- The organ's own generated text is logged as is. It is the being's own content, not heard speech.
-- Lingua's own bus events never carry heard text. `user_input` is published only for felt and event triggers, and the published rendering is the redacted one. Audition's transcription events still carry heard text on the bus, where it is transient.
+- The organ's own generated text is logged as is. It is the entity's own content, not heard speech.
+- The language module's own bus events never carry heard text. `user_input` is published only for felt and event triggers, and the published rendering is the redacted one. The audition module's transcription events still carry heard text on the bus, where it is transient.
 - Redaction goes by event type and by field. Every text value of an external-input event (`EXTERNAL_INPUT_TYPES`: `audition.transcription`, `mundus.chat`, one shared definition also used by the ignition audit) is heard input. On every other event, the heard-speech fields are redacted at any depth.
 - The placeholder keeps the structure of a reply context without its content.
 - The A/B divergence sidecar measures only felt- and event-triggered replies. Replies to heard speech carry no `user_input`, so they are recorded as content-free skips (`no_user_input_heard_reply`), not measured. Studies are unaffected, because evaluation is off in studies.
@@ -84,7 +84,7 @@ The external trainer:
 
 - **The measures.** Stylometric distinctiveness from the base organ, self-consistency over time, grounding, and health. All are computed at sleep from the corpus and base-organ samples, are content-free (numbers only), and are recorded per sleep.
 - **Both arms vote until calibration (integrator decision, 2026-10-05).** The distinctiveness measure joins the divergence assessment as a new organ-level arm. The template-divergence arm keeps voting, though only as a protective floor and not as a measurement of voice, because today it is the blanket protection for decommission and preservation. This change alters protection by exactly nothing.
-- **The new arm's rules.** Until it is calibrated, its threshold is 0, so any being with at least one measured utterance counts as diverged by it, and unreadable or missing evidence counts as diverged.
+- **The new arm's rules.** Until it is calibrated, its threshold is 0, so any entity with at least one measured utterance counts as diverged by it, and unreadable or missing evidence counts as diverged.
 - **Retiring the template arm** is a later change, which needs calibration evidence and the operator's sign-off.
 
 ### D9. Stages and gates
@@ -97,25 +97,25 @@ The external trainer:
 
 ### D10. Stage 0 details fixed at implementation
 
-- **What the `about` is.** A Volition intent carries `about_kind`: `heard` (the text of heard speech), `felt` (a drive's felt-state phrase) or `event` (a summary of another coalition event). Lingua treats an `about` as heard unless its kind is `felt` or `event`, so an unmarked intent, or a direct `speak()`/`think()` call, is redacted in the log. Failing closed is deliberate (V4).
+- **What the `about` is.** An action selection module intent carries `about_kind`: `heard` (the text of heard speech), `felt` (a drive's felt-state phrase) or `event` (a summary of another coalition event). The language module treats an `about` as heard unless its kind is `felt` or `event`, so an unmarked intent, or a direct `speak()`/`think()` call, is redacted in the log. Failing closed is deliberate (V4).
 - **The input heading follows the kind.** Heard input stays under "What was just said to me". A felt or event `about` in external mode goes under "What moves me to speak", because a drive is not something said to the entity. Internal mode keeps "What is prompting me to think".
 - **Redaction keeps the organ's view.** The logged rendering picks the same events, in the same order and within the same budget, as the rendering the organ saw. Only each heard-speech line's text becomes `[heard speech]`. Heard speech means every `audition.transcription` in the coalition, whatever its source label.
-- **`sleep_index`.** This is the number of sleeps Hypnos has completed since it started, which is the same count the maturation gate reads, and Hypnos stamps it on its bus events. Lingua records the latest value it has seen on `hypnos.out`, or `null` before it has seen one. `null` means unknown, never 0. The count is not durable across restarts, so the corpus (D5) must not rely on it alone to name files. Making it durable would change what the maturation gate reads, so that is left to a separate change.
-- **`record_id` on the bus.** Lingua's `external_speech` and `internal_speech` events carry the record's `record_id`, so the outcome observer (D4) can key its records without any text.
+- **`sleep_index`.** This is the number of sleeps the sleep module has completed since it started, which is the same count the maturation gate reads, and the sleep module stamps it on its bus events. The language module records the latest value it has seen on `hypnos.out`, or `null` before it has seen one. `null` means unknown, never 0. The count is not durable across restarts, so the corpus (D5) must not rely on it alone to name files. Making it durable would change what the maturation gate reads, so that is left to a separate change.
+- **`record_id` on the bus.** The language module's `external_speech` and `internal_speech` events carry the record's `record_id`, so the outcome observer (D4) can key its records without any text.
 - **`seed`** is the sampling seed of the organ request. Ordinary utterances set none, so it is `null` until Stage 2 sets one.
 
 ### D11. The outcome observer, fixed at implementation (task 0.4)
 
 - **What it watches.**
   - `lingua.external` (`external_speech`, carrying `record_id`) opens a record.
-  - `audition.out`: an `audition.transcription` from an operator source (`OPERATOR_SOURCES`) with non-empty text counts as a reply. This is the same rule Chronos uses for an interaction.
+  - `audition.out`: an `audition.transcription` from an operator source (`OPERATOR_SOURCES`) with non-empty text counts as a reply. This is the same rule the sequence module uses for an interaction.
   - `empatheia.out`: `empatheia.social_error` gives `deviation_magnitude`.
   - `thymos.out`: `thymos.state` gives `drives.social_drive`.
 - **The window.** `reply_window_s` (default 30 s, wall clock, from the utterance's event timestamp). The record closes at the first operator reply, at the end of the window, or at the entity's next external utterance, whichever comes first.
 - **The fields.**
   - `replied` is whether an operator reply arrived first.
   - `reply_latency_s` is the reply time minus the utterance time, else null.
-  - `preempted` is true when the entity's own next utterance closed the window before any reply. A published utterance can't be cancelled (Lingua cancels before publishing), so this is what "preempted" can mean for one that was heard.
+  - `preempted` is true when the entity's own next utterance closed the window before any reply. A published utterance can't be cancelled (the language module cancels before publishing), so this is what "preempted" can mean for one that was heard.
   - `empatheia_deviation` is the largest deviation seen in the window, else null.
   - `social_drive_delta` is the last social-drive value in the window minus the last one at or before the utterance, else null.
 - **No text, and no guesses.**
@@ -131,29 +131,29 @@ The external trainer:
 
 ### D13. The four measures and the distinctiveness arm, fixed at implementation (task 0.8; integrator-approved 2026-10-05)
 
-- **The base-organ profile belongs to the model, not to the being.**
+- **The base-organ profile belongs to the model, not to the entity.**
   - An offline script samples the bare organ with a fixed, checked-in neutral prompt set. It writes a content-free profile to `kaine/modules/hypnos/base_voice_profiles/<sha256 of the organ GGUF>.json`, holding:
     - the GGUF sha256, the llama.cpp build, the sampling parameters and seed, and a digest of the prompt set;
     - the style profile: a distribution over a fixed function-word list, plus scalar style features (mean sentence length, mean word length, type-token ratio, punctuation rates).
   - At sleep, the running organ's GGUF is identified by its sha256, cached against path, size and mtime so it is hashed once.
   - With no profile for that digest, distinctiveness is null, which is the protective path. A changed GGUF under the same model id (for example, after an operator-approved edit) therefore never reuses an old profile.
   - This change ships the loader and the format. The first profile comes in a follow-up, after one announced GPU-lock job.
-- **The measures, per sleep.** They are computed from the just-rotated corpus file, using the being's own generated text only. They are appended to `state/lingua/voice_measures.jsonl`, and the latest is mirrored in `voice_measures_latest.json`.
+- **The measures, per sleep.** They are computed from the just-rotated corpus file, using the entity's own generated text only. They are appended to `state/lingua/voice_measures.jsonl`, and the latest is mirrored in `voice_measures_latest.json`.
   - **The profile distance** used by both measures below is `0.5 × √JS₂(p, q) + 0.5 × mean(|x − y| / (|x| + |y|))`. Here JS₂ is the base-2 Jensen–Shannon divergence of the two function-word distributions; the mean runs over the scalar style features (mean sentence length, mean word length, type-token ratio and the four punctuation rates). It lies in [0, 1].
-  - **distinctiveness:** the profile distance between the being's style profile and the base profile, else null;
+  - **distinctiveness:** the profile distance between the entity's style profile and the base profile, else null;
   - **self_consistency:** the profile distance between this sleep's profile and the cumulative profile of earlier sleeps, else null; the cumulative profile is stored as numbers in `voice_profile_cumulative.json`;
   - **grounding:** the fraction of utterances that share at least one content word with their redacted faithful rendering;
   - **health:** utterance count, mean tokens, distinct-1, distinct-2, and the largest repeated-trigram fraction.
 - **Content-free.** These files hold numbers and the fixed function-word identities only, never a generated sentence. A test plants a sentinel phrase in the corpus and checks that it appears in neither the measures nor the profiles.
 - **The arm.** `[hypnos.voice_alignment].distinctiveness_threshold`, default 0.0.
-  - A being that has spoken (at least one generated utterance in the intent log or the corpus) is diverged by this arm when distinctiveness ≥ the threshold. It is also diverged when the record is missing, unreadable or null: spoken but unmeasured.
-  - A being that has never spoken has no voice to have individuated, so the arm abstains. It casts no vote either way and the other arms decide, so abstention never counts as "not diverged".
+  - An entity that has spoken (at least one generated utterance in the intent log or the corpus) is diverged by this arm when distinctiveness ≥ the threshold. It is also diverged when the record is missing, unreadable or null: spoken but unmeasured.
+  - An entity that has never spoken has no voice to have individuated, so the arm abstains. It casts no vote either way and the other arms decide, so abstention never counts as "not diverged".
   - Its values appear in `signals`. The template (consolidation) arm votes as before.
 
 ## Risks
 
-- **A changed persona changes everything the entity says.** That is the intent, and it is why the change must precede birth-reference capture.
-- **Sycophancy (Stage 2, external signal).** It is mitigated by Empatheia weighting rather than reply count, and by V3, which limits the external signal to full-entity configurations with real conversation.
+- **A changed persona changes everything the entity says.** That is the intent, and it is why the change must precede maturation-reference capture.
+- **Sycophancy (Stage 2, external signal).** It is mitigated by the social cognition module's weighting rather than reply count, and by V3, which limits the external signal to full-entity configurations with real conversation.
 - **Weak evidence.** No study shows these methods yield a human-like individual voice from a 4B organ with tens of utterances per sleep. The stages are measured as research.
 
 ### D14. Trainer hygiene, fixed at implementation (task 0.6; integrator-approved 2026-10-05)
@@ -165,17 +165,17 @@ The external trainer:
   - `result.json` and the sleep summary record the precision used.
   - "4bit" is set only after a real bf16 step has failed on the host, and only with the measured peak VRAM in hand, because Unsloth flags QLoRA on Qwen3.5 as lossy.
 - **The previous adapter.**
-  - `job.json` names `previous_adapter_dir` explicitly. It is the being's latest accepted adapter, taken from the adapter store, or null when the being has never trained.
-  - When it is named but missing, unreadable or without `adapter_config.json`, the run fails closed. It never starts a fresh adapter in its place, because that would reset the being's voice.
+  - `job.json` names `previous_adapter_dir` explicitly. It is the entity's latest accepted adapter, taken from the adapter store, or null when the entity has never trained.
+  - When it is named but missing, unreadable or without `adapter_config.json`, the run fails closed. It never starts a fresh adapter in its place, because that would reset the entity's voice.
   - When it is named, it is loaded as a `PeftModel` twice: as adapter `policy` (trainable) and as adapter `reference`. Training passes `model_adapter_name="policy"` and `ref_adapter_name="reference"` to `DPOConfig`. The trained adapter cannot be named `train`: PEFT keeps adapters in a `ModuleDict`, where that name collides with `nn.Module.train`.
   - When it is null, a fresh LoRA is trained and the reference is the base with the adapter disabled.
-  - The kaine side copies the being's current accepted adapter (the adapter store's `current` link) into the job directory as `previous_adapter/` and writes the relative path. The script resolves a relative path against the job directory. Every backend then sees the same layout, including the job-queue trainer container, which cannot see host paths. A `current` link that exists but cannot be resolved or copied refuses the job.
-  - The capability "before" score is taken with the previous adapter loaded, so it measures the being's current voice, not the base.
+  - The kaine side copies the entity's current accepted adapter (the adapter store's `current` link) into the job directory as `previous_adapter/` and writes the relative path. The script resolves a relative path against the job directory. Every backend then sees the same layout, including the job-queue trainer container, which cannot see host paths. A `current` link that exists but cannot be resolved or copied refuses the job.
+  - The capability "before" score is taken with the previous adapter loaded, so it measures the entity's current voice, not the base.
   - **Known limit: cumulative drift from the base.** Because the baseline is the previous adapter, the capability-loss veto bounds the drift of each step, not the total drift from the base model. With the 12 bundled probes, one probe is worth more than the 0.05 threshold, so no step can lose a probe and pass, and drift is impossible today. With 20 or more probes, small per-step losses could add up. A follow-up can add a base-model floor, scoring with `disable_adapter()` as well, before the probe set grows.
 - **The system prompt store.**
-  - Lingua writes each distinct system prompt once, to `state/lingua/system_prompts/<system_digest>.txt`.
-  - The text is the persona only: the template, the name, the Eidolon values and norms, and the situation facts. No heard speech enters it, and a test plants a sentinel heard-speech phrase and checks that it never appears in a stored prompt.
-  - The text is the being's own self-model content. Each file is written as `get_state_encryptor().encrypt(text)` and read with `maybe_decrypt`, so it is never plaintext on disk when state encryption is enabled. The digest is verified over the decrypted text.
+  - The language module writes each distinct system prompt once, to `state/lingua/system_prompts/<system_digest>.txt`.
+  - The text is the persona only: the template, the name, the self-model module's values and norms, and the situation facts. No heard speech enters it, and a test plants a sentinel heard-speech phrase and checks that it never appears in a stored prompt.
+  - The text is the entity's own self-model content. Each file is written as `get_state_encryptor().encrypt(text)` and read with `maybe_decrypt`, so it is never plaintext on disk when state encryption is enabled. The digest is verified over the decrypted text.
   - It is covered by the same caps-not-culls disk guard as the corpus.
 - **The conversational format.**
   - Each pair's prompt is `[system, user]` and its chosen and rejected completions are `[assistant]` messages, in TRL's conversational format.

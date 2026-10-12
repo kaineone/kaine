@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Load-bearing: a Phantasia training pass writes NO files to disk.
+"""Load-bearing: a world model training pass writes NO files to disk.
 
 Training is in-memory only. The trajectory buffer is never serialized. This test
 snapshots /tmp and the project directory before a training pass and asserts that
@@ -66,7 +66,7 @@ async def bus():
 async def test_training_pass_writes_no_disk_artifacts(
     bus: AsyncBus, tmp_path, monkeypatch
 ):
-    """A Phantasia training/imagination pass writes NO model-state files to disk.
+    """A world model training/imagination pass writes NO model-state files to disk.
 
     Uses a private TMPDIR and an audit-hook write recorder so the test is
     hermetic and not affected by concurrent machine-wide /tmp traffic.

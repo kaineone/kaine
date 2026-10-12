@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Eidolon subsystem: observes internal speech + workspace, persists self-model."""
+"""The self-model subsystem: observes internal speech + workspace, persists self-model."""
 from __future__ import annotations
 
 import json
@@ -40,7 +40,7 @@ async def test_eidolon_internal_speech_does_not_leak_to_external(tmp_path):
             type="internal_speech",
             payload={"text": "private musing"},
         )
-        # Eidolon SHOULD NOT publish that text on any external stream.
+        # the self-model module SHOULD NOT publish that text on any external stream.
         external = await h.collect("eidolon.out", count=1, timeout=0.3)
         for ev in external:
             assert "private musing" not in json.dumps(ev.payload)

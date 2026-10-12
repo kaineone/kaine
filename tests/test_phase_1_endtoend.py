@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Phase 1 end-to-end: bus + cycle + Syneidesis + EchoModule.
+"""Phase 1 end-to-end: bus + cycle + workspace + EchoModule.
 
 Runs entirely against fakeredis — does not require the operator's
 hardened Redis. The live-Redis integration tests live in
@@ -56,17 +56,17 @@ async def test_phase_1_end_to_end_delivery():
 
     await echo.initialize()
     try:
-        # 1. Echo publishes one event into its own stream.
+        # 1. The recorder module publishes one event into its own stream.
         await echo.publish_one(salience=0.8)
 
         # 2. Run one cycle tick. The cycle should collect the event from
-        #    echo.out, hand it to syneidesis, broadcast the resulting
+        #    echo.out, hand it to the workspace, broadcast the resulting
         #    snapshot to workspace.broadcast.
         result = await cycle.tick()
         assert result.events_collected == 1
         assert result.is_experiential is True
 
-        # 3. Wait for echo's background workspace consumer to receive the
+        # 3. Wait for the recorder module's background workspace consumer to receive the
         #    broadcast.
         for _ in range(50):
             if echo.snapshots:

@@ -3,7 +3,7 @@
 The real adapter merger (`TiesDareAdapterMerger`, `kaine/lifecycle/adapter_merge.py`) loads the base model inside the process that asks for the merge. It uses `from_pretrained(..., torch_dtype="auto")` to keep the checkpoint's bf16 and halve the memory each check needs.
 
 In transformers 5.x, any `from_pretrained` whose dtype is not float32 sets the process-wide default dtype to that dtype for the length of model construction. Merges run inside long-lived processes:
-- Nexus runs `ForkManager.merge` in a worker thread (`kaine/nexus/diagnostics.py`);
+- The dashboard runs `ForkManager.merge` in a worker thread (`kaine/nexus/diagnostics.py`);
 - the fork-merge gate (`kaine/lifecycle/fork_merge_gate.py`) calls it in its caller's process.
 
 Any other thread that builds torch layers during that window gets bf16 layers. That is the same race the perception loaders closed by building in float32 (`fix-cpu-perception-paths`).

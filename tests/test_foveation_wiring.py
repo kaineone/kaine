@@ -4,9 +4,9 @@
 """Composition-root wiring of the fovea-size arousal seam (topos-foveation).
 
 The cognitive cycle holds the ``AffectStateProvider`` it refreshes each tick from
-``thymos.state``; ``_wire_topos_arousal`` hands Topos a read-only accessor to its
-arousal so the fovea size tracks affect (Easterbrook narrowing) without Topos
-importing the workspace or Thymos.
+``thymos.state``; ``_wire_topos_arousal`` hands the vision module a read-only accessor to its
+arousal so the fovea size tracks affect (Easterbrook narrowing) without the vision module
+importing the workspace or the affect module.
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ def test_foveation_on_wires_live_arousal():
     wired = _wire_topos_arousal(_FakeRegistry(topos=topos), provider)
     assert wired is True
     assert topos.arousal_provider is not None
-    # Before any thymos.state, the accessor reports the Thymos baseline (0.3).
+    # Before any thymos.state, the accessor reports the affect module's baseline (0.3).
     assert topos.arousal_provider() == 0.3
     # After a state update, the accessor reflects the live arousal.
     provider.observe([_thymos_state_event(0.82)])
@@ -79,7 +79,7 @@ def test_foveation_on_wires_live_arousal():
 
 
 # --------------------------------------------------------------------------- #
-# Audition arousal seam (attention-driven-audition), mirroring the topos wiring
+# Audition arousal seam (attention-driven-audition), mirroring the vision wiring.
 # --------------------------------------------------------------------------- #
 
 
@@ -111,6 +111,6 @@ def test_general_audition_on_wires_live_arousal():
     a = _FakeAudition(general_audition=True)
     provider = AffectStateProvider()
     assert _wire_audition_arousal(_FakeRegistry(audition=a), provider) is True
-    assert a.arousal_provider() == 0.3  # thymos baseline before any state
+    assert a.arousal_provider() == 0.3  # the affect module's baseline before any state
     provider.observe([_thymos_state_event(0.77)])
     assert a.arousal_provider() == 0.77

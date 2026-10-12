@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Operator freeze: control state, the freeze-watch loop (resume-while-paused),
-and the Nexus freeze router."""
+and the dashboard freeze router."""
 
 import asyncio
 
@@ -83,7 +83,7 @@ async def test_freeze_watch_pauses_and_resumes(tmp_path, monkeypatch):
         await asyncio.wait_for(task, timeout=2.0)
 
 
-# ---- Nexus router -----------------------------------------------------------
+# ---- Dashboard router -----------------------------------------------------------
 
 
 @pytest.mark.asyncio

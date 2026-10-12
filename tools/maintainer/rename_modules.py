@@ -38,6 +38,7 @@ import fnmatch
 import importlib.util
 import io
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -458,6 +459,131 @@ def _is_prose_like(ctx: str | None) -> bool:
     }
 
 
+def _is_prose_compound(token: str, capabilities: frozenset[str]) -> bool:
+    if not re.fullmatch(r"^[A-Za-z]+(?:[-/][A-Za-z]+)+$", token):
+        return False
+    if token in capabilities:
+        return False
+    for segment in re.split(r"[-/]", token):
+        if not (
+            re.fullmatch(r"^[a-z]+$", segment)
+            or re.fullmatch(r"^[A-Z][a-z]+$", segment)
+        ):
+            return False
+    return True
+
+
+def _is_code_reference(text: str, start: int, end: int, ctx: str | None) -> bool:
+    """Return True when a prose-context match is actually a code/config reference."""
+    if ctx not in {"md_prose", "comment", "docstring", "toml_comment"}:
+        return False
+
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", start)
+    if line_end == -1:
+        line_end = len(text)
+    line = text[line_start:line_end]
+    rel_start = start - line_start
+    rel_end = end - line_start
+
+    if ctx in {"comment", "docstring", "toml_comment"}:
+        # a) inline backtick span on the same line (`x` or ``x``)
+        i = 0
+        while i < len(line):
+            if line[i] == "`":
+                j = i
+                while j < len(line) and line[j] == "`":
+                    j += 1
+                run = j - i
+                close = line.find("`" * run, j)
+                if close != -1:
+                    if i + run <= rel_start and rel_end <= close:
+                        return True
+                    i = close + run
+                    continue
+                break
+            i += 1
+
+        # b) single- or double-quoted string with no whitespace in its content
+        i = 0
+        while i < len(line):
+            ch = line[i]
+            if ch in "'\"":
+                j = i
+                while j < len(line) and line[j] == ch:
+                    j += 1
+                run = j - i
+                if run >= 3:
+                    i = j
+                    continue
+                close = -1
+                k = j
+                while True:
+                    k = line.find(ch, k)
+                    if k == -1:
+                        break
+                    rlen = 1
+                    while k + rlen < len(line) and line[k + rlen] == ch:
+                        rlen += 1
+                    if rlen == run and (k + run >= len(line) or line[k + run] != ch):
+                        close = k
+                        break
+                    k += rlen
+                if close != -1:
+                    content_start = i + run
+                    content_end = close
+                    if content_start <= rel_start and rel_end <= content_end:
+                        if not any(c.isspace() for c in line[content_start:content_end]):
+                            return True
+                    i = close + run
+                    continue
+            i += 1
+
+    # c) bracketed reference, but not Markdown link text
+    def _pair_close(open_idx: int) -> int | None:
+        balance = 1
+        for k in range(open_idx + 1, line_end):
+            if text[k] == "[":
+                balance += 1
+            elif text[k] == "]":
+                balance -= 1
+                if balance == 0:
+                    return k
+        return None
+
+    def _pair_open(close_idx: int) -> int | None:
+        balance = 1
+        for k in range(close_idx - 1, line_start - 1, -1):
+            if text[k] == "]":
+                balance += 1
+            elif text[k] == "[":
+                balance -= 1
+                if balance == 0:
+                    return k
+        return None
+
+    if start > line_start and text[start - 1] == "[":
+        close = _pair_close(start - 1)
+        if close is not None:
+            if text[close + 1 : close + 2] == "(":
+                return False
+            return True
+
+    if end < line_end and text[end] == "]":
+        open_b = _pair_open(end)
+        if open_b is not None:
+            if text[end + 1 : end + 2] == "(":
+                return False
+            return True
+
+    # d) dotted reference on the same line (e.g. mundus.<adapter> or mnemos.replay)
+    if end < line_end and text[end] == ".":
+        if end + 1 < line_end and not text[end + 1].isspace():
+            return True
+
+    return False
+
+
 def _context_intervals(rel_path: str, text: str) -> list[tuple[int, int, str]]:
     kind = _file_kind(rel_path, text)
     if kind == "python":
@@ -497,11 +623,17 @@ def _python_contexts(text: str) -> list[tuple[int, int, str]]:
             }
         )
 
-    significant = {tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT}
+    docstring_prev_ok = {
+        tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT, tokenize.ENCODING
+    }
+    skip_back = {tokenize.NL, tokenize.COMMENT}
     for idx, tok in enumerate(token_infos):
         if tok["type"] != tokenize.STRING:
             continue
-        prev_ok = idx == 0 or token_infos[idx - 1]["type"] in significant
+        j = idx - 1
+        while j >= 0 and token_infos[j]["type"] in skip_back:
+            j -= 1
+        prev_ok = j < 0 or token_infos[j]["type"] in docstring_prev_ok
         if not prev_ok:
             continue
         next_ok = False
@@ -858,7 +990,7 @@ def _markdown_contexts(text: str) -> list[tuple[int, int, str]]:
         info = m.group(3).strip().split()[0] if m.group(3).strip() else ""
         start = m.start()
         close_re = re.compile(
-            rf"^(?: {0,3})({re.escape(fence_char)}{{{fence_len},}})\s*\n?$",
+            rf"^(?: {{0,3}})({re.escape(fence_char)}{{{fence_len},}})\s*\n?$",
             re.MULTILINE,
         )
         close = close_re.search(text, m.end())
@@ -1067,6 +1199,24 @@ def _repo_top_prefixes(table) -> tuple[str, ...]:
     return tuple(f"{d}/" for d in dirs)
 
 
+def _link_target(rel_path: str, T: str, table) -> str | None:
+    """Resolve a markdown link target to a repo-relative path if it ends in .md."""
+    target = T.rsplit("#", 1)[0]
+    if not target.endswith(".md"):
+        return None
+    top_dirs = set(getattr(table, "REPO_TOP_DIRS", ()))
+    parts = target.split("/")
+    if parts and parts[0] in top_dirs:
+        resolved = target
+    else:
+        base_dir = posixpath.dirname(rel_path.replace("\\", "/"))
+        joined = posixpath.join(base_dir, target)
+        resolved = posixpath.normpath(joined)
+    if resolved.startswith(".."):
+        return None
+    return resolved
+
+
 def _in_pip_extra(text: str, start: int, end: int) -> bool:
     """Return True when ``text[start:end]`` lies inside a ``kaine[...]`` pip extra."""
     line_start = text.rfind("\n", 0, start) + 1
@@ -1094,6 +1244,7 @@ def _assign_scope(
     toml_table: str | None,
     tokens: list[dict],
     table,
+    capabilities: frozenset[str] = frozenset(),
 ) -> str:
     """Assign a scope to a candidate match using the rules from the spec."""
     lower_path = rel_path.lower().replace("\\", "/")
@@ -1123,6 +1274,7 @@ def _assign_scope(
         ):
             first_seg = T.split("/")[0]
             if first_seg not in getattr(table, "REPO_TOP_DIRS", ()):
+
                 return "persisted"
 
     env_vars = _env_var_set(table)
@@ -1145,10 +1297,21 @@ def _assign_scope(
     if _in_pip_extra(text, start, end):
         return "operator"
 
-    if _is_prose_like(ctx) and shape == "bare":
-        if T == W or T.endswith(".md") or T.startswith("docs/"):
-            return "prose"
-    if T.endswith(".md") or T.startswith("docs/"):
+    if ctx in {"py_text", "toml_text"}:
+        return "operator"
+
+    if ctx in {"md_prose", "comment", "docstring", "toml_comment"}:
+        if not _is_code_reference(text, start, end, ctx):
+            if shape == "bare":
+                return "prose"
+            if _is_prose_compound(T, capabilities):
+                top_dirs = getattr(table, "REPO_TOP_DIRS", ())
+                if not any(T.startswith(d + "/") for d in top_dirs):
+                    return "prose"
+    target = _link_target(rel_path, T, table)
+    if target is not None:
+        return _path_move_scope(target)
+    if T.startswith("docs/"):
         return "prose"
 
     if ctx == "py_name":
@@ -1424,6 +1587,36 @@ def _resolve_non_guarded(
     return (True, "word")
 
 
+def _adjust_possessive(
+    text: str, start: int, end: int, new_sub: str, ctx: str | None
+) -> tuple[int, str]:
+    """
+    Extend a replacement through a bare apostrophe when the old name ended in
+    ``s`` but the new name does not.
+
+    Only in prose-like contexts, when the old text ends in ``s``/``S``, the
+    match is not a code reference, the character before the match is not a
+    quote/apostrophe, and the character after the apostrophe is not a
+    letter or digit. Path segments never extend.
+    """
+    old_sub = text[start:end]
+    if not old_sub or old_sub[-1] not in ("s", "S"):
+        return end, new_sub
+    if not new_sub or new_sub[-1].lower() == "s":
+        return end, new_sub
+    if ctx not in {"md_prose", "comment", "docstring", "toml_comment"}:
+        return end, new_sub
+    if _is_code_reference(text, start, end, ctx):
+        return end, new_sub
+    if start > 0 and text[start - 1] in ("'", '"'):
+        return end, new_sub
+    if end >= len(text) or text[end] != "'":
+        return end, new_sub
+    if end + 1 < len(text) and text[end + 1].isalnum():
+        return end, new_sub
+    return end + 1, new_sub + "'s"
+
+
 def _replacement_for(
     text: str,
     start: int,
@@ -1433,10 +1626,39 @@ def _replacement_for(
     old_key: str,
     plural: bool,
     table,
+    ctx: str | None,
+    T: str,
+    rel_path: str,
+    capabilities: frozenset[str] = frozenset(),
 ) -> str:
     entry = _all_entries(table)[old_key]
     forms = _new_forms(entry, plural)
     matched = text[start:end]
+
+    code_like = _is_code_reference(text, start, end, ctx)
+
+    if (
+        _is_prose_compound(T, capabilities)
+        and ctx in {"md_prose", "comment", "docstring", "toml_comment"}
+        and not code_like
+    ):
+        sep = "-" if "-" in T else "/"
+        if matched[0].isupper():
+            if sep == "-":
+                kebab = forms["kebab"]
+                if kebab and kebab[0].islower():
+                    return kebab[0].upper() + kebab[1:]
+                return kebab
+            prose = forms["prose"]
+            if prose and prose[0].islower():
+                return prose[0].upper() + prose[1:]
+            return prose
+        if sep == "-":
+            return forms["kebab"]
+        prose = forms["prose"]
+        if prose and prose[0].isupper():
+            return prose[0].lower() + prose[1:]
+        return prose
 
     kebab = False
     if start > 0 and text[start - 1] == "-":
@@ -1445,11 +1667,20 @@ def _replacement_for(
         kebab = True
 
     if matched[0].islower():
-        if kebab:
+        force_kebab = False
+        if T.endswith(".md") or "docs/" in T:
+            link_target = _link_target(rel_path, T, table)
+            if link_target is not None and (
+                link_target.startswith("docs/")
+                or link_target.startswith("openspec/specs/")
+                or re.match(r"openspec/changes/[^/]+/specs/", link_target)
+            ):
+                force_kebab = True
+        if kebab or force_kebab:
             return forms["kebab"]
         if shape == "camel_lower":
             return forms["lower_camel"]
-        if scope == "prose":
+        if not code_like and _is_prose_like(ctx) and shape == "bare":
             if forms["prose"][0].isupper():
                 return forms["prose"][0].lower() + forms["prose"][1:]
             return forms["prose"]
@@ -1461,11 +1692,14 @@ def _replacement_for(
         return forms["upper"]
 
     if matched[0].isupper():
-        if scope == "prose" and shape == "bare":
-            return forms["prose"]
+        if not code_like and _is_prose_like(ctx) and shape == "bare":
+            prose = forms["prose"]
+            if prose and prose[0].islower():
+                return prose[0].upper() + prose[1:]
+            return prose
         return forms["class"]
 
-    if scope == "prose":
+    if not code_like and _is_prose_like(ctx) and shape == "bare":
         return forms["prose"]
     return forms["key"]
 
@@ -1591,6 +1825,7 @@ def _apply_key_overrides(
     rel_path: str,
     tokens: list[dict],
     table,
+    capabilities: frozenset[str] = frozenset(),
 ) -> list[tuple[int, int, str, str, str, str]]:
     replacements: list[tuple[int, int, str, str, str, str]] = []
     regex, group_map = _name_regex(table)
@@ -1647,6 +1882,7 @@ def _apply_key_overrides(
                             toml_table,
                             tokens,
                             table,
+                            capabilities,
                         )
                         if scope in scopes:
                             replacements.append(
@@ -1728,8 +1964,6 @@ def _apply_phrases(
     table,
 ) -> list[tuple[int, int, str, str, str, str]]:
     replacements: list[tuple[int, int, str, str, str, str]] = []
-    if "prose" not in scopes:
-        return replacements
     regex, group_map = _name_regex(table)
     phrases: list[tuple[str, str, str]] = []
     for old_p, new_p in getattr(table, "PHRASES", ()):
@@ -1751,13 +1985,20 @@ def _apply_phrases(
             if idx == -1:
                 break
             end = idx + len(old_p)
+            before_ok = idx == 0 or not _is_word_char(text[idx - 1])
+            after_ok = end == len(text) or not _is_word_char(text[end])
+            ctx = _context_at(idx, intervals)
             if (
-                not _blocked(idx, end, blocked)
+                before_ok
+                and after_ok
+                and not _blocked(idx, end, blocked)
                 and _same_context(idx, end, intervals)
-                and _is_prose_like(_context_at(idx, intervals))
+                and _is_prose_like(ctx)
             ):
-                replacements.append((idx, end, new_p, "prose", "phrase", attr))
-                blocked.append((idx, end))
+                scope = "operator" if ctx in {"py_text", "toml_text"} else "prose"
+                if scope in scopes:
+                    replacements.append((idx, end, new_p, scope, "phrase", attr))
+                    blocked.append((idx, end))
                 pos = end
             else:
                 pos = idx + 1
@@ -1774,6 +2015,7 @@ def _apply_word_matches(
     rel_path: str,
     tokens: list[dict],
     table,
+    capabilities: frozenset[str] = frozenset(),
 ) -> tuple[
     list[tuple[int, int, str, str, str, str]],
     dict[str, int],
@@ -1817,11 +2059,11 @@ def _apply_word_matches(
             action, rule_text = resolution
             if action == "rename":
                 scope = _assign_scope(
-                    rel_path, ctx, text, start, end, W, T, shape, toml_table, tokens, table
+                    rel_path, ctx, text, start, end, W, T, shape, toml_table, tokens, table, capabilities
                 )
                 if scope in scopes:
                     new_text = _replacement_for(
-                        text, start, end, scope, shape, old_key, plural, table
+                        text, start, end, scope, shape, old_key, plural, table, ctx, T, rel_path, capabilities
                     )
                     replacements.append(
                         (start, end, new_text, scope, rule_text, old_key)
@@ -1850,11 +2092,11 @@ def _apply_word_matches(
             action, rule_text = guarded_result
             if action == "rename":
                 scope = _assign_scope(
-                    rel_path, ctx, text, start, end, W, T, shape, toml_table, tokens, table
+                    rel_path, ctx, text, start, end, W, T, shape, toml_table, tokens, table, capabilities
                 )
                 if scope in scopes:
                     new_text = _replacement_for(
-                        text, start, end, scope, shape, old_key, plural, table
+                        text, start, end, scope, shape, old_key, plural, table, ctx, T, rel_path, capabilities
                     )
                     replacements.append(
                         (start, end, new_text, scope, rule_text, old_key)
@@ -1879,11 +2121,11 @@ def _apply_word_matches(
         rename, rule_text = _resolve_non_guarded(ctx, T, rel_path, text, start, end, table)
         if rename:
             scope = _assign_scope(
-                rel_path, ctx, text, start, end, W, T, shape, toml_table, tokens, table
+                rel_path, ctx, text, start, end, W, T, shape, toml_table, tokens, table, capabilities
             )
             if scope in scopes:
                 new_text = _replacement_for(
-                    text, start, end, scope, shape, old_key, plural, table
+                    text, start, end, scope, shape, old_key, plural, table, ctx, T, rel_path, capabilities
                 )
                 replacements.append((start, end, new_text, scope, rule_text, old_key))
                 blocked.append((start, end))
@@ -2041,6 +2283,7 @@ def rewrite_text(
     scopes: set[str],
     only: set[str] | None = None,
     change_ids: frozenset[str] = frozenset(),
+    capabilities: frozenset[str] = frozenset(),
 ) -> FileResult:
     """
     Rewrite the contents of one file according to the table.
@@ -2061,7 +2304,7 @@ def rewrite_text(
     replacements: list[tuple[int, int, str, str, str, str]] = []
 
     overrides = _apply_key_overrides(
-        text, intervals, blocked, scopes, only, rel_path, tokens, table
+        text, intervals, blocked, scopes, only, rel_path, tokens, table, capabilities
     )
     replacements.extend(overrides)
 
@@ -2072,7 +2315,7 @@ def rewrite_text(
     replacements.extend(phrases)
 
     word_reps, kept, queued = _apply_word_matches(
-        text, intervals, blocked, scopes, only, change_ids, rel_path, tokens, table
+        text, intervals, blocked, scopes, only, change_ids, rel_path, tokens, table, capabilities
     )
     replacements.extend(word_reps)
 
@@ -2086,6 +2329,14 @@ def rewrite_text(
         key_collisions = []
 
     collisions: list[tuple[str, str, str]] = seq_collisions + key_collisions
+
+    adjusted: list[tuple[int, int, str, str, str, str]] = []
+    for rep in replacements:
+        start, end, new_sub, scope, rule, old_key = rep
+        ctx = _context_at(start, intervals)
+        new_end, new_sub = _adjust_possessive(text, start, end, new_sub, ctx)
+        adjusted.append((start, new_end, new_sub, scope, rule, old_key))
+    replacements = adjusted
 
     replacements.sort(key=lambda r: r[0])
     new_text = text
@@ -2198,6 +2449,7 @@ def new_path(
     kebab_dir = rel_norm.startswith("openspec/specs/") or re.match(
         r"openspec/changes/[^/]+/specs/", rel_norm
     )
+    docs_path = rel_norm.startswith("docs/")
 
     full_path = "/".join(parts)
     new_parts: list[str] = []
@@ -2283,14 +2535,15 @@ def new_path(
                 end < len(segment) and segment[end] == "-"
             )
             if matched[0].islower():
-                new_sub = forms["kebab"] if (kebab_neighbor or kebab_dir) else forms["key"]
+                new_sub = forms["kebab"] if (kebab_neighbor or kebab_dir or docs_path) else forms["key"]
             elif matched[0].isupper() and (
                 len(matched) == 1 or matched[1:].isupper()
             ):
                 new_sub = forms["upper"]
             else:
                 new_sub = forms["class"]
-            current_segment = current_segment[:start] + new_sub + current_segment[end:]
+            new_end, new_sub = _adjust_possessive(segment, start, end, new_sub, "path")
+            current_segment = current_segment[:start] + new_sub + current_segment[new_end:]
             changed = True
 
         new_parts.append(current_segment)
@@ -2328,26 +2581,60 @@ def tracked_files(root: Path) -> list[str]:
 
 def change_ids(root: Path, files: Iterable[str]) -> frozenset[str]:
     """Collect active and archived change IDs that contain a hyphen."""
+    del root
     active: set[str] = set()
     archived: set[str] = set()
     for rel in files:
         rel_norm = rel.replace("\\", "/")
-        if rel_norm.startswith("openspec/changes/"):
-            parts = rel_norm.split("/")
-            if len(parts) > 2:
-                cid = parts[2]
-                if cid != "archive":
-                    active.add(cid)
-        if rel_norm.startswith("openspec/changes/archive/"):
-            parts = rel_norm.split("/")
-            if len(parts) > 3:
-                cid = parts[3]
-                m = re.match(r"^\d{4}-\d{2}-\d{2}-(.+)$", cid)
-                if m:
-                    archived.add(m.group(1))
+        parts = rel_norm.split("/")
+        # Only segments that are directories (not the final path part) may be IDs.
+        max_dir_idx = len(parts) - 1
+        if max_dir_idx <= 0:
+            continue
+        for i in range(max_dir_idx - 1):
+            if parts[i] == "openspec" and parts[i + 1] == "changes":
+                next_idx = i + 2
+                if next_idx >= max_dir_idx:
+                    continue
+                candidate = parts[next_idx]
+                if candidate == "archive":
+                    archive_idx = next_idx + 1
+                    if archive_idx >= max_dir_idx:
+                        continue
+                    cid = parts[archive_idx]
+                    m = re.match(r"^\d{4}-\d{2}-\d{2}-(.+)$", cid)
+                    if m:
+                        archived.add(m.group(1))
+                    else:
+                        archived.add(cid)
                 else:
-                    archived.add(cid)
+                    active.add(candidate)
     return frozenset(cid for cid in (active | archived) if "-" in cid)
+
+
+def openspec_capabilities(files: Iterable[str]) -> frozenset[str]:
+    """Collect capability folder names following every openspec/specs/ segment."""
+    caps: set[str] = set()
+    for rel in files:
+        rel_norm = rel.replace("\\", "/")
+        parts = rel_norm.split("/")
+        for i in range(len(parts) - 2):
+            if parts[i] == "openspec" and parts[i + 1] == "specs":
+                candidate = parts[i + 2]
+                if candidate and i + 2 < len(parts) - 1:
+                    caps.add(candidate)
+            elif (
+                parts[i] == "openspec"
+                and parts[i + 1] == "changes"
+                and parts[i + 2] != "archive"
+                and i + 3 < len(parts)
+                and parts[i + 3] == "specs"
+                and i + 4 < len(parts)
+            ):
+                candidate = parts[i + 4]
+                if candidate and i + 4 < len(parts) - 1:
+                    caps.add(candidate)
+    return frozenset(caps)
 
 
 def is_excluded(rel_path: str, table) -> bool:
@@ -2383,6 +2670,7 @@ def plan(
     """Build a full rename plan for the repository."""
     files = tracked_files(root)
     change_ids_set = change_ids(root, files)
+    capabilities_set = openspec_capabilities(files)
 
     moves: list[tuple[str, str, str]] = []
     results: dict[str, FileResult] = {}
@@ -2412,7 +2700,7 @@ def plan(
         except UnicodeDecodeError:
             continue
 
-        result = rewrite_text(rel, text, table, scopes, only, change_ids_set)
+        result = rewrite_text(rel, text, table, scopes, only, change_ids_set, capabilities_set)
         if result.skipped:
             results[rel] = result
             continue

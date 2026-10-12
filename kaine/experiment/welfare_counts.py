@@ -4,7 +4,7 @@
 """Welfare gray-zone counters and sensor advisory state from the JSONL rollup (boundary-neutral).
 
 Lives in ``kaine.experiment`` so BOTH the evaluation tab
-(``kaine.evaluation.nexus_tab``) and the Nexus diagnostics health board
+(``kaine.evaluation.nexus_tab``) and the dashboard diagnostics health board
 (``kaine.nexus.health``) can read it without ``kaine.nexus`` importing
 ``kaine.evaluation`` (which the sidecar boundary forbids). Numeric only, no
 entity-interior content (records are scrubbed through the shared PrivacyFilter

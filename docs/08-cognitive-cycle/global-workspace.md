@@ -1,6 +1,6 @@
 # The global workspace
 
-Syneidesis is KAINE's global workspace. On every processing tick it scores the candidate events the active modules have published, ranks them, and forms a coalition. On a broadcast tick the cycle publishes that coalition, and the members whose scores reach the access threshold are the accessed content: they can drive report and action, and the perceptual and interoceptive processors adopt a summary of them as the context for their next predictions. This page documents the scoring formula and the access rule exactly as the code computes them, the broadcast payload, the prediction context built from it, the optional coherence layer, and how Volition turns an accessed broadcast into intents. Read it if you are tuning selection parameters, wiring a new module, or tracing why an event did or did not lead to speech.
+The workspace module implements KAINE's global workspace. On every processing tick it scores the candidate events the active modules have published, ranks them, and forms a coalition. On a broadcast tick the cycle publishes that coalition, and the members whose scores reach the access threshold are the accessed content: they can drive report and action, and the perceptual and interoceptive processors adopt a summary of them as the context for their next predictions. This page documents the scoring formula and the access rule exactly as the code computes them, the broadcast payload, the prediction context built from it, the optional coherence layer, and how the action selection module turns an accessed broadcast into intents. Read it if you are tuning selection parameters, wiring a new module, or tracing why an event did or did not lead to speech.
 
 Related: [The cognitive cycle](README.md) · [Architecture](../02-architecture/README.md) · [Configuration reference](../appendix-a-configuration/README.md)
 
@@ -43,7 +43,7 @@ score(e)    = clamp(T × C_g(priority(e)))
 | `I(e)` | `event.salience` | The intensity the publishing module assigned when it published the event. The bus rejects values outside `[0, 1]`. |
 | `N(e)` | `NoveltyTracker.observe` | `max(0, 1 − r / W)`, where `r` counts earlier occurrences of the event's fingerprint among the last `W` scored candidates and `W` is `[syneidesis].novelty_window` (32). The fingerprint is a hash of the source, the type and the complete payload, so only an exact repeat is discounted. Every scored candidate enters the window, on broadcast ticks and on other ticks alike. |
 | `G(e)` | `GoalScorer.relevance` | 1 with the shipped static goal factor. See [The goal factor](#the-goal-factor). |
-| `T` | `ThymosModulator.modulate` | The level gain, `0.2 + 0.8 × a`, where `a` is the current Thymos arousal. It is the same for every candidate of a tick. |
+| `T` | `ThymosModulator.modulate` | The level gain, `0.2 + 0.8 × a`, where `a` is the current Affect arousal. It is the same for every candidate of a tick. |
 | `g` | `ThymosModulator.contrast_gain` | The contrast gain, `arousal_contrast_gain × clamp((a − a0) / (1 − a0))`, with `a0` the baseline arousal (`[thymos].baseline_arousal`, 0.3) and `[syneidesis].arousal_contrast_gain` 8.0. It is 0 at or below baseline arousal. |
 
 `C_g` is the logistic rescaled so that it maps 0 to 0 and 1 to 1:
@@ -57,26 +57,26 @@ where `σ` is the logistic function. The code treats any gain at or below `1e-9`
 
 If the scorer raises for an event, that event gets score 0 and a warning is logged.
 
-With `[syneidesis].salience_thymos_factor = "static"`, the Thymos factor is the constant 1 with contrast gain 0, so the score equals the priority. That setting is a negative control and logs a degraded-mode warning.
+With `[syneidesis].salience_thymos_factor = "static"`, the affect module's factor is the constant 1 with contrast gain 0, so the score equals the priority. That setting is a negative control and logs a degraded-mode warning.
 
 ### What the formula does and does not do
 
-The workspace applies no weight per source. Precision is local to each predictive processor: Topos, Audition, Soma and Chronos each divide their current prediction error by the mean of their own recent errors and report a graded intensity from that ratio (`kaine/modules/intensity.py`):
+The workspace applies no weight per source. Precision is local to each predictive processor: the vision, audition, interoception and sequence modules each divide their current prediction error by the mean of their own recent errors and report a graded intensity from that ratio (`kaine/modules/intensity.py`):
 
 ```
 I = alert level                                              on a categorical alert
 I = baseline + (alert level − baseline) × min(1, ratio / 2)  otherwise
 ```
 
-So within a tick the processors' candidates compete on surprise measured against each channel's own history. A module's baseline and alert levels set the range over which its surprise is graded, which makes them per-source weights in effect. Thymos, Hypnos and Lingua publish at fixed levels. Every predictive processor's report payload carries a boolean `alert`.
+So within a tick the processors' candidates compete on surprise measured against each channel's own history. A module's baseline and alert levels set the range over which its surprise is graded, which makes them per-source weights in effect. The affect, sleep and language modules publish at fixed levels. Every predictive processor's report payload carries a boolean `alert`.
 
-Arousal is the global gain. Because `T` is common to every candidate and `C_g` is strictly increasing, arousal never changes the order of the candidates within a tick. It moves the scores relative to the access threshold and the report bars, so it decides whether a broadcast is accessed and which of its members are, and it widens the gap between strong and weak candidates' scores. Arousal also sizes the sensory apertures (the Topos fovea and the Audition attended window), which changes what the processors report next.
+Arousal is the global gain. Because `T` is common to every candidate and `C_g` is strictly increasing, arousal never changes the order of the candidates within a tick. It moves the scores relative to the access threshold and the report bars, so it decides whether a broadcast is accessed and which of its members are, and it widens the gap between strong and weak candidates' scores. Arousal also sizes the sensory apertures (the vision module's fovea and the audition module's attended window), which changes what the processors report next.
 
 With the shipped values, resting arousal (0.3) gives `T = 0.44` and `g = 0`, so a candidate reaches the threshold of 0.35 only when its priority is at least about 0.80. A priority below about 0.43 never reaches the threshold at any arousal. The intensity levels, the threshold and the report bars are provisional and are to be calibrated together on the live system before the planned runs; that calibration has not been done yet.
 
 ### The goal factor
 
-`[syneidesis].salience_goal_factor` selects the goal factor. The shipped value, `"static"`, holds it at 1, and the boot logs an informational note. The alternative, `"drive_relevance"`, is built and off by default because it changes what reaches access. It reads the dominant Thymos drive `d` with value `v` and returns
+`[syneidesis].salience_goal_factor` selects the goal factor. The shipped value, `"static"`, holds it at 1, and the boot logs an informational note. The alternative, `"drive_relevance"`, is built and off by default because it changes what reaches access. It reads the dominant affect module's drive `d` with value `v` and returns
 
 ```
 G(e) = 1 − v × (1 − relevance(e)) × 0.5
@@ -84,7 +84,7 @@ G(e) = 1 − v × (1 − relevance(e)) × 0.5
 
 where `relevance(e)` is 1 when the event's source relieves `d` and 0 otherwise, and `G = 1` when no drive is positive.
 
-Each module class declares the drives its events relieve in `relieves_drives`. At boot `kaine/boot/wiring.py` builds the drive-to-source table from the registered modules' declarations, adds Volition (restlessness), and injects the table into the scorer, so the workspace never imports a module. A tag that is not one of the four drives (`curiosity`, `boredom`, `social_drive`, `restlessness`) fails the boot.
+Each module class declares the drives its events relieve in `relieves_drives`. At boot `kaine/boot/wiring.py` builds the drive-to-source table from the registered modules' declarations, adds the action selection module (restlessness), and injects the table into the scorer, so the workspace never imports a module. A tag that is not one of the four drives (`curiosity`, `boredom`, `social_drive`, `restlessness`) fails the boot.
 
 Both live factors read affect and drives through an `AffectStateProvider` (`kaine/cycle/affect_state.py`), which the cycle refreshes each tick from the `thymos.state` events it already collects. Scoring is a function of the event and that snapshot, with no wall-clock reads and no random numbers.
 
@@ -92,14 +92,14 @@ Both live factors read affect and drives through an `AffectStateProvider` (`kain
 
 `kaine/workspace/syneidesis.py` · `Syneidesis._compose`
 
-Syneidesis sorts the candidates by score in decreasing order. The sort is stable, so equal scores keep the canonical order by source, type and bus entry id. The first `[syneidesis].top_k` candidates (default 5) form the coalition. Then:
+The workspace sorts the candidates by score in decreasing order. The sort is stable, so equal scores keep the canonical order by source, type and bus entry id. The first `[syneidesis].top_k` candidates (default 5) form the coalition. Then:
 
 ```
 inhibited = best score < θ
 metadata["access_threshold"] = θ
 ```
 
-where `θ` is `[syneidesis].publication_threshold` (default 0.35), the access threshold. A coalition member is accessed when its own score reaches `θ` (a score equal to `θ` counts). A broadcast is accessed when at least one member is, which is the same as its best score reaching `θ`, so `inhibited` is false exactly when the broadcast is accessed. A member of an accessed broadcast whose score is below `θ` is broadcast but not accessed. With no candidates, Syneidesis returns an empty snapshot marked inhibited, whose metadata holds only the arm (the pooled arm below is the exception: its empty snapshot is not inhibited).
+where `θ` is `[syneidesis].publication_threshold` (default 0.35), the access threshold. A coalition member is accessed when its own score reaches `θ` (a score equal to `θ` counts). A broadcast is accessed when at least one member is, which is the same as its best score reaching `θ`, so `inhibited` is false exactly when the broadcast is accessed. A member of an accessed broadcast whose score is below `θ` is broadcast but not accessed. With no candidates, the workspace returns an empty snapshot marked inhibited, whose metadata holds only the arm (the pooled arm below is the exception: its empty snapshot is not inhibited).
 
 Every broadcast with candidates carries the threshold in its metadata so that each module can tell accessed members from the rest of the coalition. When the coherence layer is on, the threshold applies to the coherence-adjusted scores.
 
@@ -107,7 +107,7 @@ Every broadcast with candidates carries the threshold in its metadata so that ea
 
 ## The broadcast
 
-On a broadcast tick the cycle publishes the snapshot to `workspace.broadcast` whatever its state: accessed, inhibited, or empty. The cycle then calls Volition. The payload has these fields:
+On a broadcast tick the cycle publishes the snapshot to `workspace.broadcast` whatever its state: accessed, inhibited, or empty. The cycle then calls the action selection module. The payload has these fields:
 
 | Field | Content |
 |---|---|
@@ -125,18 +125,18 @@ How modules use the broadcast depends on its state:
 
 | Reader | Accessed broadcast | Inhibited broadcast |
 |---|---|---|
-| Topos, Audition, Soma | Adopt its accessed members as prediction context | Ignore it; the previous context stays |
-| Chronos | Takes it as the input it predicts | Takes it as input too |
-| Thymos | Appraises it | Appraises it |
-| Volition | Applies the report rule | Derives no intent |
+| Vision, Audition, Interoception | Adopt its accessed members as prediction context | Ignore it; the previous context stays |
+| Sequence | Takes it as the input it predicts | Takes it as input too |
+| Affect | Appraises it | Appraises it |
+| Action selection | Applies the report rule | Derives no intent |
 
-Because Chronos and Thymos read inhibited broadcasts, content that did not gain access can still influence later processing. Hypnos does not read the broadcast.
+Because the sequence and affect modules read inhibited broadcasts, content that did not gain access can still influence later processing. The sleep module does not read the broadcast.
 
 ## The broadcast as prediction context
 
 `kaine/modules/context.py` · `BroadcastContext`
 
-Topos, Audition and Soma each hold a `BroadcastContext`. When a broadcast arrives, `observe` adopts it only when it is not inhibited and at least one coalition member's score in `salience_scores` reaches `metadata["access_threshold"]`. The adopted members are exactly those accessed members, each weighted by its reported intensity (`salience`) rather than its score, so the context does not depend on the arousal gain. The context is held until the next adoption.
+The vision, audition and interoception modules each hold a `BroadcastContext`. When a broadcast arrives, `observe` adopts it only when it is not inhibited and at least one coalition member's score in `salience_scores` reaches `metadata["access_threshold"]`. The adopted members are exactly those accessed members, each weighted by its reported intensity (`salience`) rather than its score, so the context does not depend on the arousal gain. The context is held until the next adoption.
 
 The context vector is a 24-component featurization of the adopted members plus the context's age:
 
@@ -144,26 +144,26 @@ The context vector is a 24-component featurization of the adopted members plus t
 |---|---|
 | 0 | `log(1 + n)` for `n` members, capped at 8 |
 | 1 to 3 | Mean, maximum and sample standard deviation of the members' intensities (the standard deviation is 0 for fewer than two members) |
-| 4 to 11 | Intensity mass per source, in the order Soma, Chronos, Topos, Nous, Mnemos, Thymos, Lingua, Praxis; any other source except Audition (Hypnos, for example) adds to the Praxis component |
+| 4 to 11 | Intensity mass per source, in the order Interoception, Sequence, Vision, Planning, Episodic memory, Affect, Language, Effectors; any other source except Audition (Sleep, for example) adds to the Effectors component |
 | 12 to 19 | Intensity mass in eight buckets chosen by a hash of `(source, type)`, an indicator of event types |
 | 20 | `log(1 + age)`, the time in seconds since the module adopted the broadcast |
 | 21 | Inhibition flag, always 0 for a context |
 | 22 | Broadcast indicator, always 1 |
 | 23 | Intensity mass of Audition |
 
-The context records which modules' reports gained access, which event types, how strongly and how recently. It carries no payloads. Its age is the entity time since the broadcast was published: the cycle stamps each broadcast with `published_at` on the entity clock, and Topos, Audition and Soma read the age on the same shared clock when they form a prediction. A broadcast without the stamp is aged from its receipt, and the age is never negative.
+The context records which modules' reports gained access, which event types, how strongly and how recently. It carries no payloads. Its age is the entity time since the broadcast was published: the cycle stamps each broadcast with `published_at` on the entity clock, and the vision, audition and interoception modules read the age on the same shared clock when they form a prediction. A broadcast without the stamp is aged from its receipt, and the age is never negative.
 
-The context enters each processor's forward model as an extra input alongside the module's own recent inputs: the Topos forward model, both Audition forward models (the acoustic path and the tone path), and Soma's readout. The weights that read the context are learned online with the rest of the model, so each processor learns how much the shared context helps it predict its own input. Before the first adoption the context input is all zeros. Adaptation pauses during sleep, as it does for the rest of each forward model. Chronos does not hold a context; the broadcast is its input.
+The context enters each processor's forward model as an extra input alongside the module's own recent inputs: the vision module's forward model, both audition module forward models (the acoustic path and the tone path), and the interoception module's readout. The weights that read the context are learned online with the rest of the model, so each processor learns how much the shared context helps it predict its own input. Before the first adoption the context input is all zeros. Adaptation pauses during sleep, as it does for the rest of each forward model. The sequence module does not hold a context; the broadcast is its input.
 
 ### Broadcast information gain per report
 
-Topos, Audition's acoustic path and Soma also form a second prediction with a null context and publish, on every report, `context_gain`, the two errors it is computed from (`null_prediction_error` and `mean_prediction_error`), and `context_age_s`:
+The vision module, the audition module's acoustic path and the interoception module also form a second prediction with a null context and publish, on every report, `context_gain`, the two errors it is computed from (`null_prediction_error` and `mean_prediction_error`), and `context_age_s`:
 
 ```
 context_gain = (null error − error) / running mean error
 ```
 
-The null context keeps the module's own share of the context and replaces the other sources' share with its mean over the contexts the module has adopted so far in the run. Components 0 to 3 are replaced by their running means, the additive components (4 to 19 and 23) by the kept sources' current share plus the mean of the other sources' share, and components 20 to 22 are kept. The context and its null are built from one reading of the clock, so they carry the same age. The kept sources are `topos` for Topos, `audition` for Audition, and `soma` and `lingua` for Soma, because the language organ's load on the host would otherwise let its share predict Soma's input. The null prediction never trains the model. `context_gain` is `None` until a prediction formed with an adopted context has been scored.
+The null context keeps the module's own share of the context and replaces the other sources' share with its mean over the contexts the module has adopted so far in the run. Components 0 to 3 are replaced by their running means, the additive components (4 to 19 and 23) by the kept sources' current share plus the mean of the other sources' share, and components 20 to 22 are kept. The context and its null are built from one reading of the clock, so they carry the same age. The kept sources are `topos` for the vision module, `audition` for the audition module, and `soma` and `lingua` for the interoception module, because the language organ's load on the host would otherwise let its share predict the interoception module's input. The null prediction never trains the model. `context_gain` is `None` until a prediction formed with an adopted context has been scored.
 
 This per-report gain is the measurement the planned workspace-mediation test is built on. The positive control that checks the measure detects injected information is built as a study-mode facility (`[positive_control]`, off by default). See [For researchers](../14-for-researchers.md#the-planned-test).
 
@@ -173,9 +173,9 @@ This per-report gain is the measurement the planned workspace-mediation test is 
 
 - `competitive`, the default, is selection and access as described above.
 - `matched` scores every candidate as usual, then on each broadcast tick draws `min(top_k, n)` of the `n` candidates uniformly without regard to score, from a generator seeded from the run seed (`[experiment].seed`). The drawn members are ordered by score. A drawn member is accessed when its score reaches `θ`, and the broadcast is inhibited when none does. Ticks that are not broadcast ticks draw nothing, so the same seed and the same broadcast ticks give the same coalitions. A matched selection whose context does not say whether the tick is a broadcast tick is refused. The generator's state is not saved: the draws reproduce within one uninterrupted run, and a restart or revive starts the stream again from the seed.
-- `pooled` scores nothing. Every candidate of the tick is a member, the broadcast is never inhibited, the score table carries each candidate's intensity (Volition applies its report bars to intensities), and the metadata has no access threshold, so every member enters the context. An empty pooled broadcast replaces the context with the featurization of the empty set.
+- `pooled` scores nothing. Every candidate of the tick is a member, the broadcast is never inhibited, the score table carries each candidate's intensity (the action selection module applies its report bars to intensities), and the metadata has no access threshold, so every member enters the context. An empty pooled broadcast replaces the context with the featurization of the empty set.
 
-The two controls need the coherence layer off, as it is in the base-thesis form; Syneidesis refuses the combination at construction.
+The two controls need the coherence layer off, as it is in the base-thesis form; the workspace refuses the combination at construction.
 
 A run selects its arm through a study configuration, which also sets greedy decoding: `KAINE_STUDY=workspace_mediation_matched` (or `_competitive`, `_pooled`) applies `config/studies/workspace_mediation_matched.toml` after the operator file. See [How configuration is loaded](../appendix-a-configuration/README.md#how-configuration-is-loaded).
 
@@ -183,9 +183,9 @@ A run selects its arm through a study configuration, which also sets greedy deco
 
 `kaine/workspace/coherence.py`
 
-The coherence layer is controlled by `[oscillator].enabled` and is off by default. When it is off, Syneidesis has no coherence scorer, selection skips the coherence step entirely, and no `metadata["coherence"]` is written.
+The coherence layer is controlled by `[oscillator].enabled` and is off by default. When it is off, the workspace has no coherence scorer, selection skips the coherence step entirely, and no `metadata["coherence"]` is written.
 
-When it is on, the cycle passes `context["phases"]` to Syneidesis each tick, a dict mapping module names to oscillator phase in radians, and the scorer appends each module's phase to a sliding window of `[oscillator].plv_window` samples (default 10, minimum 10).
+When it is on, the cycle passes `context["phases"]` to the workspace each tick, a dict mapping module names to oscillator phase in radians, and the scorer appends each module's phase to a sliding window of `[oscillator].plv_window` samples (default 10, minimum 10).
 
 ### Phase-locking value
 
@@ -213,11 +213,11 @@ The defaults are `coherence_floor = 0.8` and `coherence_ceiling = 1.25`, so the 
 
 Two tests keep the toggle honest. With the layer disabled, an instance driven through many cycles with the same seed, events and phases as a baseline instance without a layer selects the same events in the same order, with the same scores and inhibition flag, and neither writes `metadata["coherence"]`. With the layer enabled at an extreme ceiling and floor, a phase-locked event with a lower raw score overtakes a desynchronized event with a higher one, which shows the layer is connected to selection.
 
-## Volition and the report rule
+## Action selection and the report rule
 
 `kaine/workspace/volition.py` · `kaine/workspace/report_policy.py`
 
-The cycle calls `Volition.select(snapshot)` after each successful publication. Volition checks `inhibited` first and returns no intents for an inhibited broadcast. It is the only path from the workspace to an output; the cycle publishes the returned intents on `volition.out` and never calls an effector itself.
+The cycle calls `Volition.select(snapshot)` after each successful publication. The action selection module checks `inhibited` first and returns no intents for an inhibited broadcast. It is the only path from the workspace to an output; the cycle publishes the returned intents on `volition.out` and never calls an effector itself.
 
 The policy is chosen by `[volition].policy` and `[volition].drive_initiative`:
 
@@ -227,7 +227,7 @@ The policy is chosen by `[volition].policy` and `[volition].drive_initiative`:
 | no `policy`, `drive_initiative = true` (the code default) | `DriveBiasedActionSelectionPolicy` |
 | no `policy`, `drive_initiative = false` | `DefaultActionSelectionPolicy` |
 
-When Nous is enabled, the composition root wraps whichever policy was chosen in `NousProposalSource` (`kaine/workspace/nous_proposals.py`), and the cycle publishes `volition.proposal_outcome` events on `volition_feedback.out` after the intents, including for inhibited broadcasts so that the Nous critic receives feedback. The `thesis_test` profile sets the self-initiated report policy with `drive_initiative = false`, and Nous is off in that profile.
+When the planning module is enabled, the composition root wraps whichever policy was chosen in `NousProposalSource` (`kaine/workspace/nous_proposals.py`), and the cycle publishes `volition.proposal_outcome` events on `volition_feedback.out` after the intents, including for inhibited broadcasts so that the planning module critic receives feedback. The `thesis_test` profile sets the self-initiated report policy with `drive_initiative = false`, and the planning module is off in that profile.
 
 ### The self-initiated report policy
 
@@ -252,16 +252,16 @@ The bars are a heuristic stand-in for the report-or-act decision of the predicti
 
 `kaine/security/intent_signing.py` · `kaine/modules/praxis/module.py`
 
-All modules of a single-process instance share one bus credential, so the bus alone cannot prove which module published an event. For `act` intents, the only kind that can reach an effector, the composition root generates a per-boot secret (`generate_intent_secret()`, 32 random bytes held in process memory, never persisted or logged) and gives it to Volition and Praxis.
+All modules of a single-process instance share one bus credential, so the bus alone cannot prove which module published an event. For `act` intents, the only kind that can reach an effector, the composition root generates a per-boot secret (`generate_intent_secret()`, 32 random bytes held in process memory, never persisted or logged) and gives it to the action selection module and the effectors module.
 
-Volition attaches a provenance envelope to every `act` intent: `run_id`, a per-signer monotonic `seq`, and `sig`, an HMAC-SHA256 over a canonical serialization of `(kind, effector, params, run_id, seq)`. `speak` and `think` intents carry no envelope. Praxis verifies the signature with `verify_intent_signature` before it runs any effector and drops a forged, unsigned or replayed intent, recording it as `provenance_rejected`. The operator's effector whitelist applies after that check. Praxis is held in the base-thesis form. See [Praxis](../09-modules/praxis.md).
+The action selection module attaches a provenance envelope to every `act` intent: `run_id`, a per-signer monotonic `seq`, and `sig`, an HMAC-SHA256 over a canonical serialization of `(kind, effector, params, run_id, seq)`. `speak` and `think` intents carry no envelope. The effectors module verifies the signature with `verify_intent_signature` before it runs any effector and drops a forged, unsigned or replayed intent, recording it as `provenance_rejected`. The operator's effector whitelist applies after that check. The effectors module is held in the base-thesis form. See the [effectors module](../09-modules/effectors.md).
 
 ## Streams
 
 | Stream | Direction | Events |
 |---|---|---|
 | `<module>.out` | module to bus | All module outputs |
-| `workspace.broadcast` | cycle (as Syneidesis) to bus | `snapshot` JSON field, with no Event wrapper |
+| `workspace.broadcast` | cycle (as Workspace) to bus | `snapshot` JSON field, with no Event wrapper |
 | `volition.out` | cycle to bus | `intent.speak`, `intent.think`, `intent.act`, `intent.rest` |
 | `volition_feedback.out` | cycle to bus | `volition.proposal_outcome` |
 | `cycle.control` | operator to bus | `cycle.set_rates` |
@@ -319,9 +319,9 @@ The level-gain floor and ceiling (0.2 and 1.0) are constructor defaults of `Stat
 | `kaine/workspace/volition.py` | `Volition`, `DefaultActionSelectionPolicy`, `Intent` |
 | `kaine/workspace/report_policy.py` | `SelfInitiatedReportPolicy` |
 | `kaine/workspace/drive_policy.py` | `DriveBiasedActionSelectionPolicy` |
-| `kaine/workspace/nous_proposals.py` | `NousProposalSource`, used when Nous is enabled |
+| `kaine/workspace/nous_proposals.py` | `NousProposalSource`, used when Planning is enabled |
 | `kaine/security/intent_signing.py` | `IntentSigner`, `generate_intent_secret`, `verify_intent_signature` |
 | `kaine/cycle/types.py` | `WorkspaceSnapshot` |
 | `kaine/cycle/affect_state.py` | `AffectStateProvider` |
 | `kaine/boot/wiring.py` | Builds the salience factors and the drive-to-source table |
-| `kaine/cycle/__main__.py` | Composition root that wires the policy, Volition and signing |
+| `kaine/cycle/__main__.py` | Composition root that wires the policy, Action selection and signing |

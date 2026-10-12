@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Gestation owner: readiness readout and bounded probe protocol.
+"""Developmental phase owner: readiness readout and bounded probe protocol.
 
-This component measures a gestating entity's readiness for birth. It does not
+This component measures the readiness of an entity in its developmental phase for maturation. It does not
 actuate the entity, push it toward any target, or change lifecycle stage.
 The probe protocol is bounded (hard maxima), disclosed via ``gestation.probe``
 events, and never runs while the cycle is frozen (which covers a welfare
@@ -23,9 +23,9 @@ Markers and their research sites:
     Duecker 2021).
   * ``hrv_variability`` — coefficient of variation of self-rhythm wrap
     intervals (Feldman & Eidelman 2003).
-  * ``womb_prediction_error`` — Topos raw prediction-error ratio across
-    gestation (Ciaunica 2021).
-  * ``return_to_baseline_seconds`` — Soma interoceptive surprise recovery after
+  * ``womb_prediction_error`` — the vision module's raw prediction-error ratio across
+    the developmental phase (Ciaunica 2021).
+  * ``return_to_baseline_seconds`` — the interoception module's interoceptive surprise recovery after
     perturbation (Feldman 2012).
 """
 
@@ -353,9 +353,9 @@ def assess_viability(
     ever_replicated: bool,
     cfg: GestationReadoutConfig,
 ) -> dict | None:
-    """Judge whether a gestation can still reach birth after a withdrawal.
+    """Judge whether a developmental phase can still reach maturation after a withdrawal.
 
-    Returns None if the gestation is still viable, otherwise a verdict dict.
+    Returns None if the developmental phase is still viable, otherwise a verdict dict.
     """
     conclusive = [h for h in history if h.get("pull") is not None]
 

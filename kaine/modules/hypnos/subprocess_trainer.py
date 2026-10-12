@@ -5,7 +5,7 @@
 
 ``SubprocessVoiceTrainer`` implements the same minimal :class:`Trainer`
 protocol as :class:`~kaine.modules.hypnos.voice_alignment.FakeTrainer`,
-so it drops into the same slot in ``boot.py::make_hypnos`` and Hypnos calls it
+so it drops into the same slot in ``boot.py::make_hypnos`` and the sleep module calls it
 identically. It runs the real unsloth DPO in an operator-configured EXTERNAL
 Python environment as a subprocess, or loads the same
 ``scripts/hypnos_external_train.py`` by path and calls its entry point in a
@@ -79,7 +79,7 @@ DEFAULT_TIMEOUT_S = 6 * 60 * 60
 
 class SubprocessTrainerError(RuntimeError):
     """Raised when the trainer fails to produce a valid, verifiable adapter.
-    Surfaced to Hypnos as a trainer error — never swallowed into a fake success.
+    Surfaced to the sleep module as a trainer error — never swallowed into a fake success.
     """
 
 
@@ -162,7 +162,7 @@ def _write_private(path: Path, text: str) -> None:
 def scrub_job_inputs(job_dir: Path) -> None:
     """Delete a job's sensitive inputs once the trainer has finished with them.
 
-    ``pairs.jsonl`` holds the being's prompts, utterances and decrypted system
+    ``pairs.jsonl`` holds the entity's prompts, utterances and decrypted system
     prompts, and ``previous_adapter/`` is a copy of its learned voice. The
     external trainer cannot import kaine to decrypt, so they are plaintext
     while it runs; they must not outlive the run.

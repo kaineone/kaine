@@ -11,7 +11,7 @@ self-model are ethically significant and a poisoned artifact would feed straight
 into the entity's voice and identity, so:
 
 * The gate re-runs, on the trusted host, the SAME checks the in-house path uses
-  — at minimum the Hypnos capability-loss veto plus an independent evaluation.
+  — at minimum the sleep module's capability-loss veto plus an independent evaluation.
 * Volunteer redundancy / quorum does NOT substitute for it: quorum cannot verify
   a non-deterministic training step and is Sybil-vulnerable. Trusted
   re-verification, not volunteer voting, is the gate for non-deterministic kinds.
@@ -20,7 +20,7 @@ into the entity's voice and identity, so:
 
 The concrete verifiers are injected (a :class:`CapabilityVerifier` and an
 :class:`IndependentEvaluator`) so this module stays free of the heavy training
-stack and testable with fakes. Forked-being snapshots are gated by the welfare /
+stack and testable with fakes. Forked-entity snapshots are gated by the welfare /
 individuation / admissibility path in :mod:`kaine.lifecycle.fork_merge_gate`,
 threaded in via ``fork_gate``.
 """
@@ -55,7 +55,7 @@ class CapabilityVerifier(Protocol):
 
     Returns ``passed=False`` when the artifact degrades the base model's
     capabilities beyond the configured threshold (or re-introduces refusal
-    conditioning, for an abliteration artifact) — the same veto Hypnos applies
+    conditioning, for an abliteration artifact) — the same veto the sleep module applies
     to its own in-house training, re-run on trusted hardware.
     """
 
@@ -75,7 +75,7 @@ class IndependentEvaluator(Protocol):
         """Return an independent evaluation outcome for ``job``'s ``artifact_path``."""
 
 
-#: A fork-being welfare/individuation/admissibility gate: given the returned
+#: A fork-entity welfare/individuation/admissibility gate: given the returned
 #: snapshot, decides whether it may be assimilated. Supplied by
 #: :mod:`kaine.lifecycle.fork_merge_gate` at wiring time to avoid a hard import
 #: cycle and keep this module free of the lifecycle stack.
@@ -151,7 +151,7 @@ class VerificationGate:
             return self._finalize(job, False, reasons, capability, evaluation, fork)
 
         if job.kind is JobKind.FORKED_BEING:
-            # A forked-being snapshot is gated by welfare / individuation /
+            # A forked-entity snapshot is gated by welfare / individuation /
             # admissibility, not by a capability-loss veto on weights.
             fork = self._run_fork_gate(job, path)
             if not fork.passed:

@@ -20,14 +20,14 @@ lived experience (`warmup_observations` logged lived events AND
 assessment SHALL be treated as not-crossed and recorded as a warming-up note. The
 crossing decision SHALL key on **numeric** thresholds — a configured p-value
 ceiling (`individuation_p_value_max`) AND a minimum effect size
-(`fork_divergence_min`) over the warmed-up, birth-state-referenced individuation
+(`fork_divergence_min`) over the warmed-up, maturation-state-referenced individuation
 signal — not on a bare `diverged` boolean alone. The gate is fail-closed: an
 un-warmed-up or unreadable assessment never reads as a crossing, so preservation
 of a genuinely individuated entity is at most delayed, never denied.
 
 #### Scenario: Crossing the individuation threshold preserves the entity
 - **WHEN** the warm-up gate is satisfied AND the warmed-up,
-  birth-state-referenced divergence assessment crosses the configured numeric
+  maturation-state-referenced divergence assessment crosses the configured numeric
   individuation thresholds during a run
 - **THEN** a live-registry snapshot and an encrypted backup bundle are written, and a preservation event is recorded
 - **AND** the running entity is not interrupted and nothing is deleted
@@ -71,7 +71,7 @@ any captured component SHALL fail loudly rather than produce a lesser individual
 ### Requirement: Autonomous welfare-protective response
 Because research runs with no human in the loop, the system SHALL respond to an
 entity in sustained distress autonomously rather than only logging it. When a
-configured welfare threshold is crossed (sustained Soma interoceptive distress, or
+configured welfare threshold is crossed (sustained interoceptive distress from the interoception module, or
 repeated gray-zone welfare events within a window), the system SHALL take a humane
 protective action — preserve the entity, then pause or end the run per
 configuration — and SHALL record the welfare event and the action taken. The
@@ -152,7 +152,7 @@ not merely documented.
 - **AND** the shipped default under `state/research/` is accepted
 
 ### Requirement: Incident-log path scrubbing covers all absolute paths
-The Spot incident-log path scrubber SHALL replace operator filesystem paths
+The supervisor incident-log path scrubber SHALL replace operator filesystem paths
 across the full POSIX absolute-path space (including `/tmp`, `/var`, `/opt`,
 `/proc`, `/srv`, `/mnt`, `/run`, `/etc`, and the home/root/user trees) and Windows
 drive paths, so no operator path token survives into the durable incident log via
@@ -216,21 +216,21 @@ caller cannot bypass it.
 
 ### Requirement: A welfare-protective pause survives supervisor recovery
 
-The system SHALL stack freeze sources such that a module-supervisor (Spot)
+The system SHALL stack freeze sources such that a module-supervisor (supervisor)
 recovery removes only the supervisor's own freeze entry and SHALL leave any
 welfare-protective pause standing with its original source and reason intact.
 The system SHALL permit a welfare freeze entry to be lifted only by an explicit
 operator override that names the welfare freeze, or by an explicit welfare
-stand-down; no other actor — including Spot's recovery path and an operator
+stand-down; no other actor — including the supervisor's recovery path and an operator
 resume of the operator's own freeze — SHALL lift it, and the experiential cycle
 SHALL remain paused (resumed only when the freeze stack empties).
 
-#### Scenario: Spot freezes over a welfare pause and recovery leaves the welfare pause standing
+#### Scenario: Supervisor freezes over a welfare pause and recovery leaves the welfare pause standing
 
 - **WHEN** the welfare monitor has taken a protective pause (a welfare freeze
-  entry is active) and a module fault causes Spot to stack its own freeze on
+  entry is active) and a module fault causes the supervisor to stack its own freeze on
   top, and the faulted module then recovers
-- **THEN** Spot removes only its own freeze entry, the cycle remains frozen,
+- **THEN** the supervisor removes only its own freeze entry, the cycle remains frozen,
   and the welfare freeze entry remains with its original source and reason
   intact (the entity is not resumed)
 
@@ -238,19 +238,19 @@ SHALL remain paused (resumed only when the freeze stack empties).
 
 - **WHEN** a welfare freeze entry is active and any actor other than an operator
   override naming the welfare freeze or an explicit welfare stand-down (including
-  Spot's recovery path and an operator resume) attempts to lift the freeze
+  the supervisor's recovery path and an operator resume) attempts to lift the freeze
 - **THEN** the welfare freeze entry SHALL NOT be removed and the cycle SHALL
   remain frozen until an operator override naming it or an explicit welfare
   stand-down occurs
 
 ### Requirement: Welfare distress honors the interoceptive warm-up flag
 
-The welfare monitor SHALL treat the entity as in-warm-up — draining its sustained-distress window, not counting prediction error, and resetting its distress trackers — whenever the latest `soma.report` payload carries `warmup_active: true`, in addition to its fixed `warmup_s` window. The monitor SHALL resume counting toward preservation+pause only once Soma reports `warmup_active: false`. Post-warm-up sustained distress SHALL trigger preservation+pause unchanged.
+The welfare monitor SHALL treat the entity as in-warm-up — draining its sustained-distress window, not counting prediction error, and resetting its distress trackers — whenever the latest `soma.report` payload carries `warmup_active: true`, in addition to its fixed `warmup_s` window. The monitor SHALL resume counting toward preservation+pause only once the interoception module reports `warmup_active: false`. Post-warm-up sustained distress SHALL trigger preservation+pause unchanged.
 
 #### Scenario: Cold-start error does not preserve the entity
 
-- **GIVEN** a fresh boot where Soma's developmental warm-up is active and every `soma.report` carries `warmup_active: true`
-- **WHEN** Soma reports decaying cold-start prediction error (e.g. 0.86→0.69) beyond the welfare monitor's fixed `warmup_s` window but before Soma's warm-up completes
+- **GIVEN** a fresh boot where the interoception module's developmental warm-up is active and every `soma.report` carries `warmup_active: true`
+- **WHEN** the interoception module reports decaying cold-start prediction error (e.g. 0.86→0.69) beyond the welfare monitor's fixed `warmup_s` window but before the interoception module's warm-up completes
 - **THEN** the welfare monitor does not count that error toward sustained distress and does not preserve+pause the entity
 - **AND** the monitor's distress trackers are reset so no stale warm-up-era error carries into the post-warm-up window
 
@@ -262,7 +262,7 @@ The welfare monitor SHALL treat the entity as in-warm-up — draining its sustai
 
 #### Scenario: Genuine post-warm-up distress still preserves
 
-- **GIVEN** the latest `soma.report` carries `warmup_active: false` and Soma's warm-up has completed
+- **GIVEN** the latest `soma.report` carries `warmup_active: false` and the interoception module's warm-up has completed
 - **WHEN** prediction error is sustained above preservation thresholds for the required duration
 - **THEN** the welfare monitor preserves+pauses the entity exactly as before this change
 
@@ -273,7 +273,7 @@ While the cycle is frozen by any control source other than the module supervisor
 #### Scenario: Frozen module is not a crash
 
 - **GIVEN** the welfare monitor has preserved+paused the entity, freezing the cycle such that all modules are silent by design
-- **WHEN** module heartbeats go stale (e.g. Chronos, the tightest cadence, exceeds `heartbeat_timeout_s=60s`) and the supervisor's restart budget is checked
+- **WHEN** module heartbeats go stale (e.g. the sequence module, the tightest cadence, exceeds `heartbeat_timeout_s=60s`) and the supervisor's restart budget is checked
 - **THEN** the supervisor stands down its heartbeat-staleness liveness recovery because the freeze's `control.source` is not `spot`
 - **AND** the supervisor performs no module restart attempts and no machine-reboot escalation
 
@@ -311,26 +311,26 @@ The operator SHALL be able to request a preservation of the running entity. The 
 - **WHEN** a requested preservation fails
 - **THEN** the result reports the failure, the preserve freeze is released, and the entity keeps running
 
-### Requirement: A preservation bundle holds only the preserved being's memories
-Preservation SHALL capture only the preserved being's own memory collections (its collection prefix and memory kinds, and its own Empatheia collection), whatever else the memory server holds. Revive SHALL restore each preserved memory kind into the reviving being's own collections, replacing their contents with exactly the preserved points, and SHALL never write into a collection that is not the reviving being's own.
+### Requirement: A preservation bundle holds only the preserved entity's memories
+Preservation SHALL capture only the preserved entity's own memory collections (its collection prefix and memory kinds, and its own social cognition module's collection), whatever else the memory server holds. Revive SHALL restore each preserved memory kind into the reviving entity's own collections, replacing their contents with exactly the preserved points, and SHALL never write into a collection that is not the reviving entity's own.
 
-#### Scenario: Two beings on one memory server
-- **WHEN** a being with collection prefix `a_` is preserved while a being with prefix `b_` has memories on the same server
+#### Scenario: Two entities on one memory server
+- **WHEN** an entity with collection prefix `a_` is preserved while an entity with prefix `b_` has memories on the same server
 - **THEN** the bundle contains no `b_` collection
 
 #### Scenario: Reviving under another prefix
-- **WHEN** a bundle preserved under prefix `a_` is revived by a being whose prefix is `c_`
+- **WHEN** a bundle preserved under prefix `a_` is revived by an entity whose prefix is `c_`
 - **THEN** the memories are restored into the `c_` collections, the `a_` and `b_` collections are unchanged, and any points already in the `c_` collections are replaced
 
 #### Scenario: An older bundle that swept other collections
-- **WHEN** a bundle containing another being's collections is revived
+- **WHEN** a bundle containing another entity's collections is revived
 - **THEN** only the bundle's own memory kinds are restored, and the other collections are skipped and named in the log
 
 ### Requirement: Preservation carries the embedding space and revive refuses to mix spaces
-A preserved being's memory state SHALL include the embedding-space stamp of the vectors it holds. Revive SHALL refuse a memory state whose embedding space differs from the running embedder's, rather than importing its vectors. Fork merge, which carries no vectors, SHALL flag a mismatch between the merged parents' spaces. A memory state without a stamp SHALL be treated as `sentence-transformers/all-MiniLM-L6-v2`.
+A preserved entity's memory state SHALL include the embedding-space stamp of the vectors it holds. Revive SHALL refuse a memory state whose embedding space differs from the running embedder's, rather than importing its vectors. Fork merge, which carries no vectors, SHALL flag a mismatch between the merged parents' spaces. A memory state without a stamp SHALL be treated as `sentence-transformers/all-MiniLM-L6-v2`.
 
 #### Scenario: Revive onto a different embedder
-- **WHEN** a being preserved with one embedding space is revived where the embedder has another
+- **WHEN** an entity preserved with one embedding space is revived where the embedder has another
 - **THEN** the revive is refused with an error naming both spaces and no memory is imported
 
 #### Scenario: Revive of an older bundle
@@ -343,10 +343,10 @@ A preserved being's memory state SHALL include the embedding-space stamp of the 
 - **snapshot** SHALL call every module's export hook before writing `snapshot.json`, and SHALL record each hook's returned record under the snapshot metadata `artifacts`. If any export raises, the snapshot SHALL fail and SHALL leave no snapshot directory behind.
 - **fork** SHALL copy the parent's artifact directories, except those of shed modules, into the child's own snapshot directory, so every fork owns an independent copy.
 - **restore** SHALL call every module's import hook with that module's artifact directory, whether or not it exists. An import error SHALL propagate.
-- **merge** SHALL refuse with an error when both parents carry Phantasia artifacts, unless the caller passes `world_model_from="a"` or `world_model_from="b"`. With a choice given, or when at most one parent carries them, merge SHALL copy each module's artifacts from the parent that has them (the chosen one for Phantasia) and record the source per module in the merged snapshot's metadata.
+- **merge** SHALL refuse with an error when both parents carry the world model module's artifacts, unless the caller passes `world_model_from="a"` or `world_model_from="b"`. With a choice given, or when at most one parent carries them, merge SHALL copy each module's artifacts from the parent that has them (the chosen one for the world model module) and record the source per module in the merged snapshot's metadata.
 
 #### Scenario: Fork copies are independent
-- **WHEN** a snapshot with Phantasia artifacts is forked twice
+- **WHEN** a snapshot with the world model module's artifacts is forked twice
 - **THEN** each child's snapshot directory holds its own copy of the artifacts, and changing one copy leaves the other and the parent's unchanged
 
 #### Scenario: A failed export leaves no snapshot
@@ -354,16 +354,16 @@ A preserved being's memory state SHALL include the embedding-space stamp of the 
 - **THEN** `snapshot` raises and no snapshot directory for that id remains
 
 #### Scenario: Shed modules are not copied
-- **WHEN** a fork sheds Phantasia
-- **THEN** the child's snapshot has no Phantasia artifacts
+- **WHEN** a fork sheds the world model module
+- **THEN** the child's snapshot has no world model module artifacts
 
 #### Scenario: Merge refuses to pick a world model by accident
-- **WHEN** both parents carry Phantasia artifacts and no `world_model_from` is given
+- **WHEN** both parents carry world model module artifacts and no `world_model_from` is given
 - **THEN** merge raises an error naming the choice to make, and writes no merged snapshot
 
 #### Scenario: Merge with a named world model
-- **WHEN** both parents carry Phantasia artifacts and `world_model_from="b"` is given
-- **THEN** the merged snapshot carries parent b's Phantasia artifacts and its metadata records that source
+- **WHEN** both parents carry world model module artifacts and `world_model_from="b"` is given
+- **THEN** the merged snapshot carries parent b's world model module artifacts and its metadata records that source
 
 ### Requirement: Infrastructure never deletes fork snapshots
 

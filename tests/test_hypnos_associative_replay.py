@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for Hypnos phase-3 associative cross-period replay.
+"""Tests for sleep phase-3 associative cross-period replay.
 
 Phase 3 selects traces from at least two distinct memory periods, cues
-Phantasia for scenario extensions, consumes the resulting scenarios, and
-re-injects the novel associations into the workspace. When Phantasia is
+the world model module for scenario extensions, consumes the resulting scenarios, and
+re-injects the novel associations into the workspace. When the world model module is
 disabled/absent the cue degrades to a no-op.
 
-All collaborators are tiny fakes — no real Mnemos / Phantasia / LLM.
+All collaborators are tiny fakes — no real episodic memory module / world model module / LLM.
 """
 from __future__ import annotations
 
@@ -101,7 +101,7 @@ async def test_cues_phantasia_and_reinjects():
         enabled=True, mnemos=mnemos, phantasia=phantasia, reinject=_reinject
     )
     assert result.success is True
-    # Phantasia cued once per cross-period seed (2 seeds).
+    # world model cued once per cross-period seed (2 seeds).
     assert phantasia.seeds == ["st:0", "ep:0"]
     # 2 seeds x 2 scenarios each = 4 consumed + re-injected.
     assert result.metadata["scenarios_consumed"] == 4
@@ -116,7 +116,7 @@ async def test_phantasia_absent_is_noop_cue():
     assert result.success is True
     assert "no-op" in result.metadata["phantasia_cue"]
     assert result.metadata["scenarios_consumed"] == 0
-    # Cross-period selection still happened even with Phantasia absent.
+    # Cross-period selection still happened even with the world model module absent.
     assert result.metadata["distinct_periods"] >= 2
 
 

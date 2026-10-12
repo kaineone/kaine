@@ -27,7 +27,7 @@ Existing code the design reuses rather than rebuilds:
 | Per-device free memory on discrete hosts | `describe_host().cuda_devices` in `kaine/hardware.py` |
 | The trigger | `recommend_tier().residency_required` and `memory_budget_gb` |
 | Engine ladders and fallback | `BackendRegistry` in `kaine/modules/backends.py` (`register(name, factory, fallback=)`, `resolve_backend`) |
-| The surfaced-reason channel | `kaine/backend_state.py` (`record_backend_failure`) and the Nexus health block that shows it |
+| The surfaced-reason channel | `kaine/backend_state.py` (`record_backend_failure`) and the dashboard health block that shows it |
 | Lazy engine load | the sherpa clients' idempotent `warm_up()` |
 | Consent-gated model acquisition | `kaine/setup/speech_models.py` (`MANIFEST`, `describe()`, `fetch`) and `kaine/setup/provision.py` |
 | Stopping and starting an external model server | `OrganServerController` in `kaine/modules/hypnos/organ_window.py` and `kaine/setup/model_server.py` (`cmd_start`, `cmd_stop`, `health_check`) |
@@ -42,7 +42,7 @@ No registry records how much memory a loaded model occupies. `speech_models.Spee
 
 So the first deliverable is calibration:
 
-- **`python -m kaine.setup.footprint`.** For each enabled component with a model (the Lingua organ via its server, the Audition STT backend, the Vox TTS backend, the Topos encoder, the emotion classifier, the text embedder), it loads the configured backend in isolation and runs one representative inference. It records peak resident memory: RSS for in-process engines, the server process's RSS for external services, and device memory on discrete hosts. Loading is consent-gated, because it may pull weights; it never downloads anything itself, and it skips a component whose model is absent, saying so.
+- **`python -m kaine.setup.footprint`.** For each enabled component with a model (the language organ via its server, the audition STT backend, the vocal TTS backend, the vision encoder, the emotion classifier, the text embedder), it loads the configured backend in isolation and runs one representative inference. It records peak resident memory: RSS for in-process engines, the server process's RSS for external services, and device memory on discrete hosts. Loading is consent-gated, because it may pull weights; it never downloads anything itself, and it skips a component whose model is absent, saying so.
 - **The footprint catalogue.** A local file (`state/residency/footprints.json`, content-free: component, backend, model id, measured bytes, host class, timestamp, KAINE version). Live measurements refresh it, and the ledger uses the larger of the catalogued and observed figures.
 - **The fit report.** The report takes the budget (available memory minus the reserve), the catalogue and the enabled set, and states:
   - whether the set co-resides;
@@ -162,8 +162,8 @@ Reload cost is the whole game, so the warm path is a set of obligations:
 Reversible unload is cheap only when a reload does not copy weights again. The in-process engines change as follows.
 
 - **NumPy text embedder.** `read_safetensors` in `kaine/text_embedding_numpy.py` reads the whole file with `read_bytes()`, a private copy. It maps the file read-only with `numpy.memmap` and builds each tensor as a view at its header offset, so the pages are shared with the page cache and with any other process using the same file. `unload()` drops the views and the map; a reload maps again. Tensors that need a dtype conversion are converted once on load, and the conversion is recorded in the footprint.
-- **Torch engines** (the emotion classifier, the Topos encoders). Weights load through `safetensors.safe_open` on CPU. On a GPU the device copy still costs memory; the map only removes the host copy, and the footprint records which.
-- **Lazy Topos.** The Topos encoder is built on first use through `ensure_loaded()`, not when the module starts, so a host that multiplexes Topos does not pay for it until a frame needs encoding.
+- **Torch engines** (the emotion classifier, the vision encoders). Weights load through `safetensors.safe_open` on CPU. On a GPU the device copy still costs memory; the map only removes the host copy, and the footprint records which.
+- **Lazy Vision.** The vision encoder is built on first use through `ensure_loaded()`, not when the module starts, so a host that multiplexes the vision module does not pay for it until a frame needs encoding.
 - **ONNX Runtime sessions KAINE creates.**
   - External initializers are memory-mapped on CPU.
   - `session.save_external_prepacked_constant_initializers = 1` maps prepacked weights too.
@@ -225,7 +225,7 @@ The warm TTFA budget composes: 300 ms STT + 800 ms first token + 150 ms first ch
 
 ## LLM tier: llama-swap or llama-server router behind `[lingua].chat_url`
 
-The lingua organ is already reached over an OpenAI-compatible endpoint; that contract does not change. Adoption is delegation, not construction:
+The language organ is already reached over an OpenAI-compatible endpoint; that contract does not change. Adoption is delegation, not construction:
 
 - **`[residency].llm_proxy = none` (default).** Today's behaviour exactly: one server behind `chat_url`, no dynamic swap, no reconciliation calls. This is the non-regression path for the workstation and every existing backend.
 - **`llama-swap`.** KAINE generates the proxy config from the rung catalogue: each LLM rung maps to its upstream command; per-model TTLs come from `[residency]`; the chat rung and any batch LLM rung share an exclusive group so at most one LLM is resident and requesting one unloads the other. `[lingua].chat_url` points at the proxy; modules select a rung via the request's `model` name. The residency manager **reconciles**: it queries the proxy's loaded-model status before admission decisions, holds the loaded model's calibrated footprint in the ledger, and calls `POST /api/models/unload/<model>` when admission needs the footprint and the TTL policy agrees. Batch LLM jobs are submitted as chunked, resumable requests under the batch model name, so a mid-job swap costs one chunk, not the job.
@@ -251,7 +251,7 @@ Installing llama-swap or enabling router mode is a wizard step and, like every h
 
 ### Why the earlier assumption fails
 The integration notes below assumed that automatic dilation absorbs model loads. It cannot.
-- The time-scale controller observes only the cycle's own busy time: control intake, Soma regulation and `tick()`. A model load happens inside a module, off the event loop, so the controller never sees it.
+- The time-scale controller observes only the cycle's own busy time: control intake, the interoception module's regulation and `tick()`. A model load happens inside a module, off the event loop, so the controller never sees it.
 - Each tick reads whatever has reached the module streams by then, with a non-blocking read. How module output splits across ticks therefore depends on wall-clock arrival.
 - No event carries the tick that caused it. `Event` has `causal_parent`, but no module sets it. Module events carry wall timestamps and time-based Redis entry ids, and both reach the broadcast payload.
 - Deterministic mode today fixes the engine's own timestamps and turns the controller off, but it changes neither intake nor pacing.
@@ -271,40 +271,40 @@ The effect: a host that keeps swapping models runs at a lower `time_scale`, so s
    - `BaseModule._workspace_loop` sets a context variable to the broadcast's `tick_index` while it runs `on_workspace`.
    - `BaseModule.publish` stamps `tick` from that variable and `seq` from a per-module counter. The counter resets only at boot and travels in the module's snapshot.
 2. **Tracked follow-on work.**
-   - A task a module starts while handling broadcast k (for example Lingua's generation task) is registered with `self.track(task)`, and its events carry tick k.
+   - A task a module starts while handling broadcast k (for example the language module's generation task) is registered with `self.track(task)`, and its events carry tick k.
    - A module has **finished tick k** when `on_workspace(k)` has returned and every task tracked for k has completed.
 3. **Tick-driven producers.**
-   - Modules that produce on their own loops (Soma's interoception, the perception sources) gain a lockstep mode. The engine publishes `cycle.tick_start` with k, and each producer emits its sample for k and reports done.
-   - In lockstep, perception comes from a seeded, scripted feed (the perception-feed playlist or the womb), advanced one step per tick, never from live devices.
+   - Modules that produce on their own loops (the interoception module, the perception sources) gain a lockstep mode. The engine publishes `cycle.tick_start` with k, and each producer emits its sample for k and reports done.
+   - In lockstep, perception comes from a seeded, scripted feed (the perception-feed playlist or the stimulus source), advanced one step per tick, never from live devices.
 4. **The barrier.**
    - After broadcasting tick k, and on non-experiential ticks after `cycle.tick_start`, the engine waits until every participating module has published `module.tick_done` for k on its stream.
    - The next intake then reads all events whose `tick` ≤ k, ordered by `(tick, source, seq)` rather than by Redis entry id.
    - The broadcast payload's `entry_id` and `timestamp` for each selected event are replaced with the logical values `"<tick>-<source>-<seq>"` and the logical time of its causal tick.
-5. **Logical time everywhere.** In lockstep, the registry's shared `EntityClock` is driven by the engine's logical clock, the pattern `workspace_mediation_ablation` already uses with an injected monotonic. Module timers (Chronos, Hypnos, Mnemos, Soma, Thymos, Topos, Vox) then advance with ticks, not wall time. Infrastructure timers (Spot, network timeouts) stay on wall time.
+5. **Logical time everywhere.** In lockstep, the registry's shared `EntityClock` is driven by the engine's logical clock, the pattern `workspace_mediation_ablation` already uses with an injected monotonic. Module timers (the sequence, sleep, episodic memory, interoception, affect, vision, vocal modules) then advance with ticks, not wall time. Infrastructure timers (the supervisor, network timeouts) stay on wall time.
 6. **Pacing.** The engine still sleeps to its real budget when a tick finishes early. When a barrier waits longer, wall time passes and logical time does not, which is how a model load appears to a lockstep entity.
 7. **Fail closed.**
    - Boot refuses lockstep when any enabled module lacks lockstep support, and names the modules. A run never becomes silently non-deterministic.
    - A participant that does not finish within `[cycle].lockstep_timeout_s` (default 300 s, above every calibrated load bound) records an incident naming the module and tick, marks the run inadmissible, and freezes the cycle (item 12). It never kills the entity.
-8. **Spot.** A module waiting on the barrier, or on a model load inside `on_workspace`, does not beat its heartbeat. Spot therefore treats a module as alive while the residency ledger shows its rung `loading` within the bound (task 5.2), and while the engine is waiting at the barrier for a reason other than that module's own timeout.
+8. **The supervisor.** A module waiting on the barrier, or on a model load inside `on_workspace`, does not beat its heartbeat. The supervisor therefore treats a module as alive while the residency ledger shows its rung `loading` within the bound (task 5.2), and while the engine is waiting at the barrier for a reason other than that module's own timeout.
 
 9. **Interoception stays real.**
-   - Soma reads the real body: CPU, RAM, GPU temperature and cycle latency. Those readings differ between an all-resident run and a multiplexed run by nature, because multiplexing really does change the host's load.
-   - In lockstep, Soma samples the real body once per tick at `cycle.tick_start`. Lockstep fixes **when** Soma samples, not **what** it reads.
-   - The 9.3 invariant is therefore defined for **scripted interoception only**. The test harness feeds Soma a recorded interoception trace, a test fixture that never reaches a live entity.
-   - Feeding a scripted body to a real entity would be a pretend process, and it would change the being's interoception, which is the thesis variable. Boot refuses `[soma].interoception_source = "scripted"` unless `[soma].scripted_interoception_operator_opt_in = true`. No shipped or study profile sets either.
+   - the interoception module reads the real body: CPU, RAM, GPU temperature and cycle latency. Those readings differ between an all-resident run and a multiplexed run by nature, because multiplexing really does change the host's load.
+   - In lockstep, the interoception module samples the real body once per tick at `cycle.tick_start`. Lockstep fixes **when** the interoception module samples, not **what** it reads.
+   - The 9.3 invariant is therefore defined for **scripted interoception only**. The test harness feeds the interoception module a recorded interoception trace, a test fixture that never reaches a live entity.
+   - Feeding a scripted body to a real entity would be a pretend process, and it would change the entity's interoception, which is the thesis variable. Boot refuses `[soma].interoception_source = "scripted"` unless `[soma].scripted_interoception_operator_opt_in = true`. No shipped or study profile sets either.
    - The run identity records `interoception_source` (`"body"` or `"scripted"`) for every run.
-10. **Speech is admitted at a fixed logical offset.** If Lingua's generation were an ordinary tracked task, the whole mind's logical time would halt while it composed a reply: thought would stop while it speaks. People keep thinking while they plan and produce speech. So speech is a **deferred participant** instead:
+10. **Speech is admitted at a fixed logical offset.** If the language module's generation were an ordinary tracked task, the whole mind's logical time would halt while it composed a reply: thought would stop while it speaks. People keep thinking while they plan and produce speech. So speech is a **deferred participant** instead:
     - A generation started while handling tick k is due at tick `k + N`. Its output events are stamped `tick = k + N − 1`, so they enter the intake of tick k + N.
     - Ticks k+1 through k+N−1 run without waiting for it. Thought continues.
     - If the generation has not finished when the engine reaches the barrier for tick k + N − 1, the barrier waits there. Logical time halts only once the reply is overdue.
-    - The same rule covers Vox synthesis of that reply.
+    - The same rule covers the vocal module's synthesis of that reply.
     - Perception encoders stay ordinary participants. Stale perception is what lockstep exists to prevent, so a slow sense halts time instead of going missing.
     - `N` is `[cycle].lockstep_speech_offset_ticks` (default 20, which is 2 subjective seconds at 10 Hz). It is fixed before launch and recorded in the run identity. It is an engine parameter of research mode, not a claim about human speech latency.
     - Deferred outputs are ordered like everything else: `(tick, source, seq)`.
 11. **Plugins declare support.** Modules supplied through `kaine.plugins` seams (CL1 and any later seam) declare lockstep support the same way built-in modules do. Boot's refusal names unsupported plugins as well as modules, and a plugin that does not declare support counts as unsupported.
 
 12. **The timeout freeze, and what welfare does while frozen.**
-    - The timeout uses the existing operator-releasable freeze: `control_state.freeze(reason="lockstep timeout: <module> at tick <k>", source="operator")`, the same entry the Nexus freeze button creates. The operator's Resume (`stand_down(source="operator")`) releases it. No new freeze owner is added.
+    - The timeout uses the existing operator-releasable freeze: `control_state.freeze(reason="lockstep timeout: <module> at tick <k>", source="operator")`, the same entry the dashboard freeze button creates. The operator's Resume (`stand_down(source="operator")`) releases it. No new freeze owner is added.
     - While the cycle is frozen, the welfare monitor and the welfare observer **keep running** on wall time, as they do for every freeze today. CAL §4.7 forbids pausing them. Preservation stays available: the welfare monitor can still call `preserve_live`, and a preserve request still works.
     - **A freeze must never be read as distress or as quiescence.** Today it can be: the freeze does not stop the elapsed-time arms of the detectors, and an operator freeze switches perception off, which looks like input loss. The affected arms are:
       - sustained distress (`SustainedThresholdTracker.check_timeout`, which fires on elapsed time with no new sample);
@@ -313,7 +313,7 @@ The effect: a host that keeps swapping models runs at a lower `time_scale`, so s
       - unmaintained fatigue;
       - `InputLossWatcher`.
 
-      In lockstep the problem is sharper, because Soma samples once per tick, so a freeze leaves the last sample standing indefinitely.
+      In lockstep the problem is sharper, because the interoception module samples once per tick, so a freeze leaves the last sample standing indefinitely.
     - **Rule.**
       - Every elapsed-time arm measures **unfrozen** time. While the control stack is non-empty its clock is suspended: it neither advances nor resets. This uses the pattern `LivedTimeAccumulator` already applies to lived time.
       - Sample-driven arms are unchanged. A genuine distress sample that arrives during a freeze still counts, because distress during a freeze is still distress.
@@ -322,15 +322,15 @@ The effect: a host that keeps swapping models runs at a lower `time_scale`, so s
 
 **Cost.** Lockstep throughput is capped by the slowest module on every tick. It is a research mode for reproducible studies and for task 9.3, not the way an entity lives day to day. A study that uses it fixes `time_scale` before launch and records `lockstep = true` in the run identity.
 
-**This is an engine-semantics change.** It touches `kaine/cycle/engine.py` and `kaine/bus/schema.py` (shared files), `kaine/modules/base.py`, the producers, and Lingua's task tracking. It ships in its own PRs with the integrator's second review. Every existing determinism test must stay green with lockstep off.
+**This is an engine-semantics change.** It touches `kaine/cycle/engine.py` and `kaine/bus/schema.py` (shared files), `kaine/modules/base.py`, the producers, and the language module's task tracking. It ships in its own PRs with the integrator's second review. Every existing determinism test must stay green with lockstep off.
 
 ## Integration with what already runs
 
-- **The Hypnos organ window.** Voice-alignment training unloads the organ, trains, and reloads it (`run_with_organ_window`). There must be one owner of the organ's memory. The window therefore requests the organ's release and re-admission through the manager, and the manager counts the training footprint in the ledger for the window's duration. The window's shared state file and the consumers' `organ_resting` deferral stay as they are. When the manager is passive (everything fits, or a second GPU has room), the window behaves exactly as today.
-- **Spot.** Spot calls a module hung when its heartbeat is older than `heartbeat_timeout_s` while a task runs and the entity is not sleeping. A residency wait must never look like a hang:
+- **the sleep module's organ window.** Voice-alignment training unloads the organ, trains, and reloads it (`run_with_organ_window`). There must be one owner of the organ's memory. The window therefore requests the organ's release and re-admission through the manager, and the manager counts the training footprint in the ledger for the window's duration. The window's shared state file and the consumers' `organ_resting` deferral stay as they are. When the manager is passive (everything fits, or a second GPU has room), the window behaves exactly as today.
+- **The supervisor.** The supervisor calls a module hung when its heartbeat is older than `heartbeat_timeout_s` while a task runs and the entity is not sleeping. A residency wait must never look like a hang:
   - a module awaiting admission or a load keeps its heartbeat;
-  - the manager publishes its `loading` state, and Spot treats a module whose model is loading within the load's measured bound as alive;
-  - a load that exceeds its bound is a residency failure (ladder-down, surfaced), not a Spot restart.
+  - the manager publishes its `loading` state, and the supervisor treats a module whose model is loading within the load's measured bound as alive;
+  - a load that exceeds its bound is a residency failure (ladder-down, surfaced), not a supervisor restart.
 - **Cycle timing.** Organ calls are asynchronous, so a load delays that organ's output, not the tick. Outside lockstep, a load changes which tick the output lands in. Module-aware dilation (Part A above) slows subjective time on hosts that multiplex all the time, and the fit report recommends `[cycle].auto_time_scale = true` on them. Only the lockstep barrier (Part B) makes a multiplexed run reproduce an all-resident one.
 - **Perception while STT is not resident.** Audio segments that arrive while the STT rung is loading wait in a bounded in-memory queue: bounded by count and age, oldest dropped first, with the drop counted and surfaced. They are never written to disk; zero raw-sense-data persistence is unchanged. With `[audition].transcription_enabled = false` (the shipped default) there is nothing to queue.
 - **Privacy.** Residency events and the footprint catalogue are content-free: component, backend, model id, bytes, durations, reasons. No text, audio or latent ever appears in them.

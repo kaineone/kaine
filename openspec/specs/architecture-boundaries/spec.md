@@ -24,11 +24,11 @@ report a precise contract violation naming the offending module.
 ### Requirement: Declared architectural layering
 The import contracts MUST declare the project's real layering — at minimum that
 `kaine.modules` does not import the cycle **runtime** (the engine/loop,
-registry, preflight, boot, `__main__`, the Spot supervisor, and the
+registry, preflight, boot, `__main__`, the supervisor, and the
 preservation/research monitors), with the pure data/contract module
 `kaine.cycle.types` (`WorkspaceSnapshot`) as the single declared exception that
 modules MAY import (directly or transitively); that `kaine.evaluation` does not
-import Nexus internals; and that the boundary-neutral shared homes
+import the dashboard's internals; and that the boundary-neutral shared homes
 (`kaine/persistence`, `kaine/experiment`, `kaine/privacy_filter`,
 `kaine/text_embedding`, `kaine/lifecycle/welfare_signal`) depend on neither the
 core-runtime nor the evaluation subsystem — so the layering is an enforced,
@@ -56,11 +56,11 @@ The boot, cycle and workspace packages SHALL NOT import the install, setup, tran
 - **THEN** it imports them from `kaine.model_paths` or `kaine.organ_probe`, not from `kaine.setup`
 
 ### Requirement: The runtime verifies speech models without importing setup
-The speech-model manifest and the integrity check run before a speech model loads SHALL live outside `kaine.setup`, in a module that imports only the standard library and `kaine.model_paths`. The runtime speech modules and the Nexus health probes SHALL NOT import `kaine.setup`, directly or indirectly. `kaine.setup.speech_models` SHALL import the manifest and the installed-model check from that module rather than keep its own copies.
+The speech-model manifest and the integrity check run before a speech model loads SHALL live outside `kaine.setup`, in a module that imports only the standard library and `kaine.model_paths`. The runtime speech modules and the dashboard health probes SHALL NOT import `kaine.setup`, directly or indirectly. `kaine.setup.speech_models` SHALL import the manifest and the installed-model check from that module rather than keep its own copies.
 
 #### Scenario: The speech modules do not reach setup
 - **WHEN** the import graph is built
-- **THEN** there is no chain from the sherpa STT or TTS module, or from the Nexus health probes, to `kaine.setup`
+- **THEN** there is no chain from the sherpa STT or TTS module, or from the dashboard health probes, to `kaine.setup`
 
 #### Scenario: Setup uses the runtime definitions
 - **WHEN** install-time code reads `MANIFEST` or `is_installed` from `kaine.setup.speech_models`

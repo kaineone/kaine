@@ -3,8 +3,8 @@
 
 """MnemosCore — orchestrates embedder + storage + short-term buffer.
 
-This is the thing the Mnemos `BaseModule` wraps. It also exists
-independently so callers (tests, Hypnos, future Lingua introspection)
+This is the thing the episodic memory module `BaseModule` wraps. It also exists
+independently so callers (tests, the sleep module, future language module introspection)
 can drive memory operations without spinning up a bus.
 """
 from __future__ import annotations
@@ -41,7 +41,7 @@ _RECALL_SEARCH_CAP: int = 4096
 
 
 def _write_health_file(path: Path, data: dict[str, Any]) -> None:
-    """Write Mnemos health JSON atomically; failures are logged, not raised."""
+    """Write the episodic memory module's health JSON atomically; failures are logged, not raised."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
@@ -54,7 +54,7 @@ def _write_health_file(path: Path, data: dict[str, Any]) -> None:
         log.warning("mnemos: failed to write health file %s", path, exc_info=True)
 
 
-# Mnemos owns these payload keys (paper A.10); a caller's payload cannot set them.
+# The episodic memory module owns these payload keys (paper A.10); a caller's payload cannot set them.
 _RESERVED_PAYLOAD_KEYS: frozenset[str] = frozenset({"log_base", "born_sleep", "entity_time", "size_bytes"})
 
 
@@ -269,7 +269,7 @@ class MnemosCore:
         if stamp is not None:
             if same_space(stamp, space):
                 return
-            # The stamp is stale. If the being's own persisted collections are
+            # The stamp is stale. If the entity's own persisted collections are
             # empty there is nothing to mix, so replace the stamp.
             total = 0
             for name in own_collections:
@@ -826,7 +826,7 @@ class MnemosCore:
     async def export_state(self) -> dict[str, Any]:
         """Capture the whole memory store: short-term buffer + persisted points.
 
-        Used by Mnemos preservation. The persisted side delegates to the
+        Used by the episodic memory module's preservation. The persisted side delegates to the
         storage backend's ``export`` (which FAILS LOUDLY on an unreachable
         Qdrant). The short-term buffer is in-process working memory; it is
         captured here as ``StoredMemory`` fields so a revived entity resumes
@@ -1124,7 +1124,7 @@ async def recover_interrupted_import(
     budget_bytes: int | None = None,
     health_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Operator recovery for an interrupted Mnemos preservation import.
+    """Operator recovery for an interrupted episodic memory module preservation import.
 
     Re-scans the persisted store and clears the import_pending flag so
     ordinary sleeps can resume. The store is kept as it stands; imported

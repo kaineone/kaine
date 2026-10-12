@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Vector storage backends for Mnemos.
+"""Vector storage backends for the episodic memory module.
 
 `MemoryStorage` is the protocol; `QdrantStorage` is the production
 default (Tier 2); `InMemoryStorage` is the deterministic fallback for
@@ -9,7 +9,7 @@ tests; `SqliteVecStorage` is the in-process edge backend (Tier 0/1) —
 an ``asg017/sqlite-vec`` vector index with near-zero idle footprint and
 no server, selected by ``[mnemos].backend = "sqlite_vec"`` (openspec
 runtime-backends). All three satisfy the SAME protocol and store the same
-CLS collections, so selecting a backend never changes Mnemos's semantics.
+CLS collections, so selecting a backend never changes the episodic memory module's semantics.
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def _validate_stamp(value: Any, backend: str, key: str) -> None:
     """Fail loudly on malformed embedding-space stamps.
 
     A stamp that is present but malformed must never be read as "no
-    stamp"; otherwise Mnemos would silently re-stamp a store and
+    stamp"; otherwise the episodic memory module would silently re-stamp a store and
     pretend the existing vectors belong to the current embedder.
 
     The four canonical keys must be present with the right types; extra
@@ -364,7 +364,7 @@ class InMemoryStorage:
         """Full-fidelity dump of the requested collections' points.
 
         Each point is ``{id, vector, text, payload, affect}`` — the same shape
-        :meth:`upsert` stores. Used by Mnemos preservation so the persisted
+        :meth:`upsert` stores. Used by the episodic memory module's preservation so the persisted
         vector memory travels with the bundle, not just its sizes.
         Collections that do not exist are simply absent from the result.
         """
@@ -608,7 +608,7 @@ class SqliteVecStorage:
     process with no Qdrant server and near-zero idle footprint — the single-user
     edge counterpart of :class:`QdrantStorage`. It stores the same CLS
     collections and exposes the same ``search`` (``query_points``-equivalent)
-    API, so Mnemos's memory semantics are unchanged (openspec runtime-backends).
+    API, so the episodic memory module's semantics are unchanged (openspec runtime-backends).
 
     ``sqlite_vec`` is imported lazily inside :meth:`initialize` (mirroring
     :class:`QdrantStorage`'s lazy ``qdrant_client`` import), so a Tier-2 install

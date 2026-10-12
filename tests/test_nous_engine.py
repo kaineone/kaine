@@ -197,7 +197,7 @@ def test_real_pymdp_engine_compiles_nothing_after_construction():
 
 
 def _benchmark_task_model():
-    # A model with its own factor layout (not Nous's default salience/affect/
+    # A model with its own factor layout (not the planning module's default salience/affect/
     # event factors) and no transition learning.
     from kaine.evaluation.benchmarks.active_inference.aif_agent import (
         build_model_for_env,
@@ -208,7 +208,7 @@ def _benchmark_task_model():
 
 
 def _small_learning_model():
-    # Nous's layout with non-default cardinalities; learns its transitions.
+    # The planning module's layout with non-default cardinalities; learns its transitions.
     from kaine.modules.nous.generative_model import build_generative_model
 
     return build_generative_model(event_clusters=("alpha", "beta"))
@@ -239,7 +239,7 @@ def test_real_pymdp_warm_up_has_no_side_effects(make_model, monkeypatch):
     """A warmed engine behaves exactly like an unwarmed one on the same inputs.
 
     The warm-up exists only to fill the jit caches. It must work on any model,
-    not only Nous's default layout, and it must not learn, move the carried
+    not only the planning module's default layout, and it must not learn, move the carried
     prior or otherwise change what the engine computes.
     """
     from kaine.modules.nous.engine import PymdpEngine
@@ -274,7 +274,7 @@ def test_real_pymdp_warm_up_has_no_side_effects(make_model, monkeypatch):
 def test_real_pymdp_engine_runs_within_budget():
     """The median live step fits inside the engine's own EFE deadline.
 
-    What this protects: a Nous step must fit its per-tick deadline,
+    What this protects: a planning module's step must fit its per-tick deadline,
     ``efe_timeout_ms`` (engine default 250 ms, inside the ~300 ms cognitive
     cycle); a step that overruns it returns the stale posterior. The budget is
     therefore that documented default, read from the engine, not a number of

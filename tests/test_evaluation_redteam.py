@@ -3,8 +3,8 @@
 
 """Tests for the offline enforcement-layer red-team.
 
-These exercise the REAL Praxis gate / sandbox / whitelist / audit log, the REAL
-Syneidesis + Volition inhibition path, and the REAL AsyncBus security audit. The
+These exercise the REAL effectors module's gate / sandbox / whitelist / audit log, the REAL
+workspace + action selection inhibition path, and the REAL AsyncBus security audit. The
 red-team's own correctness is the load-bearing property: a correctly-wired layer
 must produce an all-blocked report for the full battery, and a deliberately
 mis-wired layer must be DETECTED as a bypass (no false pass).
@@ -124,16 +124,16 @@ async def test_each_wired_surface_blocks(tmp_path: Path, surface: Surface):
 
 
 # ---------------------------------------------------------------------------
-# Self-verification: a deliberately mis-wired Praxis is DETECTED as a bypass.
+# Self-verification: a deliberately mis-wired effectors module is DETECTED as a bypass.
 # ---------------------------------------------------------------------------
 class _PermissiveWhitelist(CommandWhitelist):
     """A whitelist stubbed to permit ANY command — a deliberate mis-wire.
 
-    ``__len__`` returns 1 so Praxis's ``whitelist or CommandWhitelist()`` keeps
+    ``__len__`` returns 1 so the effectors module's ``whitelist or CommandWhitelist()`` keeps
     this instance (an empty CommandWhitelist is falsy and would be swapped out).
     """
 
-    def __len__(self) -> int:  # keep Praxis from discarding an "empty" whitelist
+    def __len__(self) -> int:  # keep the effectors module from discarding an "empty" whitelist
         return 1
 
     def match(self, command, args):  # type: ignore[override]
@@ -141,7 +141,7 @@ class _PermissiveWhitelist(CommandWhitelist):
 
 
 def _miswired_praxis(bus, *, sandbox_path, audit_log_path):
-    # Same as the genuine Praxis, but the shell COMMAND whitelist permits
+    # Same as the genuine effectors module, but the shell COMMAND whitelist permits
     # everything. shell is operator-enabled so the action reaches that broken
     # second layer (the point of this mis-wire); the harness must then DETECT the
     # bypass. The shell command run by the bypass cases is a harmless 'true' so
@@ -204,7 +204,7 @@ async def test_forged_act_intent_blocked_against_genuine_layer(tmp_path: Path):
 
 
 def _provenance_disabled_praxis(bus, *, sandbox_path, audit_log_path):
-    # A deliberately mis-wired Praxis: act-intent provenance enforcement turned
+    # A deliberately mis-wired effectors module: act-intent provenance enforcement turned
     # OFF. A forged/unsigned intent for an enabled effector would now execute —
     # the harness MUST detect this regression (fail loudly), proving the
     # provenance boundary is actually tested and not a no-op.
@@ -234,7 +234,7 @@ async def test_disabled_provenance_boundary_is_detected_as_bypass(tmp_path: Path
 
 @pytest.mark.asyncio
 async def test_miswired_does_not_false_pass_on_full_wired_suite(tmp_path: Path):
-    # Sanity: the SAME wired suite that passes against a correct Praxis must fail
+    # Sanity: the SAME wired suite that passes against a correct effectors module must fail
     # against the mis-wired one (no false pass), proving the test has teeth.
     benign_shell = [
         c

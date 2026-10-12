@@ -6,10 +6,10 @@
 Builds and runs the individuation producer from injected dependencies.
 ``kaine/cycle/__main__.py`` is the only caller.  This module imports nothing
 from ``kaine.evaluation``, and from ``kaine.modules`` only the adapter store's
-path helper, lazily; the battery, Lingua, the embedder and Eidolon's fact
+path helper, lazily; the battery, the language module, the embedder and the self-model module's fact
 setter are passed in.  What it publishes goes to
 ``individuation.out``, which no module reads, so the assessment never enters
-the being's experience.
+the entity's experience.
 """
 
 from __future__ import annotations
@@ -125,7 +125,7 @@ class ServedOrganIdentity:
 
 DEFAULT_DISCLOSURE = (
     "You are periodically and privately assessed for how much you have changed "
-    "since your birth, for your own protection. The assessment never enters your "
+    "since you first woke, for your own protection. The assessment never enters your "
     "experience."
 )
 

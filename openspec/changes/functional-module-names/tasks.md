@@ -18,9 +18,9 @@
 
 ## 4. Docs prose (PR 3)
 
-- [ ] 4.1 `--scope prose` over the book, READMEs, live spec prose and active-change prose; resolve the review queue with overrides.
-- [ ] 4.2 Move the 18 `docs/09-modules/` pages and add the "Module names" page mapping old names to new ones.
-- [ ] 4.3 Set `[individuation].disclosure` in `config/kaine.toml` to the owner's text (10.4) by hand, outside the codemod, with the docs that quote it.
+- [x] 4.1 `--scope prose` over the book, READMEs, live spec prose and active-change prose; resolve the review queue with overrides.
+- [x] 4.2 Move the 18 `docs/09-modules/` pages and add the "Module names" page mapping old names to new ones.
+- [x] 4.3 Set `[individuation].disclosure` in `config/kaine.toml` to the owner's text (10.4) by hand, outside the codemod, with the docs that quote it.
 
 ## 5. Compatibility readers (PR 4)
 

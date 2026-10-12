@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for the Soma _in_hypnos flag and weight-freeze behaviour.
+"""Tests for the interoception module's _in_hypnos flag and weight-freeze behaviour.
 
 Spec requirements (spec.md):
 - _in_hypnos is False at start.
@@ -82,7 +82,7 @@ async def test_in_hypnos_true_after_sleep_started(bus: AsyncBus):
     await soma.initialize()
     try:
         await bus.publish(_make_hypnos_event("hypnos.sleep.started"))
-        # Allow the hypnos consumer task to drain the event.
+        # Allow the sleep consumer task to drain the event.
         for _ in range(100):
             if soma._in_hypnos:
                 break
@@ -102,7 +102,7 @@ async def test_weights_frozen_during_hypnos(bus: AsyncBus):
         # Do a warm-up tick to get a non-None last_prediction.
         await soma.tick_once()
 
-        # Enter Hypnos.
+        # Enter the sleep module.
         await bus.publish(_make_hypnos_event("hypnos.sleep.started"))
         for _ in range(100):
             if soma._in_hypnos:
@@ -154,7 +154,7 @@ async def test_adaptation_resumes_after_sleep_completed(bus: AsyncBus):
     soma = Soma(bus, reader=FakeMetricsReader(), detector=NeverAlertDetector())
     await soma.initialize()
     try:
-        # Enter and exit Hypnos.
+        # Enter and exit the sleep module.
         await bus.publish(_make_hypnos_event("hypnos.sleep.started"))
         for _ in range(100):
             if soma._in_hypnos:

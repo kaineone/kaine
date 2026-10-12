@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for module shutdown order and early Hypnos shutdown.
+"""Tests for module shutdown order and early sleep shutdown.
 """
 
 import asyncio
@@ -109,7 +109,7 @@ def test_shutdown_order_puts_hypnos_first():
 
 
 async def test_cycle_shuts_hypnos_down_while_thymos_is_up(bus, tmp_path):
-    """Hypnos shutdown calls affective_reset while Thymos is still up."""
+    """The sleep module's shutdown calls affective_reset while the affect module is still up."""
     calls: list[str] = []
     mnemos = RecordingMnemos(calls, hang_in="replay")
     thymos = FakeThymos()
@@ -124,7 +124,7 @@ async def test_cycle_shuts_hypnos_down_while_thymos_is_up(bus, tmp_path):
 
 
 async def test_spot_shutdown_all_shuts_hypnos_down_first():
-    """Spot shuts Hypnos down before the other modules."""
+    """The supervisor shuts the sleep module down before the other modules."""
     order: list[str] = []
 
     async def record_shutdown(name: str) -> None:

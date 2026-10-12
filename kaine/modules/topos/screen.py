@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Cross-platform screen / window capture as a Topos ``_VideoSource``.
+"""Cross-platform screen / window capture as a vision module ``_VideoSource``.
 
 A shared desktop or a single window is the most flexible live-stimulus source:
 whatever the operator plays there — a browser, a media player with a playlist, a
@@ -13,9 +13,9 @@ macOS, ``x11grab`` on X11) and desktop-audio capture, whereas the PyAV pip wheel
 ship without those input devices. Only the per-OS *input spec* differs; it is a
 pure function (:func:`screen_capture_spec`), unit-tested per platform.
 
-The source spawns one ffmpeg that scales the capture to Topos's configured
+The source spawns one ffmpeg that scales the capture to the vision module's configured
 geometry and emits raw ``bgr24`` frames on stdout, which the source reads a frame
-at a time and hands to Topos as a BGR ``ndarray`` — the same shape the webcam
+at a time and hands to the vision module as a BGR ``ndarray`` — the same shape the webcam
 source yields, so nothing downstream of ``Topos.process_frame`` changes. The
 process spawner is injected so the framing/lifecycle logic is testable without a
 display; the real one runs ffmpeg. As with all perception, raw frames are held in
@@ -237,7 +237,7 @@ def _read_exact(stream: Any, n: int) -> bytes | None:
 
 
 class ScreenCaptureSource:
-    """A Topos ``_VideoSource`` backed by a system-ffmpeg screen/window capture.
+    """A vision module ``_VideoSource`` backed by a system-ffmpeg screen/window capture.
 
     ``open()`` spawns ffmpeg scaling the capture to ``(width, height)`` and
     emitting raw ``bgr24`` frames; ``read()`` returns the next frame as a
@@ -271,7 +271,7 @@ class ScreenCaptureSource:
 
     def command(self) -> list[str]:
         """The full ffmpeg command: the OS input spec, emitted as raw bgr24 on
-        stdout. Scaled to Topos geometry unless native passthrough is set."""
+        stdout. Scaled to the vision module's geometry unless native passthrough is set."""
         scale_args = (
             [] if self._native else ["-vf", f"scale={self._width}:{self._height}"]
         )

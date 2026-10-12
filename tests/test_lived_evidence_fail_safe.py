@@ -3,7 +3,7 @@
 
 """Fail-safe tests for lived-history evidence.
 
-A being that has lived must never be gestated. Evidence that cannot be read
+An entity that has lived must never be gestated. Evidence that cannot be read
 therefore counts as LIVED, never as absent.
 """
 

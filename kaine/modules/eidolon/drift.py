@@ -29,7 +29,7 @@ class SourceDistributionDrift:
     historical reference source-name distributions.
 
     "Sources" here are the `source` fields of selected events in a
-    workspace broadcast. Eidolon feeds them in batches (one batch per
+    workspace broadcast. The self-model module feeds them in batches (one batch per
     broadcast). The detector keeps a deque-of-batches as the recent
     window. The reference distribution is formed from batches that
     have left the recent window, so the reference and recent

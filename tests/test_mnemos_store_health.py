@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for Mnemos store-health block, prober, template, and recovery CLI."""
+"""Tests for episodic memory store-health block, prober, template, and recovery CLI."""
 from __future__ import annotations
 
 import asyncio
@@ -97,7 +97,7 @@ def test_mnemos_store_block_states(tmp_path):
 
 
 async def test_health_prober_mnemos_store(tmp_path):
-    """The health prober includes the Mnemos store block under its canonical key."""
+    """The health prober includes the episodic memory module's store block under its canonical key."""
     assert "mnemos_store" in diagnostics.HEALTH_BLOCK_KEYS
 
     health_path = tmp_path / "store_health.json"
@@ -128,7 +128,7 @@ async def test_health_prober_mnemos_store(tmp_path):
 
 
 def test_mnemos_store_template_critical(tmp_path):
-    """The Mnemos store template renders a critical block with a down chip."""
+    """The episodic memory module's store template renders a critical block with a down chip."""
     env = Environment(loader=FileSystemLoader("kaine/nexus/templates"), autoescape=select_autoescape(["html"]))
     template = env.get_template("_mnemos_store.html")
     html = template.render(
@@ -148,7 +148,7 @@ def test_mnemos_store_template_critical(tmp_path):
 
 
 def test_mnemos_store_template_unavailable(tmp_path):
-    """The Mnemos store template shows unavailable when the block is missing."""
+    """The episodic memory module's store template shows unavailable when the block is missing."""
     env = Environment(loader=FileSystemLoader("kaine/nexus/templates"), autoescape=select_autoescape(["html"]))
     template = env.get_template("_mnemos_store.html")
     html = template.render(mnemos_store=None)

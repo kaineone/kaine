@@ -19,7 +19,7 @@ predictable to the entity" property the design calls for.
 
 BOUNDARIES: this leaf module lives under ``kaine.modules`` and imports nothing
 but the standard library, so both perception modules may import it freely without
-crossing any ``lint-imports`` contract (no cycle-runtime, no nexus, no evaluation
+crossing any ``lint-imports`` contract (no cycle-runtime, no dashboard, no evaluation
 import here).
 """
 from __future__ import annotations

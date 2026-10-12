@@ -3,13 +3,13 @@
 
 """Controlled A/B-divergence runner.
 
-The A/B-divergence meter normally runs as a passive live sidecar: every Lingua
+The A/B-divergence meter normally runs as a passive live sidecar: every language module's
 ``external_speech`` is paired with a bare-LLM inference and the cosine distance
 logged. This runner promotes it to a CONTROLLED experiment that measures the
 meter's *dynamic range* on a fixed battery, offline.
 
 Each battery case runs through the production ``divergence_control`` seam — the
-SAME function the entrypoint wires to Lingua's real ``ContextAssembler`` — but
+SAME function the entrypoint wires to the language module's real ``ContextAssembler`` — but
 with a deterministic *echo* conditioned-inference client (the model returns its
 prompt verbatim). Because the echo client's output is a pure function of the
 prompt, the two control properties are provable for any embedder:
@@ -52,7 +52,7 @@ def _default_embedder() -> HashEmbedder:
 
 
 def _prompt_for(utterance: str, conditioning: str) -> tuple[str, str]:
-    """Build the conditioned prompt the way Lingua's assembler does in shape.
+    """Build the conditioned prompt the way the language module's assembler does in shape.
 
     A stable persona scaffold + the (variable) conditioning block + the (constant)
     utterance. With empty conditioning the prompt is byte-identical across arms;

@@ -7,8 +7,8 @@ sleeps):
 
 - C1  freeze/resume restores the desired perception flags (the freeze path
       saves them; the resume path writes back exactly what was saved).
-- C2  stacked freeze sources: a welfare pause survives a Spot recovery
-      (Spot pops only its own entry), a pre-existing stack is restored intact,
+- C2  stacked freeze sources: a welfare pause survives a supervisor recovery
+      (supervisor pops only its own entry), a pre-existing stack is restored intact,
       and only an operator or welfare stand-down lifts a welfare freeze.
 - M3  the welfare ``notify`` rate limit (``_welfare_notify_allowed``).
 - C3  the refractory-scaled guard timeout clears speak/think in-flight guards
@@ -201,7 +201,7 @@ def test_c1_freeze_resume_restores_desired_perception_flags(monkeypatch):
 
 
 def test_c2_welfare_pause_survives_spot_recovery(tmp_path: Path):
-    """A Spot recovery pops only Spot's own entry; the welfare freeze below
+    """A supervisor recovery pops only the supervisor's own entry; the welfare freeze below
     it stays in force, so the cycle remains frozen."""
     path = tmp_path / "control.json"
     push_freeze(reason="operator repair", path=path, source="operator")
@@ -213,14 +213,14 @@ def test_c2_welfare_pause_survives_spot_recovery(tmp_path: Path):
     assert len(state.stack) == 3
     assert state.source == "spot"  # top of the stack
 
-    # Spot recovers: it pops only its own entry.
+    # The supervisor recovers: it pops only its own entry.
     state = pop_freeze(path=path, source="spot")
     assert state.frozen, "welfare freeze must survive a Spot recovery"
     assert [e["source"] for e in state.stack] == ["operator", " welfare".strip()]
     assert state.source == "welfare"
     assert state.reason == "distress"
 
-    # A Spot recovery repeated still never touches the welfare entry.
+    # A supervisor recovery repeated still never touches the welfare entry.
     state = pop_freeze(path=path, source="spot")
     assert state.frozen
     assert [e["source"] for e in state.stack] == ["operator", "welfare"]
@@ -231,7 +231,7 @@ def test_c2_welfare_pause_survives_spot_recovery(tmp_path: Path):
 
 
 def test_c2_spot_recovery_restores_pre_existing_stack(tmp_path: Path):
-    """Spot stacking its freeze and popping it restores any pre-existing
+    """The supervisor stacking its freeze and popping it restores any pre-existing
     stack byte-for-byte in structure (sources, reasons, timestamps)."""
     path = tmp_path / "control.json"
     base = push_freeze(reason="infra", path=path, source="operator")
@@ -249,15 +249,15 @@ def test_c2_spot_recovery_restores_pre_existing_stack(tmp_path: Path):
 
 def test_c2_only_operator_or_welfare_stand_down_lifts_welfare(tmp_path: Path):
     """A welfare freeze is liftable only by an operator stand-down or an
-    explicit welfare stand-down — never by a Spot recovery or a plain pop."""
+    explicit welfare stand-down — never by a supervisor recovery or a plain pop."""
     path = tmp_path / "control.json"
     push_freeze(reason="distress", path=path, source="welfare")
 
-    # Spot recovery cannot lift it.
+    # A supervisor recovery cannot lift it.
     assert pop_freeze(path=path, source="spot").frozen
     # A plain pop of the top would lift it — but the API contract for welfare
     # entries is the stand-down paths; assert an unrelated source stand-down
-    # (e.g. spot) does not lift the welfare freeze either.
+    # (e.g. the supervisor) does not lift the welfare freeze either.
     assert stand_down(path=path, source="spot").frozen
 
     # Operator stand-down lifts everything, including the welfare freeze.

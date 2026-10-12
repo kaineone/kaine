@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The Mnemos factory."""
+"""The episodic memory module factory."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional
@@ -24,7 +24,7 @@ def make_mnemos(
 ) -> BaseModule:
     from kaine.modules.mnemos.module import Mnemos
 
-    # Spot-injected shared embedder; never a TOML key, so pop before validation.
+    # supervisor-injected shared embedder; never a TOML key, so pop before validation.
     embedder = section.pop("_embedder", None)
 
     allowed = {

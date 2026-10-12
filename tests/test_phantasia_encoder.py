@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Phantasia observation encoder: fixed-width, no raw sense data, versioned."""
+"""world model observation encoder: fixed-width, no raw sense data, versioned."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -70,7 +70,7 @@ def test_inhibition_flag_encoded():
 def test_salience_weighted_coalition_buckets():
     quiet = encode_snapshot(_snapshot([_event("soma", "soma.report", salience=0.1)]))
     loud = encode_snapshot(_snapshot([_event("soma", "soma.report", salience=0.9)]))
-    # Higher-salience soma event yields a larger soma bucket value.
+    # Higher-salience interoception event yields a larger interoception bucket value.
     assert max(loud) > max(quiet)
 
 

@@ -1,6 +1,6 @@
 ## Why
 
-Two findings of the mathematics review of 2026-10-08 about Topos foveation, which is on in the base-thesis profile.
+Two findings of the mathematics review of 2026-10-08 about the vision module's foveation, which is on in the base-thesis profile.
 
 - **The precision weighting is trivial.** The design selects the fovea by a precision-weighted combination of bottom-up saliency and a top-down bias. The code multiplies the bottom-up map (each tile's absolute grey-level change since the previous clip tick) by a weight of 1, and no top-down map is wired, so the fovea goes to whichever tile changed most. A tile that flickers all the time (a screen, foliage, water) wins as easily as a stable region that suddenly changes. In predictive coding, precision is the inverse variance of a channel's error, and attention weights each error by its precision (Feldman and Friston 2010).
 - **The video encoder sees no motion.** With foveation on, the peripheral gist and the foveal crop are each encoded as a 16-frame clip made of one still view repeated 16 times, so the clip encoder's temporal modelling is wasted and motion enters only through the sequence of clip embeddings.
@@ -21,7 +21,7 @@ The top-down channel stays unwired, as the foveation design decided ("no pretend
 ## Impact
 
 - **Code:** `kaine/modules/topos/{foveation,module}.py`.
-- **Behaviour:** the fovea favours surprising change over habitual change; the peripheral and foveal latents now carry motion, so Topos's change and prediction-error statistics, and the arousal startles they drive, change. The womb prediction-error marker reads Topos's error and is re-validated in the follow-up validation step.
+- **Behaviour:** the fovea favours surprising change over habitual change; the peripheral and foveal latents now carry motion, so the vision module's change and prediction-error statistics, and the arousal startles they drive, change. The stimulus source prediction-error marker reads the vision module's error and is re-validated in the follow-up validation step.
 - **Cost:** 32 crops and resizes per clip tick instead of 2, with the same two encodes; `scripts/bench_foveation.py` is to be re-run on the host before the next study.
-- **Docs:** `docs/09-modules/topos.md`.
+- **Docs:** `docs/09-modules/vision.md`.
 - **Paper:** §3.5 (the fovea) and the foveation figure caption.

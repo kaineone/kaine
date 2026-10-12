@@ -3,21 +3,21 @@
 
 """PerceptionLocus — applies entity-initiated perceptual-locus switches.
 
-The operator sets the locus directly through Nexus; this module is the path by
+The operator sets the locus directly through the dashboard; this module is the path by
 which the *entity* may switch its own locus, via an `intent.perception.switch`
-intent from volition. Every such switch is gated (policy + operator lock +
+intent from the action selection module. Every such switch is gated (policy + operator lock +
 inhibition + minimum dwell), audited onto the bus, and — when applied — writes
-the new locus to perception desired-state so Topos/Audio-In rebind (the real
+the new locus to perception desired-state so the vision module and Audio-In rebind (the real
 camera/mic go dark on a move to `virtual`).
 
 **Producer gap (deferred virtual-world embodiment):** The `intent.perception.switch`
-event type consumed by this module has no producer yet. Volition only emits
+event type consumed by this module has no producer yet. The action selection module only emits
 `intent.speak`, `intent.think`, and `intent.act`; nothing in the current build
 emits `intent.perception.switch`. As a result the entity-initiated self-switch
 path cannot fire from the entity. The `allow_self_switch` config knob (default
 ``False``) is reserved for deferred virtual-world embodiment work and should
 remain ``False`` until that work lands. Locus changes are operator-driven (via
-Nexus desired-state writes) until then.
+dashboard desired-state writes) until then.
 """
 from __future__ import annotations
 
@@ -84,7 +84,7 @@ class PerceptionLocus(BaseModule):
         await super().shutdown()
 
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
-        # Belt-and-suspenders: volition already suppresses intents while
+        # Belt-and-suspenders: the action selection module already suppresses intents while
         # inhibited, but track it so the switch policy can refuse independently.
         self._inhibited = bool(getattr(snapshot, "inhibited", False))
 

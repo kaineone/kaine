@@ -1,6 +1,6 @@
 ## Why
 
-Eidolon's drift detector compares the source distribution of the last 100 broadcasts (`p`) with the cumulative all-time distribution (`q`) by the symmetric (Jeffreys) Kullback-Leibler divergence. The cumulative histogram already contains the recent window, so the detector compares a distribution with a mixture that includes it. Early in life the recent window is most of the mixture and the score is pulled toward zero; late in life the window is a vanishing part of it. The same threshold, 0.6, therefore means different things at different ages, and a change confined to the window is partly hidden by its own counts. The mathematics review of 2026-10-08 found this.
+The self-model module's drift detector compares the source distribution of the last 100 broadcasts (`p`) with the cumulative all-time distribution (`q`) by the symmetric (Jeffreys) Kullback-Leibler divergence. The cumulative histogram already contains the recent window, so the detector compares a distribution with a mixture that includes it. Early in life the recent window is most of the mixture and the score is pulled toward zero; late in life the window is a vanishing part of it. The same threshold, 0.6, therefore means different things at different ages, and a change confined to the window is partly hidden by its own counts. The mathematics review of 2026-10-08 found this.
 
 ## What Changes
 
@@ -18,6 +18,6 @@ Eidolon's drift detector compares the source distribution of the last 100 broadc
 ## Impact
 
 - **Code:** `kaine/modules/eidolon/drift.py`, `kaine/modules/eidolon/module.py` (payload field).
-- **Behaviour:** Eidolon is held (off in the base-thesis form). With it on, drift is undefined in the first two windows of life and then compares like with like. `drift_count` and identity history already recorded by preserved beings were computed under the old reference; they are kept as they are.
+- **Behaviour:** The self-model module is held (off in the base-thesis form). With it on, drift is undefined in the first two windows of life and then compares like with like. `drift_count` and identity history already recorded by preserved entities were computed under the old reference; they are kept as they are.
 - **Consumers:** `kaine/lifecycle/divergence.py` and the preservation monitor read `drift_count`, whose meaning (episodes over threshold) is unchanged.
-- **Docs:** `docs/09-modules/eidolon.md`.
+- **Docs:** `docs/09-modules/self-model.md`.

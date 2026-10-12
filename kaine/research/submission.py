@@ -6,8 +6,8 @@
 PARAMOUNT SAFETY INVARIANT
 --------------------------
 The default bundle is ALLOWLIST-BASED and contains NUMERIC METRICS ONLY.
-It never includes speech transcripts, the Lingua intent log
-(intent_expression.jsonl), Mnemos/Qdrant memories, the Eidolon self-model,
+It never includes speech transcripts, the language intent log
+(intent_expression.jsonl), episodic memory/Qdrant memories, the self-model,
 or any conversation content.
 
 Only the subdirectories enumerated in ``METRICS_ONLY_DIRS`` are ever copied
@@ -59,7 +59,7 @@ log = logging.getLogger(__name__)
 # These names mirror the evaluation sink/observer output dirs (see the
 # registry and config under kaine/evaluation/) but are duplicated here on
 # purpose: this module never imports the evaluation package, preserving the
-# sidecar privacy boundary (only the cycle/nexus entrypoints may couple to it).
+# sidecar privacy boundary (only the cycle/dashboard entrypoints may couple to it).
 # ---------------------------------------------------------------------------
 
 #: Allowed subdirectory names under ``data/evaluation/`` for the metrics tier.

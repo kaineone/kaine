@@ -5,7 +5,7 @@
 
 All twelve canonical module names are registered via the same fakes
 the module-shedding tests use. The cycle runs 50 ticks against
-fakeredis, Syneidesis composes broadcasts, ForkManager snapshots and
+fakeredis, workspace composes broadcasts, ForkManager snapshots and
 restores the whole registry, and every check stays within fakeredis —
 no real Redis, no real services, no module entity-state init.
 """
@@ -96,7 +96,7 @@ async def test_full_stack_unbooted_runs_50_ticks_and_round_trips_snapshot(tmp_pa
 
 @pytest.mark.asyncio
 async def test_full_stack_with_nexus_co_existence(tmp_path):
-    """Cycle + Nexus on the same fakeredis. Nexus bridge reads streams
+    """Cycle + the dashboard on the same fakeredis. The dashboard bridge reads streams
     without disrupting the cycle's reads."""
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     from kaine.nexus.bridge import BusBridge
@@ -143,7 +143,7 @@ async def test_full_stack_with_nexus_co_existence(tmp_path):
             result = await cycle.tick()
             assert result.error is False
             await asyncio.sleep(0.01)
-        # Nexus diagnostics SSE saw at least one event from lingua.out
+        # The dashboard diagnostics SSE saw at least one event from lingua.out
         # (scrubbed of content fields, but the event itself surfaced).
         assert diag_client.queue.qsize() > 0
     finally:

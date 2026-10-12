@@ -12,7 +12,7 @@ Every successful `speak` or `think` SHALL append one JSONL record to the configu
 - **THEN** the intent-expression log contains two records whose `mode` values are `"external"` and `"internal"` respectively, and both records carry a `model` field
 
 #### Scenario: Heard speech is never logged
-- **WHEN** the coalition contains an `audition.transcription` and Lingua replies to it
+- **WHEN** the coalition contains an `audition.transcription` and the language module replies to it
 - **THEN** the log record contains no text of that transcription, and contains the placeholder `[heard speech]` where it appeared
 
 ## ADDED Requirements

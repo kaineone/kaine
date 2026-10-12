@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-"""Soma on wetware: interoceptive forward model.
+"""The interoception module on wetware: interoceptive forward model.
 
-The biological substrate replaces Soma's frozen CfC reservoir; the readout
+The biological substrate replaces the interoception module's frozen CfC reservoir; the readout
 stays a small online linear model so prediction error keeps the silicon
-semantics (L2 in feature space) that Soma's salience, fatigue and warm-up depend
+semantics (L2 in feature space) that the interoception module's salience, fatigue and warm-up depend
 on.  See `openspec/changes/soma-on-wetware/`.
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 
 class WetwareInteroceptiveModel:
-    """Drop-in for Soma's `forward_model=` (silicon CfC reservoir + readout).
+    """Drop-in for the interoception module's `forward_model=` (silicon CfC reservoir + readout).
 
     The biological substrate replaces the frozen recurrent reservoir; the
     readout remains a tiny linear head trained online so prediction-error

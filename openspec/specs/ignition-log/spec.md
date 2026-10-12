@@ -1,7 +1,7 @@
 # ignition-log Specification
 
 ## Purpose
-The ignition log is an optional, content-free research record of every workspace broadcast. It places each ignition in the film programme (item, offset, paused) and keeps the entry ids, the run id and the broadcast time, so the module-ignition study can compare ignitions across viewings without recording what the being perceived or thought.
+The ignition log is an optional, content-free research record of every workspace broadcast. It places each ignition in the film programme (item, offset, paused) and keeps the entry ids, the run id and the broadcast time, so the module-ignition study can compare ignitions across viewings without recording what the entity perceived or thought.
 
 ## Requirements
 

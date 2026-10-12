@@ -13,7 +13,7 @@ Nothing here runs the live cognitive loop or a live volunteer client: it is the
 job descriptor (:mod:`kaine.distributed.job`), the trusted-side re-verification
 gate (:mod:`kaine.distributed.gate`), the trusted-first runner abstraction
 (:mod:`kaine.distributed.runner`), the BOINC volunteer contract + guardrails
-(:mod:`kaine.distributed.boinc`), and the forked-temporary-being job kind
+(:mod:`kaine.distributed.boinc`), and the forked-temporary-entity job kind
 (:mod:`kaine.distributed.fork_being`).
 """
 from __future__ import annotations

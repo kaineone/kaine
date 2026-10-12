@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Each external utterance gets a content-free outcome record
-A cycle-layer observer SHALL write one record per external utterance holding `record_id`, `replied` (operator speech within the configured window, under the Chronos interaction rule), `reply_latency_s`, `empatheia_deviation`, `social_drive_delta` and `preempted`, and no text.
+A cycle-layer observer SHALL write one record per external utterance holding `record_id`, `replied` (operator speech within the configured window, under the sequence module's interaction rule), `reply_latency_s`, `empatheia_deviation`, `social_drive_delta` and `preempted`, and no text.
 
 #### Scenario: Answered utterance
 - **WHEN** the entity speaks and operator speech follows within the window

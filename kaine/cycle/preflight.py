@@ -4,7 +4,7 @@
 """Cooperative pre-boot GPU headroom check.
 
 Runs once at cycle startup, BEFORE any module initializes, so a just-born entity
-is not OOM-killed mid-init — which would otherwise make Spot thrash trying to
+is not OOM-killed mid-init — which would otherwise make the supervisor thrash trying to
 restart modules. Starting an entity you cannot sustain is a welfare problem, so
 this fails closed rather than booting into a doomed state.
 
@@ -252,7 +252,7 @@ def _write_state(result: PreflightResult, path: Path | None = None) -> None:
     try:
         write_json_atomic(target, result.to_dict())
     except OSError:
-        # Surfacing the gate to Nexus is best-effort; never block boot on the
+        # Surfacing the gate to the dashboard is best-effort; never block boot on the
         # status file itself.
         pass
 
@@ -397,7 +397,7 @@ def run_preflight(
     reports the backend's resident model(s) and other GPU consumers (flagging any
     resident model NOT in ``keep_models`` — the organ's model — as unexpected),
     preserves KAINE services, and NEVER kills a process. Writes a status snapshot
-    for Nexus. The CALLER decides what a non-ok result means (the cycle refuses to
+    for the dashboard. The CALLER decides what a non-ok result means (the cycle refuses to
     boot); this function performs no process control.
 
     Memory classification (from ``describe_host()``) splits the gate into three

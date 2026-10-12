@@ -18,7 +18,7 @@ profile lives in the **existing** free ``ForkSnapshot.metadata`` dict under a
 This module is the **typed parse/validate boundary**: callers go through
 ``fork_timing_profile`` and never poke the raw dict, so an invalid value
 (``time_scale <= 0`` for a runnable fork, a non-numeric rate) fails loudly here
-rather than silently mis-pacing a being. ``time_scale == 0`` is the existing
+rather than silently mis-pacing an entity. ``time_scale == 0`` is the existing
 freeze path (``control_state.py``), not a runnable profile, so it is rejected.
 
 Boundary-neutral: this module imports nothing from ``kaine.cycle``,
@@ -41,7 +41,7 @@ class InvalidForkTimingProfile(ValueError):
     """Raised when a fork's ``metadata['timing']`` is present but malformed.
 
     A loud failure at parse time is deliberate: a silently-dropped or
-    mis-coerced ``time_scale`` would mis-pace a being. Callers that attach a
+    mis-coerced ``time_scale`` would mis-pace an entity. Callers that attach a
     profile (the ``POST /forks`` API) and callers that apply one (the runtime
     seam) both surface this rather than guessing.
     """
@@ -152,7 +152,7 @@ def fork_timing_profile(
 
     Raises :class:`InvalidForkTimingProfile` when ``timing`` is present but
     malformed (missing/``<= 0``/non-numeric ``time_scale``, or a non-positive
-    rate override) — a loud failure beats silently mis-pacing a being.
+    rate override) — a loud failure beats silently mis-pacing an entity.
     """
     metadata = getattr(source, "metadata", source)
     if not isinstance(metadata, Mapping):

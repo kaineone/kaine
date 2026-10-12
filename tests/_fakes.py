@@ -3,7 +3,7 @@
 
 """Test fakes for the cognitive cycle.
 
-These are intentionally minimal — full Syneidesis and ModuleRegistry land in
+These are intentionally minimal — full workspace and ModuleRegistry land in
 their own Phase 1 changes. Tests for the cycle treat both as collaborators
 that match the protocols in kaine.cycle.protocols.
 """

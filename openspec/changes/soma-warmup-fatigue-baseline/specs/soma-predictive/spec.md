@@ -1,11 +1,11 @@
 ## MODIFIED Requirements
 
 ### Requirement: Fatigue accumulator triggers maintenance
-Soma SHALL maintain a fatigue accumulator that integrates **unexpected** prediction error over waking time and decays continuously. Unexpected error is the error beyond each channel's learned expected band (see "Learned expected prediction error per interoceptive channel"). While a hard-threshold breach is live, the accumulator SHALL integrate the raw prediction error at full weight. During the developmental warm-up, the accumulator input SHALL be damped by subtracting the warming baseline, the mean of the accumulator's own recent inputs (unexpected error, or raw error while a hard threshold is breached) before the current tick, floored at zero. When the accumulator crosses `fatigue_maintenance_threshold`, Soma SHALL publish a `soma.fatigue` event carrying the current value, the threshold and a `crossed` flag. The accumulator SHALL reset to baseline at the end of an offline-maintenance cycle.
+The interoception module SHALL maintain a fatigue accumulator that integrates **unexpected** prediction error over waking time and decays continuously. Unexpected error is the error beyond each channel's learned expected band (see "Learned expected prediction error per interoceptive channel"). While a hard-threshold breach is live, the accumulator SHALL integrate the raw prediction error at full weight. During the developmental warm-up, the accumulator input SHALL be damped by subtracting the warming baseline, the mean of the accumulator's own recent inputs (unexpected error, or raw error while a hard threshold is breached) before the current tick, floored at zero. When the accumulator crosses `fatigue_maintenance_threshold`, the interoception module SHALL publish a `soma.fatigue` event carrying the current value, the threshold and a `crossed` flag. The accumulator SHALL reset to baseline at the end of an offline-maintenance cycle.
 
 #### Scenario: Crossing the threshold emits soma.fatigue
 - **WHEN** sustained unexpected prediction error drives the accumulator above `fatigue_maintenance_threshold`
-- **THEN** Soma publishes a `soma.fatigue` event with `crossed == true`
+- **THEN** the interoception module publishes a `soma.fatigue` event with `crossed == true`
 
 #### Scenario: Fatigue decays without error
 - **WHEN** unexpected prediction error is zero for a period

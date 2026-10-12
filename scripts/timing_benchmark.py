@@ -19,12 +19,12 @@ shipped defaults (this script NEVER changes them — it only recommends).
 THIS IS NOT AN ENTITY BOOT. It is a dry performance probe. Explicitly:
 
   * The cognitive cycle is driven in DETERMINISTIC mode for N ticks.
-  * NO language organ / NO real LLM: lingua + vox are force-disabled in the
+  * NO language organ / NO real LLM: the language and vocal modules are force-disabled in the
     config copy this script builds, so no organ module is constructed and no
     chat client is created. (The organ never participates in tick() anyway —
     it reacts to bus events in its own loop — but disabling it removes any
     chance of an outward utterance.)
-  * NO Volition side-effects: the cycle is built with ``volition=None``, so the
+  * NO action selection module side-effects: the cycle is built with ``volition=None``, so the
     tick can never select or publish an effector intent. Nothing is spoken,
     nothing acts outward. We measure cognitive PLUMBING cost only.
   * The vision encode is timed directly on a seeded synthetic frame — never a
@@ -105,7 +105,7 @@ async def _benchmark_tick(cfg: dict[str, Any], ticks: int) -> dict[str, Any]:
     """Drive CognitiveCycle.tick() for `ticks` ticks; return per-tick stats.
 
     Wires the real modules (as tier1_smoke does) but with the language organ
-    disabled and Volition removed, so this is cognitive plumbing only — no LLM,
+    disabled and the action selection module removed, so this is cognitive plumbing only — no LLM,
     no effector activation, no outward action.
     """
     out: dict[str, Any] = {"ran": False, "reason": "", "samples_ms": []}
@@ -170,7 +170,7 @@ async def _benchmark_tick(cfg: dict[str, Any], ticks: int) -> dict[str, Any]:
             registry=registry,
             processing_rate_hz=float(cycle_cfg.get("processing_rate_hz", 3.333)),
             experiential_rate_hz=float(cycle_cfg.get("experiential_rate_hz", 3.333)),
-            # NO Volition: the tick can never select/publish an effector intent.
+            # NO action selection module: the tick can never select/publish an effector intent.
             volition=None,
             collect_phases=coherence is not None,
             entity_clock=registry.entity_clock,
@@ -220,7 +220,7 @@ async def _benchmark_tick(cfg: dict[str, Any], ticks: int) -> dict[str, Any]:
 
 
 async def _benchmark_vision(cfg: dict[str, Any], encodes: int) -> dict[str, Any]:
-    """Time the Topos DINOv2 encode of one seeded frame over `encodes` iters."""
+    """Time the vision module's DINOv2 encode of one seeded frame over `encodes` iters."""
     out: dict[str, Any] = {"ran": False, "reason": "", "samples_ms": []}
 
     topos_cfg = cfg.get("topos") or {}

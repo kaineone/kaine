@@ -4,8 +4,8 @@
 """Caretaker notifier task and best-effort event sender for unattended runs.
 
 Manages the durable start/acknowledgement lifecycle and repeats a reminder
-notice until an operator acknowledges the start in Nexus. Running notices
-(Spot escalation, supervision loss, welfare response, boot failure) are sent
+notice until an operator acknowledges the start in the dashboard. Running notices
+(supervisor escalation, supervision loss, welfare response, boot failure) are sent
 best-effort and never stop the entity.
 """
 from __future__ import annotations

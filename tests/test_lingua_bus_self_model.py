@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Lingua seeds its persona from the *bus-mediated* Eidolon self-model snapshot,
-not an in-process Eidolon reference (``distributed-deployment`` task 2.2 / 5.1).
+"""The language module seeds its persona from the *bus-mediated* self-model snapshot,
+not an in-process self-model reference (``distributed-deployment`` task 2.2 / 5.1).
 
 This is the decoupling that lets the language organ run in a separate process /
-on a separate trusted host from Eidolon: the two coordinate over the shared
+on a separate trusted host from the self-model module: the two coordinate over the shared
 authenticated bus, never through a boot-time Python object handle.
 """
 from __future__ import annotations
@@ -32,7 +32,7 @@ async def bus():
 
 
 async def _publish_self_model(bus: AsyncBus, **fields) -> None:
-    # Source "eidolon" routes to the eidolon.out stream Lingua consumes.
+    # Source "eidolon" routes to the eidolon.out stream the language module consumes.
     await bus.publish(
         Event(
             source="eidolon",
@@ -71,8 +71,8 @@ async def _wait_for(pred, *, timeout_s: float = 2.0) -> bool:
 
 @pytest.mark.asyncio
 async def test_lingua_boots_against_bus_mediated_self_model(bus: AsyncBus, tmp_path: Path):
-    # A self-model snapshot already on the bus at boot (the Eidolon initial
-    # publish) seeds Lingua's persona — no in-process provider is wired.
+    # A self-model snapshot already on the bus at boot (the self-model module's initial
+    # publish) seeds the language module's persona — no in-process provider is wired.
     await _publish_self_model(bus, name="Kaine Umarov")
     lingua = _make_lingua(bus, tmp_path)
     assert lingua._self_model_provider is None  # no in-process reference

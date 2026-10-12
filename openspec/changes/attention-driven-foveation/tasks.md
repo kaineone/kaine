@@ -1,7 +1,7 @@
 # Tasks — attention-driven foveation
 
 This change is **design-first**: this pass delivers the proposal, design, and spec
-deltas only. No perception or Topos code is written here. Implementation is
+deltas only. No perception or vision module code is written here. Implementation is
 **phased** and gated on the lead's review of the design and on the host benchmark
 confirming the two-encode budget fits the tick.
 
@@ -15,11 +15,11 @@ returning a fixed/centre fovea.
 
 - [x] 0.1 **Single grab at NATIVE resolution**, kept configurable so the benchmark
       can dial it back. (design.md §Flags 1)
-- [x] 0.2 **Top-down bias is in Phase 1** (workspace→Topos attention channel built
+- [x] 0.2 **Top-down bias is in Phase 1** (workspace→vision module attention channel built
       now, not deferred). (Flag 2)
 - [x] 0.3 **Single fovea.** (Flag 3)
 - [x] 0.4 **Fovea size is arousal-driven** — the distinct visual coupling
-      (Easterbrook narrowing default, sign tunable), NOT the Syneidesis salience
+      (Easterbrook narrowing default, sign tunable), NOT the workspace salience
       window. (Flag 4)
 - [ ] 0.5 **Deferred (operator decision):** Phase 3 native region capture: build or defer — decide after the Phase 1
       benchmark. (Flag 5)
@@ -30,15 +30,15 @@ returning a fixed/centre fovea.
 
 ## 1. Phase 1 — spatial saliency + fovea (bottom-up + top-down) + dual view
 
-- [x] 1.1 Add a coarse spatial saliency map to Topos: tile the frame; per-tile
+- [x] 1.1 Add a coarse spatial saliency map to the vision module: tile the frame; per-tile
       change and forward-model prediction error; kept in memory only.
-- [x] 1.2 A workspace→Topos attention channel: an optional top-down bias region
-      (from Nous / Empatheia / a goal), injected without Topos importing the
+- [x] 1.2 A workspace→vision module attention channel: an optional top-down bias region
+      (from the planning module / the social cognition module / a goal), injected without the vision module importing the
       workspace (a provider/callback seam, like the affect seam).
       (`Topos.set_top_down_bias_provider` / `set_arousal_provider`.)
 - [x] 1.3 Select the single fovea target as the argmax of the precision-weighted
       combination of bottom-up saliency and the top-down bias, with dwell/hysteresis
-      to damp thrashing; fovea size from the Thymos arousal value (distinct visual
+      to damp thrashing; fovea size from the affect module's arousal value (distinct visual
       coupling; Easterbrook-narrowing default sign, tunable).
 - [x] 1.4 From a single in-memory grab, derive the peripheral (downsample) and the
       foveal crop (array slice → native patch); release frames as they age out
@@ -81,21 +81,21 @@ returning a fixed/centre fovea.
       exercised without a real display/GPU, so it is not built speculatively — the
       Phase 1 native single-grab crop is the shipped foveal source until the
       operator elects to add the second capture.*
-- [ ] 3.2 **Deferred (belongs to active-vision work; needs 3.1 and a Nous integration):** frame foveation as explicit active inference: Nous selects saccades by
+- [ ] 3.2 **Deferred (belongs to active-vision work; needs 3.1 and a planning module integration):** frame foveation as explicit active inference: the planning module selects saccades by
       expected free energy (epistemic value of looking there).
-      *Deferred: gated on 3.1 and a cross-module Nous action-selection integration
+      *Deferred: gated on 3.1 and a cross-module planning module action-selection integration
       (expected-free-energy saccade valuation). Belongs to an active-vision change,
       not this perception-path change; no pretend EFE loop is shipped.*
 
 ## 4. Phase 4 — embodiment tie-in
 
-- [ ] 4.1 **Deferred (belongs to embodiment work):** route the fovea target (normalized 2-D + size) into the future Mundus
+- [ ] 4.1 **Deferred (belongs to embodiment work):** route the fovea target (normalized 2-D + size) into the future embodiment module
       "gaze direction decoupled from the body" control scalar, so screen gaze and
       camera gaze share one mechanism.
-      *Deferred: the fovea is already published in the Mundus-consumable form the
+      *Deferred: the fovea is already published in the embodiment-module-consumable form the
       design requires — a content-free normalized 2-D target + size
-      (`FoveaTarget.to_dict()`). Actually *routing* it into Mundus's gaze channel
-      is a cross-module embodiment integration: Mundus's `gaze_yaw`/`gaze_pitch`
+      (`FoveaTarget.to_dict()`). Actually *routing* it into the embodiment module's gaze channel
+      is a cross-module embodiment integration: the embodiment module's `gaze_yaw`/`gaze_pitch`
       are bidirectional rate channels driven by the learned `MotorPolicy`
       (`kaine/modules/mundus/control_surface.py`), and wiring the screen fovea into
       them competes with that learner. That coupling belongs to the embodiment
@@ -104,7 +104,7 @@ returning a fixed/centre fovea.
 
 ## 5. Docs / paper
 
-- [x] 5.1 Update `docs/09-modules/topos.md` with the foveation path once implemented.
+- [x] 5.1 Update `docs/09-modules/vision.md` with the foveation path once implemented.
       (New "Attention-driven foveation (topos-foveation)" section documenting the
       per-tick pipeline, the injected top-down/arousal seams, the attention schema,
       and the report fields; plus `[topos]` config rows, the `foveation.py` key-file
@@ -112,7 +112,7 @@ returning a fixed/centre fovea.
       rows.)
 - [x] 5.2 Note the attention-schema realization and active-vision framing for the
       paper's future-work / §5 indicator update (paper change, not code).
-      *Done 2026-10-05: the paper's Topos paragraph (§3) already describes the
+      *Done 2026-10-05: the paper's vision module paragraph (§3) already describes the
       forward-modelled fovea as an attention-schema construct (Graziano and Webb
       2015); the active-vision framing is filed as future work in the paper
       repository's `REVISION-NOTES.md` (section 6), stating that saccade

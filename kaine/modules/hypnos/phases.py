@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The five Hypnos sleep phases (paper §3.5).
+"""The five sleep phases (paper §3.5).
 
 Phase ordering (non-negotiable; paper-canonical):
   1. light_consolidation: short-term to episodic transfer (nothing dropped);
      oscillator frequency reduction across all active modules.
   2. deep_consolidation: replay of the consolidated traces inside a replay
-     window that Hypnos opens through Mnemos, then the downscaling of trace
+     window that the sleep module opens through the episodic memory module, then the downscaling of trace
      strengths that protects the replayed traces (paper A.10).
-  3. associative_replay: cross-period trace selection + Phantasia-cued
+  3. associative_replay: cross-period trace selection + world-model-cued
      re-injection (hypnos-consolidation).
-  4. voice_alignment: orchestrated by the Hypnos module directly.
-  5. affective_reset: Thymos reset; sleep ends with it. Soma's fatigue
+  4. voice_alignment: orchestrated by the sleep module directly.
+  5. affective_reset: the affect module reset; sleep ends with it. The interoception module's fatigue
      resets on the hypnos.sleep.completed event that follows.
 
 Each phase is async, takes its specific collaborator(s), and returns a
@@ -54,10 +54,10 @@ def _now_ms() -> float:
 # ---------------------------------------------------------------------------
 
 class _SupportsMnemos(Protocol):
-    """Mnemos module: memory consolidation, replay, and downscaling of trace strengths.
+    """The episodic memory module: memory consolidation, replay, and downscaling of trace strengths.
 
     deep_consolidation also calls ``open_replay_window()`` and
-    ``close_replay_window()`` when the collaborator has them. The real Mnemos
+    ``close_replay_window()`` when the collaborator has them. The real episodic memory module
     does; test fakes need not, so they are not part of this protocol.
     """
 
@@ -74,7 +74,7 @@ class _SupportsAffectiveReset(Protocol):
 
 
 class _SupportsTimeReset(Protocol):
-    """Anything Chronos-shaped that exposes a reset/recalibrate entry."""
+    """Anything sequence-module-shaped that exposes a reset/recalibrate entry."""
 
     def reset(self) -> None: ...
 
@@ -93,7 +93,7 @@ async def light_consolidation(
 
     Calls ``consolidate_now()``, which moves every short-term entry into
     episodic memory and drops nothing: no trace is deleted in this phase, and
-    ``entries_consolidated`` counts the entries moved. Mnemos keeps the moved
+    ``entries_consolidated`` counts the entries moved. The episodic memory module keeps the moved
     traces for this sleep, so phase 2's replay draws on them. Strong traces are
     tagged for deep consolidation (no-op at this stage — tagging is implicit
     in the existing salience scoring).
@@ -164,12 +164,12 @@ async def deep_consolidation(
     """Phase 2: replay first, then downscaling of trace strengths.
 
     Replay of the consolidated traces runs inside a replay window that this
-    function opens through Mnemos itself (so the window never depends on
-    Mnemos having seen ``hypnos.sleep.started`` on the bus). The window is
+    function opens through the episodic memory module itself (so the window never depends on
+    the episodic memory module having seen ``hypnos.sleep.started`` on the bus). The window is
     closed once replay is done. Perception is suspended for the duration
     using the provided callables and is always restored afterwards.
 
-    After replay Mnemos scales the strength of every persisted trace
+    After replay the episodic memory module scales the strength of every persisted trace
     except the replayed ones by one factor that deepens with the number of
     traces the wake stored, and the replayed traces keep theirs (paper
     A.10); vectors are not touched. If replay fails, downscaling and pruning
@@ -177,7 +177,7 @@ async def deep_consolidation(
     can be replayed on the next sleep.
 
     Args:
-        mnemos:              Mnemos module, or None (phase is no-op).
+        episodic_memory:              the episodic memory module, or None (phase is no-op).
         suspend_perception:  Callable (sync or no-arg async) to suspend external
                              perception; None = skip.
         restore_perception:  Callable (sync or no-arg async) to restore perception;
@@ -296,7 +296,7 @@ async def deep_consolidation(
 # ---------------------------------------------------------------------------
 
 class _SupportsCrossPeriod(Protocol):
-    """Mnemos-shaped object that can yield traces grouped by memory period.
+    """An episodic-memory-shaped object that can yield traces grouped by memory period.
 
     Returns a mapping ``{period_name: [trace, ...]}`` where each trace is
     any object carrying at least ``point_id`` and ``text`` attributes (or a
@@ -311,7 +311,7 @@ class _SupportsCrossPeriod(Protocol):
 
 
 class _SupportsScenarioCue(Protocol):
-    """Phantasia-shaped collaborator that imagines a scenario from a seed."""
+    """A world-model-shaped collaborator that imagines a scenario from a seed."""
 
     async def generate_scenario(
         self, *, seed_memory_id: str = ""
@@ -345,19 +345,19 @@ async def associative_replay(
        episodic, semantic) via ``mnemos.select_cross_period_traces`` so a
        single replay batch spans more than one period — the substrate for
        novel cross-period association.
-    2. Cues Phantasia (``generate_scenario``) for each cross-period seed and
+    2. Cues the world model module (``generate_scenario``) for each cross-period seed and
        consumes the resulting ``phantasia.scenario`` payloads.  When
-       Phantasia is disabled/absent the cue degrades to a no-op (no scenarios
+       the world model module is disabled/absent the cue degrades to a no-op (no scenarios
        produced) — the phase still succeeds.
     3. Re-injects the novel associations (the consumed scenarios) into the
-       workspace via the ``reinject`` callable so Nous (pymdp) and Thymos
+       workspace via the ``reinject`` callable so the planning module (pymdp) and the affect module
        process them through the normal cognitive cycle — there is NO special
        belief-revision burst.
 
     Args:
         enabled:     associative_replay feature flag.
-        mnemos:      cross-period trace source (or None → cross-period skipped).
-        phantasia:   scenario cue collaborator (or None → cue no-op).
+        episodic_memory:      cross-period trace source (or None → cross-period skipped).
+        world_model:   scenario cue collaborator (or None → cue no-op).
         reinject:    async/sync callable taking one scenario payload dict;
                      publishes it into the workspace.  None → skip re-injection.
         periods:     number of distinct memory periods to span (>= 2).
@@ -404,14 +404,14 @@ async def associative_replay(
                 seeds.append(tid)
     metadata["cross_period_traces"] = len(seeds)
 
-    # --- Step 2 + 3: cue Phantasia, consume scenarios, re-inject ------------
+    # --- Step 2 + 3: cue the world model module, consume scenarios, re-inject ------------
     scenarios_consumed = 0
     reinjected = 0
     if phantasia is None:
         metadata["phantasia_cue"] = "no-op (Phantasia disabled/absent)"
     else:
         # Cue once per cross-period seed; if no seeds were selected, still
-        # issue a single unseeded cue so an enabled Phantasia can extend the
+        # issue a single unseeded cue so an enabled world model module can extend the
         # accumulated trajectory.
         cue_seeds = seeds or [""]
         for seed in cue_seeds:
@@ -448,18 +448,18 @@ async def associative_replay(
 
 
 # ---------------------------------------------------------------------------
-# Phase 5: Affective Reset (+ Soma fatigue reset); sleep ends with it
+# Phase 5: Affective Reset (+ the interoception module's fatigue reset); sleep ends with it
 # ---------------------------------------------------------------------------
 
 async def affective_reset(
     thymos: Optional[_SupportsAffectiveReset],
 ) -> PhaseResult:
-    """Phase 5: Thymos affective reset, the last phase of every sleep.
+    """Phase 5: the affect module's affective reset, the last phase of every sleep.
 
     Resets the entity's dimensional affect state (valence/arousal/dominance)
-    toward baseline.  The Soma fatigue reset is handled separately via the
-    existing ``hypnos.sleep.completed`` event that Soma subscribes to
-    (``soma-forward-model-fatigue`` change); Hypnos publishes that event in
+    toward baseline.  The interoception module's fatigue reset is handled separately via the
+    existing ``hypnos.sleep.completed`` event that the interoception module subscribes to
+    (``soma-forward-model-fatigue`` change); the sleep module publishes that event in
     ``_run_pipeline`` after all phases complete, which zeroes
     ``FatigueAccumulator`` without requiring a direct module reference here.
     """
@@ -542,10 +542,10 @@ async def reset_affect(thymos: Optional[_SupportsAffectiveReset]) -> PhaseResult
 
 
 async def recalibrate_time(chronos_resetters: list[Any]) -> PhaseResult:
-    """Reset Chronos's habituation / rumination trackers via their reset() methods.
+    """Reset the sequence module's habituation / rumination trackers via their reset() methods.
 
     Each item in ``chronos_resetters`` is anything with a ``reset()`` method
-    — typically the detectors stashed inside the Chronos module. The list
+    — typically the detectors stashed inside the sequence module. The list
     shape lets callers pass several without an introspection dance.
     """
     start = _now_ms()

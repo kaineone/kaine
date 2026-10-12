@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Mnemos replay engine.
+"""The episodic memory module replay engine.
 
-During an active Hypnos maintenance window, the replay engine selects
+During an active sleep module maintenance window, the replay engine selects
 stored memory traces and publishes them as `mnemos.replay` events for
-re-processing by the workspace (Nous re-evaluates, Thymos re-appraises,
-Eidolon observes, Phantasia extends).
+re-processing by the workspace (the planning module re-evaluates, the affect module re-appraises,
+the self-model module observes, the world model module extends).
 
 Selection policy: `affect_weight × intensity + recency_weight × recency`
 where `recency` is normalised to [0, 1] across the candidate pool.
 
-Guard: `replay()` MUST be called from inside an active Hypnos maintenance
-window (the `window_active` flag). The window is opened by Hypnos through
+Guard: `replay()` MUST be called from inside an active sleep module maintenance
+window (the `window_active` flag). The window is opened by the sleep module through
 `Mnemos.open_replay_window()` inside a sleep, immediately before phase 2's
 replay, and closed once replay is done. Calling it outside raises
 `ReplayWindowError` and emits nothing. This is a load-bearing safety
@@ -22,7 +22,7 @@ Redaction: each `mnemos.replay` event carries a full-content payload
 (`text` present) for re-injection into the cognitive loop.  A separate
 *observer* payload is produced with `text` stripped when `redact_content`
 is true, keeping memory content out of operational logs / sidecar streams.
-Callers (the owning Mnemos module) receive both so they can publish the
+Callers (the owning episodic memory module) receive both so they can publish the
 loop-facing event and hand the redacted view to any sidecar observer.
 """
 from __future__ import annotations
@@ -34,7 +34,7 @@ from typing import Any
 
 
 class ReplayWindowError(RuntimeError):
-    """Raised when replay() is called outside an active Hypnos window."""
+    """Raised when replay() is called outside an active sleep module window."""
 
 
 @dataclass
@@ -170,13 +170,13 @@ def _payload_log_base(payload: dict[str, Any]) -> float | None:
 
 
 class ReplayEngine:
-    """Stateful engine owned by the Mnemos module.
+    """Stateful engine owned by the episodic memory module.
 
-    Tracks whether a Hypnos maintenance window is currently active and,
+    Tracks whether a sleep module maintenance window is currently active and,
     when asked to replay, selects traces from the short-term buffer /
     storage and publishes `mnemos.replay` events.
 
-    The window is opened and closed by Hypnos through
+    The window is opened and closed by the sleep module through
     `Mnemos.open_replay_window()` and `Mnemos.close_replay_window()` around
     phase 2's replay; `hypnos.sleep.completed` also closes it.
     """
@@ -200,15 +200,15 @@ class ReplayEngine:
         self._window_active: bool = False
 
     # ------------------------------------------------------------------
-    # Window lifecycle (driven by Hypnos through Mnemos)
+    # Window lifecycle (driven by the sleep module through the episodic memory module)
     # ------------------------------------------------------------------
 
     def open_window(self) -> None:
-        """Signal that a Hypnos maintenance replay window has started."""
+        """Signal that a sleep module maintenance replay window has started."""
         self._window_active = True
 
     def close_window(self) -> None:
-        """Signal that the Hypnos maintenance window has ended."""
+        """Signal that the sleep module maintenance window has ended."""
         self._window_active = False
 
     @property
@@ -226,7 +226,7 @@ class ReplayEngine:
     def replay(self, candidates: list[ReplayEntry]) -> list[ReplayEvent]:
         """Select and package traces for replay.
 
-        MUST be called inside an active Hypnos maintenance window.
+        MUST be called inside an active sleep module maintenance window.
         Raises `ReplayWindowError` if called while awake.
 
         Returns a list of `ReplayEvent` objects (one per selected trace).

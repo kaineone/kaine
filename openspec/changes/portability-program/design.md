@@ -8,18 +8,18 @@ Every heavy dependency is imported lazily: importing all of `kaine.*` with torch
 
 | Module | Heaviest dependency today | Lightest backend today | Needed for the torch-free core |
 | --- | --- | --- | --- |
-| Soma | torch + ncps CfC forward model | none | NumPy CfC (closed form), verified against the torch path |
-| Chronos | torch + ncps CfC | none | NumPy CfC |
-| Mnemos | sentence-transformers MiniLM; Qdrant optional | sqlite-vec store, torch embedder | shared ONNX or model2vec embedder |
-| Empatheia | its own MiniLM | none | shared embedder |
-| Hypnos | a third MiniLM; DPO training needs a GPU | runs without the embedder | shared embedder; training stays off on edge tiers |
-| Nous | pymdp on JAX | `FakeEngine` (does not reason) | NumPy active inference |
-| Phantasia | JAX DreamerV3 | dev-only EMA stub (does not learn) | small NumPy world model |
-| Topos | torch + transformers (DINOv2 / InternVideo-Next) | DINOv2-small on torch | ONNX MobileNetV4 / DINOv2-S |
+| Interoception | torch + ncps CfC forward model | none | NumPy CfC (closed form), verified against the torch path |
+| Sequence | torch + ncps CfC | none | NumPy CfC |
+| Episodic memory | sentence-transformers MiniLM; Qdrant optional | sqlite-vec store, torch embedder | shared ONNX or model2vec embedder |
+| Social cognition | its own MiniLM | none | shared embedder |
+| Sleep | a third MiniLM; DPO training needs a GPU | runs without the embedder | shared embedder; training stays off on edge tiers |
+| Planning | pymdp on JAX | `FakeEngine` (does not reason) | NumPy active inference |
+| World model | JAX DreamerV3 | dev-only EMA stub (does not learn) | small NumPy world model |
+| Vision | torch + transformers (DINOv2 / InternVideo-Next) | DINOv2-small on torch | ONNX MobileNetV4 / DINOv2-S |
 | Audition | STT over HTTP; emotion2vec+ in-process on torch | STT offloaded, emotion off | sherpa-onnx STT; prosody-based affect |
-| Vox | Chatterbox over HTTP | none local | sherpa-onnx Kokoro / Piper / KittenTTS |
-| Lingua | 4–9B model over an OpenAI-compatible server | llama.cpp in-process GGUF | already portable |
-| Thymos, Eidolon, Praxis, Perception, Syneidesis | pure Python | — | — |
+| Vocal | Chatterbox over HTTP | none local | sherpa-onnx Kokoro / Piper / KittenTTS |
+| Language | 4–9B model over an OpenAI-compatible server | llama.cpp in-process GGUF | already portable |
+| Affect, Self-model, Effectors, Perceptual locus, Workspace | pure Python | — | — |
 
 Timing: `EntityClock.period = 1/(hz × scale)`; a cycle overrun starts the next tick at once and records slip, while subjective time keeps tracking wall time × scale. Only a lowered `time_scale` preserves the dynamics on slow hardware, and it is set by hand today.
 

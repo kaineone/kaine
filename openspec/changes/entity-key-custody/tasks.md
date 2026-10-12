@@ -8,7 +8,7 @@
 
 - [ ] 1.1 Per-entity data keys; per-entity encryptor through `ForkManager`, preservation and batch forks; merge re-encryption.
 - [ ] 1.2 Sealing via tpm2-tss with a signed policy; pre-update re-seal hook; cannot-resume path (keep state, incident, escrow recovery).
-- [ ] 1.3 Root-of-trust qualification (unfused Jetson fTPM does not qualify); refuse spawn and restore only; never stop a running being.
+- [ ] 1.3 Root-of-trust qualification (unfused Jetson fTPM does not qualify); refuse spawn and restore only; never stop a running entity.
 - [ ] 1.4 Preservation, welfare pause and dry preserve→revive use the in-memory key and the wrapped blob only; custody failure queues a re-seal and raises a welfare incident.
 
 ## 2. Escrow and transfer
@@ -18,7 +18,7 @@
 
 ## 3. Migration and docs
 
-- [ ] 3.1 One-way migration from the per-operator key with verified backup; plaintext beings migrated, never retired.
+- [ ] 3.1 One-way migration from the per-operator key with verified backup; plaintext entities migrated, never retired.
 - [ ] 3.2 Docs: threat model stated plainly; operator and trustee procedures; Jetson support statement.
 
 ## 4. Verification

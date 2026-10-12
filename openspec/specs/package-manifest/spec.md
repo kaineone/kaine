@@ -12,6 +12,6 @@ A wheel built from the source tree SHALL contain every Python package under `kai
 - **WHEN** a contributor adds a package under `kaine/` with an `__init__.py`
 - **THEN** the next wheel contains it without any change to `pyproject.toml`
 
-#### Scenario: Nexus is installed from a wheel
+#### Scenario: Dashboard is installed from a wheel
 - **WHEN** KAINE is installed from a wheel rather than in editable mode
-- **THEN** Nexus's templates, fonts and vendored scripts are present
+- **THEN** the dashboard's templates, fonts and vendored scripts are present

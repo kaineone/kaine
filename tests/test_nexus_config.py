@@ -96,7 +96,7 @@ def test_load_nexus_config_missing_returns_defaults(tmp_path):
 
 
 def test_env_host_overrides_toml(tmp_path, monkeypatch):
-    # Containers reach Nexus via a published port that cannot reach a server bound
+    # Containers reach the dashboard via a published port that cannot reach a server bound
     # to the container's own 127.0.0.1 (the shipped default). KAINE_NEXUS_HOST lets
     # the deployment bind all interfaces without editing the baked config.
     config_file = tmp_path / "kaine.toml"

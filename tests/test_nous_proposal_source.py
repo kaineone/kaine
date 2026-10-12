@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for the Nous proposal action-selection source."""
+"""Tests for the planning proposal action-selection source."""
 from __future__ import annotations
 
 import asyncio
@@ -89,7 +89,7 @@ def _proposal(
 
 def _snapshot(events, *, inhibited: bool = False) -> WorkspaceSnapshot:
     # The coalition is ordered by salience (highest first) by the time it
-    # reaches Volition, so the helper sorts to match real engine behavior. The
+    # reaches the action selection module, so the helper sorts to match real engine behavior. The
     # precision-weighted scores the report policy reads mirror each salience.
     selected = sorted(events, key=lambda item: item[1].salience, reverse=True)
     return WorkspaceSnapshot(
@@ -218,7 +218,7 @@ def test_rest_proposal_emits_rest_intent_without_signature():
     assert intents[0].origin == "nous"
     assert intents[0].proposal_id == "p1"
     assert intents[0].sig is None
-    # Rest outcomes are forwarded to Hypnos; realization is decided there.
+    # Rest outcomes are forwarded to the sleep module; realization is decided there.
     assert v.proposal_outcomes(snap)[0] == {
         "proposal_id": "p1",
         "realized": False,
@@ -314,7 +314,7 @@ def test_lingua_ignores_rest_intent():
 
 
 def test_default_policy_speak_dropped_while_source_speak_guard_armed():
-    # Regression (N1): a realized Nous speak must arm the WRAPPED policy's
+    # Regression (N1): a realized planning module's speak must arm the WRAPPED policy's
     # guard, not a source-side guard that drops already-decided inner intents.
     # The inner guard clears by its own 48 s timeout; a user reply after that
     # is answered and no replies are permanently lost.
@@ -323,7 +323,7 @@ def test_default_policy_speak_dropped_while_source_speak_guard_armed():
     source = NousProposalSource(inner, clock=clock, speak_refractory_s=8.0)
     v = Volition(policy=source)
 
-    # t=0: a Nous speak proposal is realized; the inner policy's speak guard
+    # t=0: a planning module's speak proposal is realized; the inner policy's speak guard
     # is armed externally.
     snap1 = _snapshot(
         [
@@ -337,7 +337,7 @@ def test_default_policy_speak_dropped_while_source_speak_guard_armed():
     assert intents1[0].origin == "nous"
 
     # t=40: a user utterance would normally make the default policy speak, but
-    # the inner policy's own guard is still armed from the Nous speak at t=0.
+    # the inner policy's own guard is still armed from the planning module's speak at t=0.
     # With the old bug the inner intent was dropped *after* arming that guard,
     # leaving a ghost guard until t=88.
     clock.advance(40.0)
@@ -352,7 +352,7 @@ def test_default_policy_speak_dropped_while_source_speak_guard_armed():
     assert intents3[0].kind == SPEAK
     assert intents3[0].origin is None
 
-    # After the original Nous guard times out, the system is responsive through
+    # After the original planning module's guard times out, the system is responsive through
     # t=88. We clear the guard between replies by simulating own output.
     for t in [48.0, 60.0, 88.0]:
         clock.t = t
@@ -364,7 +364,7 @@ def test_default_policy_speak_dropped_while_source_speak_guard_armed():
 
 
 def test_report_policy_think_dropped_while_source_think_guard_armed():
-    # Regression: a realized Nous think/speak now arms the report policy's own
+    # Regression: a realized planning module's think/speak now arms the report policy's own
     # guard and refractory via note_external_intent, so the next report intent
     # of that kind is declined by the wrapped policy itself.
     clock = _Clock()
@@ -376,7 +376,7 @@ def test_report_policy_think_dropped_while_source_think_guard_armed():
     source = NousProposalSource(inner, clock=clock, think_refractory_s=3.0)
     v = Volition(policy=source)
 
-    # Tick 1: the soma report is below the think threshold, so the Nous think
+    # Tick 1: the interoception module's report is below the think threshold, so the planning module's think
     # proposal is realized. This arms the inner think guard and stamps the
     # report policy's think refractory.
     snap1 = _snapshot(
@@ -401,7 +401,7 @@ def test_report_policy_think_dropped_while_source_think_guard_armed():
 
 
 def test_report_policy_speak_refractory_after_nous_speak():
-    # A realized Nous speak sets the report policy's last-speak-at refractory;
+    # A realized planning module's speak sets the report policy's last-speak-at refractory;
     # after the in-flight guard is cleared, the refractory still suppresses a
     # report speak until the interval passes.
     clock = _Clock()
@@ -414,7 +414,7 @@ def test_report_policy_speak_refractory_after_nous_speak():
     source = NousProposalSource(inner, clock=clock, speak_refractory_s=8.0)
     v = Volition(policy=source)
 
-    # Tick 1: the report is below both report bars, so the Nous speak proposal
+    # Tick 1: the report is below both report bars, so the planning module's speak proposal
     # is realized rather than superseded by a report speak.
     snap1 = _snapshot(
         [

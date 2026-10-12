@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""NumPy Phantasia engine: JAX-free learning, checkpoint interchange, disclosure."""
+"""NumPy world model engine: JAX-free learning, checkpoint interchange, disclosure."""
 from __future__ import annotations
 
 import os

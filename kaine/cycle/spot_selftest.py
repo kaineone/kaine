@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Spot self-test for the unattended boot gate.
+"""The supervisor self-test for the unattended boot gate.
 
-Constructs a scratch Spot from a real ``[spot]`` section, redirects every
+Constructs a scratch supervisor from a real ``[spot]`` section, redirects every
 stateful path to a temporary directory, registers a synthetic probe module,
 and drives one controlled failure through the full freeze/snapshot/restart/
-release/incident lifecycle.  The gate uses this to prove Spot's recovery
+release/incident lifecycle.  The gate uses this to prove the supervisor's recovery
 path works before any entity module is loaded.
 """
 from __future__ import annotations
@@ -81,7 +81,7 @@ class _Probe(BaseModule):
 
 
 class _NullBus:
-    """Bus double that satisfies Spot's publish calls without sending."""
+    """Bus double that satisfies the supervisor's publish calls without sending."""
 
     async def publish(self, event: Any = None) -> str:
         return "0-0"

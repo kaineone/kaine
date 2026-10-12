@@ -220,7 +220,7 @@ def _mock_nexus(monkeypatch, port=12345):
 
 @pytest.fixture(autouse=True)
 def _no_cwd_nexus_log():
-    """The nexus job spec must never place its log under the current cwd."""
+    """The dashboard job spec must never place its log under the current cwd."""
     log = Path.cwd() / "state" / "logs" / "nexus.log"
     existed_before = log.exists()
     stats_before = None

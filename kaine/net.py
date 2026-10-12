@@ -31,8 +31,8 @@ __all__ = ["SERVICE_PORTS", "port_listening"]
 
 # KAINE's own GPU-using services, by local port.
 #   model_server — the OpenAI-compatible inference server (Unsloth Studio /
-#                  llama.cpp) that serves the language organ (lingua).
-#   chatterbox   — text-to-speech (vox).
+#                  llama.cpp) that serves the language organ (the language module).
+#   chatterbox   — text-to-speech (the vocal module).
 #   speaches     — speech-to-text (audition).
 SERVICE_PORTS: dict[str, int] = {
     "model_server": DEFAULT_ORGAN_PORT,

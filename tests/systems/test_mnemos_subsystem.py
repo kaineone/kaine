@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Mnemos subsystem: store + recall via the in-memory backend."""
+"""The episodic memory subsystem: store + recall via the in-memory backend."""
 from __future__ import annotations
 
 import pytest
@@ -39,7 +39,7 @@ async def test_mnemos_short_term_accepts_external_speech():
             recall_top_k=3,
         )
         await h.register(mnemos)
-        # Mnemos observes the bus; a Lingua external_speech event should
+        # the episodic memory module observes the bus; a language module external_speech event should
         # land in its short-term buffer (or at least not crash the module).
         await h.inject_to_stream(
             "lingua.external",
@@ -47,7 +47,7 @@ async def test_mnemos_short_term_accepts_external_speech():
             type="external_speech",
             payload={"text": "hello world"},
         )
-        # Drive Mnemos's workspace-driven consolidation by broadcasting.
+        # Drive the episodic memory module's workspace-driven consolidation by broadcasting.
         await h.broadcast_workspace({"tick_index": 0, "selected": []})
         # Smoke check: the module is still alive and serializing.
         assert mnemos.serialize() is not None

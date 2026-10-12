@@ -62,7 +62,7 @@ module can depend on it. Pinned as a regression in
 
 ## Live integration against real KAINE
 
-The Chronos reference conversion is verified against the **actual** pinned `kaine`
+The sequence module reference conversion is verified against the **actual** pinned `kaine`
 module (not a stand-in): stock `Chronos(bus, network=WetwareTimingModel(...))` over
 a `fakeredis` bus publishes the same `chronos.out` contract as a silicon network
 (`tests/test_chronos_integration.py`). The seam confirmed: `Chronos.__init__`
@@ -89,9 +89,9 @@ contract and the module running end-to-end on the substrate.
 
 - **Downstream boot** (`build_wetware_registry`) that constructs real KAINE
   modules and injects CL1 backends needs the pinned `kaine` dependency installed;
-  it begins with the Chronos conversion.
+  it begins with the sequence module conversion.
 - **Background-thread real-time drive** and a starvation probe are only meaningful
   on hardware (accelerated time covers offline/sim runs); they land with the
   hardware phase.
 - **Temporal encoder** and a **functional-connectivity decoder** land with the
-  first module that needs each (Chronos; Empatheia/Nous).
+  first module that needs each (the sequence module; the social cognition/planning modules).

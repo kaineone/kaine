@@ -174,7 +174,7 @@ KAINE SHALL state at plan time and at runtime which requested configurations do 
 The system SHALL provide a calibration command that loads each enabled component's configured backend on the host in isolation, runs one representative inference, and records the component's measured peak resident footprint (system memory, and device memory on discrete hosts) in a local, content-free footprint catalogue. The command SHALL load components only with operator consent, SHALL NOT download any model itself, and SHALL skip a component whose model is absent while naming it. The system SHALL produce a fit report from the residency budget, the catalogue and the enabled module set, stating whether the set co-resides and, if not, the shortfall, the multiplexing plan (pinned organ, multiplexed organs, the rung each organ would use) and the expected feel. The admission ledger SHALL use the larger of the catalogued and the live-observed footprint for each rung, and SHALL NOT fall back to download or file sizes when a footprint is unknown; an uncalibrated rung SHALL be reported as uncalibrated and admitted only when the budget can hold the rung's worst-case estimate supplied by its backend, with the uncertainty surfaced.
 
 #### Scenario: Calibration measures and records footprints
-- **WHEN** the operator runs the calibration command and consents on a host with Lingua, Audition (`sherpa_onnx`) and Vox (`sherpa_onnx`) enabled and their models present
+- **WHEN** the operator runs the calibration command and consents on a host with the language module, the audition module (`sherpa_onnx`) and the vocal module (`sherpa_onnx`) enabled and their models present
 - **THEN** each component's backend is loaded in isolation, one inference is run, its peak resident footprint is recorded in the catalogue with backend, model id, host class and timestamp, and no text, audio or latent is written
 
 #### Scenario: Absent model is skipped, not fetched
@@ -201,18 +201,18 @@ Every in-process engine client whose model the residency manager may release SHA
 - **THEN** the inference completes normally and the model is released immediately afterwards
 
 ### Requirement: One owner of model memory
-The residency manager SHALL be the single owner of model residency on the host. The Hypnos organ window SHALL request the organ's release and re-admission through the manager, and the manager SHALL count the training footprint in its ledger for the window's duration; when the manager is passive, the organ window SHALL behave exactly as it does without the manager. No other component SHALL stop, start, load or unload a model outside the manager.
+The residency manager SHALL be the single owner of model residency on the host. The sleep module's organ window SHALL request the organ's release and re-admission through the manager, and the manager SHALL count the training footprint in its ledger for the window's duration; when the manager is passive, the organ window SHALL behave exactly as it does without the manager. No other component SHALL stop, start, load or unload a model outside the manager.
 
 #### Scenario: Voice-alignment training on a multiplexed host
-- **WHEN** Hypnos opens the organ window on a host whose manager is multiplexing organs
+- **WHEN** the sleep module opens the organ window on a host whose manager is multiplexing organs
 - **THEN** the window's unload, training and reload go through the manager, the training footprint is held in the ledger until reload, other admissions see that footprint as occupied, and consumers of the organ keep their existing `organ_resting` deferral
 
 ### Requirement: Residency waits are not faults
-A module waiting for admission or for its model to load SHALL keep its liveness heartbeat. The manager SHALL publish each rung's `loading` state, and the module supervisor (Spot) SHALL treat a module whose model is loading within the load's measured bound as alive. A load that exceeds its bound SHALL be handled as a residency failure (ladder-down, surfaced) and SHALL NOT by itself trigger a Spot restart.
+A module waiting for admission or for its model to load SHALL keep its liveness heartbeat. The manager SHALL publish each rung's `loading` state, and the module supervisor (the supervisor) SHALL treat a module whose model is loading within the load's measured bound as alive. A load that exceeds its bound SHALL be handled as a residency failure (ladder-down, surfaced) and SHALL NOT by itself trigger a supervisor restart.
 
 #### Scenario: A slow load does not trip the watchdog
-- **WHEN** Spot polls while a module's model is loading and the load is still within its measured bound
-- **THEN** Spot reports the module alive and takes no freeze or restart action
+- **WHEN** the supervisor polls while a module's model is loading and the load is still within its measured bound
+- **THEN** the supervisor reports the module alive and takes no freeze or restart action
 
 ### Requirement: Perception queued without persistence while STT is not resident
 When STT is enabled and its rung is not resident, audio segments that arrive SHALL wait in a bounded in-memory queue, bounded by count and by age, with the oldest segments dropped first and every drop counted and surfaced. Queued audio SHALL never be written to disk or to any persistent store.
@@ -237,7 +237,7 @@ The pre-boot check SHALL include a `Residency fit` row computed from the fit rep
 - **THEN** the `Residency fit` row SKIPS and names the calibration command
 
 ### Requirement: Engine weights are mapped where the backend allows
-The NumPy text embedder SHALL map its safetensors file read-only and build tensors as views of the map. Torch engines SHALL load through `safetensors.safe_open`. The Topos encoder SHALL be built on first use through `ensure_loaded()`. The footprint catalogue SHALL record, per rung, whether its weights are mapped.
+The NumPy text embedder SHALL map its safetensors file read-only and build tensors as views of the map. Torch engines SHALL load through `safetensors.safe_open`. The vision encoder SHALL be built on first use through `ensure_loaded()`. The footprint catalogue SHALL record, per rung, whether its weights are mapped.
 
 #### Scenario: The embedder shares pages with the file
 - **WHEN** the NumPy embedder loads its weights

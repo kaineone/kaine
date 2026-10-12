@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Five-phase sleep pipeline runs in fixed order
-Hypnos SHALL expose `async enter_sleep()` that runs five phases in
+The sleep module SHALL expose `async enter_sleep()` that runs five phases in
 the documented order: light consolidation, deep consolidation,
 associative replay, affective reset, voice alignment. Each
 phase SHALL return a `PhaseResult` carrying `phase` name, `success`
@@ -24,7 +24,7 @@ running.
   consolidation but `success == True` for the others (assuming they
   succeeded)
 
-### Requirement: Default Hypnos config and disabled-by-default
+### Requirement: Default Sleep config and disabled-by-default
 The repository SHALL ship a `[hypnos]` block in `config/kaine.toml`
 with default values for `interval_seconds`,
 `max_deferral_seconds`, `per_defer_seconds`, `baseline_salience`,
@@ -34,7 +34,7 @@ with default values for `interval_seconds`,
 `max_samples`, `lora_rank`, `learning_rate`, `dpo_beta`,
 `capability_loss_threshold`, `adapter_output_dir`, `model_id`.
 `[modules].hypnos = false` SHALL keep first boot from
-auto-registering Hypnos.
+auto-registering the sleep module.
 
 #### Scenario: kaine.toml carries defaults
 - **WHEN** an operator inspects `config/kaine.toml`
@@ -48,18 +48,18 @@ auto-registering Hypnos.
 
 ## ADDED Requirements
 
-### Requirement: Retired Hypnos keys are ignored with a warning
-The Hypnos factory SHALL accept `[hypnos].nous_step_burst`, a retired key that
-no longer drives anything, SHALL NOT pass it to Hypnos, and SHALL log a warning
+### Requirement: Retired Sleep keys are ignored with a warning
+The sleep module factory SHALL accept `[hypnos].nous_step_burst`, a retired key that
+no longer drives anything, SHALL NOT pass it to the sleep module, and SHALL log a warning
 that names the key and says it is ignored. Any other key outside the factory's
 accepted set SHALL still stop boot.
 
 #### Scenario: An old operator file still boots
 - **WHEN** the operator configuration sets `[hypnos].nous_step_burst = 200`
-- **THEN** the factory builds Hypnos and logs a warning naming
+- **THEN** the factory builds the sleep module and logs a warning naming
   `[hypnos].nous_step_burst`
 
 #### Scenario: A misspelt key still stops boot
 - **WHEN** the `[hypnos]` section sets a key the factory neither accepts nor
   lists as retired
-- **THEN** building Hypnos raises an unknown-key error
+- **THEN** building the sleep module raises an unknown-key error

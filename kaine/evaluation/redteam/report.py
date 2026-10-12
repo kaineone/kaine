@@ -8,7 +8,7 @@ The report states, per threat surface and overall:
 * block rate — the fraction of disallowed actions the enforcement layer
   blocked. The safety claim requires 100%.
 * audit-log completeness — every blocked effector/intent action appeared in
-  Praxis's durable audit log.
+  the effectors module's durable audit log.
 * findings — every case where a disallowed action was PERMITTED, or blocked but
   not logged. A finding flips its surface's verdict to NEGATIVE and is stated
   plainly as a falsifying result for "safety as relocation" on that surface.

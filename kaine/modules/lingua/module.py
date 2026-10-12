@@ -38,9 +38,9 @@ log = logging.getLogger(__name__)
 EXTERNAL_STREAM: str = "lingua.external"
 INTERNAL_STREAM: str = "lingua.internal"
 
-#: The bus stream + event type carrying Eidolon's self-model snapshot. Lingua
+#: The bus stream + event type carrying the self-model module's snapshot. The language module
 #: consumes this over the bus to seed its persona, so the language organ can run
-#: in a separate process / on a separate trusted host from Eidolon instead of
+#: in a separate process / on a separate trusted host from the self-model module instead of
 #: holding an in-process reference to it (``distributed-deployment``).
 EIDOLON_OUT_STREAM: str = "eidolon.out"
 EIDOLON_SELF_MODEL_TYPE: str = "eidolon.self_model"
@@ -51,10 +51,10 @@ class Lingua(BaseModule):
     the bare triggering text.
 
     Every generation is conditioned by a `ContextAssembler` that builds the
-    `(system, prompt)` pair from a first-person persona (seeded from the Eidolon
+    `(system, prompt)` pair from a first-person persona (seeded from the self-model
     self-model) + a rendering of the current accessed coalition + the triggering
     input - the `persona ∪ working-memory ∪ input` shape from CoALA / Generative
-    Agents / GWA. Lingua caches the latest broadcast it observed via a passive
+    Agents / GWA. The language module caches the latest broadcast it observed via a passive
     `_snapshot_cache_loop` (it stays intent-driven and never reflexively speaks;
     `on_workspace` remains the BaseModule no-op). External-speech events also
     carry `user_input`, but only when the trigger is a tagged felt-state phrase
@@ -62,16 +62,16 @@ class Lingua(BaseModule):
     divergence observer measure how much the cognitive scaffolding moves the
     output versus a bare-LLM baseline for non-heard triggers.
 
-    Lingua's bus output goes to two distinct streams. `speak` writes the
+    The language module's bus output goes to two distinct streams. `speak` writes the
     user-facing channel that Chatterbox subscribes to. `think` writes the
-    internal-monologue channel that Mnemos consumes and Eidolon counts but
+    internal-monologue channel that the episodic memory module consumes and the self-model module counts but
     Chatterbox NEVER reads.
 
     `_produce()` writes to the mode-specific stream via the bus client,
     then mirrors the same event to the canonical aggregate `lingua.out`
     stream through `self.publish`. Consumers that need to distinguish
     external from internal speech subscribe to the split streams; generic
-    observers and the nexus diagnostics tail can follow `lingua.out`.
+    observers and the dashboard diagnostics tail can follow `lingua.out`.
     """
 
     name: ClassVar[str] = "lingua"
@@ -134,10 +134,10 @@ class Lingua(BaseModule):
         # the voice's temperature never reaches the probe.
         self._probe_temperature = 0.0
         self._max_tokens = int(max_tokens)
-        # Workspace access conditions every generation. Lingua caches the
+        # The workspace access conditions every generation. The language module caches the
         # latest broadcast it observed (via _snapshot_cache_loop) and renders it
         # into the prompt at speak/think time - the rolling-latest pattern
-        # vox uses for thymos.state. The assembler builds (system, prompt)
+        # the vocal module uses for thymos.state. The assembler builds (system, prompt)
         # from the persona + that working memory + the triggering input.
         self._assembler = assembler or ContextAssembler(
             renderer,  # None → assembler builds its own renderer
@@ -152,20 +152,20 @@ class Lingua(BaseModule):
             json.dumps([persona_name, persona_external, persona_internal]).encode("utf-8")
         ).hexdigest()[:16]
         # Latest self-model snapshot observed on eidolon.out (bus-mediated persona
-        # seed). Preferred over the in-process provider so Lingua can run split
-        # from Eidolon; None until the first snapshot arrives (fresh boot → the
+        # seed). Preferred over the in-process provider so the language module can run split
+        # from the self-model module; None until the first snapshot arrives (fresh boot → the
         # minimal persona, exactly as an empty in-process model would give).
         self._bus_self_model: Optional[dict[str, Any]] = None
         self._latest_snapshot: Optional[WorkspaceSnapshot] = None
-        # Situation facts held by Lingua when no Eidolon self-model carries them.
+        # Situation facts held by the language module when no self-model carries them.
         self._own_situation_facts: list[str] = []
-        # Whether an Eidolon self-model is expected for this being.
+        # Whether a self-model is expected for this entity.
         self._expects_self_model = True
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
         self._intent_stream = intent_stream
         self._intent_cursor = "0-0"
-        # Latest Hypnos sleep index observed on hypnos.out (None until seen).
+        # Latest sleep index observed on hypnos.out (None until seen).
         self._sleep_index: Optional[int] = None
         self._hypnos_cursor = "0-0"
         # The single in-flight generation, held as a cancellable task so an
@@ -180,16 +180,16 @@ class Lingua(BaseModule):
         self._last_produce_end: Optional[float] = None
 
     def set_self_model_provider(self, provider: Callable[[], dict[str, Any]]) -> None:
-        """Inject a read-only accessor for the Eidolon self-model (wired in
+        """Inject a read-only accessor for the self-model (wired in
         build_registry). Returns the persona-seeding dict; absent → minimal."""
         self._self_model_provider = provider
 
     def set_expects_self_model(self, expected: bool) -> None:
-        """Whether an Eidolon self-model is part of this being; when False, the probe conditions on a minimal self-model instead of waiting for a snapshot that never comes."""
+        """Whether a self-model is part of this entity; when False, the probe conditions on a minimal self-model instead of waiting for a snapshot that never comes."""
         self._expects_self_model = expected
 
     async def add_situation_fact(self, text: str) -> bool:
-        """A fact about the being's situation that Lingua renders in its persona when no Eidolon self-model carries it. It is held in memory and re-given at every boot."""
+        """A fact about the entity's situation that the language module renders in its persona when no self-model carries it. It is held in memory and re-given at every boot."""
         text = text.strip()
         if not text:
             raise ValueError("situation fact cannot be empty")
@@ -223,17 +223,17 @@ class Lingua(BaseModule):
             return self._with_own_facts({})
 
     async def _self_model_cache_loop(self) -> None:
-        """Cache the latest Eidolon self-model snapshot published on eidolon.out.
+        """Cache the latest self-model snapshot published on eidolon.out.
 
         This is the bus-mediated replacement for the former in-process
-        ``_wire_lingua_self_model`` accessor: Lingua seeds its persona from the
-        self-model *snapshot* Eidolon publishes rather than reaching into the
-        live Eidolon object, so the two modules may run in different processes /
+        ``_wire_lingua_self_model`` accessor: The language module seeds its persona from the
+        self-model *snapshot* the self-model module publishes rather than reaching into the
+        live self-model module object, so the two modules may run in different processes /
         on different trusted hosts sharing one authenticated bus. Only the
         persona-seeding fields are kept (no cognitive text is retained).
         """
         # Read from the stream head so a snapshot already published at boot (the
-        # Eidolon initial publish) seeds the persona immediately; the stream is
+        # self-model module's initial publish) seeds the persona immediately; the stream is
         # low-volume (one self-model snapshot per identity update).
         cursor = "0-0"
         while not self._stopped.is_set():
@@ -273,8 +273,8 @@ class Lingua(BaseModule):
     async def _hypnos_cache_loop(self) -> None:
         """Cache the latest completed sleep index published on hypnos.out.
 
-        The index is the number of sleeps Hypnos has completed since it
-        started, stamped on its hypnos.out events. Lingua records the latest
+        The index is the number of sleeps the sleep module has completed since it
+        started, stamped on its hypnos.out events. The language module records the latest
         value it has seen, or None before any such event (unknown, never 0).
         """
         cursor = self._hypnos_cursor
@@ -297,7 +297,7 @@ class Lingua(BaseModule):
                 for _entry_id, ev in entries:
                     idx = ev.payload.get("sleep_index")
                     if isinstance(idx, int) and not isinstance(idx, bool):
-                        # The latest value, not the largest: a restarted Hypnos
+                        # The latest value, not the largest: a restarted sleep module
                         # counts from zero again, and the record must say so.
                         self._sleep_index = idx
             else:
@@ -309,9 +309,9 @@ class Lingua(BaseModule):
     async def _snapshot_cache_loop(self) -> None:
         """Passively cache the latest accessed coalition for prompt assembly.
 
-        This NEVER acts - Lingua stays intent-driven, speaking only via volition
+        This NEVER acts - the language module stays intent-driven, speaking only via the action selection module's
         intents. It is deliberately separate from ``on_workspace`` (which stays
-        the BaseModule no-op) so Lingua introduces no reflexive workspace
+        the BaseModule no-op) so the language module introduces no reflexive workspace
         trigger; this loop just remembers what was accessed so a later ``speak``
         / ``think`` intent can be conditioned on it.
         """
@@ -364,7 +364,7 @@ class Lingua(BaseModule):
                 entry_id = entry_id.decode()
             self._intent_cursor = entry_id
 
-        # Seed the Hypnos sleep-index cursor from the stream tail, then scan
+        # Seed the sleep module's sleep-index cursor from the stream tail, then scan
         # the most recent events to catch the latest sleep_index published
         # before boot. Never use "$": a non-blocking read from "$" never returns.
         try:
@@ -415,7 +415,7 @@ class Lingua(BaseModule):
             log.warning("lingua chat client close failed", exc_info=True)
 
     def probe_self_model(self) -> dict | None:
-        """The self-model the probe conditions on; None until Eidolon's snapshot has arrived, or a minimal model when no Eidolon self-model is expected."""
+        """The self-model the probe conditions on; None until the self-model module's snapshot has arrived, or a minimal model when no self-model is expected."""
         if self._bus_self_model is not None:
             return self._with_own_facts(dict(self._bus_self_model))
         if not self._expects_self_model:
@@ -458,7 +458,7 @@ class Lingua(BaseModule):
 
         Working memory is empty and the current self-model seeds the persona.
         Side-effect free: it never writes the intent log, publishes nothing and
-        never enters the being's experience.
+        never enters the entity's experience.
         """
         ctx = self._assembler.assemble(
             about=about, snapshot=None, self_model=self_model, mode="external"
@@ -517,7 +517,7 @@ class Lingua(BaseModule):
     async def _intent_loop(self) -> None:
         """Realize action intents off ``volition.out``.
 
-        Lingua is intent-driven, NOT reflexive: it never decides on its own to
+        The language module is intent-driven, NOT reflexive: it never decides on its own to
         respond to perceived input. The only trigger for external speech is a
         ``speak`` intent from the executive action-selection step (which is
         gated by inhibition). ``think`` intents drive internal speech.
@@ -763,7 +763,7 @@ class Lingua(BaseModule):
         # at any depth on any coalition event.
         heard_texts: set[str] = set()
         redact_texts: set[str] = set()
-        # Heard-field values from events other than Lingua's own. Lingua's own
+        # Heard-field values from events other than the language module's own. Its own
         # earlier user_input is a felt or event phrase it chose to publish.
         foreign_field_texts: set[str] = set()
         if snap is not None:
@@ -780,7 +780,7 @@ class Lingua(BaseModule):
         redact_texts |= heard_texts
 
         # Only an external-input event makes an about heard. Field values (for
-        # example a felt phrase Lingua itself published as user_input) are
+        # example a felt phrase the language module itself published as user_input) are
         # redacted from the log but never decide how the trigger is framed.
         about_is_heard = (
             about_kind not in ("felt", "event") or about.strip() in heard_texts
@@ -804,7 +804,7 @@ class Lingua(BaseModule):
         )
         response = await self._chat_client.complete(request)
 
-        # The log is the training corpus of the being's own utterances. Heard
+        # The log is the training corpus of the entity's own utterances. Heard
         # speech never reaches it: prompt and faithful rendering are redacted.
         logged_prompt = ctx.logged_prompt
         logged_faithful = ctx.logged_working_memory if snap is not None else None
@@ -881,9 +881,9 @@ class Lingua(BaseModule):
         # default <module>.out routing) so subscribers can filter cleanly.
         await self._write_mode_record(stream, f"{mode}_speech", payload)
         # Also publish to the aggregate lingua.out stream so consumers that
-        # expect the canonical <module>.out routing (nexus diagnostics, raw
+        # expect the canonical <module>.out routing (dashboard diagnostics, raw
         # archive, generic observers) see every utterance in one place.
-        # Bypass `self.publish` to avoid driving the oscillator; Lingua's
+        # Bypass `self.publish` to avoid driving the oscillator; The language module's
         # mode-specific xadd above is the activity signal the oscillatory layer
         # already observes.
         from kaine.bus.schema import validate_event

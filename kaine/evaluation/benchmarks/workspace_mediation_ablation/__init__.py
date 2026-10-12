@@ -3,7 +3,7 @@
 
 """Offline development harness for the workspace-mediation test.
 
-This package runs a reduced pair of real processors (Soma and Topos) against a
+This package runs a reduced pair of real processors (the interoception and vision modules) against a
 pooled control arm only. The workspace-on arm uses competitive selection; the
 pooled arm admits every candidate weighted by its intensity. The measure is the
 cross-module broadcast information gain, read from each processor's

@@ -3,7 +3,7 @@
 
 """Individuation producer core.
 
-Captures the birth reference and runs one individuation look.  All
+Captures the maturation reference and runs one individuation look.  All
 dependencies are injected; this module has no organ, scheduler or wiring.
 """
 
@@ -161,7 +161,7 @@ class IndividuationCore:
         Nothing is written when the capture aborts, fails, or the conditioning changes
         mid-capture; an existing reference is replaced only with ``regenerate=True`` or
         when an incomplete capture (reference without a matching ledger) is detected;
-        the birth adapter is copied only for a ``birth`` reference and only after the
+        the maturation adapter is copied only for a ``birth`` reference and only after the
         reference document is safely persisted.
         """
         if self._refresh_conditions is not None:

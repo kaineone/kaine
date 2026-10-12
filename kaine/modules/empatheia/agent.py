@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""AgentModel — per-agent social model for Empatheia.
+"""AgentModel — per-agent social model for the social cognition module.
 
 Stores numeric histograms, behavioral feature summaries, reliability,
 and interaction counts only. Zero raw sense-data persistence: no

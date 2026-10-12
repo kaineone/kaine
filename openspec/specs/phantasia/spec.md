@@ -1,28 +1,28 @@
-# phantasia Specification
+# world model Specification
 
 ## Purpose
-Phantasia is KAINE's world model and imagination module. It is a DreamerV3-style recurrent state-space model that predicts the next workspace observation while the being is awake, publishing its prediction error as a salience signal. During sleep it imagines trajectories seeded by replayed memories and trains in memory on waking experience. It is a world model only: it has no actor, critic or reward, and Nous selects actions. This capability defines the model and its engines (JAX, and a NumPy engine that trains the same model), what its events disclose, zero persistence of experience data, and the opt-in persistence of its learned weights.
+The world model module is KAINE's learned model of its world, and its imagination. It is a DreamerV3-style recurrent state-space model that predicts the next workspace observation while the entity is awake, publishing its prediction error as a salience signal. During sleep it imagines trajectories seeded by replayed memories and trains in memory on waking experience. It is a world model only: it has no actor, critic or reward, and the planning module selects actions. This capability defines the model and its engines (JAX, and a NumPy engine that trains the same model), what its events disclose, zero persistence of experience data, and the opt-in persistence of its learned weights.
 
 ## Requirements
 
 ### Requirement: Vendored danijar/dreamerv3 RSSM world model
-Phantasia SHALL vendor danijar/dreamerv3 under `external/dreamerv3/` at a pinned
+The world model module SHALL vendor danijar/dreamerv3 under `external/dreamerv3/` at a pinned
 upstream commit hash recorded in `external/dreamerv3/UPSTREAM`, with an SPDX MIT
 license notice. The `[worldmodel]` optional extra SHALL declare `jax[cpu]` and
-the required transitive deps. Phantasia SHALL use the vendored RSSM core
+the required transitive deps. The world model module SHALL use the vendored RSSM core
 (recurrent + stochastic latent transition, encoder, decoder, imagination rollout)
 and SHALL NOT instantiate the actor, critic, or return heads; policy selection
-remains Nous's responsibility. The world model SHALL be accessible behind a
+remains the planning module's responsibility. The world model module SHALL be accessible behind a
 `WorldModelBackend` protocol so a `FakeWorldModel` can substitute in tests without
 requiring JAX or the vendored code.
 
 #### Scenario: Actor-critic is absent
-- **WHEN** Phantasia constructs its world model
+- **WHEN** the world model module constructs its world model
 - **THEN** no actor, critic, or return head is instantiated or loaded
 
 #### Scenario: FakeWorldModel passes tests without JAX
 - **WHEN** the test suite runs with only core project deps (no `[worldmodel]` extra)
-- **THEN** all Phantasia tests pass using the `FakeWorldModel` stub
+- **THEN** all world model module tests pass using the `FakeWorldModel` stub
 
 #### Scenario: Upstream commit is recorded
 - **WHEN** the vendored directory is inspected
@@ -30,13 +30,13 @@ requiring JAX or the vendored code.
   and SPDX MIT declaration
 
 ### Requirement: Observations are workspace summaries, not raw senses
-Phantasia SHALL encode each `WorkspaceSnapshot` to a fixed-width observation
+The world model module SHALL encode each `WorkspaceSnapshot` to a fixed-width observation
 vector (salience-weighted coalition + affect summary + inhibition flag) using a
 versioned encoder. No raw audio or image bytes SHALL appear in the observation
 vector or the trajectory buffer.
 
 #### Scenario: Observation vector contains no raw sense data
-- **WHEN** Phantasia encodes a tick for its world model
+- **WHEN** the world model module encodes a tick for its world model
 - **THEN** the observation vector is derived from the workspace snapshot and
   contains no raw audio or image bytes
 
@@ -45,7 +45,7 @@ vector or the trajectory buffer.
 - **THEN** it exposes a non-empty `VERSION` string
 
 ### Requirement: Waking world-prediction error
-Phantasia SHALL predict the next latent state each waking tick and SHALL publish
+The world model module SHALL predict the next latent state each waking tick and SHALL publish
 a `phantasia.world_error` event whose salience reflects the magnitude of the
 predicted-minus-actual latent. `phantasia.world_error` is a salience-only signal
 and SHALL NOT carry imagined scenario content.
@@ -60,24 +60,24 @@ and SHALL NOT carry imagined scenario content.
 - **THEN** the payload contains no imagined trajectory or scenario field
 
 ### Requirement: Offline imagined-scenario generation and workspace re-injection
-Phantasia SHALL, on a `mnemos.replay` cue received during offline maintenance,
+The world model module SHALL, on a `mnemos.replay` cue received during offline maintenance,
 roll out imagined trajectories from that seed up to `rollout_horizon` and publish
 them as `phantasia.scenario` events. `phantasia.scenario` events SHALL be
-re-injected into the workspace broadcast during maintenance so that Nous, Thymos,
-and Eidolon process them via `on_workspace` (associative consolidation, paper
+re-injected into the workspace broadcast during maintenance so that the planning, affect,
+and the self-model module process them via `on_workspace` (associative consolidation, paper
 §3.3.5 phase 3).
 
 #### Scenario: Replay cue produces a scenario
-- **WHEN** Phantasia receives a `mnemos.replay` cue during maintenance
+- **WHEN** the world model module receives a `mnemos.replay` cue during maintenance
 - **THEN** it publishes at least one `phantasia.scenario` event
 
 #### Scenario: Scenario is re-injected into workspace broadcast
 - **WHEN** a `phantasia.scenario` event is published during maintenance
 - **THEN** the scenario is re-injected into the workspace broadcast so
-  Nous, Thymos, and Eidolon process it via on_workspace
+  the planning, affect and self-model modules process it via on_workspace
 
 ### Requirement: In-memory-only training; zero-persistence
-Phantasia SHALL perform all training in memory and SHALL NOT serialize the trajectory buffer or any raw-sense-derived data to disk. Any upstream disk-serialization hooks from the vendored code SHALL be bypassed. Training SHALL occur only when `training_enabled` is true, and SHALL abort without corrupting in-memory state if the loss becomes non-finite. No `.pt`, `.pkl`, `.npy`, `.arrow` or `.jsonl` files SHALL be written to `/tmp` or the project directory during a training pass. Learned world-model parameters are NOT sense data. They SHALL be persisted only through the weight-persistence requirement below; a training pass itself writes nothing.
+The world model module SHALL perform all training in memory and SHALL NOT serialize the trajectory buffer or any raw-sense-derived data to disk. Any upstream disk-serialization hooks from the vendored code SHALL be bypassed. Training SHALL occur only when `training_enabled` is true, and SHALL abort without corrupting in-memory state if the loss becomes non-finite. No `.pt`, `.pkl`, `.npy`, `.arrow` or `.jsonl` files SHALL be written to `/tmp` or the project directory during a training pass. Learned world-model parameters are NOT sense data. They SHALL be persisted only through the weight-persistence requirement below; a training pass itself writes nothing.
 
 #### Scenario: Training disabled skips the training pass
 - **WHEN** maintenance runs with `training_enabled` false
@@ -99,7 +99,7 @@ Phantasia SHALL perform all training in memory and SHALL NOT serialize the traje
 - **WHEN** `serialize()` is called or a weight checkpoint is written
 - **THEN** the trajectory buffer contents appear in neither the serialized state nor the checkpoint bytes
 
-### Requirement: FaithfulRenderer templates for Phantasia events
+### Requirement: FaithfulRenderer templates for World model events
 The `FaithfulRenderer` SHALL include registered templates for
 `phantasia.world_error` and `phantasia.scenario` events so they render as
 human-readable plain text.
@@ -128,15 +128,15 @@ stub (not a world model) in `config/kaine.toml` so operators understand what
 the shipped default produces.
 
 #### Scenario: world_error discloses backend
-- **WHEN** Phantasia publishes `phantasia.world_error`
+- **WHEN** the world model module publishes `phantasia.world_error`
 - **THEN** the payload includes `"backend"` matching the configured backend name
 
 #### Scenario: scenario discloses backend
-- **WHEN** Phantasia generates and publishes `phantasia.scenario`
+- **WHEN** the world model module generates and publishes `phantasia.scenario`
 - **THEN** the payload includes `"backend"` matching the configured backend name
 
 #### Scenario: events disclose the engine
-- **WHEN** Phantasia publishes any `phantasia.*` event with `backend = "dreamerv3"`
+- **WHEN** the world model module publishes any `phantasia.*` event with `backend = "dreamerv3"`
 - **THEN** the payload includes `"engine"` matching the configured engine
 
 #### Scenario: fake backend is documented as a non-learning stub
@@ -146,15 +146,15 @@ the shipped default produces.
   (real RSSM with trained latents)
 
 ### Requirement: Only a pass that learned counts as consolidation
-A training pass SHALL report whether it updated learned parameters. Phantasia SHALL count a pass toward `successful_training_passes`, and save weights after it, only when it did. A world model that does not learn (the fake world model) SHALL never produce consolidation evidence.
+A training pass SHALL report whether it updated learned parameters. The world model module SHALL count a pass toward `successful_training_passes`, and save weights after it, only when it did. A world model that does not learn (the fake world model) SHALL never produce consolidation evidence.
 
 #### Scenario: The fake world model trains
-- **WHEN** Phantasia runs a sleep training pass on the fake world model
+- **WHEN** the world model module runs a sleep training pass on the fake world model
 - **THEN** `successful_training_passes` does not increase
 
 ### Requirement: A JAX-free engine that computes and learns what the JAX core does
 
-Phantasia SHALL provide a NumPy engine for `backend = "dreamerv3"`, selected by `[phantasia].engine = "numpy"` (default `"jax"`). It SHALL run the same RSSM world model as `external/dreamerv3/rssm.py`: encoder, GRU, prior and posterior heads, categorical (straight-through) and Gaussian latents, decoder, observation filtering, imagination, and the DreamerV3 loss with KL balancing and free bits. Sleep training SHALL use hand-written reverse-mode gradients of that loss, with the same non-finite loss and gradient guards. The NumPy engine SHALL import neither JAX nor any JAX-dependent library. An unknown engine SHALL be a configuration error at boot.
+The world model module SHALL provide a NumPy engine for `backend = "dreamerv3"`, selected by `[phantasia].engine = "numpy"` (default `"jax"`). It SHALL run the same RSSM world model as `external/dreamerv3/rssm.py`: encoder, GRU, prior and posterior heads, categorical (straight-through) and Gaussian latents, decoder, observation filtering, imagination, and the DreamerV3 loss with KL balancing and free bits. Sleep training SHALL use hand-written reverse-mode gradients of that loss, with the same non-finite loss and gradient guards. The NumPy engine SHALL import neither JAX nor any JAX-dependent library. An unknown engine SHALL be a configuration error at boot.
 
 #### Scenario: Gradients match JAX
 - **WHEN** the committed golden fixtures are replayed on the NumPy engine, on a host with or without JAX
@@ -193,9 +193,9 @@ Both engines SHALL read and write learned weights through one shared codec with 
 - **THEN** `CheckpointMismatchError` is raised and the running model is untouched
 
 ### Requirement: Learned world-model weights persist by default
-Phantasia SHALL persist learned world-model parameters across restarts when `[phantasia].persist_weights` is true. The committed configuration SHALL ship with `persist_weights = true` and `training_enabled = true`, because the learned world model is part of the entity's memory and individuality.
+The world model module SHALL persist learned world-model parameters across restarts when `[phantasia].persist_weights` is true. The committed configuration SHALL ship with `persist_weights = true` and `training_enabled = true`, because the learned world model is part of the entity's memory and individuality.
 
-When persistence is enabled, Phantasia SHALL:
+When persistence is enabled, the world model module SHALL:
 - load the checkpoint at `checkpoint_path` during initialization if it exists;
 - save after each successful (non-aborted, at-least-one-step) training pass;
 - save on shutdown.
@@ -205,7 +205,7 @@ Checkpoint writes SHALL be atomic (write-temp-then-replace), and SHALL be encryp
 Enabling `persist_weights` with a backend that cannot export real learned parameters (the `fake` EMA stub) SHALL be a configuration error at construction. The decommission backup bundle SHALL include the checkpoint file when one exists, as transferable cognitive state per CAL Article 4.2(b).
 
 #### Scenario: Weights survive a restart
-- **WHEN** `persist_weights` is true, a training pass completes, the module shuts down, and a new Phantasia instance initializes with the same `checkpoint_path`
+- **WHEN** `persist_weights` is true, a training pass completes, the module shuts down, and a new world model module instance initializes with the same `checkpoint_path`
 - **THEN** the new instance's world model carries the saved parameters instead of a fresh random initialization
 
 #### Scenario: Save after successful sleep training
@@ -225,7 +225,7 @@ Enabling `persist_weights` with a backend that cannot export real learned parame
 - **THEN** initialization raises an operator-actionable error naming the mismatch and the checkpoint file is not modified
 
 #### Scenario: Fake backend cannot persist
-- **WHEN** Phantasia is constructed with `persist_weights = true` and `backend = "fake"`
+- **WHEN** the world model module is constructed with `persist_weights = true` and `backend = "fake"`
 - **THEN** construction raises a configuration error (the EMA stub has no real learned parameters to persist)
 
 #### Scenario: Shipped default is on
@@ -237,7 +237,7 @@ Enabling `persist_weights` with a backend that cannot export real learned parame
 - **THEN** the bundle contains the checkpoint and the manifest inventory and restore notes reference it
 
 ### Requirement: A fork starts from its parent's world model
-Phantasia SHALL implement `export_snapshot_artifacts(dest_dir)` and `import_snapshot_artifacts(src_dir)`.
+The world model module SHALL implement `export_snapshot_artifacts(dest_dir)` and `import_snapshot_artifacts(src_dir)`.
 
 **Export.** When persistence is enabled with a learning backend, export SHALL write the current learned parameters to `dest_dir/world_model.ckpt` (atomic; encrypted at rest when state encryption is on), together with the successful-training-pass count. It SHALL return an honest record: captured true, or captured false with the reason. A failed write SHALL raise.
 
@@ -254,7 +254,7 @@ A preservation bundle SHALL carry the pass count with the checkpoint, and revive
 - **THEN** only the fork's own checkpoint changes; the parent's snapshot artifacts and checkpoint are unchanged
 
 #### Scenario: A snapshot without a world model is announced
-- **WHEN** an instance that persists restores a snapshot that has no Phantasia artifacts
+- **WHEN** an instance that persists restores a snapshot that has no world model module artifacts
 - **THEN** a warning names the fresh start and the instance keeps its fresh initialization
 
 #### Scenario: The pass count travels

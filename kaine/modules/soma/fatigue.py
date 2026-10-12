@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Fatigue accumulator for Soma.
+"""Fatigue accumulator for the interoception module.
 
 Integrates prediction error over waking time with continuous decay.
 Crossing the maintenance threshold triggers a ``soma.fatigue`` event
@@ -34,7 +34,7 @@ class FatigueAccumulator:
 
         F(t + dt) = max(0, F(t) + e * dt - decay * dt)
 
-    During Hypnos sleep (``faster_decay`` flag), the decay rate is
+    During sleep (``faster_decay`` flag), the decay rate is
     multiplied by ``faster_decay_factor`` so fatigue drops during
     rest.
 
@@ -167,7 +167,7 @@ class FatigueAccumulator:
         return self._value < self._threshold and new_value >= self._threshold
 
     def reset(self) -> None:
-        """Reset fatigue to baseline at the end of a Hypnos offline cycle."""
+        """Reset fatigue to baseline at the end of the sleep module's offline cycle."""
         self._value = 0.0
         self._threshold_crossed = False
         self._last_time = None

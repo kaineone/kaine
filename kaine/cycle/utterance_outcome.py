@@ -71,7 +71,7 @@ def reply_window_from_lingua(lingua_section: object) -> float:
     return candidate
 
 
-# Produced by Lingua: each external_speech event opens one outcome record.
+# Produced by the language module: each external_speech event opens one outcome record.
 LINGUA_EXTERNAL = "lingua.external"
 AUDITION_OUT = module_stream("audition")
 EMPATHEIA_OUT = module_stream("empatheia")

@@ -314,7 +314,7 @@ def test_fetch_success_with_mocked_runner():
 
 
 # --------------------------------------------------------------------------
-# Topos wiring: the selector reaches through the module + boot
+# Vision wiring: the selector reaches through the module + boot
 # --------------------------------------------------------------------------
 
 
@@ -507,7 +507,7 @@ async def test_encoder_load_uses_offline_loader_not_automodel(monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# Topos clip ring buffer + strided cadence + zero-persistence + dim guard
+# Vision clip ring buffer + strided cadence + zero-persistence + dim guard
 # --------------------------------------------------------------------------
 
 
@@ -637,7 +637,7 @@ async def test_deserialize_discards_mismatched_forward_model(bus):
     big = LatentForwardModel(latent_dim=768, units=256, seed=1)
     big_state = big.state_dict()
 
-    # A running Topos whose forward model is sized to a 4-dim encoder.
+    # A running vision module whose forward model is sized to a 4-dim encoder.
     small_enc = FakeSmall()
     topos = Topos(bus, encoder=small_enc, forward_prediction=True)
     topos._forward_model = LatentForwardModel(latent_dim=4, units=16, seed=2)

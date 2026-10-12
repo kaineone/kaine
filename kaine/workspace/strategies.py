@@ -54,7 +54,7 @@ class StaticGoalScorer:
 
 
 class StaticThymosModulator:
-    """Dev-only fallback / negative-control Thymos modulator.
+    """Dev-only fallback / negative-control affect modulator.
 
     Returns a constant, bypassing affect-weighting. NOT the live default — the
     real :class:`kaine.modules.thymos.modulator.StateModulator` is wired in by
@@ -76,7 +76,7 @@ class StaticThymosModulator:
 
 # ENGINEERING EXTENSION (paper §3.4.3). The paper grounds goals as "preferred
 # interoceptive states" entering appraisal but does NOT fully specify the goal
-# function that weights salience. Grounding it in the four Thymos drives that
+# function that weights salience. Grounding it in the four affect module drives that
 # the architecture already accumulates and broadcasts, each registered module
 # declares the drives its events tend to relieve via ``BaseModule.relieves_drives``.
 # This function inverts those per-source tags into the per-drive source table
@@ -84,11 +84,11 @@ class StaticThymosModulator:
 # currently-dominant drive". The mapping is a defensible first choice, not a
 # claim from the paper; keep it labeled as such and do not overstate it.
 # Sources are canonical module names; workspace scaffolding sources (e.g.
-# volition) are added here because they are not registry modules.
+# action selection module) are added here because they are not registry modules.
 
 DRIVES: frozenset[str] = frozenset({"curiosity", "boredom", "social_drive", "restlessness"})
 
-# Event sources that are workspace scaffolding, not registry modules. Volition's
+# Event sources that are workspace scaffolding, not registry modules. The action selection module's
 # action events relieve restlessness.
 SCAFFOLDING_DRIVE_SOURCES: dict[str, frozenset[str]] = {"volition": frozenset({"restlessness"})}
 
@@ -98,7 +98,7 @@ def build_drive_sources(tags_by_source: Mapping[str, Iterable[str]]) -> dict[str
 
     ``tags_by_source`` maps an event source (a module name) to the drives its
     events tend to relieve; the workspace scaffolding sources are added. Raises
-    ValueError for a tag that is not a Thymos drive.
+    ValueError for a tag that is not an affect module drive.
     """
     table: dict[str, set[str]] = {drive: set() for drive in DRIVES}
     for source, tags in tags_by_source.items():

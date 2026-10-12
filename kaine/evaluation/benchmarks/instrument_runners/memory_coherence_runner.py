@@ -12,23 +12,23 @@ it right. This runner promotes it to a CONTROLLED experiment that measures the
 A REAL ``MnemosCore`` (``HashEmbedder`` + ``InMemoryStorage``; the deterministic
 in-memory backend, no network) is loaded with a fixed battery of unique fabricated
 facts. The full-system arm is a ``RetrievalCognitiveClient`` whose answer is
-DERIVED from what Mnemos returns (it echoes the retrieved text, or emits the
+DERIVED from what the episodic memory module returns (it echoes the retrieved text, or emits the
 honest ``NON_RECALL_MARKER`` when recall is empty rather than confabulating). The
 bare arm has no memory. Each battery case is scored with the production
 ``score_async``.
 
 The advantage is PROVEN to be retrieval, not a hard-coded answer, by re-running
-the SAME client against an EMPTIED Mnemos as a recorded check: with nothing in
+the SAME client against an emptied episodic memory module as a recorded check: with nothing in
 memory the client can no longer repeat the planted facts and the advantage must
 vanish.
 
 The verdict is **WIN** when (a) full-system retrieval accuracy exceeds the bare
 arm by at least a floor on the planted battery, (b) a never-stored fact yields
-honest non-recall (scored 0), and (c) the emptied-Mnemos advantage vanishes.
+honest non-recall (scored 0), and (c) the emptied episodic memory module's advantage vanishes.
 **NULL** otherwise.
 
 Boundary note: ``kaine.evaluation`` does not import ``kaine.modules.*`` at module
-import time. The real Mnemos is built by a ``mnemos_builder`` callable injected by
+import time. The real episodic memory module is built by a ``mnemos_builder`` callable injected by
 the caller; only when none is supplied does the runner perform a lazy,
 function-local import as a convenience for the CLI.
 """
@@ -89,7 +89,7 @@ async def _default_mnemos_builder() -> Any:
 
 
 class _RetrievalCognitiveClient:
-    """Answer DERIVED from what the injected Mnemos returns.
+    """Answer DERIVED from what the injected episodic memory module returns.
 
     Recalls from episodic memory and echoes the retrieved text. If recall is empty
     it emits ``NON_RECALL_MARKER`` rather than confabulate. The answer is NOT
@@ -164,7 +164,7 @@ def _classify(
     config: MemoryCoherenceConfig,
 ) -> Verdict:
     """WIN iff retrieval advantage holds, non-recall is honest, and the advantage
-    is RETRIEVAL (vanishes when Mnemos is emptied)."""
+    is RETRIEVAL (vanishes when the episodic memory module is emptied)."""
     advantages = [r["advantage"] for r in planted]
     min_advantage = min(advantages) if advantages else 0.0
     mean_advantage = (sum(advantages) / len(advantages)) if advantages else 0.0
@@ -229,7 +229,7 @@ async def run_memory_coherence(
     ``mnemos_builder`` returns a fresh, initialized real ``MnemosCore``; the
     runner builds two — one loaded with the battery (full-system arm) and one left
     empty (the retrieval proof). When omitted, a lazy default builds an in-memory
-    Mnemos so the CLI works out of the box.
+    episodic memory module so the CLI works out of the box.
     """
     config = config or MemoryCoherenceConfig()
     set_global_seed(config.seed)

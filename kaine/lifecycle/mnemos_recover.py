@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Recovery CLI for an interrupted Mnemos preservation import.
+"""Recovery CLI for an interrupted episodic memory module preservation import.
 
 Run as::
 
@@ -27,7 +27,7 @@ import sys
 
 
 def main(argv: list[str] | None = None, *, out=None, err=None) -> int:
-    """Operator recovery command for a blocked Mnemos store."""
+    """Operator recovery command for a blocked episodic memory store."""
     import argparse
     import asyncio
     import os

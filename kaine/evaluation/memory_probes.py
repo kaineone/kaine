@@ -4,7 +4,7 @@
 """Memory coherence prober.
 
 Picks an episodic memory older than the LLM's effective context
-window. Asks KAINE about it through Lingua (real cognitive stack)
+window. Asks KAINE about it through the language module (real cognitive stack)
 and through the bare bypass client. Logs which one got it right.
 """
 from __future__ import annotations
@@ -34,7 +34,7 @@ NON_RECALL_MARKER = "__KAINE_NO_MEMORY_RECALLED__"
 
 @runtime_checkable
 class CognitiveQueryClient(Protocol):
-    """A way to ask the real stack a question — wraps Lingua but lets
+    """A way to ask the real stack a question — wraps the language module but lets
     us inject a fake for tests."""
 
     async def query(self, user_text: str) -> str: ...

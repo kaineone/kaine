@@ -174,7 +174,7 @@ async def test_control_tick_publishes_efference_copy(bus):
 
 def test_closed_loop_uses_existing_forward_model_no_new_learner():
     loop = EfferenceLoop()
-    # The loop reuses Soma's SubstrateForwardModel — it adds no new learner.
+    # The loop reuses the interoception module's SubstrateForwardModel — it adds no new learner.
     assert isinstance(loop.forward_model, SubstrateForwardModel)
     # No torch.nn.Module subclass is defined in the control-surface module.
     import torch.nn as nn
@@ -197,7 +197,7 @@ def test_efference_loop_requires_feedback_to_close():
     assert err >= 0.0
 
 
-# ---- W9.4 curriculum: birth minimal, freed by competence not time ------------
+# ---- W9.4 curriculum: maturation minimal, freed by competence not time ------------
 
 def test_birth_starts_with_drive_and_yaw_only():
     cur = MotorCurriculum()
@@ -242,10 +242,10 @@ def test_competence_readout_needs_min_samples():
 def test_surface_is_inert_before_birth_handoff():
     surface = ContinuousMotorSurface(policy=_FakePolicy(drive=1.0, yaw_rate=1.0))
     assert surface.active is False
-    assert surface.emit().is_zero()  # inert before birth
+    assert surface.emit().is_zero()  # inert before maturation
     surface.on_birth()
     assert surface.active is True
-    assert not surface.emit().is_zero()  # active after birth
+    assert not surface.emit().is_zero()  # active after maturation
 
 
 def test_inhibition_zeroes_the_action():

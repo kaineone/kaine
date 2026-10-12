@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Spot ``spot.incident`` bus annotation — freeze-run-annotation change.
+"""supervisor ``spot.incident`` bus annotation — freeze-run-annotation change.
 
 Covers the ``spot-supervisor`` ADDED requirements:
 
-* Spot publishes a structured ``spot.incident`` event at each lifecycle
+* The supervisor publishes a structured ``spot.incident`` event at each lifecycle
   transition (detect, freeze, snapshot, restart) IN ADDITION to the unchanged
   ephemeral ``spot.status`` / ``spot.log`` events.
 * Each event carries the shared ``incident_id``, ``module``, ``transition``, the

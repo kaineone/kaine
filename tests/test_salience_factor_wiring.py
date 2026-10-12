@@ -3,7 +3,7 @@
 
 """Live four-factor salience wiring (wire-salience-goal-thymos).
 
-Covers the real Thymos factor (StateModulator, live by default) and the real
+Covers the real affect factor (StateModulator, live by default) and the real
 goal factor (DriveRelevanceGoalScorer, built but staged), the AffectStateProvider
 DI seam that feeds them without a workspace->modules import, the static negative
 control's bit-for-bit reproduction of the two-factor selection, and determinism.
@@ -58,7 +58,7 @@ def _thymos_state(*, valence=0.0, arousal=0.3, dominance=0.0, drives=None) -> Ev
 
 
 # Per-module drive-tag declarations (from BaseModule.relieves_drives). The
-# scaffolding source volition is added by build_drive_sources automatically.
+# action selection module's scaffolding source is added by build_drive_sources automatically.
 _MODULE_TAGS: dict[str, frozenset[str]] = {
     "perception": frozenset({"curiosity", "boredom"}),
     "topos": frozenset({"curiosity", "boredom"}),
@@ -122,7 +122,7 @@ def test_provider_drive_values_is_a_copy():
 
 
 # ---------------------------------------------------------------------------
-# Real Thymos factor changes selection vs the static placeholder
+# Real affect module factor changes selection vs the static placeholder
 # ---------------------------------------------------------------------------
 
 
@@ -134,7 +134,7 @@ async def _select_one(strategy, event) -> tuple:
 
 @pytest.mark.asyncio
 async def test_real_thymos_factor_changes_selection_outcome():
-    """The arousal-weighted Thymos factor alters selection vs the constant stub.
+    """The arousal-weighted affect factor alters selection vs the constant stub.
 
     intensity=0.5, novelty=1.0, goal=1.0. Under the real modulator the score is
     0.5 * arousal-derived multiplier (floor 0.2, ceiling 1.0): zero arousal
@@ -345,7 +345,7 @@ def _cfg(**syn) -> dict:
 
 
 def test_make_salience_factors_shipped_defaults():
-    """Shipped defaults: Thymos real, goal on the staged static baseline, and NO
+    """Shipped defaults: affect real, goal on the staged static baseline, and NO
     downgrade (goal-static is the intended shipped state, not a downgrade)."""
     thymos, goal, downgraded = make_salience_factors({}, AffectStateProvider())
     assert isinstance(thymos, StateModulator)
@@ -435,7 +435,7 @@ async def test_engine_calls_observer_before_select_with_sorted_batch():
 
     # Observer fires each tick, BEFORE selection.
     assert order == ["observe", "select"]
-    # It receives the canonically-sorted batch (audition < soma by source).
+    # It receives the canonically-sorted batch (audition < interoception by source).
     sources = [ev.source for _, ev in seen[0]]
     assert sources == sorted(sources) == ["audition", "soma"]
 

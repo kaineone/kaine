@@ -514,7 +514,7 @@ async def test_dry_run_run_async_checks_survives_a_crashing_check(monkeypatch):
 
 
 async def test_dry_run_resolves_state_key_before_services_check(monkeypatch, tmp_path):
-    """Regression: the SERVICES group includes the Nexus health board's own
+    """Regression: the SERVICES group includes the dashboard health board's own
     state-encryption probe, which reads $KAINE_STATE_KEY directly. If the key
     is resolved from secrets/state_key AFTER that probe runs (e.g. only
     inside check_welfare, which runs later), the SERVICES probe falsely

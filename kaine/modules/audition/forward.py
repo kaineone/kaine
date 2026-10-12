@@ -9,7 +9,7 @@ and an optional broadcast context vector.  Adapts online with a single
 small gradient step per utterance; skips any non-finite update
 (non-finite guard).
 
-Design constraints (matching the Topos LatentForwardModel and Chronos
+Design constraints (matching the vision module's LatentForwardModel and the sequence module's
 ForwardPredictionHead pattern)
 -----------------------------------------------------------------------
 - CPU-only: all tensors stay on CPU regardless of host hardware.
@@ -19,7 +19,7 @@ ForwardPredictionHead pattern)
 - Non-finite guard: adaptation is skipped when the loss or any gradient is
   non-finite, protecting against degenerate inputs. A non-finite input is
   skipped entirely (no buffer append, no weight update, no prediction kept).
-- Adaptation can be suspended externally (e.g. during Hypnos sleep) by
+- Adaptation can be suspended externally (e.g. during sleep) by
   setting ``suspended = True``.
 """
 from __future__ import annotations
@@ -231,7 +231,7 @@ class AuditoryForwardModel:
         if any(not math.isfinite(v) for v in feature):
             # A skipped reading touches neither the buffer nor the weights and
             # leaves no prediction behind, so the next reading scores nothing,
-            # reports no gain and makes no update, as in Soma's forward model.
+            # reports no gain and makes no update, as in the interoception module's forward model.
             log.warning("AuditoryForwardModel: non-finite feature vector; skipping step")
             self.last_null_error = None
             self.last_scored_had_context = False

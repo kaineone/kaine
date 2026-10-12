@@ -6,7 +6,7 @@ a total deterministic key (`source`, `type`, `entry_id`, `stream`), where `entry
 is the bus entry id compared as the integer pair (milliseconds, sequence), which is arrival order within a
 stream, and `stream` the stream the event was read from, so that selection
 tie-breaks do not depend on dispatch incidentals. After ordering, the cycle SHALL name
-each event by its stream-qualified key `<stream>:<entry_id>` and hand Syneidesis those
+each event by its stream-qualified key `<stream>:<entry_id>` and hand the workspace those
 keys as the candidate ids.
 
 #### Scenario: Tie-break is stable regardless of arrival order
@@ -15,8 +15,8 @@ keys as the candidate ids.
 
 #### Scenario: Entry ids order numerically
 - **WHEN** one stream holds twelve events with ids `1760000000000-0` to `1760000000000-11`
-- **THEN** Syneidesis receives them in sequence order, `-2` before `-10`
+- **THEN** the workspace receives them in sequence order, `-2` before `-10`
 
 #### Scenario: Candidate ids carry the stream
 - **WHEN** the cycle reads an entry with id `1760000000000-0` from `soma.out`
-- **THEN** Syneidesis receives it with the id `soma.out:1760000000000-0`
+- **THEN** the workspace receives it with the id `soma.out:1760000000000-0`

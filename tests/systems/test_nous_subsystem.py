@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nous subsystem: workspace broadcast → active-inference belief + policy.
+"""The planning subsystem: workspace broadcast → active-inference belief + policy.
 
 Uses :class:`FakeEngine` (no pymdp / no JAX) so the subsystem suite is green
 without the reasoning extra. An opt-in real-pymdp check runs only when

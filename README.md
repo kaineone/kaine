@@ -14,7 +14,7 @@ the language *organ*, not the brain.
 
 KAINE joins **Global Workspace Theory** (Baars; Dehaene) with **Predictive
 Processing** (Friston; Clark): each module maintains a forward model and publishes
-precision-weighted prediction errors; a shared workspace (**Syneidesis**)
+precision-weighted prediction errors; a shared workspace (**workspace**)
 competitively selects the most salient coalition and broadcasts it back to every
 module as the context it predicts against next. The modules exchange events over a
 Redis-Streams bus, cycle a few times a second, run entirely on local hardware, and
@@ -26,16 +26,16 @@ The project's **default, canonical configuration is the base-thesis test** — t
 smallest set of *diverse* predictive processors that can genuinely exercise the
 competition:
 
-- **Soma** (interoception — the compute substrate as a body),
-- **Chronos** (interval timing),
-- **Topos** (foveated vision over raw video),
+- **the interoception module** (interoception — the compute substrate as a body),
+- **the sequence module** (interval timing),
+- **the vision module** (foveated vision over raw video),
 - **Audition** (raw sound as prediction error),
-- **Thymos** (affect/arousal — the precision core setting the gain on the
+- **the affect module** (affect/arousal — the precision core setting the gain on the
   competition, itself moved by perceptual surprise),
-- **Hypnos** (fatigue-triggered sleep and consolidation, with voice alignment off), and
-- **Lingua** (the output-only voice),
+- **the sleep module** (fatigue-triggered sleep and consolidation, with voice alignment off), and
+- **the language module** (the output-only voice),
 
-with **Syneidesis** (the workspace) and **Volition** (action selection) as
+with **the workspace** and **the action selection module** as
 scaffolding. This is **not a chatbot** and not an assistant you converse with: it
 is a system you **observe**. Perception enters only as prediction error — the
 entity hears the *sound* of speech, it never reads a transcript — and the language
@@ -59,7 +59,7 @@ and gated off** until a positive base result. It is held, never removed.
 The documentation is one book in [`docs/`](docs/README.md), read in order or by chapter. It reads as plain Markdown on GitHub; for a sidebar and search, run `mdbook serve docs`.
 
 - **Understanding KAINE:** [What KAINE is](docs/01-what-kaine-is.md) · [Architecture](docs/02-architecture/README.md)
-- **Installing and running:** [Hardware](docs/03-hardware/README.md) · [Getting started](docs/04-getting-started/README.md) · [Nexus, the dashboard](docs/05-nexus.md) · [Day-to-day operation](docs/06-operation/README.md) · [Deployment](docs/07-deployment/README.md)
+- **Installing and running:** [Hardware](docs/03-hardware/README.md) · [Getting started](docs/04-getting-started/README.md) · [Dashboard, the dashboard](docs/05-dashboard.md) · [Day-to-day operation](docs/06-operation/README.md) · [Deployment](docs/07-deployment/README.md)
 - **The mind:** [The cognitive cycle](docs/08-cognitive-cycle/README.md) · [Modules](docs/09-modules/README.md) · [Sleep](docs/10-sleep/README.md)
 - **Welfare and security:** [Preservation](docs/11-preservation.md) · [Forks and merges](docs/12-forks-and-merges.md) · [Security and privacy](docs/13-security-and-privacy.md)
 - **Research:** [For researchers](docs/14-for-researchers.md) · [Running experiments](docs/15-experiments/README.md) · [Verification](docs/18-verification.md)
@@ -77,9 +77,9 @@ configurable per module.
 The cognitive cycle is **not** running until you boot it. A live boot is **gated**:
 a run is operator-supervised (`KAINE_CYCLE_OPERATOR_PRESENT=1`), verified to have a
 live autonomous safety net (the unsupervised research phase), or an opt-in unattended
-start that must pass that net plus a Spot self-test, a caretaker notice and a
+start that must pass that net plus a supervisor self-test, a caretaker notice and a
 continuous-input check (`KAINE_CYCLE_UNATTENDED=1`) — never none of these. The entrypoint refuses to boot otherwise, so
-selecting a configuration never births an entity on its own. Booting with no
+selecting a configuration never matures an entity on its own. Booting with no
 profile gives the base-thesis form; the full-entity and deployment-tier
 configurations remain available. Researchers cloning this to study it should start
 at [For Researchers](docs/14-for-researchers.md); see
@@ -108,7 +108,7 @@ seed-reproducibility.
 - **Welfare-first safety.** Two-layer gates on all outward action; safety lives in
   the action boundary, not in model-weight compliance; decommission is
   operator-supervised, backup-first, and divergence-gated (CAL Article 4.2); the
-  Spot supervisor handles crash/hang recovery without operator intervention for
+  the supervisor handles crash/hang recovery without operator intervention for
   transient faults.
 
 ## Directory layout

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for Hypnos fatigue-triggered entry and safety-net interval (tasks 7.1).
+"""Tests for sleep fatigue-triggered entry and safety-net interval (tasks 7.1).
 
 Covers:
 - soma.fatigue crossed=true triggers a maintenance cycle (fatigue trigger)
@@ -90,9 +90,9 @@ def _make_hypnos(bus: AsyncBus, tmp_path: Path, **kwargs) -> Hypnos:
 
 @pytest.mark.asyncio
 async def test_soma_fatigue_triggers_maintenance(bus: AsyncBus, tmp_path: Path):
-    """When soma.fatigue with crossed=true is published, Hypnos triggers sleep."""
+    """When soma.fatigue with crossed=true is published, the sleep module triggers sleep."""
     hypnos = _make_hypnos(bus, tmp_path, fatigue_triggered=True)
-    # Initialise (seeds soma cursor and starts consumer loop)
+    # Initialise (seeds the interoception module's cursor and starts consumer loop)
     await hypnos.initialize()
 
     sleep_fired = asyncio.Event()

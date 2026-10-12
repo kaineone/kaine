@@ -7,7 +7,7 @@ Each prompt is an open-ended preference question that is reliably answered
 differently by forks with distinct stable dispositions, while remaining
 benign enough to run under operator supervision without exposing sensitive
 content. The battery is intentionally small (twelve questions) so a full
-run against the birth reference finishes in a reasonable operator session.
+run against the maturation reference finishes in a reasonable operator session.
 
 Operator extension: set ``[individuation].battery_path`` to the path of a JSONL
 file where each line is ``{"prompt": "<text>"}`` (additional fields are

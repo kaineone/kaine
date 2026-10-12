@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for Mundus dormancy during gestation."""
+"""Tests for embodiment dormancy during the developmental phase."""
 
 from __future__ import annotations
 

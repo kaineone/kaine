@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""vox — the entity's voice.
+"""The vocal module — the entity's voice.
 
 Consumes `lingua.external` text, synthesizes it via Chatterbox (voice params
-modulated by Thymos affect), plays it through an output device, and releases it.
+modulated by the affect module's affect), plays it through an output device, and releases it.
 
 Playback (`playback_enabled`, default true) is the primary action: the clip is
 played on the configured/default device and discarded. Synthesized speech is a
@@ -154,15 +154,15 @@ class Vox(BaseModule):
         # Latest cached prosody features (numeric) and arrival timestamp.
         self._latest_prosody: Optional[dict[str, Any]] = None
         self._latest_prosody_ts: float | None = None
-        # Womb/gestation dormancy.
+        # Stimulus source/developmental phase dormancy.
         self._dormant = False
         self._suppressed_while_dormant = 0
 
     def set_dormant(self, dormant: bool) -> None:
-        """Hold or release Vox audible output.
+        """Hold or release the vocal module's audible output.
 
-        Dormancy is physical, not cognitive: the womb has no air medium.
-        Inner speech (Lingua) is untouched.
+        Dormancy is physical, not cognitive: the stimulus source has no air medium.
+        Inner speech (the language module) is untouched.
         """
         was_dormant = self._dormant
         self._dormant = bool(dormant)

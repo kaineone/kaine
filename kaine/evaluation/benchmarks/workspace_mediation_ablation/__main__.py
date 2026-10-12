@@ -4,7 +4,7 @@
 """CLI: ``python -m kaine.evaluation.benchmarks.workspace_mediation_ablation``.
 
 Runs the workspace-mediation development harness offline. It exercises a
-reduced pair of real processors (Soma and Topos) with the workspace on against a
+reduced pair of real processors (the interoception and vision modules) with the workspace on against a
 pooled arm, measuring cross-module broadcast information gain. The modules are
 driven by hand over an in-memory bus. It boots no entity and opens no network
 connection. It is development tooling and does not test the thesis.

@@ -1,14 +1,14 @@
 ## Why
 
 Paper A.1 defines the broadcast as carrying the full table of candidate
-scores, one score for each candidate of the tick's batch $E_k$. Syneidesis
+scores, one score for each candidate of the tick's batch $E_k$. The workspace
 keys that table by the bus entry id alone. A Redis stream entry id
 (`<milliseconds>-<sequence>`) is unique only within its stream, so two
 candidates read from different streams that were published in the same
 millisecond with the same sequence number share an id. The second score
 written overwrites the first: the table loses a candidate, and every reader
 that looks up a coalition member's score by its id (`BroadcastContext`,
-Volition's report policy, the Nous proposal filter, the faithful renderer,
+the action selection module's report policy, the planning module's proposal filter, the faithful renderer,
 the workspace-mediation harness) can read the other candidate's score. The
 coalition itself is chosen from the scored list, not from the table, so
 selection and the inhibition flag are unaffected; per-member access, the
@@ -32,7 +32,7 @@ ablation's top score and candidate count are affected.
   sequence), which is arrival order within a stream; compared as text,
   `x-10` sorted before `x-2`. The stream is a final tie-break, reached only
   when one source publishes the same type on two streams.
-- Syneidesis refuses a candidate list in which two candidates share an id,
+- The workspace refuses a candidate list in which two candidates share an id,
   in every arm, so a collision can no longer pass silently.
 - Readers are unchanged in code: each looks up a member's score with the
   member's own id, and in any one broadcast or log record the member ids and

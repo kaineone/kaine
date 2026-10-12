@@ -150,13 +150,13 @@ class Thymos(BaseModule):
         self._alert_slow = 0.0
         self._intent_rate = 0.0
         self._intents_since_broadcast = 0
-        self._wellness = 0.5  # neutral prior: no Soma wellness information yet
+        self._wellness = 0.5  # neutral prior: no interoception module wellness information yet
         self._interaction_seen = False
         self._last_tsli: Optional[float] = None
 
         # Precedence: an explicit `clock` callable (test seam) > the injected
         # subjective `entity_clock.now` > a real-time EntityClock. All of
-        # Thymos's time constants read through `self._clock`, so injecting the
+        # The affect module's time constants read through `self._clock`, so injecting the
         # shared subjective clock dilates them coherently with the cycle.
         self._entity_clock = entity_clock
         if clock is not None:
@@ -177,7 +177,7 @@ class Thymos(BaseModule):
         # Goal-significance method flag, disclosed in thymos.emotion events.
         self._goal_method = "unavailable"
         # Drive-to-source table and dominant-drive selector, injected at cycle
-        # assembly so Thymos never imports the workspace.
+        # assembly so the affect module never imports the workspace.
         self._drive_sources: Optional[Mapping[str, frozenset[str]]] = None
         self._dominant_drive: Optional[
             Callable[[Mapping[str, float]], tuple[str, float] | None]
@@ -185,9 +185,9 @@ class Thymos(BaseModule):
         # Streams for coupling inputs (populated in initialize).
         self._audition_emotion_stream = "audition.out"
         self._empatheia_agent_model_stream = "empatheia.out"
-        # Perception→arousal coupling: perceptual surprise (topos scene dynamics,
+        # Perception→arousal coupling: perceptual surprise (the vision module's scene dynamics,
         # audition acoustic onsets) arouses the entity, scaled by the normalised
-        # prediction error, mirroring the interoceptive soma-alert→arousal path.
+        # prediction error, mirroring the interoception module's alert→arousal path.
         # These streams are read UNCONDITIONALLY (arousal is pre-attentive — a
         # startle does not require the emotion-coupling path to be enabled).
         self._topos_stream = "topos.out"
@@ -275,7 +275,7 @@ class Thymos(BaseModule):
     ) -> None:
         """Store the drive-to-source table and the dominant-drive helper.
 
-        Both are injected by the cycle composition root; Thymos does not import
+        Both are injected by the cycle composition root; the affect module does not import
         the workspace layer.
         """
         self._drive_sources = drive_sources
@@ -404,7 +404,7 @@ class Thymos(BaseModule):
                     "alert": emotion != CategoricalEmotion.NEUTRAL,
                     "scores": scores.as_tuple(),
                     "state": self._state.to_dict(),
-                    # norm_compatibility is hardcoded 0.0 until Eidolon norm
+                    # norm_compatibility is hardcoded 0.0 until the self-model module's norm
                     # signals are wired (see _score_snapshot).  DISGUST
                     # (requires norm <= -0.4) is therefore unreachable by
                     # design until that integration lands.
@@ -501,7 +501,7 @@ class Thymos(BaseModule):
             min(1.0, self._state.valence + (0.5 - self._state.arousal)),
         )
         # Norm compatibility: fixed 0.0 — not a real measurement.
-        # Eidolon norm signals are not yet wired; until they are, the DISGUST
+        # The self-model module's norm signals are not yet wired; until they are, the DISGUST
         # classification branch (norm <= -0.4) is unreachable by design.
         # The published thymos.emotion event carries norm_compatibility_available=False
         # so consumers know this dimension is unavailable, not zero.
@@ -860,7 +860,7 @@ class Thymos(BaseModule):
             "drives": self._drives.to_dict(),
             "last_emotion": self._last_emotion.value,
             # Coupling: only numeric familiarity values — zero raw-sense-data
-            # persistence; agent ids are opaque strings from Empatheia.
+            # persistence; agent ids are opaque strings from the social cognition module.
             "familiarity_cache": dict(self._familiarity_cache),
             # Goals: the entity's own intentions, not sense data, so they also
             # satisfy the zero raw-sense-data persistence rule.

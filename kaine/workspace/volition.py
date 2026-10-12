@@ -3,17 +3,17 @@
 
 """Executive action selection ("Volition").
 
-KAINE's global workspace (Syneidesis) decides *what is accessed* and flags
+KAINE's global workspace decides *what is accessed* and flags
 executive inhibition (`WorkspaceSnapshot.inhibited`) when the winning coalition
 fails to clear the publication threshold. Per the paper (§37, §147) a winning
 coalition must clear that threshold *before reaching the action layer* - "the
 system can consider speaking and decide that silence is the better choice."
 
 This module is that action layer. Each experiential tick the cognitive cycle
-hands ``Volition.select`` the broadcast ``WorkspaceSnapshot`` and Volition
+hands ``Volition.select`` the broadcast ``WorkspaceSnapshot`` and the action selection module
 returns zero or more :class:`Intent` objects describing what the entity has
 decided to DO. The cycle publishes those intents to the ``volition.out`` stream;
-effectors (Lingua, Praxis) realize them. Effectors never self-trigger off the
+effectors (the language and effectors modules) realize them. Effectors never self-trigger off the
 raw broadcast — the only path to action is an intent, and intents only exist
 when the snapshot is *not* inhibited.
 
@@ -61,7 +61,7 @@ INTENT_TYPES: dict[str, str] = {
     REST: "intent.rest",
 }
 
-# Event type used for Nous proposal outcomes on volition_feedback.out.
+# Event type used for the planning module's proposal outcomes on volition_feedback.out.
 PROPOSAL_OUTCOME_TYPE = "volition.proposal_outcome"
 
 # The source/type of a user-communication event the default policy is disposed
@@ -78,7 +78,7 @@ OWN_INTERNAL_SPEECH_TYPE = "internal_speech"
 
 # Channels whose voices are treated as the operator. Audio from any other
 # channel is modelled as "media:<channel>" and is not answered as a user
-# utterance. The list is shared with Empatheia attribution.
+# utterance. The list is shared with the social cognition module's attribution.
 DEFAULT_OPERATOR_SOURCES = OPERATOR_SOURCES
 
 
@@ -90,24 +90,24 @@ class Intent:
     accessed content the intent concerns: a short textual summary the realizing
     effector can use as a prompt. ``entry_id`` carries the broadcast entry id of
     the referenced coalition member when there is one (for audit/traceability).
-    For ``act`` intents, ``effector`` names the Praxis effector and ``params``
+    For ``act`` intents, ``effector`` names the effectors module's effector and ``params``
     carries its request fields.
 
     ``run_id`` / ``seq`` / ``sig`` are the provenance envelope attached to
     ``act`` intents by :meth:`Volition.select` when a signer is wired (see
     ``kaine.security.intent_signing``). They are absent (``None``) for unsigned
     intents and for non-``act`` kinds. ``sig`` is an HMAC over
-    ``canonical(kind, effector, params, run_id, seq)`` that Praxis verifies
+    ``canonical(kind, effector, params, run_id, seq)`` that the effectors module verifies
     before running any effector; ``(run_id, seq)`` is the replay guard.
 
     ``interrupt`` marks a ``speak`` intent as *urgent redirect*: a sufficiently
     surprising new coalition that should preempt an in-flight utterance rather
     than wait behind it (see ``interruptible-utterance``). Only ``speak`` intents
-    carry it; Lingua honors it by cancelling the in-flight generation and
+    carry it; the language module honors it by cancelling the in-flight generation and
     starting this one. Default ``False`` — the flag is emitted on the wire only
-    when set, so non-Lingua consumers (Praxis) simply never see an unknown field.
+    when set, so non-language consumers (the effectors module) simply never see an unknown field.
 
-    ``about_kind`` classifies the ``about`` field for Lingua's redaction logic:
+    ``about_kind`` classifies the ``about`` field for the language module's redaction logic:
     ``"heard"`` for heard speech, ``"felt"`` for a drive's felt-state phrase,
     or ``"event"`` for another coalition event summary. ``None`` is treated as
     ``"heard"`` (fail-closed), so unmarked intents are redacted in the log.
@@ -136,7 +136,7 @@ class Intent:
             payload["proposal_id"] = self.proposal_id
         if self.entry_id is not None:
             payload["entry_id"] = self.entry_id
-        # Emitted only when set so the wire payload stays minimal and non-Lingua
+        # Emitted only when set so the wire payload stays minimal and non-language-module
         # consumers never encounter the field on ordinary intents.
         if self.interrupt:
             payload["interrupt"] = True
@@ -160,7 +160,7 @@ class Intent:
 class ActionSelectionPolicy(Protocol):
     """Maps a *non-inhibited* snapshot to zero or more intents.
 
-    Implementations MUST NOT be called when the snapshot is inhibited — Volition
+    Implementations MUST NOT be called when the snapshot is inhibited — the action selection module
     enforces the inhibition gate before delegating. A policy may be stateful (the
     default one keeps a one-in-flight guard).
     """
@@ -186,7 +186,7 @@ class DefaultActionSelectionPolicy:
       (the entity's own ``lingua.external`` output appears in a later coalition).
 
     Injectable so `drives-to-behavior` can supply a drive-biased policy without
-    touching Volition's plumbing.
+    touching the action selection module's plumbing.
     """
 
     # C3: refractory-scaled guard timeout (6x the report speak refractory of
@@ -314,15 +314,15 @@ class Volition:
     effector ever acts while the entity is inhibited. A non-inhibited snapshot is
     delegated to the injected :class:`ActionSelectionPolicy`.
 
-    Volition never re-decides salience or inhibition; it *consumes* Syneidesis's
+    The action selection module never re-decides salience or inhibition; it *consumes* the workspace's
     verdict. It does not touch the bus — the cycle publishes the returned intents.
 
     When an :class:`~kaine.security.intent_signing.IntentSigner` is injected (the
     composition root wires one holding the per-boot secret), every ``act`` intent
-    Volition returns carries a provenance signature over its
-    ``(kind, effector, params, run_id, seq)`` so Praxis can prove the intent came
+    the action selection module returns carries a provenance signature over its
+    ``(kind, effector, params, run_id, seq)`` so the effectors module can prove the intent came
     from this action-selection step and reject forged or replayed intents. Only
-    ``act`` intents are signed — they are the only kind Praxis realizes into
+    ``act`` intents are signed — they are the only kind the effectors module realizes into
     real-world effects; ``speak``/``think`` are unchanged.
     """
 
@@ -366,7 +366,7 @@ class Volition:
         return [self._sign(intent) for intent in intents]
 
     def proposal_outcomes(self, snapshot: WorkspaceSnapshot) -> list[dict]:
-        """Content-free outcomes for any Nous proposals seen on the last select."""
+        """Content-free outcomes for any planning module proposals seen on the last select."""
         if hasattr(self._policy, "proposal_outcomes"):
             return self._policy.proposal_outcomes(snapshot)
         return []

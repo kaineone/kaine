@@ -11,7 +11,7 @@ change, Phase 1:
   * time_scale = 0 is freeze semantics (no divide-by-zero; sleep is a no-op);
   * the deterministic logical clock is byte-identical at scale 1.0 to the
     pre-change formula (the top-priority behavior-identical invariant);
-  * every rate change — including the Soma reduce_rate advisory — recomputes the
+  * every rate change — including the interoception module's reduce_rate advisory — recomputes the
     cached tick period (the divergence-bug regression);
   * with shipped defaults (time_scale 1.0, unchanged rates) the engine behaves
     as before.

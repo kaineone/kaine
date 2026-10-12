@@ -307,7 +307,7 @@ def test_viability_file_during_viewing_is_ignored(tmp_path: Path, known_modules,
 
 
 def test_verdict_from_an_earlier_attempt_is_ignored(tmp_path: Path, known_modules, monkeypatch):
-    """A retried gestation must not be stopped by the previous attempt's verdict."""
+    """A retried developmental phase must not be stopped by the previous attempt's verdict."""
     import os
     import time
 

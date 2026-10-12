@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The Praxis factory."""
+"""The effectors module factory."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional
@@ -51,9 +51,9 @@ def make_praxis(
         "enabled_effectors": enabled_effectors,
     }
     # Per-boot act-intent provenance secret (Mechanism B). The cycle composition
-    # root generates it and injects the SAME bytes into Volition (to sign) and
+    # root generates it and injects the SAME bytes into the action selection module (to sign) and
     # here (to verify). None only in headless/test construction, where the
-    # fail-closed default in Praxis then refuses every act intent.
+    # fail-closed default in the effectors module then refuses every act intent.
     if intent_secret is not None:
         kwargs["intent_secret"] = intent_secret
     for k in (

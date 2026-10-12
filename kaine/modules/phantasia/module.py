@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Phantasia — world-model / imagination module (DreamerV3 RSSM core).
+"""The world model module — imagination module (DreamerV3 RSSM core).
 
-Phantasia is KAINE's world model. It is NOT an agent: it has no actor, critic,
-reward, or return head — action selection is Nous's job (pymdp active
-inference). Phantasia only models and imagines.
+The world model module is KAINE's learned model of its world. It is NOT an agent: it has no actor, critic,
+reward, or return head — action selection is the planning module's job (pymdp active
+inference). The world model module only models and imagines.
 
 Two modes:
 
@@ -15,12 +15,12 @@ Two modes:
     carries no imagined content. The observation is appended to a bounded
     in-memory ring buffer (the training corpus), which is NEVER serialized.
 
-  * **Offline (scenario window only).** While the scenario window that Hypnos
-    opens around the sleep phases that cue Phantasia is open: (1) on a
+  * **Offline (scenario window only).** While the scenario window that the sleep module
+    opens around the sleep phases that cue the world model module is open: (1) on a
     ``mnemos.replay`` cue, seed the world model from the prior trajectory and
     roll out imagined trajectories, publishing ``phantasia.scenario`` events.
     Because those events are published on ``phantasia.out``, they are
-    re-injected into the workspace broadcast so Nous, Thymos, and Eidolon
+    re-injected into the workspace broadcast so the planning module, the affect module and the self-model module
     process them via ``on_workspace`` (associative consolidation); (2) training
     over the accumulated buffer runs when ``hypnos.sleep.started`` arrives,
     gated by ``training_enabled``. The waking path pauses from
@@ -76,7 +76,7 @@ from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
-# How many closed scenario windows Phantasia remembers for late replay cues.
+# How many closed scenario windows the world model module remembers for late replay cues.
 _KEPT_WINDOWS = 4
 
 
@@ -105,7 +105,7 @@ class Phantasia(BaseModule):
         # Opt-in learned-weight persistence (requires a real backend).
         persist_weights: bool = False,
         checkpoint_path: str = "state/phantasia/world_model.ckpt",
-        # Peer streams: mnemos.replay cues + hypnos window tracking.
+        # Peer streams: mnemos.replay cues + the sleep module's window tracking.
         mnemos_stream: str = "mnemos.out",
         hypnos_stream: str = "hypnos.out",
         # Forwarded to the real backend (ignored by the fake).
@@ -156,7 +156,7 @@ class Phantasia(BaseModule):
 
         # _asleep tracks the sleep from hypnos.sleep.started to
         # hypnos.sleep.completed on the bus and pauses the waking path for the
-        # whole sleep. Hypnos itself opens and closes the scenario window.
+        # whole sleep. The sleep module itself opens and closes the scenario window.
         self._asleep: bool = False
         self._window_active: bool = False
         # Wall-clock bounds of the open window and of the last few closed ones,
@@ -412,11 +412,11 @@ class Phantasia(BaseModule):
         )
 
     # ------------------------------------------------------------------
-    # Offline path: mnemos.replay cue (Hypnos window only) -> scenarios
+    # Offline path: mnemos.replay cue (the sleep module's window only) -> scenarios
     # ------------------------------------------------------------------
 
     async def _peer_consumer_loop(self) -> None:
-        """Background loop: track Hypnos window + handle mnemos.replay cues."""
+        """Background loop: track the sleep module's window + handle mnemos.replay cues."""
         try:
             while not self._stopped.is_set():
                 progressed = False
@@ -444,25 +444,25 @@ class Phantasia(BaseModule):
         if stream == self._hypnos_stream:
             if event.type == "hypnos.sleep.started":
                 # The waking path pauses for the whole sleep. The scenario
-                # window is opened by Hypnos, so a late sleep.started on the
+                # window is opened by the sleep module, so a late sleep.started on the
                 # bus cannot open it after the sleep ended.
                 self._asleep = True
                 # Maintenance entered: run an in-memory training pass.
                 await self._maybe_train()
             elif event.type == "hypnos.sleep.completed":
                 self._asleep = False
-                # Backstop: Hypnos closes the window itself after phase 3.
+                # Backstop: the sleep module closes the window itself after phase 3.
                 self.close_scenario_window()
         elif stream == self._mnemos_stream and event.type == "mnemos.replay":
             await self._handle_replay_cue(event)
 
     def open_scenario_window(self) -> None:
-        """Open the scenario window. Hypnos calls this inside a sleep, before phase 2's replay."""
+        """Open the scenario window. The sleep module calls this inside a sleep, before phase 2's replay."""
         self._window_active = True
         self._window_opened_at = _utc_now()
 
     def close_scenario_window(self) -> None:
-        """Close the scenario window. Hypnos calls this once phase 3 is done; closing a closed window does nothing."""
+        """Close the scenario window. The sleep module calls this once phase 3 is done; closing a closed window does nothing."""
         if not self._window_active:
             return
         self._window_active = False

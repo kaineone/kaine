@@ -1,6 +1,6 @@
 ## Why
 
-KAINE's small learned parts adapt online while the entity is awake: the Soma readout, the Topos, Audition and Chronos forward heads, and the Phantasia RSSM. Each suspends adaptation during sleep, but nothing protects what it learned earlier from interference by what it learns later.
+KAINE's small learned parts adapt online while the entity is awake: the interoception readout, the vision, audition and sequence forward heads, and the world model RSSM. Each suspends adaptation during sleep, but nothing protects what it learned earlier from interference by what it learns later.
 
 The paper already cites the mechanism that would: sleep-like replay in Wei, Krishnan and Bazhenov 2016 (J Neurosci 36:4231–4247). Tadros, Krishnan, Ramyaa and Bazhenov (Nat Commun 13:7742, 2022) showed that running a trained network as a spiking network driven by noise, with local Hebbian updates, recovers the structure of earlier tasks (alternatives review 2026-10-05, §5.5).
 
@@ -8,7 +8,7 @@ The paper already cites the mechanism that would: sleep-like replay in Wei, Kris
 
 ## What Changes
 
-A design for a noise-driven, local-Hebbian replay phase in Hypnos:
+A design for a noise-driven, local-Hebbian replay phase in the sleep module:
 - It applies to the small online learners, one learner at a time.
 - It runs inside the existing sleep window.
 - It is gated by a measured interference test.

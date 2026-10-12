@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for the womb video and audio source implementations."""
+"""Tests for the stimulus source video and audio implementations."""
 from __future__ import annotations
 
 import numpy as np
@@ -22,7 +22,7 @@ from tests.zero_persistence import WriteRecorder, leaked_writes, redirect_temp
 
 def _origin_then(reading: float):
     """Fake monotonic clock: the first call (the origin) is 0.0, later calls
-    return ``reading``, so womb time equals ``reading`` from then on."""
+    return ``reading``, so stimulus source time equals ``reading`` from then on."""
     calls = iter([0.0])
 
     def clock() -> float:
@@ -489,7 +489,7 @@ def test_audio_synthesis_failure_stops_the_producer_loudly(caplog) -> None:
 
 
 def test_womb_is_cpu_only_and_torch_free() -> None:
-    # The local womb must run on a modest single host: rendering a frame and
+    # The local stimulus source must run on a modest single host: rendering a frame and
     # an audio block needs numpy only, never torch or a GPU stack.
     import subprocess
     import sys
@@ -517,8 +517,8 @@ def test_womb_is_cpu_only_and_torch_free() -> None:
 
 
 def test_no_entity_state_feeds_the_womb() -> None:
-    # The womb is external: its only inputs are the seed, the parameters, the
-    # shared womb clock and (for the colour-onset schedule only) lived time.
+    # The stimulus source is external: its only inputs are the seed, the parameters, the
+    # shared stimulus source clock and (for the colour-onset schedule only) lived time.
     # Nothing from the entity's affect, workspace or modules may reach it.
     import ast
     import importlib.util

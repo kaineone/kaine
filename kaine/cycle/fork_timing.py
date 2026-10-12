@@ -4,12 +4,12 @@
 """Apply a fork's subjective-time profile at spawn (Phase 4 of biological timing).
 
 When a fork carrying a :class:`~kaine.lifecycle.timing_profile.ForkTimingProfile`
-is restored to run, the runtime applies that profile so the being runs at its own
+is restored to run, the runtime applies that profile so the entity runs at its own
 subjective speed. This seam owns the wiring between the *parsed* profile (a pure
 lifecycle data object) and the *runtime* it must touch — the shared
 ``EntityClock`` and the ``CognitiveCycle`` — which is why it lives in
 ``kaine.cycle`` (the runtime layer that may legally import the clock, the cycle,
-and the Topos perception knob) rather than in the boundary-neutral lifecycle
+and the vision module's perception knob) rather than in the boundary-neutral lifecycle
 profile module.
 
 It reuses **only existing seams** — it introduces no new throttle, freeze, or
@@ -24,7 +24,7 @@ rate mechanism:
 
 A ``time_scale > 1`` keeps the existing aspirational-target-then-throttle
 semantics: the cycle attempts the faster real rate and the Phase-3 pacing report
-+ Soma ``reduce_rate`` honestly surface/throttle an overrun. This seam adds no
++ the interoception module's ``reduce_rate`` honestly surface/throttle an overrun. This seam adds no
 second throttle.
 
 It is a deliberate **no-op for a profile-less fork** (``profile is None``), so a
@@ -70,7 +70,7 @@ class _VisionRateSink(Protocol):
 def _resolve_vision_sink(vision_rate_sink: Any) -> _VisionRateSink | None:
     """Find an object exposing ``set_vision_sample_hz`` on the given handle.
 
-    The runtime may pass the Topos module, its ``LiveCamera`` directly, or any
+    The runtime may pass the vision module, its ``LiveCamera`` directly, or any
     object with a ``live_camera`` attribute. We probe those in order and return
     the first that exposes the vision-rate knob, or ``None`` when no clean
     runtime seam is reachable (so the caller can honestly record the limitation
@@ -114,13 +114,13 @@ def apply_fork_timing_profile(
         ``set_experiential_rate`` setters apply rate overrides).
     vision_rate_sink:
         Optional handle exposing (or owning) ``set_vision_sample_hz`` — the
-        running Topos module or its ``LiveCamera``. When the running config does
+        running vision module or its ``LiveCamera``. When the running config does
         not expose a vision-rate seam, the ``vision_sample_hz`` override is
         honestly reported as not-applied rather than faked.
 
     Returns
     -------
-    A summary dict for logging / Nexus. For a profile-less fork it is
+    A summary dict for logging / the dashboard. For a profile-less fork it is
     ``{"applied": False, ...}`` and nothing is mutated.
     """
     if profile is None:
@@ -151,7 +151,7 @@ def apply_fork_timing_profile(
         cycle.set_experiential_rate(profile.experiential_rate_hz)
         summary["experiential_rate_hz"] = profile.experiential_rate_hz
 
-    # 3) Optional perception-rate override through the existing Topos knob
+    # 3) Optional perception-rate override through the existing vision module knob
     #    (Phase 3). If no clean runtime seam is reachable on the running config,
     #    record the limitation honestly rather than pretend it was applied.
     if profile.vision_sample_hz is not None:

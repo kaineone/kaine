@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Durable, append-only incident log for the Spot module supervisor.
+"""Durable, append-only incident log for the supervisor.
 
-Spot already executes a well-defined fault-recovery lifecycle (detect a crash or
+The supervisor already executes a well-defined fault-recovery lifecycle (detect a crash or
 hang -> freeze the cycle -> snapshot last-good state -> run the restart ladder ->
 escalate). Every step has observable side effects, but none of them survive a
 clean boot: the crash exception read in ``Spot.assess`` was historically
@@ -100,7 +100,7 @@ def scrub_paths(text: Optional[str]) -> Optional[str]:
 
 
 class IncidentLog:
-    """Durable JSONL writer for Spot lifecycle transitions.
+    """Durable JSONL writer for the supervisor lifecycle transitions.
 
     Wraps an :class:`AsyncJsonlSink` configured for the incident log's storage
     contract (no-purge, daily rotation, encrypted-at-rest when enabled). When
@@ -108,7 +108,7 @@ class IncidentLog:
     ever written.
 
     The class is deliberately thin -- it stamps ``ts`` if absent and forwards to
-    the sink, guarding the write so a broken sink can never crash Spot (the
+    the sink, guarding the write so a broken sink can never crash the supervisor (the
     watchdog must keep running precisely when things are failing).
     """
 

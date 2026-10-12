@@ -1,16 +1,16 @@
 # hypnos-fatigue-phases Specification
 
 ## Purpose
-How fatigue drives Hypnos: maintenance starts when fatigue crosses its threshold or a maximum interval passes, the phases slow the oscillators and downscale activity during deep consolidation, and fatigue resets at the end, without interrupting sleep.
+How fatigue drives the sleep module: maintenance starts when fatigue crosses its threshold or a maximum interval passes, the phases slow the oscillators and downscale activity during deep consolidation, and fatigue resets at the end, without interrupting sleep.
 ## Requirements
 ### Requirement: Fatigue-triggered maintenance with interval safety net
-Hypnos SHALL trigger offline maintenance when it observes a `soma.fatigue` event
+The sleep module SHALL trigger offline maintenance when it observes a `soma.fatigue` event
 with `crossed == true`, and SHALL retain `interval_seconds` only as a max-interval
 safety net so maintenance still occurs if fatigue never crosses. Non-
 interruptibility, deferral, and operator-freeze preemption SHALL be preserved.
 
 #### Scenario: Crossed fatigue triggers maintenance
-- **WHEN** Hypnos observes `soma.fatigue` with `crossed == true` and no freeze is
+- **WHEN** the sleep module observes `soma.fatigue` with `crossed == true` and no freeze is
   active
 - **THEN** a maintenance cycle begins
 
@@ -19,7 +19,7 @@ interruptibility, deferral, and operator-freeze preemption SHALL be preserved.
 - **THEN** a maintenance cycle begins anyway
 
 ### Requirement: Phase-1 oscillator frequency-reduction hook
-Hypnos phase 1 SHALL invoke `ModuleOscillator.set_frequency(scale)` across all
+The sleep module's phase 1 SHALL invoke `ModuleOscillator.set_frequency(scale)` across all
 active modules. Before `oscillatory-layer` ships the call SHALL be a no-op;
 once `oscillatory-layer` is present modules SHALL slow their LIF oscillators
 during the maintenance cycle.
@@ -34,7 +34,7 @@ during the maintenance cycle.
   factor
 
 ### Requirement: Deep consolidation with global activation downscaling
-Hypnos phase 2 SHALL apply global activation downscaling to memory (scaling all
+The sleep module's phase 2 SHALL apply global activation downscaling to memory (scaling all
 activation weights by `downscale_factor` while preserving relative ordering) and
 SHALL open a replay window during which external perception is suspended. The
 `mnemos.replay` re-injection SHALL be driven within that window; before
@@ -51,10 +51,10 @@ SHALL open a replay window during which external perception is suspended. The
   restored afterward
 
 ### Requirement: Fatigue reset in phase 4
-Hypnos phase 4 SHALL reset Soma's fatigue accumulator to its baseline after
+The sleep module's phase 4 SHALL reset the interoception module's fatigue accumulator to its baseline after
 completing the affective-reset step.
 
 #### Scenario: Fatigue resets after maintenance
 - **WHEN** a maintenance cycle completes phase 4
-- **THEN** Soma's fatigue accumulator is at its baseline
+- **THEN** the interoception module's fatigue accumulator is at its baseline
 

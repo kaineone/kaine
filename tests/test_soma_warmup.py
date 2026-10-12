@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for Soma's developmental cold-start warm-up gate.
+"""Tests for the interoception module's developmental cold-start warm-up gate.
 
 The warm-up (soma-coldstart-regulation-warmup) gates ONLY the action path —
 the reduce_rate/shed_module/request_maintenance regulation advisories and the
@@ -10,7 +10,7 @@ host substrate baseline. It NEVER alters the published prediction-error signal,
 and any concurrent hard-threshold breach overrides it unconditionally.
 
 The forward model is swapped for a deterministic fake so prediction error,
-adaptation-sample count, and Hypnos-suspension are all controllable without a
+adaptation-sample count, and sleep-suspension are all controllable without a
 real CfC. Construction still builds the real model, so torch is required.
 """
 from __future__ import annotations

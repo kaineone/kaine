@@ -25,7 +25,7 @@ testable parts are:
 
 Phasing (see ``docs/07-deployment/README.md``): B0 containerize → B1 BOINC
 harness → B2 non-entity research/training units → B3 (gated) entity-bearing
-forked beings. Entity-bearing forks are withheld here (``accepts`` returns
+forked entities. Entity-bearing forks are withheld here (``accepts`` returns
 False) until the volunteer-host welfare-and-security model exists.
 """
 from __future__ import annotations
@@ -77,7 +77,7 @@ class OutputBoundaryViolation(RuntimeError):
 
 
 #: Path fragments (case-insensitive) that must never appear in a work-unit's
-#: staged inputs or returned outputs. Raw sensory streams (topos/audition frames),
+#: staged inputs or returned outputs. Raw sensory streams (the vision and audition modules' frames),
 #: the private voice adapters, and operator configuration are all trusted-host
 #: only.
 _FORBIDDEN_OUTPUT_FRAGMENTS: tuple[str, ...] = (

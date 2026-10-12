@@ -6,10 +6,10 @@
 Covers findings:
   H2 — thymos.emotion carries norm_compatibility_available=False
   H3 — audition.emotion carries degraded=True when model absent
-  L2 — empatheia skips fold on degraded emotion events
-  M3 — thymos PassiveDecay no-op is visible (first-use debug log)
+  L2 — the social cognition module skips fold on degraded emotion events
+  M3 — the affect module PassiveDecay no-op is visible (first-use debug log)
   M4 — thymos.emotion carries goal_significance_method; no-goals guard
-  M7 — mnemos recall surfaces StorageError instead of fake empty result
+  M7 — the episodic memory module recall surfaces StorageError instead of fake empty result
 """
 from __future__ import annotations
 
@@ -300,7 +300,7 @@ async def test_audition_emotion_no_degraded_flag_when_model_runs(bus: AsyncBus):
 
 
 # ---------------------------------------------------------------------------
-# L2 — empatheia skips fold on degraded emotion events
+# L2 — social cognition skips fold on degraded emotion events
 # ---------------------------------------------------------------------------
 
 
@@ -332,7 +332,7 @@ def _emotion_event(
 
 @pytest.mark.asyncio
 async def test_empatheia_skips_degraded_emotion_fold(bus: AsyncBus):
-    """Empatheia must not fold interaction when emotion event is degraded."""
+    """The social cognition module must not fold interaction when emotion event is degraded."""
     store = InMemoryAgentStore()
     emp = Empatheia(bus, store=store)
     await emp.initialize()
@@ -351,7 +351,7 @@ async def test_empatheia_skips_degraded_emotion_fold(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_empatheia_folds_real_emotion_event(bus: AsyncBus):
-    """Empatheia must still fold a non-degraded emotion event."""
+    """The social cognition module must still fold a non-degraded emotion event."""
     store = InMemoryAgentStore()
     emp = Empatheia(bus, store=store)
     await emp.initialize()
@@ -368,7 +368,7 @@ async def test_empatheia_folds_real_emotion_event(bus: AsyncBus):
 
 
 # ---------------------------------------------------------------------------
-# M7 — mnemos recall surfaces StorageError (not fake empty result)
+# M7 — episodic memory recall surfaces StorageError (not fake empty result)
 # ---------------------------------------------------------------------------
 
 

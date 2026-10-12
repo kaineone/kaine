@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for the Nexus caretaker acknowledge router."""
+"""Tests for the dashboard caretaker acknowledge router."""
 
 from __future__ import annotations
 

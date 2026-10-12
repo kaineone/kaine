@@ -7,7 +7,7 @@ Reproducible stimulus for research runs: a bit-identical seeded tier and a sha25
 
 The system SHALL provide a deterministic perceptual feed, selected via a single
 shared `[perception_feed].mode`, that supplies a reproducible, copyright-free
-stimulus stream to **both** the Topos vision surface (via its `_VideoSource` seam)
+stimulus stream to **both** the vision surface (via its `_VideoSource` seam)
 and the Audition hearing surface (via its `_AudioStream` `stream_factory` seam).
 Two deterministic modes SHALL be available: a **seeded procedural** source (the
 in-repo default, needing no external media) and a **playlist** source over
@@ -25,7 +25,7 @@ for a research run.
 #### Scenario: A research run selects a deterministic mode
 
 - **WHEN** a research boot sets `mode = "seeded"` or `mode = "playlist"`
-- **THEN** Topos receives frames from the corresponding deterministic video source
+- **THEN** the vision module receives frames from the corresponding deterministic video source
   and Audition receives audio from the corresponding deterministic audio source,
   with no live human input in the loop
 
@@ -169,7 +169,7 @@ coherence via the shared start-clock (playlist) or via the shared seed and caden
 #### Scenario: Seeded surprises are cross-modal
 
 - **WHEN** the seeded feed fires a surprise on a cadence slot
-- **THEN** both a visual surprise (in the Topos stream) and an audio surprise (in
+- **THEN** both a visual surprise (in the vision stream) and an audio surprise (in
   the Audition stream) occur for that slot
 
 #### Scenario: One manifest pins both surfaces

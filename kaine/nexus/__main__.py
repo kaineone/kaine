@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Operator entrypoint: `python -m kaine.nexus` boots uvicorn against
-the configured Nexus app. NOT invoked by first-boot scripts.
+the configured dashboard app. NOT invoked by first-boot scripts.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ def make_metrics_snapshot(
     """Build the metrics_snapshot reader closure.
 
     The cycle process writes ``state/cycle/runtime.json`` on every tick (or every
-    1s when idle). Nexus reads it on each request so it shows live values without
+    1s when idle). The dashboard reads it on each request so it shows live values without
     an in-process cycle reference. The snapshot surfaces only non-content
     operational fields plus the run-identity / boot-mode metadata.
     """
@@ -122,7 +122,7 @@ def _warn_ignored_snapshot_retention(lifecycle_cfg: dict[str, Any]) -> None:
     """Warn when a config still sets the removed snapshot count cap.
 
     ``[lifecycle].max_snapshots_retained`` used to delete the oldest snapshot
-    directories. The fork root holds preserved beings, and infrastructure
+    directories. The fork root holds preserved entities, and infrastructure
     never deletes an entity, so the key is accepted and ignored.
     """
     raw = lifecycle_cfg.get("max_snapshots_retained")
@@ -214,7 +214,7 @@ def _load_security_state_encryption_config() -> dict[str, Any]:
 
 
 async def _build():
-    # Install the process-wide data root for this Nexus process.
+    # Install the process-wide data root for this dashboard process.
     try:
         kaine_config = load_kaine_config()
     except Exception as exc:

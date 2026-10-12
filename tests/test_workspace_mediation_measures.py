@@ -162,7 +162,7 @@ def test_broadcast_context_adopts_pooled_snapshot():
 
 
 def test_broadcast_context_rejects_thresholded_snapshot():
-    """A Syneidesis-style snapshot below its own access threshold is not adopted."""
+    """A workspace-style snapshot below its own access threshold is not adopted."""
     event = Event(
         source="soma",
         type="soma.report",

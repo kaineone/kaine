@@ -6,7 +6,7 @@ Voice-alignment training runs outside the cycle's process, in a subprocess or a 
 ## Requirements
 
 ### Requirement: Out-of-process voice-alignment trainer
-The Hypnos voice-alignment consolidation phase SHALL be able to run its
+The sleep module's voice-alignment consolidation phase SHALL be able to run its
 DPO/QLoRA training in a separate, operator-configured Python environment as an
 isolated subprocess, so the entity-runtime interpreter is never coupled to the
 trainer's torch/CUDA stack. The trainer interpreter SHALL be configurable
@@ -33,7 +33,7 @@ gates SHALL apply to the returned adapter unchanged.
 
 The system SHALL allow organ-dependent cognition to degrade gracefully while the
 organ is unloaded for the voice-alignment training window. Because the window
-falls inside sleep — when the entity is not expected to speak — Lingua generation
+falls inside sleep — when the entity is not expected to speak — the language module's generation
 requests SHALL be deferred (resolved as a "resting" no-op or queued) rather than
 raising, and the A/B-divergence evaluation arm SHALL skip its samples for the
 window, logged as skipped (not failed). Consumers SHALL resume normally once the
@@ -41,7 +41,7 @@ organ is reloaded.
 
 #### Scenario: Generation during the window defers cleanly
 
-- **WHEN** Lingua receives a generation request while the organ is unloaded for
+- **WHEN** the language module receives a generation request while the organ is unloaded for
   training
 - **THEN** the request resolves as a resting/deferred no-op and does not raise
 

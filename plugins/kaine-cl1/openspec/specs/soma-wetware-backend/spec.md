@@ -1,15 +1,15 @@
 # soma-wetware-backend Specification
 
 ## Purpose
-Soma's interoceptive forward model with the substrate in place of its frozen reservoir and a silicon readout, so prediction error keeps its usual units.
+Interoception's interoceptive forward model with the substrate in place of its frozen reservoir and a silicon readout, so prediction error keeps its usual units.
 
 ## Requirements
 
-### Requirement: Soma runs its interoceptive forward model on the substrate
-When the plugin configuration sets `soma = "cl1"` and gives Soma a channel territory, kaine SHALL construct stock Soma with a `WetwareInteroceptiveModel` injected through the `soma.forward_model` seam. Soma's name, bus subscriptions and `soma.out` event shapes SHALL be unchanged. Silicon SHALL remain the default when the key is absent or `"silicon"`.
+### Requirement: Interoception runs its interoceptive forward model on the substrate
+When the plugin configuration sets `soma = "cl1"` and gives the interoception module a channel territory, kaine SHALL construct the stock interoception module with a `WetwareInteroceptiveModel` injected through the `soma.forward_model` seam. The interoception module's name, bus subscriptions and `soma.out` event shapes SHALL be unchanged. Silicon SHALL remain the default when the key is absent or `"silicon"`.
 
 #### Scenario: Event contract preserved
-- **WHEN** Soma runs with `soma = "cl1"`
+- **WHEN** the interoception module runs with `soma = "cl1"`
 - **THEN** its `soma.out` events have the same types and payload keys as under the silicon model
 
 ### Requirement: Prediction error keeps the silicon semantics
@@ -22,7 +22,7 @@ Each `step(feature)` SHALL return the L2 distance between `feature` and the pred
 ### Requirement: Adaptation suspends during offline cycles
 While `suspended` is true the model SHALL NOT change its readout weights and `adaptation_steps` SHALL NOT advance; after `suspended` returns to false, adaptation SHALL resume.
 
-#### Scenario: Hypnos suspends adaptation
+#### Scenario: Sleep suspends adaptation
 - **WHEN** `suspended` is set true for five steps and then false for five steps
 - **THEN** the readout weights and `adaptation_steps` are unchanged across the suspended steps and advance afterwards
 

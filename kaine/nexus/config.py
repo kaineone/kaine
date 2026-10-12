@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 
 class NexusConfigError(RuntimeError):
-    """Nexus configuration is unsafe or invalid and the server must not start."""
+    """The dashboard configuration is unsafe or invalid and the server must not start."""
 
 
 @dataclass(frozen=True)

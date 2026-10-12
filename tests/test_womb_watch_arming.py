@@ -168,10 +168,10 @@ def test_arm_timeout_zero_raises(tmp_path):
 
 def test_boot_holds_for_the_womb_before_any_module_exists() -> None:
     # maturation-gate-liveness 2.1: a gestating entity is never spawned without
-    # a ready womb. The boot cannot run in tests (it boots an entity), so pin
+    # a ready stimulus source. The boot cannot run in tests (it boots an entity), so pin
     # the order of its calls across the boot phases: the hold comes after the
     # bus exists and before the registry is built and any module initializes;
-    # the locus pin and the womb-loss watcher follow.
+    # the locus pin and the stimulus-source-loss watcher follow.
     from tests._boot_sequence import first_index
 
     bus_created = first_index("AsyncBus")

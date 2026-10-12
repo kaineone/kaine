@@ -133,7 +133,7 @@ def test_own_speech_is_not_reported_and_clears_guard():
     p(_snap([("e1", "soma", 0.9)]))  # arms speak guard
     clk.t = 100.0
     # The entity's own external speech becoming conscious clears the guard and is
-    # not itself reported (source lingua / type external_speech).
+    # not itself reported (source language module / type external_speech).
     own = WorkspaceSnapshot(
         tick_index=2,
         selected_events=[("s1", _ev("lingua", OWN_EXTERNAL_SPEECH_TYPE))],
@@ -207,7 +207,7 @@ def test_below_interrupt_reportworthy_does_not_preempt():
 def test_same_content_does_not_interrupt():
     clk = _Clock()
     p = _interrupting(clk)
-    assert _kinds(p(_snap([("e1", "soma", 0.7)]))) == [SPEAK]  # sig = soma
+    assert _kinds(p(_snap([("e1", "soma", 0.7)]))) == [SPEAK]  # sig = interoception
     # Same content signature crosses the interrupt bar → do not interrupt to say
     # the same thing (novelty guard holds).
     second = p(_snap([("e2", "soma", 0.95)]))

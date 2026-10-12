@@ -201,7 +201,7 @@ def test_shutdown_always_runs(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_escalation_exit_code(
     monkeypatch: pytest.MonkeyPatch, escalated: bool, expected: int
 ) -> None:
-    """Escalated spot returns 70; otherwise the runner returns 0."""
+    """Escalated supervisor returns 70; otherwise the runner returns 0."""
     shutdown_calls: list[cyc.BootContext] = []
 
     async def set_spot(ctx: cyc.BootContext) -> None:
@@ -247,7 +247,7 @@ def test_phase_exception_skips_shutdown(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_boot_context_repr_hides_the_intent_secret() -> None:
-    """The context holds the Praxis intent secret, so its repr shows no field."""
+    """The context holds the effectors module's intent secret, so its repr shows no field."""
     ctx = cyc.BootContext(kaine_config={})
     ctx.intent_secret = b"\x01secret-bytes\x02"
     assert "secret-bytes" not in repr(ctx)

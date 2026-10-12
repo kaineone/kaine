@@ -19,7 +19,7 @@ inference; the organ server SHALL NOT be used for decision-model queries.
 
 #### Scenario: Organ inference uses the OpenAI endpoint
 
-- **WHEN** Lingua issues a generation request
+- **WHEN** the language module issues a generation request
 - **THEN** it POSTs to the configured server's `/v1/chat/completions`
 - **AND** it issues no request to an Ollama-native `/api/*` endpoint
 

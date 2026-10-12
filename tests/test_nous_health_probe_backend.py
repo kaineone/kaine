@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Backend routing tests for the Nous health probe."""
+"""Backend routing tests for the planning health probe."""
 
 from __future__ import annotations
 

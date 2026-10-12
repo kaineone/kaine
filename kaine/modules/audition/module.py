@@ -92,7 +92,7 @@ class Audition(BaseModule):
         # the precise mirror of Topos.source_factory; None = the real mic.
         stream_factory: Optional[Callable[..., Any]] = None,
         # Self-hearing suppression. Shared gate injected in build_registry; while
-        # vox is playing the entity's own voice, captured utterances are
+        # the vocal module is playing the entity's own voice, captured utterances are
         # dropped so the entity does not transcribe itself. None = no gate.
         speaking_gate: Optional["SpeakingGate"] = None,
         # Forward model knobs (disabled by default — purely additive).
@@ -125,7 +125,7 @@ class Audition(BaseModule):
         # RELATIVE to the module's own rolling baseline of change scores (see
         # acoustic_change_alert_factor); this floor only prevents a large ratio over
         # a near-silent/steady stream (tiny mean) from firing on noise. Mirrors the
-        # Topos change-alert treatment (perception-drives-salience).
+        # the vision module change-alert treatment (perception-drives-salience).
         acoustic_change_alert_threshold: float = 0.35,
         # Relative alert multiplier: an acoustic change alerts when it reaches
         # acoustic_change_alert_factor times the rolling-window mean, matching the
@@ -174,7 +174,7 @@ class Audition(BaseModule):
             self._live_mic = live_microphone or self._build_default_live_mic(live_mic_config)
 
         # Forward model — always instantiated (cheap, CPU-only MLP). Unlike
-        # Chronos/Topos there is deliberately no `forward_prediction` toggle:
+        # the sequence and vision modules, there is deliberately no `forward_prediction` toggle:
         # prediction error only ever *weights* salience here, never gates
         # transcription/emotion output, so it is safe to leave always-on.
         self._forward_model = AuditoryForwardModel(
@@ -219,13 +219,13 @@ class Audition(BaseModule):
                 auditory_buffer_size=int(auditory_buffer_size),
                 context_dim=CONTEXT_DIM,
             )
-        # Arousal seam (wired at boot, like the topos-arousal / affect seams): a
-        # zero-arg callable returning the current Thymos arousal in [0, 1] that
+        # Arousal seam (wired at boot, like the vision and affect modules' arousal seams): a
+        # zero-arg callable returning the current affect module's arousal in [0, 1] that
         # sizes the auditory attentional window. Audition never imports the
         # workspace; None → widest window.
         self._arousal_provider: Optional[Callable[[], float]] = None
 
-        # Hypnos sleep suspension state.
+        # sleep suspension state.
         self._in_hypnos: bool = False
         self._hypnos_cursor: str = "$"
         self._clock = entity_clock or EntityClock()
@@ -263,10 +263,10 @@ class Audition(BaseModule):
         return self._general_audition
 
     def set_arousal_provider(self, provider: Optional[Callable[[], float]]) -> None:
-        """Inject the Thymos arousal channel that sizes the auditory window.
+        """Inject the affect module's arousal channel that sizes the auditory window.
 
         Zero-arg callable returning arousal in [0, 1]. Distinct affective→auditory
-        coupling (Easterbrook), mirroring the topos-arousal seam.
+        coupling (Easterbrook), mirroring the vision module's arousal seam.
         """
         self._arousal_provider = provider
 
@@ -315,7 +315,7 @@ class Audition(BaseModule):
         context_gain: Optional[float] = None
         null_prediction_error: Optional[float] = None
         mean_prediction_error: Optional[float] = None
-        # Pause adaptation during Hypnos sleep, mirroring Topos.
+        # Pause adaptation during sleep, mirroring the vision module.
         self._acoustic_forward_model.suspended = self._in_hypnos
         ctx = null = None
         scored_stamp = self._prediction_stamp
@@ -335,7 +335,7 @@ class Audition(BaseModule):
         # none, nor has the first reading after a skip (paper A.2).
         if getattr(self._acoustic_forward_model, "last_error_defined", True):
             self._acoustic_errors.append(prediction_error)
-        # Normalise the error against its rolling mean (Chronos/Topos convention):
+        # Normalise the error against its rolling mean (the sequence and vision modules' convention):
         # steady, predictable sound stays low-salience even at non-zero error.
         mean_err = (
             sum(self._acoustic_errors) / len(self._acoustic_errors)
@@ -395,7 +395,7 @@ class Audition(BaseModule):
         energy_db = await asyncio.to_thread(energy_dbfs, attended_bytes)
 
         # A report without a defined error publishes none, so consumers such as
-        # Thymos do not pool a made-up 0.
+        # the affect module do not pool a made-up 0.
         published_error: Optional[float] = (
             None
             if skipped or not getattr(self._acoustic_forward_model, "last_error_defined", True)
@@ -429,12 +429,12 @@ class Audition(BaseModule):
             "attended_window": window,
             "attended_seconds": attended_seconds,
             # Alert-level flag (perception-drives-salience task 4.2): lets the
-            # Nexus perception panel count stimulus-driven acoustic events.
+            # the dashboard perception panel count stimulus-driven acoustic events.
             "alert": alert,
         }
         # Playlist provenance (playlist-realtime-av-sync): stamp the CONTENT-FREE
         # identity of the item being heard (basename + manifest order) — the same
-        # keys Topos stamps on topos.report — so picture and sound are legibly on
+        # keys the vision module stamps on topos.report — so picture and sound are legibly on
         # the same item off the bus. Absent for the real mic and seeded feed.
         if item is not None:
             payload["item"] = item.title
@@ -563,7 +563,7 @@ class Audition(BaseModule):
                 live_mean_error,
                 entity_time_s=entity_time_s,
                 # Wakefulness as it was at the report: the forward model is suspended
-                # exactly while Hypnos holds the processor asleep.
+                # exactly while the sleep module holds the processor asleep.
                 awake=not suspended,
                 suspended=suspended,
             )
@@ -616,7 +616,7 @@ class Audition(BaseModule):
 
     async def initialize(self) -> None:
         await super().initialize()
-        # Seed the hypnos cursor from the stream tail before starting the loop,
+        # Seed the sleep module's cursor from the stream tail before starting the loop,
         # otherwise a literal "$" under a non-blocking XREAD never advances.
         self._hypnos_cursor = await self._bus.last_entry_id(self._HYPNOS_STREAM)
         self._tasks.append(
@@ -668,7 +668,7 @@ class Audition(BaseModule):
     def _build_default_live_mic(self, mic_config: Optional[LiveMicConfig]) -> LiveMicrophone:
         from kaine import perception_state
 
-        # Locus gate selection mirrors Topos: a wired deterministic stream_factory
+        # Locus gate selection mirrors the vision module: a wired deterministic stream_factory
         # IS the virtual world (seeded/playlist feed) and binds to the `virtual`
         # locus; the bare sounddevice path is the real mic and binds to
         # `physical`. Selecting the matching gate is what lets the configured
@@ -711,7 +711,7 @@ class Audition(BaseModule):
         events regardless of partial failure. Returns the results (or
         None on failure) for callers that need them directly.
 
-        Self-hearing guard: if vox is currently playing the entity's own
+        Self-hearing guard: if the vocal module is currently playing the entity's own
         voice (the shared speaking gate is open), drop this capture entirely so
         the entity never transcribes itself as a user utterance."""
         if self._speaking_gate is not None and self._speaking_gate.is_speaking():
@@ -772,7 +772,7 @@ class Audition(BaseModule):
             mean_energy=mean_energy,
         )
 
-        # Pause adaptation during Hypnos sleep, mirroring Topos.
+        # Pause adaptation during sleep, mirroring the vision module.
         self._forward_model.suspended = self._in_hypnos
         if getattr(self._forward_model, "context_dim", 0) > 0:
             ctx = self._context.vector()
@@ -993,7 +993,7 @@ class Audition(BaseModule):
             "classified": not degraded,
         }
         # Surface the degraded flag so downstream consumers (for example
-        # Empatheia) can tell that the emotion model did not actually run. The
+        # the social cognition module) can tell that the emotion model did not actually run. The
         # category and confidence values are placeholders, not a real
         # classification.
         if degraded:

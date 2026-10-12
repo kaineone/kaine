@@ -1,19 +1,19 @@
 ## MODIFIED Requirements
 
-### Requirement: Phase-3 associative replay with Phantasia scenarios
-Hypnos phase 3 SHALL replay traces from different memory periods in novel
-combinations, cue Phantasia for scenario extensions by publishing to
+### Requirement: Phase-3 associative replay with World model scenarios
+The sleep module's phase 3 SHALL replay traces from different memory periods in novel
+combinations, cue the world model module for scenario extensions by publishing to
 `phantasia.scenario`, and re-inject the resulting associations into the workspace.
-Before `phantasia-dreamerv3` is present, the Phantasia cue SHALL be a no-op stub.
+Before `phantasia-dreamerv3` is present, the world model module cue SHALL be a no-op stub.
 Cross-period selection SHALL draw on the short-term buffer, the traces phase 1
 of the same sleep consolidated, and the newest `cross_period_candidates`
 points of the persisted episodic collection, read without vectors through the
 storage backend's `recent_points()`, on every backend, with each trace counted
 once.
 
-#### Scenario: Associative phase cues Phantasia
-- **WHEN** phase 3 runs with Phantasia enabled
-- **THEN** Phantasia is cued and `phantasia.scenario` events are consumed and
+#### Scenario: Associative phase cues World model
+- **WHEN** phase 3 runs with the world model module enabled
+- **THEN** the world model module is cued and `phantasia.scenario` events are consumed and
   re-injected into the workspace
 
 #### Scenario: Cross-period traces are combined

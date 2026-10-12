@@ -8,13 +8,13 @@ Three passive instruments promoted to controlled, seeded, offline runners:
 - A/B divergence: a fixed (utterance, conditioning) battery through the production
   ``divergence_control`` seam with a deterministic echo client; WIN iff the meter
   has dynamic range (empty ⇒ ~0, conditioned ⇒ large);
-- memory coherence: a fixed battery of planted facts in a REAL in-memory Mnemos;
+- memory coherence: a fixed battery of planted facts in a REAL in-memory episodic memory module;
   WIN iff full-system retrieval beats the bare arm AND the advantage vanishes when
-  Mnemos is emptied AND a never-stored fact yields honest non-recall;
+  the episodic memory module is emptied AND a never-stored fact yields honest non-recall;
 - self-model accuracy: a fixed planted-signal/claim battery through the calibrated
-  Eidolon scorer; WIN iff the scorer reproduces every expected score.
+  self-model scorer; WIN iff the scorer reproduces every expected score.
 
-All offline: deterministic / echo clients + an in-memory Mnemos, no network,
+All offline: deterministic / echo clients + an in-memory episodic memory module, no network,
 no entity boot.
 """
 from __future__ import annotations
@@ -50,7 +50,7 @@ from kaine.evaluation.embeddings import HashEmbedder
 from kaine.experiment.verdict import Outcome
 
 
-# A real in-memory Mnemos builder, constructed HERE in the test so the import of
+# A real in-memory episodic memory module builder, constructed HERE in the test so the import of
 # kaine.modules.* lives in the test module, not the eval package (sidecar
 # boundary). Injected into the memory runner via mnemos_builder.
 async def _build_real_mnemos():
@@ -157,7 +157,7 @@ async def test_memory_coherence_emits_win_with_retrieval_advantage():
 
 @pytest.mark.asyncio
 async def test_memory_coherence_advantage_is_retrieval_vanishes_on_empty():
-    """The SAME client against an EMPTIED Mnemos cannot repeat the planted facts.
+    """The SAME client against an EMPTIED episodic memory module cannot repeat the planted facts.
     (spec scenario: "The memory runner's advantage is retrieval")"""
     result = await run_memory_coherence(mnemos_builder=_build_real_mnemos)
     # Every emptied-store case is honest non-recall, scored 0 — advantage gone.
@@ -310,8 +310,8 @@ async def test_all_runners_are_offline_no_network(monkeypatch):
 
 def test_runner_modules_have_no_top_level_kaine_modules_import():
     """The runner modules must not import kaine.modules at top level (the sidecar
-    convention): the memory runner's real-Mnemos import is lazy / function-local
-    inside ``_default_mnemos_builder``, and the real Mnemos is otherwise injected.
+    convention): the memory runner's import of the real episodic memory module is lazy / function-local
+    inside ``_default_mnemos_builder``, and the real episodic memory module is otherwise injected.
 
     A source-level check (not an import-time sys.modules check), because the
     evaluation PACKAGE __init__ already eagerly imports the wider package tree for

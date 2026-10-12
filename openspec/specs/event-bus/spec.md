@@ -34,7 +34,7 @@ publish time and SHALL NOT enter the bus.
 ### Requirement: Module output streams
 Each module SHALL publish to a stream named `<module>.out` where
 `<module>` is the module's registered name. The reserved stream
-`workspace.broadcast` SHALL be owned exclusively by Syneidesis and
+`workspace.broadcast` SHALL be owned exclusively by the workspace and
 written to by no other module.
 
 #### Scenario: Module name maps to stream
@@ -43,7 +43,7 @@ written to by no other module.
 - **THEN** the event is appended to the Redis stream `chronos.out` and
   not to any other stream
 
-#### Scenario: Non-Syneidesis write to workspace.broadcast rejected
+#### Scenario: Non-Workspace write to workspace.broadcast rejected
 - **WHEN** a module other than `syneidesis` calls `bus.publish_workspace`
 - **THEN** the call raises `ReservedStreamError`
 
@@ -251,7 +251,7 @@ Every consumer that keeps a cursor on a bus stream SHALL read with `read_entries
 - **THEN** the consumer handles the decodable event
 
 #### Scenario: A skipped entry is not an interaction
-- **WHEN** Chronos reads a batch of user-input entries none of which decode
+- **WHEN** the sequence module reads a batch of user-input entries none of which decode
 - **THEN** its cursor advances past them
 - **AND** its time since the last interaction is not reset
 
@@ -298,6 +298,6 @@ The bus SHALL refuse a non-blocking stream read whose cursor is `"$"`, raising a
 - **THEN** it raises an error naming the stream
 
 #### Scenario: Sleep reaches a module that follows hypnos.out
-- **WHEN** Chronos, Topos or Audition has initialized and Hypnos then publishes `hypnos.sleep.started`
+- **WHEN** the sequence module, the vision module, or the audition module has initialized and the sleep module then publishes `hypnos.sleep.started`
 - **THEN** that module suspends its forward-model adaptation
 - **AND** it resumes after `hypnos.sleep.completed`

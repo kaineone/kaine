@@ -1,7 +1,7 @@
-# mnemos Specification
+# episodic memory Specification
 
 ## Purpose
-Mnemos is KAINE's episodic memory module. This capability covers its KAINE-owned, authenticated Qdrant store and collections, the store and recall API with its shared text embedder, automatic storage of workspace broadcasts, consolidation from short-term to episodic memory, and spontaneous cue-based recall in the live loop.
+The episodic memory module stores what KAINE experiences. This capability covers its KAINE-owned, authenticated Qdrant store and collections, the store and recall API with its shared text embedder, automatic storage of workspace broadcasts, consolidation from short-term to episodic memory, and spontaneous cue-based recall in the live loop.
 
 ## Requirements
 
@@ -32,7 +32,7 @@ section, recreate the container, and confirm `/readyz` returns 200.
   `http://127.0.0.1:6533/readyz` with the api-key header returns 200
 
 ### Requirement: Four CLS-separated collections
-Mnemos SHALL manage four memory stores with the build-prompt-prescribed
+The episodic memory module SHALL manage four memory stores with the build-prompt-prescribed
 names: `short_term` (in-process buffer, not persisted), `episodic`,
 `semantic`, and `procedural` (persisted in Qdrant). The collection
 prefix `mnemos_` SHALL be configurable.
@@ -43,12 +43,12 @@ prefix `mnemos_` SHALL be configurable.
   `mnemos_semantic`, `mnemos_procedural` exist and accept points
 
 #### Scenario: Short-term is in-memory only
-- **WHEN** Mnemos is shut down and reinitialized
+- **WHEN** the episodic memory module is shut down and reinitialized
 - **THEN** the short-term buffer is empty (no Qdrant collection by
   that name exists)
 
 ### Requirement: Store and recall API
-Mnemos SHALL expose `store(text, payload, affect=None, collection="short_term")` that attaches `payload` and `affect` metadata and writes to the named store. For `short_term` the text SHALL be stored without embedding; for the other collections it SHALL be embedded at store time. Mnemos SHALL expose `recall(query_text, k=5, collection="episodic")` that embeds the query, scores the named store's entries by cosine similarity to it, returns up to `k` matches as `RecalledMemory` dataclasses, and, for collections other than `short_term`, invokes the configured `EmotionalRetriggerHook` with the affect summary of those matches. For `short_term`, each entry's embedding SHALL be computed at most once per embedding space, held in memory only, and never exported or persisted; equal scores SHALL rank the more recent entry first.
+The episodic memory module SHALL expose `store(text, payload, affect=None, collection="short_term")` that attaches `payload` and `affect` metadata and writes to the named store. For `short_term` the text SHALL be stored without embedding; for the other collections it SHALL be embedded at store time. The episodic memory module SHALL expose `recall(query_text, k=5, collection="episodic")` that embeds the query, scores the named store's entries by cosine similarity to it, returns up to `k` matches as `RecalledMemory` dataclasses, and, for collections other than `short_term`, invokes the configured `EmotionalRetriggerHook` with the affect summary of those matches. For `short_term`, each entry's embedding SHALL be computed at most once per embedding space, held in memory only, and never exported or persisted; equal scores SHALL rank the more recent entry first.
 
 #### Scenario: Store then recall returns the stored entry
 - **WHEN** `store("the cat sat on the mat", payload={...})` is awaited and then `recall("cat on mat", k=1)` is awaited against the same collection
@@ -67,7 +67,7 @@ Mnemos SHALL expose `store(text, payload, affect=None, collection="short_term")`
 - **THEN** the exported short-term entries carry their text, payload, affect and timestamp and no embedding
 
 ### Requirement: Short-term consolidates into episodic at capacity
-Mnemos SHALL evict the oldest short-term entry into the episodic
+The episodic memory module SHALL evict the oldest short-term entry into the episodic
 collection on the next `store` call whenever the short-term buffer is
 at its configured capacity (default 128). The original payload,
 affect, and timestamp SHALL be preserved across the move.
@@ -79,10 +79,10 @@ affect, and timestamp SHALL be preserved across the move.
   episodic collection and the short-term buffer's size is 128
 
 ### Requirement: Workspace broadcasts auto-store into short-term
-Mnemos SHALL produce exactly one `store` call into the short-term buffer for every `workspace.broadcast` it observes through its base module workspace consumer. The stored text SHALL be a deterministic serialization of the snapshot's selected events, naming each event's source and type with its payload after the privacy filter's vector rule has removed every vector field and every numeric list of 16 or more items. The serialization SHALL NOT include the tick index or bus entry IDs; the tick index is kept in the stored payload.
+The episodic memory module SHALL produce exactly one `store` call into the short-term buffer for every `workspace.broadcast` it observes through its base module workspace consumer. The stored text SHALL be a deterministic serialization of the snapshot's selected events, naming each event's source and type with its payload after the privacy filter's vector rule has removed every vector field and every numeric list of 16 or more items. The serialization SHALL NOT include the tick index or bus entry IDs; the tick index is kept in the stored payload.
 
 #### Scenario: One broadcast in produces one short-term entry
-- **WHEN** Mnemos receives one workspace broadcast through its base module consumer with two selected events
+- **WHEN** the episodic memory module receives one workspace broadcast through its base module consumer with two selected events
 - **THEN** the short-term buffer's size increases by exactly 1
 
 #### Scenario: A foveated vision report stores no vectors
@@ -94,14 +94,14 @@ Each `recall` call SHALL publish a `mnemos.recall` event to `mnemos.out`
 containing `count`, `collection`, `query_length`, and the maximum
 affect intensity among the returned memories — but SHALL NOT include
 the memory contents or the raw query text. The privacy boundary from
-build prompt §8.3 applies here even pre-Nexus.
+build prompt §8.3 applies here even pre-dashboard.
 
 #### Scenario: Recall publishes count without contents
 - **WHEN** `recall(query, k=5)` returns 3 matched memories
 - **THEN** the published `mnemos.recall` event has `count == 3` and
   no fields containing the memory texts or the query string
 
-### Requirement: Default Mnemos config and disabled-by-default
+### Requirement: Default Episodic memory config and disabled-by-default
 The repository SHALL ship a `[mnemos]` block in `config/kaine.toml`
 with default values for `backend` (`qdrant`), `collection_prefix`,
 `short_term_capacity`, `recall_top_k`, `baseline_salience` and
@@ -109,7 +109,7 @@ with default values for `backend` (`qdrant`), `collection_prefix`,
 `model_id` and `device`. `[mnemos]` SHALL NOT accept `embedder_model_id`
 or `device`: boot SHALL reject either with an error naming the
 `[embedding]` key that replaces it. The `[modules].mnemos = false` flag
-SHALL keep first boot from auto-registering Mnemos.
+SHALL keep first boot from auto-registering the episodic memory module.
 
 #### Scenario: kaine.toml carries defaults
 - **WHEN** an operator inspects `config/kaine.toml`
@@ -121,11 +121,11 @@ SHALL keep first boot from auto-registering Mnemos.
 
 ### Requirement: Spontaneous cue-based recall in the live loop
 
-Mnemos SHALL perform cue-based recall in the live loop: on an experiential
+The episodic memory module SHALL perform cue-based recall in the live loop: on an experiential
 workspace broadcast that carries a meaningful cue, it derives a query from the
 conscious snapshot, calls `recall()`, and publishes the recalled memories as
 `mnemos.recall` events, so recalled context re-enters the workspace and reaches
-downstream consumers (e.g. Thymos). Recall SHALL occur before the snapshot is
+downstream consumers (e.g. the affect module). Recall SHALL occur before the snapshot is
 stored for that tick
 (so the cue retrieves prior memories, not the just-stored one). Recall SHALL be
 throttled by a cooldown so it does not fire on every tick, and SHALL be skipped
@@ -137,30 +137,30 @@ Storing the snapshot each experiential tick SHALL continue unchanged.
 
 - **WHEN** an experiential broadcast with a non-empty cue occurs and the recall
   cooldown has elapsed
-- **THEN** Mnemos calls recall and publishes a `mnemos.recall` event
+- **THEN** the episodic memory module calls recall and publishes a `mnemos.recall` event
 
 #### Scenario: Cooldown suppresses repeated recall
 
 - **WHEN** experiential broadcasts occur faster than the recall cooldown
-- **THEN** Mnemos recalls at most once per cooldown window
+- **THEN** the episodic memory module recalls at most once per cooldown window
 
 #### Scenario: No cue, no recall
 
 - **WHEN** a broadcast carries no meaningful cue
-- **THEN** Mnemos performs no recall
+- **THEN** the episodic memory module performs no recall
 
 #### Scenario: Recall is not inhibition-gated
 
 - **WHEN** a cued experiential broadcast is inhibited and the cooldown elapsed
-- **THEN** Mnemos still performs recall (recall is cognition, not action)
+- **THEN** the episodic memory module still performs recall (recall is cognition, not action)
 
 #### Scenario: Storing still happens every experiential tick
 
 - **WHEN** an experiential broadcast occurs
-- **THEN** Mnemos stores the snapshot as before, independent of whether recall
+- **THEN** the episodic memory module stores the snapshot as before, independent of whether recall
   fired
 
-### Requirement: Mnemos recall does not fabricate empty success on storage failure
+### Requirement: Episodic memory recall does not fabricate empty success on storage failure
 
 `QdrantStorage.search()` SHALL raise `StorageError` (not return `[]`) when
 the Qdrant backend operation fails.  `Mnemos.recall()` SHALL catch
@@ -177,7 +177,7 @@ normally (that is a valid empty result, not a storage failure).
 - **THEN** it raises `StorageError` with a descriptive message
 - **AND** does NOT return `[]`
 
-#### Scenario: Mnemos recall on StorageError
+#### Scenario: Episodic memory recall on StorageError
 
 - **WHEN** `Mnemos.recall()` encounters a `StorageError`
 - **THEN** it logs the error at `logging.ERROR` level
@@ -191,23 +191,23 @@ normally (that is a valid empty result, not a storage failure).
 - **THEN** `mnemos.recall` is published with real `count` and no `"error"` key
 
 ### Requirement: One shared text embedder with a torch-free default
-KAINE SHALL build a single text embedder per registry from the `[embedding]` configuration and SHALL give that one instance to Mnemos, Empatheia, Hypnos and the evaluation sidecar. The default backend SHALL be a NumPy implementation of the configured sentence-transformers model that needs no torch, sentence-transformers or transformers, and that matches the sentence-transformers backend to 1e-5 per component with identical token ids. The storage dimension SHALL come from the model's configuration.
+KAINE SHALL build a single text embedder per registry from the `[embedding]` configuration and SHALL give that one instance to the episodic memory module, the social cognition module, the sleep module and the evaluation sidecar. The default backend SHALL be a NumPy implementation of the configured sentence-transformers model that needs no torch, sentence-transformers or transformers, and that matches the sentence-transformers backend to 1e-5 per component with identical token ids. The storage dimension SHALL come from the model's configuration.
 
 #### Scenario: A host without torch
-- **WHEN** KAINE starts Mnemos with the default embedding backend where torch cannot be imported
-- **THEN** Mnemos loads the model from its files on disk, encodes text, and the extras check does not require the `memory` extra for it
+- **WHEN** KAINE starts the episodic memory module with the default embedding backend where torch cannot be imported
+- **THEN** the episodic memory module loads the model from its files on disk, encodes text, and the extras check does not require the `memory` extra for it
 
 #### Scenario: The same vectors on either backend
 - **WHEN** the same text is embedded by the NumPy and the sentence-transformers backends from the same model
 - **THEN** the vectors agree to 1e-5 in every component
 
 ### Requirement: A memory store is bound to its embedding space
-Every Mnemos store SHALL carry a stamp naming the embedding space its vectors belong to (model id, dimension, pooling and normalisation). Mnemos SHALL refuse to start on a store stamped with a different space than its embedder's, and SHALL never write vectors from two spaces into one store. A store with points but no stamp SHALL be treated as `sentence-transformers/all-MiniLM-L6-v2` when its dimension matches, stamped as such, and logged; otherwise Mnemos SHALL refuse it.
+Every episodic memory store SHALL carry a stamp naming the embedding space its vectors belong to (model id, dimension, pooling and normalisation). The episodic memory module SHALL refuse to start on a store stamped with a different space than its embedder's, and SHALL never write vectors from two spaces into one store. A store with points but no stamp SHALL be treated as `sentence-transformers/all-MiniLM-L6-v2` when its dimension matches, stamped as such, and logged; otherwise the episodic memory module SHALL refuse it.
 
 #### Scenario: A different model on an existing store
-- **WHEN** Mnemos starts with an embedder whose space differs from the store's stamp
+- **WHEN** the episodic memory module starts with an embedder whose space differs from the store's stamp
 - **THEN** it fails to start with an error naming both spaces, and the store is unchanged
 
 #### Scenario: A store from before stamping
-- **WHEN** Mnemos starts on a 384-dimension store with points and no stamp, using MiniLM-L6-v2
+- **WHEN** the episodic memory module starts on a 384-dimension store with points and no stamp, using MiniLM-L6-v2
 - **THEN** it stamps the store as MiniLM-L6-v2, logs that it did, and starts

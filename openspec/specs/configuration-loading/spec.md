@@ -76,7 +76,7 @@ The organ chat URL default, the model-server API key lookup and the free-disk fl
 - **WHEN** the source tree under `kaine/` is scanned
 - **THEN** the literal `11434` appears only in `kaine/net.py` and `kaine/defaults.py`
 
-### Requirement: Empatheia operator sources are checked when the config loads
+### Requirement: Social cognition operator sources are checked when the config loads
 Config loading SHALL refuse a `[empatheia].operator_sources` that is not a list of strings, naming the key, before the boot opens any resource.
 
 #### Scenario: A string instead of a list

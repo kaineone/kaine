@@ -319,7 +319,7 @@ async def test_adaptation_suspended_during_hypnos(bus: AsyncBus):
     # First tick to seed last_hidden
     await chronos.on_workspace(_empty_snapshot(tick=0))
     before_count = len(head.adapt_calls)
-    # Second tick during Hypnos — adapt should not be called
+    # Second tick during the sleep module — adapt should not be called
     await chronos.on_workspace(_empty_snapshot(tick=1))
     after_count = len(head.adapt_calls)
     assert after_count == before_count, "adapt() must not be called during Hypnos sleep"
@@ -330,7 +330,7 @@ async def test_serialize_deserialize_preserves_head_weights(bus: AsyncBus):
     """serialize() captures head weights; deserialize() restores them exactly."""
     from kaine.modules.chronos.network import ForwardPredictionHead
 
-    # Build a Chronos with a real ForwardPredictionHead and adapt it a bit
+    # Build the sequence module with a real ForwardPredictionHead and adapt it a bit
     network = FakeNetwork(units=4)
     head = ForwardPredictionHead(input_size=24, units=4, seed=7, lr=0.05)
     for _ in range(10):
@@ -347,7 +347,7 @@ async def test_serialize_deserialize_preserves_head_weights(bus: AsyncBus):
     state = chronos.serialize()
     assert "pred_head" in state
 
-    # Restore into a fresh Chronos with a new head
+    # Restore into a fresh sequence module with a new head
     fresh_head = ForwardPredictionHead(input_size=24, units=4, seed=99)
     fresh = Chronos(
         bus,

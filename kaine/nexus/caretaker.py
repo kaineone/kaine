@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nexus router for caretaker unattended-start acknowledgement.
+"""The dashboard router for caretaker unattended-start acknowledgement.
 
 Two routes under /diagnostics:
 
   GET  /diagnostics/caretaker.json  — current start/ack state
   POST /diagnostics/caretaker/ack    — operator acknowledges the start
 
-The cycle writes ``state/cycle/caretaker_start.json``; Nexus writes ONLY the
+The cycle writes ``state/cycle/caretaker_start.json``; the dashboard writes ONLY the
 acknowledgement record. Nothing here ever creates or modifies the start file.
 """
 

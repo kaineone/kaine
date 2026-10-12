@@ -23,11 +23,11 @@ the bracket is unnecessary (serve on one device, train on the other) and is
 SKIPPED — the bracket is a single-GPU accommodation, not a universal requirement.
 
 The window publishes its state through a small boundary-neutral STATE FILE
-(``state/hypnos/organ_window.json``) that organ-dependent consumers (Lingua's
+(``state/hypnos/organ_window.json``) that organ-dependent consumers (the language module's
 chat client, the A/B-divergence eval arm) read to learn the organ is "resting"
 and degrade gracefully — deferred/skipped, not crashed. This mirrors the written-
-record seam Hypnos already uses for the consolidation-divergence metric, so no
-consumer needs to import Hypnos.
+record seam the sleep module already uses for the consolidation-divergence metric, so no
+consumer needs to import the sleep module.
 """
 from __future__ import annotations
 
@@ -37,8 +37,8 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 # Boundary-neutral window-state seam (depends on neither core-runtime nor the
-# evaluation sidecar) so Lingua + the A/B eval arm read the same signal without
-# importing Hypnos. Re-exported here for the bracket's own use.
+# evaluation sidecar) so the language module + the A/B eval arm read the same signal without
+# importing the sleep module. Re-exported here for the bracket's own use.
 from kaine.organ_window_state import (
     ORGAN_WINDOW_STATE,
     PHASE_IDLE,
@@ -204,9 +204,9 @@ class OrganServerController:
         The cooperative preflight (report-only, never kills a foreign process)
         lives in ``kaine.cycle.preflight`` — a cycle-RUNTIME module a domain
         organ may NOT import (the modules→cycle boundary). So it is INJECTED as
-        ``preflight_fn`` by the cycle entrypoint that wires Hypnos; when absent
+        ``preflight_fn`` by the cycle entrypoint that wires the sleep module; when absent
         (e.g. a unit test or a host where preflight is off) we proceed. A short
-        device → reported by the injected preflight (it writes the Nexus
+        device → reported by the injected preflight (it writes the dashboard
         snapshot) and we return False so the caller does not thrash; the organ
         reload is still attempted (a working organ on wake is welfare-critical),
         but the operator has been told the device is tight.
@@ -263,7 +263,7 @@ async def run_with_organ_window(
     """Run ``train`` inside the on-device GPU window and return its result.
 
     ``train`` is the awaitable producing a
-    :class:`~kaine.modules.hypnos.voice_alignment.TrainingResult` (Hypnos passes
+    :class:`~kaine.modules.hypnos.voice_alignment.TrainingResult` (the sleep module passes
     a thunk around ``self._trainer.train(pairs, config)``). The bracket:
 
     1. SKIPS entirely when a second GPU has room to serve + train concurrently,

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Thymos affect → Chatterbox expressivity controls.
+"""The affect module's affect → Chatterbox expressivity controls.
 
 Pure function. Documented monotonicity:
   - higher arousal → strictly higher exaggeration
@@ -76,7 +76,7 @@ def affect_to_chatterbox(
     # Speed: 0.85 at valence=-1, 1.0 at valence=0, 1.15 at valence=+1.
     speed_factor = 1.0 + (spd_hi - 1.0) * valence  # symmetric since spd_lo + spd_hi - 2 = 0
 
-    # Apply baseline pulls so callers without Thymos still get sensible
+    # Apply baseline pulls so callers without the affect module still get sensible
     # defaults — the math above just keeps the bands monotonic in inputs.
     if state == DimensionalState():
         return ChatterboxParams(

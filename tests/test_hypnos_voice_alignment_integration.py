@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""End-to-end Hypnos voice-alignment integration.
+"""End-to-end sleep voice-alignment integration.
 
-Exercises the real in-process trainer script wired through Hypnos against
+Exercises the real in-process trainer script wired through the sleep module against
 the fake training stack. Asserts that the returned TrainingResult carries
 the fields the evaluation sidecar's voice_tracking observer consumes.
 """

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Gestation womb-pinning + honest lock attribution (`developmental-maturation-gate`).
+"""Developmental-phase stimulus-source pinning + honest lock attribution (`developmental-maturation-gate`).
 
-Exercises the `perception_state` touch point: a gestation-gate lock is logged as
+Exercises the `perception_state` touch point: a developmental-phase gate lock is logged as
 a developmental-gate action, not an operator lock. No entity is booted.
 """
 from __future__ import annotations
@@ -45,7 +45,7 @@ def test_write_desired_locus_preserves_attribution_when_omitted(tmp_path: Path) 
     assert d.locked_by == "gestation"
 
 
-# --- honest denial reason (W2.2, spec: self-switch refused during gestation) --
+# --- honest denial reason (W2.2, spec: self-switch refused during the developmental phase) --
 
 
 def _switch(locked_by: str):
@@ -74,7 +74,7 @@ def test_operator_lock_denial_unchanged() -> None:
 
 
 def test_self_switch_refused_while_gestating() -> None:
-    # The load-bearing behaviour: while the womb lock is held the entity cannot
-    # leave the womb, regardless of dwell/policy.
+    # The load-bearing behaviour: while the stimulus source lock is held the entity cannot
+    # leave the stimulus source, regardless of dwell/policy.
     allowed, _ = _switch("gestation")
     assert allowed is False

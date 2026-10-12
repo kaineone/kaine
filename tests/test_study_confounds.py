@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for the study-confounds change: audio channel labels, channel-aware
-Empatheia/Volition attribution, and Vox dormancy in the womb."""
+social cognition and action selection attribution, and vocal dormancy in the stimulus source."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -181,7 +181,7 @@ async def test_make_audition_sets_source_label_per_feed(bus, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 1.2 Empatheia attribution by channel
+# 1.2 Social cognition attribution by channel
 # ---------------------------------------------------------------------------
 
 
@@ -254,7 +254,7 @@ async def test_empatheia_custom_operator_sources(bus):
 
 
 # ---------------------------------------------------------------------------
-# 1.3 Volition answers only operator-channel speech
+# 1.3 Action selection answers only operator-channel speech
 # ---------------------------------------------------------------------------
 
 
@@ -299,7 +299,7 @@ def test_drive_biased_policy_forwards_operator_sources():
 
 
 # ---------------------------------------------------------------------------
-# 1.4 Vox is dormant in the womb
+# 1.4 Vocal is dormant in the stimulus source
 # ---------------------------------------------------------------------------
 
 

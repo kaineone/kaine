@@ -234,7 +234,7 @@ def test_encryption_step_decline_keeps_existing_enabled_true() -> None:
 
 def test_setup_main_imports_without_web_extras(monkeypatch) -> None:
     # A None entry in sys.modules makes the import raise ImportError, as on an
-    # install without the nexus extra. monkeypatch restores every entry after
+    # install without the dashboard extra. monkeypatch restores every entry after
     # the test, so nothing leaks into later tests on the same worker.
     for name in ("fastapi", "uvicorn"):
         monkeypatch.setitem(sys.modules, name, None)

@@ -5,7 +5,7 @@
 
 Covers the two OPTIONAL local-only research recorders:
 - ExternalUtteranceLog: external speech only, no inner speech, no bystander input.
-- NexusRecord: the exact filtered payload the Nexus bridge displays.
+- NexusRecord: the exact filtered payload the dashboard bridge displays.
 
 Also verifies config gating, defaults, and export-allowlist confinement.
 """

@@ -126,7 +126,7 @@ async def test_vox_initialize_degrades_on_warm_up_failure(bus: AsyncBus, tmp_pat
         for f in kaine.backend_state.backend_failures()
     )
 
-    # A muted Vox does not raise: it returns empty audio (the failure event is
+    # A muted vocal module does not raise: it returns empty audio (the failure event is
     # rate-limited and published at baseline salience; see the test below).
     result = await vox.synthesize_text("hello")
     assert result.bytes_produced == 0

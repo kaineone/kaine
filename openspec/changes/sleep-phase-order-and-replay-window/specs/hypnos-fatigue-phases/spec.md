@@ -6,10 +6,10 @@
 ## MODIFIED Requirements
 
 ### Requirement: Deep consolidation with global activation downscaling
-Hypnos phase 2 SHALL first run memory replay and then apply global activation
+The sleep module's phase 2 SHALL first run memory replay and then apply global activation
 downscaling to memory (scaling all activation weights by `downscale_factor`
 while preserving relative ordering). Replay SHALL run inside a replay window
-that Hypnos opens through Mnemos immediately before calling `replay_now()` and
+that the sleep module opens through the episodic memory module immediately before calling `replay_now()` and
 closes once replay returns or raises. External perception SHALL be suspended
 while the window is open.
 
@@ -19,7 +19,7 @@ while the window is open.
   unchanged
 
 #### Scenario: Replay precedes downscaling
-- **WHEN** phase 2 runs with Mnemos present
+- **WHEN** phase 2 runs with the episodic memory module present
 - **THEN** `replay_now()` is called before `downscale_activations()`
 
 #### Scenario: Perception is suspended during replay window
@@ -28,10 +28,10 @@ while the window is open.
   restored afterward
 
 ### Requirement: Fatigue reset after the affective reset
-Hypnos SHALL reset Soma's fatigue accumulator to its baseline after the
+The sleep module SHALL reset the interoception module's fatigue accumulator to its baseline after the
 affective reset that ends the sleep, through the `hypnos.sleep.completed`
 event that follows it.
 
 #### Scenario: Fatigue resets after maintenance
 - **WHEN** a maintenance cycle completes its affective reset
-- **THEN** Soma's fatigue accumulator is at its baseline
+- **THEN** the interoception module's fatigue accumulator is at its baseline

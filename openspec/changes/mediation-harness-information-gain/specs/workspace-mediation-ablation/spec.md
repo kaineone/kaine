@@ -16,7 +16,7 @@
 **Reason**: Cross-module error coupling, coalition-source entropy and output divergence are retired; the measure is the cross-module broadcast information gain.
 **Migration**: See "Development harness measures information gain".
 
-### Requirement: Soma-salience coverage for measure power
+### Requirement: Interoception-salience coverage for measure power
 **Reason**: Tied to the retired coupling measure.
 **Migration**: See "Development harness verdict".
 
@@ -31,7 +31,7 @@
 ## ADDED Requirements
 
 ### Requirement: Offline development harness of the workspace-mediation test
-The system SHALL provide an offline development harness that exercises the pipeline of the workspace-mediation test on a reduced pair of real context-conditioned processors, Soma and Topos, in a workspace-on arm and a pooled arm only. Both arms SHALL use the same seeds, the same scripted stimulus and identically initialized modules. The harness SHALL be seeded and deterministic, SHALL NOT boot an entity or open a network connection, and SHALL state in its documentation and in every verdict that it is development tooling and does not test the thesis.
+The system SHALL provide an offline development harness that exercises the pipeline of the workspace-mediation test on a reduced pair of real context-conditioned processors, the interoception and vision modules, in a workspace-on arm and a pooled arm only. Both arms SHALL use the same seeds, the same scripted stimulus and identically initialized modules. The harness SHALL be seeded and deterministic, SHALL NOT boot an entity or open a network connection, and SHALL state in its documentation and in every verdict that it is development tooling and does not test the thesis.
 
 #### Scenario: Same seed reproduces the run
 - **WHEN** the harness runs twice with the same seed and stimulus
@@ -46,14 +46,14 @@ The harness SHALL read each processor's per-report broadcast information gain, t
 
 #### Scenario: Gain defined on the coupled battery
 - **WHEN** the harness runs the coupled battery past its initial learning period
-- **THEN** `IG_j` is defined for Soma and Topos in both arms and `dIG` is defined
+- **THEN** `IG_j` is defined for the interoception and vision modules in both arms and `dIG` is defined
 
 #### Scenario: Headline undefined when a processor has no included report
 - **WHEN** one processor has no included report in an arm
 - **THEN** that arm's headline is undefined
 
 ### Requirement: Pooled arm of the development harness
-In the pooled arm every candidate of a tick SHALL enter the context, weighted by its reported intensity, with no scoring, selection, access threshold or inhibition. In the workspace-on arm the coalition SHALL be selected by Syneidesis as built, and the context SHALL be formed from the members whose scores reach the access threshold.
+In the pooled arm every candidate of a tick SHALL enter the context, weighted by its reported intensity, with no scoring, selection, access threshold or inhibition. In the workspace-on arm the coalition SHALL be selected by the workspace as built, and the context SHALL be formed from the members whose scores reach the access threshold.
 
 #### Scenario: Pooled snapshot adopts every candidate
 - **WHEN** a pooled snapshot of a tick's candidates is delivered to a processor's broadcast context

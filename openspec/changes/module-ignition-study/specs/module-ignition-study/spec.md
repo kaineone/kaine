@@ -6,7 +6,7 @@ The study runner SHALL run the seed first, then branch 0, then the repeat, then 
 - every branch and the repeat start from the seed;
 - accumulate 1 starts from branch 0's preservation, and each later accumulate step from the previous accumulate step's preservation.
 
-The runner SHALL record for every step its line, step, module set, start bundle, resulting preservation, run id, exit code, outcome and recording paths. A step SHALL count as complete only when its preservation reports success: the end-of-programme preservation, or for the seed, the birth preservation.
+The runner SHALL record for every step its line, step, module set, start bundle, resulting preservation, run id, exit code, outcome and recording paths. A step SHALL count as complete only when its preservation reports success: the end-of-programme preservation, or for the seed, the maturation preservation.
 
 #### Scenario: A viewing completes
 - **WHEN** a viewing's process exits after its end-of-programme preservation reports success
@@ -18,8 +18,8 @@ The runner SHALL record for every step its line, step, module set, start bundle,
 - **THEN** it continues with the first incomplete step in the defined order
 - **AND** it never repeats a completed step
 
-### Requirement: Lines never share the being's state
-Each branch step, the repeat and the accumulate line SHALL each run from their own working directory, with their own memory collections and their own Empatheia collection. Every step SHALL start on an empty bus database that belongs to the study. The runner SHALL flush only the study's own database numbers, and SHALL refuse a plan whose database numbers include the operator's.
+### Requirement: Lines never share the entity's state
+Each branch step, the repeat and the accumulate line SHALL each run from their own working directory, with their own memory collections and their own social cognition module collection. Every step SHALL start on an empty bus database that belongs to the study. The runner SHALL flush only the study's own database numbers, and SHALL refuse a plan whose database numbers include the operator's.
 
 #### Scenario: Two lines
 - **WHEN** branch 1 and accumulate 1 have each run a viewing
@@ -38,13 +38,13 @@ The analysis SHALL compute, for every completed viewing:
 - data-quality counts.
 
 It SHALL compare branch k against branch 0, branch 0 against the repeat, and accumulate k against branch k. Its report SHALL be content-free. It SHALL state the study's limits:
-- one being per condition, with a noise floor from a single repeat;
+- one entity per condition, with a noise floor from a single repeat;
 - a fixed module order;
 - familiarity mixed with history on the accumulate line;
 - expected nulls for faculties without an input channel.
 
 #### Scenario: Paused time does not dilute the rate
-- **WHEN** a viewing includes a Hypnos replay window during which the programme was paused
+- **WHEN** a viewing includes a sleep module replay window during which the programme was paused
 - **THEN** the broadcast rate is computed over unpaused programme time only
 
 #### Scenario: A comparison without enough overlap
@@ -53,13 +53,13 @@ It SHALL compare branch k against branch 0, branch 0 against the repeat, and acc
 
 ## ADDED Requirements
 
-### Requirement: The seed is the being at the moment it is born
-The study SHALL gestate one being in the local womb with automatic birth. It SHALL preserve that being once the birth transition has completed, and SHALL use that preservation as the start of every branch step and of the repeat. The seed SHALL record the womb's time at birth.
+### Requirement: The seed is the entity at the moment it matures
+The study SHALL gestate one entity in the local stimulus source with automatic maturation. It SHALL preserve that entity once the maturation transition has completed, and SHALL use that preservation as the start of every branch step and of the repeat. The seed SHALL record the stimulus source's time at maturation.
 
-#### Scenario: Birth needs no operator
+#### Scenario: Maturation needs no operator
 - **WHEN** the seed's maturation gate passes
-- **THEN** the being is born without waiting for an operator acknowledgement
-- **AND** it is preserved after the birth bloom completes
+- **THEN** the entity matures without waiting for an operator acknowledgement
+- **AND** it is preserved after the maturation bloom completes
 
 #### Scenario: Branches share one seed
 - **WHEN** branch 3 and the repeat are started
@@ -74,11 +74,11 @@ The study runner SHALL be startable as a compose service built from the cycle im
 - **AND** the runner resumes from them
 
 ### Requirement: The study guards free disk
-The runner SHALL refuse to start a step when the free space on the study directory's filesystem is below the larger of the plan's `min_free_gb` (default 20) and 5% of the filesystem, naming the free and required space. It SHALL record no step when it refuses. While a step runs, if free space falls below that floor, the runner SHALL request a preservation with stop, and record the step as `failed:disk_low` with whether the preservation succeeded. If that preservation fails, the runner SHALL record `failed:critical` with the child's pid and halt. The study SHALL never delete a being, a preservation or a research record to recover space.
+The runner SHALL refuse to start a step when the free space on the study directory's filesystem is below the larger of the plan's `min_free_gb` (default 20) and 5% of the filesystem, naming the free and required space. It SHALL record no step when it refuses. While a step runs, if free space falls below that floor, the runner SHALL request a preservation with stop, and record the step as `failed:disk_low` with whether the preservation succeeded. If that preservation fails, the runner SHALL record `failed:critical` with the child's pid and halt. The study SHALL never delete an entity, a preservation or a research record to recover space.
 
 #### Scenario: A full disk stops a step cleanly
 - **WHEN** free space on the study's filesystem drops below the floor during a viewing
-- **THEN** the being is preserved and stopped
+- **THEN** the entity is preserved and stopped
 - **AND** the step is recorded as `failed:disk_low`
 - **AND** nothing is deleted
 

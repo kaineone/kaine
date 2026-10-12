@@ -67,7 +67,7 @@ class FaithfulRenderer:
         """Render at most ``max_events`` selected events, chosen by highest
         salience and capped at ``char_budget`` characters, then ordered stably
         (by original coalition order) for readability. Feeds the accessed
-        coalition into Lingua's prompt without unbounded growth;
+        coalition into the language module's prompt without unbounded growth;
         ``render_snapshot`` is unchanged for existing callers.
 
         At-least-one policy: the single highest-salience event is always

@@ -13,7 +13,7 @@ Subscribes to five predictive-module output streams:
 
 Maintains an in-memory sliding window per source and computes mean / p95 /
 p99 statistics on each flush interval.  Statistics are written to
-daily-rotated JSONL and exposed as in-memory counters for Nexus diagnostics.
+daily-rotated JSONL and exposed as in-memory counters for dashboard diagnostics.
 
 When a source module is absent its stream produces no events and that slot
 contributes nothing — the observer remains fully operational for the streams

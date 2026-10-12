@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Vox subsystem: TTS request observed by Fake client when
+"""Vocal subsystem: TTS request observed by Fake client when
 Chatterbox is absent."""
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ async def test_vox_renders_on_lingua_external(tmp_path):
             sink_path=tmp_path / "audio",
         )
         await h.register(ao)
-        # Inject a Lingua external_speech event into the lingua.external
+        # Inject a language module external_speech event into the lingua.external
         # stream specifically (not lingua.out, which is what the default
         # publish() path would target).
         await h.inject_to_stream(

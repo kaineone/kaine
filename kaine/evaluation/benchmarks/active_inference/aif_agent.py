@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Active-inference agent adapter — drives the *live* Nous pymdp engine.
+"""Active-inference agent adapter — drives the *live* planning module's pymdp engine.
 
 This adapter is the head-to-head subject under test. It does NOT re-implement
 active inference: it constructs a :class:`kaine.modules.nous.generative_model.
@@ -38,13 +38,13 @@ from kaine.modules.nous.generative_model import GenerativeModel
 
 
 def build_model_for_env(task: DiscretePOMDP) -> GenerativeModel:
-    """Wrap an env's generative tensors in Nous's :class:`GenerativeModel`.
+    """Wrap an env's generative tensors in the planning module's :class:`GenerativeModel`.
 
     The env already exposes ``A``/``B``/``D`` and ``preference_C()`` in pymdp's
     list-over-modalities / list-over-factors layout, so this is a faithful
     repackaging — the AIF agent is handed exactly the model the env's
     ``reward_matching`` documents. ``state_labels`` are synthesised positionally
-    (the benchmark does not need the human-readable Nous belief contract).
+    (the benchmark does not need the human-readable planning module's belief contract).
     """
     A = [np.asarray(a, dtype=float) for a in task.A]
     B = [np.asarray(b, dtype=float) for b in task.B]

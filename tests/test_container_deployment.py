@@ -121,7 +121,7 @@ def test_dockerfile_shape():
     assert "useradd" in text and "USER kaine" in text
     assert 'VOLUME ["/app/state", "/models"]' in text
     assert "HF_HUB_OFFLINE=1" in text and "TRANSFORMERS_OFFLINE=1" in text
-    # default CMD is the cycle; nexus overrides it in compose
+    # default CMD is the cycle; the dashboard overrides it in compose
     assert 'CMD ["python", "-m", "kaine.cycle"]' in text
 
 
@@ -176,7 +176,7 @@ def test_cycle_is_profile_gated_out_of_default_up():
     doc = _load_compose()
     assert doc["services"]["kaine-cycle"].get("profiles") == ["cycle"]
     assert doc["services"]["kaine-provision"].get("profiles") == ["setup"]
-    # Nexus is NOT profile-gated — it is always-up and holds no entity.
+    # The dashboard is NOT profile-gated — it is always-up and holds no entity.
     assert "profiles" not in doc["services"]["kaine-nexus"]
 
 
@@ -347,14 +347,14 @@ def test_quadlet_cycle_has_no_install_section():
         "the entity must never be enabled/auto-started"
     )
     assert "Restart=no" in text
-    # The data/nexus units, by contrast, ARE enabled for reboot survival.
+    # The data/dashboard units, by contrast, ARE enabled for reboot survival.
     assert _has_section((_QUADLET / "kaine-nexus.container").read_text(), "[Install]")
     assert _has_section((_QUADLET / "kaine-redis.container").read_text(), "[Install]")
 
 
 def test_quadlet_nexus_privacy_hardening_and_python_healthcheck():
     text = (_QUADLET / "kaine-nexus.container").read_text()
-    # Nexus binds all-interfaces inside the container; the published port is loopback-only.
+    # The dashboard binds all-interfaces inside the container; the published port is loopback-only.
     assert "Environment=KAINE_NEXUS_HOST=0.0.0.0" in text
     assert "Environment=KAINE_NEXUS_NON_LOOPBACK_ALLOWED=1" in text
     assert (
@@ -884,7 +884,7 @@ def test_study_volume_is_a_declared_named_volume():
     assert "kaine-studies" in doc["volumes"]
     assert "kaine-studies:/app/studies" in doc["services"]["kaine-study"]["volumes"]
 
-# run-recording 2.2 — the Nexus record directory is on a durable volume
+# run-recording 2.2 — the dashboard record directory is on a durable volume
 # --------------------------------------------------------------------------
 def test_nexus_record_dir_is_on_a_durable_volume_in_every_cycle_deployment():
     cfg = tomllib.loads((_REPO_ROOT / "config" / "kaine.toml").read_text())

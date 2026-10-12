@@ -10,8 +10,8 @@ tests do not:
 
   - ``make_lingua`` threads the ``[lingua]`` persona / context-budget config
     into the ``ContextAssembler`` (tasks 3.4, 4.1, 4.2).
-  - ``_wire_lingua_self_model`` seeds the first-person persona from the Eidolon
-    self-model, and is a safe no-op when Eidolon is absent (task 3.4).
+  - ``_wire_lingua_self_model`` seeds the first-person persona from the self-model module
+    self-model, and is a safe no-op when the self-model module is absent (task 3.4).
 
 The offline analogue of operator step 6.1 ("the captured prompt contains the
 conscious coalition") is asserted here: a wired ``speak`` produces a request
@@ -66,7 +66,7 @@ def _soma_event(wellness: float = 0.5):
 
 
 def _lingua(bus: AsyncBus, tmp_path, **extra):
-    """Build Lingua through the real boot factory, then swap in a fake chat
+    """Build the language module through the real boot factory, then swap in a fake chat
     client so we can capture the assembled request with no network/model."""
     section = {"intent_log_path": str(tmp_path / "intent.jsonl")}
     section.update(extra)
@@ -84,7 +84,7 @@ class _FakeEidolonModel:
 
 
 class _FakeEidolon:
-    """Minimal Eidolon stand-in: the registry only reads ``.name`` and the
+    """Minimal self-model module stand-in: the registry only reads ``.name`` and the
     wiring only reads ``.model`` (values / norms / name / baseline)."""
 
     def __init__(self, model: _FakeEidolonModel):
@@ -144,11 +144,11 @@ async def test_context_max_events_config_bounds_the_coalition(bus, tmp_path):
 
 @pytest.mark.asyncio
 async def test_lingua_persona_seeds_from_bus_mediated_self_model(bus, tmp_path):
-    """Lingua seeds its first-person persona from the Eidolon self-model it caches
+    """The language module seeds its first-person persona from the self-model it caches
     off the bus, so a populated self-model surfaces in the system prompt (task 3.4).
 
     The distributed-deployment change made ``_wire_lingua_self_model`` a documented
-    no-op seam: the self-model now reaches Lingua as an ``eidolon.self_model``
+    no-op seam: the self-model now reaches the language module as an ``eidolon.self_model``
     snapshot on ``eidolon.out``, cached by ``_self_model_cache_loop`` into
     ``_bus_self_model`` (the bus read itself is covered by
     ``test_lingua_bus_self_model.py``). Here we assert that the cached model
@@ -164,14 +164,14 @@ async def test_lingua_persona_seeds_from_bus_mediated_self_model(bus, tmp_path):
 
 @pytest.mark.asyncio
 async def test_wire_lingua_self_model_noop_without_eidolon(bus, tmp_path):
-    """With Eidolon absent (all-modules-off shipped config, fresh start) the
+    """With the self-model module absent (all-modules-off shipped config, fresh start) the
     wiring is a no-op and the persona falls back to the minimal invariant —
     still a non-empty, first-person system prompt (task 3.4 / fresh start)."""
     lingua = _lingua(bus, tmp_path)
     registry = ModuleRegistry()
     registry.register(lingua)
 
-    _wire_lingua_self_model(registry)  # eidolon not registered → safe no-op
+    _wire_lingua_self_model(registry)  # the self-model module not registered → safe no-op
     await lingua.speak("hi", snapshot=None)
 
     req = lingua.chat_client.requests[-1]
@@ -181,7 +181,7 @@ async def test_wire_lingua_self_model_noop_without_eidolon(bus, tmp_path):
 
 @pytest.mark.asyncio
 async def test_wire_lingua_fresh_start_empty_model_minimal_persona(bus, tmp_path):
-    """Eidolon present but empty (no name/values/norms accumulated): the persona
+    """The self-model module present but empty (no name/values/norms accumulated): the persona
     stays minimal — non-empty invariant, no invented identity clause."""
     lingua = _lingua(bus, tmp_path)
     eidolon = _FakeEidolon(_FakeEidolonModel())  # empty model

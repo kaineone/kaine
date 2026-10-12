@@ -4,9 +4,9 @@
 """Self-initiated report action selection (the "report or stay silent" decision).
 
 The default policy answers a *user utterance*; the drive-biased policy adds
-*drive*-initiated intents. Both need something external (a transcript) or Thymos
+*drive*-initiated intents. Both need something external (a transcript) or the affect module
 to move the entity. The base-thesis configuration has neither — no chatbot input
-path, Thymos gated off - so nothing would make the entity speak.
+path, the affect module gated off - so nothing would make the entity speak.
 
 This policy closes that without any input trigger: the entity reports **its own
 state**. It treats "worth saying" as a higher bar than "access" - a report
@@ -17,7 +17,7 @@ broader than report; only a rare, high-surprise, novel coalition crosses into
 external speech.
 
 Guards (reusing the executive design, never bypassing it):
-  - Volition checks inhibition first; this policy is only called on a NON-inhibited
+  - the action selection module checks inhibition first; this policy is only called on a NON-inhibited
     snapshot (it also returns nothing defensively if handed an inhibited one).
   - A report always describes the CURRENT coalition. With the one-in-flight guard,
     no new intent forms while a prior is being realized, so stale coalitions are

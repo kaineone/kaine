@@ -67,8 +67,8 @@ SCHEMA: dict[str, dict[str, tuple[float, float]]] = {
     "cycle.tick": {"access_drive": UNIT, "experiential_rate_hz": NONNEG, "processing_rate_hz": NONNEG},
     # --- Prediction / precision ---
     # prediction_error is clamped non-negative at the producer (soma.fatigue:
-    # max(0.0, e)); topos likewise reports a non-negative error magnitude.
-    # Soma's fatigue_value accumulates on a scale of 0..threshold, not a unit
+    # max(0.0, e)); the vision module likewise reports a non-negative error magnitude.
+    # The interoception module's fatigue_value accumulates on a scale of 0..threshold, not a unit
     # interval; unexpected_error is the learned-band residual, also non-negative.
     "soma.report": {"prediction_error": NONNEG, "wellness": UNIT, "fatigue_value": NONNEG, "unexpected_error": NONNEG, "entity_time_s": NONNEG, "prediction_broadcast_tick": NONNEG, "prediction_context_age_s": NONNEG},
     "topos.report": {"prediction_error": NONNEG, "entity_time_s": NONNEG, "prediction_broadcast_tick": NONNEG, "prediction_context_age_s": NONNEG},
@@ -77,7 +77,7 @@ SCHEMA: dict[str, dict[str, tuple[float, float]]] = {
     "positive_control.result": {"n_reports": NONNEG, "min_reports": NONNEG, "min_effect": NONNEG, "snr": (0.0, INF), "t_learn_s": NONNEG},
     "positive_control.ladder": {"entity_time_s": NONNEG},
     "phantasia.world_error": {"error": NONNEG},
-    # nous confidence is 1 - normalised_entropy, clamped to [0, 1]
+    # The planning module's confidence is 1 - normalised_entropy, clamped to [0, 1]
     # (nous.module). expected_free_energy is a signed scalar with no hard
     # bound, so it is intentionally NOT declared.
     "nous.belief": {"confidence": UNIT},
@@ -97,7 +97,7 @@ SCHEMA: dict[str, dict[str, tuple[float, float]]] = {
     # --- Perception (derived) ---
     "audition.emotion": {"confidence": UNIT, "tone_error_ratio": NONNEG},
     # --- Self / social ---
-    # empatheia familiarity() is documented in [0, 1]; social error magnitude
+    # The social cognition module's familiarity() is documented in [0, 1]; social error magnitude
     # is non-negative.
     "empatheia.agent_model": {"familiarity_scalar": UNIT},
     "empatheia.social_error": {"error_magnitude": NONNEG},

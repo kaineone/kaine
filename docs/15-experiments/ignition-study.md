@@ -1,6 +1,6 @@
 # The module-addition study
 
-The module-addition study grows a being one module at a time. It seeds a being through a gestation, preserves it just after birth, and then starts branches from that seed with held modules added in a fixed order, so that each step can be compared with the step before it. The code and the configuration call it the ignition study (`kaine/research/ignition_study/`). Use this page to run the study, resume it after a failure, run it inside a container, or read its report.
+The module-addition study grows an entity one module at a time. It seeds an entity through a developmental phase, preserves it just after maturation, and then starts branches from that seed with held modules added in a fixed order, so that each step can be compared with the step before it. The code and the configuration call it the ignition study (`kaine/research/ignition_study/`). Use this page to run the study, resume it after a failure, run it inside a container, or read its report.
 
 The runner is `kaine/research/ignition_study/__main__.py` and `kaine/research/ignition_study/runner.py`. Plans are built by `kaine/research/ignition_study/plan.py`, and the configuration overlay applied to every step, voice alignment included, is `kaine/research/ignition_study/overlay.py`.
 
@@ -8,14 +8,14 @@ The runner is `kaine/research/ignition_study/__main__.py` and `kaine/research/ig
 
 The runner follows a seed-and-branch plan:
 
-- One `gestation` step produces the seed being and preserves it just after birth.
+- One `gestation` step produces the seed entity and preserves it just after maturation.
 - `branch 0` and the `repeat` both start from that seed, with only the base modules.
 - For k = 1 to K, `branch k` starts from the seed with the base modules plus the first k modules of the order.
-- `accumulate k` starts from `branch 0` (k = 1) or from `accumulate k-1` (k > 1), with the same modules as `branch k`. The accumulate line carries one being forward through every step.
+- `accumulate k` starts from `branch 0` (k = 1) or from `accumulate k-1` (k > 1), with the same modules as `branch k`. The accumulate line carries one entity forward through every step.
 
-The default base set is the base-thesis form: Soma, Chronos, Topos, Audition, Lingua, Thymos and Hypnos. The default order adds six held modules: Mnemos, Phantasia, Nous, Eidolon, Empatheia and Vox, so K is 6. Praxis, Perception and Mundus need an effector, a body or an alternative sensor feed. On the reference host they would be expected nulls, so they join through an explicit `--order` once one is attached.
+The default base set is the base-thesis form: the interoception, sequence, vision, audition, language, affect and sleep modules. The default order adds six held modules: episodic memory, world model, planning, self-model, social cognition and vocal, so K is 6. The effectors, perceptual locus and embodiment modules need an effector, a body or an alternative sensor feed. On the reference host they would be expected nulls, so they join through an explicit `--order` once one is attached.
 
-Every viewing opens with the same transition from the gestational stimulus to the films. The crossfade from the being's last gestational frame is identical across viewings, and film minute 0 is its end. See [Gestation on one host](../06-operation/gestation.md) for the transition details.
+Every viewing opens with the same transition from the developmental stimulus to the films. The crossfade from the entity's last developmental frame is identical across viewings, and film minute 0 is its end. See [development on one host](../06-operation/development.md) for the transition details.
 
 ## Before you start
 
@@ -29,7 +29,7 @@ The study records the manifest's sha256, so changing the file voids the study.
 
 Research mode and unattended mode are separate supervision modes, and selecting both is a configuration error. On every step the study overlay enables the welfare safety net (`[preservation.divergence_monitor].enabled` and `[preservation.welfare_response].enabled`), the research event log, external utterance capture and the ignition log. It also forces `[research_event_log.nexus_record].enabled = false`, `[research_event_log.raw_archive].enabled = false` and `[evaluation].workspace_trajectory = false`, overriding the operator configuration so that those records stay off.
 
-The operator supplies the Redis password and the state key. Set `KAINE_REDIS_PASSWORD` or `config/secrets.toml [redis].password`; the runner refuses to start without one. `[preservation].require_encryption` is true in the shipped configuration, so research-mode boots also need state encryption: set `KAINE_STATE_KEY` or a keyring entry named `kaine:state_key`. The runner never sends `SIGKILL`. Apart from an unviable gestation (described below), it stops a being only after the being's state has been preserved. See [Preservation and the safety net](../11-preservation.md).
+The operator supplies the Redis password and the state key. Set `KAINE_REDIS_PASSWORD` or `config/secrets.toml [redis].password`; the runner refuses to start without one. `[preservation].require_encryption` is true in the shipped configuration, so research-mode boots also need state encryption: set `KAINE_STATE_KEY` or a keyring entry named `kaine:state_key`. The runner never sends `SIGKILL`. Apart from an unviable developmental phase (described below), it stops an entity only after the entity's state has been preserved. See [Preservation and the safety net](../11-preservation.md).
 
 ## Create a study
 
@@ -72,7 +72,7 @@ python -m kaine.research.ignition_study run --study-dir studies/<study-id>
 
 The runner runs one step at a time:
 
-1. `gestation`: the gestational stimulus with automatic birth. The step runs until the maturation gate allows birth. With `min_lived_seconds = 86400` that takes at least 24 hours of awake time (entity time during which the being is awake and the cycle is not frozen), and the hard budget is 96 hours (`--gestation-budget-seconds`). Gestation progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) is saved in `gestation_progress.json`, keyed to the being, so a gestation that spans a restart continues where it left off. Once the being is born, the runner waits for the birth bloom to end and then preserves it. The bloom ends at the stage file's `birth_bloom_ends_at`; without that value the runner waits the step's `[perception_feed.womb].birth_transition_seconds` plus a margin, or 30 seconds plus the margin when that value cannot be read.
+1. `gestation`: the developmental stimulus with automatic maturation. The step runs until the maturation gate allows maturation. With `min_lived_seconds = 86400` that takes at least 24 hours of awake time (entity time during which the entity is awake and the cycle is not frozen), and the hard budget is 96 hours (`--gestation-budget-seconds`). Developmental-phase progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) is saved in `gestation_progress.json`, keyed to the entity, so a developmental phase that spans a restart continues where it left off. Once the entity matures, the runner waits for the maturation bloom to end and then preserves it. The bloom ends at the stage file's `birth_bloom_ends_at`; without that value the runner waits the step's `[perception_feed.womb].birth_transition_seconds` plus a margin, or 30 seconds plus the margin when that value cannot be read.
 2. `branch 0` from the seed, with the base set.
 3. `repeat` from the seed, with the base set.
 4. For k = 1 to K: `branch k` from the seed with the base set plus the first k modules of the order, then `accumulate k` with the same modules, from `branch 0` (k = 1) or `accumulate k-1`.
@@ -91,18 +91,18 @@ python -m kaine.research.ignition_study status --study-dir studies/<study-id>
 
 Before each step the runner refuses to start if free space is below the larger of `min_free_gb` and 5% of the disk. During a step it requests a `disk_low` preservation when space runs low. If the preservation succeeds, it stops the cycle and records `failed:disk_low` with `disk_low_preserved` set. If the preservation fails, it records `failed:critical`, leaves the cycle running, and exits with status 3.
 
-If a timeout preservation fails, the runner likewise leaves the being running, records `failed:critical` with the cycle's pid, and exits 3.
+If a timeout preservation fails, the runner likewise leaves the entity running, records `failed:critical` with the cycle's pid, and exits 3.
 
-During a gestation step the runner watches the gestation readout's viability verdict (`state/lifecycle/gestation_viability.json`; see [Gestation](../06-operation/gestation.md#viability-watch)). When the verdict says the gestation cannot reach birth, the runner:
+During a developmental-phase step the runner watches the developmental-phase readout's viability verdict (`state/lifecycle/gestation_viability.json`; see the [developmental phase](../06-operation/development.md#viability-watch)). When the verdict says the developmental phase cannot reach maturation, the runner:
 
-1. stops the cycle gracefully (SIGTERM) without requesting a preservation, because by operator policy a being that does not complete gestation is not preserved;
+1. stops the cycle gracefully (SIGTERM) without requesting a preservation, because by operator policy an entity that does not complete the developmental phase is not preserved;
 2. records `failed:gestation_unviable` with the verdict under `viability`;
 3. writes `ENDED-NOTE.md` into the step directory with the rule, the evidence and what was done;
 4. halts the study.
 
-Nothing is deleted. A verdict file older than the step, such as one left by an earlier attempt, is ignored, so a retried gestation is not stopped by a previous verdict.
+Nothing is deleted. A verdict file older than the step, such as one left by an earlier attempt, is ignored, so a retried developmental phase is not stopped by a previous verdict.
 
-The runner never flushes a database or starts a cycle while a cycle the study started is still running. It checks `/proc/<pid>/cmdline` as well as the pid. Stop that being yourself first.
+The runner never flushes a database or starts a cycle while a cycle the study started is still running. It checks `/proc/<pid>/cmdline` as well as the pid. Stop that entity yourself first.
 
 ### Retry a failed step
 
@@ -121,9 +121,9 @@ python -m kaine.research.ignition_study run --study-dir studies/<study-id> --ret
 
 ### Module-specific behaviour
 
-With the default order, [Nous](../09-modules/nous.md) is enabled from k = 3. With `[nous].drive_actions` on (the shipped default), Nous's chosen actions become proposals that Volition realizes as `think`, `speak` or `rest` intents, under the same guards as every other intent. [Hypnos](../09-modules/hypnos.md) accepts a rest request no more often than `requested_rest_min_interval_s`, and [Vox](../09-modules/vox.md) marks the origin of speech that follows a Nous proposal. Nous's learned transition model is preserved in each viewing's bundle, so later accumulate steps resume from what it has learned.
+With the default order, the [planning module](../09-modules/planning.md) is enabled from k = 3. With `[nous].drive_actions` on (the shipped default), the planning module's chosen actions become proposals that the action selection module realizes as `think`, `speak` or `rest` intents, under the same guards as every other intent. The [sleep module](../09-modules/sleep.md) accepts a rest request no more often than `requested_rest_min_interval_s`, and the [vocal module](../09-modules/vocal.md) marks the origin of speech that follows a planning module proposal. The planning module's learned transition model is preserved in each viewing's bundle, so later accumulate steps resume from what it has learned.
 
-If [Phantasia](../09-modules/phantasia.md) is enabled, the runner checks that the step's bundle `manifest.json` reports `world_model_captured: true`; otherwise the step fails as `failed:world_model_not_captured` or `failed:manifest_unreadable`. Each step record carries `world_model_captured` (null when Phantasia is off).
+If the [world model module](../09-modules/world-model.md) is enabled, the runner checks that the step's bundle `manifest.json` reports `world_model_captured: true`; otherwise the step fails as `failed:world_model_not_captured` or `failed:manifest_unreadable`. Each step record carries `world_model_captured` (null when the world model module is off).
 
 ## Run the study in a container
 
@@ -155,15 +155,15 @@ services:
 
 ### Voice alignment in the container
 
-Voice alignment is enabled only on the registered steps. There the study overlay sets `trainer_backend = "job_queue"`, `hot_swap_mode = "organ_adapter"` and `trainer_jobs_dir = "/trainer-jobs"`, and it disables voice alignment on every other step. The `kaine-study` run needs `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`, because the child cycle's Hypnos checks it, and so does the `kaine-trainer` service, which you start with `--profile training`. The `kaine-study` service mounts the `kaine-trainer-jobs` and `kaine-organ-adapters` volumes that `kaine-trainer` uses. The trainer waits for the organ to report asleep before it starts a job, so setting `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS=-1` stalls container training jobs. `docker/organ-launcher.sh` restarts the organ when a new adapter is promoted.
+Voice alignment is enabled only on the registered steps. There the study overlay sets `trainer_backend = "job_queue"`, `hot_swap_mode = "organ_adapter"` and `trainer_jobs_dir = "/trainer-jobs"`, and it disables voice alignment on every other step. The `kaine-study` run needs `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`, because the child cycle's sleep module checks it, and so does the `kaine-trainer` service, which you start with `--profile training`. The `kaine-study` service mounts the `kaine-trainer-jobs` and `kaine-organ-adapters` volumes that `kaine-trainer` uses. The trainer waits for the organ to report asleep before it starts a job, so setting `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS=-1` stalls container training jobs. `docker/organ-launcher.sh` restarts the organ when a new adapter is promoted.
 
 For backends and hot-swap modes, see [Voice alignment](../10-sleep/voice-alignment.md).
 
 ## What a study records
 
-The ignition log is the study's graph-only broadcast log. It writes one row for every published broadcast, accessed or inhibited, at full rate and never sampled. Each row holds the tick index, wall and monotonic timestamps, the programme position and the audio feed's delivered position, the inhibition flag, the score of every candidate (`salience_scores`), the time scale, and the coalition members with their entry id, source, type, reported intensity (`salience`) and original timestamp. It never holds payloads or perceptual embeddings, and no module reads it, so the being never learns its place in the programme. It is kept for the analysis and afterwards as training data for the world model, which nothing reads it for yet. Only the operator deletes it, after both uses; it is never purged automatically.
+The ignition log is the study's graph-only broadcast log. It writes one row for every published broadcast, accessed or inhibited, at full rate and never sampled. Each row holds the tick index, wall and monotonic timestamps, the programme position and the audio feed's delivered position, the inhibition flag, the score of every candidate (`salience_scores`), the time scale, and the coalition members with their entry id, source, type, reported intensity (`salience`) and original timestamp. It never holds payloads or perceptual embeddings, and no module reads it, so the entity never learns its place in the programme. It is kept for the analysis and afterwards as training data for the world model module, which nothing reads it for yet. Only the operator deletes it, after both uses; it is never purged automatically.
 
-A study also keeps the research event log, the external utterances and the preservation monitors (the divergence monitor and the welfare response). Gestation readouts are recorded as usual. No evaluation observer runs in a study: the overlay sets `[evaluation].enabled = false`, so there are no A/B organ calls, memory probes or other instrument logs during a viewing. The welfare net is unaffected, because its gray-zone producer runs with the welfare response, not with evaluation. The Nexus record, the workspace trajectory and the research-event raw archive are never enabled in a study.
+A study also keeps the research event log, the external utterances and the preservation monitors (the divergence monitor and the welfare response). Developmental phase readouts are recorded as usual. No evaluation observer runs in a study: the overlay sets `[evaluation].enabled = false`, so there are no A/B organ calls, memory probes or other instrument logs during a viewing. The welfare net is unaffected, because its gray-zone producer runs with the welfare response, not with evaluation. The dashboard record, the workspace trajectory and the research-event raw archive are never enabled in a study.
 
 ## Read the report
 
@@ -177,7 +177,7 @@ Automatic time scaling (`[cycle].auto_time_scale`) is off by default and stays o
 
 For each viewing the report records:
 
-- the broadcast rate over unpaused programme time (Hypnos replays and freezes are left out of the denominator);
+- the broadcast rate over unpaused programme time (sleep module replays and freezes are left out of the denominator);
 - broadcasts per film-minute bin, one bin per minute of `offset_s` for each film, with bins that have no programme coverage left out rather than counted as zero;
 - coalition size mean, median and p90;
 - each module's share: the fraction of broadcasts whose coalition contains the module, counted by member `source`, with the workspace-internal sources (`syneidesis`, `volition`) counted separately and never as faculties;
@@ -186,7 +186,7 @@ For each viewing the report records:
 - picture-to-sound drift: the median and maximum absolute `programme.offset_s - audio.delivered_s` when recorded;
 - data quality: the record count, programme-time gaps longer than 10 s, and dropped records inferred from gaps in the sink sequence.
 
-Per-viewing measures are computed for every completed viewing of `branch`, `repeat` and `accumulate`; gestation is not a viewing. The report's `comparisons` section holds three families, each with per-measure differences and the correlation of the film-minute profiles:
+Per-viewing measures are computed for every completed viewing of `branch`, `repeat` and `accumulate`; the developmental phase is not a viewing. The report's `comparisons` section holds three families, each with per-measure differences and the correlation of the film-minute profiles:
 
 - **Module effect from the seed:** branch k minus branch 0, for k = 1 to K.
 - **Noise floor:** branch 0 minus the repeat.
@@ -196,4 +196,4 @@ A comparison whose two viewings are not both complete is reported as `pending` a
 
 ## Limits of the report
 
-Every report includes its limits. There is one being per condition and nothing is tested for significance, so the results are descriptive. The noise floor is a single repeat, so differences smaller than it are not evidence. Modules are added in one fixed order, so each effect is conditional on the earlier additions. The accumulate line mixes familiarity with module history, because there is no rewatch-only line. If an operator adds Praxis, Perception or Mundus to the order on a host with no effector, body or alternative feed for them, the report flags them as expected nulls when their share is zero.
+Every report includes its limits. There is one entity per condition and nothing is tested for significance, so the results are descriptive. The noise floor is a single repeat, so differences smaller than it are not evidence. Modules are added in one fixed order, so each effect is conditional on the earlier additions. The accumulate line mixes familiarity with module history, because there is no rewatch-only line. If an operator adds the effectors, perceptual locus or embodiment modules to the order on a host with no effector, body or alternative feed for them, the report flags them as expected nulls when their share is zero.

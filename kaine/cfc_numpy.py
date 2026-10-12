@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""NumPy CfC reservoir, step, and readout shared by Soma and Chronos.
+"""NumPy CfC reservoir, step, and readout shared by the interoception and sequence modules.
 
 This module intentionally uses only NumPy (and the Python standard library)
 so it can be imported on hosts without torch/ncps.  It replicates the default
@@ -127,8 +127,8 @@ def generate_cfc_weights(
 ) -> tuple[ReservoirWeights, NumpyReadout]:
     """Generate a reservoir and an initial readout from the same seed.
 
-    The readout weights are drawn *after* the reservoir so that Soma and
-    Chronos can share one seed and still obtain the same readout initialisation
+    The readout weights are drawn *after* the reservoir so that the interoception and
+    sequence modules can share one seed and still obtain the same readout initialisation
     as the torch path.
     """
     rng = np.random.default_rng(seed)

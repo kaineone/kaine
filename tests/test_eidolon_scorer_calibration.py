@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Calibration tests for the Eidolon self-model accuracy scorer.
+"""Calibration tests for the self-model accuracy scorer.
 
 These prove the scorer ARITHMETIC is correct: given known planted signals it
 computes the documented accuracy. They validate scorer correctness only, NOT
@@ -52,7 +52,7 @@ class _FakeCognitiveClient:
 def _plant_affect_correlation(
     logs_dir: Path, *, valence: float, arousal: float, hedge_word_count: float
 ) -> None:
-    """Plant a single affect_correlation record carrying a known Thymos vector.
+    """Plant a single affect_correlation record carrying a known affect module vector.
 
     A single record means the averages computed by ``_signals_snapshot`` equal
     exactly the planted values, so the derived signal flags are deterministic.

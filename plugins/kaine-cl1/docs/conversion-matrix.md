@@ -19,10 +19,10 @@ Scoring axes:
 
 | Module | Role | Why it fits | Coding scheme |
 |---|---|---|---|
-| **Chronos** | interval timing, anomaly/rumination | timing & sequence anticipation are intrinsic to recurrent tissue; upstream model is tiny & CPU-pinned | temporal-code the recent workspace summary → stim; decode next-interval prediction + LZ/criticality surprise |
-| **Soma** | interoception, homeostasis, fatigue | low-dim scalar streams (substrate metrics) → a biological forward model of "how the body feels"; poetic *and* apt | rate-code metrics → stim; decode firing-rate deviation as interoceptive prediction error |
+| **Sequence** | interval timing, anomaly/rumination | timing & sequence anticipation are intrinsic to recurrent tissue; upstream model is tiny & CPU-pinned | temporal-code the recent workspace summary → stim; decode next-interval prediction + LZ/criticality surprise |
+| **Interoception** | interoception, homeostasis, fatigue | low-dim scalar streams (substrate metrics) → a biological forward model of "how the body feels"; poetic *and* apt | rate-code metrics → stim; decode firing-rate deviation as interoceptive prediction error |
 | **Oscillator layer** | LIF oscillators for phase/coherence binding | biological neurons **are** oscillators; the culture's intrinsic bursting *is* the oscillation | drive with periodic stim; decode phase via DCT/burst timing → PLV coherence |
-| **Nous** | active inference over a compact discrete generative model | active inference **is** the free-energy principle, which is the DishBrain paradigm; conceptually the purest fit | population-code beliefs → stim; closed-loop stim as evidence; decode policy via territory firing balance |
+| **Planning** | active inference over a compact discrete generative model | active inference **is** the free-energy principle, which is the DishBrain paradigm; conceptually the purest fit | population-code beliefs → stim; closed-loop stim as evidence; decode policy via territory firing balance |
 
 ## Hybrid tier: silicon + wetware together (planned, default-off)
 
@@ -33,23 +33,23 @@ wetware task, so "hybrid" is a stable end state, not a failed full conversion.
 | Module | Wetware half | Silicon half (stays) | Note |
 |---|---|---|---|
 | **Audition (front end only)** | "any sound → prediction-error salience" acoustic front end | STT, vocal-emotion (model-bound) | likely permanent hybrid |
-| **Phantasia (surprise signal only)** | scalar **surprise** from culture criticality/LZ | the RSSM world-model rollout (high-dim) | likely permanent hybrid |
-| **Volition / action-selection** | closed-loop action selection, the DishBrain "Pong" paradigm | intent plumbing + safety gate | could become a full conversion if decode proves reliable |
-| **Thymos** | dimensional valence/arousal from population dynamics (arousal ≈ global excitability) | affect state machinery | speculative; welfare-sensitive; review-gated |
+| **World model (surprise signal only)** | scalar **surprise** from culture criticality/LZ | the RSSM world-model rollout (high-dim) | likely permanent hybrid |
+| **Action selection / action-selection** | closed-loop action selection, the DishBrain "Pong" paradigm | intent plumbing + safety gate | could become a full conversion if decode proves reliable |
+| **Affect** | dimensional valence/arousal from population dynamics (arousal ≈ global excitability) | affect state machinery | speculative; welfare-sensitive; review-gated |
 
 ## Silicon-only: do not convert (and why)
 
 | Module(s) | Reason |
 |---|---|
-| **Lingua**, **Vox** | large language / TTS models; symbolic, high-dim; no meaningful electrode encoding |
-| **Topos** | HD video encoder (InternVideo); 64 electrodes cannot carry a visual latent. (A *toy* down-sampled visual task à la DishBrain-Pong could be a future demo, but it is not "running Topos".) |
-| **Mnemos**, **Empatheia** | vector stores / per-agent ToM; need reliable addressable key-value memory the substrate cannot provide |
-| **Eidolon**, **Praxis**, **Hypnos**, **Perception**, **Mundus** | orchestration / self-model / effector-IO / control planes, not forward models at all |
+| **Language**, **Vocal** | large language / TTS models; symbolic, high-dim; no meaningful electrode encoding |
+| **Vision** | HD video encoder (InternVideo); 64 electrodes cannot carry a visual latent. (A *toy* down-sampled visual task à la DishBrain-Pong could be a future demo, but it is not "running Vision".) |
+| **Episodic memory**, **Social cognition** | vector stores / per-agent ToM; need reliable addressable key-value memory the substrate cannot provide |
+| **Self-model**, **Effectors**, **Sleep**, **Perceptual locus**, **Embodiment** | orchestration / self-model / effector-IO / control planes, not forward models at all |
 
 ## The ceiling
 
 64 electrodes, one culture. With the strong-tier territory budget
-(Chronos 12 + Soma 12 + Oscillator 8 = 32), roughly **half the array remains**
+(12 for the sequence module + 12 for the interoception module + 8 for the Oscillator = 32), roughly **half the array remains**
 for one or two hybrid-tier modules at a time. You cannot run all eight
 converted modules on a single culture simultaneously; the broker enforces this.
 

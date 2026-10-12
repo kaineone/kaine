@@ -264,7 +264,7 @@ the device string.
 ### Requirement: Module-level device override and env-var override
 `kaine.hardware` SHALL expose `select_device(preferred: str | None) -> str`
 that accepts a per-module preferred device (e.g. `"cpu"` for the
-<100K-parameter Chronos network even on a CUDA host) and SHALL honor
+<100K-parameter sequence module network even on a CUDA host) and SHALL honor
 the `KAINE_FORCE_DEVICE` environment variable as the highest priority
 override. Preferred indexed accelerator strings (`cuda:N`, `xpu:N`) SHALL be
 validated against the available device count: `select_device` SHALL raise on an
@@ -316,8 +316,8 @@ no accelerator, `memory.kind` SHALL be `"unknown"` with an empty pool list.
 The `memory` block SHALL give the `gpu-preflight` gate enough information to
 distinguish known-discrete, known-unified, and unknown memory states.
 
-The dict SHALL be JSON-serializable so Soma can include it in its
-`soma.report` payloads and Nexus can render it in diagnostics, and SHALL NOT
+The dict SHALL be JSON-serializable so the interoception module can include it in its
+`soma.report` payloads and the dashboard can render it in diagnostics, and SHALL NOT
 raise when a backend probe or a memory probe fails; a failing probe SHALL
 degrade to the explicit unknown markers above instead of an exception.
 
@@ -440,7 +440,7 @@ The system SHALL provide a metadata-only torch-stack coherence check, the pre-bo
 The base installation SHALL contain only the dependencies every entity uses, and heavy or host-specific dependencies SHALL be in named extras. When an enabled module or service needs an extra that is not installed, the start SHALL stop before any module is built with one message naming each missing import, the extra that provides it and the install command, and SHALL NOT fail later with an import traceback.
 
 #### Scenario: A module whose extra is missing
-- **WHEN** Soma is enabled on a host without the `core` extra
+- **WHEN** the interoception module is enabled on a host without the `core` extra
 - **THEN** the start stops before building modules, and the message names torch and ncps and the `core` extra
 
 #### Scenario: A lean host

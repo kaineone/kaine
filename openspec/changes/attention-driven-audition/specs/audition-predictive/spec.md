@@ -35,7 +35,7 @@ updates.
 
 ## ADDED Requirements
 
-### Requirement: The acoustic forward model persists with the being
+### Requirement: The acoustic forward model persists with the entity
 Audition SHALL serialize the acoustic forward model's weights and statistical buffer summary keyed by the encoder's `model_id`, and SHALL restore the running encoder's entry when its tensor shapes match the running model. An entry whose shapes do not match SHALL be discarded with a logged warning, and the model SHALL learn afresh. Entries for other encoders SHALL be carried forward unchanged. The serialized form SHALL contain no raw audio and no raw embeddings.
 
 #### Scenario: Round-trip
@@ -47,7 +47,7 @@ Audition SHALL serialize the acoustic forward model's weights and statistical bu
 - **THEN** the entry is discarded with a warning and restore does not raise
 
 #### Scenario: Switching encoder keeps the other model
-- **WHEN** a being serialized under encoder A is restored under encoder B and serialized again
+- **WHEN** an entity serialized under encoder A is restored under encoder B and serialized again
 - **THEN** the new state still holds encoder A's entry unchanged
 
 ### Requirement: Auditory adaptation pauses during sleep

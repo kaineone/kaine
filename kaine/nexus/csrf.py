@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""CSRF / Origin / Host-header validation for Nexus.
+"""CSRF / Origin / Host-header validation for the dashboard.
 
 Mounted as a FastAPI middleware. The ``Host`` header is validated on **every**
 request, including read-only GET/HEAD/OPTIONS surfaces, to prevent DNS-rebinding
@@ -110,7 +110,7 @@ def _host_allowed(host: str, allowlist: tuple[str, ...]) -> bool:
 
 
 class NexusCSRFMiddleware(BaseHTTPMiddleware):
-    """Origin/Host validation middleware for Nexus requests."""
+    """Origin/Host validation middleware for the dashboard requests."""
 
     def __init__(self, app: Any, config: NexusConfig) -> None:
         super().__init__(app)

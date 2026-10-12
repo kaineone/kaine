@@ -6,7 +6,7 @@
 The gate must: pass with ample VRAM, report (never evict — the single-resident
 OpenAI model backend has no unload API) the backend's resident models, fail
 closed when still short, honor the operator override, write a status snapshot
-for Nexus, and NEVER terminate any process.
+for dashboard, and NEVER terminate any process.
 """
 from __future__ import annotations
 
@@ -174,7 +174,7 @@ def test_shipped_config_ships_gpu_preflight_disabled():
     assert raw["gpu_preflight"]["enabled"] is False
 
 
-# --- Nexus read-only block ---------------------------------------------------
+# --- Dashboard read-only block ---------------------------------------------------
 
 
 def test_nexus_block_reads_blocked_state(tmp_path):

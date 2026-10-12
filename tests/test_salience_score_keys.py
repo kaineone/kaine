@@ -427,7 +427,7 @@ async def test_tone_event_is_accessed_through_the_engine_path(tmp_path):
         assert len(events) == 1
         assert events[0].accessed is True
         assert events[0].entry_id == "audition.out:1760000000000-0"
-        # With ids keyed by entry id alone, soma's 0.1 overwrote the tone
+        # With ids keyed by entry id alone, the interoception module's 0.1 overwrote the tone
         # event's score and the tone event read as not accessed.
     finally:
         await bus.close()

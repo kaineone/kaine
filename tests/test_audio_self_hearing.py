@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Self-hearing suppression: the SpeakingGate, audition dropping its own
-voice during playback, vox opening the window, and boot wiring."""
+voice during playback, the vocal module opening the window, and boot wiring."""
 import io
 import wave
 
@@ -111,7 +111,7 @@ async def test_audition_processes_when_not_speaking(bus: AsyncBus):
         await audition.shutdown()
 
 
-# ---- vox opens the window (only when suppression is on) ---------------
+# ---- the vocal module opens the window (only when suppression is on) ---------------
 
 def _make_vox(bus, tmp_path, **overrides):
     overrides.setdefault("player", FakePlayer())

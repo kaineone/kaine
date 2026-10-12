@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nexus operator token helpers for setup."""
+"""Dashboard operator token helpers for setup."""
 from __future__ import annotations
 
 import os
@@ -12,9 +12,9 @@ from typing import Any, Callable
 
 from kaine import secrets_file
 
-# Where Nexus reads its operator token (kaine.nexus.config.load_nexus_config).
+# Where the dashboard reads its operator token (kaine.nexus.config.load_nexus_config).
 DEFAULT_SECRETS_PATH = Path("config/secrets.toml")
-# Nexus rejects shorter operator tokens (kaine.nexus.config.load_nexus_config).
+# The dashboard rejects shorter operator tokens (kaine.nexus.config.load_nexus_config).
 _MIN_NEXUS_TOKEN_LEN = 32
 
 
@@ -24,9 +24,9 @@ def ensure_nexus_token(
     out: Callable[[str], Any],
     env: dict[str, str] | None = None,
 ) -> str:
-    """Ensure a Nexus operator sign-in token exists.
+    """Ensure a dashboard operator sign-in token exists.
 
-    Without a token, Nexus rejects every sign-in with 503. The environment
+    Without a token, the dashboard rejects every sign-in with 503. The environment
     variable ``KAINE_NEXUS_TOKEN`` takes precedence; otherwise the token is read
     from or written to ``[nexus] operator_token`` in the secrets file.
     """
@@ -65,7 +65,7 @@ def ensure_nexus_token(
         return "error"
 
     if isinstance(existing, str) and existing.strip():
-        # Never overwrite an operator's token, but say so when Nexus would
+        # Never overwrite an operator's token, but say so when the dashboard would
         # refuse it rather than reporting it as fine.
         if len(existing.strip()) < _MIN_NEXUS_TOKEN_LEN:
             out(

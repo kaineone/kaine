@@ -23,7 +23,7 @@ rather than burying it in untestable shell.
 No pretend processes: it launches the server binary that is installed (a real
 subprocess / real systemd unit) or fails honestly with install guidance — it
 NEVER silently installs the multi-GB server toolchain, and never fakes a launch.
-This is **process** supervision of a service, distinct from Spot (which supervises
+This is **process** supervision of a service, distinct from the supervisor (which supervises
 cognitive **modules** inside the cycle process group); the two do not overlap.
 """
 from __future__ import annotations

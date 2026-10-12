@@ -67,7 +67,7 @@ VALID_COMBINATION_TYPES = ("ties", "dare_ties", "dare_linear")
 class CapabilityEval(Protocol):
     """Same shape as the voice-alignment-training CapabilityEval but
     duplicated here to avoid coupling the lifecycle layer to the
-    Hypnos module. Either implementation is interchangeable."""
+    sleep module. Either implementation is interchangeable."""
 
     async def eval(self, model: Any, tokenizer: Any) -> float:
         """Return the capability score of ``model``."""
@@ -75,8 +75,8 @@ class CapabilityEval(Protocol):
 
 @runtime_checkable
 class AbliterationScorer(Protocol):
-    """Same shape as the Hypnos AbliterationProbeScorer but duplicated
-    here to avoid coupling the lifecycle layer to the Hypnos module.
+    """Same shape as the sleep module's AbliterationProbeScorer but duplicated
+    here to avoid coupling the lifecycle layer to the sleep module.
     Either implementation is interchangeable."""
 
     async def score(self, model: Any, tokenizer: Any) -> Any:

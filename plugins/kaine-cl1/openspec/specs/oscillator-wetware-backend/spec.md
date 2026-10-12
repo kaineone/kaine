@@ -24,7 +24,7 @@ A `WetwareOscillator` SHALL implement KAINE's `OscillatorProtocol`. Each `step(d
 - **WHEN** the substrate follows the cycle and a module publishes with full drive once every several cycle ticks
 - **THEN** each recorded sample is the response to its previous publish, and is far above the background firing of the ticks in between
 
-### Requirement: Hypnos can slow substrate oscillators
+### Requirement: Sleep can slow substrate oscillators
 `set_frequency(scale)` SHALL set the drive scale (negative values clamp to 0) so that stimulation amplitude is proportional to `drive * scale`, matching the silicon oscillator.
 
 #### Scenario: Deep-sleep slowdown

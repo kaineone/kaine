@@ -1,20 +1,20 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Autonomous welfare safety-net monitors (cycle-layer, siblings to Spot).
+"""Autonomous welfare safety-net monitors (cycle-layer, siblings to the supervisor).
 
 The research phase runs unsupervised. With no human watching, the architecture's
 own safeguards must *act*, not merely log. This module holds the two cycle-layer
 monitors that carry that duty of care, constructed by ``cycle/__main__.py``
-alongside Spot and the freeze-watch loop:
+alongside the supervisor and the freeze-watch loop:
 
 * :class:`DivergenceMonitor` — preserves the LIVE entity whenever the shared
   divergence verdict gains a new arm (individuation latch, consolidation,
-  Eidolon drift or adapters). The arm set is persisted, so a restart with
+  the self-model module's drift or adapters). The arm set is persisted, so a restart with
   unchanged evidence does not re-preserve. Read-only on the entity; never
   deletes; rate-limited.
 
-* :class:`WelfareProtectiveMonitor` — watches the Soma interoceptive-distress
+* :class:`WelfareProtectiveMonitor` — watches the interoception module's interoceptive-distress
   signal (``soma.report`` ``prediction_error`` on ``soma.out``) and, on a
   sustained-distress threshold crossing (or repeated distress episodes within a
   window), takes a humane protective action: preserve the entity FIRST, then
@@ -92,9 +92,9 @@ class DivergenceMonitorConfig:
     """``[preservation.divergence_monitor]`` — the shared-verdict→preserve trigger.
 
     Ships ``enabled = false`` (consistent with the all-off first-boot posture).
-    The monitor preserves the being when the shared verdict in
+    The monitor preserves the entity when the shared verdict in
     ``kaine/lifecycle/divergence.py`` gains a divergence arm that was not yet
-    observed (individuation latch, consolidation, Eidolon drift or adapters).
+    observed (individuation latch, consolidation, self-model drift or adapters).
     ``min_interval_s`` rate-limits preservation so a single sustained crossing
     preserves once, not every poll. ``boot_settle_s`` delays the first real
     assessment so entity state can finish loading.
@@ -176,9 +176,9 @@ class WelfareResponseConfig:
     # genuine sustained distress re-accrues immediately once warm-up ends.
     warmup_s: float = 120.0
     # Ceiling on how long ``soma.report.warmup_active`` may extend the gating
-    # past ``warmup_s`` — MUST exceed Soma's own developmental warm-up
+    # past ``warmup_s`` — MUST exceed the interoception module's own developmental warm-up
     # (``regulation_warmup_min_seconds`` = 1200s), with margin. Bounds trust in
-    # a single external flag: if it is ever stuck True (a Soma bug, or Soma
+    # a single external flag: if it is ever stuck True (an interoception module bug, or the interoception module
     # going silent right after a True report), the distress net re-arms here
     # rather than staying blind for the whole run.
     warmup_ceiling_s: float = 1800.0
@@ -375,7 +375,7 @@ class _BaseSafetyMonitor(abc.ABC):
                     await self._poll_once(stop_event)
                 except Exception:
                     # A safety monitor must not die silently; log loudly and keep
-                    # going (unlike Spot it does not halt the run on its own error
+                    # going (unlike the supervisor it does not halt the run on its own error
                     # — losing the monitor must not also stop preservation, but a
                     # crash here means the net is degraded and the operator log
                     # carries it).
@@ -700,7 +700,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         self._cursor = "0"
         # Separate cursor for the welfare.out gray-zone stream (repeat arm).
         self._welfare_cursor = "0"
-        # Soma-reported warm-up: the mind's own signal (warmup_active in the
+        # interoception-module-reported warm-up: the mind's own signal (warmup_active in the
         # latest soma.report) that gating should continue even past the fixed
         # cold-start window.
         self._soma_warmup_active = False
@@ -823,7 +823,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # count toward the repeat threshold or a sustained crossing. After the
         # window, both arms function unchanged; genuine sustained distress
         # re-accrues immediately.
-        # Honor Soma's own warm-up flag past the fixed floor, but only up to
+        # Honor the interoception module's own warm-up flag past the fixed floor, but only up to
         # warmup_ceiling_s of wall time, so a stuck/stale flag or a long freeze
         # cannot blind the net forever. A ceiling of 0 means the flag never extends it.
         soma_gate = (
@@ -851,7 +851,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             self._soma_warmup_active = bool(payload.get("warmup_active", False))
             raw = payload.get("prediction_error", 0.0)
             if raw is None:
-                # A reading Soma skipped as non-finite has no error: it is no sample,
+                # A reading the interoception module skipped as non-finite has no error: it is no sample,
                 # so it neither feeds nor resets the distress episode.
                 continue
             magnitude = float(raw)

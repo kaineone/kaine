@@ -9,7 +9,7 @@ counts/rate correctness; semantic magnitude (with a real-but-deterministic
 embedder + the null-when-absent path); the metric emitted even when training is
 skipped/rejected; the bus event/state record content-free; `assess_divergence`
 flipping on threshold (independent of the individuation test + adapters) and NOT
-from this signal alone below threshold; and the Nexus surface being numeric-only.
+from this signal alone below threshold; and the dashboard surface being numeric-only.
 """
 from __future__ import annotations
 
@@ -440,7 +440,7 @@ def test_assess_never_raises_on_garbage_state(tmp_path: Path):
 
 
 # --------------------------------------------------------------------------- #
-# 3. Research event taxonomy + Nexus surface
+# 3. Research event taxonomy + dashboard surface
 # --------------------------------------------------------------------------- #
 
 

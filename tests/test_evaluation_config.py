@@ -71,8 +71,8 @@ def test_shipped_kaine_toml_has_evaluation_block():
 
 # --- A/B baseline parity with the language organ -----------------------------
 # The A/B-divergence baseline runs bare (no architecture). It MUST use the SAME
-# model as Lingua, or the divergence measures a model difference instead of the
-# architecture's conditioning. The baseline therefore DERIVES from lingua and
+# model as the language module, or the divergence measures a model difference instead of the
+# architecture's conditioning. The baseline therefore DERIVES from the language module and
 # fails closed on an explicit divergent value.
 
 

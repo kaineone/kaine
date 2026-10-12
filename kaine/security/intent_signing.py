@@ -6,29 +6,29 @@
 KAINE runs single-process today: every module is an asyncio task sharing one
 Redis connection and one bus credential. That means the bus cannot tell *which*
 module published an event — a compromised or prompt-injected peripheral module
-(Lingua is the most exposed, being LLM-output-driven) could ``XADD`` a crafted
-``{kind: "act", effector, params}`` onto ``volition.out`` and have Praxis realize
-it, bypassing Syneidesis's threshold and Volition's inhibition gate entirely.
+(the language module is the most exposed, being LLM-output-driven) could ``XADD`` a crafted
+``{kind: "act", effector, params}`` onto ``volition.out`` and have the effectors module realize
+it, bypassing the workspace's threshold and the action selection module's inhibition gate entirely.
 
 This module closes that boundary cryptographically. A per-boot secret, generated
 by and held ONLY in the cycle process (never published to the bus, never
 persisted, never logged), is injected into BOTH the action-selection step
-(Volition, which SIGNS each ``act`` intent) and Praxis (which VERIFIES the
+(the action selection module, which SIGNS each ``act`` intent) and the effectors module (which VERIFIES the
 signature before any effector runs). A forged intent from any writer that does
 not hold the secret fails verification and is dropped.
 
 The signature covers a stable canonical serialization of the exact fields that
 determine what the action does — ``kind``, ``effector``, ``params`` — plus a
 ``run_id`` and a monotonic ``seq`` so a captured signed intent cannot be
-replayed (Praxis rejects a ``(run_id, seq)`` pair it has already realized).
+replayed (the effectors module rejects a ``(run_id, seq)`` pair it has already realized).
 
 This is a SECOND boundary. The operator effector-enablement whitelist + the
 per-effector sandbox/command whitelist remain the PRIMARY enforced gate; this
-change makes inhibition/provenance a real boundary at the Praxis interface in
+change makes inhibition/provenance a real boundary at the effectors module's interface in
 addition to that gate, not a replacement for it.
 
 Threat note: the secret lives in-process, so a full compromise of the cycle
-process defeats it — but such an attacker already controls Volition, so the
+process defeats it — but such an attacker already controls the action selection module, so the
 boundary still holds against the realistic threat (a compromised *peripheral*
 module). Per-process Redis ACLs (Option A in the design) are the direction once
 services split; that is out of scope here.
@@ -51,7 +51,7 @@ def generate_intent_secret() -> bytes:
     """Return a fresh per-boot HMAC secret (32 cryptographically-random bytes).
 
     Called once by the cycle composition root. The returned bytes are held only
-    in-process and handed to Volition (to sign) and Praxis (to verify). They are
+    in-process and handed to the action selection module (to sign) and the effectors module (to verify). They are
     NEVER published to the bus, written to disk, or logged.
     """
     return os.urandom(_SECRET_BYTES)
@@ -126,9 +126,9 @@ class IntentSigner:
     """Signs executive ``act`` intents with a per-boot secret.
 
     Holds the shared secret, the run's ``run_id``, and a monotonic ``seq``
-    counter minted per signed intent. Injected into Volition at the composition
+    counter minted per signed intent. Injected into the action selection module at the composition
     root. Each :meth:`sign` call returns the ``(run_id, seq, signature)`` triple
-    the intent must carry so Praxis can verify provenance and reject replays.
+    the intent must carry so the effectors module can verify provenance and reject replays.
     """
 
     def __init__(self, secret: bytes, run_id: str) -> None:

@@ -14,7 +14,7 @@ class EchoModule(BaseModule):
 
     EchoModule is permanent test infrastructure for the Phase 1
     end-to-end test. It is disabled in the default config and exists
-    only so regression tests on the bus + cycle + Syneidesis path have
+    only so regression tests on the bus + cycle + the workspace path have
     a ground-truth observer.
     """
 

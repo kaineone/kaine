@@ -8,15 +8,15 @@ divergence, memory probes, individuation) AND by core modules that must
 NOT import ``kaine.evaluation`` (the sidecar-decoupling boundary). It lives
 here — alongside :mod:`kaine.privacy_filter` and
 :mod:`kaine.persistence.jsonl_sink`, the other boundary-neutral primitives —
-so a core module (e.g. Hypnos computing its consolidation-divergence
+so a core module (e.g. the sleep module computing its consolidation-divergence
 magnitude) can embed text without pulling in the evaluation subsystem.
 
 ``kaine.evaluation.embeddings`` re-exports everything here unchanged, so the
 sidecar import sites are untouched.
 
 This module is the SINGLE source of the sentence-transformer embedder. The
-evaluation sidecar (``embed`` / ``cosine_similarity``), Hypnos
-consolidation-divergence, and the memory/social modules (Mnemos, Empatheia,
+evaluation sidecar (``embed`` / ``cosine_similarity``), the sleep module's
+consolidation-divergence, and the memory/social modules (episodic memory, social cognition,
 which need ``encode`` / ``encode_batch`` / ``latent_dim`` / ``model_id`` /
 ``shutdown``) all share ONE wrapper here, so every subsystem embeds on the
 same model and the same cosine scale. ``kaine.modules.mnemos.embeddings``
@@ -90,10 +90,10 @@ class SentenceTransformerTextEmbedder:
     """The single sentence-transformer embedder for the whole system.
 
     Satisfies both the lightweight :class:`TextEmbedder` protocol
-    (``load`` / ``embed``, used by the evaluation sidecar and Hypnos) and
+    (``load`` / ``embed``, used by the evaluation sidecar and the sleep module) and
     the richer :class:`Embedder` protocol (``encode`` / ``encode_batch`` /
-    ``latent_dim`` / ``model_id`` / ``shutdown``, used by Mnemos and
-    Empatheia). ``embed`` is an alias of ``encode`` so both names address
+    ``latent_dim`` / ``model_id`` / ``shutdown``, used by the episodic memory module and
+    the social cognition module). ``embed`` is an alias of ``encode`` so both names address
     the same vectors on the same cosine scale.
 
     Pins HF telemetry off so the runtime stays fully local after the
@@ -253,7 +253,7 @@ class SentenceTransformerTextEmbedder:
 class HashEmbedder:
     """Deterministic, dep-free embedder for tests and offline use.
 
-    Satisfies the richer :class:`Embedder` protocol, so Mnemos can use it in
+    Satisfies the richer :class:`Embedder` protocol, so the episodic memory module can use it in
     tests and offline instruments. Hashes tokens into a fixed-dim vector. Not
     semantically meaningful, but cosine similarity stays in [0, 1] and is
     repeatable.
@@ -367,9 +367,9 @@ class SharedEmbedder:
     """Wraps an embedder so many consumers can share one model instance.
 
     ``load()`` is serialised with an ``asyncio.Lock`` so the inner embedder
-    loads exactly once, even across concurrent callers or a Spot rebuild.
+    loads exactly once, even across concurrent callers or a supervisor rebuild.
     ``shutdown()`` is intentionally a no-op: MnemosCore shuts its embedder
-    down when it stops, and a Spot restart of one module must not unload
+    down when it stops, and a supervisor restart of one module must not unload
     the model underneath the other modules that still hold a reference to it.
     ``unload()`` is the residency path and delegates to the inner embedder.
     """

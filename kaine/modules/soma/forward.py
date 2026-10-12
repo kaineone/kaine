@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Substrate forward model for Soma — closed-form continuous-time (CfC) network.
+"""Substrate forward model for the interoception module — closed-form continuous-time (CfC) network.
 
-Per paper §3.4.1 (Soma) and the §4.2 instrument table ("Temporal and
-substrate modeling | CfC via ncps | Prediction models (Chronos, Soma)"), Soma
+Per paper §3.4.1 (the interoception module) and the §4.2 instrument table ("Temporal and
+substrate modeling | CfC via ncps | Prediction models (Sequence, Interoception)\"), the interoception module
 maintains a closed-form continuous-time network (Hasani et al. 2022), via the
 `ncps` package, that learns the entity's normal substrate patterns from GPU
 temperature, CPU and RAM utilization, and cognitive-cycle latency. The signal
 it publishes is the prediction error between expected and actual substrate
 state.
 
-This mirrors the Chronos CfC pattern (`kaine.modules.chronos.network`,
+This mirrors the sequence module's CfC pattern (`kaine.modules.chronos.network`,
 `CfCNetwork` / `ForwardPredictionHead`): a frozen, randomly-initialised CfC
 reservoir turns the raw metric vector into a recurrent hidden state, and a
 small linear readout learns ONLINE (one SGD step per tick) to predict the
@@ -19,23 +19,23 @@ NEXT feature vector from that hidden state. Keeping the reservoir frozen and
 the readout linear keeps online adaptation a convex, single-step problem —
 stable enough to update every tick without diverging.
 
-Design constraints (matching the Chronos CfCNetwork / ForwardPredictionHead
+Design constraints (matching the sequence module's CfCNetwork / ForwardPredictionHead
 pattern)
 -----------------------------------------------------------------------
 - CPU-only: all tensors stay on CPU regardless of host hardware.
 - Zero raw-sense-data persistence: ``state_dict()`` / ``load_state_dict()``
   serialise only the readout's weight and bias tensors, and loading rejects a
   readout whose shape does not match this model. The CfC reservoir is frozen
-  and is regenerated from ``reservoir_seed``, which Soma keeps in its
+  and is regenerated from ``reservoir_seed``, which the interoception module keeps in its
   snapshot, so a revived being rebuilds the same reservoir. The recurrent
   hidden state is ephemeral runtime context and is never persisted.
 - Non-finite guard: adaptation is skipped when the loss or any gradient is
-  non-finite. Soma's feature vectors come from raw host-sensor reads (unlike
-  Chronos's already-curated featurizer output) and can glitch, so a non-finite
+  non-finite. The interoception module's feature vectors come from raw host-sensor reads (unlike
+  the sequence module's already-curated featurizer output) and can glitch, so a non-finite
   *input* vector also skips the recurrent-state commit for that tick entirely
   — protecting the CfC's persistent hidden state from being permanently
   corrupted by a single bad sensor read.
-- Adaptation can be suspended externally (e.g. during Hypnos sleep) by
+- Adaptation can be suspended externally (e.g. during sleep) by
   setting ``suspended = True``.
 - Backend selection: ``backend="numpy"`` (default) needs no torch/ncps and is
   matches the torch path to 1e-5 when started from the same seed.
@@ -58,7 +58,7 @@ log = logging.getLogger(__name__)
 # Default learning rate for online adaptation of the readout.
 _DEFAULT_LR: float = 1e-3
 
-# Default feature vector dimension. Soma's normalized metrics include
+# Default feature vector dimension. The interoception module's normalized metrics include
 # cpu_percent, ram_percent, cycle_latency_avg_ms, and (where available) GPU
 # temperature; the model uses a fixed-size vector padded/truncated to match.
 DEFAULT_FEATURE_DIM: int = 8
@@ -75,12 +75,12 @@ class SubstrateForwardModel:
     units) turns the current feature vector into a recurrent hidden state.
     The reservoir's weights are randomly initialised and FROZEN (never
     trained) — it is a fixed temporal feature extractor, exactly like
-    Chronos's `CfCNetwork`. A linear readout (``units`` -> ``feature_dim``)
+    the sequence module's `CfCNetwork`. A linear readout (``units`` -> ``feature_dim``)
     maps that hidden state to a feature prediction and adapts online via
-    SGD, exactly like Chronos's `ForwardPredictionHead`.
+    SGD, exactly like the sequence module's `ForwardPredictionHead`.
 
     When a ``context_dim`` is provided, the broadcast context vector is
-    concatenated to the hidden state before the readout, so Soma can
+    concatenated to the hidden state before the readout, so the interoception module can
     condition its substrate predictions on the global broadcast context.
     The reservoir remains frozen; only the readout learns.
 
@@ -189,7 +189,7 @@ class SubstrateForwardModel:
 
         # Count of real online-adaptation steps taken (one SGD step per tick
         # where a finite feature vector was learned from, not suspended). This
-        # is the direct "logged lived events" analogue the Soma developmental
+        # is the direct "logged lived events" analogue the interoception module's developmental
         # warm-up reads for its samples-seen end-condition (see module.py and
         # paper §6.6). Runtime-only; never serialised.
         self._adaptation_steps: int = 0
@@ -246,7 +246,7 @@ class SubstrateForwardModel:
 
         Increments only on ticks where the readout actually learned from a
         finite feature vector (not suspended, prior context available). During
-        Hypnos sleep (``suspended``) or on a non-finite/first tick it does not
+        sleep (``suspended``) or on a non-finite/first tick it does not
         advance — so a paused or sensory-starved entity does not accrue
         "samples", exactly what the warm-up end-condition needs.
         """
@@ -422,7 +422,7 @@ class SubstrateForwardModel:
            hidden state.
 
         When ``context_dim > 0`` and ``null_context`` is supplied, the null
-        prediction is recorded so Soma can report the information gain of the
+        prediction is recorded so the interoception module can report the information gain of the
         broadcast context.
 
         Returns the L2 prediction error ``||feature - last_prediction||``
@@ -692,7 +692,7 @@ class SubstrateForwardModel:
 
     # ------------------------------------------------------------------
     # Serialisation — readout weights only. The frozen CfC reservoir is
-    # rebuilt from ``reservoir_seed`` (kept in Soma's snapshot), and the
+    # rebuilt from ``reservoir_seed`` (kept in the interoception module's snapshot), and the
     # recurrent hidden state is ephemeral runtime context, never persisted.
     # ------------------------------------------------------------------
 
@@ -749,14 +749,14 @@ def metrics_to_feature_vector(
     cycle_latency_target_ms: float = 300.0,
     gpu_temp_max_c: float = 100.0,
 ) -> list[float]:
-    """Convert a soma metrics dict to a fixed-size normalized feature vector.
+    """Convert an interoception metrics dict to a fixed-size normalized feature vector.
 
     Layout:
       [0] cpu_percent / 100.0                    (0 = 0%, 1 = 100%)
       [1] ram_percent / 100.0                     (0 = 0%, 1 = 100%)
       [2] cycle_latency_avg_ms / (2 * target)     (0 = no latency, 1 = 2x target)
       [3] max(gpu_*_temp_c) / gpu_temp_max_c      (0 = no GPU data, else hottest GPU)
-      [4..6] self-rhythm slots filled by Soma when the self-rhythm runs
+      [4..6] self-rhythm slots filled by the interoception module when the self-rhythm runs
       [7] VRAM (layout 2): max(gpu_*_vram_percent) / 100.0; 0.0 in layout 1
       [8..feature_dim-1] zero-padded
 

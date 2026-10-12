@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nexus router for the live-perception surface.
+"""The dashboard router for the live-perception surface.
 
 Two routes under /diagnostics/perception:
 
@@ -109,7 +109,7 @@ def perception_snapshot() -> dict:
     return snap
 
 
-# The Nexus proxy talks to the cycle's loopback preview server with a tight
+# The dashboard proxy talks to the cycle's loopback preview server with a tight
 # timeout — it is a same-host request that must either answer immediately or be
 # treated as "no preview" (404). Never hang the diagnostics UI on it.
 _PREVIEW_PROXY_TIMEOUT_S = 1.0
@@ -198,7 +198,7 @@ def build_perception_router(
 
     # ---- dev-gated perception preview (paper §4.4 explicit override) --------
     # These surface WHAT THE ENTITY CURRENTLY SEES / how loud it hears. The
-    # preview holder is populated inside the CYCLE process; Nexus is a SEPARATE
+    # preview holder is populated inside the CYCLE process; the dashboard is a SEPARATE
     # process, so these routes PROXY over a 127.0.0.1-only socket to the cycle's
     # loopback preview server (kaine/perception_preview_server.py), which serves
     # the in-RAM slot. They exist only under the operator dev flag

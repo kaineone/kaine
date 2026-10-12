@@ -27,7 +27,7 @@ async def bus():
 
 
 class _FakeEncoder:
-    """Minimal Topos encoder double — no DINOv2 download, deterministic latent."""
+    """Minimal vision encoder double — no DINOv2 download, deterministic latent."""
 
     model_id = "fake/encoder-sleep"
     latent_dim = 4

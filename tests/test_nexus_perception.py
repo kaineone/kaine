@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nexus perception router: GET .json + POST toggle.
+"""The dashboard perception router: GET .json + POST toggle.
 
 Renders the banner partial when state shows active. Privacy filter
 covered separately in tests/test_nexus_privacy.py — restated here:

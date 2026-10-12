@@ -4,7 +4,7 @@
 """Per-module neural-oscillation layer (oscillatory-binding capability).
 
 Each KAINE module may carry a small leaky integrate-and-fire (LIF) population
-whose spiking rhythm is summarised by a single **phase** value. Syneidesis
+whose spiking rhythm is summarised by a single **phase** value. The workspace
 reads these phases to compute the phase-locking value (PLV) among the modules
 contributing to a candidate coalition and applies a bounded coherence
 multiplier to the coalition's aggregate salience (see

@@ -46,7 +46,7 @@ STUDY_OWNER_KEY = "kaine:study:owner"
 #: The runner's record of the cycle it started, in the step's working directory.
 CHILD_FILE = ".study_child.json"
 
-#: The longest birth bloom the womb accepts (``WombParams`` and
+#: The longest maturation bloom the stimulus source accepts (``WombParams`` and
 #: ``WombClock.begin_birth`` both bound ``birth_transition_seconds`` to (0, 30]).
 BIRTH_BLOOM_MAX_SECONDS = 30.0
 
@@ -314,7 +314,7 @@ class StudyRunner:
     def _birth_bloom_over(
         self, line_dir: Path, first_embodied_wall: float, fallback_seconds: float
     ) -> bool:
-        """Whether the birth bloom has ended: at the stage file's
+        """Whether the maturation bloom has ended: at the stage file's
         ``birth_bloom_ends_at`` when it has one, else ``fallback_seconds``
         after the runner first saw the embodied stage."""
         now = self.wall_clock()
@@ -328,7 +328,7 @@ class StudyRunner:
         not name the bloom's end: the child's own
         ``[perception_feed.womb].birth_transition_seconds`` (loaded exactly as
         the cycle loads it from the step's working directory) plus the margin.
-        When that value cannot be resolved, the longest bloom the womb accepts
+        When that value cannot be resolved, the longest bloom the stimulus source accepts
         plus the margin, so the seed is never preserved mid-bloom."""
         from kaine.boot import _womb_params
         from kaine.config import load_runtime_config
@@ -399,7 +399,7 @@ class StudyRunner:
     def _adopt_birth_preservation(
         self, line_dir: Path, modules_set: set[str]
     ) -> dict[str, Any] | None:
-        """A gestation whose birth preservation succeeded before the runner
+        """A developmental phase whose maturation preservation succeeded before the runner
         could record it: its record, built from the preservation pair on disk,
         or ``None`` when there is no such preservation."""
         state = line_dir / "state" / "cycle"
@@ -482,7 +482,7 @@ class StudyRunner:
             repo_root / "config" / "kaine.operator.toml",
         )
 
-        # A runner that died after the seed's birth preservation succeeded,
+        # A runner that died after the seed's maturation preservation succeeded,
         # but before recording it, left the seed on disk: adopt it rather than
         # gestate a second being.
         if (
@@ -581,7 +581,7 @@ class StudyRunner:
 
         # A runtime.json already on disk belongs to an earlier child (a retry
         # after a failed timeout preservation, or a killed runner).  It is
-        # metadata, not the being's state: it stays where it is, and the loop
+        # metadata, not the entity's state: it stays where it is, and the loop
         # below never acts on it.
         stale_runtime = self._read_runtime(line_dir)
 
@@ -639,7 +639,7 @@ class StudyRunner:
                     ):
                         if first_embodied_wall is None:
                             first_embodied_wall = self.wall_clock()
-                        # The seed is the being once its birth bloom is over.
+                        # The seed is the entity once its maturation bloom is over.
                         if self._birth_bloom_over(
                             line_dir, first_embodied_wall, bloom_fallback
                         ):
@@ -1177,7 +1177,7 @@ def _utc_iso() -> str:
 
 
 def _check_phantasia_manifest(bundle_path: str) -> tuple[str | None, bool | None]:
-    """Return an extra outcome and captured flag for a Phantasia bundle."""
+    """Return an extra outcome and captured flag for a world model bundle."""
     manifest_path = Path(bundle_path) / "manifest.json"
     try:
         text = manifest_path.read_text(encoding="utf-8")

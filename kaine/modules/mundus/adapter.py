@@ -3,7 +3,7 @@
 
 """The body-agnostic embodiment-adapter contract.
 
-Mundus is a control plane that routes the entity's perception and action to and
+The embodiment module is a control plane that routes the entity's perception and action to and
 from a *body* through a pluggable :class:`EmbodimentAdapter`. The core knows no
 wire protocol, transport, or platform vocabulary; each body (a virtual world, a
 VR runtime, a robot, another effector platform) is a small local adapter the
@@ -109,7 +109,7 @@ class EmbodimentCapabilities:
 
 @runtime_checkable
 class EmbodimentAdapter(Protocol):
-    """The one narrow interface the Mundus core drives a body through."""
+    """The one narrow interface the embodiment module core drives a body through."""
 
     def capabilities(self) -> EmbodimentCapabilities:
         """Return the (immutable) capability descriptor for this body."""

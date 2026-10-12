@@ -4,7 +4,7 @@
 """Caretaker notices for unattended boot condition 7.
 
 All notices are content-free: they contain only the install label, the
-current time, the event kind, gate condition results, and the Nexus address.
+current time, the event kind, gate condition results, and the dashboard address.
 Cognitive content, affect, welfare signals, or perception data are never
 included.
 

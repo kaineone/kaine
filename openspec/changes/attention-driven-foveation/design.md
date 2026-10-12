@@ -2,17 +2,17 @@
 
 ## The fovea target signal
 
-Topos today emits whole-frame salience (change, habituation, forward-model
+The vision module today emits whole-frame salience (change, habituation, forward-model
 prediction error). Foveation needs a *spatial* target. Compute a coarse saliency
 map by tiling the frame (e.g. an N×M grid, N,M ≈ 8–16) and scoring each tile by the
 same quantities used per-frame:
 
 - **change** — cosine distance of the tile's features to the previous frame's;
-- **prediction error** — the tile's contribution to the Topos forward model's
+- **prediction error** — the tile's contribution to the vision module's forward model's
   predicted-minus-actual latent (spatially localized, not just the frame scalar).
 
 The **bottom-up** target is the argmax tile (its centre). A **top-down** bias is an
-optional region supplied by the workspace / Nous / Empatheia (e.g. "attend to the
+optional region supplied by the workspace / the planning module / the social cognition module (e.g. "attend to the
 region where the speaking agent's face was"). The two combine by **precision
 weighting** — the fovea target is the argmax of `w_bu · saliency + w_td · bias`,
 where the weights are precisions, consistent with the precision-as-attentional-gain
@@ -20,12 +20,12 @@ the architecture already uses (Feldman and Friston 2010; Bastos et al. 2012). Wi
 no top-down source the target is purely bottom-up (Phase 1).
 
 **Fovea size from arousal — a distinct visual coupling.** Do not conflate this with
-the existing Thymos→Syneidesis mechanism. That mechanism ("arousal widens the
+the existing affect→workspace mechanism. That mechanism ("arousal widens the
 attentional window," §3.4.3) is a *cognitive salience-selection* window inside the
-workspace/Thymos graph — it scales salience scores and how hard the confidence
+workspace and affect module graph — it scales salience scores and how hard the confidence
 threshold is to clear, i.e. *which candidates* reach the workspace. It says nothing
 about a spatial region of the visual field. Fovea size is a **new** coupling: the
-Thymos arousal *value* is taken as an input and mapped onto the spatial extent of
+The affect module's arousal *value* is taken as an input and mapped onto the spatial extent of
 the high-acuity crop. The grounding is the psychophysics of arousal and visual
 attention — the Easterbrook (1959) cue-utilization effect, in which higher arousal
 *narrows* the effective visual field (tunnel vision). The default mapping should
@@ -61,7 +61,7 @@ out; nothing touches disk. The existing static-grep guard
 
 ## Encoding and the report
 
-Topos encodes both views: the peripheral → a gist/context latent, the foveal patch
+The vision module encodes both views: the peripheral → a gist/context latent, the foveal patch
 → a detail latent at the encoder's native size (efficient). The `topos.report`
 carries both latents, each tagged `peripheral` / `foveal`, plus the **content-free
 fovea location** (normalized `(x, y)` and size in `[0, 1]`) — never pixels. When
@@ -89,7 +89,7 @@ cost.
 ## Active-vision framing (why this is not a bolt-on)
 
 The loop: bottom-up saliency proposes → precision-weighted selection with top-down →
-the fovea moves (a covert eye movement = **epistemic action**, valued by Nous via
+the fovea moves (a covert eye movement = **epistemic action**, valued by the planning module via
 expected free energy) → the high-res fovea lowers prediction error where attended →
 forward models update → next tick's saliency shifts. This is active inference over
 where to look (Friston et al. 2012), realized with machinery the architecture
@@ -98,17 +98,17 @@ attention-schema indicator, not just throughput.
 
 ## Embodiment tie-in
 
-The paper's §3.4.6 Mundus continuous-control plan already names "gaze direction
+The paper's §3.4.6 embodiment module's continuous-control plan already names "gaze direction
 decoupled from the body" as a clamped per-tick control scalar. The fovea-target
 signal defined here is that gaze signal for the screen: in an embodied setting the
 same target aims a real or virtual camera. This change should therefore publish the
-fovea target in a form the future Mundus gaze scalar can consume directly (a
+fovea target in a form the future embodiment module's gaze scalar can consume directly (a
 normalized 2-D target + size), so the two never diverge.
 
 ## Risks / open questions
 
 - **Fovea thrashing.** The target could oscillate (kin to the loop-stability
-  concern in §9). Damp with dwell/hysteresis, momentum (Topos already carries local
+  concern in §9). Damp with dwell/hysteresis, momentum (the vision module already carries local
   recurrent state), and arousal-set size.
 - **Spatial saliency touches the perception hot path.** Modest work, but benchmark
   it — the tiling and per-tile scoring run every emitted tick.
@@ -123,7 +123,7 @@ Locked by the operator 2026-07-08:
 
 1. **Capture resolution of the single grab: NATIVE** (up to 4K), kept configurable
    so the host benchmark can dial it back if it strains the tick.
-2. **Phase 1 scope: INCLUDE top-down** — the workspace→Topos attention channel is
+2. **Phase 1 scope: INCLUDE top-down** — the workspace→vision attention channel is
    built in Phase 1, not deferred.
 3. **Fovea count: SINGLE.**
 4. **Fovea size: AROUSAL-DRIVEN** (the distinct visual coupling above), sign per the

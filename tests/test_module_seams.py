@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for boot-time module seams and the parity between registry boot,
-individual construction, and Spot's heavy-restart rebuild path.
+individual construction, and the supervisor's heavy-restart rebuild path.
 """
 
 from __future__ import annotations
@@ -77,7 +77,7 @@ class _FakeModule:
 
 
 # ---------------------------------------------------------------------------
-# Chronos network / forward-prediction seam
+# The sequence module's network / forward-prediction seam
 # ---------------------------------------------------------------------------
 
 
@@ -128,7 +128,7 @@ async def test_chronos_default_network_head_width_equals_cfc_units(bus: AsyncBus
 async def test_chronos_injected_network_without_units_rejects_forward_prediction(
     bus: AsyncBus,
 ) -> None:
-    # The chronos spec requires a construction error, so a bad plugin network
+    # The sequence module's spec requires a construction error, so a bad plugin network
     # stops boot before any module starts.
     featurizer = SnapshotFeaturizer()
     with pytest.raises(ValueError, match="units"):
@@ -142,7 +142,7 @@ async def test_chronos_injected_network_without_units_rejects_forward_prediction
 
 
 # ---------------------------------------------------------------------------
-# Soma forward-model seam
+# The interoception module's forward-model seam
 # ---------------------------------------------------------------------------
 
 
@@ -217,7 +217,7 @@ async def test_soma_injected_forward_model_tick_never_builds_substrate(
 
 
 # ---------------------------------------------------------------------------
-# Nous engine seam
+# The planning module's engine seam
 # ---------------------------------------------------------------------------
 
 
@@ -445,14 +445,14 @@ def test_construct_module_matches_build_registry_calls(monkeypatch: pytest.Monke
         assert reg_call["intent_secret"] == dir_call["intent_secret"]
         assert reg_call["injections"] == dir_call["injections"]
 
-    # Topos/Audition receive the shared perception feed.
+    # the vision and audition modules receive the shared perception feed.
     topos_call = by_name_dir["topos"]
     assert topos_call["section"]["perception_feed"] == kaine_config["perception_feed"]
 
-    # Praxis receives the intent secret.
+    # The effectors module receives the intent secret.
     assert by_name_dir["praxis"]["intent_secret"] is secret
 
-    # Soma is clocked and receives the shared EntityClock instance.
+    # The interoception module is clocked and receives the shared EntityClock instance.
     assert by_name_dir["soma"]["entity_clock"] is clock
 
 
@@ -472,7 +472,7 @@ async def test_construct_module_rejects_injections_for_non_seam_modules(
 
 
 # ---------------------------------------------------------------------------
-# Spot rebuild parity
+# The supervisor rebuild parity
 # ---------------------------------------------------------------------------
 
 
@@ -532,7 +532,7 @@ def test_make_rebuild_module_passes_clock_and_secret(monkeypatch: pytest.MonkeyP
 
 
 # ---------------------------------------------------------------------------
-# Chronos restart identity
+# The sequence module's restart identity
 # ---------------------------------------------------------------------------
 
 

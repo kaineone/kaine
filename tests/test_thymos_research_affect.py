@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Research-affect tests for Thymos.
+"""Research-affect tests for the affect module.
 
 Validates the drive/relief dynamics and the valence/appraisal rules described
 in the 2026-10-08 OpenSpec proposal.
@@ -902,7 +902,7 @@ async def test_peer_consumer_survives_a_bad_event(bus: AsyncBus):
 @pytest.mark.asyncio
 async def test_skipped_perceptual_reports_leave_the_error_trackers_unchanged(bus):
     """A None prediction_error from a perceptual module must be ignored,
-    leaving Thymos error trackers and progress exactly as they were."""
+    leaving the affect module's error trackers and progress exactly as they were."""
     fake_now = [0.0]
     thymos = Thymos(
         bus,

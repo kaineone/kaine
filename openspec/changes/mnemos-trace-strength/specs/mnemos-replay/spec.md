@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Affect/recency replay selection
-Mnemos SHALL select replay traces by a score combining affect intensity and
+The episodic memory module SHALL select replay traces by a score combining affect intensity and
 recency (`affect_weight × intensity + recency_weight × recency`), returning the
 top `selection_top_k` traces. The candidates SHALL be every persisted trace
 stored since the previous downscaling (`born_sleep` equal to the sleep count),

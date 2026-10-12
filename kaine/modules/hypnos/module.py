@@ -111,7 +111,7 @@ class Hypnos(BaseModule):
         phantasia: Optional[Any] = None,
         # Active-module registry for oscillator hook (phase 1)
         active_modules: Optional[list[Any]] = None,
-        # Perception locus path (for suspension during replay window)
+        # the perceptual locus module path (for suspension during replay window)
         perception_desired_path: Optional[Path] = None,
         # Shared playlist clock (playlist-sleep-pause), injected by boot when a
         # playlist feed runs — the SAME instance both feeds read. pause()/
@@ -128,10 +128,10 @@ class Hypnos(BaseModule):
         # measure infrastructure latency, like the cycle slip). Defaults to a
         # real-time clock → behavior-identical.
         entity_clock: Optional[EntityClock] = None,
-        # Minimum entity-time seconds between a sleep's end and a Nous-requested
-        # rest; bounds rest requests from an exploring Nous.
+        # Minimum entity-time seconds between a sleep's end and a planning-module-requested
+        # rest; bounds rest requests from an exploring planning module.
         requested_rest_min_interval_s: float = 1800.0,
-        # Path to the organ GGUF served by Lingua. Used to identify the correct
+        # Path to the organ GGUF served by the language module. Used to identify the correct
         # base voice profile for distinctiveness measurement; None means the
         # digest is unknown and distinctiveness will be null.
         organ_gguf_path: Optional[Path] = None,
@@ -172,7 +172,7 @@ class Hypnos(BaseModule):
         self._phantasia = phantasia
         # Module registry for oscillator hook
         self._active_modules: list[Any] = list(active_modules or [])
-        # Perception locus path
+        # the perceptual locus module path
         self._perception_desired_path = perception_desired_path
         # Shared playlist clock (may be None in non-playlist modes).
         self._playlist_clock = playlist_clock
@@ -189,7 +189,7 @@ class Hypnos(BaseModule):
         self._last_sleep_at: Optional[float] = None
         # Consolidation-divergence magnitude embedder + persisted state path.
         # The embedder lives in the boundary-neutral kaine.text_embedding so
-        # Hypnos (core) never imports kaine.evaluation. Injected by the cycle
+        # the sleep module (core) never imports kaine.evaluation. Injected by the cycle
         # entrypoint (the semantic embedder, so magnitude is on the SAME scale
         # as the A/B meter) — mirroring how the A/B observer's embedder is wired
         # at the entrypoint, not defaulted in the module. When None the
@@ -202,13 +202,13 @@ class Hypnos(BaseModule):
         # Fatigue trigger state
         self._soma_cursor: str = "0"
         self._fatigue_triggered_sleep: bool = False  # did fatigue fire this cycle?
-        # Nous/Volition rest-request handling
+        # The planning and action selection modules' rest-request handling
         self._requested_rest_min_interval_s: float = requested_rest_min_interval_s
         self._entity_clock = entity_clock
         self._volition_cursor: str = "0"
         # Seed from boot time so a fresh boot or module restart cannot bypass
         # the requested-rest interval. Fatigue/regulation triggers are
-        # unaffected; this only guards Nous/Volition rest requests.
+        # unaffected; this only guards planning and action selection modules' rest requests.
         self._last_sleep_ended_at: Optional[float] = (
             self._entity_clock.now()
             if self._entity_clock is not None
@@ -296,7 +296,7 @@ class Hypnos(BaseModule):
             if isinstance(tail, bytes):
                 tail = tail.decode()
             self._broadcast_cursor = tail
-        # Seed cursor so we only process new volition intents from now on.
+        # Seed cursor so we only process new action selection module intents from now on.
         try:
             latest = await self._bus.client.xrevrange("volition.out", count=1)
         except Exception:
@@ -310,7 +310,7 @@ class Hypnos(BaseModule):
             asyncio.create_task(self._volition_consumer_loop(), name="hypnos-volition-consumer")
         )
         if self._fatigue_triggered:
-            # Seed cursor so we only process new soma events from now on.
+            # Seed cursor so we only process new interoception module events from now on.
             try:
                 latest = await self._bus.client.xrevrange("soma.out", count=1)
             except Exception:
@@ -365,7 +365,7 @@ class Hypnos(BaseModule):
         """Background loop: watch soma.out for maintenance triggers.
 
         Two event shapes on ``soma.out`` trigger an immediate maintenance
-        cycle when Hypnos is not already sleeping (subject to the same
+        cycle when the sleep module is not already sleeping (subject to the same
         non-interruptibility / freeze-preemption guards as the interval-based
         trigger):
 
@@ -373,9 +373,9 @@ class Hypnos(BaseModule):
           crossed its maintenance threshold.
         * ``soma.regulation`` with ``action == "request_maintenance"`` — the
           homeostatic regulator escalated to requesting an earlier offline
-          cycle.  The linkage is event-driven: Hypnos observes the advisory
+          cycle.  The linkage is event-driven: the sleep module observes the advisory
           directly on ``soma.out`` (the cycle engine separately latches an
-          advisory ``maintenance_requested`` flag for diagnostics, but Hypnos
+          advisory ``maintenance_requested`` flag for diagnostics, but the sleep module
           does not read that flag).
         """
         try:
@@ -436,7 +436,7 @@ class Hypnos(BaseModule):
     async def _volition_consumer_loop(self) -> None:
         """Background loop: watch volition.out for rest requests.
 
-        Nous-originated ``intent.rest`` events (and any other rest intents)
+        The planning-module-originated ``intent.rest`` events (and any other rest intents)
         request an entity-time sleep. Accepted requests start a maintenance
         cycle with trigger ``"requested"``; refusals publish a content-free
         ``hypnos.rest_request`` event.
@@ -505,7 +505,7 @@ class Hypnos(BaseModule):
             log.warning("hypnos: rest_request publish failed", exc_info=True)
 
     async def _handle_rest_request(self, payload: dict[str, Any]) -> None:
-        """Accept or refuse a Nous/Volition rest request.
+        """Accept or refuse a planning/action selection module rest request.
 
         Publishes a content-free ``hypnos.rest_request`` diagnostic at
         salience 0.0 and, when accepted, starts a requested sleep through the
@@ -595,7 +595,7 @@ class Hypnos(BaseModule):
         """Set locus to 'off' to suspend external perception for the sleep.
 
         Reuses the perception_state.write_desired_locus machinery (the same
-        path used by PerceptionLocus and the Nexus operator toggle).  Zero
+        path used by PerceptionLocus and the dashboard operator toggle).  Zero
         raw-sense-data persistence is preserved: we only write the desired
         locus flag, never any sensory content.
 
@@ -632,7 +632,7 @@ class Hypnos(BaseModule):
                 "hypnos: perception suspension (write_desired_locus) failed",
                 exc_info=True,
             )
-        # Pause the shared playlist clock under the hypnos holder. A missing
+        # Pause the shared playlist clock under the sleep module's holder. A missing
         # clock (non-playlist modes) is an honest no-op, not a crash.
         if self._playlist_clock is not None:
             try:
@@ -658,7 +658,7 @@ class Hypnos(BaseModule):
                 "hypnos: perception restore (write_desired_locus) failed",
                 exc_info=True,
             )
-        # Resume the shared playlist clock under the hypnos holder so the
+        # Resume the shared playlist clock under the sleep module's holder so the
         # stimulus resumes with perception (the invariant: clock paused ⇔
         # perception suspended).
         if self._playlist_clock is not None:
@@ -670,9 +670,9 @@ class Hypnos(BaseModule):
     async def _reinject_association(self, scenario: dict[str, Any]) -> None:
         """Re-inject a phase-3 cross-period association into the workspace.
 
-        Published as ``hypnos.association`` on the Hypnos out-stream; the
-        syneidesis broadcast then surfaces it to Nous (pymdp belief update)
-        and Thymos (re-appraisal) through the NORMAL cognitive cycle — there
+        Published as ``hypnos.association`` on the sleep module's out-stream; the
+        workspace broadcast then surfaces it to the planning module (pymdp belief update)
+        and the affect module (re-appraisal) through the NORMAL cognitive cycle — there
         is no separate belief-revision burst.  Carries only compact scenario
         descriptors (no raw sense data); zero-persistence invariant holds.
         """
@@ -683,7 +683,7 @@ class Hypnos(BaseModule):
         )
 
     def _open_phantasia_window(self) -> None:
-        """Open Phantasia's scenario window before phases 2 and 3."""
+        """Open the world model module's scenario window before phases 2 and 3."""
         method = getattr(self._phantasia, "open_scenario_window", None)
         if method is None:
             return
@@ -693,7 +693,7 @@ class Hypnos(BaseModule):
             log.warning("hypnos: opening Phantasia's scenario window failed", exc_info=True)
 
     def _close_phantasia_window(self) -> None:
-        """Close Phantasia's scenario window after phases 2 and 3."""
+        """Close the world model module's scenario window after phases 2 and 3."""
         method = getattr(self._phantasia, "close_scenario_window", None)
         if method is None:
             return
@@ -751,10 +751,10 @@ class Hypnos(BaseModule):
                 )
             )
 
-            # --- Phases 2 and 3 cue Phantasia ---
+            # --- Phases 2 and 3 cue the world model module ---
             # Phase 2's replay cues it through mnemos.replay events on the bus
-            # and phase 3 calls it directly. Hypnos opens Phantasia's scenario
-            # window around both, so the window never depends on Phantasia
+            # and phase 3 calls it directly. The sleep module opens the world model module's scenario
+            # window around both, so the window never depends on the world model module
             # having seen hypnos.sleep.started, and closes it on any exit.
             self._open_phantasia_window()
             try:
@@ -768,9 +768,9 @@ class Hypnos(BaseModule):
                 )
 
                 # --- Phase 3: Associative Replay (cross-period; behind feature flag) ---
-                # Selects cross-period traces, cues Phantasia, and re-injects the
-                # resulting novel associations into the workspace so Nous (pymdp) and
-                # Thymos process them via the NORMAL cognitive cycle: no NAR burst.
+                # Selects cross-period traces, cues the world model module, and re-injects the
+                # resulting novel associations into the workspace so the planning module (pymdp) and
+                # the affect module process them via the NORMAL cognitive cycle: no NAR burst.
                 phase_results.append(
                     await associative_replay(
                         enabled=self._associative_replay_enabled,
@@ -1001,7 +1001,7 @@ class Hypnos(BaseModule):
             summary["ignition_audit"] = await self._run_ignition_audit(since=previous_sleep_at)
         except Exception:
             log.warning("hypnos: ignition audit step failed (continuing)", exc_info=True)
-        # Publishing hypnos.sleep.completed causes Soma to reset its
+        # Publishing hypnos.sleep.completed causes the interoception module to reset its
         # FatigueAccumulator (soma._hypnos_event_loop handles this event).
         await self.publish("hypnos.sleep.completed", summary, salience=salience)
         return summary
@@ -1043,7 +1043,7 @@ class Hypnos(BaseModule):
         ``intent.act`` on ``nous.out`` is counted separately as unrealizable
         because no effector reads ``nous.out``. ANY exception degrades to a
         logged warning + ``{"error": <ExcTypeName>}`` — the sleep must never
-        fail because auditing failed. Boundary: Hypnos never imports
+        fail because auditing failed. Boundary: The sleep module never imports
         ``kaine.evaluation``; only ``kaine.modules.hypnos.ignition_audit``.
         """
         from kaine.modules.hypnos.ignition_audit import classify_realizations
@@ -1160,7 +1160,7 @@ class Hypnos(BaseModule):
 
         Boundary: only counts + a scalar magnitude leave here. The magnitude is
         computed with the boundary-neutral ``kaine.text_embedding`` embedder —
-        Hypnos never imports ``kaine.evaluation``. NEVER the prompt/chosen/
+        the sleep module never imports ``kaine.evaluation``. NEVER the prompt/chosen/
         rejected utterance text.
         """
         self._sleep_count += 1
@@ -1200,7 +1200,7 @@ class Hypnos(BaseModule):
             kwargs["path"] = self._consolidation_divergence_path
         # The template arm is a protective floor (voice-development D8): a scan
         # that failed or found nothing is no evidence, so it never overwrites an
-        # earlier record. Otherwise one bad read would un-diverge a being.
+        # earlier record. Otherwise one bad read would un-diverge an entity.
         prior = None
         if scanned == 0:  # also the case when the build failed
             read_kwargs = {"path": kwargs["path"]} if "path" in kwargs else {}
@@ -1494,7 +1494,7 @@ class Hypnos(BaseModule):
         If the body raises, including a transient failure of its own
         completed publish, this wrapper publishes a completed event
         carrying an ``"aborted": True`` flag (content-free: the reason field
-        carries only the exception class name). Soma treats it identically
+        carries only the exception class name). The interoception module treats it identically
         to a normal completion, so ``_in_hypnos`` can never wedge and
         faster_decay always stops.
 

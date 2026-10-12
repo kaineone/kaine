@@ -59,7 +59,7 @@ DEFAULT_VISION_REPO = "facebook/dinov2-small"
 DEFAULT_EMBEDDER_REPO = "sentence-transformers/all-MiniLM-L6-v2"
 DEFAULT_TTS_REPO = "resemble-ai/chatterbox"
 
-# Shipped-default Topos encoder backend. Kept in sync with
+# Shipped-default vision encoder backend. Kept in sync with
 # kaine.modules.topos.encoder.DEFAULT_ENCODER_BACKEND and config/kaine.toml
 # [topos].encoder_backend. Held as a bare string so the setup phase never pulls
 # the heavy torch-bearing encoder module just to read a default.
@@ -67,7 +67,7 @@ DEFAULT_ENCODER_BACKEND = "internvideo_next"
 
 
 def encoder_backend(config: Optional[dict[str, Any]] = None) -> str:
-    """The configured Topos encoder backend, lower-cased; the shipped default
+    """The configured vision encoder backend, lower-cased; the shipped default
     (``internvideo_next``) when the operator sets none."""
     topos = (config or {}).get("topos") or {}
     val = topos.get("encoder_backend")
@@ -118,7 +118,7 @@ def aux_models(config: Optional[dict[str, Any]] = None) -> tuple[AuxModel, ...]:
     configured ids where present.
 
     The faster-distil-Whisper STT repo is fetched only when Audition uses the
-    Speaches backend; the Chatterbox TTS repo only when Vox uses the Chatterbox
+    Speaches backend; the Chatterbox TTS repo only when the vocal module uses the Chatterbox
     backend.  The vision encoder is backend-dependent and only DINOv2 is a plain
     repo download: it appears here ONLY when ``[topos].encoder_backend = "dinov2"``.
     The shipped default (``internvideo_next``) is a revision-pinned single-file

@@ -10,5 +10,5 @@
 ## 3. Tests, docs
 
 - [x] 3.1 Tests: the arousal gained per second from a steady novel coalition is the same at 3.3 and 10 broadcasts per second; state is published with no broadcasts; mutation-check.
-- [x] 3.2 Docs: `docs/09-modules/thymos.md`.
+- [x] 3.2 Docs: `docs/09-modules/affect.md`.
 - [x] 3.3 `openspec validate thymos-rate-invariant-timely-state --strict`.

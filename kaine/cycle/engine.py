@@ -169,11 +169,11 @@ class CognitiveCycle:
         self._wall_clock = wall_clock
         self._deterministic = bool(deterministic)
         # When the oscillatory-layer is enabled, collect per-module phases each
-        # tick and hand them to Syneidesis via context['phases']. Off by
+        # tick and hand them to the workspace via context['phases']. Off by
         # default ⇒ zero per-tick cost and selection is unchanged.
         self._collect_phases = bool(collect_phases)
         # DI seam for the live four-factor salience (wire-salience-goal-thymos).
-        # When the workspace's real Thymos/goal factors are active, the cycle
+        # When the workspace's real affect/goal factors are active, the cycle
         # refreshes this callback each tick with the events it already collected
         # so the affect/drive snapshot the salience factors read stays current —
         # without the workspace importing kaine.modules. None (both factors on
@@ -201,7 +201,7 @@ class CognitiveCycle:
         self._cursors: dict[str, str] = {}
         self._error_counts: dict[str, int] = {}
         # L4 — rate-limit guards (monotonic ts of the last WARNING) for the
-        # control / soma consumer loops.
+        # control / interoception module consumer loops.
         self._control_err_last_log = 0.0
         self._soma_err_last_log = 0.0
         self._experience_acc = 0.0
@@ -212,7 +212,7 @@ class CognitiveCycle:
         # finished pauses and the start of the current one, if any.
         self._paused_total = 0.0
         self._paused_at: float | None = None
-        # Time not awake: the union of frozen and Hypnos-sleep spans (awake time excludes both).
+        # Time not awake: the union of frozen and sleep spans (awake time excludes both).
         self._sleep_source: Optional[Callable[[], bool]] = None
         self._unawake_total = 0.0
         self._unawake_since: float | None = None
@@ -224,7 +224,7 @@ class CognitiveCycle:
         # budget, so we can surface the ACHIEVED processing rate vs the TARGET
         # rate and the recent slip. This makes a `time_scale > 1` (or any rate)
         # overrun *visible* — the cycle attempts the faster target and, when the
-        # hardware cannot hold it, the shortfall is reported (and Soma's
+        # hardware cannot hold it, the shortfall is reported (and the interoception module's
         # reduce_rate throttles), never silently capped or faked.
         self._recent_wall_ms: deque[float] = deque(maxlen=self._PACING_WINDOW_TICKS)
         self._recent_target_ms: deque[float] = deque(maxlen=self._PACING_WINDOW_TICKS)
@@ -234,7 +234,7 @@ class CognitiveCycle:
         # soma.regulation consumer state.
         self._soma_out_cursor: str = "0"
         # Advisory / diagnostic latch only. The early-maintenance trigger is
-        # event-driven: Hypnos observes the soma.regulation/request_maintenance
+        # event-driven: the sleep module observes the soma.regulation/request_maintenance
         # event on soma.out directly. Nothing reads this flag to drive behaviour.
         self.maintenance_requested: bool = False
 
@@ -345,12 +345,12 @@ class CognitiveCycle:
         raises it above the subjective rate). The achieved rate is derived from
         the mean real per-tick wall time over the recent window: a tick that
         overruns its budget pushes the achieved rate below target, and that
-        shortfall is what is surfaced here (and in Nexus) so a ``>1`` dilation is
+        shortfall is what is surfaced here (and in the dashboard) so a ``>1`` dilation is
         attempted and then *honestly* throttled, never silently capped.
 
         Returns ``None``-valued fields (achieved_rate_hz=None) until at least one
         tick has run. ``overrunning`` is True when recent ticks slipped past
-        their budget on average — the signal an operator/Nexus reads to see the
+        their budget on average — the signal an operator/dashboard reads to see the
         mind could not hold the requested speed.
         """
         scale = self._entity_clock.scale
@@ -407,7 +407,7 @@ class CognitiveCycle:
 
         EVERY path that changes the processing rate — the public
         ``set_processing_rate``, the runtime ``cycle.set_rates`` control event,
-        and the Soma ``reduce_rate`` advisory throttle — routes through here, so
+        and the interoception module's ``reduce_rate`` advisory throttle — routes through here, so
         the cached subjective tick period (used by the logical clock and the
         pacing budget) is recomputed on EVERY change and can never diverge from
         the live rate. (The earlier bug: ``reduce_rate`` mutated
@@ -467,7 +467,7 @@ class CognitiveCycle:
         return total
 
     def set_sleep_source(self, source: Optional[Callable[[], bool]]) -> None:
-        """Set the callable that reports whether Hypnos is asleep (None: never asleep)."""
+        """Set the callable that reports whether the sleep module is asleep (None: never asleep)."""
         self._sleep_source = source
 
     @property
@@ -657,7 +657,7 @@ class CognitiveCycle:
             except Exception:
                 log.exception("workspace broadcast failed on tick %d", self._tick_index)
             # Executive action selection runs immediately after a successful
-            # experiential broadcast. Volition is the ONLY source of effector
+            # experiential broadcast. The action selection module is the ONLY source of effector
             # activation; it returns no intents when the snapshot is inhibited,
             # structurally enforcing executive inhibition (§37/§147).
             if broadcast_ok and self._volition is not None:
@@ -720,9 +720,9 @@ class CognitiveCycle:
 
         The cycle never calls effectors directly: it publishes intents to
         ``volition.out`` and effectors realize them off the bus. An inhibited
-        snapshot yields no intents (Volition's gate), so nothing is published
+        snapshot yields no intents (the action selection module's gate), so nothing is published
         there. Proposal outcomes always go to ``volition_feedback.out`` (when a
-        Nous proposal source is wired) so Nous can learn what happened.
+        planning module proposal source is wired) so the planning module can learn what happened.
         """
         from kaine.workspace.volition import (
             INTENT_TYPES,
@@ -753,7 +753,7 @@ class CognitiveCycle:
             except Exception:
                 log.exception("failed to publish %s intent", intent.kind)
 
-        # Publish content-free proposal outcomes for Nous learning. This runs
+        # Publish content-free proposal outcomes for the planning module's learning. This runs
         # even when the snapshot was inhibited (no intents above).
         try:
             outcomes = self._volition.proposal_outcomes(snapshot)
@@ -861,11 +861,11 @@ class CognitiveCycle:
                 await self.apply_rate_control_event(event.payload)
 
     async def consume_soma_regulation(self, soma_stream: str = "soma.out") -> None:
-        """Drain pending ``soma.regulation`` events from the soma stream.
+        """Drain pending ``soma.regulation`` events from the interoception stream.
 
         Actions are advisory only: the cycle acts on them within safe
         bounds and logs each one.  Unknown ``action`` values are ignored
-        gracefully — Soma may be extended in future without breaking the
+        gracefully — the interoception module may be extended in future without breaking the
         engine.
 
         Actuation map
@@ -880,7 +880,7 @@ class CognitiveCycle:
         ``request_maintenance``
             Latch ``self.maintenance_requested = True`` as an advisory /
             diagnostic signal.  This flag is NOT what schedules maintenance:
-            the actual early-maintenance trigger is event-driven — Hypnos
+            the actual early-maintenance trigger is event-driven — the sleep module
             observes the ``soma.regulation`` / ``request_maintenance`` event
             directly on ``soma.out`` and fires an earlier offline cycle.  The
             flag is retained purely as a latched advisory for diagnostics and

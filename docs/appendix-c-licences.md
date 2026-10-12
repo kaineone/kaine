@@ -123,12 +123,12 @@ The trainer container ([`Dockerfile`](../Dockerfile)) installs its own copy of `
 | Model / weights | License | Notes |
 |---|---|---|
 | Published KAINE organ: GGUF (`kaineone/Qwen3.5-4B-abliterated-GGUF`) and safetensors (`kaineone/Qwen3.5-4B-abliterated`) | Apache-2.0 | KAINE's abliteration of Qwen3.5-4B. The GGUF is served by the local model server, and the safetensors copy is the base for voice-alignment training |
-| InternVideo-Next base (`revliter/internvideo_next_base_p14_res224_f16`, OpenGVLab) | MIT | Frozen temporally-native visual encoder (Topos, shipped default). Modeling code vendored in [`external/internvideo_next/`](../external/internvideo_next/); weights fetched at setup. |
+| InternVideo-Next base (`revliter/internvideo_next_base_p14_res224_f16`, OpenGVLab) | MIT | Frozen temporally-native visual encoder (Vision, shipped default). Modeling code vendored in [`external/internvideo_next/`](../external/internvideo_next/); weights fetched at setup. |
 | Dasheng base (`mispeech/dasheng-base`, Xiaomi) | Apache-2.0 | Frozen self-supervised acoustic encoder (Audition, selectable). Modeling code vendored in [`external/dasheng/`](../external/dasheng/); weights fetched at setup. |
 | WavJEPA base (`labhamlet/wavjepa-base`) | MIT (per the HF model tag; no LICENSE file in the repo) | Frozen self-supervised acoustic encoder (Audition, selectable; student path only). Modeling code vendored in [`external/wavjepa/`](../external/wavjepa/) with three safety changes; weights fetched at setup. |
-| `facebook/dinov2-small` | Apache-2.0 | Frozen ViT-S/14 visual encoder (Topos, selectable non-default fallback) |
+| `facebook/dinov2-small` | Apache-2.0 | Frozen ViT-S/14 visual encoder (Vision, selectable non-default fallback) |
 | emotion2vec+ (`emotion2vec/emotion2vec_plus_base`) | Apache-2.0 | Loaded via funasr from HuggingFace hub |
-| `all-MiniLM-L6-v2` | Apache-2.0 | Sentence-transformers memory embedder (Mnemos) |
+| `all-MiniLM-L6-v2` | Apache-2.0 | Sentence-transformers memory embedder (Episodic memory) |
 | Whisper / faster-Whisper (`Systran/faster-distil-whisper-medium.en`) | MIT | Served by Speaches STT host service |
 | sherpa-onnx Moonshine base/tiny | see upstream | Fetched at setup ([`kaine/setup/speech_models.py`](../kaine/setup/speech_models.py)) |
 | Kokoro v0.19 | see upstream | Fetched at setup ([`kaine/setup/speech_models.py`](../kaine/setup/speech_models.py)) |
@@ -144,7 +144,7 @@ The trainer container ([`Dockerfile`](../Dockerfile)) installs its own copy of `
 | Dasheng modeling code | [`external/dasheng/`](../external/dasheng/) | Apache-2.0 | Verbatim vendor; frozen self-supervised acoustic encoder (Audition, selectable) |
 | WavJEPA modeling code | [`external/wavjepa/`](../external/wavjepa/) | MIT (per the upstream Hugging Face model tag; the repository carries no LICENSE file) | Vendored with three safety changes; frozen self-supervised acoustic encoder (Audition, selectable, student path only) |
 | jlens | [`external/jlens/`](../external/jlens/) | Apache-2.0 | |
-| Nexus front-end assets | [`kaine/nexus/static/`](../kaine/nexus/static/) | mixed | JavaScript libraries in `vendor/`; fonts in `fonts/`. Includes three.js, uPlot, and `viz.js` (GPL-3.0-or-later). See [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md). |
+| dashboard front-end assets | [`kaine/nexus/static/`](../kaine/nexus/static/) | mixed | JavaScript libraries in `vendor/`; fonts in `fonts/`. Includes three.js, uPlot, and `viz.js` (GPL-3.0-or-later). See [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md). |
 
 The project `NOTICE` file lists each vendored component above. Check [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md) for the full vendored set.
 

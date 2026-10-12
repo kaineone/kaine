@@ -7,10 +7,10 @@ This module implements the two destructive primitives the decommission CLI
 (:mod:`kaine.lifecycle.__main__`) orchestrates:
 
 * :func:`capture_backup` — produce ``backups/entity_<name>_<utc>/``: the
-  entity's transferable self (Eidolon self-model, Lingua intent log, Hypnos
-  voice adapters, Phantasia world-model weight checkpoints, the latest fork
+  entity's transferable self (self-model, the language module's intent log, the sleep module's
+  voice adapters, world-model weight checkpoints, the latest fork
   snapshot, a best-effort Qdrant export of the
-  mnemos/empatheia collections) plus a ``manifest.json`` recording the
+  episodic memory and social cognition modules' collections) plus a ``manifest.json`` recording the
   divergence assessment, the continuity note, the file inventory, and restore
   notes. The bundle is encrypted with the existing state encryptor when state
   encryption is enabled. This satisfies CAL 4.2(b) ("saving the Entity's
@@ -18,7 +18,7 @@ This module implements the two destructive primitives the decommission CLI
   elsewhere"). Backup is **blocking**: a failure must abort decommission.
 
 * :func:`delete_entity_state` — remove the on-disk state subtrees, drop the
-  mnemos/empatheia Qdrant collections, and clear entity Redis streams. It only
+  episodic memory and social cognition modules' Qdrant collections, and clear entity Redis streams. It only
   ever operates under the provided ``state_root`` (so tests can point it at a
   tmp dir) and supports ``dry_run`` (report what *would* be removed).
 
@@ -322,10 +322,10 @@ def capture_backup(
     errors: list[str] = []
 
     bundle_dir = out_root / f"entity_{_safe_name(entity_name)}_{_utc_stamp()}"
-    # The being's identity goes into the plaintext manifest so key custody can
+    # The entity's identity goes into the plaintext manifest so key custody can
     # find its key without decrypting the bundle (entity-identity D7). It is read
     # before the bundle directory exists, so an unreadable identity leaves no
-    # partial copy of the being behind (D10).
+    # partial copy of the entity behind (D10).
     identity_entry: dict[str, Any] | None = None
     try:
         identity = load_identity(state_root / "identity" / "entity.json")
@@ -353,7 +353,7 @@ def capture_backup(
             errors=[f"could not create backup dir: {type(exc).__name__}: {exc}"],
         )
 
-    # --- 1. Eidolon self-model ------------------------------------------
+    # --- 1. Self-model ------------------------------------------
     self_model_src = state_root / "eidolon" / "self_model.json"
     if self_model_src.is_file():
         try:
@@ -362,7 +362,7 @@ def capture_backup(
         except Exception as exc:
             errors.append(f"copy self_model.json: {exc}")
 
-    # --- 2. Lingua intent expression log --------------------------------
+    # --- 2. Language intent expression log --------------------------------
     intent_src = state_root / "lingua" / "intent_expression.jsonl"
     if intent_src.is_file():
         try:
@@ -382,7 +382,7 @@ def capture_backup(
         except Exception as exc:
             errors.append(f"copy intent_log/: {exc}")
 
-    # --- 3. Hypnos voice adapters ---------------------------------------
+    # --- 3. Sleep voice adapters ---------------------------------------
     adapters_src = state_root / "hypnos" / "adapters"
     if adapters_src.is_dir():
         try:
@@ -391,7 +391,7 @@ def capture_backup(
         except Exception as exc:
             errors.append(f"copy adapters/: {exc}")
 
-    # --- 4. Phantasia world-model weight checkpoints ---------------------
+    # --- 4. World-model weight checkpoints ---------------------
     # Learned-from-experience RSSM weights (opt-in persist_weights). The whole
     # directory is copied so custom checkpoint filenames are covered. These
     # are transferable cognitive state per CAL 4.2(b) — learned weights, never
@@ -407,8 +407,8 @@ def capture_backup(
             errors.append(f"copy phantasia/: {exc}")
 
     # --- 4a. Individuation evidence ---------------------------------------
-    # Birth reference, ledger, reports and stored birth adapter. This evidence
-    # travels with the being into the backup and is included in the same
+    # Maturation reference, ledger, reports and stored maturation adapter. This evidence
+    # travels with the entity into the backup and is included in the same
     # tar/encryption pass as the other subtrees. A failure here is fatal: the
     # CLI must not delete the only copy of the evidence.
     individuation_src = state_root / "individuation"

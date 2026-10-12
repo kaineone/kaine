@@ -81,7 +81,7 @@ _SYNEIDESIS_ALLOWED_KEYS: set[str] = {
 }
 
 # Shipped default source per salience factor (wire-salience-goal-thymos, STAGED
-# rollout). The Thymos factor ships LIVE (the real, tested StateModulator); the
+# rollout). The affect module factor ships LIVE (the real, tested StateModulator); the
 # goal factor ships on the static baseline pending validation. A factor "warns"
 # only when the operator selects "static" for a factor whose default is REAL —
 # i.e. a deliberate downgrade — so flipping the goal default to "drive_relevance"
@@ -101,7 +101,7 @@ def make_salience_factors(
     *,
     drive_sources: Mapping[str, frozenset[str]] | None = None,
 ):
-    """Select the goal + Thymos salience factors from the [syneidesis] section.
+    """Select the goal + the affect module's salience factors from the [syneidesis] section.
 
     Returns ``(thymos_modulator, goal_scorer, downgraded_factors)``. Both real
     factors read the entity's current affect/drives through ``affect_provider``
@@ -246,22 +246,22 @@ def _wire_oscillators(registry: ModuleRegistry, kaine_config: dict[str, Any]) ->
 
 
 def _wire_lingua_self_model(registry: ModuleRegistry) -> None:
-    """Confirm Lingua seeds its persona from the *bus-mediated* Eidolon
-    self-model snapshot rather than an in-process Eidolon reference.
+    """Confirm the language module seeds its persona from the *bus-mediated* self-model module's
+    self-model snapshot rather than an in-process self-model module reference.
 
-    Previously this injected a live ``eidolon.model`` accessor into Lingua — a
+    Previously this injected a live ``eidolon.model`` accessor into the language module — a
     direct boot-time Python reference that pinned the two modules into one
     process. That reference is the coupling the ``distributed-deployment``
-    change removes: Eidolon now publishes its self-model to ``eidolon.out`` and
-    Lingua caches it via its own ``_self_model_cache_loop`` (over the shared
+    change removes: the self-model module now publishes its self-model to ``eidolon.out`` and
+    The language module caches it via its own ``_self_model_cache_loop`` (over the shared
     authenticated bus), so the language organ can run in a separate process /
     on a separate trusted GPU host. This helper therefore no longer wires an
     object handle; it stays as the documented seam (and a boot log) so the
     single-host default is unchanged and the decoupling is explicit.
 
-    Hypnos→Mnemos/Nous/Thymos remains an in-process reference (the next
+    The sleep module → the episodic memory / planning / affect modules remains an in-process reference (the next
     decoupling target — see docs/07-deployment/README.md); only the read-only
-    Lingua→Eidolon accessor is bus-mediated here.
+    The language module → the self-model module accessor is bus-mediated here.
     """
     if "lingua" not in registry or "eidolon" not in registry:
         return
@@ -272,7 +272,7 @@ def _wire_lingua_organ_adapter(
     registry: ModuleRegistry,
     kaine_config: dict[str, Any] | None,
 ) -> None:
-    """Wire Lingua's per-request organ adapter resolver when voice alignment
+    """Wire the language module's per-request organ adapter resolver when voice alignment
     uses the organ_adapter hot-swap mode and the organ is a KAINE-managed
     llama-server container.
     """
@@ -322,11 +322,11 @@ def _wire_lingua_organ_adapter(
 
 
 def _wire_eidolon_capabilities(registry: ModuleRegistry) -> None:
-    """Inject the Praxis effector whitelist into Eidolon's self-inference engine
+    """Inject the effectors module's effector whitelist into the self-model module's self-inference engine
     so the self-model's ``capability_map`` reflects what the entity can execute
-    (the ``eidolon-self-inference`` "Capability map from Praxis whitelist"
+    (the ``eidolon-self-inference`` "Capability map from Effectors whitelist"
     requirement). No-op unless both modules are present. Idempotent: the whitelist
-    is fixed for the boot, so re-running (e.g. after a Spot rebuild) is safe."""
+    is fixed for the boot, so re-running (e.g. after a supervisor rebuild) is safe."""
     if "praxis" not in registry or "eidolon" not in registry:
         return
     praxis = registry.get("praxis")
@@ -340,11 +340,11 @@ def _wire_eidolon_capabilities(registry: ModuleRegistry) -> None:
 
 
 def _wire_thymos_drive_relevance(registry: ModuleRegistry) -> None:
-    """Give Thymos the drive-to-source table its goal-significance check scores
+    """Give the affect module the drive-to-source table its goal-significance check scores
     against: the same table the salience goal factor builds from each registered
     module's ``relieves_drives`` declaration, with the dominant-drive rule handed
-    in so Thymos never imports the workspace. Re-run by ``rewire_module`` so a
-    restarted Thymos, or a restarted module that changes the table, is re-wired."""
+    in so the affect module never imports the workspace. Re-run by ``rewire_module`` so a
+    restarted affect module, or a restarted module that changes the table, is re-wired."""
     if "thymos" not in registry:
         return
     thymos = registry.get("thymos")
@@ -353,13 +353,13 @@ def _wire_thymos_drive_relevance(registry: ModuleRegistry) -> None:
 
 
 def _wire_self_hearing_gate(registry: ModuleRegistry) -> None:
-    """Share one SpeakingGate between vox and audition so the entity does
+    """Share one SpeakingGate between the vocal and audition modules so the entity does
     not transcribe its own spoken output. No-op unless both modules are
-    enabled. Whether the gate is ever *opened* is controlled by vox's
+    enabled. Whether the gate is ever *opened* is controlled by the vocal module's
     `suppress_self_hearing` flag, so an isolated-headset operator can stay
     full-duplex by setting it false.
 
-    Reuses an existing gate already installed on either side so a Spot rebuild
+    Reuses an existing gate already installed on either side so a supervisor rebuild
     of one module does not replace the live gate and leave the old instance
     wired to the other side.
     """
@@ -371,7 +371,7 @@ def _wire_self_hearing_gate(registry: ModuleRegistry) -> None:
     audition = registry.get("audition")
     # Reuse an existing gate if one side already has one; otherwise create a
     # fresh shared gate. This makes rewire_module idempotent and preserves the
-    # gate object across Spot rebuilds.
+    # gate object across supervisor rebuilds.
     gate: Optional[Any] = None
     if hasattr(vox, "_speaking_gate") and vox._speaking_gate is not None:
         gate = vox._speaking_gate

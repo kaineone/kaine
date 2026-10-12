@@ -3,8 +3,8 @@
 
 """Sampler for individuation probes.
 
-The sampler draws one answer from the being for a battery prompt, through
-Lingua's own chat client with the current adapter, without touching the intent
+The sampler draws one answer from the entity for a battery prompt, through
+the language module's own chat client with the current adapter, without touching the intent
 log or the bus. The persona and conditioning digest are taken from the same
 self-model snapshot; if the snapshot has not arrived, or a required disclosure
 fact is missing, the run is marked inconclusive. Every failure becomes a
@@ -51,7 +51,7 @@ def adapter_expected_from(adapter_output_dir: Path | None) -> Callable[[], bool]
     """Return a callable that is True when a current adapter.gguf exists.
 
     The returned callable is suitable for the ``adapter_expected`` argument of
-    :func:`build_probe_sampler`: True means the being should be using its
+    :func:`build_probe_sampler`: True means the entity should be using its
     adapter, so a response without ``lora_applied`` is a failure.
     """
     def _check() -> bool:

@@ -10,9 +10,9 @@ accident or trip the guard. Instead, the first-run wizard
 (``python -m kaine.setup``) writes a gitignored ``config/kaine.operator.toml``
 that this loader deep-merges over the shipped file — operator values win.
 
-The cognitive cycle entrypoint and Nexus route through
+The cognitive cycle entrypoint and the dashboard route through
 :func:`load_kaine_config`, so an operator override applies wherever the
-configuration is consumed. Nexus's own ``[nexus]`` section is the exception:
+configuration is consumed. The dashboard's own ``[nexus]`` section is the exception:
 :mod:`kaine.nexus.config` reads it from ``config/kaine.toml``,
 ``config/kaine.operator.toml`` and ``config/secrets.toml`` directly.
 
@@ -727,8 +727,8 @@ def load_runtime_config(
     * When neither profile argument is set and ``config/profiles/thesis_test.toml``
       exists, the base-thesis ``thesis_test`` profile is applied. This is the
       project's default entity configuration: a fresh install that boots the cycle
-      with no explicit profile gets the base-thesis module set (Soma, Chronos,
-      Topos, Audition, Lingua, Thymos and Hypnos), STT off, and the self-initiated
+      with no explicit profile gets the base-thesis module set (the interoception, sequence,
+      vision, audition, language, affect and sleep modules), STT off, and the self-initiated
       voice. The profile is the single definition of that set; the operator
       overlay carries host-local values and deliberate deviations only.
     * The deployment tier is resolved by :func:`resolve_tier_name` (``KAINE_TIER``

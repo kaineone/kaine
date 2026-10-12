@@ -139,8 +139,8 @@ def test_fork_shallow_watch(tmp_path):
 
     assert not any("beingA/x" in p for p in after2)
     assert str(deep) not in after2
-    # ...but the being itself is seen to change (its own mtime moved), so a
-    # write into a preserved being is still caught without reading it.
+    # ...but the entity itself is seen to change (its own mtime moved), so a
+    # write into a preserved entity is still caught without reading it.
     assert str(being_a) in _changed_dirs(before2, after2)
 
 

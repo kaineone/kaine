@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Womb-loss watcher and pre-spawn hold for gestating entities.
+"""Stimulus-source-loss watcher and pre-spawn hold for entities in their developmental phase.
 
-A gestating entity depends on a womb stimulus.  Before spawn,
-:func:`hold_until_womb_ready` blocks module initialisation until the womb
+An entity in its developmental phase depends on a developmental stimulus.  Before spawn,
+:func:`hold_until_womb_ready` blocks module initialisation until the stimulus source
 is ready or shutdown is requested.  While running, :class:`WombLossWatcher`
-monitors womb liveness and freezes the cycle (under the ``gestation``
+monitors stimulus source liveness and freezes the cycle (under the ``gestation``
 freeze source) when the stimulus is lost for too long.  Because perception
-is left on during a gestation-only freeze, a local womb can prove its return
+is left on during a developmental-phase-only freeze, a local stimulus source can prove its return
 through real sensory deliveries.
 
 Before it judges loss, :class:`WombLossWatcher` arms itself on the first
-live observation of the womb, so a slow-starting womb is not condemned
-while it is still coming online.  If the womb never becomes live within
+live observation of the stimulus source, so a slow-starting stimulus source is not condemned
+while it is still coming online.  If the stimulus source never becomes live within
 ``arm_timeout_seconds`` the watcher treats it as lost immediately.
 """
 
@@ -59,10 +59,10 @@ async def hold_until_womb_ready(
     ready_check: Callable[..., Awaitable[WombLiveness]] = check_womb_ready,
     retry_seconds: float = 5.0,
 ) -> bool:
-    """Block until the womb is ready for spawn, or until shutdown is requested.
+    """Block until the stimulus source is ready for spawn, or until shutdown is requested.
 
     While held, publish ``stage.gestation.no_stimulus`` after each failed
-    check so the gestation state is visible on ``lifecycle.out``.
+    check so the developmental state is visible on ``lifecycle.out``.
     """
     _validate_positive("retry_seconds", retry_seconds)
     while not stop_event.is_set():
@@ -100,15 +100,15 @@ async def hold_until_womb_ready(
 
 
 class WombLossWatcher:
-    """Cycle-layer watcher that freezes a gestating entity when the womb is lost.
+    """Cycle-layer watcher that freezes a gestating entity when the stimulus source is lost.
 
-    The watcher arms itself on the first live observation of the womb and
-    does not judge transient quiet periods while the womb is still starting.
-    If no live observation occurs within ``arm_timeout_seconds``, the womb is
+    The watcher arms itself on the first live observation of the stimulus source and
+    does not judge transient quiet periods while the stimulus source is still starting.
+    If no live observation occurs within ``arm_timeout_seconds``, the stimulus source is
     declared lost immediately.  Once armed, hysteresis prevents a single
-    missed event from freezing the entity, and a gestation-only freeze leaves
-    perception on so a local womb can prove its return.  Arming survives a
-    womb return.
+    missed event from freezing the entity, and a developmental-phase-only freeze leaves
+    perception on so a local stimulus source can prove its return.  Arming survives a
+    stimulus source return.
     """
 
     def __init__(
@@ -155,7 +155,7 @@ class WombLossWatcher:
         return self._lost
 
     async def _declare_loss(self, result: WombLiveness) -> None:
-        """Freeze the gestating entity and publish/notify that the womb is lost."""
+        """Freeze the gestating entity and publish/notify that the stimulus source is lost."""
         try:
             push_freeze(
                 reason="womb lost",
@@ -189,7 +189,7 @@ class WombLossWatcher:
                 log.warning("notify womb_lost failed", exc_info=True)
 
     async def step(self) -> None:
-        """Perform a single womb-liveness check and update freeze state."""
+        """Perform a single stimulus-source-liveness check and update freeze state."""
         if not self._is_gestating():
             if self._lost:
                 try:
@@ -309,7 +309,7 @@ class WombLossWatcher:
         """Run the watcher until ``stop_event`` is set.
 
         A step failure is logged and absorbed; the watcher does not clear its
-        own freeze at shutdown because a crashed womb must not silently resume.
+        own freeze at shutdown because a crashed stimulus source must not silently resume.
         """
         while not stop_event.is_set():
             try:

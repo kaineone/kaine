@@ -413,7 +413,7 @@ class ExploitationPOMDP:
       the choice is the agent's committed action. The context's transition is
       the identity (it persists through the one-step planning horizon — the env
       re-draws it only at the next :meth:`reset`); the choice's ``B`` is the
-      one-slice-per-action selector, exactly as the Nous control factor works.
+      one-slice-per-action selector, exactly as the planning module control factor works.
       Modalities: ``[context-obs (n, near-identity), reward-obs (2: lose/win)]``.
       The reward modality is ``win`` iff ``choice == context``. With a strong
       ``C`` on ``win`` and a clean context observation, a ``policy_len == 1`` EFE
@@ -477,7 +477,7 @@ class ExploitationPOMDP:
 
     def _build_B(self) -> list[np.ndarray]:
         # Factor 0 (choice): controllable — action a moves the choice latent to
-        # state a (one slice per action), mirroring the Nous control factor.
+        # state a (one slice per action), mirroring the planning module control factor.
         b_choice = np.zeros((self.n, self.n, self.n))
         for a in range(self.n):
             b_choice[a, :, a] = 1.0

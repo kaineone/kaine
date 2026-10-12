@@ -32,7 +32,7 @@ from kaine.storage import install_data_root, resolve
 
 
 def _default_order() -> list[str]:
-    # Praxis, Perception and Mundus need an effector, body or alternative
+    # The effectors, perceptual locus and embodiment modules need an effector, body or alternative
     # sensor feed; on the reference host they would be expected nulls (use --order).
     return [
         "mnemos",

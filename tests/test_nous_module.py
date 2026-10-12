@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nous module tests.
+"""planning module tests.
 
 Module-level tests drive a :class:`FakeEngine` (no pymdp, no JAX), so the green
 build never requires the reasoning extra or a NAR binary. An opt-in
@@ -151,7 +151,7 @@ async def test_epistemic_action_emitted_as_proposal(bus: AsyncBus):
         assert "proposal_id" in payload
         assert "step" in payload
         assert 0.0 <= payload["preference"] <= 1.0
-        # Source is nous; it published a proposal, not a direct effector call.
+        # The source is the planning module; it published a proposal, not a direct effector call.
         assert proposals[0].source == "nous"
         intents = await _read(bus, "intent.act")
         assert intents == []

@@ -274,7 +274,7 @@ systemctl --user start kaine-redis kaine-qdrant kaine-nexus
 
 The script writes the checkout's absolute path into the units and refuses a path with spaces or other characters that would break a unit line. It checks the rendered units with Podman's quadlet generator before installing them (`--dry-run` renders and checks without writing; `--root` and `--dest` choose another checkout or destination). It never enables or starts a unit, and it never installs `kaine-cycle-unattended.container`. Run it again after moving the checkout.
 
-The data, model, voice and Nexus units carry `[Install] WantedBy=default.target`, so with linger they start at boot. `kaine-cycle.container` has no `[Install]` section and `Restart=no`, so the entity starts only when you start it:
+The data, model, voice and dashboard units carry `[Install] WantedBy=default.target`, so with linger they start at boot. `kaine-cycle.container` has no `[Install]` section and `Restart=no`, so the entity starts only when you start it:
 
 ```bash
 systemctl --user set-environment KAINE_CYCLE_OPERATOR_PRESENT=1
@@ -342,7 +342,7 @@ To restore the desktop later, run `sudo systemctl set-default graphical.target &
 
 ## 7. Reach the dashboard over the private network
 
-Nexus listens on loopback by default: `[nexus].host = "127.0.0.1"` in `config/kaine.toml`, and `PublishPort=127.0.0.1:8088:8088` in `quadlet/kaine-nexus.container`. No other device can reach it. The shipped `[nexus].access` is `"open"` (no token) because the dashboard is reachable only from the host.
+The dashboard listens on loopback by default: `[nexus].host = "127.0.0.1"` in `config/kaine.toml`, and `PublishPort=127.0.0.1:8088:8088` in `quadlet/kaine-nexus.container`. No other device can reach it. The shipped `[nexus].access` is `"open"` (no token) because the dashboard is reachable only from the host.
 
 Do not widen the bind to `0.0.0.0`, which would expose the port on every interface the host has. Keep the loopback bind and proxy to it from the private network.
 
@@ -350,7 +350,7 @@ Do not widen the bind to `0.0.0.0`, which would expose the port on every interfa
 
 The reference host runs Tailscale, so `tailscale serve` puts a tailnet HTTPS address in front of the loopback port, and Tailscale provisions the certificate for the node's MagicDNS name.
 
-Nexus refuses a request whose `Host` header is not in `[nexus].host_allowlist` or whose `Origin` is not allowed, so the tailnet name must be added to both. The image contains `config/kaine.toml`, and the quadlet unit mounts only `config/kaine.operator.toml` and `config/secrets.toml` from the checkout, so configuration changes go in `config/kaine.operator.toml`. The unit sets `KAINE_NEXUS_ALLOWED_ORIGINS` itself, which overrides any `allowed_origins` in TOML, so the origin goes in the unit.
+The dashboard refuses a request whose `Host` header is not in `[nexus].host_allowlist` or whose `Origin` is not allowed, so the tailnet name must be added to both. The image contains `config/kaine.toml`, and the quadlet unit mounts only `config/kaine.operator.toml` and `config/secrets.toml` from the checkout, so configuration changes go in `config/kaine.operator.toml`. The unit sets `KAINE_NEXUS_ALLOWED_ORIGINS` itself, which overrides any `allowed_origins` in TOML, so the origin goes in the unit.
 
 In `config/kaine.operator.toml`, add the tailnet hostname to `host_allowlist` and keep the loopback names:
 
@@ -365,7 +365,7 @@ In `quadlet/kaine-nexus.container`, add the HTTPS origin to `KAINE_NEXUS_ALLOWED
 Environment=KAINE_NEXUS_ALLOWED_ORIGINS=http://127.0.0.1:8088,http://localhost:8088,https://myhost.tail1234.ts.net
 ```
 
-Render the units again and restart Nexus:
+Render the units again and restart the dashboard:
 
 ```bash
 bash scripts/install-quadlet.sh
@@ -373,7 +373,7 @@ systemctl --user daemon-reload
 systemctl --user restart kaine-nexus
 ```
 
-If the tailnet includes devices or people you do not fully trust, switch to token access. Set `[nexus].access = "token"` in `config/kaine.operator.toml` and put the token, at least 32 characters, under `[nexus]` as `operator_token` in `config/secrets.toml`; both files are mounted into the container. A token set only in `compose/.env` does not reach the quadlet container, because the unit passes only the variables named on its `Environment=` lines. Restart Nexus afterwards.
+If the tailnet includes devices or people you do not fully trust, switch to token access. Set `[nexus].access = "token"` in `config/kaine.operator.toml` and put the token, at least 32 characters, under `[nexus]` as `operator_token` in `config/secrets.toml`; both files are mounted into the container. A token set only in `compose/.env` does not reach the quadlet container, because the unit passes only the variables named on its `Environment=` lines. Restart the dashboard afterwards.
 
 Then start the proxy:
 
@@ -395,7 +395,7 @@ https://<host>.<tailnet>.ts.net (proxying to http://127.0.0.1:8088)
 
 The MagicDNS name stays the same when the node's 100.x address changes, so bookmarks keep working, and the serve configuration persists across reboots.
 
-On a host without Tailscale, use any proxy on the private network, for example an SSH local forward from your workstation (`ssh -L 8088:127.0.0.1:8088 <user>@<host>`) or a reverse proxy bound only to the private interface. Nexus keeps its loopback bind in every case.
+On a host without Tailscale, use any proxy on the private network, for example an SSH local forward from your workstation (`ssh -L 8088:127.0.0.1:8088 <user>@<host>`) or a reverse proxy bound only to the private interface. The dashboard keeps its loopback bind in every case.
 
 ### Privacy consequence
 
@@ -414,7 +414,7 @@ conversation_enabled = false
 dev_content_override = false
 ```
 
-Check `config/kaine.operator.toml` as well, because it overrides both. For more on these settings, see [Nexus, the dashboard](../05-nexus.md) and [Security and privacy](../13-security-and-privacy.md).
+Check `config/kaine.operator.toml` as well, because it overrides both. For more on these settings, see [the dashboard](../05-dashboard.md) and [Security and privacy](../13-security-and-privacy.md).
 
 ## What these steps establish
 

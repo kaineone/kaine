@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The cycle entrypoint starts the womb presence publisher only in womb mode."""
+"""The cycle entrypoint starts the stimulus source presence publisher only in stimulus source mode."""
 from __future__ import annotations
 
 import asyncio

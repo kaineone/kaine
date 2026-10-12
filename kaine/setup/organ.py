@@ -21,7 +21,7 @@ hunt against a wrong default. It mirrors the detect-and-guide pattern in
     Unsloth Studio direction, ROCm → unsloth-core, anything else → guide-only).
   - ``plan_organ_download()`` decides which repo(s)+format(s) are needed for the
     host's role (GGUF always; +safetensors iff Stage-2 training is enabled) and
-    returns the EXACT command(s) plus a size estimate — nothing for a non-lingua
+    returns the EXACT command(s) plus a size estimate — nothing for a non-language
     install.
   - ``run_organ_download()`` runs a **real** ``hf download`` (real subprocess,
     real success/failure; never a faked/no-op "installed" result) and captures the
@@ -76,7 +76,7 @@ class OrganArtifact:
 class OrganDownloadPlan:
     """The organ-acquisition plan for a host's chosen modules + backend.
 
-    ``artifacts`` is empty when the organ is not needed (lingua disabled): the
+    ``artifacts`` is empty when the organ is not needed (language disabled): the
     wizard then offers no download step at all.
     """
 
@@ -97,7 +97,7 @@ def _stage2_enabled(config: dict[str, Any]) -> bool:
     """True iff on-device voice-alignment (Stage-2) training is enabled.
 
     Stage-2 needs the safetensors base as the trainer's ``base_model_path``; a
-    serve-only host skips it. Gated on BOTH the hypnos module toggle and
+    serve-only host skips it. Gated on BOTH the sleep module toggle and
     ``[hypnos.voice_alignment].enabled`` (the master gate)."""
     modules = config.get("modules") or {}
     if not modules.get("hypnos"):
@@ -134,7 +134,7 @@ def plan_organ_download(
     GGUF is always required (what the OpenAI-compatible server serves);
     safetensors is added ONLY when Stage-2 voice-alignment training is enabled
     (the trainer's base model). Returns an empty plan (``needed=False``) when
-    lingua is not enabled — the wizard then offers no organ step.
+    the language module is not enabled — the wizard then offers no organ step.
 
     ``config`` is the resolved config used to read the Stage-2 toggle; when None it
     is derived from ``modules`` alone (Stage-2 treated as off). Pure: builds the

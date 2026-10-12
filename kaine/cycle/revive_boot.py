@@ -7,7 +7,7 @@ The operator revive order is:
 
   1. Parse ``--revive <bundle>``. Read the bundle's members.
   2. If the bundle carries ``stage.json``, its stage is handed to
-     ``_resolve_boot_stage`` in memory, so gestation, the womb hold, the womb
+     ``_resolve_boot_stage`` in memory, so the developmental phase, the stimulus source hold, the stimulus source
      clock and the gate all see the preserved stage. The stage file is NOT
      written yet. A bundle without a stage member resolves the stage from the
      stage file as today and logs that.
@@ -20,7 +20,7 @@ The operator revive order is:
   6. Start the cycle, recording ``revived_from`` in ``runtime.json`` and the
      run context.
 
-Module initialisation happens before revive because Eidolon's ``initialize()``
+Module initialisation happens before revive because the self-model module's ``initialize()``
 reloads its disk file; a revive before it would be overwritten. Background
 loops started during ``initialize()`` run briefly on fresh state before the
 revive lands, but the cognitive cycle (and so the workspace) has not started,
@@ -67,7 +67,7 @@ class RevivePlan:
     bundle: Path
     preservation_id: str | None
     stage: dict | None
-    # The being this bundle revives (entity-identity): the snapshot's own
+    # The entity this bundle revives (entity-identity): the snapshot's own
     # identity, else the manifest's, else the deterministic legacy identity of
     # a bundle written before identities existed. Never freshly minted.
     identity: EntityIdentity
@@ -268,7 +268,7 @@ class ReviveSession:
                 ) from exc
 
             # The moved-aside tree is kept, never deleted: it may hold another
-            # being's evidence, or this being's own if the restore is undone.
+            # entity's evidence, or this entity's own if the restore is undone.
             replaced: Path | None = None
 
             def _replaced_name() -> str:
@@ -312,7 +312,7 @@ class ReviveSession:
                 try:
                     os.replace(staging, target)
                 except OSError as exc:
-                    # Best-effort rollback: restore the aside tree so the being
+                    # Best-effort rollback: restore the aside tree so the entity
                     # is not left without evidence.
                     if replaced is not None and replaced.exists():
                         try:
@@ -351,7 +351,7 @@ class ReviveSession:
 
                 target = _stage_module.STAGE_PATH
 
-            # Gestation progress travels with the being (awake time persists across boots). The bundle is authoritative: gestation files already here are moved aside first.
+            # Developmental progress travels with the entity (awake time persists across boots). The bundle is authoritative: development files already here are moved aside first.
             gestation_dir = resolve(target).parent
             try:
                 _preservation.set_aside_gestation_files(gestation_dir)

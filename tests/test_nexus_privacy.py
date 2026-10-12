@@ -94,7 +94,7 @@ def test_filter_does_not_mutate_input():
 
 
 def test_description_and_statement_are_content_fields():
-    """Thymos goal `description` and Nous belief `statement` are free-text
+    """The affect module's goal `description` and the planning module's belief `statement` are free-text
     entity-interior content — the audit found them leaking through the old
     denylist. Both must now be scrubbed from the diagnostics surface."""
     from kaine.nexus.privacy import CONTENT_FIELDS
@@ -151,13 +151,13 @@ _CONTENT_SUSPECT_TOKENS = (
 # content. (agent_label: research taxonomy keeps it as a familiarity metric.)
 _REVIEWED_OPERATIONAL_KEYS = frozenset(
     {
-        "agent_label",     # empatheia: modeled-agent familiarity label (metric)
-        "name",            # eidolon self-model name on eidolon.out + module/metric names — operational identity, not cognition content
-        "error_detail",    # mnemos: exception detail string
-        "error_reason",    # nous: exception reason string
-        "reason",          # hypnos/phantasia/perception/preservation: short reason enum (consumer-read)
+        "agent_label",     # social cognition module: modeled-agent familiarity label (metric)
+        "name",            # self-model name on eidolon.out + module/metric names — operational identity, not cognition content
+        "error_detail",    # episodic memory module: exception detail string
+        "error_reason",    # planning module: exception reason string
+        "reason",          # sleep/world model/perception/preservation modules: short reason enum (consumer-read)
         "source_label",    # audition: perception source name (e.g. "microphone")
-        "temporal_context",  # chronos: numeric hidden-state vector; removed by the vector rule (VECTOR_FIELDS)
+        "temporal_context",  # sequence module: numeric hidden-state vector; removed by the vector rule (VECTOR_FIELDS)
     }
 )
 
@@ -240,7 +240,7 @@ def test_no_uncovered_content_key_in_module_publishers():
 
 
 def test_user_input_and_faithful_rendering_are_content_fields():
-    """Lingua's external-speech events carry user_input (the user's utterance)
+    """The language module's external-speech events carry user_input (the user's utterance)
     and faithful_rendering (the conscious-workspace block) for the eval
     observers; both are content and must be scrubbed from diagnostics."""
     from kaine.nexus.privacy import CONTENT_FIELDS

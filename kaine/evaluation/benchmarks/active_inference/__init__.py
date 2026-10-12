@@ -4,7 +4,7 @@
 """Offline AIF-vs-RL benchmark (KAINE Paper §6.3, §11).
 
 The paper does not assume active inference is a general decision engine; it
-makes a falsifiable claim and attaches this benchmark to it: Nous's bounded
+makes a falsifiable claim and attaches this benchmark to it: the planning module's bounded
 discrete active-inference decisions are compared head-to-head with a
 reinforcement-learning baseline matched on observation model and reward, over a
 suite of bounded discrete tasks, reporting decision quality, sample efficiency,
@@ -16,5 +16,5 @@ and a NEGATIVE result (underperforms) are both first-class, reportable outcomes.
 Everything here is OFFLINE: synthetic discrete POMDPs, no bus, no intents, no
 entity boot, no cognitive cycle. The active-inference agent reuses the *same*
 pymdp engine core (:meth:`kaine.modules.nous.engine.PymdpEngine.infer`) the live
-Nous module drives, so the benchmarked engine IS the live engine.
+planning module drives, so the benchmarked engine IS the live engine.
 """

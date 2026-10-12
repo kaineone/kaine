@@ -23,8 +23,8 @@ class ChatRequest:
     # Hybrid-thinking models (e.g. Qwen3.5) emit a chain-of-thought unless told
     # not to — and then the visible `content` comes back EMPTY: the answer is
     # routed to the separate reasoning channel, or only arrives after a long
-    # reasoning detour (and is lost entirely if generation is bounded). Lingua is
-    # a voice, not a reasoner (reasoning lives in Nous), so the organ DEFAULTS to
+    # reasoning detour (and is lost entirely if generation is bounded). The language module is
+    # a voice, not a reasoner (reasoning lives in the planning module), so the organ DEFAULTS to
     # thinking off. This client-side flag is the load-bearing suppression: the
     # server's `--reasoning-budget 0` launch flag does NOT reliably suppress CoT
     # on the served abliterated template. `False` → send enable_thinking=false;
@@ -77,8 +77,8 @@ class OpenAIChatClient:
     ``llama.cpp``/vLLM server) at the organ's chat URL.
 
     Chain-of-thought suppression travels via ``chat_template_kwargs`` (the
-    portable llama.cpp mechanism), NOT Ollama's native ``think`` flag: Lingua is a
-    *voice*, not a reasoner — reasoning lives in Nous — so a hybrid-thinking model
+    portable llama.cpp mechanism), NOT Ollama's native ``think`` flag: the language module is a
+    *voice*, not a reasoner — reasoning lives in the planning module — so a hybrid-thinking model
     (e.g. Qwen3.5) runs with thinking off. If the served model/server rejects the
     kwarg, the request is retried without it so non-thinking models still work.
 
@@ -246,11 +246,11 @@ class OpenAIChatClient:
 class LlamaCppChatClient:
     """In-process GGUF chat client via ``llama-cpp-python`` (edge backend).
 
-    This is the Tier-0/Tier-1 runtime for the Lingua organ: the same speech
+    This is the Tier-0/Tier-1 runtime for the language organ: the same speech
     contract as :class:`OpenAIChatClient`, but the model runs *in process* on the
     GGML/NEON runtime (no Ollama/torch server, no network) so it ports down to a
     ~512 MB-class SBC or a retired phone under a userland like Termux (openspec
-    runtime-backends). Selecting a backend never changes Lingua's published
+    runtime-backends). Selecting a backend never changes the language module's published
     events — it emits the same ``lingua.speech`` / evaluation events under either
     backend; only the implementation of the organ differs.
 
@@ -370,7 +370,7 @@ def build_chat_client_registry(
     gguf_path: Optional[str] = None,
     gguf_filename: Optional[str] = None,
 ) -> Any:
-    """Backend registry for the Lingua chat client (openspec runtime-backends).
+    """Backend registry for the language module's chat client (openspec runtime-backends).
 
     ``openai`` (the default) is the workstation HTTP path — an OpenAI-compatible
     server such as llama.cpp's ``llama-server`` or vLLM. ``ollama`` is kept as an

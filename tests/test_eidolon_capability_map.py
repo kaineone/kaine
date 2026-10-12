@@ -5,7 +5,7 @@
 
 Coverage (task 6.2):
 - Whitelist entries appear in capability_map.
-- EFE outcomes (Nous policy events) are recorded.
+- EFE outcomes (planning policy events) are recorded.
 - Empty state produces empty map.
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ def test_empty_builder_produces_empty_map():
 
 
 def test_whitelist_entries_appear_in_capability_map():
-    """Praxis whitelist commands are included under 'effectors'."""
+    """The effectors module's whitelist commands are included under 'effectors'."""
     builder = CapabilityMapBuilder(whitelist_commands=["echo", "ls"])
     cap = builder.build()
     assert "effectors" in cap
@@ -35,7 +35,7 @@ def test_whitelist_entries_sorted():
 
 
 def test_efe_outcomes_recorded():
-    """Nous policy events accumulate in policy_outcomes."""
+    """The planning module's policy events accumulate in policy_outcomes."""
     builder = CapabilityMapBuilder()
     builder.observe_policy({"policy": "request_think", "expected_free_energy": -0.4})
     builder.observe_policy({"policy": "request_think", "expected_free_energy": -0.6})

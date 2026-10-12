@@ -4,12 +4,12 @@
 """Controlled, seeded, offline runners for the passive measuring instruments.
 
 Three of KAINE's instruments — the A/B-divergence meter, the memory-coherence
-prober, and the self-model (Eidolon) accuracy scorer — normally run as PASSIVE
+prober, and the self-model accuracy scorer — normally run as PASSIVE
 live sidecars (they record opportunistically while the entity runs). This package
 promotes each to a CONTROLLED experiment of the same shape as the active-inference
 benchmark and the oscillatory-ablation runner: it sets a fixed stimulus battery
 and a seed, runs the instrument's production control seam offline (deterministic /
-echo clients + an in-memory Mnemos only — no live modules, no network, no entity
+echo clients + an in-memory episodic memory module only — no live modules, no network, no entity
 boot), and emits a shared-schema ``Verdict`` plus seeded JSONL.
 
 Each runner exposes ``run_*(config) -> dict`` (records / summary / verdict),

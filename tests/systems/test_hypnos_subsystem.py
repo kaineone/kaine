@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Hypnos subsystem: phase functions + scheduler smoke."""
+"""The sleep subsystem: phase functions + scheduler smoke."""
 from __future__ import annotations
 
 import pytest

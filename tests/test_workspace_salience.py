@@ -37,7 +37,7 @@ def _strategy(
 @pytest.mark.asyncio
 async def test_product_form_score():
     s = _strategy(goal=1.0, thymos=1.0)
-    # intensity=0.8, novelty=1.0 (first obs), goal=1.0, thymos=1.0
+    # intensity=0.8, novelty=1.0 (first obs), goal=1.0, affect=1.0
     score = await s.score(_ev(0.8), context={})
     assert score == pytest.approx(0.8, abs=1e-9)
 

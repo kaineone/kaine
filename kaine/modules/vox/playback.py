@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Audio playback for vox.
+"""Audio playback for the vocal module.
 
 Synthesized speech is played through the host's output device and then
 released. This module provides:
 
-- `Player` — the protocol vox depends on.
+- `Player` — the protocol the vocal module depends on.
 - `SoundDevicePlayer` — real playback via `sounddevice`, decoding the WAV
   in memory (no temp file). Playback is serialized so clips play in order
   and runs off the event loop. If `sounddevice`/PortAudio is unavailable it
@@ -153,7 +153,7 @@ def build_player(
     playback_enabled: bool,
     output_device: str | int = "",
 ) -> Player:
-    """Construct the player vox should use.
+    """Construct the player the vocal module should use.
 
     `playback_enabled=False` → `NullPlayer`. Otherwise a `SoundDevicePlayer`
     (which itself degrades to a no-op if the audio system is unavailable).

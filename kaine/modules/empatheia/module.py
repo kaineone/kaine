@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Empatheia — social cognition / theory-of-mind module.
+"""The social cognition / theory-of-mind module.
 
 Consumes ``audition.emotion`` and ``audition.transcription`` events and
 the workspace broadcast to build and maintain per-agent social models.
@@ -144,7 +144,7 @@ class Empatheia(BaseModule):
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         """React to workspace ticks — currently a no-op placeholder.
 
-        Empatheia's actual work is event-driven, not tick-driven: it runs in
+        The social cognition module's actual work is event-driven, not tick-driven: it runs in
         `_audition_consumer_loop`, reacting to `audition.out` emotion and
         transcription events. This hook is reserved for future coalition-aware
         behaviour (e.g. speaker diarization cues) and intentionally does nothing.

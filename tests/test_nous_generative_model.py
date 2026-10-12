@@ -121,7 +121,7 @@ def test_encode_snapshot_maps_salience_and_source():
     assert obs[0] == 0
     # high salience -> top band.
     assert obs[1] == len(gm.salience_bands) - 1
-    # dominant event is soma -> perception cluster.
+    # dominant event is interoception -> perception cluster.
     assert obs[3] == gm.event_clusters.index("cluster_perception")
     # every index within its modality's range.
     for o, n in zip(obs, gm.num_obs):

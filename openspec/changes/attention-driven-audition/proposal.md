@@ -4,7 +4,7 @@
 
 Hearing is currently **speech transcription for the language organ**, not
 perception. Audition captures audio, runs speech-to-text and a vocal-emotion
-classifier, and publishes a transcript (and a speaker's emotion) toward Lingua;
+classifier, and publishes a transcript (and a speaker's emotion) toward the language module;
 its only salience is a forward model over a speech-shaped feature vector
 (emotion-class distribution plus utterance timing and energy). There is **no
 general acoustic encoder** and **no representation of non-speech sound**. A door
@@ -13,7 +13,7 @@ is perceived: it is transcribed into empty or garbage text and assigned a
 meaningless "vocal emotion." The entity cannot *notice an interesting sound*; it
 can only parse a voice.
 
-This is asymmetric with vision. Topos encodes the whole visual scene into an
+This is asymmetric with vision. The vision module encodes the whole visual scene into an
 embedding, scores change and forward-model prediction error over that embedding to
 produce salience for *any* visual stimulus, and now foveates by attention and
 arousal. Hearing has no analog. A KAINE entity should be able to **listen to its
@@ -65,7 +65,7 @@ specialized detail path) applied to the auditory modality.
 - **Speech is a triggered specialization, not the whole of hearing.** Capture is
   no longer confined to voice: the general path hears everything. When the
   attended/salient stimulus is detected as speech, the speech path (transcription
-  → Lingua, vocal emotion) fires on that stream. Voices are a subset of
+  → the language module, vocal emotion) fires on that stream. Voices are a subset of
   interesting sounds; the language organ receives words when there are words,
   while the entity still hears the rest of the world.
 - **The zero-raw-sense-data invariant is preserved.** The acoustic embedding, the
@@ -106,7 +106,7 @@ specialized detail path) applied to the auditory modality.
   audio encoder collaborator and an acoustic forward model to
   `kaine/modules/audition/`, extend `Audition.process_audio` (general encode →
   salience → attention → speech-gated STT/emotion), a workspace→Audition arousal
-  seam (like the affect / topos-arousal seams), and config under `[audition]`.
+  seam (like the vision and affect modules' arousal seams), and config under `[audition]`.
   No entity is booted by this change.
 - **Dependencies:** a frozen self-supervised audio encoder (a new optional
   `[audio]`-extra collaborator, lazy-imported; the build/test suite stays green
@@ -136,8 +136,8 @@ specialized detail path) applied to the auditory modality.
 
 Phase 1 shipped with a download-free spectral encoder behind the `AcousticEncoder` protocol. The paper says three times that Audition uses a frozen self-supervised encoder over the raw waveform (§3.5 table, §3.5 prose, §5.2), so the code and the paper diverge. Nothing selects an encoder from configuration, and Audition has no plugin seam. Two further defects:
 
-- **The acoustic forward model starts from scratch on every boot.** `Audition.serialize()` persists only the speech-path forward model, so what a being has learned to expect of its sound world is lost at every restart.
-- **Neither forward model suspends adaptation during sleep.** Topos and Chronos both do; Audition does not, although `AuditoryForwardModel.suspended` exists.
+- **The acoustic forward model starts from scratch on every boot.** `Audition.serialize()` persists only the speech-path forward model, so what an entity has learned to expect of its sound world is lost at every restart.
+- **Neither forward model suspends adaptation during sleep.** The vision and sequence modules both do; the audition module does not, although `AuditoryForwardModel.suspended` exists.
 
 ### What this amendment adds
 
@@ -146,18 +146,18 @@ Phase 1 shipped with a download-free spectral encoder behind the `AcousticEncode
 - An Audition plugin seam, `audition.acoustic_encoder`, lets a plugin supply any `AcousticEncoder`. A filled seam and a non-default `acoustic_encoder` together are a configuration error.
 
 **Persisted forward model (A1)**
-- The acoustic forward model's weights and buffer summary persist with the being. They are keyed by the encoder's `model_id`, so switching encoder and back keeps what was learned under each.
-- A checkpoint whose shapes do not match the running encoder is discarded with a warning, matching Topos.
-- Both forward models suspend adaptation between `hypnos.sleep.started` and `hypnos.sleep.completed`, matching Topos.
+- The acoustic forward model's weights and buffer summary persist with the entity. They are keyed by the encoder's `model_id`, so switching encoder and back keeps what was learned under each.
+- A checkpoint whose shapes do not match the running encoder is discarded with a warning, matching the vision module.
+- Both forward models suspend adaptation between `hypnos.sleep.started` and `hypnos.sleep.completed`, matching the vision module.
 
 **Self-supervised encoders (B1)**
 - Dasheng-base (Apache-2.0, from Hugging Face, never the GPL Zenodo copy) and WavJEPA-base (code BSD-3-Clause, weights MIT) are vendored under `external/`, with pinned revisions and `UPSTREAM` files.
 - They load with `local_files_only` and `HF_HUB_OFFLINE=1`, never `trust_remote_code`, from weights fetched at setup time.
 - ONNX and int8 exports serve the torch-free tiers.
 - A separate energy channel carries loudness for salience, because WavJEPA normalises loudness away and Dasheng's embedding is not a loudness measure.
-- An offline bake-off on the seeded, playlist and womb feeds picks the thesis-profile default and is recorded under `docs/records/`. Tier 0 keeps `spectral`.
+- An offline bake-off on the seeded, playlist and stimulus source feeds picks the thesis-profile default and is recorded under `docs/records/`. Tier 0 keeps `spectral`.
 - WavJEPA's predictor-based mismatch ("MMN mode") is an offline experiment inside the bake-off harness only. It is not wired into the runtime module.
 
 ### Research impact
 
-The thesis-profile default encoder changes the embedding space that acoustic salience is computed over, so the next study is re-baselined on it. Persisting the acoustic forward model means a revived being keeps its auditory expectations. No study is running, and no entity is booted for the bake-off.
+The thesis-profile default encoder changes the embedding space that acoustic salience is computed over, so the next study is re-baselined on it. Persisting the acoustic forward model means a revived entity keeps its auditory expectations. No study is running, and no entity is booted for the bake-off.

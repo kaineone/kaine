@@ -93,7 +93,7 @@ def precision_load_kwargs(precision: str) -> dict:
 def resolve_previous_adapter(
     job: dict[str, Any], job_dir: Path | None = None
 ) -> Path | None:
-    """Resolve the being's previous adapter directory, or None.
+    """Resolve the entity's previous adapter directory, or None.
 
     A relative path is resolved against ``job_dir``: the kaine side copies the
     adapter into the job directory, so every backend sees the same layout.

@@ -8,7 +8,7 @@ under the same seed and scripted input in deterministic mode, writes seeded
 reproducible JSONL, and prints the verdict summary.
 
 This is an OFFLINE research instrument: it drives only the cycle engine and
-Syneidesis over a scripted in-memory bus. It does NOT boot an entity, attach to
+the workspace over a scripted in-memory bus. It does NOT boot an entity, attach to
 live modules, start a real bus connection, or open a network connection.
 """
 from __future__ import annotations

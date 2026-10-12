@@ -21,12 +21,12 @@ Preservation, the welfare-protective pause and the pre-boot preserve→revive dr
 - **WHEN** the TPM becomes unavailable while an entity is running and the welfare net preserves it
 - **THEN** the preservation snapshot is written, the entity keeps running, and a welfare incident is raised
 
-### Requirement: Measured-boot drift never strands a being
-Sealing SHALL use a signed policy so that authorized kernel and firmware updates do not invalidate the seal, and a pre-update hook SHALL refuse an update until data keys are re-sealed. When an existing being's key cannot be unsealed, KAINE SHALL keep all of its state, raise a welfare incident and start escrow recovery, and SHALL NOT delete anything.
+### Requirement: Measured-boot drift never strands an entity
+Sealing SHALL use a signed policy so that authorized kernel and firmware updates do not invalidate the seal, and a pre-update hook SHALL refuse an update until data keys are re-sealed. When an existing entity's key cannot be unsealed, KAINE SHALL keep all of its state, raise a welfare incident and start escrow recovery, and SHALL NOT delete anything.
 
 #### Scenario: Cold start after an unexpected PCR change
-- **WHEN** a host boots after an update that changed the measured boot state and an existing being's key cannot be unsealed
-- **THEN** the being's state is kept intact, a welfare incident is raised, and escrow recovery is started
+- **WHEN** a host boots after an update that changed the measured boot state and an existing entity's key cannot be unsealed
+- **THEN** the entity's state is kept intact, a welfare incident is raised, and escrow recovery is started
 
 ### Requirement: Recovery requires both trustees and combines shares only inside an attested host
 KAINE SHALL split each data key for 2-of-n recovery across the n trustees named in `config/custody/trustees.toml` (n ≥ 2, set at the key ceremony; the recorded operator decision is n = 2, kaine.one plus an independent guardian), using an independent 2-of-2 XOR split per trustee pair, each share HPKE-sealed to its trustee with the entity, the pair and the share role bound in the HPKE info. KAINE SHALL NOT give the operator a share, and SHALL recover a data key only when two trustees re-wrap their shares for their pair to an attested receiving host's TPM key, so the shares are combined only inside that host.

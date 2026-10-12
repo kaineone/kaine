@@ -4,7 +4,7 @@
 """Tests for the research submission module.
 
 PARAMOUNT: the default (metrics) bundle must be allowlist-based and contain
-NONE of the deny patterns (intent_expression, mnemos, qdrant, eidolon/self_model,
+NONE of the deny patterns (intent_expression, episodic memory, qdrant, eidolon/self_model,
 conversation, replay). These tests verify the guarantee holds even when decoy
 sensitive files are present in eval_root.
 """
@@ -45,18 +45,18 @@ def _make_eval_root(tmp_path: Path) -> Path:
         )
 
     # --- Decoy sensitive files (must be EXCLUDED) ---
-    # 1. intent_expression.jsonl (Lingua — embeds user speech + monologue)
+    # 1. intent_expression.jsonl (the language module — embeds user speech + monologue)
     decoy_lingua = eval_root / "intent_expression.jsonl"
     decoy_lingua.write_text(
         '{"intent": "user said something private", "expression": "entity responded"}\n',
         encoding="utf-8",
     )
 
-    # 2. A mnemos file
+    # 2. An episodic memory file
     decoy_mnemos = eval_root / "mnemos_short_term.jsonl"
     decoy_mnemos.write_text('{"id": "mem1", "text": "private memory"}\n', encoding="utf-8")
 
-    # 3. An eidolon self-model file
+    # 3. A self-model file
     decoy_eidolon = eval_root / "eidolon_self_model.json"
     decoy_eidolon.write_text('{"name": "entity identity", "values": []}', encoding="utf-8")
 

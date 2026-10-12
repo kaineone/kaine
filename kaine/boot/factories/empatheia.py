@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The Empatheia factory."""
+"""The social cognition module factory."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -16,7 +16,7 @@ from kaine.modules.base import BaseModule
 def make_empatheia(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     from kaine.modules.empatheia.module import Empatheia
 
-    # Spot-injected shared embedder; never a TOML key, so pop before validation.
+    # supervisor-injected shared embedder; never a TOML key, so pop before validation.
     embedder = section.pop("_embedder", None)
 
     allowed = {

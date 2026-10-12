@@ -154,7 +154,7 @@ def test_decommission_deletes_stamp_point(tmp_path, monkeypatch):
 
 @pytest.mark.skipif(not HAS_QDRANT, reason="qdrant_client not installed")
 def test_decommission_keeps_strength_meta_when_a_drop_fails(tmp_path, monkeypatch):
-    """A failed collection drop keeps the Mnemos strength meta point."""
+    """A failed collection drop keeps the episodic memory module's strength meta point."""
     state_root = tmp_path / "state"
     _seed(state_root)
 

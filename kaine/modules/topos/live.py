@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Live camera stream — eyes for the topos surface.
+"""Live camera stream — eyes for the vision module's surface.
 
 LiveCamera runs as a sibling task launched from Topos.initialize() when
 [topos].capture_enabled = true. It opens cv2.VideoCapture(device) in a
@@ -12,7 +12,7 @@ ZERO PERSISTENCE INVARIANT: raw frames live only in process memory.
 The capture path never writes to disk — see the load-bearing test at
 tests/test_zero_persistence_invariant.py for the static grep that
 fails the build if a frame-writing call sneaks in. Each frame is
-released after the sink call returns. Topos's own CosineChangeDetector
+released after the sink call returns. The vision module's own CosineChangeDetector
 + RollingMeanHabituator handle throttling at the process_frame level.
 """
 from __future__ import annotations
@@ -155,12 +155,12 @@ def _bgr_to_pil_rgb(frame: Any) -> Any:
 
 
 class LiveCamera:
-    """Eyes-only camera stream. Constructed by Topos when
+    """Eyes-only camera stream. Constructed by the vision module when
     [topos].capture_enabled is true. Lifecycle owned by the parent.
 
     `sink` is `Topos.process_frame`. The camera hands frames to it and
     never touches the result. Static-scene throttling happens inside
-    Topos via change-detection + habituation; nothing here.
+    the vision module via change-detection + habituation; nothing here.
     """
 
     def __init__(
@@ -173,7 +173,7 @@ class LiveCamera:
         on_state_change: OnStateChange | None = None,
         source_factory: Callable[..., _VideoSource] | None = None,
         bgr_to_rgb: Callable[[Any], Any] | None = None,
-        # Shared subjective clock (injected by Topos at boot). The capture
+        # Shared subjective clock (injected by the vision module at boot). The capture
         # interval is the entity's perception SAMPLING rhythm, so it runs in
         # subjective time — at time_scale != 1.0 the eyes sample at the dilated
         # rate, coherent with the rest of the mind. The desired-state poll
@@ -208,7 +208,7 @@ class LiveCamera:
         """Content-free provenance of the item the underlying source is
         presenting, or ``None``. Only the playlist source exposes this (via the
         shared ``PlaylistClock``); the real camera and seeded feeds return
-        ``None``. Read by Topos to stamp the playing item onto ``topos.report``
+        ``None``. Read by the vision module to stamp the playing item onto ``topos.report``
         so the media is legible off the bus rather than inferred from file
         descriptors."""
         return getattr(self._source, "current_item", None)

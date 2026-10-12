@@ -1,0 +1,10 @@
+{
+  "args": ["--apply", "--scope", "prose"],
+  "expect_exit": 0,
+  "moves": [
+    ["docs/09-modules/mnemos.md", "docs/09-modules/episodic-memory.md"],
+    ["docs/09-modules/perception.md", "docs/09-modules/perceptual-locus.md"]
+  ],
+  "report_contains": [],
+  "report_excludes": []
+}

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Hypnos brackets the trainer call with the on-device organ window.
+"""The sleep module brackets the trainer call with the on-device organ window.
 
 When an organ_window_runner is injected, the voice-alignment phase runs the
 trainer THROUGH it (unload→train→reload) and surfaces the window outcome in the

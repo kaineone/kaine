@@ -6,16 +6,16 @@
 During the sleep-cycle voice-alignment training window the served language organ
 is unloaded to free the single GPU for the LoRA training step (see
 :mod:`kaine.modules.hypnos.organ_window`). Organ-dependent consumers that live on
-the OTHER side of the evaluation sidecar boundary — Lingua's chat client (core)
+the OTHER side of the evaluation sidecar boundary — the language module's chat client (core)
 and the A/B-divergence eval arm (sidecar) — need to know the organ is "resting"
 so they degrade gracefully (defer / skip) instead of crashing on the dead
 endpoint.
 
 This module is the shared, dependency-free home for that signal: a tiny state
 file plus pure readers. It depends only on the stdlib, so BOTH the core runtime
-(Hypnos writes it, Lingua reads it) and the evaluation sidecar (the A/B arm reads
+(the sleep module writes it, the language module reads it) and the evaluation sidecar (the A/B arm reads
 it) can use it without either side importing the other — the same written-record
-pattern Hypnos already uses for the consolidation-divergence metric.
+pattern the sleep module already uses for the consolidation-divergence metric.
 
 Content-free: only a phase tag + a short human detail + the last adapter verdict
 ever leave here. Never utterance text.
@@ -35,7 +35,7 @@ log = logging.getLogger(__name__)
 #: Where the bracket publishes the window phase; consumers read it.
 ORGAN_WINDOW_STATE = Path("state/hypnos/organ_window.json")
 
-#: Window phases (surfaced to consumers + Nexus).
+#: Window phases (surfaced to consumers + the dashboard).
 PHASE_IDLE = "idle"  # no training window; organ serving normally
 PHASE_RESTING = "resting"  # organ unloaded for training; consumers defer/skip
 PHASE_TRAINING = "training"  # trainer running against the safetensors base
@@ -53,7 +53,7 @@ def write_window_state(
     last_adapter_reason: Optional[str] = None,
     path: Optional[Path] = None,
 ) -> None:
-    """Persist the current organ-window phase for consumers + Nexus.
+    """Persist the current organ-window phase for consumers + the dashboard.
 
     Guarded — a write failure logs and is swallowed (the bracket always writes
     RESTING before it unloads, so a missing file safely means "organ available").

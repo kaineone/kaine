@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Eidolon self-model accuracy check.
+"""The self-model accuracy check.
 
 Periodically asks "describe yourself" through an internal channel,
 parses claims, and scores each against the evaluation logs.
@@ -131,7 +131,7 @@ class EidolonAccuracyRunner(BaseObserver):
         and tolerant of missing files (fresh-boot)."""
         signals: dict[str, float] = {}
 
-        # Affect-correlation logs carry recent Thymos state vectors.
+        # The affect-correlation logs carry recent affect module's state vectors.
         ac_dir = self._logs_dir / "affect_correlation"
         if ac_dir.exists():
             valences: list[float] = []

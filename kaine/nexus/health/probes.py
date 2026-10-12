@@ -523,7 +523,7 @@ async def probe_state_encryption(
 
 
 async def nous_health_probe(*, backend: str = "pymdp") -> tuple[str, str]:
-    """Probe Nous's active-inference backend (pymdp or NumPy).
+    """Probe the planning module's active-inference backend (pymdp or NumPy).
 
     The ``backend`` keyword selects which implementation is checked:
     ``"pymdp"`` requires the ``reasoning`` extra (jax + inferactively-pymdp),

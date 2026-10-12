@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Provenance and seed wiring for the Lingua chat client."""
+"""Provenance and seed wiring for the language chat client."""
 
 from __future__ import annotations
 

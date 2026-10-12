@@ -37,7 +37,7 @@ def _reduced_config():
 
 
 def test_build_registry_boots_exactly_the_three_modules(monkeypatch):
-    """Booting the reduced set registers exactly Soma/Chronos/Lingua and hits no
+    """Booting the reduced set registers exactly the interoception, sequence and language modules and hits no
     disabled-module dependency (spec `minimal-run-configuration` clean boot)."""
     import base64
     import os

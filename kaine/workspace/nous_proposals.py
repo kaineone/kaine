@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nous proposal realization for Volition.
+"""The planning module proposal realization for the action selection module.
 
-This module implements the Volition side of ``nous-drives-action``: a policy
+This module implements the action selection module's side of ``nous-drives-action``: a policy
 wrapper that considers the most salient ``nous.proposal`` in the accessed
 coalition and, when appropriate, emits an intent with ``origin: "nous"``. For
-every proposal it sees it records a content-free outcome payload that Volition
-publishes to ``volition_feedback.out`` so Nous can learn from what actually
+every proposal it sees it records a content-free outcome payload that the action selection module
+publishes to ``volition_feedback.out`` so the planning module can learn from what actually
 happened.
 """
 from __future__ import annotations
@@ -34,22 +34,22 @@ from kaine.workspace.volition import (
 
 log = logging.getLogger(__name__)
 
-# Nous → Volition event contract.
+# The planning module → the action selection module event contract.
 NOUS_SOURCE = "nous"
 NOUS_PROPOSAL_TYPE = "nous.proposal"
 
 # Drive summary helpers are mirrored here so this module stays independent of
-# kaine.workspace.drive_policy (the drive policy already imports from volition).
+# kaine.workspace.drive_policy (the drive policy already imports from the action selection module).
 THYMOS_DRIVE_SOURCE = "thymos"
 THYMOS_DRIVE_TYPE = "thymos.drive"
 
 
 class NousProposalSource:
-    """Policy wrapper that realizes accessed Nous proposals.
+    """Policy wrapper that realizes accessed planning proposals.
 
     Runs the wrapped ``inner`` policy first. For each kind the wrapped policy
     guards itself (it exposes ``<kind>_in_flight`` and implements
-    :meth:`note_external_intent`), a realized Nous proposal arms that policy's
+    :meth:`note_external_intent`), a realized planning proposal arms that policy's
     own guard. For any other kind the source keeps a local guard and drops
     inner intents of that kind while it is armed. Records an outcome for every
     proposal seen.
@@ -111,7 +111,7 @@ class NousProposalSource:
         return list(self._last_outcomes)
 
     def observe_inhibited(self, snapshot: WorkspaceSnapshot) -> None:
-        """Record an outcome for every Nous proposal in the coalition.
+        """Record an outcome for every planning proposal in the coalition.
 
         Guard clearing still runs on every call, including inhibited
         observations. With ``drive_actions=False`` the recorded reason is
@@ -167,11 +167,11 @@ class NousProposalSource:
 
     @staticmethod
     def _without_proposals(snapshot: WorkspaceSnapshot) -> WorkspaceSnapshot:
-        """The coalition as the wrapped policy sees it: without Nous proposals.
+        """The coalition as the wrapped policy sees it: without planning proposals.
 
-        A proposal is Nous's own choice of action, handled only here. Leaving it
+        A proposal is the planning module's own choice of action, handled only here. Leaving it
         in would let the wrapped policy report on the proposal itself, and would
-        make the wrapped policy decide differently with Nous on than with it off.
+        make the wrapped policy decide differently with the planning module on than with it off.
         """
         kept = [
             (entry_id, event)
@@ -200,7 +200,7 @@ class NousProposalSource:
     def _non_nous_members(
         self, snapshot: WorkspaceSnapshot
     ) -> list[tuple[Optional[str], object]]:
-        # Referents must be neither Nous proposals nor the entity's own speech.
+        # Referents must be neither planning proposals nor the entity's own speech.
         return [
             (entry_id, event)
             for entry_id, event in snapshot.selected_events

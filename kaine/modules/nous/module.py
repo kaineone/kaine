@@ -1,31 +1,31 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nous — the active-inference engine (KAINE Paper §3.3.2).
+"""The planning module — the active-inference engine (KAINE Paper §3.3.2).
 
-Nous performs belief updating + policy selection by expected-free-energy
+The planning module performs belief updating + policy selection by expected-free-energy
 minimisation over a compact discrete generative model (pymdp 1.0, JAX). It
 replaces the retired NARS/ONA symbolic reasoner (archived under
 ``external/archive/`` for a future complementary symbolic module).
 
-Each global broadcast Nous:
+Each global broadcast from the planning module:
 
 - drives the :class:`ActiveInferenceEngine` (snapshot → posterior + EFE policy),
-- publishes ``nous.belief`` (PRESERVED contract shape so Mnemos / Eidolon /
-  Syneidesis consumers keep working) with redefined semantics: ``statement`` =
+- publishes ``nous.belief`` (PRESERVED contract shape so the episodic memory module / the self-model module /
+  the workspace consumers keep working) with redefined semantics: ``statement`` =
   the dominant latent-factor label, ``frequency`` = posterior expectation,
   ``confidence`` = 1 − normalised entropy, ``kind`` = ``"belief"``,
 - publishes ``nous.policy`` (selected policy + expected free energy + horizon),
 - emits the chosen epistemic / communicative action as an ``intent.act`` event
-  through the Volition/intent path — NEVER a direct effector call. Syneidesis
-  inhibition + Praxis whitelists remain in control of all outward action; Nous
+  through the action selection module's intent path — NEVER a direct effector call. The workspace
+  inhibition + the effectors module's whitelists remain in control of all outward action; the planning module
   proposes, the executive disposes.
 
-On an EFE timeout the engine returns the last posterior; Nous publishes a
+On an EFE timeout the engine returns the last posterior; the planning module publishes a
 ``nous.timeout`` diagnostic (salience 0.3) and does not block the cycle.
 
 On a non-timeout inference crash the engine returns stale priors and sets
-``EngineResult.error=True``; Nous publishes a ``nous.error`` diagnostic and
+``EngineResult.error=True``; the planning module publishes a ``nous.error`` diagnostic and
 skips publishing ``nous.belief`` / ``nous.policy`` for that cycle — stale
 priors are never re-broadcast as a fresh computation.
 """
@@ -52,10 +52,10 @@ from kaine.workspace.volition import VOLITION_FEEDBACK_STREAM
 log = logging.getLogger(__name__)
 HYPNOS_OUT_STREAM = "hypnos.out"
 
-# Map an engine action name → a proposal kind for the Volition/proposal path.
+# Map an engine action name → a proposal kind for the action selection module's proposal path.
 # `request_think` is epistemic (internal elaboration) → a `think` proposal.
 # `request_speak` → a `speak` proposal. `request_maintenance` → a `rest`
-# proposal realized by Volition and Hypnos. `no_op` produces no proposal.
+# proposal realized by the action selection module and the sleep module. `no_op` produces no proposal.
 _ACTION_TO_PROPOSAL_KIND: dict[str, str] = {
     "request_think": "think",
     "request_speak": "speak",
@@ -134,7 +134,7 @@ class Nous(BaseModule):
             if result.error:
                 # Non-timeout crash: stale priors must NOT be re-published as a
                 # fresh computation. Surface a nous.error diagnostic instead so
-                # downstream (Eidolon, Mnemos, Syneidesis) see the gap rather
+                # downstream (the self-model module, the episodic memory module, the workspace) see the gap rather
                 # than acting on fabricated belief/policy.
                 await self._publish_error(result)
                 return
@@ -271,8 +271,8 @@ class Nous(BaseModule):
             payload = event.payload
             pid = payload.get("proposal_id")
             if payload.get("reason") == "forwarded":
-                # Rest proposal forwarded to Hypnos; never changes _recent_proposals
-                # and never counts as unknown, because Hypnos will decide.
+                # Rest proposal forwarded to the sleep module; never changes _recent_proposals
+                # and never counts as unknown, because the sleep module will decide.
                 continue
             action_index = self._recent_proposals.get(pid)
             if action_index is None:
@@ -346,7 +346,7 @@ class Nous(BaseModule):
         priors held by the engine are returned from step() but they represent
         the PREVIOUS successful computation, not a fresh inference from this
         snapshot. Publishing them as if they were fresh would mislead
-        downstream consumers (Eidolon, Mnemos, Syneidesis).
+        downstream consumers (the self-model module, the episodic memory module, the workspace).
         """
         await self.publish(
             "nous.error",

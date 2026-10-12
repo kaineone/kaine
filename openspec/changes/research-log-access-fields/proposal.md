@@ -11,7 +11,7 @@ observer does not read it either.
 ## What Changes
 
 - Research-log taxonomy: `topos.report` and `soma.report` gain `alert`,
-  `context_gain` and `context_age_s` (Soma gains `alert`; Topos already has
+  `context_gain` and `context_age_s` (the interoception module gains `alert`; the vision module already has
   it); `chronos.report` gains `alert`; `audition.perception` is added with its
   numeric fields (`prediction_error`, `normalised_error`, `change_score`,
   `energy_dbfs`, `attended_window`, `attended_seconds`, `alert`,

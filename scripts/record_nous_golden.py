@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Record golden fixtures from the pymdp Nous engine for the NumPy backend.
+"""Record golden fixtures from the pymdp planning engine for the NumPy backend.
 
 This script runs only where ``pymdp`` and ``JAX`` are installed. It records
 deterministic JSON fixtures under ``tests/fixtures/nous_golden/`` from:

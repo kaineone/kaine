@@ -21,7 +21,7 @@ from kaine.modules.praxis.whitelist import CommandWhitelist, WhitelistEntry
 from kaine.security.intent_signing import compute_intent_signature
 
 # The per-boot provenance secret the tests share between the signer (here) and
-# Praxis (via _make_praxis). At a real boot this is generate_intent_secret().
+# the effectors module (via _make_praxis). At a real boot this is generate_intent_secret().
 _TEST_SECRET = b"praxis-provenance-test-secret-32"
 _TEST_RUN_ID = "test-run"
 
@@ -39,7 +39,7 @@ async def _publish_act_intent(
     """Publish an act intent onto volition.out, signed by default.
 
     With ``sign=True`` (the default) the payload carries a valid provenance
-    envelope so Praxis realizes it. ``sign=False`` models a forged/peripheral
+    envelope so the effectors module realizes it. ``sign=False`` models a forged/peripheral
     writer that has no secret; ``sig_override`` models a wrong/forged signature.
     """
     payload = {"kind": "act", "about": "do it", "effector": effector, "params": params}
@@ -342,7 +342,7 @@ def _read_audit(tmp_path: Path) -> list[dict]:
 
 @pytest.mark.asyncio
 async def test_signed_intent_is_realized(bus: AsyncBus, tmp_path: Path):
-    # Happy path unchanged: a validly-signed act intent from Volition executes.
+    # Happy path unchanged: a validly-signed act intent from the action selection module executes.
     p = _make_praxis(bus, tmp_path)
     await p.initialize()
     try:
@@ -448,13 +448,13 @@ async def test_fail_closed_without_secret(bus: AsyncBus, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_replay_guard_survives_light_restart(bus: AsyncBus, tmp_path: Path):
-    # The replay guard is in-process state. A LIGHT module restart (Spot's path
+    # The replay guard is in-process state. A LIGHT module restart (the supervisor's path
     # for a module with no external resources) re-initializes the SAME instance,
     # so the guard MUST persist: a captured signed intent re-delivered after a
     # restart is still rejected as a replay. This pins the invariant so a future
-    # change that makes Praxis heavy (and thus rebuilt) is forced to reconsider.
+    # change that makes the effectors module heavy (and thus rebuilt) is forced to reconsider.
     p = _make_praxis(bus, tmp_path)
-    # The invariant depends on Praxis staying a light (non-externally-rebuilt)
+    # The invariant depends on the effectors module staying a light (non-externally-rebuilt)
     # module — see the replay-guard note in module.py.
     assert p.holds_external_resources() is False
     await p.initialize()
@@ -480,10 +480,10 @@ async def test_replay_guard_survives_light_restart(bus: AsyncBus, tmp_path: Path
 
 
 def test_praxis_stays_light_so_replay_guard_persists():
-    # The replay guard's durability across a Spot restart depends on Praxis being
+    # The replay guard's durability across a supervisor restart depends on the effectors module being
     # a LIGHT module: BaseModule.restart() re-initializes the same instance
     # (preserving _replay_high_water) ONLY because holds_external_resources() is
-    # False, so Spot does not rebuild a fresh Praxis. If a future PR adds an
+    # False, so the supervisor does not rebuild a fresh effectors module. If a future PR adds an
     # external resource and flips this to True, the replay window silently
     # reopens on restart — this assertion forces that PR to revisit replay
     # durability (persist/rotate the guard) rather than regress silently.

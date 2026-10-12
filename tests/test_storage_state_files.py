@@ -100,7 +100,7 @@ def test_state_files_round_trip_under_data_root(tmp_path, monkeypatch):
     assert not (cwd / stage_module.STAGE_PATH).exists()
     assert stage_module.read_stage() == stage
 
-    # birth request / ack
+    # maturation request / ack
     birth_req = new_birth_request(_now_iso())
     write_birth_request(birth_req)
     assert (root / BIRTH_REQUEST_PATH).is_file()
@@ -123,7 +123,7 @@ def test_state_files_round_trip_under_data_root(tmp_path, monkeypatch):
     assert isinstance(window, dict)
     assert window["phase"] == "ready"
 
-    # hypnos consolidation divergence
+    # sleep consolidation divergence
     metric = ConsolidationDivergence(records_scanned=4, usable_pairs=1, divergence_rate=0.25)
     write_consolidation_divergence(metric, sleep_index=3)
     assert (root / CONSOLIDATION_DIVERGENCE_STATE).is_file()

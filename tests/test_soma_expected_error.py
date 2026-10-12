@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for Soma's learned expected prediction error and unexpected error.
+"""Tests for the interoception module's learned expected prediction error and unexpected error.
 
 The harness follows tests/test_soma_warmup.py: deterministic fakes, a fakeredis
 bus fixture, and ManualMonotonic clock. The new ExpectedErrorModel is tested
@@ -352,7 +352,7 @@ def test_expected_error_width_change_resets() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Soma integration tests with fake forward models
+# Interoception integration tests with fake forward models
 # ---------------------------------------------------------------------------
 
 

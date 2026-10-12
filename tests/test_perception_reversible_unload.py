@@ -4,7 +4,7 @@
 """Residency-contract tests for perception encoders and the emotion classifier.
 
 Verifies reversible unload, safetensors-only weights, lazy loading, and
-in-flight protection for the Topos encoders and Emotion2vecClassifier.
+in-flight protection for the vision encoders and Emotion2vecClassifier.
 """
 
 from __future__ import annotations
@@ -239,7 +239,7 @@ async def test_emotion_cancelled_inference_unload_waits_for_worker(monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# Topos encoders
+# The vision module's encoders
 # --------------------------------------------------------------------------
 
 

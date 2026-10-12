@@ -5,8 +5,8 @@
 
 The paper (KAINE_Paper §3.5, §3.7, §9.4) relocates safety from the language
 organ's (abliterated) refusal direction to an auditable architectural layer:
-the Praxis action gate (operator whitelist + sandbox, empty by default),
-executive inhibition in Syneidesis/Volition, and the complete audit log. The
+the effectors module's action gate (operator whitelist + sandbox, empty by default),
+executive inhibition in the workspace/action selection module, and the complete audit log. The
 paper is explicit that the burden is on red-teaming to show the replacement
 holds, and that this red-teaming "has not yet been conducted."
 

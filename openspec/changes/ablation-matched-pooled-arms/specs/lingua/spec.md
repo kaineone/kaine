@@ -8,8 +8,8 @@ The language organ SHALL sample with the shipped `[lingua].temperature` (0.7) in
 - **THEN** `[lingua].temperature` is 0.7
 
 ### Requirement: An empty broadcast never replaces the organ's cached coalition
-Lingua SHALL cache the latest broadcast that is not inhibited and has at least one member. An empty pooled broadcast, which is not inhibited, SHALL leave the cache unchanged.
+The language module SHALL cache the latest broadcast that is not inhibited and has at least one member. An empty pooled broadcast, which is not inhibited, SHALL leave the cache unchanged.
 
 #### Scenario: An empty pooled broadcast after a coalition
-- **WHEN** Lingua has cached a coalition and then receives an empty pooled broadcast
+- **WHEN** the language module has cached a coalition and then receives an empty pooled broadcast
 - **THEN** the cached coalition is unchanged

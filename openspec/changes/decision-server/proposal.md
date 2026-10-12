@@ -2,7 +2,7 @@
 
 ## Why
 K1-Jev (`k1-jev-decision-model`) answers typed questions about external speech through llama-server's native `/v1/systemone`. The instruments (`instrument-graders-v2`) and the welfare signals (`welfare-expressed-preference-signals`) need a place to call it. That place must not be the language organ:
-- An adapter on the organ disables prompt caching for all Lingua traffic.
+- An adapter on the organ disables prompt caching for all language module traffic.
 - Changing an adapter restarts llama-server.
 - An empty `"lora": []` does not zero an adapter (llama.cpp #28674, open).
 - `/v1/systemone` ignores per-request adapters.

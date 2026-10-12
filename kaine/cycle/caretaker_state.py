@@ -3,7 +3,7 @@
 
 """Persistent start/acknowledgement records for unattended caretaker boots.
 
-The cycle writes the start record; Nexus writes the acknowledgement record.
+The cycle writes the start record; the dashboard writes the acknowledgement record.
 Both are small JSON files under ``state/cycle/``. Readers are forgiving: a
 missing or malformed file is treated as absent and never raises.
 """

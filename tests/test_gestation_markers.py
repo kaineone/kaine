@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Unit tests for the pure gestation marker functions."""
+"""Unit tests for the pure developmental-phase marker functions."""
 
 from __future__ import annotations
 

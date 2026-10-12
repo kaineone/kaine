@@ -16,7 +16,7 @@ in predictive coding (Feldman and Friston 2010). The top-down channel stays unwi
 Pure and dependency-light (numpy + a lazily-imported cv2 for resizes). No disk I/O:
 frames and views exist only in memory, preserving the zero-raw-sense-data invariant.
 The direction and exact magnitude of the arousal→size mapping are tuning parameters,
-not asserted results. This is the algorithmic heart; Topos wires it into the
+not asserted results. This is the algorithmic heart; the vision module wires it into the
 perception path and the capture layer supplies the native frame.
 """
 

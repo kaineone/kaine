@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The Nexus chat-LLM health probe must tolerate chat_url given as the Ollama
+"""The dashboard chat-LLM health probe must tolerate chat_url given as the Ollama
 server root (the shipped default, no /v1) or with a trailing /v1, normalizing
 to the /v1/models listing endpoint either way. Regression for the chat_url
 native-root config change, which otherwise made the probe hit a 404 /models

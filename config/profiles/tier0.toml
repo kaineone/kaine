@@ -3,9 +3,9 @@
 # Host class: ~512 MB-class single-board computer or a retired low-RAM phone.
 # Role: symbolic reasoning + episodic memory + perception satellite, optionally
 # feeding a higher tier over the bus. The torch-free engines available are
-# llama.cpp, sqlite-vec, the NumPy CfC, the NumPy embedder, the NumPy Nous
+# llama.cpp, sqlite-vec, the NumPy CfC, the NumPy embedder, the NumPy planning
 # engine and sherpa-onnx speech; speech is not enabled at Tier 0 for memory.
-# Soma, Chronos and the Mnemos/Empatheia/Hypnos memory embedder run on NumPy.
+# The interoception module, the sequence module and the episodic memory, social cognition and sleep modules' memory embedder run on NumPy.
 #
 # This overlay is INERT and VOICE-FREE by contract (openspec: "Tier files
 # preserve the safety invariants"): it selects runtime backends and device/

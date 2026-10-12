@@ -3,8 +3,8 @@
 
 """Statistics of the individuation instrument.
 
-A stratified two-sample energy test compares the being's current answer
-embeddings against its birth-reference answer embeddings, prompt by prompt.
+A stratified two-sample energy test compares the entity's current answer
+embeddings against its maturation-reference answer embeddings, prompt by prompt.
 For each prompt (a stratum) an unbiased U-statistic energy distance is
 computed and the stratum statistics are summed to give the overall test
 statistic T.

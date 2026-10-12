@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""CfC wrapper for Chronos.
+"""CfC wrapper for the sequence module.
 
-Imports torch / ncps lazily so the rest of the chronos package can be
+Imports torch / ncps lazily so the rest of the sequence package can be
 tested without those deps installed. CPU-only by policy — the CfC is
 small enough that GPU offers no benefit, and pinning CPU keeps the
 cycle's tick budget predictable.
@@ -43,7 +43,7 @@ class ForwardPredictionHead:
       serialise only weight and bias tensors, never raw feature buffers.
     - Non-finite guard: adaptation is skipped when the loss or any gradient
       is non-finite, protecting against degenerate inputs.
-    - Adaptation can be suspended externally (e.g. during Hypnos sleep) by
+    - Adaptation can be suspended externally (e.g. during sleep) by
       setting ``suspended = True``.
     - ``backend="numpy"`` needs no torch and matches the torch
       path to 1e-5 from the same seed.

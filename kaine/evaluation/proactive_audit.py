@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Proactive output audit: log every Lingua external speech whose
+"""Proactive output audit: log every language module's external speech whose
 causal chain doesn't include a recent user input event.
 """
 

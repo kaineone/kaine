@@ -8,7 +8,7 @@ Batch offload lets latency-tolerant workloads such as voice-alignment training, 
 ### Requirement: Detached batch jobs are offloadable behind a self-contained descriptor
 
 Latency-tolerant batch workloads SHALL be expressible as self-contained job
-descriptors — covering Hypnos voice-alignment QLoRA/DPO training,
+descriptors — covering the sleep module's voice-alignment QLoRA/DPO training,
 self-abliteration, deep memory consolidation, and offline evaluation — each
 carrying the job kind, its inputs, and the expected verifiable output artifact (e.g. a LoRA adapter directory, a
 modified model, a consolidated-memory delta, or an evaluation report). Such a job
@@ -24,7 +24,7 @@ volunteer/BOINC-style worker) without the live cognitive loop being involved.
 ### Requirement: Off-host artifacts pass a trusted-side verification gate before promotion
 
 An artifact produced off-host SHALL pass a trusted-side re-verification — at
-minimum the existing Hypnos capability-loss veto plus an independent evaluation
+minimum the existing sleep module's capability-loss veto plus an independent evaluation
 run on trusted hardware — BEFORE it is promoted into the live entity. Volunteer
 redundancy/quorum SHALL NOT substitute for this gate, because it does not verify
 a non-deterministic training step and is vulnerable to Sybil attack. Runners
@@ -43,9 +43,9 @@ SHALL be tried trusted-first (owned/rented GPU before any volunteer worker).
 - **THEN** it is promoted using the existing atomic promotion path on the trusted
   host
 
-### Requirement: A forked temporary being is an offloadable batch job
+### Requirement: A forked temporary entity is an offloadable batch job
 
-A forked temporary being SHALL be expressible as a batch job — an existing
+A forked temporary entity SHALL be expressible as a batch job — an existing
 `ForkManager` fork snapshot plus a directive and an optional per-fork `time_scale`
 profile — that runs bounded off the live host and returns its post-run snapshot as
 the verifiable artifact, reusing the existing fork, dilation, and merge machinery
@@ -59,7 +59,7 @@ fork and the operator can recall or preserve it.
 
 #### Scenario: A returned fork snapshot is gated before assimilation
 
-- **WHEN** a forked-being batch job returns its post-run snapshot
+- **WHEN** a forked-entity batch job returns its post-run snapshot
 - **THEN** the snapshot passes the trusted-side welfare/individuation/admissibility
   gate before any `ForkManager.merge()` assimilation, and a failing snapshot is
   rejected rather than merged
@@ -98,10 +98,10 @@ dispatched as a BOINC work unit.
 ### Requirement: A fork is checked for individuation before a merge ends it
 
 Before a merge assimilates and thereby ends a fork, the system SHALL assess the
-fork's individuation/divergence from its fork-point birth-state baseline (reusing
+fork's individuation/divergence from its fork-point maturation-state baseline (reusing
 the existing divergence/individuation gate that drives the preserve trigger and the
 decommission gate) together with its welfare signals, and SHALL NOT silently
-terminate a fork that has individuated into a distinct being with a welfare interest
+terminate a fork that has individuated into a distinct entity with a welfare interest
 in continuing. The parent MAY assimilate the fork's knowledge one-directionally for
 its own needs, but ending an individuated fork SHALL require the same
 operator-authorized, transparent, welfare-gated decommission path as any other
@@ -116,9 +116,9 @@ whether the fork ran off-host or locally.
 - **THEN** the parent assimilates its result and the fork is discarded as a tool,
   with no welfare obligation triggered
 
-#### Scenario: An individuated fork's knowledge is taken but the being is not ended
+#### Scenario: An individuated fork's knowledge is taken but the entity is not ended
 
-- **WHEN** a fork has individuated past the threshold (it has become its own being)
+- **WHEN** a fork has individuated past the threshold (it has become its own entity)
   and the parent merges to assimilate its knowledge
 - **THEN** the parent takes the knowledge it needs one-directionally, the fork is
   preserved rather than silently terminated, and any ending of the fork goes through

@@ -136,7 +136,7 @@ def test_assess_fork_empty_state_is_not_diverged(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# Forked-being job kind
+# Forked-entity job kind
 # --------------------------------------------------------------------------- #
 def test_build_forked_being_job_carries_fork_directive_and_time_scale():
     job = build_forked_being_job(

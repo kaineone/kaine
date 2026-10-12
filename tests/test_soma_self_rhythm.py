@@ -276,11 +276,11 @@ async def test_coalition_oscillator_never_receives_external_drive(bus, base_metr
         self_rhythm_step_hz=20.0,
     )
     soma._oscillator = coalition
-    # Let the self-rhythm step with a maternal drive while Soma publishes.
+    # Let the self-rhythm step with a maternal drive while the interoception module publishes.
     rhythm.step(0.5, external_drive=0.7)
     await soma.tick_once()
     # The coalition oscillator's step(drive) takes no external drive at all (a
-    # keyword would raise TypeError), it was stepped only by Soma's publishes
+    # keyword would raise TypeError), it was stepped only by the interoception module's publishes
     # with their saliences, and the self-rhythm never reached it.
     assert coalition.steps, "Soma published nothing"
     assert all(0.0 <= d <= 1.0 for d in coalition.steps)

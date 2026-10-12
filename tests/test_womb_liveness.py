@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for the womb liveness interface."""
+"""Tests for the stimulus source liveness interface."""
 from __future__ import annotations
 
 import asyncio
@@ -24,7 +24,7 @@ from kaine.preboot import CheckResult
 
 @pytest.fixture(autouse=True)
 def _oscillator_extra_present(monkeypatch):
-    # The local-womb readiness also requires the oscillator extra; these tests
+    # The local-stimulus-source readiness also requires the oscillator extra; these tests
     # are about the perception probe, so pin its availability rather than
     # depending on whether the test host has snnTorch.
     monkeypatch.setattr("kaine.oscillator.snntorch_available", lambda: True)

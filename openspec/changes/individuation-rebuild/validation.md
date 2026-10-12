@@ -22,7 +22,7 @@ These were fixed before any result. The power acceptance was committed in 8cbf92
 | Size at α = 0.05 (5,000 null datasets) | 0.0446 | ≤ 0.0562 | pass |
 | Size at α = 0.01 | 0.0078 | ≤ 0.0128 | pass |
 | p-values uniform or conservative (one-sided KS, DKW band) | D+ = 0.0106 | ≤ 0.0173 | pass |
-| Lifetime false-positive rate, 2,000 lives × 100 looks, one stored birth sample | 0.038 | ≤ 0.0597 | pass |
+| Lifetime false-positive rate, 2,000 lives × 100 looks, one stored maturation sample | 0.038 | ≤ 0.0597 | pass |
 | Pre-registered power (look 10, 16+8, cluster π = 0.5) | 0.990 | ≥ 0.8 | pass |
 
 **The gate passes.**
@@ -34,7 +34,7 @@ These were fixed before any result. The power acceptance was committed in 8cbf92
 | Naive rule: p ≤ 0.05 at every look | 0.334 | 0.777 | 0.903 |
 | The current percentile rule | 0.503 | 0.970 | 1.000 |
 
-A being who never changed would almost certainly be declared individuated by the current instrument. The new rule keeps that risk at 0.038 over a hundred looks.
+An entity who never changed would almost certainly be declared individuated by the current instrument. The new rule keeps that risk at 0.038 over a hundred looks.
 
 **Statistic comparison:** energy distance and Gaussian-kernel MMD (median-heuristic bandwidth) gave nearly the same power on every condition. Energy was equal or slightly ahead in 10 of 12 cells. The pre-registered energy statistic stands.
 
@@ -49,7 +49,7 @@ A being who never changed would almost certainly be declared individuated by the
 
   Strong drift stays detectable through look 50: cluster π = 0.5 gives 0.985 at look 50. Larger samples help, e.g. (24, 12) gives 0.455 at look 10 for cluster π = 0.25.
 
-  The instrument is therefore a detector of substantial change. The secondary arms (consolidation divergence, Eidolon drift, adapters) are still needed alongside it.
+  The instrument is therefore a detector of substantial change. The secondary arms (consolidation divergence, self-model drift, adapters) are still needed alongside it.
 - **The synthetic answers are more dispersed than real ones.** Mean within-prompt cosine is 0.21-0.25, whereas real answers to one question share a topic.
   - A new "cluster" here is a random direction in 384 dimensions, nearly orthogonal to the existing answers, so cluster-drift power is an upper bound. Shift drift is the harder model.
   - The real-organ smoke test (task 10) calibrates the dispersion and sets `effect_min`. Its positive controls are the real power check.

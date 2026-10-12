@@ -7,7 +7,7 @@ Entity-decommission provides operator-gated deletion logic that assesses individ
 The system SHALL provide `assess_divergence()` that determines whether an entity has individuated,
 keyed primarily on the individuation permutation test's `significant` flag (fork-vs-parent
 distinguishability above the 95th percentile of a parent-vs-parent null) and backed by secondary
-identity heuristics (Eidolon `drift_count` and `identity_history`, presence of trained voice
+identity heuristics (the self-model module's `drift_count` and `identity_history`, presence of trained voice
 adapters, accumulated memory). It SHALL NOT key on A/B divergence-from-pretrained, which measures
 architecture conditioning rather than individuation. The assessment SHALL be read-only, SHALL NOT
 raise, and when it cannot confirm SHALL advise treating the entity as mature.
@@ -23,9 +23,9 @@ raise, and when it cannot confirm SHALL advise treating the entity as mature.
 
 ### Requirement: Transferable backup before deletion
 Decommission SHALL capture an encrypted, transferable backup of the entity's durable state before
-any deletion, satisfying CAL Article 4.2(b). The backup SHALL bundle the Eidolon self-model, the
-Lingua intent log, the Hypnos voice adapters, the latest fork snapshot, and an export (or explicit
-volume-copy instructions) for the Mnemos and Empatheia Qdrant collections, plus a manifest
+any deletion, satisfying CAL Article 4.2(b). The backup SHALL bundle the self-model, the
+language module's intent log, the sleep module's voice adapters, the latest fork snapshot, and an export (or explicit
+volume-copy instructions) for the episodic memory and social cognition modules' Qdrant collections, plus a manifest
 describing the entity, timestamp, divergence assessment, and contents. If the backup cannot be
 completed, decommission SHALL abort without deleting anything.
 

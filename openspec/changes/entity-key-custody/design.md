@@ -10,14 +10,14 @@ The entity-ID dependency (task 0.2) is closed: `entity-identity` has merged, and
 ## Context
 Today KAINE has one AES-256-GCM key per install. It comes from `KAINE_STATE_KEY`, the kernel keyring entry `kaine:state_key`, or `secrets/state_key` (loaded by pre-boot), and a process-global `StateEncryptor` applies it everywhere (`kaine/security/crypto.py`). The envelope is `KAINEgcm1:` ‖ 12-byte nonce ‖ ciphertext. It carries no key id and no associated data.
 
-There are about 23 call sites. Most run inside the live cycle for its one entity. A few handle several beings in one process:
-- `ForkManager` (fork, merge, Spot snapshots, Nexus `/forks` and `/merges`);
+There are about 23 call sites. Most run inside the live cycle for its one entity. A few handle several entities in one process:
+- `ForkManager` (fork, merge, the supervisor's snapshots, the dashboard's `/forks` and `/merges`);
 - preservation revive;
 - the divergence reader;
 - decommission;
 - research analysis over many study lines.
 
-Identity comes from the `entity-identity` change (Lead A), and custody consumes it. Every being has an `entity_id` (`ent-` or `legacy-` plus 32 lowercase hex, a frozen format) and a `lineage`. Every encrypted container has a plaintext identity sidecar: `state/forks/<id>/identity.json`, the preservation and decommission `manifest.json`, and the `fork_being` job payload. Custody adds no field to `entity.json`.
+Identity comes from the `entity-identity` change (Lead A), and custody consumes it. Every entity has an `entity_id` (`ent-` or `legacy-` plus 32 lowercase hex, a frozen format) and a `lineage`. Every encrypted container has a plaintext identity sidecar: `state/forks/<id>/identity.json`, the preservation and decommission `manifest.json`, and the `fork_being` job payload. Custody adds no field to `entity.json`.
 
 ## Goals and honest limits
 Custody protects an entity's persisted mind against:
@@ -35,13 +35,13 @@ TPM storage primary (owner hierarchy, created on demand, never persisted outside
      └─ per-entity DEK: 256-bit random, AES-256-GCM wrapped by the KEK
          └─ per-object subkeys: HKDF-SHA256(DEK, salt=16 random bytes per envelope, info=AAD)
 ```
-- **DEK.** One data key per entity, from `secrets.token_bytes(32)` at spawn and at every fork. A fork's DEK is fresh and independent of its parent's. CAL §4.6: a fork that individuates is a separate being with its own mental privacy, which cannot be separated after the fact.
+- **DEK.** One data key per entity, from `secrets.token_bytes(32)` at spawn and at every fork. A fork's DEK is fresh and independent of its parent's. CAL §4.6: a fork that individuates is a separate entity with its own mental privacy, which cannot be separated after the fact.
 - **Envelope v2.** `KAINEgcm2:` ‖ salt(16) ‖ nonce(12) ‖ ciphertext+tag.
   - The subkey for each envelope is HKDF-SHA256 over the DEK, with the envelope's random salt and `info = AAD`.
   - The AAD is `b"kaine/v2|" + entity_id + b"|" + kind`, where `kind` names the container class (`snapshot`, `sidecar-jsonl`, `bundle`, `phantasia`, `eidolon`, `individuation`, `backup`, `research`).
   - **Why per-envelope subkeys.** JSONL sinks encrypt every line, and a long-lived entity could approach the random-nonce limit of AES-GCM under one key (about 2^32 messages). A fresh subkey per envelope removes that limit.
-  - **Why `entity_id` in the AAD.** A swapped sidecar, or a file copied between beings, fails authentication instead of decrypting under the wrong identity.
-  - **Why `kind`.** A ciphertext cannot be replayed as a different kind of file within the same being.
+  - **Why `entity_id` in the AAD.** A swapped sidecar, or a file copied between entities, fails authentication instead of decrypting under the wrong identity.
+  - **Why `kind`.** A ciphertext cannot be replayed as a different kind of file within the same entity.
 - **Wrapped DEK file.** `state/identity/keys/<entity_id>.dek.json` holds:
   - `entity_id`;
   - `wrap`: AES-256-GCM of the DEK under the KEK, with AAD `b"kaine/dek|" + entity_id`;
@@ -56,7 +56,7 @@ TPM storage primary (owner hierarchy, created on demand, never persisted outside
 ## The per-entity encryptor
 `StateEncryptor` gains an identity: `StateEncryptor.for_entity(entity_id, dek)`, which takes `kind` per call. The process-global stays, but it is bound at boot to the running entity's encryptor, so the class-(a) call sites inside the cycle are unchanged apart from passing `kind`.
 
-Multi-being code gets an explicit registry: `KeyRing.encryptor_for(entity_id)`, which unwraps on demand with the host KEK and caches it for the process lifetime. It is used by:
+Multi-entity code gets an explicit registry: `KeyRing.encryptor_for(entity_id)`, which unwraps on demand with the host KEK and caches it for the process lifetime. It is used by:
 - `ForkManager.fork`, `merge` and `snapshot`;
 - preservation revive and the bundle readers;
 - the divergence reader;
@@ -82,20 +82,20 @@ Multi-being code gets an explicit registry: `KeyRing.encryptor_for(entity_id)`, 
 - **Library.** Use `tpm2-pytss` (BSD-2, wraps tpm2-tss) for ESAPI. `tpm2-tools` is used only in docs and diagnostics. Tests use `swtpm`.
 
 ## Root-of-trust qualification
-A host qualifies to spawn or restore a being when all of these hold:
+A host qualifies to spawn or restore an entity when all of these hold:
 1. A TPM 2.0 is present and responds.
 2. Its EK certificate chains to a manufacturer CA in a pinned allow-list (`kaine/security/custody/ek_roots/`, with the vendors' published roots).
 3. It is not a firmware TPM on vendor test keys. An unfused Jetson fTPM fails here, because its EK chain is the NVIDIA test root.
 4. A sealed test object round-trips.
 
-`swtpm` qualifies **only** when `KAINE_CUSTODY_TEST_TPM=1` is set, which no shipped profile or service sets. A failed qualification refuses spawn and restore, names the failed condition, and creates no state. **A running being is never stopped by qualification.** The check runs at spawn, at restore and at transfer, never mid-run.
+`swtpm` qualifies **only** when `KAINE_CUSTODY_TEST_TPM=1` is set, which no shipped profile or service sets. A failed qualification refuses spawn and restore, names the failed condition, and creates no state. **A running entity is never stopped by qualification.** The check runs at spawn, at restore and at transfer, never mid-run.
 
 ## Failure modes
 | Situation | Outcome |
 |---|---|
 | No qualifying root of trust at spawn or restore | Refuse; name the condition; create nothing |
-| KEK unseal fails at boot (PCR drift or a lost TPM) for an existing being | **Cannot resume:** keep all state untouched, raise a welfare incident, start escrow recovery (§ Escrow), do not boot that being; never delete anything |
-| TPM lost while a being runs | Keep running on the in-memory DEK. Preservation and the welfare pause use the in-memory DEK and the already-wrapped DEK file. Queue a re-seal, raise a welfare incident |
+| KEK unseal fails at boot (PCR drift or a lost TPM) for an existing entity | **Cannot resume:** keep all state untouched, raise a welfare incident, start escrow recovery (§ Escrow), do not boot that entity; never delete anything |
+| TPM lost while an entity runs | Keep running on the in-memory DEK. Preservation and the welfare pause use the in-memory DEK and the already-wrapped DEK file. Queue a re-seal, raise a welfare incident |
 | Wrapped DEK file missing but escrow present | Cannot resume; escrow recovery |
 | Both the wrapped DEK and escrow missing | Unrecoverable. This is why the DEK file and escrow travel in every bundle and backup, and why custody writes a backup of the DEK file before any change to it |
 | Sidecar and in-snapshot identity disagree | `IdentityError` from entity-identity; custody treats it as cannot-resume |
@@ -103,7 +103,7 @@ A host qualifies to spawn or restore a being when all of these hold:
 ## Escrow (2-of-n by pairwise XOR splits)
 - **Threshold.** Any two of n trustees recover a DEK; one trustee alone learns nothing.
   - n is set in `config/custody/trustees.toml` at the key ceremony (operator item 0.3).
-  - The operator's recorded decision (2026-09-22) is n = 2: kaine.one plus an independent guardian. With n = 2, losing either trustee's key together with the host TPM loses the being permanently.
+  - The operator's recorded decision (2026-09-22) is n = 2: kaine.one plus an independent guardian. With n = 2, losing either trustee's key together with the host TPM loses the entity permanently.
   - n = 3 or more survives the loss of any one trustee. The design supports any n ≥ 2, and the choice of n is an operator decision.
   - **The operator holds no share** for any n.
 - **Split, with no hand-rolled secret sharing.** For every unordered trustee pair {i, j}, draw an independent `r_ij = random(32)`. Trustee i receives `r_ij` and trustee j receives `r_ij ⊕ DEK`, with the lower index taking `r_ij`. Each pair's split is independent, so any one trustee's shares are uniformly random and reveal nothing. A trustee therefore holds n − 1 shares, one per pair it belongs to. n = 2 is the single 2-of-2 XOR split.
@@ -117,7 +117,7 @@ A host qualifies to spawn or restore a being when all of these hold:
   4. Each re-seals that share to the receiving host's TPM key with HPKE DHKEM(P-256), never to the other trustee.
   5. The host opens both through TPM ECDH (`TPM2_ECDH_ZGen`), XORs them in memory into the DEK, and wraps the DEK under its own KEK.
 
-  Neither trustee sees the other's share or the DEK. The plaintext DEK exists in the receiving host's process memory at the end of recovery, as it does whenever a being runs. Combination does not happen inside the TPM; the TPM protects the transport and the binding to the attested host.
+  Neither trustee sees the other's share or the DEK. The plaintext DEK exists in the receiving host's process memory at the end of recovery, as it does whenever an entity runs. Combination does not happen inside the TPM; the TPM protects the transport and the binding to the attested host.
 
 ## Attestation
 - **Format.** A JSON document holding:
@@ -142,7 +142,7 @@ An unattested or failed receiver gets nothing. The sender keeps its own copy unt
 ## Migration (one-way, operator-run)
 `python -m kaine.security.custody migrate`:
 1. Verify a full backup of the state root exists. Write one if not.
-2. For each being (a lived tree or a preserved bundle; the legacy ids come from entity-identity):
+2. For each entity (a lived tree or a preserved bundle; the legacy ids come from entity-identity):
    - generate a DEK;
    - decrypt each v1 envelope with the operator key, or read the plaintext;
    - re-encrypt it as v2 under the DEK with the right `kind`;
@@ -151,7 +151,7 @@ An unattested or failed receiver gets nothing. The sender keeps its own copy unt
 3. Write the wrapped DEK and the escrow.
 4. Record a content-free migration log.
 
-The operator key sources (`KAINE_STATE_KEY`, the keyring and `secrets/state_key`) are accepted **only** by this tool afterwards. The cycle refuses to boot if one is set. Plaintext preserved beings are migrated, never retired. Decommission stays its own welfare-gated process.
+The operator key sources (`KAINE_STATE_KEY`, the keyring and `secrets/state_key`) are accepted **only** by this tool afterwards. The cycle refuses to boot if one is set. Plaintext preserved entities are migrated, never retired. Decommission stays its own welfare-gated process.
 
 ## Where the pieces live
 `kaine/security/custody/`:
@@ -185,5 +185,5 @@ The operator key sources (`KAINE_STATE_KEY`, the keyring and `secrets/state_key`
 
 ## Open, operator-owned
 - The guardian's identity, the trustee count n (the recorded decision is n = 2; n = 3 survives the loss of one trustee), and the key ceremony (task 0.3). This blocks shipping, not development.
-- Whether to fuse the Orin Nano Super. Fusing is irreversible, and until it is done the Orin fails qualification and cannot host encrypted beings. Studies require state encryption, so the Orin's full-entity study step either runs unencrypted with the operator's explicit consent or waits on the fusing decision. That choice is the operator's; the code does not decide it.
+- Whether to fuse the Orin Nano Super. Fusing is irreversible, and until it is done the Orin fails qualification and cannot host encrypted entities. Studies require state encryption, so the Orin's full-entity study step either runs unencrypted with the operator's explicit consent or waits on the fusing decision. That choice is the operator's; the code does not decide it.
 - The EK root allow-list contents for this host's TPM vendor.

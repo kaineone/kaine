@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Discrete generative model for Nous active inference (pymdp 1.0, JAX).
+"""Discrete generative model for the planning module's active inference (pymdp 1.0, JAX).
 
-Nous reframes reasoning as active inference (KAINE Paper §3.3.2): belief
+The planning module reframes reasoning as active inference (KAINE Paper §3.3.2): belief
 updating + policy selection by expected-free-energy (EFE) minimisation, using
 **pymdp 1.0**'s JAX-native :class:`pymdp.agent.Agent`.
 
@@ -19,7 +19,7 @@ Hidden state factors
    uncontrollable (a single, identity transition).
 1. ``salience_band`` — coarse salience of the dominant coalition member
    (low / medium / high by default).
-2. ``affect_quadrant`` — Thymos valence×arousal quadrant
+2. ``affect_quadrant`` — the affect module's valence×arousal quadrant
    (calm-pleasant / excited-pleasant / calm-unpleasant / excited-unpleasant).
 3. ``event_cluster`` — a small set of recurring event-type clusters (the open
    seam; see :func:`register_event_cluster`).
@@ -58,10 +58,10 @@ import numpy as np
 # The B-matrix of the controllable factor (factor 0) is indexed over this
 # fixed four-element action space. `request_think` is an EPISTEMIC action:
 # it keeps computation internal to the cognitive loop and therefore does NOT
-# require a Praxis whitelist entry — the absence of a whitelist is not a v1
+# require an effectors module whitelist entry — the absence of a whitelist is not a v1
 # blocker. `request_speak` / `request_maintenance` are still proposed only as
-# intents; Syneidesis inhibition + Praxis whitelists in the executive path
-# gate whether they are ever realized (Nous proposes, the executive disposes).
+# intents; the workspace inhibition + the effectors module whitelists in the executive path
+# gate whether they are ever realized (the planning module proposes, the executive disposes).
 ACTION_SPACE: tuple[str, ...] = (
     "no_op",
     "request_think",
@@ -280,7 +280,7 @@ def build_generative_model(
     # the latent deterministically to state a (the entity "becomes" the action
     # it takes). Perceptual factors are now action-dependent too, but their
     # initial expected transitions are identical for every action (broad and
-    # uncertain). Nous learns what each action actually does from experience.
+    # uncertain). The planning module learns what each action actually does from experience.
     n_actions = len(actions)
     B: list[np.ndarray] = []
     pB: list[np.ndarray] = []
@@ -309,7 +309,7 @@ def build_generative_model(
 
     # Preferences C over observations. v1: the existing preference for the
     # highest salience band acts through the learned consequences of actions:
-    # once Nous learns which actions tend to produce high-salience observations,
+    # once the planning module learns which actions tend to produce high-salience observations,
     # EFE can favour those actions. C by itself cannot discriminate actions,
     # because no action's effect is written into the model; the discrimination
     # emerges from learning B.
@@ -407,7 +407,7 @@ def encode_snapshot(
       action on the next cycle if it wants closed-loop self-observation.
     - salience_band: band of the dominant coalition member's salience (0 if no
       events).
-    - affect_quadrant: derived from a Thymos event in the coalition if present;
+    - affect_quadrant: derived from an affect module event in the coalition if present;
       else the neutral calm-pleasant quadrant (index 0).
     - event_cluster: cluster of the dominant event's source; ``cluster_other``
       (index 0) if unmapped / no events.
@@ -433,7 +433,7 @@ def encode_snapshot(
     dom_sal, dom_event = dominant
     obs[SALIENCE_FACTOR] = _salience_to_band(dom_sal, n_sal)
 
-    # affect: prefer an explicit Thymos affect signal anywhere in the coalition.
+    # affect: prefer an explicit affect signal anywhere in the coalition.
     valence: Optional[float] = None
     arousal: Optional[float] = None
     for _eid, event in getattr(snapshot, "selected_events", []) or []:

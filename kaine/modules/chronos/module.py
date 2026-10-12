@@ -115,7 +115,7 @@ class Chronos(BaseModule):
         self._pred_errors: deque[float] = deque(maxlen=self._prediction_error_window)
         self._last_hidden: Optional[list[float]] = None  # hidden state from previous tick
 
-        # Hypnos sleep flag — set True when hypnos.sleep.started, False on completed
+        # sleep flag — set True when hypnos.sleep.started, False on completed
         self._in_hypnos: bool = False
         # Initialize resolves this to the current stream tail via last_entry_id().
         self._hypnos_cursor: str = "$"
@@ -191,7 +191,7 @@ class Chronos(BaseModule):
             else:
                 self._user_input_cursors[stream] = "0-0"
 
-        # Seed the hypnos cursor from the stream tail before starting the loop,
+        # Seed the sleep module's cursor from the stream tail before starting the loop,
         # otherwise a literal "$" under a non-blocking XREAD never advances.
         self._hypnos_cursor = await self._bus.last_entry_id(_HYPNOS_STREAM)
 

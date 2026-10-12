@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for Nous proposals and taken-action feedback."""
+"""Tests for planning proposals and taken-action feedback."""
 
 from __future__ import annotations
 
@@ -301,7 +301,7 @@ async def test_first_boot_cursor_ignores_pre_boot_outcome(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_realized_late_outcome_records_action_at_arrival_tick(bus: AsyncBus):
-    """A proposal outcome that arrives after Nous missed its broadcast is learned when it arrives."""
+    """A proposal outcome that arrives after the planning module missed its broadcast is learned when it arrives."""
     fake = _RecordingFakeEngine(policy_efe=[0.9, 0.5, 0.05, 0.7])
     nous = Nous(bus, engine=fake)
     await nous.initialize()
@@ -365,7 +365,7 @@ async def test_unknown_proposal_outcome_counts_unknown_and_records_no_op(bus: As
     try:
         await nous.on_workspace(_snapshot([_event()]))
 
-        # Outcome for a proposal id Nous never published (e.g. from before restart).
+        # Outcome for a proposal id the planning module never published (e.g. from before restart).
         await _publish_outcome(bus, "unknown-id", True)
 
         await nous.on_workspace(_snapshot([_event()]))
@@ -408,7 +408,7 @@ async def test_error_step_does_not_insert_extra_no_op(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_rest_proposal_forwarded_then_accepted(bus: AsyncBus):
-    """A forwarded rest proposal is kept until Hypnos accepts it."""
+    """A forwarded rest proposal is kept until the sleep module accepts it."""
     fake = _RecordingFakeEngine(policy_efe=[0.9, 0.5, 0.7, 0.05])
     nous = Nous(bus, engine=fake)
     await nous.initialize()
@@ -420,13 +420,13 @@ async def test_rest_proposal_forwarded_then_accepted(bus: AsyncBus):
         rest_index = fake.actions.index("request_maintenance")
         no_op_index = fake.actions.index("no_op")
 
-        # Volition forwards the rest proposal to Hypnos; not a final outcome.
+        # The action selection module forwards the rest proposal to the sleep module; not a final outcome.
         await _publish_outcome(bus, pid, False, reason="forwarded")
         await nous.on_workspace(_snapshot([_event()]))
         assert fake.recorded == [no_op_index, no_op_index]
         assert pid in nous._recent_proposals
 
-        # Hypnos accepts the rest request.
+        # The sleep module accepts the rest request.
         await _publish_rest_request(bus, pid, True, reason="accepted")
         await nous.on_workspace(_snapshot([_event()]))
         assert fake.recorded == [no_op_index, no_op_index, rest_index]
@@ -453,7 +453,7 @@ async def test_rest_proposal_forwarded_then_refused(bus: AsyncBus):
         assert fake.recorded == [no_op_index, no_op_index]
         assert pid in nous._recent_proposals
 
-        # Hypnos declines the rest request.
+        # The sleep module declines the rest request.
         await _publish_rest_request(bus, pid, False, reason="busy")
         await nous.on_workspace(_snapshot([_event()]))
         assert fake.recorded == [no_op_index, no_op_index, no_op_index]
@@ -552,7 +552,7 @@ async def test_realized_action_survives_timeout_step(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_forwarded_outcome_after_hypnos_refusal_is_not_unknown(bus: AsyncBus):
-    """A forwarded rest outcome that arrives after Hypnos refused it is not unknown."""
+    """A forwarded rest outcome that arrives after the sleep module refused it is not unknown."""
     fake = _RecordingFakeEngine(policy_efe=[0.9, 0.5, 0.7, 0.05])
     nous = Nous(bus, engine=fake)
     await nous.initialize()
@@ -563,7 +563,7 @@ async def test_forwarded_outcome_after_hypnos_refusal_is_not_unknown(bus: AsyncB
 
         no_op_index = fake.actions.index("no_op")
 
-        # Hypnos refuses the rest request before Volition's forwarded outcome is read.
+        # The sleep module refuses the rest request before the action selection module's forwarded outcome is read.
         await _publish_rest_request(bus, pid, False, reason="too_soon")
         await nous.on_workspace(_snapshot([_event()]))
         assert fake.recorded == [no_op_index, no_op_index]

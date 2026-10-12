@@ -95,7 +95,7 @@ def test_restore_ignores_module_not_in_snapshot(tmp_path):
     extra = FakeModule("topos", {"latent": "frozen"})
     soma = FakeModule("soma")
     mgr.restore(snap.id, FakeRegistry([soma, extra]))
-    # topos has no entry → state untouched
+    # The vision module has no entry → state untouched
     assert extra.serialize() == {"latent": "frozen"}
     assert soma.serialize() == {"wellness": 1.0}
 
@@ -223,7 +223,7 @@ def test_merger_from_name_rejects_unknown():
 
 
 def test_snapshots_are_never_evicted(tmp_path):
-    """The fork root holds preserved beings: no count cap deletes any of them."""
+    """The fork root holds preserved entities: no count cap deletes any of them."""
     mgr = ForkManager(tmp_path)
     snaps = [mgr.snapshot(FakeRegistry([FakeModule("soma", {"i": i})])) for i in range(70)]
     forked = mgr.fork(snaps[0].id, label="child")

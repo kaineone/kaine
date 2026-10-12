@@ -23,7 +23,7 @@ The prober only *reads* dependencies (Redis PING, HTTP GETs, a file stat /
 ``os.access`` check). It never starts, stops, or mutates a service.
 
 The actual per-dependency probes live in :mod:`.probes`; the per-block
-snapshot builders (spot, preservation, cycle pacing, ...) live in
+snapshot builders (supervisor, preservation, cycle pacing, ...) live in
 :mod:`.blocks`. This module is the caching/scheduling orchestrator that ties
 them to instance config and exposes the single :meth:`HealthProber.snapshot`
 entrypoint the diagnostics route calls.
@@ -82,7 +82,7 @@ class HealthProber:
     # Non-content: mode + seed + video/audio schedule (seeded) or manifest digest
     # (playlist) — covers BOTH the vision and the hearing surface.
     perception_feed_cfg: dict[str, Any] = field(default_factory=dict)
-    # Topos frame geometry (capture_width/height), needed to render the seeded
+    # The vision module's frame geometry (capture_width/height), needed to render the seeded
     # video schedule descriptor exactly as the run will generate it.
     topos_capture_geometry: tuple[int, int] = (640, 480)
     # Audition capture geometry (capture_sample_rate/channels), needed to render
@@ -104,7 +104,7 @@ class HealthProber:
     preservation_incident_path: Path = Path("state/cycle/preservation")
     runs_manifest_root: Path = Path("data/evaluation/runs")
     evaluation_logs_path: Path = Path("data/evaluation")
-    # Spot state files — default to the canonical paths Spot writes.
+    # The supervisor's state files — default to the canonical paths the supervisor writes.
     spot_control_path: Path = Path("state/cycle/control.json")
     spot_escalation_path: Path = Path("state/cycle/escalation.json")
     gpu_preflight_path: Path = Path("state/cycle/gpu_preflight.json")

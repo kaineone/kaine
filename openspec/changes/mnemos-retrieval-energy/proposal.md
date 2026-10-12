@@ -1,14 +1,14 @@
 ## Why
 
-Mnemos stores and recalls, but it never publishes surprise. Under the complementary-learning-systems account the paper cites (McClelland, McNaughton and O'Reilly 1995), familiarity is a signal in its own right: how well the current content matches what memory holds.
+The episodic memory module stores and recalls, but it never publishes surprise. Under the complementary-learning-systems account the paper cites (McClelland, McNaughton and O'Reilly 1995), familiarity is a signal in its own right: how well the current content matches what memory holds.
 
 Modern Hopfield retrieval (Ramsauer et al., arXiv 2008.02217) gives that signal directly. The retrieval energy of a query against stored patterns is low for familiar content and high for novel content (alternatives review 2026-10-05, §5.4).
 
-**Design document only.** Nothing is built until the workspace-mediation ablation has run, because a new Mnemos signal adds a new competitor to the workspace.
+**Design document only.** Nothing is built until the workspace-mediation ablation has run, because a new episodic memory signal adds a new competitor to the workspace.
 
 ## What Changes
 
-A design for a content-free familiarity signal (retrieval energy) computed from the recall embedding Mnemos already makes (`mnemos-recall-and-vector-strip`), published as a scalar.
+A design for a content-free familiarity signal (retrieval energy) computed from the recall embedding the episodic memory module already makes (`mnemos-recall-and-vector-strip`), published as a scalar.
 
 ## Impact
 

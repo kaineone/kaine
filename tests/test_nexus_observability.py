@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for nexus observability.
+"""Tests for dashboard observability.
 
 Covers:
 - Section 1: DEFAULT_DIAGNOSTICS_STREAMS includes the four new streams.
@@ -574,7 +574,7 @@ def test_runtime_state_carries_run_identity_and_mode(tmp_path, monkeypatch):
 
 
 def test_metrics_snapshot_surfaces_new_fields(tmp_path):
-    """nexus metrics_snapshot surfaces run identity + mode + deterministic."""
+    """The dashboard's metrics_snapshot surfaces run identity + mode + deterministic."""
     from kaine.nexus.__main__ import make_metrics_snapshot
 
     runtime = tmp_path / "runtime.json"
@@ -1241,7 +1241,7 @@ def test_console_status_chip_defaults_to_offline():
 
 def test_status_chip_priority_logic_in_js():
     """Static guard on the four-state chip logic in nexus.js: the computed
-    state must follow OFFLINE > FROZEN > SLEEPING > AWAKE, and both hypnos
+    state must follow OFFLINE > FROZEN > SLEEPING > AWAKE, and both sleep
     sleep AND wake events must be handled."""
     js = _nexus_js()
     # The priority ladder is expressed in computeChipState().
@@ -1355,7 +1355,7 @@ def _nexus_console_js() -> str:
 def test_single_multiplexed_eventsource_across_the_bundle():
     """Central invariant of the realtime refactor (tasks 1.1 / V.2): the whole
     diagnostics bundle constructs exactly ONE ``EventSource``. Every feature
-    (charts, fatigue, spot, preservation, vitals, reveal, presence, and the
+    (charts, fatigue, supervisor, preservation, vitals, reveal, presence, and the
     counter-only metrics stream) receives events by subscribing to the shared
     NexusStream dispatcher rather than opening its own connection — this is what
     keeps the console under the browser's ~6-connection-per-host cap so streams

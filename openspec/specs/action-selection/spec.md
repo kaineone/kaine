@@ -1,15 +1,15 @@
 # action-selection Specification
 
 ## Purpose
-Volition is KAINE's executive action layer, the only path from a conscious workspace snapshot to an effector. This capability defines how intents are selected: the inhibition gate checked first, explicit intent kinds and referents, no action on the entity's own output, one intent of each kind in flight, drive-initiated intents, and the realization of conscious Nous proposals under those same gates.
+The action selection module is KAINE's executive action layer, the only path from a conscious workspace snapshot to an effector. This capability defines how intents are selected: the inhibition gate checked first, explicit intent kinds and referents, no action on the entity's own output, one intent of each kind in flight, drive-initiated intents, and the realization of conscious planning module proposals under those same gates.
 
 ## Requirements
 
 ### Requirement: Executive action selection gated by inhibition
 
 After each experiential workspace broadcast, the cognitive cycle SHALL invoke an
-executive action-selection step ("Volition") with the `WorkspaceSnapshot`. When
-the snapshot is inhibited (the winning coalition did not clear Syneidesis's
+executive action-selection step (the action selection module) with the `WorkspaceSnapshot`. When
+the snapshot is inhibited (the winning coalition did not clear the workspace's
 publication threshold), the step SHALL produce **no** intents. When the snapshot
 is not inhibited, the step MAY produce zero or more action intents according to
 its policy. Action intents SHALL be published to the `volition.out` stream and
@@ -38,8 +38,8 @@ Each intent SHALL declare a `kind` of `speak`, `think`, `act`, or `rest`, and SH
 reference the conscious content it concerns (an entry id and/or a summary) so
 the realizing effector can act appropriately. The action-selection policy SHALL
 be an injectable component so motivational inputs (drives, recalled context,
-Nous proposals) can be added without changing the cycle wiring or the intent
-transport. An intent that realizes a Nous proposal SHALL carry `origin: "nous"`.
+planning module proposals) can be added without changing the cycle wiring or the intent
+transport. An intent that realizes a planning module proposal SHALL carry `origin: "nous"`.
 
 #### Scenario: Speak intent carries its referent
 
@@ -49,7 +49,7 @@ transport. An intent that realizes a Nous proposal SHALL carry `origin: "nous"`.
 #### Scenario: Rest intent is not an effector action
 
 - **WHEN** a `rest` intent is published
-- **THEN** Praxis does not act on it and Lingua does not realize it
+- **THEN** the effectors module does not act on it and the language module does not realize it
 
 ### Requirement: No action on the entity's own output; one intent in flight
 
@@ -106,9 +106,9 @@ tick, and a present user utterance takes precedence over a drive-initiated
 - **THEN** the single `speak` intent produced is the response to the user
   utterance
 
-### Requirement: Volition realizes conscious Nous proposals under the existing gates
+### Requirement: Action selection realizes conscious Planning proposals under the existing gates
 
-When `[nous].drive_actions` is true, Volition SHALL consider the most salient `nous.proposal` in the conscious coalition of each non-inhibited experiential broadcast. It SHALL turn a `think` or `speak` proposal into a `think` or `speak` intent, and a `rest` proposal into a `rest` intent, each with `origin: "nous"`. The same inhibition gate, one-in-flight guards, refractory periods and no-self-response rule SHALL apply as to every other intent. At most one proposal-derived intent SHALL be produced per snapshot, and it SHALL NOT displace an intent the configured policy produced for the same snapshot. The configured policy SHALL decide on the coalition with every `nous.proposal` removed. For every proposal it sees, Volition SHALL publish a content-free `volition.proposal_outcome` (`proposal_id`, `realized`, `reason`) on the `volition_feedback.out` stream, never on `volition.out`.
+When `[nous].drive_actions` is true, the action selection module SHALL consider the most salient `nous.proposal` in the conscious coalition of each non-inhibited experiential broadcast. It SHALL turn a `think` or `speak` proposal into a `think` or `speak` intent, and a `rest` proposal into a `rest` intent, each with `origin: "nous"`. The same inhibition gate, one-in-flight guards, refractory periods and no-self-response rule SHALL apply as to every other intent. At most one proposal-derived intent SHALL be produced per snapshot, and it SHALL NOT displace an intent the configured policy produced for the same snapshot. The configured policy SHALL decide on the coalition with every `nous.proposal` removed. For every proposal it sees, the action selection module SHALL publish a content-free `volition.proposal_outcome` (`proposal_id`, `realized`, `reason`) on the `volition_feedback.out` stream, never on `volition.out`.
 
 #### Scenario: An inhibited coalition never realizes a proposal
 - **WHEN** a `nous.proposal` is in the coalition of an inhibited snapshot
@@ -116,13 +116,13 @@ When `[nous].drive_actions` is true, Volition SHALL consider the most salient `n
 
 #### Scenario: A proposal that never became conscious is never realized
 - **WHEN** a `nous.proposal` is published but is not in any conscious coalition
-- **THEN** Volition produces no intent for it
+- **THEN** the action selection module produces no intent for it
 
 #### Scenario: A conscious think proposal becomes internal speech
 - **WHEN** a non-inhibited coalition contains a `think` proposal and no think intent is in flight
-- **THEN** a `think` intent with `origin: "nous"` is published on `volition.out`, and Lingua realizes it as `internal_speech`
+- **THEN** a `think` intent with `origin: "nous"` is published on `volition.out`, and the language module realizes it as `internal_speech`
 
-#### Scenario: A user response outranks a Nous speak proposal
+#### Scenario: A user response outranks a Planning speak proposal
 - **WHEN** the configured policy produces a `speak` intent for a snapshot that also contains a `speak` proposal
 - **THEN** only the configured policy's intent is published, and the proposal's outcome is `reason: "superseded"`
 
@@ -131,7 +131,7 @@ When `[nous].drive_actions` is true, Volition SHALL consider the most salient `n
 - **THEN** the configured policy decides on the coalition without the proposal, so none of its intents is about the proposal, and it produces the same intents whether `[nous].drive_actions` is true or false
 
 #### Scenario: A lost realization never mutes a kind
-- **WHEN** a Nous `think` or `speak` intent is realized under any configured policy, and the matching speech never becomes conscious
+- **WHEN** a planning module `think` or `speak` intent is realized under any configured policy, and the matching speech never becomes conscious
 - **THEN** that kind's in-flight guard clears after the guard timeout, and a later proposal or policy intent of that kind can be realized again
 
 #### Scenario: Observational ablation

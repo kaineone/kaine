@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for womb perception-feed boot wiring."""
+"""Tests for stimulus source perception-feed boot wiring."""
 from __future__ import annotations
 
 import numpy as np
@@ -196,8 +196,8 @@ async def test_check_perception_womb_passes():
 def test_build_registry_womb_mode_shares_one_clock_and_selects_virtual(
     monkeypatch, tmp_path
 ):
-    """The real boot path: womb mode installs ONE shared womb clock (offset by
-    the lived gestation time) that Topos and Audition both receive, and binds
+    """The real boot path: stimulus source mode installs ONE shared stimulus source clock (offset by
+    the lived developmental time) that the vision and audition modules both receive, and binds
     the senses to the virtual locus."""
     import asyncio
 

@@ -3,7 +3,7 @@
 
 """Consented, setup-time fetch of the InternVideo-Next encoder weights.
 
-Topos's temporally-native video encoder (topos-temporal-video-encoder change) is
+the vision module's temporally-native video encoder (topos-temporal-video-encoder change) is
 the frozen InternVideo-Next base checkpoint. A fresh clone has NO weights: the
 ~182 MB fp16 ``model.safetensors`` is fetched ONCE at setup time into a
 deterministic, git-ignored local dir under ``state/models/`` — mirroring the

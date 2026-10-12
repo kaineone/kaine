@@ -118,7 +118,7 @@ def build_job_specs(
         )
         nexus_port = nexus_cfg.port
     except Exception:
-        # Nexus configuration is unsafe/invalid/malformed; do not offer the start job.
+        # The dashboard configuration is unsafe/invalid/malformed; do not offer the start job.
         return specs
 
     nexus_log = state_dir / "logs" / "nexus.log"

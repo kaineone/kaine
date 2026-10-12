@@ -38,7 +38,7 @@ The plugin SHALL read `data_source` (`"reference_culture"` by default, `"sdk"`, 
 - **THEN** boot raises `PluginError` naming `replay_path`
 
 ### Requirement: The setup wizard offers the plugin, off by default
-The setup wizard SHALL offer an optional CL1 step whose default answer is no and which defaults mode skips. When accepted, it SHALL show the requirements and licence note, print the install commands without running them, and write a `[plugins]` block enabling `cl1` with Chronos and Soma converted.
+The setup wizard SHALL offer an optional CL1 step whose default answer is no and which defaults mode skips. When accepted, it SHALL show the requirements and licence note, print the install commands without running them, and write a `[plugins]` block enabling `cl1` with the sequence and interoception modules converted.
 
 #### Scenario: Defaults mode
 - **WHEN** the wizard runs in defaults mode

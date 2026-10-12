@@ -1,12 +1,12 @@
-# lingua Specification
+# language Specification
 
 ## Purpose
-Lingua is the language organ: it turns the entity's speak and think intents into text through a local OpenAI-compatible model, conditioned on an assembled cognitive context, and publishes the result on the bus. It speaks only when an intent asks it to, never modifies its own model, keeps the A/B baseline and privacy intact, and leaves a content-free audit record when a realization fails.
+The language module is the language organ: it turns the entity's speak and think intents into text through a local OpenAI-compatible model, conditioned on an assembled cognitive context, and publishes the result on the bus. It speaks only when an intent asks it to, never modifies its own model, keeps the A/B baseline and privacy intact, and leaves a content-free audit record when a realization fails.
 
 ## Requirements
 
 ### Requirement: Two speech modes routed to distinct streams
-Lingua SHALL expose two public methods: `async speak(prompt,
+The language module SHALL expose two public methods: `async speak(prompt,
 snapshot=None)` for external speech and `async think(prompt,
 snapshot=None)` for internal speech. External speech SHALL publish a
 `lingua.external` event to its `lingua.external` stream; internal
@@ -32,7 +32,7 @@ minimum `timestamp`, `mode` (`"external"` or `"internal"`),
 provided) `faithful_rendering` — the deterministic rendering of the
 same snapshot via `kaine.faithful.FaithfulRenderer`. The
 `faithful_rendering` field is the "chosen" side of the DPO pair
-Hypnos will build in Phase 6.
+the sleep module will build in Phase 6.
 
 #### Scenario: speak with snapshot logs faithful rendering
 - **WHEN** `Lingua.speak("hello", snapshot=snap)` is awaited with a
@@ -72,7 +72,7 @@ backend-agnostic (Unsloth Studio on CUDA hosts, any conforming server elsewhere)
 - **AND** if the served model rejects it, the client retries without it
 
 #### Scenario: Custom client substitutes cleanly
-- **WHEN** Lingua is constructed with a custom `ChatClient` that returns a canned
+- **WHEN** the language module is constructed with a custom `ChatClient` that returns a canned
   response
 - **THEN** every `speak` and `think` call returns that canned text
 
@@ -88,21 +88,21 @@ External-stream events carry the same shape as internal-stream events.
   `prompt_length`, `latency_ms`
 
 ### Requirement: No automatic model modification
-Lingua SHALL NOT modify the underlying model in any way during
+The language module SHALL NOT modify the underlying model in any way during
 runtime. Abliteration, fine-tuning, and LoRA application are
-operator-approved out-of-band actions, not Lingua responsibilities.
+operator-approved out-of-band actions, not the language module's responsibilities.
 
-#### Scenario: Lingua does not invoke training APIs
-- **WHEN** Lingua is initialized and used
+#### Scenario: Language does not invoke training APIs
+- **WHEN** the language module is initialized and used
 - **THEN** no calls are made to the Unsloth training API or any
   model-modification endpoint
 
-### Requirement: Default Lingua config and disabled-by-default
+### Requirement: Default Language config and disabled-by-default
 The repository SHALL ship a `[lingua]` block in `config/kaine.toml`
 with default values for `chat_url`, `model_id`, `temperature`,
 `max_tokens`, `request_timeout_s`, `intent_log_path`,
 `baseline_salience`, and `alert_salience`. `[modules].lingua = false`
-SHALL keep first boot from auto-registering Lingua.
+SHALL keep first boot from auto-registering the language module.
 
 #### Scenario: kaine.toml carries defaults
 - **WHEN** an operator inspects `config/kaine.toml`
@@ -111,29 +111,29 @@ SHALL keep first boot from auto-registering Lingua.
 
 ### Requirement: External speech is intent-driven, not self-triggered
 
-Lingua SHALL produce external speech only in response to a `speak` intent
-emitted by the executive action-selection step. Lingua SHALL NOT decide on its
+The language module SHALL produce external speech only in response to a `speak` intent
+emitted by the executive action-selection step. The language module SHALL NOT decide on its
 own to respond to perceived input (e.g. a user transcription appearing in the
 workspace): the decision to speak belongs to the executive, which is gated by
-inhibition. Lingua realizes a `speak` intent via its existing `speak()` path,
+inhibition. The language module realizes a `speak` intent via its existing `speak()` path,
 using the intent's referenced conscious content as the prompt. A `think` intent
 is realized via `think()` (internal speech).
 
-#### Scenario: Lingua speaks when given a speak intent
+#### Scenario: Language speaks when given a speak intent
 
-- **WHEN** a `speak` intent is delivered to Lingua
-- **THEN** Lingua produces one external-speech output via `speak()` on
+- **WHEN** a `speak` intent is delivered to the language module
+- **THEN** the language module produces one external-speech output via `speak()` on
   `lingua.external`
 
-#### Scenario: Lingua stays silent on perceived input without an intent
+#### Scenario: Language stays silent on perceived input without an intent
 
 - **WHEN** a user transcription appears in the workspace but no `speak` intent
   is issued (e.g. the snapshot was inhibited)
-- **THEN** Lingua produces no external speech
+- **THEN** the language module produces no external speech
 
 ### Requirement: Speech is published with a stable semantic event type
 
-Lingua SHALL publish external speech with event type `external_speech` and
+The language module SHALL publish external speech with event type `external_speech` and
 internal speech with event type `internal_speech`, on the `lingua.external` and
 `lingua.internal` streams respectively. The event type SHALL be the semantic
 speech type, not the stream name, so consumers (the conversation surface and
@@ -152,7 +152,7 @@ SHALL match what those consumers filter on.
 
 #### Scenario: conversation and observers receive the speech
 
-- **WHEN** Lingua publishes external speech
+- **WHEN** the language module publishes external speech
 - **THEN** a consumer filtering on type `external_speech` (conversation router;
   A/B-divergence / proactive-audit / affect-correlation observers) receives it
 
@@ -160,7 +160,7 @@ SHALL match what those consumers filter on.
 
 The shipped `config/kaine.toml` SHALL set `[lingua].model_id` to an abliterated
 model — one whose refusal direction has been removed so the cognitive stack
-(Eidolon values, Thymos, the workspace) governs behavior rather than the model's
+(the self-model module's values, the affect module, the workspace) governs behavior rather than the model's
 baked-in refusals. The committed default SHALL be a publicly available abliterated
 model served as a **pinned GGUF** (identified by repository, quantization, and
 revision) by the local OpenAI-compatible backend. The **same served GGUF** SHALL
@@ -181,22 +181,22 @@ abliterated model.
 
 ### Requirement: Speech is generated from an assembled cognitive context
 
-Lingua SHALL generate external (`speak`) and internal (`think`) language from an
+The language module SHALL generate external (`speak`) and internal (`think`) language from an
 assembled context that combines four parts, not from the triggering text alone:
 
-1. a persistent first-person **persona** (system role), seeded from the Eidolon
+1. a persistent first-person **persona** (system role), seeded from the
    self-model and falling back to a minimal first-person invariant when the
    self-model is empty;
 2. a **working-memory block** — the faithful rendering of the current conscious
-   coalition (the latest Syneidesis broadcast Lingua has observed);
-3. **recalled memory** present in that coalition (Mnemos recall events), rendered
+   coalition (the latest workspace broadcast the language module has observed);
+3. **recalled memory** present in that coalition (the episodic memory module's recall events), rendered
    inline with the rest of the coalition;
 4. the **triggering input** (the `about` field of the intent).
 
 The faithful rendering SHALL be produced BEFORE the LLM call and included in the
 prompt. It SHALL continue to be recorded in the evaluation log unchanged.
 
-The `speak`/`think` intent payload on the bus is unchanged; Lingua SHALL acquire
+The `speak`/`think` intent payload on the bus is unchanged; the language module SHALL acquire
 the conscious coalition by maintaining the most recent workspace broadcast it has
 observed (rolling-latest), and render that at generation time.
 
@@ -204,7 +204,7 @@ observed (rolling-latest), and render that at generation time.
 
 - **WHEN** a user utterance is selected into the conscious coalition and the
   executive emits a `speak` intent about it
-- **THEN** the LLM request Lingua issues carries a non-empty system persona
+- **THEN** the LLM request the language module issues carries a non-empty system persona
 - **AND** the prompt contains the rendered working-memory block (e.g. current
   affect and at least one present percept/interoception line)
 - **AND** the prompt contains the triggering utterance
@@ -218,7 +218,7 @@ observed (rolling-latest), and render that at generation time.
 
 #### Scenario: Empty self-model yields a minimal persona, not an empty system
 
-- **WHEN** the Eidolon self-model has no name, values, or norms (fresh start)
+- **WHEN** the self-model has no name, values, or norms (fresh start)
 - **THEN** the assembled system prompt is a non-empty first-person invariant
 - **AND** generation still proceeds
 
@@ -233,7 +233,7 @@ observed (rolling-latest), and render that at generation time.
 
 ### Requirement: Assembled context respects a token budget
 
-Context assembly SHALL be bounded. Lingua SHALL render at most
+Context assembly SHALL be bounded. The language module SHALL render at most
 `context_max_events` coalition events, selected by salience (highest first) and
 ordered stably for reading, and SHALL cap the rendered working-memory block at a
 configured character budget, dropping lowest-salience events first when over
@@ -278,12 +278,12 @@ privacy-bounded eval logs, never to the conversation surface.
   text, not the persona, the working-memory block, or any internal speech
 
 ### Requirement: Failed realizations leave a content-free audit record
-When Lingua fails to realize a `speak` or `think` intent because generation raises (other than cancellation), it SHALL write one `realization_failed` record to `lingua.internal` in the same record format as its utterances, whose payload contains only `mode` (the intent kind) and `reason_class` (the exception class name). The record SHALL NOT contain the prompt, generated text, triggering input or exception message.
+When the language module fails to realize a `speak` or `think` intent because generation raises (other than cancellation), it SHALL write one `realization_failed` record to `lingua.internal` in the same record format as its utterances, whose payload contains only `mode` (the intent kind) and `reason_class` (the exception class name). The record SHALL NOT contain the prompt, generated text, triggering input or exception message.
 
 #### Scenario: Language organ raises during a speak intent
 - **WHEN** a `speak` intent is realized and the chat client raises `ConnectionError`
 - **THEN** `lingua.internal` receives one record with type `realization_failed` and payload `{"mode": "speak", "reason_class": "ConnectionError"}`, and `lingua.external` receives nothing
 
 #### Scenario: The sleep-time audit counts the failure
-- **WHEN** Hypnos's ignition audit classifies the records read from `lingua.internal`
+- **WHEN** the sleep module's ignition audit classifies the records read from `lingua.internal`
 - **THEN** the failure is counted in `realization_failed_count` and not as a realization

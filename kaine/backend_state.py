@@ -3,7 +3,7 @@
 
 """Boundary-neutral registry for runtime-backend load outcomes.
 
-Each heavy organ (Lingua LLM, Mnemos vector store, Audio-In STT, ...) selects a
+Each heavy organ (the language organ, the episodic memory module's vector store, Audio-In STT, ...) selects a
 model *runtime backend* via a ``[<module>].backend`` config key (see
 :mod:`kaine.modules.backends`). When a configured backend cannot load on the
 current host — a missing third-party dependency, or a load error — the failure
@@ -12,7 +12,7 @@ works" when it does not (openspec ``runtime-backends``).
 
 This module is the shared, dependency-free home for those reports: an in-process
 list of structured :class:`BackendFailure` records plus pure readers. It depends
-only on the stdlib, so BOTH the modules that record a failure and the Nexus
+only on the stdlib, so BOTH the modules that record a failure and the dashboard
 health surface that displays it can use it without either importing the other —
 the same boundary-neutral pattern as :mod:`kaine.organ_window_state`.
 
@@ -58,7 +58,7 @@ class BackendFailure:
 
 
 # Process-global registry. Boot is single-threaded, but a lock keeps the reader
-# (the async Nexus health prober, possibly on another thread) consistent.
+# (the async dashboard health prober, possibly on another thread) consistent.
 _LOCK = threading.Lock()
 _FAILURES: list[BackendFailure] = []
 
@@ -109,7 +109,7 @@ def backend_failures() -> list[BackendFailure]:
 
 
 def backend_failures_snapshot() -> list[dict[str, Any]]:
-    """Content-free dicts for the Nexus health surface / diagnostics JSON."""
+    """Content-free dicts for the dashboard health surface / diagnostics JSON."""
     return [f.as_dict() for f in backend_failures()]
 
 

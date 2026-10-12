@@ -1,12 +1,12 @@
 # topos-predictive Specification
 
 ## Purpose
-This capability gives Topos a visual forward model that predicts the next latent from the current latent and recurrent visual buffer, driving salience from prediction error. Topos adapts the model online with a single gradient step per clip latent, summarizes the buffer as a statistical descriptor for serialization, and binds the latent dimension to the active encoder.
+This capability gives the vision module a visual forward model that predicts the next latent from the current latent and recurrent visual buffer, driving salience from prediction error. The vision module adapts the model online with a single gradient step per clip latent, summarizes the buffer as a statistical descriptor for serialization, and binds the latent dimension to the active encoder.
 
 ## Requirements
 
 ### Requirement: Visual forward model predicts next latent
-Topos SHALL maintain a forward model that predicts the next visual latent from the
+The vision module SHALL maintain a forward model that predicts the next visual latent from the
 current latent and a recurrent visual buffer, and SHALL adapt it online with a
 single small gradient step per produced clip latent, skipping any non-finite
 update. The forward model's latent dimension SHALL follow the active encoder's
@@ -18,7 +18,7 @@ do not match the running encoder's `latent_dim` SHALL be discarded with a warnin
 error or silently corrupting state is not permitted.
 
 This requirement covers ONLY the module-level VISUAL next-latent predictor. It is
-distinct from and does not affect Phantasia's DreamerV3 world model, which predicts
+distinct from and does not affect the DreamerV3 world model of the world model module, which predicts
 the fused whole-workspace state; the two predictors SHALL NOT be conflated.
 
 #### Scenario: Encoder stays frozen
@@ -41,7 +41,7 @@ the fused whole-workspace state; the two predictors SHALL NOT be conflated.
 - **THEN** the recurrent visual buffer holds at most `visual_buffer_size` latents
 
 ### Requirement: Salience is driven by prediction error
-Topos event salience SHALL be driven by the visual prediction error (the
+The vision module's event salience SHALL be driven by the visual prediction error (the
 magnitude of the predicted-minus-actual latent), such that a predictable change
 yields lower salience than an equally large but unpredicted change. The alert
 criterion SHALL be relative to the module's own rolling baseline of prediction
@@ -58,7 +58,7 @@ SHALL remain on the event payload for diagnostics.
 - **THEN** the unpredicted jump yields strictly higher event salience
 
 #### Scenario: Diagnostics fields retained
-- **WHEN** Topos publishes a report
+- **WHEN** the vision module publishes a report
 - **THEN** the payload still contains `change_score` and `habituation_score`
 
 #### Scenario: A perceptual discontinuity alerts

@@ -3,7 +3,7 @@
 """Per-module CL1 backends.
 
 Each backend implements the *exact client interface* a KAINE module already
-expects for its forward model (e.g. Chronos' CfC network, Soma's
+expects for its forward model (e.g. the sequence module's CfC network, the interoception module's
 `SubstrateForwardModel`), but realises it on the shared biological substrate via
 `kaine_cl1.substrate`. The backend is injected at construction by
 `kaine_cl1.boot`; the KAINE module body is unchanged and unaware.

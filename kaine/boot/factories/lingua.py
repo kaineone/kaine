@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The Lingua factory."""
+"""The language module factory."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -24,9 +24,9 @@ def make_lingua(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "max_tokens",
         "think",
         "request_timeout_s",
-        # read by kaine.organ_server.lifecycle when it launches the organ, not by Lingua
+        # read by kaine.organ_server.lifecycle when it launches the organ, not by the language module
         "model_server_sleep_idle_seconds",
-        # read by kaine.cycle.utterance_outcome, not by Lingua
+        # read by kaine.cycle.utterance_outcome, not by the language module
         "outcome_reply_window_s",
         "api_key",
         "intent_log_path",
@@ -39,7 +39,7 @@ def make_lingua(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "alert_salience",
         # Runtime backend selection (openspec runtime-backends). Absent/"openai"
         # (or its alias "ollama") → today's OpenAI-compatible HTTP client
-        # (Tier-2, built by Lingua exactly as before); "llama_cpp" → in-process
+        # (Tier-2, built by the language module exactly as before); "llama_cpp" → in-process
         # GGUF edge runtime. GGUF locators for the edge backend (unused by the
         # HTTP default).
         "backend",
@@ -55,7 +55,7 @@ def make_lingua(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     kw["api_key"] = lingua_section_api_key(kw)
 
     # Backend seam. The default path is byte-for-byte behaviour-preserving: when
-    # no edge backend is selected we do NOT build a client here — Lingua
+    # no edge backend is selected we do NOT build a client here — the language module
     # constructs its OpenAIChatClient itself, exactly as it always has (openspec
     # runtime-backends, "Default backend preserves current behavior"). Only a
     # non-default backend resolves a client behind the ChatClient interface; a

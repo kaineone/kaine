@@ -50,7 +50,7 @@ _MODULE_NAMES = [
 
 
 def _load_module_class(name: str) -> type[BaseModule]:
-    # Most modules are packages with a ``module.py``; echo is a single file.
+    # Most modules are packages with a ``module.py``; the recorder module is a single file.
     try:
         mod = importlib.import_module(f"kaine.modules.{name}.module")
     except ModuleNotFoundError:

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Phantasia world model: FakeWorldModel protocol, rollout, NaN guard, no AC."""
+"""world model: FakeWorldModel protocol, rollout, NaN guard, no AC."""
 from __future__ import annotations
 
 import math

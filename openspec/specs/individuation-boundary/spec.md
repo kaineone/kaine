@@ -1,7 +1,7 @@
 # individuation-boundary Specification
 
 ## Purpose
-The individuation-boundary capability measures whether a fork has diverged from its own birth-state by comparing fork-vs-parent divergence against a parent-vs-parent null distribution built from permutation samples, requiring a minimum of accumulated lived experience before significance can be claimed.
+The individuation-boundary capability measures whether a fork has diverged from its own maturation-state by comparing fork-vs-parent divergence against a parent-vs-parent null distribution built from permutation samples, requiring a minimum of accumulated lived experience before significance can be claimed.
 ## Requirements
 ### Requirement: Null distribution from parent stochastic variation
 The individuation test SHALL build a null distribution by sampling parent-vs-parent
@@ -28,12 +28,12 @@ and a significance flag. The instrument SHALL NOT itself decide fork sovereignty
 - **WHEN** a fork's preference divergence exceeds the 95th percentile of the null
 - **THEN** the report's significance flag is true and a p-value is included
 
-### Requirement: Individuation is measured against the entity's own birth-state, not the bare organ
+### Requirement: Individuation is measured against the entity's own maturation-state, not the bare organ
 
 The individuation permutation test SHALL measure how far the live entity has
 drifted from **its own earlier self**, not how far the architecture-conditioned
 entity sits from the bare/pretrained organ. The test's reference SHALL be a
-**birth-state** transcript — the entity's own conditioned responses to the
+**maturation-state** transcript — the entity's own conditioned responses to the
 preference battery, captured once at run start before lived experience — and the
 null distribution SHALL be built from the **entity's own** present stochastic
 variation (the live entity re-sampled with seed variation). The reference and the
@@ -44,15 +44,15 @@ tick), which `entity-decommission` already prohibits as the individuation key.
 #### Scenario: A sensory-void / unchanged entity is not significant
 
 - **WHEN** the live entity has accumulated no lived experience and its current
-  battery responses are within its own stochastic variation of the birth-state
+  battery responses are within its own stochastic variation of the maturation-state
   reference
 - **THEN** `fork_divergence` falls inside the null distribution and `significant`
   is `false`
 
-#### Scenario: An entity that has drifted from its birth-state is significant
+#### Scenario: An entity that has drifted from its maturation-state is significant
 
 - **WHEN** lived experience has moved the entity's battery responses beyond its
-  own present stochastic variation from the birth-state reference
+  own present stochastic variation from the maturation-state reference
 - **THEN** `fork_divergence` exceeds the configured significance percentile and
   `significant` is `true`
 
@@ -60,7 +60,7 @@ tick), which `entity-decommission` already prohibits as the individuation key.
 
 - **WHEN** the individuation test is wired for a run
 - **THEN** neither the reference nor the null sampler is the bare/pretrained
-  organ; both are the entity's own self (birth-state reference, present-self null)
+  organ; both are the entity's own self (maturation-state reference, present-self null)
 
 ### Requirement: Significance requires a minimum of accumulated lived experience
 
@@ -82,5 +82,5 @@ un-warmed-up assessment never reads as individuated.
 
 - **WHEN** both `min_observations` and `min_lived_time_s` are met
 - **THEN** the report has `warmed_up == true` and `significant` reflects the
-  birth-state-referenced permutation result
+  maturation-state-referenced permutation result
 

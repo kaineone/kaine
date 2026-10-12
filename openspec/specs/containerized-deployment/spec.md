@@ -1,7 +1,7 @@
 # containerized-deployment Specification
 
 ## Purpose
-This capability deploys the whole KAINE system as containers on Docker or rootless Podman: the supporting services, the organ, Nexus, the cognitive cycle, the study runner and the trainer. The deployment never starts an entity on its own, passes GPUs through for several vendors, provisions every model and image at setup time rather than at runtime, keeps entity state safe across container recreation, and keeps the zero raw-sense-data persistence guarantee.
+This capability deploys the whole KAINE system as containers on Docker or rootless Podman: the supporting services, the organ, the dashboard, the cognitive cycle, the study runner and the trainer. The deployment never starts an entity on its own, passes GPUs through for several vendors, provisions every model and image at setup time rather than at runtime, keeps entity state safe across container recreation, and keeps the zero raw-sense-data persistence guarantee.
 
 ## Requirements
 
@@ -10,23 +10,23 @@ This capability deploys the whole KAINE system as containers on Docker or rootle
 The system SHALL provide a single container image for the KAINE runtime and a
 declarative topology (a Compose project, with an equivalent rootless-Podman/Quadlet
 layout) that brings up the full deployment — the event bus, vector store, model
-server, speech-to-text, text-to-speech, the Nexus web UI, and the cognitive cycle —
+server, speech-to-text, text-to-speech, the dashboard web UI, and the cognitive cycle —
 reproducibly on a fresh host, building on the already-containerized event bus and
 vector store. Every service port SHALL be mapped to loopback only, and the cycle and
-Nexus SHALL be gated on the data and model services being healthy.
+the dashboard SHALL be gated on the data and model services being healthy.
 
 #### Scenario: One-command bring-up on a fresh host
 
 - **WHEN** an operator runs the documented bring-up on a clean machine with the host
   GPU (or CPU-only) prerequisites met
-- **THEN** the event bus, vector store, model server, STT, TTS, and Nexus start,
+- **THEN** the event bus, vector store, model server, STT, TTS, and the dashboard start,
   pass their healthchecks, and are reachable on loopback without manual per-service
   wiring
 
-#### Scenario: Nexus and cycle are separate services from one image
+#### Scenario: Dashboard and cycle are separate services from one image
 
 - **WHEN** the topology is brought up
-- **THEN** the Nexus web UI runs as its own always-up service and the cognitive
+- **THEN** the dashboard web UI runs as its own always-up service and the cognitive
   cycle runs as a separate service, both built from the same image with different
   entrypoints
 
@@ -105,7 +105,7 @@ never baked into an image layer.
 ### Requirement: Entity state persists safely across container recreation
 
 Entity state SHALL persist across container recreation in a named volume — the
-CAL-gated preserved-being fork snapshots, preservation bundles, individuation
+CAL-gated preserved-entity fork snapshots, preservation bundles, individuation
 evidence, world-model and self-model checkpoints, control state, and audit and
 incident logs — with the established owner-only (0700/0600) protection preserved
 inside the container, and SHALL never be baked into an image layer. Encryption-at-rest

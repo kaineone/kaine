@@ -9,7 +9,7 @@ pixels/PCM). This module adds the *explicit development override* the privacy
 architecture (paper §4.4) allows for cognitive content: when the operator sets
 the dev flag ``KAINE_PERCEPTION_PREVIEW=1`` the perception modules may mirror the
 single most-recent frame (JPEG) and the current audio level into a process-local
-holder so a Nexus diagnostic can show what the entity is currently seeing/hearing.
+holder so a dashboard diagnostic can show what the entity is currently seeing/hearing.
 
 Load-bearing invariants (zero raw-sense persistence):
   * OFF by default. With the flag unset every write is a no-op and every read
@@ -88,8 +88,8 @@ class _PreviewHolder:
             self._audio_level = None
 
 
-# Process-global holder. Both the perception writers (Topos/Audition) and the
-# Nexus preview reader resolve THIS instance, so a preview is visible only within
+# Process-global holder. Both the perception writers (the vision and audition modules) and the
+# the dashboard preview reader resolve THIS instance, so a preview is visible only within
 # one process (see the module docstring's cross-process note).
 _HOLDER = _PreviewHolder()
 

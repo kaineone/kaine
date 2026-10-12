@@ -127,7 +127,7 @@ async def test_recalibrate_time_partial_failure():
 # --- Phase 1: light_consolidation ---
 
 class FakeFullMnemos:
-    """Full-protocol Mnemos fake for new-phase tests."""
+    """Full-protocol episodic memory module fake for new-phase tests."""
 
     def __init__(self, moved: int = 3) -> None:
         self.moved = moved
@@ -444,7 +444,7 @@ async def test_five_phase_pipeline_order_via_module(tmp_path: Path):
     # Phase 2: downscale ran, replay ran
     assert len(mnemos.downscale_calls) == 1
     assert mnemos.replay_calls == 1
-    # Phase 5: thymos reset ran, last
+    # Phase 5: the affect module's reset ran, last.
     assert thymos.reset_calls == 1
 
     await bus.close()
@@ -454,12 +454,12 @@ async def test_five_phase_pipeline_order_via_module(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_fatigue_reset_on_sleep_completed(tmp_path: Path):
-    """Phase 4 must cause Soma to reset its fatigue accumulator.
+    """Phase 4 must cause the interoception module to reset its fatigue accumulator.
 
-    The reset path is: Hypnos publishes hypnos.sleep.completed →
+    The reset path is: the sleep module publishes hypnos.sleep.completed →
     Soma._hypnos_event_loop calls self._fatigue.reset().
     We verify this by checking the event is published after pipeline completion
-    (the actual Soma wiring is an integration concern tested in test_soma_hypnos_flag.py).
+    (the actual interoception module wiring is an integration concern tested in test_soma_hypnos_flag.py).
     """
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     from kaine.bus.client import AsyncBus
@@ -483,7 +483,7 @@ async def test_fatigue_reset_on_sleep_completed(tmp_path: Path):
     )
     await hypnos.enter_sleep()
 
-    # hypnos.sleep.completed MUST be published (Soma resets on this event)
+    # hypnos.sleep.completed MUST be published (the interoception module resets on this event)
     entries = await bus.read("hypnos.out", last_id="0", count=20)
     types = [e.type for _, e in entries]
     assert "hypnos.sleep.completed" in types, (

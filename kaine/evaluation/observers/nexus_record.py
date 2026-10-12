@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Optional LOCAL-ONLY Nexus diagnostics recorder.
+"""Optional LOCAL-ONLY dashboard diagnostics recorder.
 
 NEVER EXPORT-ELIGIBLE
 ---------------------
-This recorder subscribes to the same diagnostics streams as the Nexus bridge
+This recorder subscribes to the same diagnostics streams as the dashboard bridge
 and writes one record per event to ``data/nexus_record/``.
 
-- The Nexus record NEVER leaves the host.
-- The Nexus record is NEVER export-eligible: it writes outside
+- The dashboard record NEVER leaves the host.
+- The dashboard record is NEVER export-eligible: it writes outside
   ``data/evaluation/`` so the metrics bundle builder cannot reach it.
 - Every record contains exactly the payload produced by ``PrivacyFilter`` with
-  ``dev_content_override=false`` (the same filter the Nexus bridge applies),
+  ``dev_content_override=false`` (the same filter the dashboard bridge applies),
   plus stream name and entry id. A filter failure drops the event and logs a
   warning, mirroring the bridge's behaviour.
 """
@@ -34,7 +34,7 @@ log = logging.getLogger(__name__)
 
 
 class NexusRecord(StreamSubscriberObserver):
-    """Local-only recorder of the filtered Nexus diagnostics display."""
+    """Local-only recorder of the filtered dashboard diagnostics display."""
 
     streams = diagnostics_streams()
     name = "nexus_record"
@@ -48,7 +48,7 @@ class NexusRecord(StreamSubscriberObserver):
         super().__init__(bus, poll_interval_s=0.5)
         self._sink = sink
         self._config = config
-        # Same filter construction as the Nexus bridge: diagnostics surface,
+        # Same filter construction as the dashboard bridge: diagnostics surface,
         # never a dev-content surface.
         self._privacy = PrivacyFilter(dev_content_override=False)
 

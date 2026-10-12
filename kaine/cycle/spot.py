@@ -1,41 +1,41 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Spot — KAINE's module supervisor (the watchdog).
+"""The supervisor — KAINE's watchdog.
 
-Spot is a cycle-layer component, NOT a registry module: it must keep running
+The supervisor is a cycle-layer component, NOT a registry module: it must keep running
 precisely when modules fail, so it cannot be subject to its own liveness checks
 or torn down by the shutdown it orchestrates. The entrypoint constructs and runs
 it alongside ``cycle.run_forever`` and the freeze-watch loop.
 
-Per poll Spot assesses each module (alive | dead | hung), and on a fault it
+Per poll the supervisor assesses each module (alive | dead | hung), and on a fault it
 freezes the cycle (humane suspend) with ``source="spot"``, snapshots last-good
 state, and runs the restart ladder (light ``BaseModule.restart`` for pure
 modules; heavy rebuild via the injected ``rebuild_module`` closure +
 ``registry.replace`` + ``rewire_module`` + snapshot restore for modules holding
 external resources). One incident is handled per poll. After
-``max_restart_attempts`` failures Spot escalates: a final snapshot, shutdown of
+``max_restart_attempts`` failures the supervisor escalates: a final snapshot, shutdown of
 every module, ``escalation.json``, a CRITICAL ``spot.status``, and a halt signal
-so the entrypoint exits non-zero. Spot never reboots the host — it only asks.
+so the entrypoint exits non-zero. The supervisor never reboots the host — it only asks.
 
 Incident annotation (research log)
 ----------------------------------
-At each lifecycle transition Spot also publishes a structured ``spot.incident``
+At each lifecycle transition the supervisor also publishes a structured ``spot.incident``
 bus event (source ``"spot"``) IN ADDITION to the ephemeral ``spot.status`` /
 ``spot.log`` events. The curated research-event observer captures it (privacy-
 filtered) into ``data/evaluation/research_events/``, where the run-context sink
 stamping stamps it with the active ``run_id`` — so a run whose data was collected
-across a Spot freeze carries the annotation, joined to the run by ``run_id`` and
+across a supervisor freeze carries the annotation, joined to the run by ``run_id`` and
 to the incident by ``incident_id``. The event carries a best-effort cycle
-position: Spot's ``poll_index`` always, plus the cycle's ``tick_index`` when a
+position: the supervisor's ``poll_index`` always, plus the cycle's ``tick_index`` when a
 ``tick_index_provider`` is wired at construction (no tick is fabricated without
 one). Free-text fields are path-scrubbed before publish.
 
 Durable incident log
 --------------------
-Alongside the ephemeral ``spot.status`` / ``spot.log`` bus events (which Nexus
+Alongside the ephemeral ``spot.status`` / ``spot.log`` bus events (which the dashboard
 shows live but which are trimmed away on every publish) and the ``spot.incident``
-annotation, Spot writes a durable, append-only JSONL record at each lifecycle
+annotation, the supervisor writes a durable, append-only JSONL record at each lifecycle
 transition (detect, freeze, snapshot, restart, escalate) to
 ``state/cycle/incidents/`` via ``kaine.cycle.incident_log.IncidentLog``. Every record for one module fault
 window shares a generated ``incident_id``. Unlike ``escalation.json`` /
@@ -75,7 +75,7 @@ _SPOT_OUT_SALIENCE = 0.5
 class IncidentLogConfig:
     """``[spot.incident_log]`` — the durable incident-log side-channel.
 
-    Ships ``enabled = true`` so any operator who turns Spot on automatically gets
+    Ships ``enabled = true`` so any operator who turns the supervisor on automatically gets
     the research-value log; it is dormant while ``[spot].enabled = false``. There
     is deliberately NO ``retention_days`` key: the retention purge is
     unconditionally disabled for the incident log (see incident_log.py).
@@ -538,7 +538,7 @@ class Spot:
                 )
 
     async def escalate_supervision_lost(self, reason: str) -> None:
-        """Escalate because Spot itself stopped supervising (unattended runs).
+        """Escalate because the supervisor itself stopped supervising (unattended runs).
 
         Takes a final snapshot, shuts every module down and writes
         ``escalation.json`` with a supervision-lost message. An unattended
@@ -569,7 +569,7 @@ class Spot:
     @staticmethod
     def _health_metrics(module: BaseModule) -> dict[str, Any]:
         """Read ``BaseModule.health()`` for the detect record. ``health()`` is
-        documented as pure/never-raises, but Spot must never crash on its own
+        documented as pure/never-raises, but the supervisor must never crash on its own
         instrumentation, so this is guarded and falls back to neutral values."""
         try:
             h = module.health()
@@ -592,18 +592,18 @@ class Spot:
             and bool(control.stack)
             and all(entry.get("source") == "gestation" for entry in control.stack)
         )
-        # Any gestation entry means the cycle is paused for a lost womb, so
-        # heartbeats stay stale even while Spot's own entry sits on top of it.
+        # Any developmental phase entry means the cycle is paused for a lost stimulus source, so
+        # heartbeats stay stale even while the supervisor's own entry sits on top of it.
         under_gestation = control.frozen and any(
             entry.get("source") == "gestation" for entry in control.stack
         )
         if control.frozen and control.source != "spot" and not gestation_only:
             # A frozen cycle's modules are silent by design, so heartbeat
-            # staleness is not a valid liveness signal for a freeze Spot does
-            # not own. Spot keeps working for its OWN recovery freeze (on
-            # recovery it pops only its own entry) and for a gestation-only
+            # staleness is not a valid liveness signal for a freeze the supervisor does
+            # not own. The supervisor keeps working for its OWN recovery freeze (on
+            # recovery it pops only its own entry) and for a developmental-phase-only
             # freeze, where crashes can still be repaired while perception is
-            # paused. Spot stays out of operator/welfare freezes and of any
+            # paused. The supervisor stays out of operator/welfare freezes and of any
             # mixed stack that contains them.
             return
         for module in list(self._registry.all_modules()):
@@ -615,7 +615,7 @@ class Spot:
                 continue
             if under_gestation and state == "hung":
                 # Heartbeats are unreliable while the cycle is paused for
-                # gestation; only crashes are actionable.
+                # developmental phase; only crashes are actionable.
                 continue
             incident = self._incidents.setdefault(name, _Incident())
             if incident.incident_id is None:
@@ -698,7 +698,7 @@ class Spot:
                     },
                 )
                 self._incidents.pop(name, None)
-                # Spot only ever lifts its own freeze. If any spot entry is
+                # The supervisor only ever lifts its own freeze. If any supervisor entry is
                 # present in the stack, pop the newest one; other sources
                 # remain frozen.
                 control = control_state.read_control(path=self._control_path)

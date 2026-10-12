@@ -135,7 +135,7 @@ def _validate_voice_alignment_steps(steps: Any, order_len: int) -> None:
 
     Raises:
         ValueError: If any entry is malformed, out of range, duplicated,
-        or names the gestation line.
+        or names the developmental phase line.
     """
     seen: set[tuple[str, int]] = set()
     for entry in steps:

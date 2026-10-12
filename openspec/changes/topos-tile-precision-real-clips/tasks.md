@@ -9,5 +9,5 @@
 ## 3. Tests, docs
 
 - [x] 3.1 Tests: a constantly flickering tile loses to a stable tile with a smaller but unusual change once the statistics have warmed; raw change during the first five observations; the clip passed to the encoder holds distinct frames; mutation-check.
-- [x] 3.2 Docs: `docs/09-modules/topos.md`.
+- [x] 3.2 Docs: `docs/09-modules/vision.md`.
 - [x] 3.3 `openspec validate topos-tile-precision-real-clips --strict`.

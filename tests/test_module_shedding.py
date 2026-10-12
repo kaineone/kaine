@@ -5,7 +5,7 @@
 subsets of the twelve canonical modules.
 
 Runs against fakeredis. The point is to prove the cycle/registry/
-Syneidesis composition tolerates absent modules — the real per-module
+workspace composition tolerates absent modules — the real per-module
 behavior is covered by each module's own test file.
 """
 from __future__ import annotations
@@ -167,7 +167,7 @@ async def test_shed_mid_run_drops_within_one_tick():
         result = await cycle.tick()
         assert result.events_collected >= 2
 
-        # Shed chronos: shutdown its background task + unregister.
+        # Shed the sequence module: shutdown its background task + unregister.
         await modules["chronos"].shutdown()
         registry.unregister("chronos")
         modules.pop("chronos")
@@ -176,7 +176,7 @@ async def test_shed_mid_run_drops_within_one_tick():
         await cycle.tick()
         await asyncio.sleep(0.05)
 
-        # The most recent broadcast that soma sees should contain only soma
+        # The most recent broadcast that the interoception module sees should contain only interoception
         # events (cycle reads from active streams now, which excludes
         # chronos.out).
         if modules["soma"].snapshots:

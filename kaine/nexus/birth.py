@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Nexus router for operator birth acknowledgement.
+"""The dashboard router for operator maturation acknowledgement.
 
 Two routes under /diagnostics:
 
-  GET  /diagnostics/birth.json  — current birth request/ack state plus development
-  POST /diagnostics/birth/ack   — operator acknowledges the birth
+  GET  /diagnostics/birth.json  — current maturation request/ack state plus developmental progress.
+  POST /diagnostics/birth/ack   — operator acknowledges the maturation
 
-The maturation gate writes ``state/lifecycle/birth_request.json``; Nexus writes
+The maturation gate writes ``state/lifecycle/birth_request.json``; the dashboard writes
 ONLY the acknowledgement record. Nothing here ever creates or modifies the
 request file or the stage file.
 """

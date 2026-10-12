@@ -13,10 +13,10 @@ The entity's body here is a small, continuous, feedback-coupled action space it
 learns to operate: four continuous locomotion/gaze rates plus one interaction
 trigger (``drive``, ``yaw_rate``, ``gaze_yaw``, ``gaze_pitch``, ``interact``),
 gaze decoupled from the body, ``strafe`` deferred. Each control tick the surface
-emits a clamped :class:`ControlCommand`, forwarded by Mundus to the body; the
+emits a clamped :class:`ControlCommand`, forwarded by the embodiment module to the body; the
 loop is closed by feeding an **efference copy** of the emitted command plus the
 proprioceptive feedback into KAINE's *existing* forward-model machinery
-(Soma's :class:`~kaine.modules.soma.forward.SubstrateForwardModel`) — no new
+(the interoception module's :class:`~kaine.modules.soma.forward.SubstrateForwardModel`) — no new
 learner is introduced.
 
 Emergent, not hard-wired
@@ -288,7 +288,7 @@ class EfferenceLoop:
     On each tick the emitted command's **efference copy** is concatenated with
     the proprioceptive feedback and fed to a forward model that predicts the next
     such vector, compares it to what arrives, and corrects online (predict ->
-    compare -> correct; Wolpert et al. 1995). This REUSES Soma's
+    compare -> correct; Wolpert et al. 1995). This REUSES the interoception module's
     :class:`~kaine.modules.soma.forward.SubstrateForwardModel` (a frozen CfC
     reservoir + online linear readout) — it introduces **no new learner**. The
     forward model is injectable so the closed loop can be exercised without torch
@@ -305,7 +305,7 @@ class EfferenceLoop:
     def forward_model(self) -> Any:
         """The forward model, constructing the default lazily on first use."""
         if self._fm is None:
-            # Reuse Soma's existing forward model — do NOT add a new learner.
+            # Reuse the interoception module's existing forward model — do NOT add a new learner.
             from kaine.modules.soma.forward import SubstrateForwardModel
 
             self._fm = SubstrateForwardModel(feature_dim=self.FEATURE_DIM)
@@ -343,24 +343,24 @@ class ContinuousMotorSurface:
         self._policy: MotorPolicy = policy or QuiescentMotorPolicy()
         self._curriculum = curriculum or MotorCurriculum()
         self._efference = efference or EfferenceLoop()
-        # The embodied stage / birth gate. The surface is INERT before the
-        # birth-transition event (design §2, §8): the developmental-stage
+        # The embodied stage / maturation gate. The surface is INERT before the
+        # maturation-transition event (design §2, §8): the developmental-stage
         # capability flips this on when the stage becomes `embodied` and the
         # embodied world takes over as the sense source. Until then the surface
         # emits the null command regardless of policy — the reciprocal half of
-        # the birth-handoff contract. (This is on top of Mundus's two-layer gate
+        # the maturation-handoff contract. (This is on top of the embodiment module's two-layer gate
         # and locus gate, which the forwarding path enforces separately.)
         self._active = False
 
     @property
     def active(self) -> bool:
-        """True once the birth handoff has activated the embodied surface."""
+        """True once the maturation handoff has activated the embodied surface."""
         return self._active
 
     def on_birth(self) -> None:
-        """Activate the surface on the birth-transition event (stage → embodied).
+        """Activate the surface on the maturation-transition event (stage → embodied).
 
-        The reciprocal half of the developmental-stage birth handoff: the
+        The reciprocal half of the developmental-stage maturation handoff: the
         embodied world becomes the sense source and this control surface becomes
         active. Idempotent.
         """
@@ -369,7 +369,7 @@ class ContinuousMotorSurface:
         self._active = True
 
     def deactivate(self) -> None:
-        """Return the surface to its inert (pre-birth) state."""
+        """Return the surface to its inert (pre-maturation) state."""
         self._active = False
 
     @property
@@ -389,8 +389,8 @@ class ContinuousMotorSurface:
 
         A workspace inhibition zeroes the action (returns the null command), so
         nothing is forwarded while the entity is inhibited — the reciprocal of
-        Volition returning no intents. The surface is likewise inert (null
-        command) before the birth handoff (:meth:`on_birth`). Channels frozen by
+        the action selection module returning no intents. The surface is likewise inert (null
+        command) before the maturation handoff (:meth:`on_birth`). Channels frozen by
         the curriculum are forced to zero; freed channels are clamped to range at
         the boundary (the policy is never trusted).
         """

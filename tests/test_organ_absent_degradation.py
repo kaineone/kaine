@@ -3,7 +3,7 @@
 
 """Organ-absent graceful degradation while the voice-alignment window holds the GPU.
 
-Lingua's chat client DEFERS (resting no-op, no raise) and the A/B-divergence eval
+The language module's chat client DEFERS (resting no-op, no raise) and the A/B-divergence eval
 arm SKIPS (logged as skipped, not failed) while the organ is unloaded. Both resume
 once the window flips back to idle.
 """
@@ -37,7 +37,7 @@ def _set_window(tmp_path, phase):
 
 
 # --------------------------------------------------------------------------
-# Lingua client defers
+# The language module's client defers
 # --------------------------------------------------------------------------
 
 

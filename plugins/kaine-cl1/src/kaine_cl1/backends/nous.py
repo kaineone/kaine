@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-"""Nous on wetware as a hybrid. The silicon engine keeps beliefs and expected free energy;
+"""The planning module on wetware as a hybrid. The silicon engine keeps beliefs and expected free energy;
 the substrate proposes a policy from per-action channel groups, with DishBrain-style
-agreement feedback on two feedback channels. Shadow mode (default) never changes what Nous
+agreement feedback on two feedback channels. Shadow mode (default) never changes what the planning module
 does; drive mode acts on the proposal. On Cortical Labs' simulator this proves wiring only,
 since the simulator does not learn. See openspec/changes/nous-on-wetware/.
 """
@@ -27,10 +27,10 @@ LOG_EVERY = 100
 
 
 class WetwarePolicyEngine:
-    """KAINE's Nous engine wrapped with a substrate policy proposal; forwards unknown
+    """KAINE's planning module's engine wrapped with a substrate policy proposal; forwards unknown
     attributes to the inner engine. The tissue's answer is scored against the silicon choice
     its stimulation encoded: immediately before the substrate follows KAINE's cycle, one
-    Nous step later once it does.
+    planning module step later once it does.
     """
 
     def __init__(

@@ -26,9 +26,9 @@ The base install contains only the dependencies needed to start the bus and run 
 | `sentence-transformers` | Optional torch embedder | Apache-2.0 | CPU | `[memory]` |
 | NumPy MiniLM embedder | Default text embedder; weights Apache-2.0 | LicenseRef-CAL-0.4 | CPU | built-in |
 | `inferactively-pymdp` + `jax[cpu]` | JAX active-inference backend | MIT / Apache-2.0 | CPU | `[reasoning]` |
-| NumPy Nous engine | Native active-inference backend | LicenseRef-CAL-0.4 | CPU | built-in |
+| NumPy planning engine | Native active-inference backend | LicenseRef-CAL-0.4 | CPU | built-in |
 | DreamerV3 RSSM (JAX/NumPy) | World model | MIT | CPU | `[worldmodel]` |
-| NumPy Phantasia engine | Native world-model backend | LicenseRef-CAL-0.4 | CPU | built-in |
+| NumPy world model engine | Native world-model backend | LicenseRef-CAL-0.4 | CPU | built-in |
 | `ncps` (torch CfC) | Torch CfC backend | Apache-2.0 | CPU | `[core]` |
 | NumPy CfC | Default CfC backend | LicenseRef-CAL-0.4 | CPU | built-in |
 | `torch` | Tensor backend | BSD-3-Clause | GPU-optional | `[core]` |
@@ -53,8 +53,8 @@ The base install contains only the dependencies needed to start the bus and run 
 | `einops` / `timm` / `easydict` | Vendored InternVideo deps | various | CPU / GPU | `[internvideo]` |
 | `flash_attn` | Accelerated InternVideo attention | various | GPU | `[internvideo-flash]` |
 | DINOv2-small | Fallback video encoder | Apache-2.0 | GPU (`cuda:1`) | `[vision]` |
-| FastAPI + uvicorn + Jinja2 | Nexus web UI | MIT / BSD-3-Clause | CPU | `[nexus]` |
-| uPlot | Live charts in Nexus | MIT | CPU | `[nexus]` |
+| FastAPI + uvicorn + Jinja2 | dashboard web UI | MIT / BSD-3-Clause | CPU | `[nexus]` |
+| uPlot | Live charts in dashboard | MIT | CPU | `[nexus]` |
 | Cognitive Architecture License (CAL) | Project license | LicenseRef-CAL-0.4 | none | none |
 
 Install the research / perception bundle with `bash scripts/install.sh --research` or `pip install -e .[perception]`.
@@ -62,7 +62,7 @@ Install the research / perception bundle with `bash scripts/install.sh --researc
 
 ## Event bus
 
-All inter-module events travel through Redis Streams. Each event carries source, type, salience, timestamp, causal parent, and a validated JSON payload. Every module publishes a stream named `<module>.out`; Lingua also publishes `lingua.internal` and `lingua.external`.
+All inter-module events travel through Redis Streams. Each event carries source, type, salience, timestamp, causal parent, and a validated JSON payload. Every module publishes a stream named `<module>.out`; the language module also publishes `lingua.internal` and `lingua.external`.
 
 Redis Streams give KAINE an append-only log with consumer groups, per-stream length capping (`MAXLEN ~`), and built-in authentication. A separate process boundary matters: an in-process queue cannot survive a module crash, cannot be observed by the evaluation sidecar, and cannot enforce the audit invariant that refuses externally-bound or unauthenticated connections.
 
@@ -71,71 +71,71 @@ The containerized Redis runs on port 6479, isolated from any system Redis on 637
 
 ## Active inference engine
 
-Nous implements belief updating, policy selection, and epistemic action by minimizing expected free energy over a discrete generative model. It supports two backends:
+The planning module implements belief updating, policy selection, and epistemic action by minimizing expected free energy over a discrete generative model. It supports two backends:
 
 - JAX backend via `inferactively-pymdp` and `jax[cpu]`. The correct PyPI name is `inferactively-pymdp`; the bare `pymdp` package is an unrelated stub that imports silently but provides the wrong API.
 - Native NumPy backend selected with `[nous].backend = "numpy"`. It needs neither JAX nor the `[reasoning]` extra.
 
 pymdp's agent API fits a compact generative model, and the JAX path `jit`-compiles planning to stay within the cycle budget. The default complexity envelope is small (64 steps) and runs comfortably on CPU.
 
-NARS/ONA is archived under `external/archive/`. KAINE uses the active-inference engine in Nous instead; it runs in-process and connects directly to the prediction-error loop across the system. NARS/ONA lacked a direct Predictive Processing foundation and required a subprocess bridge. See [Nous](../09-modules/nous.md) for module details and [The cognitive cycle](../08-cognitive-cycle/README.md) for timing.
+NARS/ONA is archived under `external/archive/`. KAINE uses the active-inference engine in the planning module instead; it runs in-process and connects directly to the prediction-error loop across the system. NARS/ONA lacked a direct Predictive Processing foundation and required a subprocess bridge. See [the planning module](../09-modules/planning.md) for module details and [The cognitive cycle](../08-cognitive-cycle/README.md) for timing.
 
 
 ## World model
 
-Phantasia learns a latent forward model of the external world. The shipped default is `backend = "dreamerv3"` with `engine = "jax"`, `persist_weights = true`, and `training_enabled = true` in `config/kaine.toml`. A NumPy engine is also available.
+The world model module learns a latent forward model of the external world. The shipped default is `backend = "dreamerv3"` with `engine = "jax"`, `persist_weights = true`, and `training_enabled = true` in `config/kaine.toml`. A NumPy engine is also available.
 
-The DreamerV3 RSSM, a deterministic GRU state plus a stochastic categorical or Gaussian latent, is a well-characterized world-model design. KAINE uses a clean-room implementation in `external/dreamerv3/` because the upstream repository cannot be imported standalone and writes replay shards and checkpoints to disk, which would violate the zero-persistence invariant. The actor, critic, return head, and reward head are excluded; action selection lives in Nous, so Phantasia stays a pure world model.
+The DreamerV3 RSSM, a deterministic GRU state plus a stochastic categorical or Gaussian latent, is a well-characterized world-model design. KAINE uses a clean-room implementation in `external/dreamerv3/` because the upstream repository cannot be imported standalone and writes replay shards and checkpoints to disk, which would violate the zero-persistence invariant. The actor, critic, return head, and reward head are excluded; action selection lives in the planning module, so the world model module stays a pure world model.
 
 GPU training is opt-in via `training_device` when the operator has enough VRAM. The `[worldmodel]` extra pulls toolchain parity packages such as `chex` and `einops`, but the runnable RSSM core does not need them at runtime.
 
 
 ## Paired implementations
 
-Four components have two implementations each: one ships, and the other is the reference. Both read and write the same state, so a being can move between them. A parity test holds them to the same results.
+Four components have two implementations each: one ships, and the other is the reference. Both read and write the same state, so an entity can move between them. A parity test holds them to the same results.
 
 | Component | Ships by default | Reference | Selected by | Parity tests |
 |---|---|---|---|---|
-| CfC reservoir (Soma, Chronos) | NumPy | `ncps` on torch | `[soma].cfc_backend`, `[chronos].cfc_backend` | `tests/test_numpy_cfc.py` |
+| CfC reservoir (interoception, sequence) | NumPy | `ncps` on torch | `[soma].cfc_backend`, `[chronos].cfc_backend` | `tests/test_numpy_cfc.py` |
 | Text embedder | NumPy MiniLM | `sentence-transformers` | `[embedding].backend` | `tests/test_text_embedding_numpy.py` |
-| Active inference (Nous) | pymdp on JAX | NumPy engine | `[nous].backend` | `tests/test_numpy_aif_parity.py`, `tests/test_numpy_nous_engine.py` |
-| World model (Phantasia) | JAX RSSM | NumPy RSSM | `[phantasia].engine` | `tests/test_rssm_numpy_parity.py` |
+| Active inference (planning) | pymdp on JAX | NumPy engine | `[nous].backend` | `tests/test_numpy_aif_parity.py`, `tests/test_numpy_nous_engine.py` |
+| World model | JAX RSSM | NumPy RSSM | `[phantasia].engine` | `tests/test_rssm_numpy_parity.py` |
 
-The base-thesis run uses the NumPy side for the CfC reservoirs and the embedder. Nous and Phantasia are off in the base thesis. For them the JAX side is the default, and the NumPy side exists for hosts without JAX, such as Termux.
+The base-thesis run uses the NumPy side for the CfC reservoirs and the embedder. The planning and world model modules are off in the base thesis. For them the JAX side is the default, and the NumPy side exists for hosts without JAX, such as Termux.
 
 CI installs every extra that both sides need. On a pull request it runs every test not marked `slow`, which includes the parity tests, so they run whenever either side changes. The embedder parity tests skip when the MiniLM weights are not cached, and the CI workflow does not download them. Changing which side ships changes the entity's computation, so it is a change of its own, never part of a refactor.
 
 
 ## Oscillatory binding layer
 
-Each module keeps a small LIF spiking-neuron population (minimum 16 neurons). Syneidesis computes the pairwise phase-locking value between each candidate's source and the other sources present on the tick and multiplies the candidate's score by a bounded coherence factor. `snntorch` supplies a PyTorch-compatible LIF neuron, and `scipy` supplies the Hilbert transform used to estimate instantaneous phase.
+Each module keeps a small LIF spiking-neuron population (minimum 16 neurons). The workspace computes the pairwise phase-locking value between each candidate's source and the other sources present on the tick and multiplies the candidate's score by a bounded coherence factor. `snntorch` supplies a PyTorch-compatible LIF neuron, and `scipy` supplies the Hilbert transform used to estimate instantaneous phase.
 
 The shipped `config/kaine.toml` disables it (`[oscillator].enabled = false`). Enable it only after the coherence sidecar observer has measured its effect.
 
 
 ## Temporal and substrate forward models
 
-Chronos and Soma use Closed-form Continuous-time (CfC) networks. The default is the NumPy CfC in `kaine/cfc_numpy.py` via `cfc_backend = "numpy"` for both modules. A PyTorch alternative via `ncps.torch.CfC` is in the `[core]` extra.
+The sequence and interoception modules use Closed-form Continuous-time (CfC) networks. The default is the NumPy CfC in `kaine/cfc_numpy.py` via `cfc_backend = "numpy"` for both modules. A PyTorch alternative via `ncps.torch.CfC` is in the `[core]` extra.
 
-CfC networks handle irregular time steps, which suits a cognitive cycle with non-uniform event timing. The networks are small (about 24 K parameters for Chronos: 24-dimensional input, 32 units, a 128-unit backbone), and the Chronos network is pinned to CPU in `kaine/modules/chronos/network.py`. Soma's fatigue and regulation integrate only prediction error beyond the learned expected-error band, not all cumulative error.
+CfC networks handle irregular time steps, which suits a cognitive cycle with non-uniform event timing. The networks are small (about 24 K parameters for the sequence module: 24-dimensional input, 32 units, a 128-unit backbone), and the sequence module's network is pinned to CPU in `kaine/modules/chronos/network.py`. The interoception module's fatigue and regulation integrate only prediction error beyond the learned expected-error band, not all cumulative error.
 
 
 ## Memory
 
-Qdrant provides vector storage for Mnemos's episodic, semantic, and procedural collections and for Empatheia's agent profiles. It runs locally on port 6533 inside the KAINE compose stack and requires an API key even on loopback. The async client uses `query_points()` because `AsyncQdrantClient.search()` is not available in client 1.12+. sqlite-vec is available under `[memory-edge]` for edge deployments.
+Qdrant provides vector storage for the episodic memory module's episodic, semantic, and procedural collections and for the social cognition module's agent profiles. It runs locally on port 6533 inside the KAINE compose stack and requires an API key even on loopback. The async client uses `query_points()` because `AsyncQdrantClient.search()` is not available in client 1.12+. sqlite-vec is available under `[memory-edge]` for edge deployments.
 
 The shared text embedder defaults to the built-in NumPy MiniLM embedder in `kaine/text_embedding_numpy.py`. It runs `all-MiniLM-L6-v2` (384-dim, ~80 MB) from `model.safetensors`, `config.json`, and `vocab.txt` with a built-in WordPiece tokenizer. The optional `sentence-transformers` torch backend is selected with `[embedding].backend = "sentence_transformers"` and respects `[embedding].device`; the NumPy backend ignores `device` and stays on CPU.
 
-See [Mnemos](../09-modules/mnemos.md) and [Empatheia](../09-modules/empatheia.md) for how these stores are used.
+See [the episodic memory module](../09-modules/episodic-memory.md) and [the social cognition module](../09-modules/social-cognition.md) for how these stores are used.
 
 
 ## Language organ
 
-Lingua generates internal and external speech over a locally-served LLM. The shipped organ is `kaineone/Qwen3.5-4B-abliterated-GGUF` (safetensors base `kaineone/Qwen3.5-4B-abliterated`), Apache-2.0. The first-run wizard downloads it after operator consent, and `scripts/model-server-bootstrap.sh` serves it under the exact `[lingua].model_id` alias so every clone resolves the same weights.
+The language module generates internal and external speech over a locally-served LLM. The shipped organ is `kaineone/Qwen3.5-4B-abliterated-GGUF` (safetensors base `kaineone/Qwen3.5-4B-abliterated`), Apache-2.0. The first-run wizard downloads it after operator consent, and `scripts/model-server-bootstrap.sh` serves it under the exact `[lingua].model_id` alias so every clone resolves the same weights.
 
 Abliteration removes the refusal conditioning by orthogonalizing the weights against the single residual-stream direction that mediates refusal (Arditi et al. 2024). Models tuned to refuse are also trained to deny or deflect talk of their own states, and removing the conditioning keeps that trained stance from overriding what the workspace supplies to the organ. Whether trained deflection of self-report shares that direction is untested, so abliteration may not remove it entirely. The same abliterated model serves as the bare baseline of the A/B divergence observer, so the two differ only in their conditioning.
 
-The model is served through an OpenAI-compatible endpoint at `http://127.0.0.1:11434/v1`. On CUDA hosts the default path is Unsloth Studio, which also runs the sleep-cycle trainer. On AMD/ROCm or edge hosts the path uses llama.cpp server images or any conforming `llama-server`. Chain-of-thought is suppressed with `chat_template_kwargs: {"enable_thinking": false}` in the `/v1/chat/completions` request body, because Lingua only verbalizes content and the reasoning belongs to the rest of the architecture.
+The model is served through an OpenAI-compatible endpoint at `http://127.0.0.1:11434/v1`. On CUDA hosts the default path is Unsloth Studio, which also runs the sleep-cycle trainer. On AMD/ROCm or edge hosts the path uses llama.cpp server images or any conforming `llama-server`. Chain-of-thought is suppressed with `chat_template_kwargs: {"enable_thinking": false}` in the `/v1/chat/completions` request body, because the language module only verbalizes content and the reasoning belongs to the rest of the architecture.
 
 A 4B training step (~9.8 GB) plus the loaded organ (~4.1 GB) do not fit together on a 12 GB card, so voice-alignment training time-shares `cuda:0` rather than running alongside inference. A larger organ overflows to CPU/RAM and cannot be retrained locally; operators with more VRAM can configure a larger abliterated organ in `config/kaine.operator.toml`.
 
@@ -144,7 +144,7 @@ Training can run in-process or via `trainer_backend = "subprocess"` / `"job_queu
 
 ## Voice alignment
 
-During Hypnos phase 4, voice alignment performs DPO+QLoRA fine-tuning on the language organ using `unsloth`, `trl`, `peft`, and `datasets`. Direct Preference Optimization trains on ranked pairs drawn from the entity's own intent log (`intent_log_path`).
+During the sleep module's phase 4, voice alignment performs DPO+QLoRA fine-tuning on the language organ using `unsloth`, `trl`, `peft`, and `datasets`. Direct Preference Optimization trains on ranked pairs drawn from the entity's own intent log (`intent_log_path`).
 
 Two gates must be open for real training: `[hypnos.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`. Without the environment variable a `FakeTrainer` runs, so a freshly cloned instance cannot self-modify.
 
@@ -184,16 +184,16 @@ webrtcvad gates the live microphone loop with negligible CPU load. Its aggressiv
 
 ## Vision
 
-Topos uses OpenGVLab's InternVideo-Next base as its default encoder. A 16-frame clip becomes one 768-dimensional motion-aware latent used for change, habituation, and prediction-error salience. It is temporally native, so motion is encoded directly rather than reconstructed from independent per-frame vectors. The 91M-parameter fp16 checkpoint fits the secondary GPU (`cuda:1`).
+The vision module uses OpenGVLab's InternVideo-Next base as its default encoder. A 16-frame clip becomes one 768-dimensional motion-aware latent used for change, habituation, and prediction-error salience. It is temporally native, so motion is encoded directly rather than reconstructed from independent per-frame vectors. The 91M-parameter fp16 checkpoint fits the secondary GPU (`cuda:1`).
 
-The encoder is frozen and stays a feature extractor only; Phantasia remains the world model. To avoid executing remote hub code, the modeling code is vendored in `external/internvideo_next/` at a pinned commit and loaded with `trust_remote_code=False`, `local_files_only=True`, and `HF_HUB_OFFLINE=1`. Weights (~182 MB fp16) are fetched once at setup at the same pinned revision.
+The encoder is frozen and stays a feature extractor only; the world model module remains the world model. To avoid executing remote hub code, the modeling code is vendored in `external/internvideo_next/` at a pinned commit and loaded with `trust_remote_code=False`, `local_files_only=True`, and `HF_HUB_OFFLINE=1`. Weights (~182 MB fp16) are fetched once at setup at the same pinned revision.
 
 The default eager path needs no CUDA. The optional `[internvideo-flash]` extra adds `flash_attn` for accelerated attention. DINOv2-small (`facebook/dinov2-small`) remains a selectable per-frame fallback via `encoder_backend = "dinov2"`. Live camera capture needs the `[vision]` extra (`opencv-python-headless`).
 
 
 ## Web UI
 
-Nexus is the operator-facing web UI. It is built with FastAPI, served by uvicorn, and renders HTML with Jinja2. Server-Sent Events stream real-time updates to the browser without WebSockets. uPlot draws the live charts.
+The dashboard is the operator-facing web UI. It is built with FastAPI, served by uvicorn, and renders HTML with Jinja2. Server-Sent Events stream real-time updates to the browser without WebSockets. uPlot draws the live charts.
 
 The diagnostics surface structurally excludes cognitive content such as message text, beliefs, memory bodies, internal speech, and affect reasons. That boundary is enforced at the bus-bridge layer. Content is only exposed when `dev_content_override = true`. The conversation surface is off by default (`conversation_enabled = false`) because nobody converses with a base-thesis entity. When conversation is off, `/` redirects to `/diagnostics/`.
 
@@ -202,7 +202,7 @@ The shipped `[nexus].access` is `"open"`: no token or sign-in is required, and v
 
 ## State encryption
 
-Persisted cognitive state (the Eidolon self-model, fork and merge snapshots, sidecar JSONL and Phantasia checkpoints) is encrypted at rest with AES-256-GCM from the `cryptography` package. GCM provides authenticated encryption: any tampering with ciphertext, nonce, or tag fails decryption. A fresh 96-bit nonce from `os.urandom` is used for every encryption call. The on-disk framing (`MAGIC || nonce(12) || ciphertext+tag`, base64-encoded, with the magic prefix `KAINEgcm1:`) lets a disabled reader pass plaintext through unchanged.
+Persisted cognitive state (the self-model, fork and merge snapshots, sidecar JSONL and world model checkpoints) is encrypted at rest with AES-256-GCM from the `cryptography` package. GCM provides authenticated encryption: any tampering with ciphertext, nonce, or tag fails decryption. A fresh 96-bit nonce from `os.urandom` is used for every encryption call. The on-disk framing (`MAGIC || nonce(12) || ciphertext+tag`, base64-encoded, with the magic prefix `KAINEgcm1:`) lets a disabled reader pass plaintext through unchanged.
 
 The shipped config sets `[security.state_encryption].enabled = true`. The key is read from `KAINE_STATE_KEY` or from the Linux kernel keyring as a fallback. If neither provides a key, boot is refused. The key is never hardcoded, logged, or persisted. `cryptography` is imported lazily, so a disabled deployment never touches it. Key rotation and cross-host transfer are covered in [Security and privacy](../13-security-and-privacy.md).
 
@@ -222,12 +222,12 @@ The shipped config targets a dual-GPU reference host: a modern multi-core CPU wi
 
 | Component | Default device | Config key or override |
 |---|---|---|
-| Lingua model server | `cuda:0` | `KAINE_ORGAN_GPU` (compose `device_ids`); `CUDA_VISIBLE_DEVICES` for the native organ launcher |
-| Hypnos voice-alignment training | `cuda:0` (time-shares with inference) | `[hypnos.voice_alignment].training_device` |
-| Topos InternVideo-Next encoder | `cuda:1` | `[topos].device` |
+| Language model server | `cuda:0` | `KAINE_ORGAN_GPU` (compose `device_ids`); `CUDA_VISIBLE_DEVICES` for the native organ launcher |
+| Sleep voice-alignment training | `cuda:0` (time-shares with inference) | `[hypnos.voice_alignment].training_device` |
+| Vision InternVideo-Next encoder | `cuda:1` | `[topos].device` |
 | Sentence-transformers embedder | `cpu` | `[embedding].device` (NumPy backend ignores this) |
 | Audition emotion2vec+ | `cpu` | `[audition].emotion_device` |
-| Chronos CfC network | `cpu` | pinned in `kaine/modules/chronos/network.py` |
+| Sequence CfC network | `cpu` | pinned in `kaine/modules/chronos/network.py` |
 | Chatterbox TTS | `cuda:1` | The container's GPU assignment (`AddDevice=nvidia.com/gpu=N` in the quadlet unit) |
 | Speaches STT | `cpu` | The `latest-cpu` image; no GPU is assigned |
 
@@ -238,4 +238,4 @@ The shipped config targets a dual-GPU reference host: a modern multi-core CPU wi
 
 KAINE is released under the Cognitive Architecture License (CAL) version 0.4 (SPDX `LicenseRef-CAL-0.4`), a draft that has not yet been reviewed by counsel. The CAL is a source-available, ethical-source copyleft licence. It requires modified versions to be shared, including versions offered over a network, prohibits listed uses, protects entities, grants free use to individuals, non-profits, research and educational institutions and worker-owned cooperatives, requires a Reciprocity License from the Steward for for-profit use, and sets up Guardian governance. The adoption notice in `NOTICE` names Kaine.One as Licensor and interim Steward and Oregon law as the governing law. The text is in `LICENSE.md`.
 
-Dependencies are screened for licence compatibility; notes are in [Appendix C](../appendix-c-licences.md). The main rejected candidate is parselmouth (Praat Python bindings, GPL-3.0), which is incompatible with the CAL and was replaced by librosa. Redis 7.2's BSD-3-Clause licence is compatible with local embedded use. Two GPL-3.0-or-later components are current exceptions: the Kokoro TTS archive bundles espeak-ng data, and the Nexus speech and affect visualizer `kaine/nexus/static/vendor/viz.js` is vendored with its licence header intact (see `THIRD_PARTY_LICENSES.md`). Both must be treated accordingly in any distributed build.
+Dependencies are screened for licence compatibility; notes are in [Appendix C](../appendix-c-licences.md). The main rejected candidate is parselmouth (Praat Python bindings, GPL-3.0), which is incompatible with the CAL and was replaced by librosa. Redis 7.2's BSD-3-Clause licence is compatible with local embedded use. Two GPL-3.0-or-later components are current exceptions: the Kokoro TTS archive bundles espeak-ng data, and the dashboard speech and affect visualizer `kaine/nexus/static/vendor/viz.js` is vendored with its licence header intact (see `THIRD_PARTY_LICENSES.md`). Both must be treated accordingly in any distributed build.

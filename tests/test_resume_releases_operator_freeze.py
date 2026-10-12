@@ -85,7 +85,7 @@ def test_override_rejects_inactive_source(tmp_path):
         cs.override(["gestation"], path=p)
 
 
-# ---- Nexus router -----------------------------------------------------------
+# ---- Dashboard router -----------------------------------------------------------
 
 
 def test_resume_leaves_welfare_and_returns_holders(tmp_path):

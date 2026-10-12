@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Vision encoders for Topos.
+"""Vision encoders for the vision module.
 
 The ``Encoder`` protocol is the seam for swapping encoders without touching
-the Topos module. InternVideo-Next is the shipped default clip encoder.
+the vision module. InternVideo-Next is the shipped default clip encoder.
 ``DINOv2Encoder`` is the per-frame fallback; it loads `facebook/dinov2-small`
 lazily on first init, so the rest of the package imports without requiring
 `transformers`.
@@ -41,7 +41,7 @@ DEFAULT_CLIP_RESOLUTION: int = 224
 
 @runtime_checkable
 class Encoder(Protocol):
-    """The swappable Topos vision-encoder seam (topos-temporal-video-encoder).
+    """The swappable vision-encoder seam (topos-temporal-video-encoder).
 
     An encoder consumes a clip of ``clip_len`` frames and returns one pooled
     latent vector. A per-frame encoder implements the protocol with
@@ -240,7 +240,7 @@ class DINOv2Encoder:
     async def encode_clip(self, frames: Any) -> list[float]:
         """Per-frame fallback: encode the most recent frame of the clip.
 
-        DINOv2 has ``clip_len == 1``, so Topos hands it a 1-frame buffer; this
+        DINOv2 has ``clip_len == 1``, so the vision module hands it a 1-frame buffer; this
         encodes ``frames[-1]`` (the current frame), preserving the historical
         per-frame CLS-token behavior behind the clip-native seam."""
         seq = list(frames)
@@ -261,7 +261,7 @@ class InternVideoNextEncoder:
     weights via :func:`kaine.modules.topos.internvideo_next_loader.load_internvideo_next`
     — ``trust_remote_code=False``, ``local_files_only=True``, no runtime network,
     no ``Auto*`` code resolution (design.md §5). Frozen contract (``eval()`` +
-    ``requires_grad_(False)``) is applied by the loader; Topos never trains it.
+    ``requires_grad_(False)``) is applied by the loader; the vision module never trains it.
 
     Pooling ``[1, 4096, 768] → 768``:
 
@@ -475,7 +475,7 @@ class InternVideoNextEncoder:
         """A clip encoder has no per-frame encode; use :meth:`encode_clip`.
 
         (Spatial foveation is a per-frame path incompatible with a temporally
-        native clip encoder — Topos rejects that combination at construction.)"""
+        native clip encoder — the vision module rejects that combination at construction.)"""
         raise NotImplementedError(
             "InternVideoNextEncoder is a clip encoder (clip_len=16); call "
             "encode_clip(frames) with a full clip. Per-frame encode() is only "

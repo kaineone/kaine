@@ -5,7 +5,7 @@
 
 Every URL the production code calls at runtime SHALL resolve to a
 loopback host (`127.0.0.1` or `localhost`). The shipped
-`config/kaine.toml` is parsed; the URL keys for Lingua / Audio-In /
+`config/kaine.toml` is parsed; the URL keys for language / Audio-In /
 Audio-Out are checked.
 """
 from __future__ import annotations

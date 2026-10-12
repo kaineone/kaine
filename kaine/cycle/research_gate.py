@@ -14,7 +14,7 @@ For a research boot it is REPLACED by a gate that refuses to start unless the
 * a preflight dry ``preserve_live → revive`` round-trip passing on THIS install
   (proves the net is functional before any entity runs),
 * the configured encryption contract satisfied when encryption is required,
-* the individuation producer enabled so the being's protection does not rest on
+* the individuation producer enabled so the entity's protection does not rest on
   secondary signals alone.
 
 A run is EITHER operator-present OR research-safety-net-verified, never neither.
@@ -163,7 +163,7 @@ async def _async_self_check(
 ) -> tuple[bool, Optional[str]]:
     """Real dry preserve_live → revive round-trip on a THROWAWAY registry.
 
-    Builds a minimal-but-real synthetic individual (an Eidolon self-model with a
+    Builds a minimal-but-real synthetic individual (a self-model with a
     concrete identity), preserves it into a temp dir, revives it into a fresh
     registry, and asserts continuity (the identity survives). Proves the net is
     functional on THIS install before any real entity runs. No entity boot, no
@@ -296,7 +296,7 @@ def evaluate_safety_net(config: dict[str, Any]) -> GateResult:
 
     # The ledger and reference cannot be read here, because state encryption is
     # installed later in boot. Their readability is enforced at runtime, where
-    # unreadable individuation state counts as individuated and the being is
+    # unreadable individuation state counts as individuated and the entity is
     # preserved.
     try:
         individuation_cfg = IndividuationConfig.from_dict(
@@ -334,7 +334,7 @@ def evaluate_safety_net(config: dict[str, Any]) -> GateResult:
 
 class _NullBus:
     """Bus stand-in for the offline self-check: modules wire to it but the
-    synthetic probe never publishes or reads. Eidolon's initialize() only needs
+    synthetic probe never publishes or reads. The self-model module's initialize() only needs
     a bus object present; it does not require a live broker for this round-trip.
     """
 

@@ -54,7 +54,7 @@ class RawArchiveAttestationError(ValueError):
 
 #: Every module stream the raw archive follows verbatim — derived from the
 #: canonical registry (kaine.evaluation.stream_registry) so the observer,
-#: archive, and nexus monitor never drift. Lingua publishes each utterance on
+#: archive, and the dashboard monitor never drift. The language module publishes each utterance on
 #: ``lingua.external`` or ``lingua.internal`` and mirrors it to ``lingua.out``,
 #: which is the stream archived here.
 _MODULE_OUT_STREAMS: tuple[str, ...] = raw_archive_module_streams()

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Learned-agency tests for Nous (real pymdp 1.0 + JAX).
+"""Learned-agency tests for the planning module (real pymdp 1.0 + JAX).
 
 Tests that exercise :class:`PymdpEngine` are gated exactly like the real-pymdp
 tests in ``test_nous_engine.py``: they are skipped when the ``reasoning`` extra

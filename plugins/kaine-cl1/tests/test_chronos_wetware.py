@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
-"""Chronos wetware backend against the simulator.
+"""The sequence wetware backend against the simulator.
 
 The acceptance criterion from `chronos-on-wetware`: on a temporally *structured*
 stimulus the prediction error is lower than on a *scrambled* one, i.e. the
@@ -39,7 +39,7 @@ def _open():
 
 
 class _LinearHead:
-    """Faithful minimal stand-in for Chronos' ForwardPredictionHead."""
+    """Faithful minimal stand-in for the sequence module's ForwardPredictionHead."""
 
     def __init__(self, units: int, feat: int, lr: float = 0.15):
         self._W = np.zeros((feat, units))

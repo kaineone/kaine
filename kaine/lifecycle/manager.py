@@ -96,8 +96,8 @@ class ForkManager:
     — `restore` only calls `deserialize` on already-instantiated
     modules.
 
-    The manager never deletes a snapshot. The root holds preserved beings
-    and Spot escalation snapshots, and removing an entity's state is the
+    The manager never deletes a snapshot. The root holds preserved entities
+    and supervisor escalation snapshots, and removing an entity's state is the
     CAL-gated decommission path only (`kaine.lifecycle.decommission`).
     Disk space is checked before boot by `python -m kaine.preboot`.
     """
@@ -124,7 +124,7 @@ class ForkManager:
         # `merger_from_name` from `[lifecycle]` config (or pass one directly)
         # override this.
         self._adapter_merger: AdapterMerger = adapter_merger or merger_from_name("auto")
-        # Reads the running being's identity (entity-identity D11). None means
+        # Reads the running entity's identity (entity-identity D11). None means
         # snapshots carry no identity, as for tools and tests.
         self._identity_source = identity_source
 

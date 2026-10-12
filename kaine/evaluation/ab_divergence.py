@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""A/B divergence observer: every Lingua external_speech is paired
+"""A/B divergence observer: every language module's external_speech is paired
 with a second 'bare LLM' inference and the cosine similarity logged.
 
-The bare output never reaches the user or Mnemos. We use the same
-chat endpoint as Lingua via httpx so behavior matches the real one.
+The bare output never reaches the user or the episodic memory module. We use the same
+chat endpoint as the language module via httpx so behavior matches the real one.
 """
 
 from __future__ import annotations
@@ -163,7 +163,7 @@ class ConditionedInferenceClient(Protocol):
     client, model, persona scaffolding, and prompt structure, any divergence the
     control reports is attributable to the conditioning ALONE — which is exactly
     what the A/B meter is supposed to measure. The real implementation (wired at
-    the cycle entrypoint) reuses Lingua's ``ContextAssembler`` + chat client, so
+    the cycle entrypoint) reuses the language module's ``ContextAssembler`` + chat client, so
     the control exercises the production conditioning path, not a parallel fake.
     """
 
@@ -205,11 +205,11 @@ async def divergence_control(
 
 
 class AssemblerConditionedClient:
-    """Real conditioned-inference path for the control: Lingua's own
+    """Real conditioned-inference path for the control: the language module's own
     ``ContextAssembler`` + the language-organ chat client.
 
     Wired at the cycle entrypoint (the allowed module-coupling point), this
-    builds the conditioned prompt the SAME way Lingua does in production, then
+    builds the conditioned prompt the SAME way the language module does in production, then
     runs it through the SAME chat client. ``conditioning`` is the rendered
     workspace/awareness block: an empty string reproduces the "nothing salient"
     prompt (the bare arm), a populated string injects the workspace contents.

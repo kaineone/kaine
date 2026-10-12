@@ -31,8 +31,8 @@ def _sink():
 
 
 def test_implied_external_deps_maps_modules():
-    # Redis is always implied; lingua→model_server, mnemos/empatheia→qdrant,
-    # audition→speaches, vox→chatterbox.
+    # Redis is always implied; language→model_server, the episodic memory and social cognition modules→qdrant,
+    # audition→speaches, vocal→chatterbox.
     assert implied_external_deps({}) == ["redis"]
     assert set(implied_external_deps({"lingua": True})) == {"redis", "model_server"}
     assert set(implied_external_deps({"mnemos": True})) == {"redis", "qdrant"}
@@ -95,7 +95,7 @@ def test_provision_command_runs_on_consent(monkeypatch):
         lambda cmd, **k: ran.append((cmd, k)),
     )
     buf, out = _sink()
-    # lingua → redis (command) + model_server (command). The model server is
+    # language → redis (command) + model_server (command). The model server is
     # launched by the dedicated organ step, so _provision_dependencies skips it
     # here (no prompt, no run) to avoid double-launching the same bootstrap;
     # only redis prompts and runs on consent.
@@ -132,7 +132,7 @@ def test_provision_guide_only_never_runs(monkeypatch):
         "kaine.setup.__main__.subprocess.run", lambda cmd, **k: ran.append(cmd)
     )
     buf, out = _sink()
-    ans = _Answers([])  # vox → chatterbox is guide-only: no prompt
+    ans = _Answers([])  # vocal → chatterbox is guide-only: no prompt
     _provision_dependencies(
         {"modules": {"vox": True}}, input_fn=ans, out=out, defaults=False
     )

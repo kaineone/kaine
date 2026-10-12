@@ -3,7 +3,7 @@
 
 """Offline validation simulation for the individuation instrument.
 
-This script generates synthetic beings and uses only
+This script generates synthetic entities and uses only
 ``kaine/lifecycle/individuation_stats.py`` to exercise the statistics core
 before any real organ data exists.
 """
@@ -126,9 +126,9 @@ def being_samples(
 
 
 def reference_vector(birth_samples: list[np.ndarray]) -> np.ndarray:
-    """Birth reference used by the old percentile rule.
+    """maturation reference used by the old percentile rule.
 
-    Mean of the birth sample over prompts, normalised.
+    Mean of the maturation sample over prompts, normalised.
     """
     per_prompt = np.stack([s.mean(axis=0) for s in birth_samples])
     return _normalize_rows(per_prompt.mean(axis=0).reshape(1, -1))[0]
@@ -402,7 +402,7 @@ def run_size(
     sigma: float = DEFAULT_SIGMA,
     out: Path | None = None,
 ) -> dict:
-    """Type-I error calibration under the null (birth == current model)."""
+    """Type-I error calibration under the null (maturation == current model)."""
     n = 500 if quick else N
     rng = np.random.default_rng(seed)
     seeds = _spawn_seeds(rng, n)

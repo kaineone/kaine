@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Self-inference engine for Eidolon.
+"""Self-inference engine for the self-model module.
 
 Populates ``SelfModelDocument.behavioral_norms``, ``personality_baseline``,
 ``values``, and ``capability_map`` from observed signals already present
@@ -14,7 +14,7 @@ Privacy boundary (load-bearing):
   categorical labels, not transcript excerpts.
 - VAD values from ``thymos.report`` / ``thymos.drive`` are aggregated
   into rolling mean/variance.  Individual samples are not stored.
-- Nous EFE policy labels and counts are stored; raw policy payloads are
+- the planning module's EFE policy labels and counts are stored; raw policy payloads are
   discarded after the numeric summary is extracted.
 
 The engine is disabled by default (``enabled = false`` in config).  When
@@ -51,7 +51,7 @@ _VADSample = tuple[float, float, float]
 # Constants
 # ---------------------------------------------------------------------------
 
-# Internal-speech type labels Eidolon tracks.  The label is the ``type``
+# Internal-speech type labels the self-model module tracks.  The label is the ``type``
 # field of the bus event (e.g. "internal.thought", "speak.internal"), not
 # the text content.  We count occurrences of each label; when a label
 # accumulates >= speech_pattern_min_count observations it graduates into a
@@ -91,7 +91,7 @@ class SelfInferenceEngine:
         Optional path to an operator-seed JSONL (one JSON object per line).
         Applied once on first boot, never re-applied.
     whitelist_commands:
-        Command names from the Praxis effector whitelist.  Injected at
+        Command names from the effectors module effector whitelist.  Injected at
         construction time by ``module.py``.
     """
 
@@ -137,7 +137,7 @@ class SelfInferenceEngine:
         return self._enabled
 
     def set_whitelist_commands(self, commands: Optional[list[str]]) -> None:
-        """Inject the Praxis effector whitelist into the capability-map builder.
+        """Inject the effectors module effector whitelist into the capability-map builder.
 
         Wired once at boot (``boot._wire_eidolon_capabilities``), so the
         self-model's ``capability_map["effectors"]`` reflects what the entity can

@@ -16,7 +16,7 @@ already built (no new system):
   default. Below that floor, the individuation instrument cannot speak for the
   fork.
 * **Before** a merge ends a fork, assess its individuation/divergence from its
-  fork-point birth-state baseline (the same divergence gate that drives the
+  fork-point maturation-state baseline (the same divergence gate that drives the
   preserve trigger and the decommission gate) together with its welfare signals
   and lived time.
 * **Decouple assimilation from termination.** Below threshold (a short-lived,
@@ -100,7 +100,7 @@ def assess_fork(
     *,
     fork_state_root: Path | str,
 ) -> DivergenceAssessment:
-    """Assess a fork's individuation against its birth-state baseline.
+    """Assess a fork's individuation against its maturation-state baseline.
 
     Thin wrapper over :func:`kaine.lifecycle.divergence.assess_divergence`
     pointed at the fork's own materialized state root, so the same verdict that

@@ -4,7 +4,7 @@
 """Shared definitions for external (other-initiated) input events.
 
 External-input types are events whose entire text payload is heard input
-produced by someone else, not by the being.
+produced by someone else, not by the entity.
 """
 
 from __future__ import annotations

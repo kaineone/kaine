@@ -16,7 +16,7 @@ adapter would drive. It has no socket, no wire, no external dependency:
 It declares symbolic no-op families plus the canonical continuous channels
 (``drive``, ``yaw_rate``, ``gaze_yaw``, ``gaze_pitch``, ``interact``) and is
 ``transitional=False``. It is the shipped reference body and ships off (the
-Mundus module is inactive by default) — a reference/test body, not a real one; a
+embodiment module is inactive by default) — a reference/test body, not a real one; a
 transport-backed virtual-world adapter is planned.
 """
 from __future__ import annotations

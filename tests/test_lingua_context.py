@@ -3,7 +3,7 @@
 
 """Conditioning the language organ on the conscious workspace.
 
-Covers the ContextAssembler (persona + working memory + input) and the Lingua
+Covers the ContextAssembler (persona + working memory + input) and the language module
 wiring that feeds the rolling-latest coalition into each generation.
 """
 
@@ -265,7 +265,7 @@ def test_redacted_bounded_rendering_preserves_selection_order():
         snap, max_events=8, char_budget=80, redact=redact_heard_speech
     )
     # The long real line fills the budget, so the organ saw only the
-    # transcription; a naive redact-then-select would also have fitted the soma
+    # transcription; a naive redact-then-select would also have fitted the interoception module
     # line. The logged rendering must list exactly the events the organ saw.
     assert len(unredacted.splitlines()) == 1
     assert redacted.splitlines() == ['- Speech heard: "[heard speech]".']
@@ -273,7 +273,7 @@ def test_redacted_bounded_rendering_preserves_selection_order():
     assert long_text not in redacted
 
 
-# ---- Lingua wiring: rolling-latest + channel isolation ----------------------
+# ---- Language wiring: rolling-latest + channel isolation ----------------------
 
 
 @pytest.fixture

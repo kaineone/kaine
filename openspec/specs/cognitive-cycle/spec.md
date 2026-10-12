@@ -7,7 +7,7 @@ The heartbeat that reads every module stream, runs workspace selection, broadcas
 
 ### Requirement: Cycle runner with pacing
 The cognitive cycle SHALL run as an async loop that targets a configurable
-processing rate (Hz). Each tick SHALL collect events, invoke Syneidesis,
+processing rate (Hz). Each tick SHALL collect events, invoke the workspace,
 optionally broadcast, and record latency. The cycle SHALL be startable,
 pausable, resumable, and shutdownable through explicit API calls.
 
@@ -22,7 +22,7 @@ pausable, resumable, and shutdownable through explicit API calls.
 
 #### Scenario: Shutdown drains and exits
 - **WHEN** `shutdown()` is awaited
-- **THEN** the run loop returns and any pending Soma latency events are
+- **THEN** the run loop returns and any pending latency events from the interoception module are
   flushed to the bus
 
 ### Requirement: Independent processing and experiential rates
@@ -61,7 +61,7 @@ read and SHALL continue running if a module raises during processing.
 On every tick the cycle SHALL publish a tick-latency event to its own
 `cycle.out` stream (source `cycle`) containing `tick_index`,
 `wall_duration_ms`, `target_duration_ms`, `slip_ms`, and a boolean
-`is_experiential`. Soma subscribes to `cycle.out` like any other consumer.
+`is_experiential`. The interoception module subscribes to `cycle.out` like any other consumer.
 The cycle SHALL claim source `syneidesis` only when calling
 `bus.publish_workspace`.
 
@@ -148,24 +148,24 @@ consumer section, so that a qdrant-backed module surfaces its existing explicit
 error. If `config/secrets.toml` exists and is group- or world-readable, the
 loader SHALL emit the same file-mode warning the bus config loader emits.
 
-#### Scenario: Key only in secrets.toml reaches Mnemos
+#### Scenario: Key only in secrets.toml reaches Episodic memory
 
 - **WHEN** `config/secrets.toml` contains `[qdrant].api_key` and no
   `KAINE_QDRANT_API_KEY` env var is set and `config/kaine.toml` has no
   `[mnemos.qdrant].api_key`
 - **THEN** the loaded cycle config has `mnemos.qdrant.api_key` equal to the
   secrets-file value
-- **AND** a qdrant-backed Mnemos constructs without raising the missing-key
+- **AND** a qdrant-backed episodic memory module constructs without raising the missing-key
   error
 
-#### Scenario: Key only in secrets.toml reaches Empatheia
+#### Scenario: Key only in secrets.toml reaches Social cognition
 
 - **WHEN** `config/secrets.toml` contains `[qdrant].api_key` and no
   `KAINE_QDRANT_API_KEY` env var is set and `config/kaine.toml` has no
   `[empatheia.qdrant].api_key`
 - **THEN** the loaded cycle config has `empatheia.qdrant.api_key` equal to the
   secrets-file value
-- **AND** a qdrant-backed Empatheia constructs without raising the missing-key
+- **AND** a qdrant-backed social cognition module constructs without raising the missing-key
   error
 
 #### Scenario: Environment variable takes precedence over secrets file
@@ -187,7 +187,7 @@ loader SHALL emit the same file-mode warning the bus config loader emits.
 
 - **WHEN** neither `KAINE_QDRANT_API_KEY` nor `config/secrets.toml`
   `[qdrant].api_key` nor a per-consumer key in `config/kaine.toml` provides a
-  key, and a qdrant-backed module (Mnemos or Empatheia) is enabled
+  key, and a qdrant-backed module (the episodic memory module or the social cognition module) is enabled
 - **THEN** no empty `api_key` is injected into that consumer's section
 - **AND** the module raises its explicit "requires qdrant_api_key" error
 
@@ -201,13 +201,13 @@ loader SHALL emit the same file-mode warning the bus config loader emits.
 
 ### Requirement: Freeze control attribution
 The cycle freeze control SHALL carry a `source` field identifying who froze the
-entity — `"operator"` (the default, written by the Nexus freeze endpoint) or
+entity — `"operator"` (the default, written by the dashboard freeze endpoint) or
 `"spot"` (written by the supervisor during recovery). Reading a control file with
 no `source` SHALL default to `"operator"` (backward compatible). The freeze-watch
 loop SHALL pause/resume the cycle on the `frozen` flag regardless of source.
 
 #### Scenario: Operator freeze defaults the source
-- **WHEN** the operator freezes via the Nexus endpoint
+- **WHEN** the operator freezes via the dashboard endpoint
 - **THEN** the control records `source = "operator"`
 
 #### Scenario: Legacy control without source reads as operator
@@ -233,7 +233,7 @@ supervisor escalates, so an escalated run does not appear successful.
 ### Requirement: Operator freeze suspends the experiential loop
 
 The operator SHALL be able to **freeze** a running cognitive cycle: halt the tick
-loop so no Syneidesis broadcast, volition, or conscious moment forms while frozen
+loop so no workspace broadcast, action selection, or conscious moment forms while frozen
 — the entity's subjective clock stops. Freezing SHALL be a suspension, not a
 shutdown: process and in-memory state are retained, no module teardown or state
 flush occurs, and resuming continues from exactly where it left off. While
@@ -277,14 +277,14 @@ The cognitive cycle SHALL provide an opt-in deterministic mode
 (`[experiment].deterministic`) in which two runs with the same seed and the same
 input sequence produce identical cognitive trajectories: the same selected
 coalitions (entry ids, sources, types, salience scores), the same inhibition
-decisions, the same volition outputs, and the same logical event timestamps, tick
+decisions, the same action selection module outputs, and the same logical event timestamps, tick
 by tick. The guarantee SHALL NOT extend to wall-clock latency measurements
 (`wall_duration_ms`, `slip_ms`), which remain physical measurements and are
 excluded from the reproducibility guarantee.
 
 #### Scenario: Two seeded runs produce identical trajectories
 - **WHEN** the cycle runs N ticks twice in deterministic mode with the same seed and the same scripted input
-- **THEN** the per-tick selected entries, salience scores, inhibited flags, volition decisions, and logical timestamps are identical across the two runs
+- **THEN** the per-tick selected entries, salience scores, inhibited flags, action selection module decisions, and logical timestamps are identical across the two runs
 
 #### Scenario: Wall-clock latency is not part of the guarantee
 - **WHEN** the two deterministic runs are compared
@@ -314,7 +314,7 @@ tie-breaks do not depend on dispatch incidentals.
 - **THEN** the selection tie-break resolves them in the canonical `(source, type, entry_id)` order
 
 ### Requirement: Conscious-access rate adapts to arousal and salience
-When `[cycle.access_rate].enabled` is true, the cycle SHALL compute, on every tick before deciding whether the tick is an experiential broadcast, an access drive in [0, 1] equal to the larger of a tonic part (Thymos arousal above its resting baseline, normalised to [0, 1]) and a phasic part (the highest salience among this tick's module reports above a floor, normalised to [0, 1], held as a peak that decays exponentially in subjective time). The effective experiential rate for the tick SHALL be `resting + (processing − resting) × drive`, where `resting` is the configured experiential rate and `processing` is the processing rate. Events whose source is `cycle` or `syneidesis` SHALL NOT contribute to the phasic part.
+When `[cycle.access_rate].enabled` is true, the cycle SHALL compute, on every tick before deciding whether the tick is an experiential broadcast, an access drive in [0, 1] equal to the larger of a tonic part (the affect module's arousal above its resting baseline, normalised to [0, 1]) and a phasic part (the highest salience among this tick's module reports above a floor, normalised to [0, 1], held as a peak that decays exponentially in subjective time). The effective experiential rate for the tick SHALL be `resting + (processing − resting) × drive`, where `resting` is the configured experiential rate and `processing` is the processing rate. Events whose source is `cycle` or `syneidesis` SHALL NOT contribute to the phasic part.
 
 #### Scenario: Calm entity broadcasts at the resting rate
 - **WHEN** arousal equals its baseline and no report exceeds the salience floor, at 10 Hz processing and a 3.333 Hz resting rate, for 300 ticks

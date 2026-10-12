@@ -707,7 +707,7 @@ async def test_null_emotion_classifier_is_disabled_but_transcribes():
 
 
 # --------------------------------------------------------------------------
-# 2.3 Mnemos sqlite-vec backend selection (behind the storage interface)
+# 2.3 the episodic memory module's sqlite-vec backend selection (behind the storage interface)
 # --------------------------------------------------------------------------
 
 
@@ -733,7 +733,7 @@ def test_mnemos_backend_selects_sqlite_vec_without_qdrant_key():
 
 
 # --------------------------------------------------------------------------
-# 2.1 / 1.3 Lingua backend seam (behind the ChatClient interface)
+# 2.1 / 1.3 Language backend seam (behind the ChatClient interface)
 # --------------------------------------------------------------------------
 
 
@@ -747,7 +747,7 @@ def _bus():
 
 
 def test_lingua_default_backend_builds_http_client_unchanged():
-    """No backend key → Lingua constructs its own OpenAIChatClient, as today."""
+    """No backend key → the language module constructs its own OpenAIChatClient, as today."""
     from kaine.boot import make_lingua
     from kaine.modules.lingua.client import OpenAIChatClient
 
@@ -773,7 +773,7 @@ def test_lingua_llama_cpp_backend_degrades_to_http_when_dep_absent():
 
 
 # --------------------------------------------------------------------------
-# 1.4 Backend-load failures surface on the Nexus health surface
+# 1.4 Backend-load failures surface on the dashboard health surface
 # --------------------------------------------------------------------------
 
 
