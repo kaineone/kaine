@@ -259,6 +259,12 @@ def validate_table(table) -> None:
         raise TableError("PERSISTED_EXACT must be a dict")
     _require_str_dict(persisted_exact, "PERSISTED_EXACT")
 
+    operator_exact = getattr(table, "OPERATOR_EXACT", ())
+    if not isinstance(operator_exact, tuple) or not all(
+        isinstance(x, str) for x in operator_exact
+    ):
+        raise TableError("OPERATOR_EXACT must be a tuple of strings")
+
     for attr_name in (
         "REPO_TOP_DIRS",
         "UI_GLOBS",
@@ -1441,6 +1447,9 @@ def _assign_scope(
             persisted = getattr(table, "PERSISTED_EXACT", {})
             if full_content in persisted:
                 return "persisted"
+            operator_exact = getattr(table, "OPERATOR_EXACT", ())
+            if full_content in operator_exact:
+                return "operator"
         if ctx in {"py_string", "py_text"} and _names_python_symbol(tokens, start):
             return "identifiers"
         if ctx.startswith("py"):
@@ -1525,6 +1534,13 @@ def _assign_scope(
         return "persisted"
     if ctx == "py_name":
         return "identifiers"
+    if ctx == "toml_key":
+        operator_exact = getattr(table, "OPERATOR_EXACT", ())
+        if T in operator_exact:
+            return "operator"
+        persisted = getattr(table, "PERSISTED_EXACT", {})
+        if T in persisted:
+            return "persisted"
     for prefix in ("kaine.", "tests."):
         if T.startswith(prefix):
             return "identifiers"
@@ -2364,11 +2380,28 @@ def _apply_persisted_exact(
     regex, group_map = _name_regex(table)
     persisted = getattr(table, "PERSISTED_EXACT", {})
     for start, end, ctx in intervals:
-        if ctx not in {"py_string", "py_text", "toml_string", "toml_text"}:
+        if ctx not in {
+            "py_string",
+            "py_text",
+            "toml_string",
+            "toml_text",
+            "toml_key",
+        }:
             continue
         if _blocked(start, end, blocked):
             continue
-        content = _string_content_at(text, start, end, ctx)
+        raw = text[start:end]
+        if ctx == "toml_key":
+            stripped = raw.strip()
+            if (
+                (stripped.startswith('"') and stripped.endswith('"'))
+                or (stripped.startswith("'") and stripped.endswith("'"))
+            ):
+                content = _strip_quotes(stripped)
+            else:
+                content = stripped
+        else:
+            content = _string_content_at(text, start, end, ctx)
         if content is None:
             continue
         if content not in persisted:
@@ -2377,7 +2410,6 @@ def _apply_persisted_exact(
         if only is not None and attr not in only:
             continue
         value = persisted[content]
-        raw = text[start:end]
         if content not in raw:
             continue
         new_raw = raw.replace(content, value, 1)
