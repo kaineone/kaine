@@ -45,7 +45,7 @@ Every judgement is about the speaker, in the utterance. The schema has a `SCHEMA
 Schema v1 is superseded by v2. The operator approved v2 on 2026-10-06 ("fix then label") after they could not answer the first gold item.
 
 **Status: design only, and blocked.** Nothing in this section is implemented (tasks 9.1 to 9.6 are open). The work is blocked on two things:
-- **The project hiatus.** Labelling and training are frozen, so neither the v2 rebuild nor the operator's labelling pass runs until the project resumes.
+- **Labelling and training are not scheduled.** Neither the v2 rebuild nor the operator's labelling pass has a date yet.
 - **The integrator's design check (task 0.1).** No v2 code is written until the integrator has checked this change.
 
 The schema v1 smoke run of the trainer, taken at the freeze, is kept in `docs/records/shakedowns/2026-10-06-k1jev-w2a-0.8b-smoke-run.md`.
