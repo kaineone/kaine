@@ -100,7 +100,7 @@ class DevelopmentReadoutConfig:
         if data is None:
             data = {}
         if not isinstance(data, dict):
-            raise ValueError("GestationReadoutConfig expects a dict")
+            raise ValueError("DevelopmentReadoutConfig expects a dict")
         allowed = {f.name for f in cls.__dataclass_fields__.values()}
         extra = set(data.keys()) - allowed
         if extra:

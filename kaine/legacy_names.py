@@ -843,6 +843,8 @@ EXCLUDED_GLOBS = (
     "*/docs/records/*",
     "kaine/nexus/static/vendor/",
     "kaine/nexus/static/fonts/",
+    "kaine/dashboard/static/vendor/",
+    "kaine/dashboard/static/fonts/",
     "external/",
     "THIRD_PARTY_LICENSES.md",
     "unsloth_compiled_cache/",
@@ -961,10 +963,17 @@ SURVEY_EXTRA = (
 )
 
 # The survey measures the tree as it was before the rename, so these keep the old paths.
-SURVEY_UI_PREFIXES = ("kaine/nexus/static/", "kaine/nexus/templates/")
+SURVEY_UI_PREFIXES = (
+    "kaine/nexus/static/",
+    "kaine/nexus/templates/",
+    "kaine/dashboard/static/",
+    "kaine/dashboard/templates/",
+)
 SURVEY_THIRD_PARTY_PREFIXES = (
     "kaine/nexus/static/vendor/",
     "kaine/nexus/static/fonts/",
+    "kaine/dashboard/static/vendor/",
+    "kaine/dashboard/static/fonts/",
     "external/",
     "unsloth_compiled_cache/",
     "THIRD_PARTY_LICENSES.md",

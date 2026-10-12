@@ -190,8 +190,10 @@ USER kaine
 # tini reaps zombies; the entrypoint fixes volume perms then dispatches. The
 # default CMD is the cognitive cycle — but the cycle STILL refuses to boot
 # without KAINE_CYCLE_OPERATOR_PRESENT=1 (or the research safety net), so a bare
-# `docker run` of this image never starts an entity. The Nexus service overrides
-# CMD with `-m kaine.dashboard`.
+# `docker run` of this image never starts an entity. The dashboard service
+# overrides CMD: until the operator rename step, compose and quadlet keep the
+# dashboard's old module command, which is now a deprecation shim that runs
+# kaine.dashboard.
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/kaine-entrypoint"]
 CMD ["python", "-m", "kaine.cycle"]
 

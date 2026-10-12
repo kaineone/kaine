@@ -8,6 +8,7 @@ from pathlib import Path
 
 import kaine.lifecycle.divergence as _divergence_mod
 import kaine.lifecycle.maturation_ack as _maturation_ack
+import kaine.lifecycle.maturation_gate as _maturation_gate
 import kaine.lifecycle.preservation as _preservation
 import kaine.memory_kinds as _memory_kinds
 import kaine.modules.self_model.module as _self_model_module
@@ -215,3 +216,16 @@ def test_stage_fields_and_value_pinned():
     for entry in legacy_names.STAGE_VALUES:
         if entry["old"] == "gestation":
             assert _stage.DEVELOPMENT == (entry["new"] if PERSISTED_DONE else entry["old"])
+
+
+def test_maturation_pending_sentinel_pinned(tmp_path):
+    """The maturation pending sentinel keeps its filename across renames."""
+    assert IndividuationPaths(root=tmp_path).maturation_pending.name == Path(
+        _state_path("individuation/birth_pending")
+    ).name
+
+
+def test_gate_action_values_pinned():
+    """Maturation gate action values keep their old text in this step."""
+    assert _maturation_gate.ACTION_DEVELOPING == "gestating"
+    assert _maturation_gate.ACTION_MATURATION == "birth"

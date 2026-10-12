@@ -53,7 +53,7 @@ class PerceptionToggleBody(BaseModel):
         return v
 
 
-class PerceptualLocusLocusBody(BaseModel):
+class PerceptualLocusBody(BaseModel):
     locus: str = Field(..., description="physical | virtual | off")
     locked: bool | None = Field(None, description="optionally (un)lock the locus")
 
@@ -230,7 +230,7 @@ def build_perception_router(
         )
 
     @router.post("/locus", dependencies=[Depends(require_operator_token)])
-    async def set_locus(body: PerceptualLocusLocusBody):
+    async def set_locus(body: PerceptualLocusBody):
         new_desired = write_desired_locus(body.locus, body.locked, desired_path)
         log.info(
             "perception locus set locus=%s locked=%s",
