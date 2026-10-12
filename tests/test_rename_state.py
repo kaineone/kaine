@@ -4,6 +4,7 @@
 """Tests for ``kaine.lifecycle.rename_state``."""
 
 import json
+import shutil
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -115,6 +116,49 @@ def _raw_snapshot(root: Path):
 def drop_wal_shm(snapshot):
     files, dirs = snapshot
     return {k: v for k, v in files.items() if not (k.endswith("-wal") or k.endswith("-shm"))}, dirs
+
+
+def _outside_snapshot(outside: Path):
+    """Snapshot a sibling directory used as an attack target."""
+    if not outside.exists():
+        return {}, set()
+    files: dict[str, bytes] = {}
+    dirs: set[str] = set()
+    for path in sorted(outside.rglob("*")):
+        rel = path.relative_to(outside)
+        key = str(rel).replace("\\", "/")
+        if path.is_dir():
+            dirs.add(key)
+        else:
+            files[key] = path.read_bytes()
+    return files, dirs
+
+
+def _attack_snapshot(root: Path, manifest_path: Path, outside: Path):
+    """Snapshot everything an attacker might try to change."""
+    manifest_bytes = manifest_path.read_bytes() if manifest_path.exists() else None
+    return (_snapshot(root), manifest_bytes, _outside_snapshot(outside))
+
+
+def _interrupt_migrate(root: Path, monkeypatch, stop_at: int = 2):
+    """Run migrate but raise KeyboardInterrupt before the ``stop_at``-th step."""
+    original = rename_state._run_step
+    call_count = 0
+
+    def wrapper(r, step, qdrant):
+        nonlocal call_count
+        call_count += 1
+        if call_count == stop_at:
+            raise KeyboardInterrupt
+        return original(r, step, qdrant)
+
+    monkeypatch.setattr(rename_state, "_run_step", wrapper)
+    try:
+        rename_state.migrate(root)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        monkeypatch.setattr(rename_state, "_run_step", original)
 
 
 def test_pending_scope_is_noop(tmp_path, monkeypatch):
@@ -575,3 +619,305 @@ def test_main_conflict(tmp_path, capsys):
     captured = capsys.readouterr()
     assert "kaine.lifecycle.rename_state:" in captured.err
     assert not (tmp_path / ".rename_state").exists()
+
+
+def test_resume_refuses_absolute_move_dst(tmp_path, monkeypatch):
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    outside.mkdir(parents=True, exist_ok=True)
+    _make_tree(root)
+
+    _interrupt_migrate(root, monkeypatch, stop_at=2)
+
+    manifest_path = root / ".rename_state" / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    for step in manifest["steps"]:
+        if step["kind"] == "move" and step["status"] == "pending":
+            step["dst"] = str(outside / "x")
+            break
+    else:
+        raise RuntimeError("no pending move step found")
+    write_json_atomic(manifest_path, manifest)
+
+    before = _attack_snapshot(root, manifest_path, outside)
+    with pytest.raises(rename_state.RenameStateError):
+        rename_state.migrate(root)
+    assert _attack_snapshot(root, manifest_path, outside) == before
+
+
+def test_revert_refuses_absolute_move_dst(tmp_path):
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    outside.mkdir(parents=True, exist_ok=True)
+    _make_tree(root)
+    rename_state.migrate(root)
+
+    manifest_path = root / ".rename_state" / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    for step in manifest["steps"]:
+        if step["kind"] == "move":
+            step["dst"] = str(outside / "x")
+            break
+    write_json_atomic(manifest_path, manifest)
+
+    before = _attack_snapshot(root, manifest_path, outside)
+    with pytest.raises(rename_state.RenameStateError):
+        rename_state.revert(root)
+    assert _attack_snapshot(root, manifest_path, outside) == before
+
+
+def test_revert_refuses_dotdot_move_src(tmp_path):
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    _make_tree(root)
+    rename_state.migrate(root)
+
+    victim = outside / "victim"
+    victim.parent.mkdir(parents=True, exist_ok=True)
+    victim.write_text("stolen")
+
+    manifest_path = root / ".rename_state" / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    for step in manifest["steps"]:
+        if step["kind"] == "move":
+            step["src"] = "../outside/victim"
+            break
+    write_json_atomic(manifest_path, manifest)
+
+    before = _attack_snapshot(root, manifest_path, outside)
+    with pytest.raises(rename_state.RenameStateError):
+        rename_state.revert(root)
+    assert _attack_snapshot(root, manifest_path, outside) == before
+
+
+def test_revert_refuses_symlinked_dst_outside_root(tmp_path):
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    _make_tree(root)
+    rename_state.migrate(root)
+
+    target_dir = outside / "target_dir"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    (target_dir / "file.txt").write_text("outside")
+
+    sleep = root / "sleep"
+    if sleep.exists():
+        shutil.rmtree(sleep)
+    sleep.symlink_to(target_dir, target_is_directory=True)
+
+    manifest_path = root / ".rename_state" / "manifest.json"
+    before = _attack_snapshot(root, manifest_path, outside)
+    with pytest.raises(rename_state.RenameStateError):
+        rename_state.revert(root)
+    assert _attack_snapshot(root, manifest_path, outside) == before
+
+
+def test_migrate_refuses_symlinked_src_outside_root(tmp_path):
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    _make_tree(root)
+
+    target = outside / "hypnos_target"
+    target.mkdir(parents=True, exist_ok=True)
+    (target / "keep.txt").write_text("out")
+
+    hypnos = root / "hypnos"
+    if hypnos.exists():
+        shutil.rmtree(hypnos)
+    hypnos.symlink_to(target, target_is_directory=True)
+
+    manifest_path = root / ".rename_state" / "manifest.json"
+    before = _attack_snapshot(root, manifest_path, outside)
+    with pytest.raises(rename_state.RenameStateError):
+        rename_state.migrate(root)
+    assert _attack_snapshot(root, manifest_path, outside) == before
+    assert not manifest_path.exists()
+    assert not (root / ".rename_state").exists()
+
+
+def test_resume_refuses_created_dir_outside_root(tmp_path, monkeypatch):
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    outside.mkdir(parents=True, exist_ok=True)
+    _make_tree(root)
+
+    _interrupt_migrate(root, monkeypatch, stop_at=2)
+
+    manifest_path = root / ".rename_state" / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    for step in manifest["steps"]:
+        if step["kind"] == "move" and step["status"] == "pending":
+            step["created_dirs"] = ["../outside/made"]
+            break
+    else:
+        raise RuntimeError("no pending move step found")
+    write_json_atomic(manifest_path, manifest)
+
+    before = _attack_snapshot(root, manifest_path, outside)
+    with pytest.raises(rename_state.RenameStateError):
+        rename_state.migrate(root)
+    assert _attack_snapshot(root, manifest_path, outside) == before
+    assert not (outside / "made").exists()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda m: m.__setitem__("steps", ["not a dict"]),
+        lambda m: m["steps"].append({"kind": "bad", "status": "pending"}),
+        lambda m: m["steps"].append(
+            {"kind": "move", "src": "a", "status": "pending", "created_dirs": []}
+        ),
+        lambda m: m["steps"].append(
+            {"kind": "move", "src": 1, "dst": "b", "created_dirs": [], "status": "pending"}
+        ),
+        lambda m: m["steps"].append(
+            {"kind": "sqlite", "path": "x.db", "pairs": "bad", "vec": False, "status": "pending"}
+        ),
+        lambda m: m["steps"].append(
+            {"kind": "move", "src": "a", "dst": "b", "created_dirs": [], "status": "weird"}
+        ),
+        lambda m: m.__setitem__("version", 2),
+    ],
+    ids=[
+        "step_not_dict",
+        "unknown_kind",
+        "move_missing_dst",
+        "move_src_int",
+        "sqlite_pairs_str",
+        "status_weird",
+        "version_2",
+    ],
+)
+def test_revert_refuses_malformed_manifest(tmp_path, mutation):
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    outside.mkdir(parents=True, exist_ok=True)
+    _make_tree(root)
+    rename_state.migrate(root)
+
+    manifest_path = root / ".rename_state" / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    mutation(manifest)
+    write_json_atomic(manifest_path, manifest)
+
+    before = _attack_snapshot(root, manifest_path, outside)
+    with pytest.raises(rename_state.RenameStateError):
+        rename_state.revert(root)
+    assert _attack_snapshot(root, manifest_path, outside) == before
+
+
+def test_revert_refuses_invalid_json_manifest(tmp_path):
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    outside.mkdir(parents=True, exist_ok=True)
+    _make_tree(root)
+    rename_state.migrate(root)
+
+    manifest_path = root / ".rename_state" / "manifest.json"
+    manifest_path.write_bytes(b"{not json")
+
+    before = _attack_snapshot(root, manifest_path, outside)
+    with pytest.raises(rename_state.RenameStateError, match="not valid JSON"):
+        rename_state.revert(root)
+    assert _attack_snapshot(root, manifest_path, outside) == before
+
+
+def test_revert_refuses_symlinked_manifest_dir(tmp_path):
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    outside.mkdir(parents=True, exist_ok=True)
+    _make_tree(root)
+    rename_state.migrate(root)
+
+    manifest_path = root / ".rename_state" / "manifest.json"
+    outside_m = outside / "m"
+    shutil.copytree(root / ".rename_state", outside_m)
+    before_outside = _outside_snapshot(outside)
+    shutil.rmtree(root / ".rename_state")
+    (root / ".rename_state").symlink_to(outside_m, target_is_directory=True)
+    before = _attack_snapshot(root, manifest_path, outside)
+
+    with pytest.raises(rename_state.RenameStateError):
+        rename_state.revert(root)
+    assert _attack_snapshot(root, manifest_path, outside) == before
+    assert _outside_snapshot(outside) == before_outside
+
+
+def test_migrate_refuses_symlinked_manifest_dir(tmp_path):
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    outside.mkdir(parents=True, exist_ok=True)
+    _make_tree(root)
+    rename_state.migrate(root)
+
+    manifest_path = root / ".rename_state" / "manifest.json"
+    outside_m = outside / "m"
+    shutil.copytree(root / ".rename_state", outside_m)
+    before_outside = _outside_snapshot(outside)
+    shutil.rmtree(root / ".rename_state")
+    (root / ".rename_state").symlink_to(outside_m, target_is_directory=True)
+    before = _attack_snapshot(root, manifest_path, outside)
+
+    with pytest.raises(rename_state.RenameStateError):
+        rename_state.migrate(root)
+    assert _attack_snapshot(root, manifest_path, outside) == before
+    assert _outside_snapshot(outside) == before_outside
+
+
+def test_revert_refuses_created_dir_not_ancestor(tmp_path):
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    outside.mkdir(parents=True, exist_ok=True)
+    _make_tree(root)
+    rename_state.migrate(root)
+
+    manifest_path = root / ".rename_state" / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    for step in manifest["steps"]:
+        if step["kind"] == "move" and step["dst"] == "sleep":
+            step["created_dirs"] = ["lifecycle"]
+            break
+    write_json_atomic(manifest_path, manifest)
+
+    before = _attack_snapshot(root, manifest_path, outside)
+    with pytest.raises(rename_state.RenameStateError):
+        rename_state.revert(root)
+    assert _attack_snapshot(root, manifest_path, outside) == before
+
+
+def test_revert_refuses_stage_backup_outside_manifest_dir(tmp_path):
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    outside.mkdir(parents=True, exist_ok=True)
+    _make_tree(root)
+    rename_state.migrate(root)
+
+    manifest_path = root / ".rename_state" / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    for step in manifest["steps"]:
+        if step["kind"] == "stage":
+            step["backup"] = "lifecycle/birth_ack.json"
+            break
+    write_json_atomic(manifest_path, manifest)
+
+    before = _attack_snapshot(root, manifest_path, outside)
+    with pytest.raises(rename_state.RenameStateError):
+        rename_state.revert(root)
+    assert _attack_snapshot(root, manifest_path, outside) == before
+
+
+def test_revert_refuses_qdrant_alias_pointing_elsewhere(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir(parents=True, exist_ok=True)
+    _make_tree(tmp_path)
+    qdrant = _FakeQdrant(["mnemos_episodic", "other"], {})
+    rename_state.migrate(tmp_path, qdrant=qdrant)
+    qdrant._aliases["episodic_memory_episodic"] = "other"
+
+    manifest_path = tmp_path / ".rename_state" / "manifest.json"
+    before = _attack_snapshot(tmp_path, manifest_path, outside)
+    with pytest.raises(rename_state.RenameStateError):
+        rename_state.revert(tmp_path, qdrant=qdrant)
+    assert _attack_snapshot(tmp_path, manifest_path, outside) == before
+    assert qdrant.aliases().get("episodic_memory_episodic") == "other"
