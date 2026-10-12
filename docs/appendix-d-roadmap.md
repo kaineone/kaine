@@ -75,6 +75,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | rd-bandwidth-cleanroom | 9/9 (100%) | A clean-room implementation, from Calonico, Cattaneo and Titiunik (2014) and its supplement only, of the robust bias-corrected regression discontinuity and its MSE-optimal bandwidths; the contrast at threshold with its band, age bins and minimum effect, so a complete settings record is possible. |
 | mnemos-trace-strength | 10/10 (100%) | Each episodic memory trace carries a strength that sleep downscales by the number of traces the wake stored, replayed traces keep theirs, sleep prunes at a floor and to an operator storage budget, recall ranks by strength times similarity, and replay draws on the whole wake just ended (paper A.10). |
 | paper-retitle | 2/2 (100%) | Cite the research paper by its new title, *KAINE: A Modular Cognitive Architecture with a Predictive Global Workspace*. |
+| pep639-license-fields | 6/6 (100%) | Declare the licence with the PEP 639 fields: the SPDX expression LicenseRef-CAL-0.4 and the three legal files in license-files, replacing the deprecated licence table. |
 
 ## Open operator and device steps
 
@@ -95,7 +96,7 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 69 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 70 active changes, 268 archived changes and 104 capability specs.
 
 The project is paused from 2026-10-06; `docs/records/2026-10-06-handoff.md` gives the state and how to resume.
 
