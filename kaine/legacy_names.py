@@ -804,6 +804,27 @@ ACCEPTED_COLLISIONS = [
     ("tests/test_voice_alignment_organ_adapter.py", "sleep"),
     ("tests/test_voice_system_prompts.py", "sleep"),
     ("tests/test_world_model_identity.py", "world_model"),
+
+    # Step 5c (language, vocal, planning, action selection, effectors, self-model,
+    # social cognition, workspace). Each was checked by hand: the new name meets an
+    # import path segment (kaine.workspace..., the effectors submodule), a keyword
+    # argument of another call, an attribute of another object, or a test-local
+    # variable; ruff reports no redefinition after the run.
+
+    ("kaine/boot/wiring.py", "effectors"),
+    ("kaine/cycle/__main__.py", "workspace"),
+    ("kaine/evaluation/observers/ablation_observer.py", "workspace"),
+    ("kaine/evaluation/redteam/harness.py", "effectors"),
+    ("kaine/evaluation/redteam/harness.py", "workspace"),
+    ("kaine/modules/praxis/__init__.py", "effectors"),
+    ("kaine/modules/praxis/module.py", "effectors"),
+    ("kaine/workspace/__init__.py", "workspace"),
+    ("tests/test_dual_path_ablation.py", "workspace"),
+    ("tests/test_individuation_probe_request.py", "self_model"),
+    ("tests/test_planned_test_studies.py", "workspace"),
+    ("tests/test_praxis_effectors.py", "effectors"),
+    ("tests/test_praxis_module.py", "effectors"),
+    ("tests/test_salience_factor_wiring.py", "workspace"),
 ]
 
 SURVEY_EXTRA = (
