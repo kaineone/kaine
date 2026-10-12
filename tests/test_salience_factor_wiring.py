@@ -20,8 +20,8 @@ from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
 from kaine.cycle import CognitiveCycle
 from kaine.cycle.affect_state import AffectStateProvider
-from kaine.modules.thymos.modulator import StateModulator
-from kaine.modules.thymos.state import DimensionalState
+from kaine.modules.affect.modulator import StateModulator
+from kaine.modules.affect.state import DimensionalState
 from kaine.workspace.novelty import NoveltyTracker
 from kaine.workspace.salience import RuleBasedSalience
 from kaine.workspace.strategies import (
@@ -44,7 +44,7 @@ def _event(source: str, intensity: float, payload=None, type_: str = "percept") 
     )
 
 
-def _thymos_state(*, valence=0.0, arousal=0.3, dominance=0.0, drives=None) -> Event:
+def _affect_state(*, valence=0.0, arousal=0.3, dominance=0.0, drives=None) -> Event:
     return Event(
         source="thymos",
         type="thymos.state",
@@ -92,13 +92,13 @@ def test_provider_defaults_to_baseline_before_any_state():
     assert provider.drive_values() == {}
 
 
-def test_provider_folds_latest_thymos_state():
+def test_provider_folds_latest_affect_state():
     provider = AffectStateProvider()
     provider.observe(
         [
-            ("1-0", _thymos_state(arousal=0.2, drives={"curiosity": 0.1})),
+            ("1-0", _affect_state(arousal=0.2, drives={"curiosity": 0.1})),
             ("2-0", _event("perception", 0.5)),  # ignored (not thymos.state)
-            ("3-0", _thymos_state(arousal=0.9, drives={"curiosity": 0.8})),
+            ("3-0", _affect_state(arousal=0.9, drives={"curiosity": 0.8})),
         ]
     )
     # The LAST thymos.state in the batch wins.
@@ -108,14 +108,14 @@ def test_provider_folds_latest_thymos_state():
 
 def test_provider_keeps_last_known_when_no_state_this_tick():
     provider = AffectStateProvider()
-    provider.observe([("1-0", _thymos_state(arousal=0.7))])
+    provider.observe([("1-0", _affect_state(arousal=0.7))])
     provider.observe([("2-0", _event("perception", 0.5))])
     assert provider.dimensional_state().arousal == pytest.approx(0.7)
 
 
 def test_provider_drive_values_is_a_copy():
     provider = AffectStateProvider()
-    provider.observe([("1-0", _thymos_state(drives={"curiosity": 0.5}))])
+    provider.observe([("1-0", _affect_state(drives={"curiosity": 0.5}))])
     snapshot = provider.drive_values()
     snapshot["curiosity"] = 99.0
     assert provider.drive_values() == {"curiosity": 0.5}
@@ -133,7 +133,7 @@ async def _select_one(strategy, event) -> tuple:
 
 
 @pytest.mark.asyncio
-async def test_real_thymos_factor_changes_selection_outcome():
+async def test_real_affect_factor_changes_selection_outcome():
     """The arousal-weighted affect factor alters selection vs the constant stub.
 
     intensity=0.5, novelty=1.0, goal=1.0. Under the real modulator the score is
@@ -145,14 +145,14 @@ async def test_real_thymos_factor_changes_selection_outcome():
     ev = _event("perception", 0.5)
 
     low = AffectStateProvider()
-    low.observe([("0-0", _thymos_state(arousal=0.0))])
+    low.observe([("0-0", _affect_state(arousal=0.0))])
     snap_low = await _select_one(
         RuleBasedSalience(NoveltyTracker(), StaticGoalScorer(), StateModulator(low.dimensional_state)),
         ev,
     )
 
     high = AffectStateProvider()
-    high.observe([("0-0", _thymos_state(arousal=0.9))])
+    high.observe([("0-0", _affect_state(arousal=0.9))])
     snap_high = await _select_one(
         RuleBasedSalience(NoveltyTracker(), StaticGoalScorer(), StateModulator(high.dimensional_state)),
         ev,
@@ -253,11 +253,11 @@ async def test_real_four_factor_selection_is_deterministic():
         ("2-0", _event("praxis", 0.8, payload={"b": 2})),
         ("3-0", _event("audition", 0.6, payload={"c": 3})),
     ]
-    thymos = _thymos_state(arousal=0.7, drives={"curiosity": 0.9, "boredom": 0.2})
+    affect = _affect_state(arousal=0.7, drives={"curiosity": 0.9, "boredom": 0.2})
 
     def run():
         provider = AffectStateProvider()
-        provider.observe([("0-0", thymos)])
+        provider.observe([("0-0", affect)])
         strategy = RuleBasedSalience(
             NoveltyTracker(window=8),
             DriveRelevanceGoalScorer(
@@ -347,22 +347,22 @@ def _cfg(**syn) -> dict:
 def test_make_salience_factors_shipped_defaults():
     """Shipped defaults: affect real, goal on the staged static baseline, and NO
     downgrade (goal-static is the intended shipped state, not a downgrade)."""
-    thymos, goal, downgraded = make_salience_factors({}, AffectStateProvider())
-    assert isinstance(thymos, StateModulator)
+    affect, goal, downgraded = make_salience_factors({}, AffectStateProvider())
+    assert isinstance(affect, StateModulator)
     assert isinstance(goal, StaticGoalScorer)
     assert downgraded == []
 
 
-def test_make_salience_factors_thymos_static_is_a_downgrade():
-    thymos, goal, downgraded = make_salience_factors(
-        _cfg(salience_thymos_factor="static"), AffectStateProvider()
+def test_make_salience_factors_affect_static_is_a_downgrade():
+    affect, goal, downgraded = make_salience_factors(
+        _cfg(**{"salience_thymos_factor": "static"}), AffectStateProvider()
     )
-    assert isinstance(thymos, StaticThymosModulator)
+    assert isinstance(affect, StaticThymosModulator)
     assert any("thymos" in d for d in downgraded), downgraded
 
 
 def test_make_salience_factors_goal_drive_relevance_activates_real_scorer():
-    thymos, goal, downgraded = make_salience_factors(
+    affect, goal, downgraded = make_salience_factors(
         _cfg(salience_goal_factor="drive_relevance"),
         AffectStateProvider(),
         drive_sources=_FULL_SOURCES,
@@ -371,10 +371,10 @@ def test_make_salience_factors_goal_drive_relevance_activates_real_scorer():
     assert downgraded == []
 
 
-def test_make_salience_factors_unknown_thymos_value_raises():
+def test_make_salience_factors_unknown_affect_value_raises():
     with pytest.raises(ConfigurationError):
         make_salience_factors(
-            _cfg(salience_thymos_factor="bogus"), AffectStateProvider()
+            _cfg(**{"salience_thymos_factor": "bogus"}), AffectStateProvider()
         )
 
 

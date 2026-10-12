@@ -227,10 +227,10 @@ class Interoception(BaseModule):
         self._warmup_completed: bool = False
 
         # --- sleep flag ---
-        self._in_hypnos: bool = False
+        self._in_sleep: bool = False
 
         # --- the sleep module event consumer ---
-        self._hypnos_cursor: str = "0"
+        self._sleep_cursor: str = "0"
 
         # --- Self-rhythm state ---
         self._self_rhythm = self_rhythm
@@ -321,7 +321,7 @@ class Interoception(BaseModule):
         )
         self._tasks.append(
             asyncio.create_task(
-                self._hypnos_event_loop(), name=f"{self.name}-hypnos-consumer"
+                self._sleep_event_loop(), name=f"{self.name}-hypnos-consumer"
             )
         )
         if self._self_rhythm is not None:
@@ -515,7 +515,7 @@ class Interoception(BaseModule):
                 feature_vec[5] = 0.5 + 0.5 * math.cos(phase)
                 feature_vec[6] = min(1.0, 2.0 * amplitude)
 
-        if self._in_hypnos:
+        if self._in_sleep:
             self._forward_model.suspended = True
         else:
             self._forward_model.suspended = False
@@ -728,7 +728,7 @@ class Interoception(BaseModule):
             # report falls after T_learn, measured in entity time from the start of
             # the run (paper Appendix A.8).
             "entity_time_s": now_read,
-            "awake": not self._in_hypnos,
+            "awake": not self._in_sleep,
             "unexpected_error": unexpected_error,
             "fatigue_value": self._fatigue.value,
             "fatigue_threshold": self._fatigue.threshold,
@@ -926,28 +926,28 @@ class Interoception(BaseModule):
         except asyncio.CancelledError:
             raise
 
-    async def _hypnos_event_loop(self) -> None:
+    async def _sleep_event_loop(self) -> None:
         """Subscribe to hypnos.out to set/clear the _in_hypnos flag."""
         try:
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
                         "hypnos.out",
-                        last_id=self._hypnos_cursor,
+                        last_id=self._sleep_cursor,
                         count=32,
                         block_ms=0,
                     )
                     if last_scanned is not None:
-                        self._hypnos_cursor = last_scanned
+                        self._sleep_cursor = last_scanned
                         for _, event in entries:
                             if event.type == "hypnos.sleep.started":
-                                self._in_hypnos = True
+                                self._in_sleep = True
                                 self._fatigue.faster_decay = True
                                 log.debug(
                                     "soma: _in_hypnos=True (hypnos.sleep.started)"
                                 )
                             elif event.type == "hypnos.sleep.completed":
-                                self._in_hypnos = False
+                                self._in_sleep = False
                                 self._fatigue.faster_decay = False
                                 self._fatigue.reset()
                                 self._fatigue_threshold_emitted = False

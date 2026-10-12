@@ -10,7 +10,7 @@ one phase SHALL be logged and SHALL NOT prevent later phases from
 running.
 
 #### Scenario: All five phases ran in order
-- **WHEN** `Hypnos.enter_sleep()` is awaited against fake
+- **WHEN** `Sleep.enter_sleep()` is awaited against fake
   collaborators
 - **THEN** the published `hypnos.sleep.completed` event's
   `phases` payload lists exactly the five phase names in the

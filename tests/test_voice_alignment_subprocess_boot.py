@@ -20,8 +20,8 @@ from pathlib import Path
 import pytest
 
 from kaine.boot import VoiceAlignmentConfigError, _resolve_trainer
-from kaine.modules.hypnos.subprocess_trainer import SubprocessVoiceTrainer
-from kaine.modules.hypnos.voice_alignment import (
+from kaine.modules.sleep.subprocess_trainer import SubprocessVoiceTrainer
+from kaine.modules.sleep.voice_alignment import (
     OPERATOR_APPROVED_ENV,
     VoiceAlignmentConfig,
 )

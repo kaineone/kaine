@@ -11,11 +11,11 @@ from pathlib import Path
 import pytest
 
 from kaine.boot.errors import VoiceAlignmentConfigError
-from kaine.boot.factories.hypnos import voice_alignment_config_from_section
+from kaine.boot.factories.sleep import voice_alignment_config_from_section
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
-from kaine.modules.hypnos import Hypnos, TrainingResult
-from kaine.modules.hypnos.voice_alignment import (
+from kaine.modules.sleep import Sleep, TrainingResult
+from kaine.modules.sleep.voice_alignment import (
     OPERATOR_APPROVED_ENV,
     PREFERENCE_SOURCES,
     DPOPairBuilder,
@@ -106,8 +106,8 @@ async def test_preference_source_none_skips_training_but_emits_divergence(
     monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
     trainer = _RecordingTrainer()
     cfg = voice_alignment_config_from_section(_section(tmp_path))
-    hypnos = Hypnos(bus, trainer=trainer, voice_alignment_config=cfg)
-    summary = await hypnos.enter_sleep()
+    sleep = Sleep(bus, trainer=trainer, voice_alignment_config=cfg)
+    summary = await sleep.enter_sleep()
 
     assert trainer.calls == []
     voice = summary["voice_alignment"]
@@ -147,14 +147,14 @@ async def test_train_on_pairs_calls_trainer_with_given_pairs(
 ):
     cfg = voice_alignment_config_from_section(_section(tmp_path))
     trainer = _RecordingTrainer()
-    hypnos = Hypnos(bus, trainer=trainer, voice_alignment_config=cfg)
+    sleep = Sleep(bus, trainer=trainer, voice_alignment_config=cfg)
 
     pairs = DPOPairBuilder().build(cfg.intent_log_path, max_pairs=cfg.max_samples)
     assert pairs, "the fixture intent log must yield at least one pair"
     start_ms = time.monotonic() * 1000.0
     def _meta(extra):
         return dict(extra)
-    voice_result, phase_result = await hypnos._train_on_pairs(pairs, start_ms, _meta)
+    voice_result, phase_result = await sleep._train_on_pairs(pairs, start_ms, _meta)
 
     assert len(trainer.calls) == 1
     # The same pairs, each now carrying its verified system prompt.
@@ -169,7 +169,7 @@ async def test_train_on_pairs_calls_trainer_with_given_pairs(
 def test_config_itself_refuses_an_unknown_source(tmp_path):
     """A config built directly, not through the boot factory, cannot name an
     unimplemented source either."""
-    from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
+    from kaine.modules.sleep.voice_alignment import VoiceAlignmentConfig
 
     with pytest.raises(ValueError, match="unknown preference_source"):
         VoiceAlignmentConfig(
@@ -181,8 +181,8 @@ def test_config_itself_refuses_an_unknown_source(tmp_path):
 
 def test_corpus_ceiling_must_be_a_non_negative_number(tmp_path):
     from kaine.boot.errors import VoiceAlignmentConfigError
-    from kaine.boot.factories.hypnos import voice_alignment_config_from_section
-    from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
+    from kaine.boot.factories.sleep import voice_alignment_config_from_section
+    from kaine.modules.sleep.voice_alignment import VoiceAlignmentConfig
 
     with pytest.raises(ValueError, match="corpus_ceiling_gb"):
         VoiceAlignmentConfig(

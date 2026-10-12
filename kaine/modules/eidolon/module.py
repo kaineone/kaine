@@ -117,7 +117,7 @@ class Eidolon(BaseModule):
         self._inference = self_inference or SelfInferenceEngine(enabled=False)
 
         # Cursors for self-inference stream subscriptions.
-        self._thymos_cursor: str = "0-0"
+        self._affect_cursor: str = "0-0"
         self._nous_cursor: str = "0-0"
 
     @property
@@ -152,7 +152,7 @@ class Eidolon(BaseModule):
         self._external_cursor = await self._latest_cursor(self._external_speech_stream)
 
         if self._inference.enabled:
-            self._thymos_cursor = await self._latest_cursor("thymos.out")
+            self._affect_cursor = await self._latest_cursor("thymos.out")
             self._nous_cursor = await self._latest_cursor("nous.out")
 
         await super().initialize()
@@ -182,7 +182,7 @@ class Eidolon(BaseModule):
         if self._inference.enabled:
             self._tasks.append(
                 asyncio.create_task(
-                    self._thymos_consumer_loop(), name=f"{self.name}-thymos-consumer"
+                    self._affect_consumer_loop(), name=f"{self.name}-thymos-consumer"
                 )
             )
             self._tasks.append(
@@ -192,7 +192,7 @@ class Eidolon(BaseModule):
             )
             self._tasks.append(
                 asyncio.create_task(
-                    self._hypnos_consumer_loop(), name=f"{self.name}-hypnos-consumer"
+                    self._sleep_consumer_loop(), name=f"{self.name}-hypnos-consumer"
                 )
             )
 
@@ -385,14 +385,14 @@ class Eidolon(BaseModule):
     # ------------------------------------------------------------------
     # Self-inference consumer loops (run only when inference is enabled)
 
-    async def _thymos_consumer_loop(self) -> None:
+    async def _affect_consumer_loop(self) -> None:
         """Subscribe to thymos.out for state and drive events."""
         try:
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
                         "thymos.out",
-                        last_id=self._thymos_cursor,
+                        last_id=self._affect_cursor,
                         count=64,
                         block_ms=0,
                     )
@@ -400,12 +400,12 @@ class Eidolon(BaseModule):
                     await asyncio.sleep(0.1)
                     continue
                 if last_scanned is not None:
-                    self._thymos_cursor = last_scanned
+                    self._affect_cursor = last_scanned
                     for _, ev in entries:
                         if ev.type == "thymos.state":
-                            self._inference.observe_thymos_state(ev.payload)
+                            self._inference.observe_affect_state(ev.payload)
                         elif ev.type == "thymos.drive":
-                            self._inference.observe_thymos_drive(ev.payload)
+                            self._inference.observe_affect_drive(ev.payload)
                 else:
                     await asyncio.sleep(0.05)
         except asyncio.CancelledError:
@@ -435,7 +435,7 @@ class Eidolon(BaseModule):
         except asyncio.CancelledError:
             raise
 
-    async def _hypnos_consumer_loop(self) -> None:
+    async def _sleep_consumer_loop(self) -> None:
         """Subscribe to hypnos.out for maintenance cycle end events."""
         cursor = await self._latest_cursor("hypnos.out")
         try:

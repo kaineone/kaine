@@ -30,7 +30,7 @@ async def adapter_applied(*, adapter_output_dir: Path | None, resolver: Any | No
     if adapter_output_dir is None:
         return True
 
-    from kaine.modules.hypnos.adapter_store import current_path
+    from kaine.modules.sleep.adapter_store import current_path
 
     current = current_path(adapter_output_dir)
     if current is None:
@@ -57,7 +57,7 @@ def adapter_expected_from(adapter_output_dir: Path | None) -> Callable[[], bool]
     def _check() -> bool:
         if adapter_output_dir is None:
             return False
-        from kaine.modules.hypnos.adapter_store import current_path
+        from kaine.modules.sleep.adapter_store import current_path
         current = current_path(adapter_output_dir)
         if current is None:
             return False

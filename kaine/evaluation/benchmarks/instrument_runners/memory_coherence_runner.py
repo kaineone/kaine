@@ -9,7 +9,7 @@ through the real stack and through a bare bypass client, and logs which one got
 it right. This runner promotes it to a CONTROLLED experiment that measures the
 *retrieval advantage* on a fixed battery of planted facts, offline.
 
-A REAL ``MnemosCore`` (``HashEmbedder`` + ``InMemoryStorage``; the deterministic
+A REAL ``EpisodicMemoryCore`` (``HashEmbedder`` + ``InMemoryStorage``; the deterministic
 in-memory backend, no network) is loaded with a fixed battery of unique fabricated
 facts. The full-system arm is a ``RetrievalCognitiveClient`` whose answer is
 DERIVED from what the episodic memory module returns (it echoes the retrieved text, or emits the
@@ -64,28 +64,28 @@ BATTERY_FACTS: tuple[tuple[str, str], ...] = (
 NEVER_STORED = ("phantom", "the hidden ledger password is GG-0000-never-stored")
 
 
-# A builder returns a fresh, INITIALIZED MnemosCore. Async because initialize is.
-MnemosBuilder = Callable[[], Awaitable[Any]]
+# A builder returns a fresh, INITIALIZED EpisodicMemoryCore. Async because initialize is.
+EpisodicMemoryBuilder = Callable[[], Awaitable[Any]]
 
 
-async def _default_mnemos_builder() -> Any:
-    """Lazy, function-local construction of a real in-memory MnemosCore.
+async def _default_episodic_memory_builder() -> Any:
+    """Lazy, function-local construction of a real in-memory EpisodicMemoryCore.
 
     The import lives INSIDE this function so importing the runner module never
     imports ``kaine.modules.*`` — the sidecar boundary convention holds. The CLI
     uses this default; tests inject their own builder.
     """
-    from kaine.modules.mnemos.memory import MnemosCore
-    from kaine.modules.mnemos.storage import InMemoryStorage
+    from kaine.modules.episodic_memory.memory import EpisodicMemoryCore
+    from kaine.modules.episodic_memory.storage import InMemoryStorage
     from kaine.text_embedding import HashEmbedder
 
     # HashEmbedder makes cosine similarity reflect token overlap, so a question
     # that contains a planted fact retrieves that fact instead of random noise.
     emb = HashEmbedder(dim=32)
     storage = InMemoryStorage(latent_dim=emb.latent_dim)
-    mnemos = MnemosCore(embedder=emb, storage=storage, short_term_capacity=8)
-    await mnemos.initialize()
-    return mnemos
+    episodic_memory = EpisodicMemoryCore(embedder=emb, storage=storage, short_term_capacity=8)
+    await episodic_memory.initialize()
+    return episodic_memory
 
 
 class _RetrievalCognitiveClient:
@@ -97,11 +97,11 @@ class _RetrievalCognitiveClient:
     which is what proves the advantage measures retrieval.
     """
 
-    def __init__(self, mnemos: Any) -> None:
-        self._mnemos = mnemos
+    def __init__(self, episodic_memory: Any) -> None:
+        self._episodic_memory = episodic_memory
 
     async def query(self, user_text: str) -> str:
-        recalls, _ = await self._mnemos.recall(user_text, k=5, collection="episodic")
+        recalls, _ = await self._episodic_memory.recall(user_text, k=5, collection="episodic")
         texts = [m.text for m in recalls if m.text]
         if not texts:
             return NON_RECALL_MARKER
@@ -221,19 +221,19 @@ def _classify(
 async def run_memory_coherence(
     config: Optional[MemoryCoherenceConfig] = None,
     *,
-    mnemos_builder: Optional[MnemosBuilder] = None,
+    episodic_memory_builder: Optional[EpisodicMemoryBuilder] = None,
     embedder: Optional[TextEmbedder] = None,
 ) -> dict[str, Any]:
     """Run the controlled memory-coherence battery; return records + verdict.
 
-    ``mnemos_builder`` returns a fresh, initialized real ``MnemosCore``; the
+    ``mnemos_builder`` returns a fresh, initialized real ``EpisodicMemoryCore``; the
     runner builds two — one loaded with the battery (full-system arm) and one left
     empty (the retrieval proof). When omitted, a lazy default builds an in-memory
     episodic memory module so the CLI works out of the box.
     """
     config = config or MemoryCoherenceConfig()
     set_global_seed(config.seed)
-    builder = mnemos_builder or _default_mnemos_builder
+    builder = episodic_memory_builder or _default_episodic_memory_builder
     embedder = embedder or _default_embedder()
     await embedder.load()
 

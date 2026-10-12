@@ -30,13 +30,13 @@ class ProactiveAuditObserver(StreamSubscriberObserver):
         bus: BusReader,
         sink: AsyncJsonlSink,
         *,
-        thymos_state_provider=None,
+        affect_state_provider=None,
         last_user_input_provider=None,
         proactive_threshold_seconds: float = 30.0,
     ) -> None:
         super().__init__(bus, poll_interval_s=0.3)
         self._sink = sink
-        self._thymos = thymos_state_provider
+        self._affect = affect_state_provider
         self._last_input = last_user_input_provider
         self._threshold = float(proactive_threshold_seconds)
 
@@ -57,12 +57,12 @@ class ProactiveAuditObserver(StreamSubscriberObserver):
         if not is_proactive:
             return
         payload = event.payload or {}
-        thymos_state = None
-        if self._thymos is not None:
+        affect_state = None
+        if self._affect is not None:
             try:
-                thymos_state = self._thymos()
+                affect_state = self._affect()
             except Exception:
-                thymos_state = None
+                affect_state = None
         await self._sink.write(
             {
                 "entry_id": entry_id,
@@ -71,6 +71,6 @@ class ProactiveAuditObserver(StreamSubscriberObserver):
                 "trigger_salience": payload.get("trigger_salience"),
                 "tick_index": payload.get("tick_index"),
                 "seconds_since_user_input": seconds_since_input,
-                "thymos_state": thymos_state,
+                "thymos_state": affect_state,
             }
         )

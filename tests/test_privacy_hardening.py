@@ -160,7 +160,7 @@ def _run(coro):
 
 def test_loopback_url_allowed(monkeypatch):
     """A loopback URL (127.0.0.1) must be allowed and POST attempted."""
-    from kaine.modules.hypnos import hot_swap
+    from kaine.modules.sleep import hot_swap
 
     monkeypatch.delenv("KAINE_ALLOW_NONLOCAL_HOT_SWAP", raising=False)
 
@@ -182,7 +182,7 @@ def test_loopback_url_allowed(monkeypatch):
 
 def test_localhost_url_allowed(monkeypatch):
     """http://localhost:... must also be accepted as loopback."""
-    from kaine.modules.hypnos import hot_swap
+    from kaine.modules.sleep import hot_swap
 
     monkeypatch.delenv("KAINE_ALLOW_NONLOCAL_HOT_SWAP", raising=False)
 
@@ -204,7 +204,7 @@ def test_localhost_url_allowed(monkeypatch):
 
 def test_nonloopback_url_rejected_without_env(monkeypatch):
     """A non-loopback URL must be rejected when KAINE_ALLOW_NONLOCAL_HOT_SWAP is not set."""
-    from kaine.modules.hypnos import hot_swap
+    from kaine.modules.sleep import hot_swap
 
     monkeypatch.delenv("KAINE_ALLOW_NONLOCAL_HOT_SWAP", raising=False)
 
@@ -230,7 +230,7 @@ def test_nonloopback_url_rejected_without_env(monkeypatch):
 
 def test_nonloopback_url_allowed_with_env(monkeypatch):
     """A non-loopback URL must be allowed when KAINE_ALLOW_NONLOCAL_HOT_SWAP=1."""
-    from kaine.modules.hypnos import hot_swap
+    from kaine.modules.sleep import hot_swap
 
     monkeypatch.setenv("KAINE_ALLOW_NONLOCAL_HOT_SWAP", "1")
 
@@ -252,7 +252,7 @@ def test_nonloopback_url_allowed_with_env(monkeypatch):
 
 def test_nonloopback_env_value_must_be_1(monkeypatch):
     """KAINE_ALLOW_NONLOCAL_HOT_SWAP must be exactly '1' to override."""
-    from kaine.modules.hypnos import hot_swap
+    from kaine.modules.sleep import hot_swap
 
     for bad_value in ("true", "yes", "1 ", "TRUE", "on"):
         monkeypatch.setenv("KAINE_ALLOW_NONLOCAL_HOT_SWAP", bad_value)
@@ -277,7 +277,7 @@ def test_nonloopback_env_value_must_be_1(monkeypatch):
 
 def test_is_loopback_url_patterns():
     """Unit-test the _is_loopback_url helper directly."""
-    from kaine.modules.hypnos.hot_swap import _is_loopback_url
+    from kaine.modules.sleep.hot_swap import _is_loopback_url
 
     assert _is_loopback_url("http://127.0.0.1:8080/reload")
     assert _is_loopback_url("http://127.0.0.1/")

@@ -1,0 +1,123 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
+import pytest
+
+from kaine.modules.episodic_memory.embeddings import FakeEmbedder
+from kaine.modules.episodic_memory.memory import EpisodicMemoryCore, RecallSummary
+from kaine.modules.episodic_memory.storage import InMemoryStorage
+
+
+@pytest.fixture
+async def core():
+    emb = FakeEmbedder(latent_dim=8)
+    await emb.load()
+    storage = InMemoryStorage(latent_dim=emb.latent_dim)
+    c = EpisodicMemoryCore(embedder=emb, storage=storage, short_term_capacity=4)
+    await c.initialize()
+    yield c
+    await c.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_invalid_capacity_rejected():
+    emb = FakeEmbedder(latent_dim=8)
+    storage = InMemoryStorage(latent_dim=8)
+    with pytest.raises(ValueError):
+        EpisodicMemoryCore(embedder=emb, storage=storage, short_term_capacity=0)
+
+
+@pytest.mark.asyncio
+async def test_short_term_store_and_size(core: EpisodicMemoryCore):
+    await core.store("first memory")
+    await core.store("second memory")
+    assert core.short_term_size == 2
+
+
+@pytest.mark.asyncio
+async def test_capacity_eviction_to_episodic(core: EpisodicMemoryCore):
+    for i in range(4):
+        await core.store(f"memory {i}")
+    assert core.short_term_size == 4
+    # 5th store should evict the oldest into episodic.
+    await core.store("memory 4")
+    assert core.short_term_size == 4
+    episodic_name = core.collection_name("episodic")
+    assert await core.storage.count(episodic_name) == 1
+
+
+@pytest.mark.asyncio
+async def test_episodic_store_then_recall(core: EpisodicMemoryCore):
+    pid = await core.store("the cat sat on the mat", collection="episodic")
+    assert pid is not None
+    results, summary = await core.recall("the cat sat on the mat", k=1, collection="episodic")
+    assert summary.count == 1
+    assert len(results) == 1
+    assert results[0].text == "the cat sat on the mat"
+
+
+@pytest.mark.asyncio
+async def test_recall_triggers_hook(core: EpisodicMemoryCore):
+    captured: list[RecallSummary] = []
+
+    async def hook(summary: RecallSummary):
+        captured.append(summary)
+
+    core._hook = hook
+    await core.store(
+        "a fearful memory",
+        affect={"valence": -0.8, "intensity": 0.9, "label": "fear"},
+        collection="episodic",
+    )
+    _, summary = await core.recall("fearful", k=1, collection="episodic")
+    assert len(captured) == 1
+    assert captured[0].max_affect_intensity == 0.9
+    assert captured[0].count == 1
+
+
+@pytest.mark.asyncio
+async def test_consolidate_now_empties_short_term(core: EpisodicMemoryCore):
+    for i in range(3):
+        await core.store(f"memory {i}")
+    assert core.short_term_size == 3
+    moved = await core.consolidate_now()
+    assert moved == 3
+    assert core.short_term_size == 0
+    assert await core.storage.count(core.collection_name("episodic")) == 3
+
+
+@pytest.mark.asyncio
+async def test_short_term_recall_uses_cosine_similarity_with_recency_tie_break(core: EpisodicMemoryCore):
+    await core.store("the cat sat on the mat")
+    await core.store("the cat sat on the mat")
+    results, summary = await core.recall("cat", k=2, collection="short_term")
+    assert summary.count == 2
+    # Identical vectors give identical cosine scores; recency breaks the tie.
+    assert results[0].point_id == "short_term:1"
+    assert results[1].point_id == "short_term:0"
+    assert results[0].score == pytest.approx(results[1].score)
+
+
+@pytest.mark.asyncio
+async def test_recall_summary_excludes_text_contents(core: EpisodicMemoryCore):
+    await core.store("secret content", collection="episodic")
+    _, summary = await core.recall("secret", k=1, collection="episodic")
+    # RecallSummary itself carries no text — that's the privacy boundary.
+    assert "secret" not in str(summary)
+
+
+@pytest.mark.asyncio
+async def test_unknown_collection_rejected(core: EpisodicMemoryCore):
+    with pytest.raises(ValueError):
+        await core.store("x", collection="nope")
+    with pytest.raises(ValueError):
+        await core.recall("x", collection="nope")
+
+
+@pytest.mark.asyncio
+async def test_collections_initialized_after_initialize(core: EpisodicMemoryCore):
+    # The fixture already initialized; the three persisted collections
+    # should be present in the storage.
+    for kind in ("episodic", "semantic", "procedural"):
+        name = core.collection_name(kind)
+        assert await core.storage.count(name) == 0

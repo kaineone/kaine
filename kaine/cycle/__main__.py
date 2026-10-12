@@ -94,9 +94,9 @@ from kaine.lifecycle.maturation_gate import (
     MaturationConfig,
     gestation_started_payload,
 )
+from kaine.modules.affect.modulator import StateModulator
 from kaine.modules.positive_control import finish_positive_controls
 from kaine.modules.registry import shutdown_order
-from kaine.modules.thymos.modulator import StateModulator
 from kaine.perception_state import (
     read_desired,
     write_desired_audio,
@@ -266,7 +266,7 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
     ensure_fact = (
         eidolon.ensure_situation_fact if eidolon is not None else lingua.add_situation_fact
     )
-    hypnos = registry.get("hypnos") if "hypnos" in registry else None
+    sleep = registry.get("hypnos") if "hypnos" in registry else None
 
     voice_cfg = (kaine_config.get("hypnos") or {}).get("voice_alignment") or {}
     adapter_output_dir = resolve(voice_cfg.get("adapter_output_dir", "state/hypnos/adapters"))
@@ -302,7 +302,7 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
         tick_index=lambda: cycle.tick_index,
         is_paused=lambda: cycle.is_paused,
         organ_unloaded=organ_unloaded,
-        hypnos_sleeping=hypnos.is_sleeping if hypnos is not None else None,
+        sleep_sleeping=sleep.is_sleeping if sleep is not None else None,
         born_at=lambda: gate_runner.stage.born_at,
         is_gestating=lambda: bool(staging_enabled and gate_runner.stage.is_gestating),
         bus=bus,
@@ -312,7 +312,7 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
     )
 
 
-def _thymos_state_factory(registry):
+def _affect_state_factory(registry):
     """Return a thunk the sidecar can call to read the affect module's current state.
 
     The sidecar must not import any kaine.modules.* code, but the cycle
@@ -322,13 +322,13 @@ def _thymos_state_factory(registry):
 
     def _get():
         try:
-            thymos = registry.get("thymos") if "thymos" in registry else None
+            affect = registry.get("thymos") if "thymos" in registry else None
         except Exception:
-            thymos = None
-        if thymos is None:
+            affect = None
+        if affect is None:
             return None
         try:
-            state = thymos.serialize() or {}
+            state = affect.serialize() or {}
         except Exception:
             return None
         return state.get("dimensional") or state
@@ -422,15 +422,15 @@ def _memory_source_factory(registry):
     """
     if "mnemos" not in registry:
         return None
-    mnemos = registry.get("mnemos")
+    episodic_memory = registry.get("mnemos")
 
-    class _MnemosMemorySource:
+    class _EpisodicMemoryMemorySource:
         async def sample_old_memory(self, *, older_than_seconds: float):
             import time
 
             cutoff = time.time() - float(older_than_seconds)
             try:
-                recalls = await mnemos.recall("what happened earlier", k=20, collection="episodic")
+                recalls = await episodic_memory.recall("what happened earlier", k=20, collection="episodic")
             except Exception:
                 return None
             oldest = None
@@ -449,7 +449,7 @@ def _memory_source_factory(registry):
                 **oldest.payload,
             }
 
-    return _MnemosMemorySource()
+    return _EpisodicMemoryMemorySource()
 
 
 def _cognitive_query_client_factory(registry, eval_cfg):
@@ -461,14 +461,14 @@ def _cognitive_query_client_factory(registry, eval_cfg):
         return None
     from kaine.modules.lingua.client import ChatRequest, OpenAIChatClient
 
-    mnemos = registry.get("mnemos")
+    episodic_memory = registry.get("mnemos")
     client = OpenAIChatClient(base_url=eval_cfg.chat_url, timeout_s=eval_cfg.chat_timeout_s)
     model = eval_cfg.chat_model_id
 
     class _StackQueryClient:
         async def query(self, user_text: str) -> str:
             try:
-                recalls = await mnemos.recall(user_text)
+                recalls = await episodic_memory.recall(user_text)
             except Exception:
                 recalls = []
             mem = "\n".join(f"- {m.text}" for m in recalls[:5]) or "(nothing relevant)"
@@ -1834,7 +1834,7 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
     # factor is BUILT but ships on the static negative control by default, staged
     # pending validation on logged runs (see config/kaine.toml [syneidesis]).
     ctx.affect_provider = AffectStateProvider()
-    thymos_modulator, goal_scorer, downgraded_factors = make_salience_factors(
+    affect_modulator, goal_scorer, downgraded_factors = make_salience_factors(
         ctx.kaine_config, ctx.affect_provider, drive_sources=drive_sources_for(ctx.registry)
     )
     # Foveation's fovea size reads the same affect snapshot (arousal → size).
@@ -1860,7 +1860,7 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
     )
     ctx.access_rate = AccessRateController(access_rate_cfg) if access_rate_cfg.enabled else None
     reads_affect = (
-        isinstance(thymos_modulator, StateModulator)
+        isinstance(affect_modulator, StateModulator)
         or isinstance(goal_scorer, DriveRelevanceGoalScorer)
         or vision_reads_arousal
         or audition_reads_arousal
@@ -1871,7 +1871,7 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=int(syn_cfg.get("novelty_window", 32))),
             goal_scorer=goal_scorer,
-            thymos_modulator=thymos_modulator,
+            affect_modulator=affect_modulator,
             downgraded_factors=downgraded_factors,
         ),
         top_k=int(syn_cfg.get("top_k", 5)),
@@ -1998,7 +1998,7 @@ async def _phase_volition(ctx: BootContext) -> int | None:
         )
 
 
-def _hypnos_is_sleeping(registry: Any) -> bool:
+def _sleep_is_sleeping(registry: Any) -> bool:
     """Whether the sleep module is asleep now (False without the sleep module)."""
     if "hypnos" not in registry:
         return False
@@ -2058,7 +2058,7 @@ async def _phase_cycle(ctx: BootContext) -> int | None:
         ),
     )
     # sleep stops awake time; read through the registry so a rebuilt sleep module is still read.
-    ctx.cycle.set_sleep_source(lambda: _hypnos_is_sleeping(ctx.registry))
+    ctx.cycle.set_sleep_source(lambda: _sleep_is_sleeping(ctx.registry))
     bind_womb_unawake_source(ctx.kaine_config, ctx.cycle.unawake_subjective_seconds)
 
 
@@ -2107,7 +2107,7 @@ async def _phase_sidecar(ctx: BootContext) -> int | None:
             bus=ctx.bus,
             config=ctx.eval_cfg,
             research_event_log_config=ctx.research_event_log_cfg,
-            thymos_state_provider=_thymos_state_factory(ctx.registry),
+            affect_state_provider=_affect_state_factory(ctx.registry),
             sleep_state_provider=_sleep_state_factory(ctx.registry),
             memory_source=_memory_source_factory(ctx.registry),
             cognitive_query_client=_cognitive_query_client_factory(ctx.registry, ctx.eval_cfg),

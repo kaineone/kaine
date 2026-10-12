@@ -167,7 +167,7 @@ class Lingua(BaseModule):
         self._intent_cursor = "0-0"
         # Latest sleep index observed on hypnos.out (None until seen).
         self._sleep_index: Optional[int] = None
-        self._hypnos_cursor = "0-0"
+        self._sleep_cursor = "0-0"
         # The single in-flight generation, held as a cancellable task so an
         # urgent (interrupt-marked) speak intent can preempt it mid-stream
         # instead of the loop awaiting it to completion (interruptible-utterance
@@ -270,14 +270,14 @@ class Lingua(BaseModule):
                     # no stop signal yet; keep polling the stream
                     pass
 
-    async def _hypnos_cache_loop(self) -> None:
+    async def _sleep_cache_loop(self) -> None:
         """Cache the latest completed sleep index published on hypnos.out.
 
         The index is the number of sleeps the sleep module has completed since it
         started, stamped on its hypnos.out events. The language module records the latest
         value it has seen, or None before any such event (unknown, never 0).
         """
-        cursor = self._hypnos_cursor
+        cursor = self._sleep_cursor
         while not self._stopped.is_set():
             try:
                 entries, last_scanned = await self._bus.read_entries(
@@ -293,7 +293,7 @@ class Lingua(BaseModule):
                 continue
             if last_scanned is not None:
                 cursor = last_scanned
-                self._hypnos_cursor = cursor
+                self._sleep_cursor = cursor
                 for _entry_id, ev in entries:
                     idx = ev.payload.get("sleep_index")
                     if isinstance(idx, int) and not isinstance(idx, bool):
@@ -368,29 +368,29 @@ class Lingua(BaseModule):
         # the most recent events to catch the latest sleep_index published
         # before boot. Never use "$": a non-blocking read from "$" never returns.
         try:
-            latest_hypnos = await self._bus.client.xrevrange("hypnos.out", count=1)
+            latest_sleep = await self._bus.client.xrevrange("hypnos.out", count=1)
         except Exception:
-            latest_hypnos = []
-        if latest_hypnos:
-            entry_id = latest_hypnos[0][0]
+            latest_sleep = []
+        if latest_sleep:
+            entry_id = latest_sleep[0][0]
             if isinstance(entry_id, bytes):
                 entry_id = entry_id.decode()
-            self._hypnos_cursor = entry_id
+            self._sleep_cursor = entry_id
         try:
-            recent_hypnos = await self._bus.client.xrevrange("hypnos.out", count=200)
+            recent_sleep = await self._bus.client.xrevrange("hypnos.out", count=200)
         except Exception as exc:
             log.debug("hypnos sleep_index backfill failed: %s", exc)
-            recent_hypnos = []
+            recent_sleep = []
         # xrevrange is newest first: the first sleep_index found is the latest.
-        for _entry_id, fields in recent_hypnos:
+        for _entry_id, fields in recent_sleep:
             raw = fields.get("payload", fields.get(b"payload"))
             if isinstance(raw, bytes):
                 raw = raw.decode("utf-8", errors="replace")
             try:
-                hypnos_payload = json.loads(raw) if raw else {}
+                sleep_payload = json.loads(raw) if raw else {}
             except (TypeError, ValueError):
                 continue
-            idx = hypnos_payload.get("sleep_index") if isinstance(hypnos_payload, dict) else None
+            idx = sleep_payload.get("sleep_index") if isinstance(sleep_payload, dict) else None
             if isinstance(idx, int) and not isinstance(idx, bool):
                 self._sleep_index = idx
                 break
@@ -404,7 +404,7 @@ class Lingua(BaseModule):
             asyncio.create_task(self._self_model_cache_loop(), name=f"{self.name}-self-model-cache")
         )
         self._tasks.append(
-            asyncio.create_task(self._hypnos_cache_loop(), name=f"{self.name}-hypnos-cache")
+            asyncio.create_task(self._sleep_cache_loop(), name=f"{self.name}-hypnos-cache")
         )
 
     async def shutdown(self) -> None:

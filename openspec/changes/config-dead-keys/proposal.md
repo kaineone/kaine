@@ -9,7 +9,7 @@ Four configuration leftovers describe behaviour KAINE does not have.
   updates on replayed traces in the ordinary cycle. The sleep module's `nous_process`
   argument is stored and never read for the same reason, and boot always passes
   `None`. The only code that used either is `revise_beliefs` in
-  `kaine/modules/hypnos/phases.py`, a legacy function that no sleep calls.
+  `kaine/modules/sleep/phases.py`, a legacy function that no sleep calls.
 - `[thymos].social_drive_time_scale_s` is accepted and validated but unused. In
   the paper the social drive builds at its build rate once the entity has heard
   a voice and is relieved each time it hears one again (§3.5, A.4, Table A1:
@@ -53,9 +53,9 @@ Four configuration leftovers describe behaviour KAINE does not have.
 
 ## Impact
 
-- `kaine/modules/hypnos/module.py`, `kaine/modules/hypnos/phases.py`,
-  `kaine/modules/thymos/module.py`, `kaine/boot/errors.py`,
-  `kaine/boot/factories/hypnos.py`, `kaine/boot/factories/thymos.py`,
+- `kaine/modules/sleep/module.py`, `kaine/modules/sleep/phases.py`,
+  `kaine/modules/affect/module.py`, `kaine/boot/errors.py`,
+  `kaine/boot/factories/sleep.py`, `kaine/boot/factories/affect.py`,
   `kaine/boot/registry.py`, `scripts/probe-host`,
   `compose/kaine.organ-host.yml`, `config/kaine.toml`, tests, and the docs
   pages that listed the keys.

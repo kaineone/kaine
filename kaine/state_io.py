@@ -20,7 +20,7 @@ This module is deliberately stdlib-only and imports nothing from the rest of
 evaluation sidecar, and the boundary-neutral homes alike.
 
 NOTE: The ENCRYPTING state writers (``kaine.lifecycle.snapshot``,
-``kaine.lifecycle.decommission``, ``kaine.modules.phantasia.checkpoint``,
+``kaine.lifecycle.decommission``, ``kaine.modules.world_model.checkpoint``,
 ``kaine.modules.eidolon.document``) are a justified specialization — they
 encrypt the payload (and chmod 0600) before it touches disk — and stay
 SEPARATE from this plaintext helper on purpose.

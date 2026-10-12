@@ -820,7 +820,7 @@ def test_outcome_refuses_the_start_bundle_as_result(tmp_path: Path, known_module
     )
 
 
-def test_phantasia_world_model_true(tmp_path: Path, known_modules, monkeypatch):
+def test_world_model_world_model_true(tmp_path: Path, known_modules, monkeypatch):
     study_dir = _create_study(tmp_path, viewings=2, order=["phantasia"])
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
@@ -832,9 +832,9 @@ def test_phantasia_world_model_true(tmp_path: Path, known_modules, monkeypatch):
     assert result == "complete"
     assert len(steps) == 5
 
-    phantasia_steps = [s for s in steps if "phantasia" in s["modules"]]
-    assert len(phantasia_steps) == 2
-    assert all(s["world_model_captured"] is True for s in phantasia_steps)
+    world_model_steps = [s for s in steps if "phantasia" in s["modules"]]
+    assert len(world_model_steps) == 2
+    assert all(s["world_model_captured"] is True for s in world_model_steps)
     for s in steps:
         if "phantasia" not in s["modules"]:
             assert s["world_model_captured"] is None
@@ -842,7 +842,7 @@ def test_phantasia_world_model_true(tmp_path: Path, known_modules, monkeypatch):
     _all_bundles_exist(steps)
 
 
-def test_phantasia_world_model_false(tmp_path: Path, known_modules, monkeypatch):
+def test_world_model_world_model_false(tmp_path: Path, known_modules, monkeypatch):
     study_dir = _create_study(tmp_path, viewings=2, order=["phantasia"])
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
@@ -855,16 +855,16 @@ def test_phantasia_world_model_false(tmp_path: Path, known_modules, monkeypatch)
     assert result["outcome"] == "failed:world_model_not_captured"
     assert len(steps) == 4
 
-    phantasia_step = steps[3]
-    assert phantasia_step["line"] == "branch" and phantasia_step["step"] == 1
-    assert "phantasia" in phantasia_step["modules"]
-    assert phantasia_step["outcome"] == "failed:world_model_not_captured"
-    assert phantasia_step["world_model_captured"] is False
+    world_model_step = steps[3]
+    assert world_model_step["line"] == "branch" and world_model_step["step"] == 1
+    assert "phantasia" in world_model_step["modules"]
+    assert world_model_step["outcome"] == "failed:world_model_not_captured"
+    assert world_model_step["world_model_captured"] is False
 
     _all_bundles_exist(steps)
 
 
-def test_phantasia_manifest_missing(tmp_path: Path, known_modules, monkeypatch):
+def test_world_model_manifest_missing(tmp_path: Path, known_modules, monkeypatch):
     study_dir = _create_study(tmp_path, viewings=2, order=["phantasia"])
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
@@ -877,16 +877,16 @@ def test_phantasia_manifest_missing(tmp_path: Path, known_modules, monkeypatch):
     assert result["outcome"] == "failed:manifest_unreadable"
     assert len(steps) == 4
 
-    phantasia_step = steps[3]
-    assert phantasia_step["line"] == "branch" and phantasia_step["step"] == 1
-    assert "phantasia" in phantasia_step["modules"]
-    assert phantasia_step["outcome"] == "failed:manifest_unreadable"
-    assert phantasia_step["world_model_captured"] is False
+    world_model_step = steps[3]
+    assert world_model_step["line"] == "branch" and world_model_step["step"] == 1
+    assert "phantasia" in world_model_step["modules"]
+    assert world_model_step["outcome"] == "failed:manifest_unreadable"
+    assert world_model_step["world_model_captured"] is False
 
     _all_bundles_exist(steps)
 
 
-def test_no_phantasia_completes_without_manifest(
+def test_no_world_model_completes_without_manifest(
     tmp_path: Path, known_modules, monkeypatch
 ):
     study_dir = _create_study(tmp_path, viewings=2, order=["mnemos", "nous"])
@@ -915,11 +915,11 @@ def test_no_phantasia_completes_without_manifest(
         ("[true]", ("failed:manifest_unreadable", False)),
     ],
 )
-def test_check_phantasia_manifest(tmp_path: Path, text: str, expected):
-    from kaine.research.ignition_study.runner import _check_phantasia_manifest
+def test_check_world_model_manifest(tmp_path: Path, text: str, expected):
+    from kaine.research.ignition_study.runner import _check_world_model_manifest
 
     (tmp_path / "manifest.json").write_text(text)
-    assert _check_phantasia_manifest(str(tmp_path)) == expected
+    assert _check_world_model_manifest(str(tmp_path)) == expected
 
 
 def _birth_request_time(study_dir: Path) -> float:

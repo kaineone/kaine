@@ -15,11 +15,11 @@ import pytest
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.lifecycle.divergence import assess_divergence
-from kaine.modules.hypnos import FakeTrainer, Hypnos, VoiceAlignmentConfig
-from kaine.modules.hypnos.corpus import intent_record_paths
-from kaine.modules.hypnos.voice_alignment import DPOPairBuilder
-from kaine.modules.hypnos.voice_measures import compute_sleep_measures
 from kaine.modules.lingua.intent_log import IntentExpressionLog
+from kaine.modules.sleep import FakeTrainer, Sleep, VoiceAlignmentConfig
+from kaine.modules.sleep.corpus import intent_record_paths
+from kaine.modules.sleep.voice_alignment import DPOPairBuilder
+from kaine.modules.sleep.voice_measures import compute_sleep_measures
 from kaine.persistence.encrypted_jsonl import (
     _is_envelope,
     encode_record,
@@ -48,7 +48,7 @@ async def bus():
 
 @pytest.fixture(autouse=True)
 def _voice_alignment_opt_in(monkeypatch):
-    from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV
+    from kaine.modules.sleep.voice_alignment import OPERATOR_APPROVED_ENV
 
     monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
 
@@ -99,13 +99,13 @@ class FakeResetter:
         self.calls += 1
 
 
-def _make_hypnos(
+def _make_sleep(
     bus: AsyncBus,
     tmp_path: Path,
     *,
     intent_records: list[dict] | None = None,
     trainer=None,
-    mnemos=None,
+    episodic_memory=None,
 ):
     log_path = tmp_path / "intent.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -118,10 +118,10 @@ def _make_hypnos(
         adapter_output_dir=tmp_path / "adapters",
         enabled=True,
     )
-    return Hypnos(
+    return Sleep(
         bus,
-        mnemos=mnemos or FakeMnemos(),
-        thymos=FakeThymos(),
+        episodic_memory=episodic_memory or FakeMnemos(),
+        affect=FakeThymos(),
         sequence_resetters=[FakeResetter(), FakeResetter()],
         trainer=trainer or FakeTrainer(),
         voice_alignment_config=config,
@@ -347,7 +347,7 @@ def test_pair_builder_unreadable(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_hypnos_corpus_rewrite_scope(monkeypatch, tmp_path, bus):
+async def test_sleep_corpus_rewrite_scope(monkeypatch, tmp_path, bus):
     _enable(monkeypatch)
     corpus_dir = tmp_path / "intent_log"
     corpus_dir.mkdir(parents=True, exist_ok=True)
@@ -371,8 +371,8 @@ async def test_hypnos_corpus_rewrite_scope(monkeypatch, tmp_path, bus):
             "timestamp": time.time(),
         },
     ]
-    hypnos = _make_hypnos(bus, tmp_path, intent_records=intent_records)
-    summary = await hypnos.enter_sleep()
+    sleep = _make_sleep(bus, tmp_path, intent_records=intent_records)
+    summary = await sleep.enter_sleep()
     # The pre-existing plaintext sleep-1 file and the newly rotated log.
     assert summary["corpus"]["encrypted_rewrites"] == 2
 

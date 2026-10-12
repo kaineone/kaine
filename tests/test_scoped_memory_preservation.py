@@ -21,8 +21,8 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.modules.empatheia.agent import AgentModel
 from kaine.modules.empatheia.store import _AGENT_ID_NAMESPACE, QdrantAgentStore, _point_id
-from kaine.modules.mnemos import MnemosCore
-from kaine.modules.mnemos.storage import InMemoryStorage, QdrantStorage, StorageError
+from kaine.modules.episodic_memory import EpisodicMemoryCore
+from kaine.modules.episodic_memory.storage import InMemoryStorage, QdrantStorage, StorageError
 from kaine.text_embedding import FakeEmbedder
 
 
@@ -289,8 +289,8 @@ async def test_qdrant_two_prefixes_scoped_export_import():
     store_b = QdrantStorage(latent_dim=4, api_key="k")
     store_b._client = client
 
-    core_a = MnemosCore(embedder, store_a, collection_prefix="a_")
-    core_b = MnemosCore(embedder, store_b, collection_prefix="b_")
+    core_a = EpisodicMemoryCore(embedder, store_a, collection_prefix="a_")
+    core_b = EpisodicMemoryCore(embedder, store_b, collection_prefix="b_")
     await core_a.initialize()
     await core_b.initialize()
 
@@ -303,7 +303,7 @@ async def test_qdrant_two_prefixes_scoped_export_import():
 
     store_c = QdrantStorage(latent_dim=4, api_key="k")
     store_c._client = client
-    core_c = MnemosCore(embedder, store_c, collection_prefix="c_")
+    core_c = EpisodicMemoryCore(embedder, store_c, collection_prefix="c_")
     await core_c.initialize()
     n = await core_c.import_state(state_a)
     assert n == 1
@@ -323,15 +323,15 @@ async def test_qdrant_two_prefixes_scoped_export_import():
 @pytest.mark.asyncio
 async def test_sqlite_vec_two_prefixes_scoped_export_import(tmp_path: Path):
     pytest.importorskip("sqlite_vec")
-    from kaine.modules.mnemos.storage import SqliteVecStorage
+    from kaine.modules.episodic_memory.storage import SqliteVecStorage
 
     db_path = tmp_path / "mnemos.db"
     storage = SqliteVecStorage(latent_dim=4, db_path=str(db_path))
     await storage.initialize()
 
     embedder = FakeEmbedder(latent_dim=4)
-    core_a = MnemosCore(embedder, storage, collection_prefix="a_")
-    core_b = MnemosCore(embedder, storage, collection_prefix="b_")
+    core_a = EpisodicMemoryCore(embedder, storage, collection_prefix="a_")
+    core_b = EpisodicMemoryCore(embedder, storage, collection_prefix="b_")
     await core_a.initialize()
     await core_b.initialize()
 
@@ -342,7 +342,7 @@ async def test_sqlite_vec_two_prefixes_scoped_export_import(tmp_path: Path):
     assert "a_semantic" in state_a["persisted"]
     assert all(not k.startswith("b_") for k in state_a["persisted"])
 
-    core_c = MnemosCore(embedder, storage, collection_prefix="c_")
+    core_c = EpisodicMemoryCore(embedder, storage, collection_prefix="c_")
     await core_c.initialize()
     n = await core_c.import_state(state_a)
     assert n == 1
@@ -361,7 +361,7 @@ async def test_import_skips_foreign_collections_and_logs(caplog):
     embedder = FakeEmbedder(latent_dim=4)
     store = QdrantStorage(latent_dim=4, api_key="k")
     store._client = client
-    core = MnemosCore(embedder, store, collection_prefix="c_")
+    core = EpisodicMemoryCore(embedder, store, collection_prefix="c_")
     await core.initialize()
 
     good_vec = list(await embedder.encode("alpha"))
@@ -387,7 +387,7 @@ async def test_import_skips_foreign_collections_and_logs(caplog):
         },
     }
 
-    caplog.set_level(logging.INFO, logger="kaine.modules.mnemos.memory")
+    caplog.set_level(logging.INFO, logger="kaine.modules.episodic_memory.memory")
     n = await core.import_state(state)
     assert n == 1
 
@@ -403,7 +403,7 @@ async def test_replace_semantics_and_validation_failure():
     embedder = FakeEmbedder(latent_dim=4)
     storage = InMemoryStorage(latent_dim=4)
     await storage.initialize()
-    core = MnemosCore(embedder, storage, collection_prefix="x_")
+    core = EpisodicMemoryCore(embedder, storage, collection_prefix="x_")
     await core.initialize()
 
     await core.store("old extra point", collection="episodic")
@@ -686,7 +686,7 @@ async def test_import_absent_kind_empties_target():
     embedder = FakeEmbedder(latent_dim=4)
     storage = InMemoryStorage(latent_dim=4)
     await storage.initialize()
-    core = MnemosCore(embedder, storage, collection_prefix="x_")
+    core = EpisodicMemoryCore(embedder, storage, collection_prefix="x_")
     await core.initialize()
 
     await core.store("old semantic point", collection="semantic")
@@ -708,7 +708,7 @@ async def test_import_only_foreign_collections_raises():
     embedder = FakeEmbedder(latent_dim=4)
     storage = InMemoryStorage(latent_dim=4)
     await storage.initialize()
-    core = MnemosCore(embedder, storage, collection_prefix="c_")
+    core = EpisodicMemoryCore(embedder, storage, collection_prefix="c_")
     await core.initialize()
 
     good_vec = list(await embedder.encode("good"))
@@ -731,7 +731,7 @@ async def test_import_empty_collection_prefix_maps_kind_directly():
     embedder = FakeEmbedder(latent_dim=4)
     storage = InMemoryStorage(latent_dim=4)
     await storage.initialize()
-    core = MnemosCore(embedder, storage, collection_prefix="")
+    core = EpisodicMemoryCore(embedder, storage, collection_prefix="")
     await core.initialize()
 
     vec = list(await embedder.encode("alpha"))
@@ -757,7 +757,7 @@ async def test_import_validation_failure_leaves_short_term_and_persisted_unchang
     embedder = FakeEmbedder(latent_dim=4)
     storage = InMemoryStorage(latent_dim=4)
     await storage.initialize()
-    core = MnemosCore(embedder, storage, collection_prefix="x_")
+    core = EpisodicMemoryCore(embedder, storage, collection_prefix="x_")
     await core.initialize()
 
     await core.store("old episodic point", collection="episodic")
@@ -795,14 +795,14 @@ async def test_import_validation_failure_leaves_short_term_and_persisted_unchang
 @pytest.mark.asyncio
 async def test_sqlite_vec_import_absent_kind_empties_target(tmp_path: Path):
     pytest.importorskip("sqlite_vec")
-    from kaine.modules.mnemos.storage import SqliteVecStorage
+    from kaine.modules.episodic_memory.storage import SqliteVecStorage
 
     db_path = tmp_path / "mnemos.db"
     storage = SqliteVecStorage(latent_dim=4, db_path=str(db_path))
     await storage.initialize()
 
     embedder = FakeEmbedder(latent_dim=4)
-    core = MnemosCore(embedder, storage, collection_prefix="x_")
+    core = EpisodicMemoryCore(embedder, storage, collection_prefix="x_")
     await core.initialize()
     await core.store("old semantic point", collection="semantic")
 
@@ -819,7 +819,7 @@ async def test_sqlite_vec_import_absent_kind_empties_target(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_sqlite_vec_replace_collection_only_named_rows(tmp_path: Path):
     pytest.importorskip("sqlite_vec")
-    from kaine.modules.mnemos.storage import SqliteVecStorage
+    from kaine.modules.episodic_memory.storage import SqliteVecStorage
 
     db_path = tmp_path / "mnemos.db"
     storage = SqliteVecStorage(latent_dim=4, db_path=str(db_path))

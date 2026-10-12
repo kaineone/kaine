@@ -17,9 +17,9 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.lifecycle.decommission import capture_backup
 from kaine.lifecycle.divergence import DivergenceAssessment
-from kaine.modules.hypnos import FakeTrainer, Hypnos, Trainer, VoiceAlignmentConfig
-from kaine.modules.hypnos.corpus import intent_record_paths, rotate_intent_log
-from kaine.modules.hypnos.voice_alignment import (
+from kaine.modules.sleep import FakeTrainer, Sleep, Trainer, VoiceAlignmentConfig
+from kaine.modules.sleep.corpus import intent_record_paths, rotate_intent_log
+from kaine.modules.sleep.voice_alignment import (
     OPERATOR_APPROVED_ENV,
     DPOPairBuilder,
     read_consolidation_divergence,
@@ -93,14 +93,14 @@ class FakeResetter:
         self.calls += 1
 
 
-def _make_hypnos(
+def _make_sleep(
     bus: AsyncBus,
     tmp_path: Path,
     *,
     intent_records: list[dict] | None = None,
     trainer: Trainer | None = None,
-    mnemos=None,
-) -> Hypnos:
+    episodic_memory=None,
+) -> Sleep:
     log_path = tmp_path / "intent.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     if intent_records is not None:
@@ -112,10 +112,10 @@ def _make_hypnos(
         adapter_output_dir=tmp_path / "adapters",
         enabled=True,
     )
-    return Hypnos(
+    return Sleep(
         bus,
-        mnemos=mnemos or FakeMnemos(),
-        thymos=FakeThymos(),
+        episodic_memory=episodic_memory or FakeMnemos(),
+        affect=FakeThymos(),
         sequence_resetters=[FakeResetter(), FakeResetter()],
         trainer=trainer or FakeTrainer(),
         voice_alignment_config=config,
@@ -168,7 +168,7 @@ async def test_two_sleeps_keep_divergence_across_rotation(bus, tmp_path):
         for i in range(20)
     ]
     divergence_path = tmp_path / "consolidation_divergence.json"
-    h = _make_hypnos(bus, tmp_path, intent_records=intent_records)
+    h = _make_sleep(bus, tmp_path, intent_records=intent_records)
     h._consolidation_divergence_path = divergence_path
 
     await h._emit_consolidation_divergence()
@@ -316,22 +316,22 @@ async def test_failed_or_empty_scan_never_overwrites_the_record(bus, tmp_path, m
         {"faithful_rendering": f"f{i}", "generated_text": f"g{i}", "prompt": "p"}
         for i in range(20)
     ]
-    hypnos = _make_hypnos(bus, tmp_path, intent_records=records)
+    sleep = _make_sleep(bus, tmp_path, intent_records=records)
     record_path = tmp_path / "consolidation_divergence.json"
-    hypnos._consolidation_divergence_path = record_path
-    await hypnos.enter_sleep()
+    sleep._consolidation_divergence_path = record_path
+    await sleep.enter_sleep()
     first = read_consolidation_divergence(record_path)
     assert first["divergence_rate"] == 1.0
 
     def boom(*args, **kwargs):
         raise OSError("corpus unreadable")
 
-    monkeypatch.setattr(hypnos._builder, "build_with_counts", boom)
-    await hypnos.enter_sleep()
+    monkeypatch.setattr(sleep._builder, "build_with_counts", boom)
+    await sleep.enter_sleep()
     assert read_consolidation_divergence(record_path)["divergence_rate"] == 1.0
 
     monkeypatch.setattr(
-        hypnos._builder, "build_with_counts", lambda *a, **k: ([], 0, 0)
+        sleep._builder, "build_with_counts", lambda *a, **k: ([], 0, 0)
     )
-    await hypnos.enter_sleep()
+    await sleep.enter_sleep()
     assert read_consolidation_divergence(record_path)["divergence_rate"] == 1.0

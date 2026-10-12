@@ -4,7 +4,7 @@
 """Boundary-neutral canonical list of the episodic memory module's memory-collection kinds.
 
 The four memory collection kinds were defined in
-``kaine.modules.mnemos.memory`` and separately *mirrored* (hand-copied) in
+``kaine.modules.episodic_memory.memory`` and separately *mirrored* (hand-copied) in
 ``kaine.lifecycle.decommission`` — which must stay independent of
 ``kaine.modules``. Hosting the canonical tuple here lets both import the same
 source of truth without the lifecycle subsystem reaching into a module.
@@ -16,16 +16,16 @@ from __future__ import annotations
 import uuid
 
 __all__ = [
-    "MNEMOS_COLLECTION_KINDS",
-    "MNEMOS_STAMP_COLLECTION",
-    "MNEMOS_STORE_HEALTH_PATH",
+    "EPISODIC_MEMORY_COLLECTION_KINDS",
+    "EPISODIC_MEMORY_STAMP_COLLECTION",
+    "EPISODIC_MEMORY_STORE_HEALTH_PATH",
     "stamp_key",
     "stamp_point_id",
     "strength_key",
 ]
 
 # Canonical episodic memory-collection kinds.
-MNEMOS_COLLECTION_KINDS: tuple[str, str, str, str] = (
+EPISODIC_MEMORY_COLLECTION_KINDS: tuple[str, str, str, str] = (
     "short_term",
     "episodic",
     "semantic",
@@ -33,10 +33,10 @@ MNEMOS_COLLECTION_KINDS: tuple[str, str, str, str] = (
 )
 
 #: Shared Qdrant collection used for embedding-space stamps.
-MNEMOS_STAMP_COLLECTION: str = "kaine_meta"
+EPISODIC_MEMORY_STAMP_COLLECTION: str = "kaine_meta"
 
 #: Shared path to the episodic memory module's store health state file written by the episodic memory module and read by the dashboard.
-MNEMOS_STORE_HEALTH_PATH: str = "state/mnemos/store_health.json"
+EPISODIC_MEMORY_STORE_HEALTH_PATH: str = "state/mnemos/store_health.json"
 
 #: Fixed namespace for deriving deterministic Qdrant point ids for
 #: ``kaine_meta`` embedding-space stamps.

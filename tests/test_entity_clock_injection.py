@@ -19,10 +19,10 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
+from kaine.modules.affect.state import DimensionalState
 from kaine.modules.interoception.module import Interoception
 from kaine.modules.sequence.featurizer import SnapshotFeaturizer
 from kaine.modules.sequence.module import Sequence
-from kaine.modules.thymos.state import DimensionalState
 from kaine.modules.vox import FakePlayer, FakeTTSClient, Vox
 
 

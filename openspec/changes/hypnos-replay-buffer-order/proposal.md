@@ -11,10 +11,10 @@ this as a known gap. The episodic memory module is held, so the base-thesis form
 
 ## What Changes
 
-- `MnemosCore.consolidate_now()` keeps the batch it moved in this pass, each
+- `EpisodicMemoryCore.consolidate_now()` keeps the batch it moved in this pass, each
   entry with the episodic point id it was stored under. Each pass replaces the
   previous batch, so a later sleep never replays an earlier sleep's traces.
-- `Mnemos.replay_now()` adds that batch to its candidates, with the episodic
+- `EpisodicMemory.replay_now()` adds that batch to its candidates, with the episodic
   point id as the replayed `memory_id`. Selection, the window guard and
   redaction are unchanged.
 - The episodic memory module drops the batch when it sees `hypnos.sleep.completed`, so the batch
@@ -35,8 +35,8 @@ this as a known gap. The episodic memory module is held, so the base-thesis form
 
 ## Impact
 
-- `kaine/modules/mnemos/memory.py`, `kaine/modules/mnemos/module.py`,
-  `kaine/modules/hypnos/phases.py` (docstrings), tests, and the episodic memory module and
+- `kaine/modules/episodic_memory/memory.py`, `kaine/modules/episodic_memory/module.py`,
+  `kaine/modules/sleep/phases.py` (docstrings), tests, and the episodic memory module and
   sleep pages of the book.
 - Behaviour: only with the episodic memory module enabled. Phase 2 now publishes up to
   `selection_top_k` `mnemos.replay` events per sleep.

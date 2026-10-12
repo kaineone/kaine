@@ -86,7 +86,7 @@ _SYNEIDESIS_ALLOWED_KEYS: set[str] = {
 # only when the operator selects "static" for a factor whose default is REAL —
 # i.e. a deliberate downgrade — so flipping the goal default to "drive_relevance"
 # later would automatically make goal="static" a warned downgrade.
-_SALIENCE_THYMOS_FACTOR_DEFAULT = "state_modulator"
+_SALIENCE_AFFECT_FACTOR_DEFAULT = "state_modulator"
 _SALIENCE_GOAL_FACTOR_DEFAULT = "static"
 
 
@@ -111,7 +111,7 @@ def make_salience_factors(
     :class:`RuleBasedSalience` warns on a genuine downgrade only (never on the
     staged goal default). Validates the section's keys and the selected values.
     """
-    from kaine.modules.thymos.modulator import StateModulator
+    from kaine.modules.affect.modulator import StateModulator
     from kaine.workspace import (
         DriveRelevanceGoalScorer,
         StaticGoalScorer,
@@ -121,10 +121,10 @@ def make_salience_factors(
     section = dict(kaine_config.get("syneidesis") or {})
     _require_keys(section, _SYNEIDESIS_ALLOWED_KEYS)
 
-    thymos_factor = str(section.get("salience_thymos_factor", _SALIENCE_THYMOS_FACTOR_DEFAULT))
+    affect_factor = str(section.get("salience_thymos_factor", _SALIENCE_AFFECT_FACTOR_DEFAULT))
     goal_factor = str(section.get("salience_goal_factor", _SALIENCE_GOAL_FACTOR_DEFAULT))
 
-    if thymos_factor == "state_modulator":
+    if affect_factor == "state_modulator":
         arousal_contrast_gain = float(section.get("arousal_contrast_gain", 8.0))
         if arousal_contrast_gain < 0.0:
             raise ConfigurationError(
@@ -133,17 +133,17 @@ def make_salience_factors(
         baseline_arousal = float(
             (kaine_config.get("thymos") or {}).get("baseline_arousal", 0.3)
         )
-        thymos_modulator = StateModulator(
+        affect_modulator = StateModulator(
             affect_provider.dimensional_state,
             contrast_gain_max=arousal_contrast_gain,
             baseline_arousal=baseline_arousal,
         )
-    elif thymos_factor == "static":
-        thymos_modulator = StaticThymosModulator()
+    elif affect_factor == "static":
+        affect_modulator = StaticThymosModulator()
     else:
         raise ConfigurationError(
             "unknown [syneidesis].salience_thymos_factor "
-            f"{thymos_factor!r} (expected 'state_modulator' or 'static')"
+            f"{affect_factor!r} (expected 'state_modulator' or 'static')"
         )
 
     if goal_factor == "drive_relevance":
@@ -164,7 +164,7 @@ def make_salience_factors(
 
     # A factor is a deliberate downgrade when it is static but ships real.
     downgraded_factors: list[str] = []
-    if thymos_factor == "static" and _SALIENCE_THYMOS_FACTOR_DEFAULT != "static":
+    if affect_factor == "static" and _SALIENCE_AFFECT_FACTOR_DEFAULT != "static":
         downgraded_factors.append("thymos_modulation (set to static)")
     if goal_factor == "static" and _SALIENCE_GOAL_FACTOR_DEFAULT != "static":
         downgraded_factors.append("goal_relevance (set to static)")
@@ -178,7 +178,7 @@ def make_salience_factors(
             "the drive-relevance scorer once validated)"
         )
 
-    return thymos_modulator, goal_scorer, downgraded_factors
+    return affect_modulator, goal_scorer, downgraded_factors
 
 def _wire_oscillators(registry: ModuleRegistry, kaine_config: dict[str, Any]) -> None:
     """Attach a live `ModuleOscillator` to every registered module when the
@@ -281,8 +281,8 @@ def _wire_lingua_organ_adapter(
     if "lingua" not in registry or "hypnos" not in registry:
         return
 
-    hypnos_cfg = kaine_config.get("hypnos", {})
-    voice_cfg = hypnos_cfg.get("voice_alignment", {}) if hypnos_cfg else {}
+    sleep_cfg = kaine_config.get("hypnos", {})
+    voice_cfg = sleep_cfg.get("voice_alignment", {}) if sleep_cfg else {}
     if not voice_cfg.get("enabled"):
         return
 
@@ -307,7 +307,7 @@ def _wire_lingua_organ_adapter(
     )
     api_key = lingua_section_api_key(lingua_cfg)
 
-    from kaine.modules.hypnos.organ_adapter import OrganAdapterResolver, organ_root_url
+    from kaine.modules.sleep.organ_adapter import OrganAdapterResolver, organ_root_url
 
     resolver = OrganAdapterResolver(
         adapter_output_dir=adapter_output_dir,
@@ -339,7 +339,7 @@ def _wire_eidolon_capabilities(registry: ModuleRegistry) -> None:
     log.info("wired eidolon capability whitelist from praxis (%d effectors)", len(effectors))
 
 
-def _wire_thymos_drive_relevance(registry: ModuleRegistry) -> None:
+def _wire_affect_drive_relevance(registry: ModuleRegistry) -> None:
     """Give the affect module the drive-to-source table its goal-significance check scores
     against: the same table the salience goal factor builds from each registered
     module's ``relieves_drives`` declaration, with the dominant-drive rule handed
@@ -347,8 +347,8 @@ def _wire_thymos_drive_relevance(registry: ModuleRegistry) -> None:
     restarted affect module, or a restarted module that changes the table, is re-wired."""
     if "thymos" not in registry:
         return
-    thymos = registry.get("thymos")
-    thymos.set_drive_relevance(drive_sources_for(registry), dominant_drive)
+    affect = registry.get("thymos")
+    affect.set_drive_relevance(drive_sources_for(registry), dominant_drive)
     log.info("wired thymos goal significance to the drive-to-source table")
 
 

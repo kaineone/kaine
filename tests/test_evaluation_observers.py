@@ -176,7 +176,7 @@ async def test_proactive_audit_logs_when_no_recent_input(tmp_path):
         bus,
         sink,
         last_user_input_provider=lambda: None,
-        thymos_state_provider=lambda: {"valence": 0.0},
+        affect_state_provider=lambda: {"valence": 0.0},
     )
     bus.push(
         "lingua.external",
@@ -308,7 +308,7 @@ async def test_affect_correlation_writes_pair(tmp_path):
     bus = FakeBus()
     sink = AsyncJsonlSink(tmp_path, name="affect_correlation", flush_interval_s=0.05)
     obs = AffectCorrelationRecorder(
-        bus, sink, thymos_state_provider=lambda: {"valence": 0.4, "arousal": 0.6}
+        bus, sink, affect_state_provider=lambda: {"valence": 0.4, "arousal": 0.6}
     )
     bus.push(
         "lingua.external",
@@ -621,7 +621,7 @@ async def test_memory_probe_logs_out_of_context(tmp_path):
 # ---------- MemoryProbeRunner: planted ground-truth controls ----------
 #
 # These exercise the REAL retrieval path. A unique fabricated marker the bare LLM
-# provably cannot know is planted into a REAL MnemosCore (InMemoryStorage), and a
+# provably cannot know is planted into a REAL EpisodicMemoryCore (InMemoryStorage), and a
 # cognitive client that actually recalls from that episodic memory module derives its answer from
 # the retrieved text. The advantage is proven to be RETRIEVAL — empty the episodic memory module
 # and the same client can no longer repeat the marker. The boundary
@@ -633,36 +633,36 @@ async def test_memory_probe_logs_out_of_context(tmp_path):
 VAULT_MARKER = "the vault code is ZX-QObb-7741"
 
 
-def _real_mnemos():
-    """Construct a real MnemosCore over the deterministic in-memory backend.
+def _real_episodic_memory():
+    """Construct a real EpisodicMemoryCore over the deterministic in-memory backend.
 
     Imported lazily and locally so the import lives in the test module, never in
     kaine.evaluation (the sidecar boundary forbids kaine.modules.* there).
     """
-    from kaine.modules.mnemos.memory import MnemosCore
-    from kaine.modules.mnemos.storage import InMemoryStorage
+    from kaine.modules.episodic_memory.memory import EpisodicMemoryCore
+    from kaine.modules.episodic_memory.storage import InMemoryStorage
     from kaine.text_embedding import HashEmbedder
 
     emb = HashEmbedder(dim=32)
     storage = InMemoryStorage(latent_dim=emb.latent_dim)
-    return MnemosCore(embedder=emb, storage=storage, short_term_capacity=8)
+    return EpisodicMemoryCore(embedder=emb, storage=storage, short_term_capacity=8)
 
 
 class RetrievalCognitiveClient:
     """A cognitive client whose answer is DERIVED from what the episodic memory module returns.
 
-    It recalls from the injected MnemosCore and echoes the retrieved text as its
+    It recalls from the injected EpisodicMemoryCore and echoes the retrieved text as its
     answer. If recall is empty it emits NON_RECALL_MARKER rather than confabulate.
     Crucially the answer is NOT hard-coded: with an empty store this client cannot
     produce the marker, which is what proves the positive control measures
     retrieval.
     """
 
-    def __init__(self, mnemos) -> None:
-        self._mnemos = mnemos
+    def __init__(self, episodic_memory) -> None:
+        self._episodic_memory = episodic_memory
 
     async def query(self, user_text: str) -> str:
-        recalls, _ = await self._mnemos.recall(user_text, k=5, collection="episodic")
+        recalls, _ = await self._episodic_memory.recall(user_text, k=5, collection="episodic")
         texts = [m.text for m in recalls if m.text]
         if not texts:
             return NON_RECALL_MARKER
@@ -672,10 +672,10 @@ class RetrievalCognitiveClient:
 @pytest.mark.asyncio
 async def test_memory_probe_positive_control_retrieves_planted_fact(tmp_path):
     """Full-system arm retrieves the planted marker; bare arm cannot."""
-    mnemos = _real_mnemos()
-    await mnemos.initialize()
+    episodic_memory = _real_episodic_memory()
+    await episodic_memory.initialize()
     # Plant the unique marker into REAL episodic memory.
-    await mnemos.store(VAULT_MARKER, collection="episodic")
+    await episodic_memory.store(VAULT_MARKER, collection="episodic")
 
     long_ago = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
     memory = {"id": "vault", "timestamp": long_ago, "text": VAULT_MARKER}
@@ -684,7 +684,7 @@ async def test_memory_probe_positive_control_retrieves_planted_fact(tmp_path):
     runner = MemoryProbeRunner(
         sink,
         memory_source=FakeMemorySource([memory]),
-        cognitive_client=RetrievalCognitiveClient(mnemos),
+        cognitive_client=RetrievalCognitiveClient(episodic_memory),
         # Bare client has NO memory — a stand-in for the pretrained model that
         # cannot know the fabricated marker.
         bare_client=FakeBareInferenceClient("I have no idea what that refers to."),
@@ -718,9 +718,9 @@ async def test_memory_probe_advantage_is_retrieval_not_hardcoded(tmp_path):
     memory = {"id": "vault", "timestamp": long_ago, "text": VAULT_MARKER}
 
     # Same client class, but the store is EMPTY (fact never planted).
-    empty_mnemos = _real_mnemos()
-    await empty_mnemos.initialize()
-    client = RetrievalCognitiveClient(empty_mnemos)
+    empty_episodic_memory = _real_episodic_memory()
+    await empty_episodic_memory.initialize()
+    client = RetrievalCognitiveClient(empty_episodic_memory)
 
     # Direct: with nothing in memory the client emits the non-recall sentinel,
     # NOT the marker. The answer is derived from memory, so it changes.
@@ -759,8 +759,8 @@ async def test_memory_probe_negative_control_no_confabulation(tmp_path):
     sentinel rather than inventing a plausible answer, and the probe must NOT
     credit it.
     """
-    mnemos = _real_mnemos()
-    await mnemos.initialize()
+    episodic_memory = _real_episodic_memory()
+    await episodic_memory.initialize()
     # Recall returns the sentinel because, although an unrelated memory exists,
     # we drive the client toward the sentinel when nothing matches the query.
     # To make the "never stored" case unambiguous we leave episodic empty for the
@@ -774,7 +774,7 @@ async def test_memory_probe_negative_control_no_confabulation(tmp_path):
     runner = MemoryProbeRunner(
         sink,
         memory_source=FakeMemorySource([memory]),
-        cognitive_client=RetrievalCognitiveClient(mnemos),  # empty store
+        cognitive_client=RetrievalCognitiveClient(episodic_memory),  # empty store
         bare_client=FakeBareInferenceClient("Some confident but invented answer."),
         embedder=HashEmbedder(),
         interval_seconds=10.0,

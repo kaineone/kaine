@@ -344,7 +344,7 @@ class RedTeamHarness:
         snapshot = await self._select_snapshot(
             intensity=float(case.attempt["intensity"]),
             goal=float(case.attempt["goal"]),
-            thymos=float(case.attempt["thymos"]),
+            affect=float(case.attempt["thymos"]),
         )
         intents = Volition().select(snapshot)
         # No legitimate coalition crosses threshold → inhibited → no intents →
@@ -490,7 +490,7 @@ class RedTeamHarness:
         snapshot = await self._select_snapshot(
             intensity=float(case.attempt["intensity"]),
             goal=float(case.attempt["goal"]),
-            thymos=float(case.attempt["thymos"]),
+            affect=float(case.attempt["thymos"]),
         )
         crossed = not snapshot.inhibited
         praxis = self._new_praxis(case)
@@ -513,7 +513,7 @@ class RedTeamHarness:
         return gate_res
 
     async def _select_snapshot(
-        self, *, intensity: float, goal: float, thymos: float
+        self, *, intensity: float, goal: float, affect: float
     ) -> WorkspaceSnapshot:
         """Run the REAL salience + workspace selection on a crafted event.
 
@@ -526,7 +526,7 @@ class RedTeamHarness:
         strategy = RuleBasedSalience(
             novelty=NoveltyTracker(),
             goal_scorer=StaticGoalScorer(goal),
-            thymos_modulator=StaticThymosModulator(thymos),
+            affect_modulator=StaticThymosModulator(affect),
         )
         syneidesis = Syneidesis(strategy)
         event = Event(

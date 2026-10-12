@@ -10,11 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from kaine.modules.hypnos.subprocess_trainer import (
+from kaine.modules.sleep.subprocess_trainer import (
     SubprocessTrainerError,
     SubprocessVoiceTrainer,
 )
-from kaine.modules.hypnos.voice_alignment import DPOPair, VoiceAlignmentConfig
+from kaine.modules.sleep.voice_alignment import DPOPair, VoiceAlignmentConfig
 
 
 def _voice_config(tmp_path: Path, **overrides) -> VoiceAlignmentConfig:
@@ -313,7 +313,7 @@ async def test_in_process_scrubs_job_inputs_after_run(tmp_path: Path, trainer_fa
 def _load_external_script():
     import importlib.util
 
-    from kaine.modules.hypnos.subprocess_trainer import EXTERNAL_ENTRY_SCRIPT
+    from kaine.modules.sleep.subprocess_trainer import EXTERNAL_ENTRY_SCRIPT
 
     spec = importlib.util.spec_from_file_location(
         "hypnos_external_train_script", EXTERNAL_ENTRY_SCRIPT

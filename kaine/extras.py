@@ -98,11 +98,11 @@ def _vox_sherpa(config: dict) -> bool:
     return backend == "sherpa_onnx"
 
 
-def _mnemos_qdrant(config: dict) -> bool:
+def _episodic_memory_qdrant(config: dict) -> bool:
     return (config.get("mnemos") or {}).get("backend", "qdrant") == "qdrant"
 
 
-def _mnemos_sqlite_vec(config: dict) -> bool:
+def _episodic_memory_sqlite_vec(config: dict) -> bool:
     return (config.get("mnemos") or {}).get("backend", "qdrant") in {
         "sqlite_vec",
         "sqlite-vec",
@@ -113,7 +113,7 @@ def _empatheia_qdrant(config: dict) -> bool:
     return (config.get("empatheia") or {}).get("backend", "qdrant") == "qdrant"
 
 
-def _hypnos_embedder_enabled(config: dict) -> bool:
+def _sleep_embedder_enabled(config: dict) -> bool:
     return (config.get("hypnos") or {}).get("consolidation_embedder_enabled", True)
 
 
@@ -122,11 +122,11 @@ def _embedding_torch_backend(config: dict) -> bool:
     return resolve_embedding_config(config)["backend"] == "sentence_transformers"
 
 
-def _phantasia_jax_engine(config: dict) -> bool:
-    phantasia = config.get("phantasia") or {}
+def _world_model_jax_engine(config: dict) -> bool:
+    world_model = config.get("phantasia") or {}
     return (
-        phantasia.get("backend", "dreamerv3") == "dreamerv3"
-        and phantasia.get("engine", "jax") == "jax"
+        world_model.get("backend", "dreamerv3") == "dreamerv3"
+        and world_model.get("engine", "jax") == "jax"
     )
 
 
@@ -158,8 +158,8 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
     ),
     "mnemos": (
         Requirement("sentence_transformers", "memory", predicate=_embedding_torch_backend),
-        Requirement("qdrant_client", "memory", predicate=_mnemos_qdrant),
-        Requirement("sqlite_vec", "memory-edge", predicate=_mnemos_sqlite_vec),
+        Requirement("qdrant_client", "memory", predicate=_episodic_memory_qdrant),
+        Requirement("sqlite_vec", "memory-edge", predicate=_episodic_memory_sqlite_vec),
     ),
     "empatheia": (
         Requirement("qdrant_client", "memory", predicate=_empatheia_qdrant),
@@ -174,7 +174,7 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
             "sentence_transformers",
             "memory",
             severity="warning",
-            predicate=lambda c: _hypnos_embedder_enabled(c) and _embedding_torch_backend(c),
+            predicate=lambda c: _sleep_embedder_enabled(c) and _embedding_torch_backend(c),
         ),
     ),
     "topos": (
@@ -197,7 +197,7 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
         Requirement("jax", "reasoning", predicate=_nous_pymdp_backend),
     ),
     "phantasia": (
-        Requirement("jax", "worldmodel", predicate=_phantasia_jax_engine),
+        Requirement("jax", "worldmodel", predicate=_world_model_jax_engine),
     ),
     "nexus": (
         Requirement("fastapi", "nexus"),

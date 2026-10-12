@@ -218,8 +218,8 @@ def implied_extras(modules: dict[str, bool], shipped: dict[str, Any]) -> list[st
     audition_cfg = shipped.get("audition") or {}
     vision_cfg = shipped.get("topos") or {}
     oscillator_cfg = shipped.get("oscillator") or {}
-    hypnos_va = (shipped.get("hypnos") or {}).get("voice_alignment") or {}
-    phantasia_cfg = shipped.get("phantasia") or {}
+    sleep_va = (shipped.get("hypnos") or {}).get("voice_alignment") or {}
+    world_model_cfg = shipped.get("phantasia") or {}
     feed_mode = str((shipped.get("perception_feed") or {}).get("mode") or "off")
 
     audition_backend = str(audition_cfg.get("backend", "speaches")).strip().lower()
@@ -227,8 +227,8 @@ def implied_extras(modules: dict[str, bool], shipped: dict[str, Any]) -> list[st
     vox_cfg = shipped.get("vox") or {}
     vox_backend = str(vox_cfg.get("backend", "chatterbox")).strip().lower()
     nous_backend = str((shipped.get("nous") or {}).get("backend", "pymdp")).strip().lower()
-    phantasia_backend = str(phantasia_cfg.get("backend", "dreamerv3")).strip().lower()
-    phantasia_engine = str(phantasia_cfg.get("engine", "jax")).strip().lower()
+    world_model_backend = str(world_model_cfg.get("backend", "dreamerv3")).strip().lower()
+    world_model_engine = str(world_model_cfg.get("engine", "jax")).strip().lower()
 
     if modules.get("nous") and nous_backend == "pymdp":
         extras.append("reasoning")
@@ -238,12 +238,12 @@ def implied_extras(modules: dict[str, bool], shipped: dict[str, Any]) -> list[st
         extras.append("vision")
     if bool(oscillator_cfg.get("enabled")):
         extras.append("oscillator")
-    if modules.get("hypnos") and bool(hypnos_va.get("enabled")):
+    if modules.get("hypnos") and bool(sleep_va.get("enabled")):
         extras.append("training")
     if (
         modules.get("phantasia")
-        and phantasia_backend == "dreamerv3"
-        and phantasia_engine == "jax"
+        and world_model_backend == "dreamerv3"
+        and world_model_engine == "jax"
     ):
         extras.append("worldmodel")
     if (

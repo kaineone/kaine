@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 
 LINGUA_EXTERNAL_STREAM = "lingua.external"
-HYPNOS_STREAM = "hypnos.out"
+SLEEP_STREAM = "hypnos.out"
 
 
 def _templates() -> Jinja2Templates:
@@ -42,7 +42,7 @@ class ConversationState:
         if isinstance(name, str) and name.strip():
             self.entity_name = name.strip()
 
-    def update_from_hypnos(self, event_type: str) -> None:
+    def update_from_sleep(self, event_type: str) -> None:
         if event_type == "hypnos.sleep.started":
             self.sleeping = True
         elif event_type == "hypnos.sleep.completed":

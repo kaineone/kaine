@@ -23,7 +23,7 @@ What the literature establishes (citations checked against the sources on 2026-1
 
 ## Impact
 
-- **Code:** new `kaine/workspace/precision.py`; `kaine/workspace/salience.py`; `kaine/modules/thymos/modulator.py`; `kaine/boot/wiring.py`; `kaine/cycle/__main__.py`; `config/kaine.toml`.
+- **Code:** new `kaine/workspace/precision.py`; `kaine/workspace/salience.py`; `kaine/modules/affect/modulator.py`; `kaine/boot/wiring.py`; `kaine/cycle/__main__.py`; `config/kaine.toml`.
 - **Behaviour:** which module wins now depends on how informative its surprise has been; above baseline arousal alerts are amplified and baseline events suppressed, so actionable broadcasts and speech become more likely under arousal. The confidence threshold and report bars are unchanged and stay provisional.
 - **Docs:** `docs/08-cognitive-cycle/global-workspace.md`, `docs/09-modules/affect.md`, `docs/appendix-a-configuration/core.md`.
 - **Paper:** §3.2, §3.5 (the affect module), Appendix A.1, Table A1.

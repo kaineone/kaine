@@ -24,7 +24,7 @@ below the floor when $h_i<h_{\min}$; no such trace SHALL exist while the entity 
   in the same wake
 
 ### Requirement: Sleep downscales strengths and protects replayed traces
-`MnemosCore.downscale(protect)` SHALL count $N_{\rm new}$, the persisted traces
+`EpisodicMemoryCore.downscale(protect)` SHALL count $N_{\rm new}$, the persisted traces
 with `born_sleep` equal to the sleep count, and SHALL multiply the strength of
 every persisted trace outside `protect` by
 $\varrho^{N_{\rm new}/N_{\rm day}}$, where $\varrho$ is
@@ -128,7 +128,7 @@ and a non-finite sum SHALL be a storage error.
 - **WHEN** an import fails after it began replacing collections
 - **THEN** every later sleep is blocked and counted in the sleep summary and
   on the dashboard health board until a later import succeeds or the operator
-  runs `python -m kaine.lifecycle.mnemos_recover --confirm-keep-current-store`
+  runs `python -m kaine.lifecycle.episodic_memory_recover --confirm-keep-current-store`
 
 #### Scenario: Disk growth stays bounded while blocked
 - **WHEN** an import is pending and the stores exceed twice the budget

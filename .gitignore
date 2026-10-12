@@ -74,9 +74,9 @@ data/**
 !eval_probes/abliteration_probes.jsonl
 # Default capability/welfare probe battery MUST ship in the repo: the
 # voice-alignment capability eval and the probe battery load it at
-# kaine/modules/hypnos/eval_probes/default.jsonl (a fresh clone would otherwise
+# kaine/modules/sleep/eval_probes/default.jsonl (a fresh clone would otherwise
 # have no probe set). Exempt it from the *.jsonl rule so it is tracked.
-!kaine/modules/hypnos/eval_probes/default.jsonl
+!kaine/modules/sleep/eval_probes/default.jsonl
 # Abliteration-lens research inputs are checked-in content (the broad *.jsonl
 # rule above would otherwise swallow them).
 !data/abliteration_lens/*.jsonl

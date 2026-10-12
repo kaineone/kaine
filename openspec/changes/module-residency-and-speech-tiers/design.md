@@ -30,7 +30,7 @@ Existing code the design reuses rather than rebuilds:
 | The surfaced-reason channel | `kaine/backend_state.py` (`record_backend_failure`) and the dashboard health block that shows it |
 | Lazy engine load | the sherpa clients' idempotent `warm_up()` |
 | Consent-gated model acquisition | `kaine/setup/speech_models.py` (`MANIFEST`, `describe()`, `fetch`) and `kaine/setup/provision.py` |
-| Stopping and starting an external model server | `OrganServerController` in `kaine/modules/hypnos/organ_window.py` and `kaine/setup/model_server.py` (`cmd_start`, `cmd_stop`, `health_check`) |
+| Stopping and starting an external model server | `OrganServerController` in `kaine/modules/sleep/organ_window.py` and `kaine/setup/model_server.py` (`cmd_start`, `cmd_stop`, `health_check`) |
 | Consumers that defer while the organ is absent | `kaine/organ_window_state.py` and the `organ_resting` path in `kaine/modules/lingua/client.py` |
 | Accounting what an LLM server holds | `GET /v1/models`, as `kaine/cycle/preflight.py` already does |
 

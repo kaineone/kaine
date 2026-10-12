@@ -98,7 +98,7 @@ Because the runner uses an echo client and no live language organ, it shows the 
 
 ### Memory coherence runner
 
-The runner measures retrieval advantage. A fixed battery of unique fabricated facts is planted into a real in-memory `MnemosCore` (`FakeEmbedder` with `InMemoryStorage`). A full-system arm, whose answer comes from what the episodic memory module returns, is scored against a bare arm with no memory using the production `score_async`.
+The runner measures retrieval advantage. A fixed battery of unique fabricated facts is planted into a real in-memory `EpisodicMemoryCore` (`FakeEmbedder` with `InMemoryStorage`). A full-system arm, whose answer comes from what the episodic memory module returns, is scored against a bare arm with no memory using the production `score_async`.
 
 The verdict is WIN only when all of these hold:
 

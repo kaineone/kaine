@@ -34,7 +34,7 @@ async def test_phase_1_end_to_end_delivery():
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
-            thymos_modulator=StaticThymosModulator(),
+            affect_modulator=StaticThymosModulator(),
         ),
         top_k=5,
         publication_threshold=0.0,
@@ -96,7 +96,7 @@ async def test_phase_1_end_to_end_with_multiple_modules():
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=8),
             goal_scorer=StaticGoalScorer(),
-            thymos_modulator=StaticThymosModulator(),
+            affect_modulator=StaticThymosModulator(),
         ),
         top_k=5,
         publication_threshold=0.0,

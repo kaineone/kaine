@@ -89,9 +89,9 @@ event's source/type/payload string, weighted by goal priority.
 - **THEN** the returned relevance does not include any contribution
   from the completed goal
 
-### Requirement: ThymosModulator exposes salience multiplier to Workspace
+### Requirement: AffectModulator exposes salience multiplier to Workspace
 The affect module SHALL expose an instance implementing the workspace's existing
-`ThymosModulator` protocol (`async modulate(event) -> float in
+`AffectModulator` protocol (`async modulate(event) -> float in
 [0, 1]`). The returned multiplier SHALL be a function of the current
 dimensional state — at least, higher arousal SHALL produce a strictly
 larger multiplier than lower arousal for the same event.

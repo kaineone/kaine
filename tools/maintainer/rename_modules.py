@@ -1279,6 +1279,35 @@ def _enclosing_string_content(
     return None
 
 
+def _name_token_at(tokens: list[dict], offset: int) -> str | None:
+    """The NAME token string that contains ``offset``, or None."""
+    for tok in tokens:
+        if (
+            tok.get("type") == tokenize.NAME
+            and tok.get("start", 0) <= offset < tok.get("end", 0)
+        ):
+            return tok.get("string")
+    return None
+
+
+def _statement_uses_file(tokens: list[dict], start: int) -> bool:
+    """Return True if the logical statement uses ``__file__``."""
+    idx = None
+    for i, tok in enumerate(tokens):
+        if tok.get("start", 0) <= start < tok.get("end", 0):
+            idx = i
+            break
+    if idx is None:
+        return False
+    for i in range(idx, -1, -1):
+        tok = tokens[i]
+        if tok.get("type") == tokenize.NAME and tok.get("string") == "__file__":
+            return True
+        if tok.get("type") == tokenize.NEWLINE:
+            break
+    return False
+
+
 def _assign_scope(
     rel_path: str,
     ctx: str | None,
@@ -1296,6 +1325,9 @@ def _assign_scope(
     """Assign a scope to a candidate match using the rules from the spec."""
     lower_path = rel_path.lower().replace("\\", "/")
 
+    if re.fullmatch(r"[\w./-]*\.(?:html|js|css|jinja|j2)", T):
+        return "identifiers"
+
     if ctx in {"py_string", "py_text", "toml_string", "toml_text"}:
         full_content = _enclosing_string_content(text, start, ctx, tokens)
         if full_content is not None:
@@ -1310,6 +1342,8 @@ def _assign_scope(
                 top_dirs = getattr(table, "REPO_TOP_DIRS", ())
                 if parts and parts[0] in top_dirs:
                     return _path_move_scope("/".join(parts))
+                if _statement_uses_file(tokens, start):
+                    return "identifiers"
                 return "persisted"
         if ("/" in T) or any(
             T.endswith(ext)
@@ -1352,6 +1386,10 @@ def _assign_scope(
 
     if ctx == "py_text" and _is_dotted_python_path(T):
         return "identifiers"
+    if ctx == "py_text" and any(
+        T.startswith(d + "/") for d in getattr(table, "REPO_TOP_DIRS", ())
+    ):
+        return _path_move_scope(T)
     if ctx in {"py_text", "toml_text"}:
         return "operator"
 
@@ -1369,6 +1407,10 @@ def _assign_scope(
     if T.startswith("docs/"):
         return "prose"
 
+    if ctx == "py_name" and _name_token_at(tokens, start) in getattr(
+        table, "PERSISTED_EXACT", {}
+    ):
+        return "persisted"
     if ctx == "py_name":
         return "identifiers"
     for prefix in ("kaine.", "tests."):

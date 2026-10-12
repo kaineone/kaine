@@ -15,6 +15,7 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.modules.affect import Affect
 from kaine.modules.audition import (
     CATEGORIES,
     Audition,
@@ -24,7 +25,6 @@ from kaine.modules.audition import (
 )
 from kaine.modules.audition.acoustic import FakeAcousticEncoder
 from kaine.modules.intensity import graded_intensity
-from kaine.modules.thymos import Thymos
 
 
 def _tone(freq: float, seconds: float = 0.2, amp: float = 0.3, sr: int = 16000) -> bytes:
@@ -765,7 +765,7 @@ async def test_acoustic_report_carries_the_paired_evaluations(bus: AsyncBus) -> 
         )
         await audition.process_audio(_tone(7000), sample_rate=16000)
 
-        thymos_entry = (
+        affect_entry = (
             "2-0",
             Event(
                 source="thymos",
@@ -778,9 +778,9 @@ async def test_acoustic_report_carries_the_paired_evaluations(bus: AsyncBus) -> 
         await audition.on_workspace(
             WorkspaceSnapshot(
                 tick_index=2,
-                selected_events=[thymos_entry],
+                selected_events=[affect_entry],
                 inhibited=False,
-                salience_scores={thymos_entry[0]: 0.75},
+                salience_scores={affect_entry[0]: 0.75},
                 metadata={"access_threshold": 0.35},
             )
         )
@@ -1091,7 +1091,7 @@ async def test_failed_classification_is_not_classified(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_categorical_tone_payload_and_thymos_novelty_unchanged(bus: AsyncBus):
+async def test_categorical_tone_payload_and_affect_novelty_unchanged(bus: AsyncBus):
     audition = Audition(
         bus,
         stt_client=FakeSTTClient(),
@@ -1127,7 +1127,7 @@ async def test_categorical_tone_payload_and_thymos_novelty_unchanged(bus: AsyncB
             salience_scores={entry_id: 0.9},
             metadata={"access_threshold": 0.35},
         )
-        assert Thymos(bus)._score_snapshot(snapshot).novelty == 0.0
+        assert Affect(bus)._score_snapshot(snapshot).novelty == 0.0
 
         leaked = dict(event.payload)
         leaked["normalised_error"] = 3.0
@@ -1139,7 +1139,7 @@ async def test_categorical_tone_payload_and_thymos_novelty_unchanged(bus: AsyncB
             salience_scores={entry_id: 0.9},
             metadata={"access_threshold": 0.35},
         )
-        assert Thymos(bus)._score_snapshot(
+        assert Affect(bus)._score_snapshot(
             leaked_snapshot
         ).novelty == pytest.approx(1.0)
     finally:

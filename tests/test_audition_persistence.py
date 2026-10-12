@@ -229,9 +229,9 @@ async def test_sleep_suspends_both_forward_models(bus):
                 timestamp=datetime.now(timezone.utc),
             )
         )
-        while not audition._in_hypnos and time.monotonic() - start < 2:
+        while not audition._in_sleep and time.monotonic() - start < 2:
             await asyncio.sleep(0.05)
-        assert audition._in_hypnos
+        assert audition._in_sleep
         assert audition._forward_model.suspended
         assert audition._acoustic_forward_model.suspended
 
@@ -250,9 +250,9 @@ async def test_sleep_suspends_both_forward_models(bus):
             )
         )
         start = time.monotonic()
-        while audition._in_hypnos and time.monotonic() - start < 2:
+        while audition._in_sleep and time.monotonic() - start < 2:
             await asyncio.sleep(0.05)
-        assert not audition._in_hypnos
+        assert not audition._in_sleep
         assert not audition._forward_model.suspended
         assert not audition._acoustic_forward_model.suspended
     finally:

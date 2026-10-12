@@ -30,8 +30,8 @@ from kaine.evaluation.sink import AsyncJsonlSink
 log = logging.getLogger(__name__)
 
 _REDACTED_DROP = frozenset({"text"})
-_MNEMOS_STREAM = "mnemos.out"
-_PHANTASIA_STREAM = "phantasia.out"
+_EPISODIC_MEMORY_STREAM = "mnemos.out"
+_WORLD_MODEL_STREAM = "phantasia.out"
 
 
 class _SingleStreamReplayObserver(StreamSubscriberObserver):
@@ -89,27 +89,27 @@ class ReplayObserver:
         *,
         redact_content: bool = True,
     ) -> None:
-        self._mnemos = _SingleStreamReplayObserver(
+        self._episodic_memory = _SingleStreamReplayObserver(
             bus,
             sink,
-            source_stream=_MNEMOS_STREAM,
+            source_stream=_EPISODIC_MEMORY_STREAM,
             accepted_types=frozenset({"mnemos.replay"}),
             redact_content=redact_content,
             name="replay_mnemos",
         )
-        self._phantasia = _SingleStreamReplayObserver(
+        self._world_model = _SingleStreamReplayObserver(
             bus,
             sink,
-            source_stream=_PHANTASIA_STREAM,
+            source_stream=_WORLD_MODEL_STREAM,
             accepted_types=frozenset({"phantasia.scenario"}),
             redact_content=redact_content,
             name="replay_phantasia",
         )
 
     async def start(self) -> None:
-        await self._mnemos.start()
-        await self._phantasia.start()
+        await self._episodic_memory.start()
+        await self._world_model.start()
 
     async def stop(self) -> None:
-        await self._mnemos.stop()
-        await self._phantasia.stop()
+        await self._episodic_memory.stop()
+        await self._world_model.stop()

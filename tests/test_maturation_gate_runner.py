@@ -46,7 +46,7 @@ def _make_bus(
     sleep_count: int = 0,
     boot_ms: int = 1_000_000,
     womb_stream: str = DEFAULT_WOMB_READOUT_STREAM,
-    hypnos_stream: str = "hypnos.out",
+    sleep_stream: str = "hypnos.out",
 ) -> Any:
     """Return a minimal async bus double with the new cursor API surface."""
     bus = MagicMock()
@@ -110,7 +110,7 @@ def _make_bus(
     async def _read_entries(
         stream: str, last_id: str = "0", count: int = 100, block_ms: int = 0
     ) -> tuple[list[tuple[str, Event]], str | None]:
-        if stream != hypnos_stream:
+        if stream != sleep_stream:
             return [], None
 
         start: tuple[int, int]
@@ -142,8 +142,8 @@ def _make_registry(
 ) -> Any:
     registry = MagicMock()
 
-    phantasia = MagicMock()
-    phantasia.successful_training_passes = consolidation_passes
+    world_model = MagicMock()
+    world_model.successful_training_passes = consolidation_passes
     mundus = MagicMock()
     # Public embodiment module API the gate uses (operator approval itself is read from
     # KAINE_MUNDUS_OPERATOR_APPROVED; tests that need it set the variable).
@@ -157,7 +157,7 @@ def _make_registry(
     vox.set_dormant = MagicMock()
 
     # The sleep module is present so the gate applies the sleep and consolidation floors.
-    modules = {"hypnos": MagicMock(), "phantasia": phantasia, "mundus": mundus, "vox": vox}
+    modules = {"hypnos": MagicMock(), "phantasia": world_model, "mundus": mundus, "vox": vox}
 
     def _get(name: str):
         return modules[name]
@@ -392,14 +392,14 @@ class _RecordingMundus:
 def _make_registry_with_mundus(mundus: _RecordingMundus) -> Any:
     registry = MagicMock()
 
-    phantasia = MagicMock()
-    phantasia.successful_training_passes = 1
+    world_model = MagicMock()
+    world_model.successful_training_passes = 1
 
     vox = MagicMock()
     vox.set_dormant = MagicMock()
 
     # The sleep module is present so the gate applies the sleep and consolidation floors.
-    modules = {"hypnos": MagicMock(), "phantasia": phantasia, "mundus": mundus, "vox": vox}
+    modules = {"hypnos": MagicMock(), "phantasia": world_model, "mundus": mundus, "vox": vox}
 
     def _get(name: str):
         return modules[name]

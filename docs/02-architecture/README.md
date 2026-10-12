@@ -25,14 +25,14 @@ graph TD
 
     subgraph Cognition["Cognition group (held)"]
         Nous["Nous\n(active inference)"]
-        Mnemos["Mnemos\n(memory)"]
+        EpisodicMemory["EpisodicMemory\n(memory)"]
         Eidolon["Eidolon\n(self-model)"]
-        Phantasia["Phantasia\n(world model)"]
+        WorldModel["WorldModel\n(world model)"]
         Empatheia["Empatheia\n(social cognition)"]
     end
 
     subgraph Motivation["Motivation group"]
-        Thymos["Thymos\n(affect + drives)"]
+        Affect["Affect\n(affect + drives)"]
     end
 
     subgraph Expression["Expression group"]
@@ -42,7 +42,7 @@ graph TD
     end
 
     subgraph Maintenance["Maintenance group"]
-        Hypnos["Hypnos\n(sleep)"]
+        Sleep["Sleep\n(sleep)"]
     end
 
     subgraph Embodiment["Embodiment group (held)"]
@@ -59,13 +59,13 @@ graph TD
     Sequence -->|"chronos.out"| Bus
     Vision -->|"topos.out"| Bus
     Audition -->|"audition.out"| Bus
-    Thymos -->|"thymos.out"| Bus
+    Affect -->|"thymos.out"| Bus
     Lingua -->|"lingua.out"| Bus
-    Hypnos -->|"hypnos.out"| Bus
+    Sleep -->|"hypnos.out"| Bus
     Nous -->|"nous.out"| Bus
-    Mnemos -->|"mnemos.out"| Bus
+    EpisodicMemory -->|"mnemos.out"| Bus
     Eidolon -->|"eidolon.out"| Bus
-    Phantasia -->|"phantasia.out"| Bus
+    WorldModel -->|"phantasia.out"| Bus
     Empatheia -->|"empatheia.out"| Bus
     Vox -->|"vox.out"| Bus
     Praxis -->|"praxis.out"| Bus
@@ -79,7 +79,7 @@ graph TD
     Bus -->|"accessed content as context"| Audition
     Bus -->|"accessed content as context"| Interoception
     Bus -->|"every broadcast as input"| Sequence
-    Bus -->|"every broadcast, appraised"| Thymos
+    Bus -->|"every broadcast, appraised"| Affect
     Bus -->|"accessed content"| Lingua
 
     Lingua -.->|"text to speak"| Vox
@@ -88,7 +88,7 @@ graph TD
     Mundus -.->|"mundus.*"| Bus
 
     classDef inactive stroke-dasharray: 5 5,opacity:0.6;
-    class Nous,Mnemos,Eidolon,Phantasia,Empatheia,Vox,Praxis,PerceptionLocus,Mundus inactive;
+    class Nous,EpisodicMemory,Eidolon,WorldModel,Empatheia,Vox,Praxis,PerceptionLocus,Mundus inactive;
 ```
 
 ## Module roster
@@ -102,15 +102,15 @@ graph TD
 | 3 | **Vision** | Prediction | Active | `kaine/modules/vision/` | Frozen InternVideo-Next clip encoder; DINOv2 fallback; online forward model with foveation |
 | 4 | **Audition** | Prediction | Active | `kaine/modules/audition/` | NumPy log-spectral acoustic encoder by default; emotion2vec+ tone classifier; optional speaches distil-Whisper and sherpa-onnx Moonshine speech-to-text backends (off in the base thesis) |
 | 5 | **Planning** | Cognition | Held | `kaine/modules/nous/` | Active inference (belief updating and expected-free-energy policy selection). The code default in `kaine/boot/factories/nous.py` is `"pymdp"` (JAX) because `config/kaine.toml` leaves `[nous].backend` commented out; only `tier0.toml` and `tier1.toml` select the NumPy engine |
-| 6 | **Episodic memory** | Cognition | Held | `kaine/modules/mnemos/` | Qdrant; shared all-MiniLM-L6-v2 embedder (384-dim, CPU); episodic, semantic and procedural stores |
+| 6 | **Episodic memory** | Cognition | Held | `kaine/modules/episodic_memory/` | Qdrant; shared all-MiniLM-L6-v2 embedder (384-dim, CPU); episodic, semantic and procedural stores |
 | 7 | **Self-model** | Cognition | Held | `kaine/modules/eidolon/` | JSON-persisted self-model; KL-drift detector; launch-name assignment |
-| 8 | **World model** | Cognition | Held | `kaine/modules/phantasia/` | DreamerV3 RSSM (`[phantasia].backend = "dreamerv3"`, `engine = "jax"` by default, NumPy engine optional); `persist_weights = true` and `training_enabled = true` |
+| 8 | **World model** | Cognition | Held | `kaine/modules/world_model/` | DreamerV3 RSSM (`[phantasia].backend = "dreamerv3"`, `engine = "jax"` by default, NumPy engine optional); `persist_weights = true` and `training_enabled = true` |
 | 9 | **Social cognition** | Cognition | Held | `kaine/modules/empatheia/` | Qdrant-backed agent models; familiarity-driven affect coupling |
-| 10 | **Affect** | Motivation | Active | `kaine/modules/thymos/` | Sequential appraisal; arousal as global gain; drive accumulators with hysteresis; affect coupling consumer |
+| 10 | **Affect** | Motivation | Active | `kaine/modules/affect/` | Sequential appraisal; arousal as global gain; drive accumulators with hysteresis; affect coupling consumer |
 | 11 | **Language** | Expression | Active | `kaine/modules/lingua/` | `kaineone/Qwen3.5-4B-abliterated-GGUF` served by an OpenAI-compatible server; context assembler; publishes `lingua.internal` and `lingua.external` as well as `lingua.out` |
 | 12 | **Vocal** | Expression | Held | `kaine/modules/vox/` | Chatterbox TTS and sherpa-onnx Kokoro; prosody modulated by the affect module; prosodic mirroring |
 | 13 | **Effectors** | Expression | Held | `kaine/modules/praxis/` | File-write, notify and shell effectors (empty whitelist by default) |
-| 14 | **Sleep** | Maintenance | Active | `kaine/modules/hypnos/` | Fatigue-triggered sleep with a five-phase consolidation pipeline and the affective reset; DPO + LoRA voice alignment (bf16 by default, 4-bit optional; Unsloth), off in the base thesis |
+| 14 | **Sleep** | Maintenance | Active | `kaine/modules/sleep/` | Fatigue-triggered sleep with a five-phase consolidation pipeline and the affective reset; DPO + LoRA voice alignment (bf16 by default, 4-bit optional; Unsloth), off in the base thesis |
 | 15 | **Perception** | Embodiment | Held | `kaine/modules/perception/` | Physical-XOR-virtual perceptual-locus arbiter; policy-gated entity self-switch |
 | 16 | **Embodiment** | Embodiment | Held | `kaine/modules/mundus/` | Body-agnostic embodiment control surface that routes perception and action to a body through a pluggable adapter. Nothing drives its per-tick loop yet, only the `stub` adapter ships, and activation is double-gated (config and an operator environment variable) |
 
@@ -258,7 +258,7 @@ See [Day-to-day operation](../06-operation/README.md), [Preservation and the saf
 Two held modules can use JAX, and each has a NumPy engine for hosts without it:
 
 - **Planning** (`kaine/modules/nous/`): pymdp under `[nous].backend = "pymdp"`, or a pure-NumPy engine under `"numpy"`.
-- **World model** (`kaine/modules/phantasia/`): the DreamerV3 RSSM world model; `[phantasia].engine` selects `"jax"` or `"numpy"`.
+- **World model** (`kaine/modules/world_model/`): the DreamerV3 RSSM world model; `[phantasia].engine` selects `"jax"` or `"numpy"`.
 
 Both use CPU-only JAX when JAX is selected. GPU acceleration is operator-configured.
 

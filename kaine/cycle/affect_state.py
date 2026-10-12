@@ -26,7 +26,7 @@ from __future__ import annotations
 from typing import Iterable
 
 from kaine.bus.schema import Event
-from kaine.modules.thymos.state import DimensionalState
+from kaine.modules.affect.state import DimensionalState
 
 
 class AffectStateProvider:

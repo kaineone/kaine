@@ -49,9 +49,9 @@ flowchart TD
     ST --> P1
     P1["Phase 1: light consolidation\n• set_frequency(0.5) on active modules\n• mnemos.consolidate_now()"]
     P1 --> P2
-    P2["Phase 2: deep consolidation (needs Mnemos)\n• open the replay window; mnemos.replay_now(); close it\n• mnemos.downscale(protect=replayed traces): downscale, then prune"]
+    P2["Phase 2: deep consolidation (needs EpisodicMemory)\n• open the replay window; mnemos.replay_now(); close it\n• mnemos.downscale(protect=replayed traces): downscale, then prune"]
     P2 --> P3
-    P3["Phase 3: associative replay (flag)\n• cross-period traces\n• cue Phantasia\n• publish hypnos.association"]
+    P3["Phase 3: associative replay (flag)\n• cross-period traces\n• cue WorldModel\n• publish hypnos.association"]
     P3 --> P4
     P4["Phase 4: voice alignment\n• consolidation divergence\n• gates; training skipped\n• intent-log rotation, voice measures"]
     P4 --> P5
@@ -60,7 +60,7 @@ flowchart TD
     R --> E([hypnos.sleep.completed])
 ```
 
-Each phase catches its own errors, and the later phases still run after one fails. The affective reset runs in a `finally` after phases 1 to 4, shielded from a second cancel, so even a sleep that raises or is cancelled ends with it, and an aborted `hypnos.sleep.completed` is published on any exception, including a cancel. Phase 3 re-injects the world model module's scenarios as `hypnos.association` events, which compete in the workspace like any other event. The order follows the paper (§3.5): replay, then synaptic downscaling, then associative replay, then the voice, and sleep ends with the affective reset. Phase 2 opens the episodic memory module's replay window itself, immediately before it replays, and closes it afterwards, so replay never depends on the episodic memory module having seen `hypnos.sleep.started` on the bus. When the world model module is present, the sleep module also opens its scenario window before phase 2, whose replay cues the world model module through `mnemos.replay`, and closes it in a `finally` after phase 3, which cues the world model module directly. On shutdown, the sleep module stops its loops, cancels a sleep still in flight and waits for it, so the sleep ends with the affective reset and an aborted `hypnos.sleep.completed`, then waits for the reset and publish tasks it holds; each wait is bounded at 5 s. The cycle's shutdown and Supervisor's halt shut the sleep module down before the other modules, so the sleep ends while the episodic memory, affect and world model modules are still up. The phase functions are in `kaine/modules/hypnos/phases.py`; phase 4 is driven from `kaine/modules/hypnos/module.py`.
+Each phase catches its own errors, and the later phases still run after one fails. The affective reset runs in a `finally` after phases 1 to 4, shielded from a second cancel, so even a sleep that raises or is cancelled ends with it, and an aborted `hypnos.sleep.completed` is published on any exception, including a cancel. Phase 3 re-injects the world model module's scenarios as `hypnos.association` events, which compete in the workspace like any other event. The order follows the paper (§3.5): replay, then synaptic downscaling, then associative replay, then the voice, and sleep ends with the affective reset. Phase 2 opens the episodic memory module's replay window itself, immediately before it replays, and closes it afterwards, so replay never depends on the episodic memory module having seen `hypnos.sleep.started` on the bus. When the world model module is present, the sleep module also opens its scenario window before phase 2, whose replay cues the world model module through `mnemos.replay`, and closes it in a `finally` after phase 3, which cues the world model module directly. On shutdown, the sleep module stops its loops, cancels a sleep still in flight and waits for it, so the sleep ends with the affective reset and an aborted `hypnos.sleep.completed`, then waits for the reset and publish tasks it holds; each wait is bounded at 5 s. The cycle's shutdown and Supervisor's halt shut the sleep module down before the other modules, so the sleep ends while the episodic memory, affect and world model modules are still up. The phase functions are in `kaine/modules/sleep/phases.py`; phase 4 is driven from `kaine/modules/sleep/module.py`.
 
 ## Outputs
 
@@ -135,23 +135,23 @@ The metric is computed whether or not training runs and is persisted to `state/h
 
 | File | Role |
 |---|---|
-| `kaine/modules/hypnos/module.py` | `Hypnos`: triggers, pipeline, perception suspension, divergence, phase 4 |
-| `kaine/modules/hypnos/phases.py` | Phases 1 to 4 |
-| `kaine/modules/hypnos/scheduler.py` | `RestScheduler`: interval and deferral |
-| `kaine/modules/hypnos/ignition_audit.py` | Sleep-time intent audit |
-| `kaine/modules/hypnos/corpus.py` | Intent-log rotation and the corpus ceiling check |
-| `kaine/modules/hypnos/voice_measures.py` | Content-free voice measures |
-| `kaine/modules/hypnos/voice_alignment.py` | `VoiceAlignmentConfig`, `DPOPairBuilder`, `FakeTrainer`, the divergence record |
-| `kaine/modules/hypnos/subprocess_trainer.py` | `SubprocessVoiceTrainer`, used by the `in_process` and `subprocess` backends |
-| `kaine/modules/hypnos/job_queue_trainer.py` | `JobQueueVoiceTrainer`, the cycle side of the `job_queue` backend |
-| `kaine/modules/hypnos/trainer_service.py` | The `kaine-trainer` service |
-| `kaine/modules/hypnos/capability_eval.py` | Capability and abliteration probe evaluators |
-| `kaine/modules/hypnos/adapter_store.py` | Atomic promotion and retention |
-| `kaine/modules/hypnos/hot_swap.py` | Hot-swap dispatch |
-| `kaine/modules/hypnos/organ_adapter.py` | Per-entity adapter activation on the organ server |
-| `kaine/modules/hypnos/organ_window.py` | Single-GPU unload, train and reload bracket |
-| `kaine/modules/hypnos/voice_audit.py` | Abliteration-veto audit trail |
-| `kaine/boot/factories/hypnos.py` | Config parsing, backend and hot-swap validation, trainer selection |
+| `kaine/modules/sleep/module.py` | `Sleep`: triggers, pipeline, perception suspension, divergence, phase 4 |
+| `kaine/modules/sleep/phases.py` | Phases 1 to 4 |
+| `kaine/modules/sleep/scheduler.py` | `RestScheduler`: interval and deferral |
+| `kaine/modules/sleep/ignition_audit.py` | Sleep-time intent audit |
+| `kaine/modules/sleep/corpus.py` | Intent-log rotation and the corpus ceiling check |
+| `kaine/modules/sleep/voice_measures.py` | Content-free voice measures |
+| `kaine/modules/sleep/voice_alignment.py` | `VoiceAlignmentConfig`, `DPOPairBuilder`, `FakeTrainer`, the divergence record |
+| `kaine/modules/sleep/subprocess_trainer.py` | `SubprocessVoiceTrainer`, used by the `in_process` and `subprocess` backends |
+| `kaine/modules/sleep/job_queue_trainer.py` | `JobQueueVoiceTrainer`, the cycle side of the `job_queue` backend |
+| `kaine/modules/sleep/trainer_service.py` | The `kaine-trainer` service |
+| `kaine/modules/sleep/capability_eval.py` | Capability and abliteration probe evaluators |
+| `kaine/modules/sleep/adapter_store.py` | Atomic promotion and retention |
+| `kaine/modules/sleep/hot_swap.py` | Hot-swap dispatch |
+| `kaine/modules/sleep/organ_adapter.py` | Per-entity adapter activation on the organ server |
+| `kaine/modules/sleep/organ_window.py` | Single-GPU unload, train and reload bracket |
+| `kaine/modules/sleep/voice_audit.py` | Abliteration-veto audit trail |
+| `kaine/boot/factories/sleep.py` | Config parsing, backend and hot-swap validation, trainer selection |
 
 ## Enabling and use
 
@@ -163,22 +163,22 @@ The metric is computed whether or not training runs and is persisted to `state/h
 
 | File | Coverage |
 |---|---|
-| `tests/test_hypnos_phases.py` | Phase functions and `PhaseResult` shape |
-| `tests/test_hypnos_module.py` | Full pipeline and the completed-event shape |
-| `tests/test_hypnos_trigger.py` | Fatigue trigger |
-| `tests/test_hypnos_scheduler.py` | Interval and deferral |
-| `tests/test_hypnos_rest_requests.py` | `intent.rest` handling |
-| `tests/test_hypnos_sleep_pause.py` | The perceptual locus module and playlist pause and restore |
-| `tests/test_hypnos_associative_replay.py` | Phase 3 |
-| `tests/test_hypnos_oscillator_hook.py` | Phase-1 oscillator hook |
-| `tests/test_hypnos_nar_removal.py` | Replay reaching the workspace through the normal cycle |
-| `tests/test_hypnos_replay_handoff.py` | Phase 2 replaying the traces phase 1 consolidated, with the episodic memory module |
-| `tests/test_interoception_hypnos_flag.py` | The interoception module's `crossed` flag |
+| `tests/test_sleep_phases.py` | Phase functions and `PhaseResult` shape |
+| `tests/test_sleep_module.py` | Full pipeline and the completed-event shape |
+| `tests/test_sleep_trigger.py` | Fatigue trigger |
+| `tests/test_sleep_scheduler.py` | Interval and deferral |
+| `tests/test_sleep_rest_requests.py` | `intent.rest` handling |
+| `tests/test_sleep_sleep_pause.py` | The perceptual locus module and playlist pause and restore |
+| `tests/test_sleep_associative_replay.py` | Phase 3 |
+| `tests/test_sleep_oscillator_hook.py` | Phase-1 oscillator hook |
+| `tests/test_sleep_nar_removal.py` | Replay reaching the workspace through the normal cycle |
+| `tests/test_sleep_replay_handoff.py` | Phase 2 replaying the traces phase 1 consolidated, with the episodic memory module |
+| `tests/test_interoception_sleep_flag.py` | The interoception module's `crossed` flag |
 | `tests/test_sleep_suspension_cursor.py` | the vision, audition and sequence modules suspending adaptation during sleep |
-| `tests/test_hypnos_voice_alignment.py`, `tests/test_hypnos_voice_alignment_integration.py` | Pair builder, gates and vetoes |
-| `tests/test_hypnos_organ_window_bracket.py` | Organ window |
-| `tests/test_hypnos_phantasia_window.py` | the world model module's scenario window around phases 2 and 3, through a real sleep on the bus |
-| `tests/test_hypnos_shutdown.py` | Shutdown during a sleep and during a held reset; the bounded wait |
+| `tests/test_sleep_voice_alignment.py`, `tests/test_sleep_voice_alignment_integration.py` | Pair builder, gates and vetoes |
+| `tests/test_sleep_organ_window_bracket.py` | Organ window |
+| `tests/test_sleep_world_model_window.py` | the world model module's scenario window around phases 2 and 3, through a real sleep on the bus |
+| `tests/test_sleep_shutdown.py` | Shutdown during a sleep and during a held reset; the bounded wait |
 | `tests/test_module_shutdown_order.py` | The cycle and Supervisor shut the sleep module down first, so the reset runs while the affect module is up |
 
 

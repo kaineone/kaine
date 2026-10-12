@@ -32,7 +32,7 @@ from kaine.lifecycle.birth_ack import (
 from kaine.lifecycle.birth_ack import (
     write_request as write_birth_request,
 )
-from kaine.modules.hypnos.voice_alignment import (
+from kaine.modules.sleep.voice_alignment import (
     CONSOLIDATION_DIVERGENCE_STATE,
     ConsolidationDivergence,
     read_consolidation_divergence,

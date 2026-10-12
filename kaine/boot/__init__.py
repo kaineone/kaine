@@ -36,6 +36,9 @@ from kaine.boot.errors import (  # noqa: F401 - re-exported
     _pop,
     _require_keys,
 )
+from kaine.boot.factories.affect import (  # noqa: F401 - re-exported
+    make_affect,
+)
 from kaine.boot.factories.audition import (  # noqa: F401 - re-exported
     _audition_sherpa_failure_reason,
     _live_mic_source_label,
@@ -47,25 +50,14 @@ from kaine.boot.factories.eidolon import (  # noqa: F401 - re-exported
 from kaine.boot.factories.empatheia import (  # noqa: F401 - re-exported
     make_empatheia,
 )
-from kaine.boot.factories.hypnos import (  # noqa: F401 - re-exported
-    _make_organ_window_runner,
-    _require_non_empty_abliteration_probes,
-    _require_non_empty_capability_probes,
-    _resolve_job_queue_trainer,
-    _resolve_subprocess_trainer,
-    _resolve_trainer,
-    _validate_backend_pairing,
-    make_hypnos,
-    voice_alignment_config_from_section,
+from kaine.boot.factories.episodic_memory import (  # noqa: F401 - re-exported
+    make_episodic_memory,
 )
 from kaine.boot.factories.interoception import (  # noqa: F401 - re-exported
     make_interoception,
 )
 from kaine.boot.factories.lingua import (  # noqa: F401 - re-exported
     make_lingua,
-)
-from kaine.boot.factories.mnemos import (  # noqa: F401 - re-exported
-    make_mnemos,
 )
 from kaine.boot.factories.mundus import (  # noqa: F401 - re-exported
     make_mundus,
@@ -77,23 +69,31 @@ from kaine.boot.factories.nous import (  # noqa: F401 - re-exported
 from kaine.boot.factories.perception import (  # noqa: F401 - re-exported
     make_perception,
 )
-from kaine.boot.factories.phantasia import (  # noqa: F401 - re-exported
-    make_phantasia,
-)
 from kaine.boot.factories.praxis import (  # noqa: F401 - re-exported
     make_praxis,
 )
 from kaine.boot.factories.sequence import (  # noqa: F401 - re-exported
     make_sequence,
 )
-from kaine.boot.factories.thymos import (  # noqa: F401 - re-exported
-    make_thymos,
+from kaine.boot.factories.sleep import (  # noqa: F401 - re-exported
+    _make_organ_window_runner,
+    _require_non_empty_abliteration_probes,
+    _require_non_empty_capability_probes,
+    _resolve_job_queue_trainer,
+    _resolve_subprocess_trainer,
+    _resolve_trainer,
+    _validate_backend_pairing,
+    make_sleep,
+    voice_alignment_config_from_section,
 )
 from kaine.boot.factories.vision import (  # noqa: F401 - re-exported
     make_vision,
 )
 from kaine.boot.factories.vox import (  # noqa: F401 - re-exported
     make_vox,
+)
+from kaine.boot.factories.world_model import (  # noqa: F401 - re-exported
+    make_world_model,
 )
 from kaine.boot.metrics import (  # noqa: F401 - re-exported
     _log_device_assignments,
@@ -133,8 +133,8 @@ from kaine.boot.wiring import (  # noqa: F401 - re-exported
     _OSCILLATOR_ALLOWED_KEYS,
     _OSCILLATOR_MIN_PLV_WINDOW,
     _OSCILLATOR_MIN_POPULATION,
+    _SALIENCE_AFFECT_FACTOR_DEFAULT,
     _SALIENCE_GOAL_FACTOR_DEFAULT,
-    _SALIENCE_THYMOS_FACTOR_DEFAULT,
     _SYNEIDESIS_ALLOWED_KEYS,
     _wire_eidolon_capabilities,
     _wire_lingua_organ_adapter,

@@ -153,7 +153,7 @@ The full `[thymos]` reference is in the [modules configuration page](../appendix
 
 The retired key `social_drive_time_scale_s` is accepted and ignored with a warning, so older local configs still boot.
 
-The perceptual arousal gain (0.15), its cap (4), the interoceptive step (0.05) and the drive hysteresis (0.9) are constants in `kaine/modules/thymos/module.py` and `drives.py`; no config key sets them.
+The perceptual arousal gain (0.15), its cap (4), the interoceptive step (0.05) and the drive hysteresis (0.9) are constants in `kaine/modules/affect/module.py` and `drives.py`; no config key sets them.
 
 Drive sub-tables `[thymos.drives.<name>]`, for `curiosity`, `boredom`, `social_drive` and `restlessness`. An unknown drive name or key stops boot.
 
@@ -206,7 +206,7 @@ Every dimension is clipped to its range after each update. The perceived emotion
 
 ## Serialization
 
-`Thymos.serialize()` stores the state, the baseline, the drive values, the last emotion, the familiarity cache and the goal ledger. The cache holds opaque agent-id strings and familiarity values only, no transcribed text. Restoring goals publishes no `thymos.goal` events.
+`Affect.serialize()` stores the state, the baseline, the drive values, the last emotion, the familiarity cache and the goal ledger. The cache holds opaque agent-id strings and familiarity values only, no transcribed text. Restoring goals publishes no `thymos.goal` events.
 
 ## Enabling and use
 
@@ -218,14 +218,14 @@ Every dimension is clipped to its range after each update. The perceived emotion
 
 | File | Role |
 |---|---|
-| `kaine/modules/thymos/module.py` | `Thymos`: update, appraisal, arousal paths, peer consumer, reset, publishing |
-| `kaine/modules/thymos/state.py` | `DimensionalState`: relaxation, nudges, clipping |
-| `kaine/modules/thymos/appraisal.py` | `AppraisalScores` and `classify()` |
-| `kaine/modules/thymos/drives.py` | `Drive`, `DriveSet`, `DriveCrossing` |
-| `kaine/modules/thymos/coupling.py` | `CouplingConfig`, `EMOTION_VAD`, `compute_coupling` |
-| `kaine/modules/thymos/goals.py` | `GoalLedger` |
-| `kaine/modules/thymos/modulator.py` | `StateModulator`: level gain and contrast gain |
-| `kaine/modules/thymos/regulation.py` | `RegulationPolicy` protocol and the no-op `PassiveDecay` |
+| `kaine/modules/affect/module.py` | `Affect`: update, appraisal, arousal paths, peer consumer, reset, publishing |
+| `kaine/modules/affect/state.py` | `DimensionalState`: relaxation, nudges, clipping |
+| `kaine/modules/affect/appraisal.py` | `AppraisalScores` and `classify()` |
+| `kaine/modules/affect/drives.py` | `Drive`, `DriveSet`, `DriveCrossing` |
+| `kaine/modules/affect/coupling.py` | `CouplingConfig`, `EMOTION_VAD`, `compute_coupling` |
+| `kaine/modules/affect/goals.py` | `GoalLedger` |
+| `kaine/modules/affect/modulator.py` | `StateModulator`: level gain and contrast gain |
+| `kaine/modules/affect/regulation.py` | `RegulationPolicy` protocol and the no-op `PassiveDecay` |
 | `kaine/cycle/affect_state.py` | `AffectStateProvider`: the cycle's copy of the last published state |
 | `kaine/boot/wiring.py` | Builds the workspace's `StateModulator` from `[syneidesis]` and `[thymos]` |
 
@@ -233,18 +233,18 @@ Every dimension is clipped to its range after each update. The perceived emotion
 
 | File | Coverage |
 |---|---|
-| `tests/test_thymos_state.py` | Relaxation, nudges, clipping |
-| `tests/test_thymos_appraisal.py` | `classify()` rules for each emotion |
-| `tests/test_thymos_drives.py` | Build, decay, threshold and hysteresis |
-| `tests/test_thymos_rate_invariant.py` | Appraisal independent of the broadcast rate; the state timer |
-| `tests/test_thymos_goal_check.py` | Goal-significance check against the dominant drive |
-| `tests/test_thymos_goals.py` | Goal lifecycle and relevance scoring |
-| `tests/test_thymos_modulator.py` | Level gain: range, floor, ceiling and monotonicity |
-| `tests/test_thymos_research_affect.py` | Drives, learning progress, valence, the appraisal leaving arousal unchanged, the sleep reset and the peer-consumer guard |
-| `tests/test_thymos_coupling.py` | Perceived emotion entering the appraisal, familiarity scaling, no direct write |
-| `tests/test_thymos_coupling_drift.py` | Perceived-signal decay and boundedness |
-| `tests/test_thymos_coupling_persistence.py` | Familiarity cache round trip |
-| `tests/test_thymos_module.py` | Module lifecycle and event publishing |
+| `tests/test_affect_state.py` | Relaxation, nudges, clipping |
+| `tests/test_affect_appraisal.py` | `classify()` rules for each emotion |
+| `tests/test_affect_drives.py` | Build, decay, threshold and hysteresis |
+| `tests/test_affect_rate_invariant.py` | Appraisal independent of the broadcast rate; the state timer |
+| `tests/test_affect_goal_check.py` | Goal-significance check against the dominant drive |
+| `tests/test_affect_goals.py` | Goal lifecycle and relevance scoring |
+| `tests/test_affect_modulator.py` | Level gain: range, floor, ceiling and monotonicity |
+| `tests/test_affect_research_affect.py` | Drives, learning progress, valence, the appraisal leaving arousal unchanged, the sleep reset and the peer-consumer guard |
+| `tests/test_affect_coupling.py` | Perceived emotion entering the appraisal, familiarity scaling, no direct write |
+| `tests/test_affect_coupling_drift.py` | Perceived-signal decay and boundedness |
+| `tests/test_affect_coupling_persistence.py` | Familiarity cache round trip |
+| `tests/test_affect_module.py` | Module lifecycle and event publishing |
 
 ## Spec and related pages
 

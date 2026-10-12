@@ -307,7 +307,7 @@ def copy_birth_adapter(
     if adapter_file is None:
         return "none"
 
-    from kaine.modules.hypnos.organ_adapter import sha256_file
+    from kaine.modules.sleep.organ_adapter import sha256_file
 
     paths.birth_adapter.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(adapter_file, paths.birth_adapter)
@@ -743,8 +743,8 @@ def adapter_sha_of(adapter_output_dir: Path | None) -> str | None:
     """Return the sha256 of the current adapter.gguf, if any."""
     if adapter_output_dir is None:
         return None
-    from kaine.modules.hypnos.adapter_store import current_path
-    from kaine.modules.hypnos.organ_adapter import sha256_file
+    from kaine.modules.sleep.adapter_store import current_path
+    from kaine.modules.sleep.organ_adapter import sha256_file
 
     current = current_path(adapter_output_dir)
     if current is None:

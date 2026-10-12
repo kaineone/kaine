@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     pass
+from kaine.boot.config_kwargs import config_kwargs
 from kaine.boot.errors import ConfigurationError, _require_keys
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
@@ -80,7 +81,7 @@ def make_vox(
         "sherpa_speaker_id",
         "sherpa_num_threads",
     }
-    kw: dict[str, Any] = {k: section[k] for k in allowed - {"mirroring"} - backend_keys if k in section}
+    kw = config_kwargs(section, sorted(allowed - {"mirroring"} - backend_keys), Vox)
     # [vox.mirroring] sub-table.
     mirroring_section = section.get("mirroring") or {}
     mirroring_allowed = {"enabled", "mirror_strength", "mirror_ceiling", "decay_s"}

@@ -37,10 +37,10 @@ def _configured_stream_refs() -> list[tuple[str, str]]:
     refs: list[tuple[str, str]] = []
     for s in _CONFIG.get("chronos", {}).get("user_input_streams", []):
         refs.append(("chronos.user_input_streams", s))
-    thymos = _CONFIG.get("thymos", {})
+    affect = _CONFIG.get("thymos", {})
     for key in ("soma_stream", "chronos_stream", "mnemos_stream"):
-        if key in thymos:
-            refs.append((f"thymos.{key}", thymos[key]))
+        if key in affect:
+            refs.append((f"thymos.{key}", affect[key]))
     eidolon = _CONFIG.get("eidolon", {})
     if "internal_speech_stream" in eidolon:
         refs.append(("eidolon.internal_speech_stream", eidolon["internal_speech_stream"]))

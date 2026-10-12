@@ -166,7 +166,7 @@ def _build_cycle(bus: ScriptedBus, *, deterministic: bool, clock=None) -> Cognit
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=32),
             goal_scorer=StaticGoalScorer(),
-            thymos_modulator=StaticThymosModulator(),
+            affect_modulator=StaticThymosModulator(),
         ),
         top_k=5,
         publication_threshold=0.35,
@@ -381,7 +381,7 @@ async def test_normal_mode_uses_injected_wall_clock():
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=32),
             goal_scorer=StaticGoalScorer(),
-            thymos_modulator=StaticThymosModulator(),
+            affect_modulator=StaticThymosModulator(),
         ),
         top_k=5,
         publication_threshold=0.35,
@@ -445,7 +445,7 @@ async def test_canonical_ordering_stable_tiebreak_regardless_of_arrival():
             strategy=RuleBasedSalience(
                 novelty=NoveltyTracker(window=32),
                 goal_scorer=StaticGoalScorer(),
-                thymos_modulator=StaticThymosModulator(),
+                affect_modulator=StaticThymosModulator(),
             ),
             top_k=5,
             publication_threshold=0.0,
@@ -483,7 +483,7 @@ async def test_default_off_engine_constructs_with_real_defaults():
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=32),
             goal_scorer=StaticGoalScorer(),
-            thymos_modulator=StaticThymosModulator(),
+            affect_modulator=StaticThymosModulator(),
         ),
         top_k=5,
         publication_threshold=0.35,

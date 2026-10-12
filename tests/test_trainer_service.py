@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-"""Tests for ``kaine.modules.hypnos.trainer_service``.
+"""Tests for ``kaine.modules.sleep.trainer_service``.
 
 All tests use fakes: no network calls, no GPU queries, and no real training
 subprocesses.
@@ -14,7 +14,7 @@ import types
 from pathlib import Path
 from typing import Any
 
-from kaine.modules.hypnos.trainer_service import (
+from kaine.modules.sleep.trainer_service import (
     claim,
     find_ready_jobs,
     run_job,
@@ -44,7 +44,7 @@ class _Sleep:
 def _config(**overrides: Any) -> types.SimpleNamespace:
     defaults = {
         "trainer_python": "/opt/trainer/bin/python",
-        "train_script": "scripts/hypnos_external_train.py",
+        "train_script": "scripts/sleep_external_train.py",
         "converter": "/opt/llama.cpp/convert_lora_to_gguf.py",
         "min_free_mib": 7000,
         "organ_wait_s": 10.0,
@@ -176,7 +176,7 @@ def test_run_job_success(tmp_path: Path) -> None:
 
     def runner(cmd: list[str], **kwargs: Any) -> Any:
         calls.append(cmd)
-        if "hypnos_external_train.py" in cmd[1]:
+        if "sleep_external_train.py" in cmd[1]:
             adapter_dir.mkdir(parents=True)
             (adapter_dir / "adapter_config.json").write_text("{}")
             (job / "result.json").write_text(
@@ -211,7 +211,7 @@ def test_run_job_success(tmp_path: Path) -> None:
     assert not (job / "pairs.jsonl").exists()
     assert (job / "result.json").exists()
     assert not (job / "result.json.tmp").exists()
-    assert len([c for c in calls if "hypnos_external_train.py" in c[1]]) == 1
+    assert len([c for c in calls if "sleep_external_train.py" in c[1]]) == 1
     assert len([c for c in calls if "convert_lora_to_gguf.py" in c[1]]) == 1
     # The service's completion marker is written last, after the final result.
     assert (job / "DONE").is_file()
@@ -233,7 +233,7 @@ def test_run_job_converter_failure(tmp_path: Path) -> None:
     (job / "pairs.jsonl").write_text("x\n")
 
     def runner(cmd: list[str], **kwargs: Any) -> Any:
-        if "hypnos_external_train.py" in cmd[1]:
+        if "sleep_external_train.py" in cmd[1]:
             adapter_dir.mkdir(parents=True)
             (adapter_dir / "adapter_config.json").write_text("{}")
             (job / "result.json").write_text(

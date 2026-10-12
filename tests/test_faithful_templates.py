@@ -211,7 +211,7 @@ def test_interoception_report_alerts_branch():
     assert "alerts" in out
 
 
-def test_thymos_state_renders_state_and_drives():
+def test_affect_state_renders_state_and_drives():
     out = TEMPLATES[("thymos", "thymos.state")]({
         "state": {"valence": 0.0, "arousal": 0.5, "dominance": 0.0},
         "drives": {"curiosity": 0.4, "boredom": 0.2},

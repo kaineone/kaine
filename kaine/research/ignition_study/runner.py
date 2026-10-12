@@ -419,7 +419,7 @@ class StudyRunner:
         outcome = "complete"
         world_model_captured: bool | None = None
         if "phantasia" in modules_set:
-            extra_outcome, world_model_captured = _check_phantasia_manifest(bundle)
+            extra_outcome, world_model_captured = _check_world_model_manifest(bundle)
             if extra_outcome:
                 outcome = extra_outcome
         overlay_path = line_dir / "config" / "kaine.operator.toml"
@@ -830,7 +830,7 @@ class StudyRunner:
         if "phantasia" in modules_set:
             world_model_captured = False
             if outcome == "complete" and bundle:
-                extra_outcome, captured = _check_phantasia_manifest(bundle)
+                extra_outcome, captured = _check_world_model_manifest(bundle)
                 if extra_outcome:
                     outcome = extra_outcome
                 world_model_captured = captured
@@ -1176,7 +1176,7 @@ def _utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _check_phantasia_manifest(bundle_path: str) -> tuple[str | None, bool | None]:
+def _check_world_model_manifest(bundle_path: str) -> tuple[str | None, bool | None]:
     """Return an extra outcome and captured flag for a world model bundle."""
     manifest_path = Path(bundle_path) / "manifest.json"
     try:

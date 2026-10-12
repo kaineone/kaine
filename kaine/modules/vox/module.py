@@ -41,8 +41,8 @@ from kaine.backend_state import record_backend_failure
 from kaine.bus.client import AsyncBus
 from kaine.bus.schema import Event
 from kaine.entity_clock import EntityClock
+from kaine.modules.affect.state import DimensionalState
 from kaine.modules.base import BaseModule
-from kaine.modules.thymos.state import DimensionalState
 from kaine.modules.vox.client import (
     ChatterboxClient,
     SynthesisResult,
@@ -110,7 +110,7 @@ class Vox(BaseModule):
         baseline_salience: float = 0.3,
         alert_salience: float = 0.7,
         lingua_external_stream: str = "lingua.external",
-        thymos_state_stream: str = "thymos.out",
+        affect_state_stream: str = "thymos.out",
         # Prosodic mirroring (disabled by default).
         mirroring_enabled: bool = False,
         mirror_strength: float = 0.3,
@@ -158,7 +158,7 @@ class Vox(BaseModule):
         self._alert_salience = float(alert_salience)
         self._muted_last_published: Optional[float] = None
         self._lingua_stream = lingua_external_stream
-        self._thymos_stream = thymos_state_stream
+        self._affect_stream = affect_state_stream
         self._cursors: dict[str, str] = {}
         self._current_state: DimensionalState = DimensionalState()
         self._clock = entity_clock or EntityClock()
@@ -244,7 +244,7 @@ class Vox(BaseModule):
                 self._sink_path,
             )
         # Determine which streams to subscribe to.
-        streams_to_subscribe = [self._lingua_stream, self._thymos_stream]
+        streams_to_subscribe = [self._lingua_stream, self._affect_stream]
         if self._mirroring_enabled:
             streams_to_subscribe.append(self._audition_prosody_stream)
         for stream in streams_to_subscribe:
@@ -501,7 +501,7 @@ class Vox(BaseModule):
         try:
             while not self._stopped.is_set():
                 progressed = False
-                active_streams = [self._lingua_stream, self._thymos_stream]
+                active_streams = [self._lingua_stream, self._affect_stream]
                 if self._mirroring_enabled:
                     active_streams.append(self._audition_prosody_stream)
                 for stream in active_streams:
@@ -525,7 +525,7 @@ class Vox(BaseModule):
             raise
 
     async def _handle(self, stream: str, event: Event) -> None:
-        if stream == self._thymos_stream and event.type == "thymos.state":
+        if stream == self._affect_stream and event.type == "thymos.state":
             state_dict = event.payload.get("state") or {}
             try:
                 self._current_state = DimensionalState(

@@ -28,7 +28,7 @@ import pytest
 
 sqlite_vec = pytest.importorskip("sqlite_vec")
 
-from kaine.modules.mnemos.storage import SqliteVecStorage, StorageError  # noqa: E402
+from kaine.modules.episodic_memory.storage import SqliteVecStorage, StorageError  # noqa: E402
 
 
 def _vec(i: float) -> list[float]:
@@ -116,7 +116,7 @@ async def test_shutdown_closes_on_the_owning_thread(tmp_path: Path, caplog):
     await storage.upsert(
         "episodic", vector=_vec(1), text="one", payload={}, affect=None
     )
-    with caplog.at_level(logging.WARNING, logger="kaine.modules.mnemos.storage"):
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.episodic_memory.storage"):
         await storage.shutdown()
     assert "sqlite-vec close failed" not in caplog.text
     # The owning worker thread is gone once the store is shut down.

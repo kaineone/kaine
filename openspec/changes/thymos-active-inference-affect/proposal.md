@@ -1,6 +1,6 @@
 ## Why
 
-The affect module is the precision core of the workspace competition: its arousal sets the gain on prediction errors. The paper describes its appraisal "following the account in which affect arises from prediction over the body's internal state" (Seth 2013; Seth and Friston 2016; Tschantz et al. 2022). The implementation is a hand-written cascade over salience statistics (`thymos/appraisal.py`), and the affect module publishes no prediction error of its own (alternatives review 2026-10-05, §2.3 item 3, §5.2). Its goal check was fixed separately (`thymos-goal-check`). The rest stays an engineering stand-in.
+The affect module is the precision core of the workspace competition: its arousal sets the gain on prediction errors. The paper describes its appraisal "following the account in which affect arises from prediction over the body's internal state" (Seth 2013; Seth and Friston 2016; Tschantz et al. 2022). The implementation is a hand-written cascade over salience statistics (`affect/appraisal.py`), and the affect module publishes no prediction error of its own (alternatives review 2026-10-05, §2.3 item 3, §5.2). Its goal check was fixed separately (`thymos-goal-check`). The rest stays an engineering stand-in.
 
 **Design document only.** Nothing here is built until the workspace-mediation ablation has run on the current affect module. Changing the precision term changes what every experiment tests.
 

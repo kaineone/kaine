@@ -11,7 +11,7 @@ list of ``{entry_id, source, type, salience}`` members.
 
 import inspect
 
-from kaine.modules.hypnos.ignition_audit import (
+from kaine.modules.sleep.ignition_audit import (
     DRIVE_TYPE,
     EXTERNAL_INPUT_TYPES,
     classify_realizations,
@@ -431,9 +431,9 @@ def test_constants():
 
 
 def test_pipeline_wires_audit_every_sleep():
-    import kaine.modules.hypnos.module as hypnos_module
+    import kaine.modules.sleep.module as sleep_module
 
-    src = inspect.getsource(hypnos_module)
+    src = inspect.getsource(sleep_module)
     # The audit step exists and is invoked in the sleep pipeline.
     assert "_run_ignition_audit" in src
     assert '"hypnos.ignition_audit"' in src

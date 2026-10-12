@@ -173,7 +173,7 @@ def _coerce_sleep_count(value: Any) -> int:
     return value
 
 
-def _coerce_hypnos_cursor(value: Any) -> str | None:
+def _coerce_sleep_cursor(value: Any) -> str | None:
     """Defensive coerce: a corrupt cursor is treated as a fresh gestation."""
     if not isinstance(value, str):
         return None
@@ -271,7 +271,7 @@ class StageState:
             born_at=data.get("born_at"),
             lived_seconds=_coerce_lived_seconds(data.get("lived_seconds", 0.0)),
             sleep_count=_coerce_sleep_count(data.get("sleep_count", 0)),
-            hypnos_cursor=_coerce_hypnos_cursor(data.get("hypnos_cursor")),
+            hypnos_cursor=_coerce_sleep_cursor(data.get("hypnos_cursor")),
             womb_t_at_birth=_coerce_womb_t_at_birth(data.get("womb_t_at_birth")),
             womb_seed=_coerce_womb_seed(data.get("womb_seed")),
             womb_params_digest=_coerce_womb_params_digest(data.get("womb_params_digest")),

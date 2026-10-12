@@ -14,9 +14,9 @@ from kaine.bus.config import BusConfig
 from kaine.evaluation.observers.voice_alignment_divergence_observer import (
     VoiceAlignmentDivergenceObserver,
 )
-from kaine.modules.hypnos import Hypnos, VoiceAlignmentConfig
-from kaine.modules.hypnos.subprocess_trainer import SubprocessVoiceTrainer
-from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV
+from kaine.modules.sleep import Sleep, VoiceAlignmentConfig
+from kaine.modules.sleep.subprocess_trainer import SubprocessVoiceTrainer
+from kaine.modules.sleep.voice_alignment import OPERATOR_APPROVED_ENV
 
 
 @pytest.fixture
@@ -55,7 +55,7 @@ def _write_probes(tmp_path: Path) -> tuple[Path, Path]:
     return cap_path, abl_path
 
 
-def _build_hypnos(bus: AsyncBus, tmp_path: Path, *, enabled: bool, fake_training_stack):
+def _build_sleep(bus: AsyncBus, tmp_path: Path, *, enabled: bool, fake_training_stack):
     cap_path, abl_path = _write_probes(tmp_path)
     config = VoiceAlignmentConfig(
         intent_log_path=_intent_log(tmp_path),
@@ -72,7 +72,7 @@ def _build_hypnos(bus: AsyncBus, tmp_path: Path, *, enabled: bool, fake_training
         trainer_workdir=tmp_path / "jobs",
         run_in_process=True,
     )
-    return Hypnos(bus, trainer=trainer, voice_alignment_config=config)
+    return Sleep(bus, trainer=trainer, voice_alignment_config=config)
 
 
 def _voice_alignment_phase(payload: dict):
@@ -89,8 +89,8 @@ class FakeSink:
 
 @pytest.mark.asyncio
 async def test_observer_records_real_sleep_summary(bus: AsyncBus, tmp_path: Path, fake_training_stack):
-    hypnos = _build_hypnos(bus, tmp_path, enabled=True, fake_training_stack=fake_training_stack)
-    await hypnos.enter_sleep()
+    sleep = _build_sleep(bus, tmp_path, enabled=True, fake_training_stack=fake_training_stack)
+    await sleep.enter_sleep()
 
     entries = await bus.read("hypnos.out", count=10)
     completed = [
@@ -119,8 +119,8 @@ async def test_observer_records_real_sleep_summary(bus: AsyncBus, tmp_path: Path
 
 @pytest.mark.asyncio
 async def test_observer_skips_disabled_voice_alignment(bus: AsyncBus, tmp_path: Path, fake_training_stack):
-    hypnos = _build_hypnos(bus, tmp_path, enabled=False, fake_training_stack=fake_training_stack)
-    await hypnos.enter_sleep()
+    sleep = _build_sleep(bus, tmp_path, enabled=False, fake_training_stack=fake_training_stack)
+    await sleep.enter_sleep()
 
     entries = await bus.read("hypnos.out", count=10)
     completed = [

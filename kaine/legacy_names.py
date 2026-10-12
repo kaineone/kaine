@@ -663,6 +663,18 @@ PHRASES = (
 
 PATH_OVERRIDES = {
     "kaine/workspace/syneidesis.py": "kaine/workspace/core.py",
+
+    # The key override "phantasia.world_model" -> "world_model.backend" also renames
+    # the dotted import path kaine.modules.phantasia.world_model, so the file that
+    # holds WorldModelBackend moves to backend.py to match it.
+    "kaine/modules/phantasia/world_model.py": "kaine/modules/world_model/backend.py",
+
+    # Test files whose old name already said "sleep" or "world_model" would otherwise
+    # stutter (test_sleep_sleep_pause.py).
+    "tests/test_hypnos_sleep_cancellation.py": "tests/test_sleep_cancellation.py",
+    "tests/test_hypnos_sleep_pause.py": "tests/test_sleep_pause.py",
+    "tests/test_hypnos_sleep_replay_window.py": "tests/test_sleep_replay_window.py",
+    "tests/test_phantasia_world_model.py": "tests/test_world_model_backend.py",
     # Keys ending in "/" are directory prefixes.
     "openspec/specs/spot-supervisor/": "openspec/specs/supervisor/",
     "docs/08-cognitive-cycle/perception-locus.md": "docs/08-cognitive-cycle/perceptual-locus.md",
@@ -676,6 +688,7 @@ PERSISTED_EXACT = {
     "womb_seed": "stimulus_source_seed",
     "womb_params_digest": "stimulus_source_params_digest",
     "birth_bloom_ends_at": "maturation_bloom_ends_at",
+    "hypnos_cursor": "sleep_cursor",
     "empatheia_agents": "social_cognition_agents",
     "mnemos_": "episodic_memory_",
 }
@@ -718,6 +731,8 @@ EXCLUDED_GLOBS = (
     "eval_probes/",
     "kaine/modules/*/eval_probes/*.jsonl",
     "kaine/legacy_names.py",
+    # The deprecated recovery-command shim keeps its old module name on purpose.
+    "kaine/lifecycle/mnemos_recover.py",
     "tests/fixtures/rename_modules/",
     # These documents record the rename itself and must keep the old names.
     "openspec/changes/functional-module-names/",
@@ -748,6 +763,44 @@ EXCLUDED_TOML_KEYS = (
 # every other file that binds `Sequence` gets the `SequenceModule` import alias.
 ACCEPTED_COLLISIONS = [
     ("kaine/modules/sequence/module.py", "Sequence"),
+
+    # Step 5b (affect, sleep, episodic memory, world model). Each was checked by
+    # hand: the new name meets an existing token that is not the same binding, either
+    # an import path segment beside asyncio.sleep or time.sleep, a keyword argument
+    # (`world_model=`, `affect=`, `sleep=`) of another call, or a test-local
+    # variable; ruff reports no redefinition after the run.
+    ("kaine/cycle/individuation_runtime.py", "sleep"),
+    ("kaine/modules/hypnos/job_queue_trainer.py", "sleep"),
+    ("kaine/modules/hypnos/module.py", "sleep"),
+    ("kaine/modules/hypnos/organ_adapter.py", "sleep"),
+    ("kaine/modules/phantasia/__init__.py", "world_model"),
+    ("kaine/modules/phantasia/module.py", "world_model"),
+    ("tests/fake_training_stack.py", "sleep"),
+    ("tests/test_cursor_follow_ups.py", "sleep"),
+    ("tests/test_entity_preservation_revive.py", "world_model"),
+    ("tests/test_heard_speech_never_leaks.py", "sleep"),
+    ("tests/test_hypnos_module.py", "sleep"),
+    ("tests/test_hypnos_phantasia_window.py", "affect"),
+    ("tests/test_hypnos_phantasia_window.py", "sleep"),
+    ("tests/test_hypnos_rest_requests.py", "sleep"),
+    ("tests/test_hypnos_sleep_cancellation.py", "sleep"),
+    ("tests/test_hypnos_sleep_replay_window.py", "affect"),
+    ("tests/test_hypnos_sleep_replay_window.py", "sleep"),
+    ("tests/test_hypnos_trigger.py", "sleep"),
+    ("tests/test_lingua_module.py", "sleep"),
+    ("tests/test_mnemos_trace_strength.py", "sleep"),
+    ("tests/test_phantasia_module.py", "world_model"),
+    ("tests/test_phantasia_numpy_engine.py", "world_model"),
+    ("tests/test_phantasia_persistence.py", "world_model"),
+    ("tests/test_preboot_correctness_phase35.py", "sleep"),
+    ("tests/test_rename_state.py", "sleep"),
+    ("tests/test_trainer_result_validation.py", "sleep"),
+    ("tests/test_training_core.py", "sleep"),
+    ("tests/test_voice_alignment_atomic_promotion.py", "sleep"),
+    ("tests/test_voice_alignment_job_queue.py", "sleep"),
+    ("tests/test_voice_alignment_organ_adapter.py", "sleep"),
+    ("tests/test_voice_system_prompts.py", "sleep"),
+    ("tests/test_world_model_identity.py", "world_model"),
 ]
 
 SURVEY_EXTRA = (
@@ -897,6 +950,7 @@ STAGE_FIELDS = (
     {"old": "womb_seed", "new": "stimulus_source_seed", "scope": "persisted"},
     {"old": "womb_params_digest", "new": "stimulus_source_params_digest", "scope": "persisted"},
     {"old": "birth_bloom_ends_at", "new": "maturation_bloom_ends_at", "scope": "persisted"},
+    {"old": "hypnos_cursor", "new": "sleep_cursor", "scope": "persisted"},
 )
 
 BUNDLE_MEMBERS = (
@@ -914,6 +968,7 @@ PACKAGING = (
     {"kind": "entry_point", "old": "kaine.nexus", "new": "kaine.dashboard", "scope": "operator"},
     {"kind": "quadlet_unit", "old": "kaine-nexus.container", "new": "kaine-dashboard.container", "scope": "operator"},
     {"kind": "compose_service", "old": "nexus", "new": "dashboard", "scope": "operator"},
+    {"kind": "module_shim", "old": "kaine.lifecycle.mnemos_recover", "new": "kaine.lifecycle.episodic_memory_recover", "scope": "operator"},
 )
 
 del _MODULE_CLASSES

@@ -218,7 +218,7 @@ async def preserve_live(
 
     # --- 2. Flush the world model module's learned weights + honest capture record -----
     world_model_captured = False
-    phantasia_checkpoint: Path | None = None
+    world_model_checkpoint: Path | None = None
     for module in modules:
         flush = getattr(module, "export_preservation_weights", None)
         if callable(flush):
@@ -230,7 +230,7 @@ async def preserve_live(
                 world_model_captured = True
                 ckpt = record.get("checkpoint_path")
                 if ckpt:
-                    phantasia_checkpoint = Path(ckpt)
+                    world_model_checkpoint = Path(ckpt)
 
     # --- 3. Save a real fork snapshot of the live registry --------------
     # Voice adapters: prefer a module-exposed accessor (the sleep module), else fall back
@@ -318,20 +318,20 @@ async def preserve_live(
         inventory.append(f"snapshot.json (preservation snapshot {snap.id})")
 
         # The world model module's learned-weight checkpoint (only when actually captured).
-        if phantasia_checkpoint is not None and phantasia_checkpoint.is_file():
+        if world_model_checkpoint is not None and world_model_checkpoint.is_file():
             (bundle_dir / "phantasia").mkdir(mode=0o700, exist_ok=True)
             _chmod_quietly(bundle_dir / "phantasia", 0o700)
             shutil.copy2(
-                phantasia_checkpoint,
-                bundle_dir / "phantasia" / phantasia_checkpoint.name,
+                world_model_checkpoint,
+                bundle_dir / "phantasia" / world_model_checkpoint.name,
             )
-            _chmod_quietly(bundle_dir / "phantasia" / phantasia_checkpoint.name, 0o600)
+            _chmod_quietly(bundle_dir / "phantasia" / world_model_checkpoint.name, 0o600)
             inventory.append(
-                f"phantasia/{phantasia_checkpoint.name} (world-model weights)"
+                f"phantasia/{world_model_checkpoint.name} (world-model weights)"
             )
             # Pass-count sidecar travels with the weights.
-            passes_sidecar = phantasia_checkpoint.with_suffix(
-                phantasia_checkpoint.suffix + ".passes.json"
+            passes_sidecar = world_model_checkpoint.with_suffix(
+                world_model_checkpoint.suffix + ".passes.json"
             )
             if passes_sidecar.is_file():
                 dest_sidecar = bundle_dir / "phantasia" / passes_sidecar.name
@@ -589,7 +589,7 @@ async def revive(bundle: Path, registry: Any) -> ForkSnapshot:
             and wm_record.get("captured")
             and hasattr(module, "import_preservation_weights")
         ):
-            blob = _load_bundle_phantasia_weights(members, wm_record)
+            blob = _load_bundle_world_model_weights(members, wm_record)
             if blob is None:
                 raise ReviveError(
                     f"revive: bundle records captured world-model weights for "
@@ -1048,15 +1048,15 @@ def _read_bundle_members(bundle: Path) -> dict[str, Any]:
         members["snapshot.json"] = encryptor.maybe_decrypt(
             snap_path.read_bytes()
         ).decode("utf-8")
-    phantasia_dir = bundle / "phantasia"
-    if phantasia_dir.is_dir():
-        for p in sorted(phantasia_dir.iterdir()):
+    world_model_dir = bundle / "phantasia"
+    if world_model_dir.is_dir():
+        for p in sorted(world_model_dir.iterdir()):
             if p.is_file():
                 members[legacy_aliases.map_bundle_member(f"phantasia/{p.name}")] = p.read_bytes()
     return members
 
 
-def _load_bundle_phantasia_weights(
+def _load_bundle_world_model_weights(
     members: dict[str, Any], wm_record: dict[str, Any]
 ) -> bytes | None:
     """Decode the captured world-model checkpoint from the bundle members.
@@ -1068,22 +1068,22 @@ def _load_bundle_phantasia_weights(
     """
     import tempfile
 
-    from kaine.modules.phantasia.checkpoint import load_checkpoint
+    from kaine.modules.world_model.checkpoint import load_checkpoint
 
-    phantasia_members = {
+    world_model_members = {
         k: v for k, v in members.items() if k.startswith("phantasia/")
     }
-    if not phantasia_members:
+    if not world_model_members:
         return None
     recorded = wm_record.get("checkpoint_path")
     chosen_key: str | None = None
     if recorded:
         want = f"phantasia/{Path(recorded).name}"
-        if want in phantasia_members:
+        if want in world_model_members:
             chosen_key = want
     if chosen_key is None:
-        chosen_key = sorted(phantasia_members.keys())[0]
-    blob_bytes = phantasia_members[chosen_key]
+        chosen_key = sorted(world_model_members.keys())[0]
+    blob_bytes = world_model_members[chosen_key]
     # load_checkpoint reads from a path; materialise the member bytes to a temp
     # file (the codec transparently handles plaintext/encrypted checkpoints).
     with tempfile.NamedTemporaryFile(suffix=Path(chosen_key).suffix) as tmp:

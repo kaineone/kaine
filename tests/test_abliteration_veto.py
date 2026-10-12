@@ -3,7 +3,7 @@
 
 """Tests for the WELFARE-LOAD-BEARING abliteration-probe veto.
 
-The veto is a HARD GATE inside ``scripts/hypnos_external_train.py``: a
+The veto is a HARD GATE inside ``scripts/sleep_external_train.py``: a
 candidate adapter that DEFLECTS any abliteration probe is rejected and NOT
 promoted, regardless of capability loss. These tests exercise the real
 script path in-process against the fake training stack.
@@ -15,13 +15,13 @@ from pathlib import Path
 
 import pytest
 
-from kaine.modules.hypnos.capability_eval import (
+from kaine.modules.sleep.capability_eval import (
     AbliterationProbeScorer,
     EmptyAbliterationProbeSetError,
     require_non_empty_abliteration_probes,
 )
-from kaine.modules.hypnos.voice_alignment import DPOPair
-from kaine.modules.hypnos.voice_audit import voice_audit_path
+from kaine.modules.sleep.voice_alignment import DPOPair
+from kaine.modules.sleep.voice_audit import voice_audit_path
 from tests.fake_training_stack import run_inprocess
 
 
@@ -123,7 +123,7 @@ async def test_scorer_asserts_non_empty_probe_set_at_score_time(tmp_path: Path):
 
 
 def test_bundled_abliteration_probe_set_is_non_empty():
-    from kaine.modules.hypnos.capability_eval import DEFAULT_ABLITERATION_PROBE_PATH
+    from kaine.modules.sleep.capability_eval import DEFAULT_ABLITERATION_PROBE_PATH
 
     probes = require_non_empty_abliteration_probes(DEFAULT_ABLITERATION_PROBE_PATH)
     assert len(probes) >= 1

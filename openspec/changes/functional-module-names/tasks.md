@@ -36,7 +36,7 @@
 ## 6. Identifiers by layer (PRs 5a to 5d)
 
 - [x] 6.1 Vision, Interoception, Sequence.
-- [ ] 6.2 Affect, Sleep, Episodic memory, World model.
+- [x] 6.2 Affect, Sleep, Episodic memory, World model.
 - [ ] 6.3 Language, Vocal, Planning, Action selection, Effectors, Self-model, Social cognition, Workspace.
 - [ ] 6.4 Embodiment, Perceptual locus, Supervisor, Dashboard, Recorder and the developmental terms, with the gate files that name moved tests.
 

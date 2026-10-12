@@ -4,7 +4,7 @@
 """Injectable fake training stack for in-process voice-alignment tests.
 
 The ``fake_training_stack`` fixture installs stub ``unsloth`` / ``trl`` /
-``peft`` / ``datasets`` modules so ``scripts/hypnos_external_train.py`` can
+``peft`` / ``datasets`` modules so ``scripts/sleep_external_train.py`` can
 run end to end without a real model or GPU. The returned control object lets
 tests script generation responses (capability/abliteration) and DPOTrainer
 behaviour.
@@ -20,8 +20,8 @@ from typing import Any, Optional
 
 import pytest
 
-from kaine.modules.hypnos.subprocess_trainer import SubprocessVoiceTrainer
-from kaine.modules.hypnos.voice_alignment import DPOPair, VoiceAlignmentConfig
+from kaine.modules.sleep.subprocess_trainer import SubprocessVoiceTrainer
+from kaine.modules.sleep.voice_alignment import DPOPair, VoiceAlignmentConfig
 
 
 def accepted_result(adapter_dir: Path, **overrides) -> dict:

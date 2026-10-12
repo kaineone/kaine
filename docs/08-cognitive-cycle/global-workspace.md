@@ -43,8 +43,8 @@ score(e)    = clamp(T × C_g(priority(e)))
 | `I(e)` | `event.salience` | The intensity the publishing module assigned when it published the event. The bus rejects values outside `[0, 1]`. |
 | `N(e)` | `NoveltyTracker.observe` | `max(0, 1 − r / W)`, where `r` counts earlier occurrences of the event's fingerprint among the last `W` scored candidates and `W` is `[syneidesis].novelty_window` (32). The fingerprint is a hash of the source, the type and the complete payload, so only an exact repeat is discounted. Every scored candidate enters the window, on broadcast ticks and on other ticks alike. |
 | `G(e)` | `GoalScorer.relevance` | 1 with the shipped static goal factor. See [The goal factor](#the-goal-factor). |
-| `T` | `ThymosModulator.modulate` | The level gain, `0.2 + 0.8 × a`, where `a` is the current Affect arousal. It is the same for every candidate of a tick. |
-| `g` | `ThymosModulator.contrast_gain` | The contrast gain, `arousal_contrast_gain × clamp((a − a0) / (1 − a0))`, with `a0` the baseline arousal (`[thymos].baseline_arousal`, 0.3) and `[syneidesis].arousal_contrast_gain` 8.0. It is 0 at or below baseline arousal. |
+| `T` | `AffectModulator.modulate` | The level gain, `0.2 + 0.8 × a`, where `a` is the current Affect arousal. It is the same for every candidate of a tick. |
+| `g` | `AffectModulator.contrast_gain` | The contrast gain, `arousal_contrast_gain × clamp((a − a0) / (1 − a0))`, with `a0` the baseline arousal (`[thymos].baseline_arousal`, 0.3) and `[syneidesis].arousal_contrast_gain` 8.0. It is 0 at or below baseline arousal. |
 
 `C_g` is the logistic rescaled so that it maps 0 to 0 and 1 to 1:
 
@@ -311,8 +311,8 @@ The level-gain floor and ceiling (0.2 and 1.0) are constructor defaults of `Stat
 | `kaine/workspace/syneidesis.py` | `Syneidesis`: scoring loop, coalition, access threshold |
 | `kaine/workspace/salience.py` | `RuleBasedSalience`, `arousal_contrast` |
 | `kaine/workspace/novelty.py` | `NoveltyTracker`, the event fingerprint |
-| `kaine/workspace/strategies.py` | `GoalScorer` and `ThymosModulator` protocols, static factors, `DriveRelevanceGoalScorer` |
-| `kaine/modules/thymos/modulator.py` | `StateModulator`, the live level and contrast gain |
+| `kaine/workspace/strategies.py` | `GoalScorer` and `AffectModulator` protocols, static factors, `DriveRelevanceGoalScorer` |
+| `kaine/modules/affect/modulator.py` | `StateModulator`, the live level and contrast gain |
 | `kaine/modules/intensity.py` | `graded_intensity`, shared by the predictive processors |
 | `kaine/modules/context.py` | `BroadcastContext`, the context featurization and null context |
 | `kaine/workspace/coherence.py` | `CoherenceScorer`, `phase_locking_value`, `mean_pairwise_plv` |

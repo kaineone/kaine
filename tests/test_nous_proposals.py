@@ -551,7 +551,7 @@ async def test_realized_action_survives_timeout_step(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_forwarded_outcome_after_hypnos_refusal_is_not_unknown(bus: AsyncBus):
+async def test_forwarded_outcome_after_sleep_refusal_is_not_unknown(bus: AsyncBus):
     """A forwarded rest outcome that arrives after the sleep module refused it is not unknown."""
     fake = _RecordingFakeEngine(policy_efe=[0.9, 0.5, 0.7, 0.05])
     nous = Nous(bus, engine=fake)

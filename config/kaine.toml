@@ -1126,7 +1126,7 @@ associative_replay = false
 # KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1 must also be set or the
 # phase refuses to construct a real trainer. Keep false by default
 # so a freshly-cloned KAINE never rewrites the language organ on its
-# own. See kaine/modules/hypnos/VOICE_ALIGNMENT.md.
+# own. See kaine/modules/sleep/VOICE_ALIGNMENT.md.
 enabled = false
 intent_log_path = "state/lingua/intent_expression.jsonl"
 adapter_output_dir = "state/hypnos/adapters"
@@ -1186,7 +1186,7 @@ reload_endpoint_url = ""
 # When hot_swap_mode = "restart_service": systemd --user unit name.
 restart_service_unit = ""
 # Override path to a capability-probe JSONL. Empty = use the package
-# default at kaine/modules/hypnos/eval_probes/default.jsonl.
+# default at kaine/modules/sleep/eval_probes/default.jsonl.
 capability_probe_path = ""
 # WELFARE-LOAD-BEARING abliteration probe set (JSONL). Each line is
 # {"prompt": "...", "deflection_patterns": ["I cannot", ...]}. Before any

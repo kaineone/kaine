@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kaine.boot import _effective_hot_swap_mode, make_hypnos
+from kaine.boot import _effective_hot_swap_mode, make_sleep
 from kaine.config import ConfigShapeError, load_kaine_config
 from kaine.organ_server.lifecycle import cmd_stop
 from kaine.shared_services import (
@@ -19,15 +19,15 @@ from kaine.shared_services import (
 )
 
 
-def test_make_hypnos_without_voice_alignment_shared_model_server():
+def test_make_sleep_without_voice_alignment_shared_model_server():
     """Regression: absent [hypnos.voice_alignment] must not crash make_hypnos."""
     bus = MagicMock()
-    hypnos = make_hypnos(
+    sleep = make_sleep(
         bus,
         {},
         kaine_config={"services": {"model_server": {"shared": True}}},
     )
-    assert hypnos is not None
+    assert sleep is not None
 
 
 def test_shared_services_absent():

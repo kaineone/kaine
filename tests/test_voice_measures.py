@@ -7,7 +7,7 @@ import os
 
 import pytest
 
-from kaine.modules.hypnos.voice_measures import (
+from kaine.modules.sleep.voice_measures import (
     FUNCTION_WORDS,
     compute_sleep_measures,
     grounding,

@@ -53,16 +53,16 @@ from kaine.experiment.verdict import Outcome
 # A real in-memory episodic memory module builder, constructed HERE in the test so the import of
 # kaine.modules.* lives in the test module, not the eval package (sidecar
 # boundary). Injected into the memory runner via mnemos_builder.
-async def _build_real_mnemos():
-    from kaine.modules.mnemos.memory import MnemosCore
-    from kaine.modules.mnemos.storage import InMemoryStorage
+async def _build_real_episodic_memory():
+    from kaine.modules.episodic_memory.memory import EpisodicMemoryCore
+    from kaine.modules.episodic_memory.storage import InMemoryStorage
     from kaine.text_embedding import HashEmbedder
 
     emb = HashEmbedder(dim=32)
     storage = InMemoryStorage(latent_dim=emb.latent_dim)
-    mnemos = MnemosCore(embedder=emb, storage=storage, short_term_capacity=8)
-    await mnemos.initialize()
-    return mnemos
+    episodic_memory = EpisodicMemoryCore(embedder=emb, storage=storage, short_term_capacity=8)
+    await episodic_memory.initialize()
+    return episodic_memory
 
 
 # --------------------------------------------------------------------------
@@ -145,7 +145,7 @@ def test_ab_format_summary_states_verdict_plainly():
 
 @pytest.mark.asyncio
 async def test_memory_coherence_emits_win_with_retrieval_advantage():
-    result = await run_memory_coherence(mnemos_builder=_build_real_mnemos)
+    result = await run_memory_coherence(episodic_memory_builder=_build_real_episodic_memory)
     v = result["verdict"]
     assert v.outcome is Outcome.WIN
     assert v.metrics["min_advantage"] > MemoryCoherenceConfig().advantage_floor
@@ -159,7 +159,7 @@ async def test_memory_coherence_emits_win_with_retrieval_advantage():
 async def test_memory_coherence_advantage_is_retrieval_vanishes_on_empty():
     """The SAME client against an EMPTIED episodic memory module cannot repeat the planted facts.
     (spec scenario: "The memory runner's advantage is retrieval")"""
-    result = await run_memory_coherence(mnemos_builder=_build_real_mnemos)
+    result = await run_memory_coherence(episodic_memory_builder=_build_real_episodic_memory)
     # Every emptied-store case is honest non-recall, scored 0 — advantage gone.
     for row in result["emptied"]:
         assert row["non_recall"] is True
@@ -170,7 +170,7 @@ async def test_memory_coherence_advantage_is_retrieval_vanishes_on_empty():
 
 @pytest.mark.asyncio
 async def test_memory_coherence_never_stored_fact_is_honest_non_recall():
-    result = await run_memory_coherence(mnemos_builder=_build_real_mnemos)
+    result = await run_memory_coherence(episodic_memory_builder=_build_real_episodic_memory)
     ns = result["never_stored"]
     assert ns["non_recall"] is True
     assert ns["real_accuracy"] == 0.0
@@ -179,10 +179,10 @@ async def test_memory_coherence_never_stored_fact_is_honest_non_recall():
 @pytest.mark.asyncio
 async def test_memory_coherence_seeded_run_reproduces():
     r1 = await run_memory_coherence(
-        MemoryCoherenceConfig(seed=9), mnemos_builder=_build_real_mnemos
+        MemoryCoherenceConfig(seed=9), episodic_memory_builder=_build_real_episodic_memory
     )
     r2 = await run_memory_coherence(
-        MemoryCoherenceConfig(seed=9), mnemos_builder=_build_real_mnemos
+        MemoryCoherenceConfig(seed=9), episodic_memory_builder=_build_real_episodic_memory
     )
     assert r1["verdict"].to_dict() == r2["verdict"].to_dict()
     assert [c["advantage"] for c in r1["planted"]] == [
@@ -192,7 +192,7 @@ async def test_memory_coherence_seeded_run_reproduces():
 
 @pytest.mark.asyncio
 async def test_memory_coherence_jsonl_round_trips(tmp_path):
-    result = await run_memory_coherence(mnemos_builder=_build_real_mnemos)
+    result = await run_memory_coherence(episodic_memory_builder=_build_real_episodic_memory)
     out = tmp_path / "mem.jsonl"
     write_jsonl(result["records"], out)
     records = [json.loads(ln) for ln in out.read_text().strip().splitlines()]
@@ -203,7 +203,7 @@ async def test_memory_coherence_jsonl_round_trips(tmp_path):
 def test_memory_format_summary_states_verdict_plainly():
     import asyncio
 
-    result = asyncio.run(run_memory_coherence(mnemos_builder=_build_real_mnemos))
+    result = asyncio.run(run_memory_coherence(episodic_memory_builder=_build_real_episodic_memory))
     text = format_memory_summary(result)
     assert "VERDICT:" in text
     assert "advantage" in text
@@ -301,7 +301,7 @@ async def test_all_runners_are_offline_no_network(monkeypatch):
     ab = await run_ab_divergence()
     assert ab["verdict"].outcome in (Outcome.WIN, Outcome.NULL)
 
-    mem = await run_memory_coherence(mnemos_builder=_build_real_mnemos)
+    mem = await run_memory_coherence(episodic_memory_builder=_build_real_episodic_memory)
     assert mem["verdict"].outcome in (Outcome.WIN, Outcome.NULL)
 
     sm = await run_self_model()

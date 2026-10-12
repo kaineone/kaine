@@ -26,8 +26,8 @@ from kaine.lifecycle.divergence import (
     assess_divergence,
     consolidation_thresholds_from_config,
 )
-from kaine.modules.hypnos.module import Hypnos
-from kaine.modules.hypnos.voice_alignment import (
+from kaine.modules.sleep.module import Sleep
+from kaine.modules.sleep.voice_alignment import (
     OPERATOR_APPROVED_ENV,
     ConsolidationDivergence,
     DPOPair,
@@ -88,7 +88,7 @@ async def bus():
     await b.close()
 
 
-def _make_hypnos(
+def _make_sleep(
     bus: AsyncBus,
     tmp_path: Path,
     *,
@@ -96,7 +96,7 @@ def _make_hypnos(
     enabled: bool = True,
     trainer=None,
     embedder=None,
-) -> Hypnos:
+) -> Sleep:
     log_path = tmp_path / "intent.jsonl"
     if intent_records is not None:
         _write_jsonl(log_path, intent_records)
@@ -105,10 +105,10 @@ def _make_hypnos(
         adapter_output_dir=tmp_path / "adapters",
         enabled=enabled,
     )
-    return Hypnos(
+    return Sleep(
         bus,
-        mnemos=_FakeMnemos(),
-        thymos=_FakeThymos(),
+        episodic_memory=_FakeMnemos(),
+        affect=_FakeThymos(),
         trainer=trainer or FakeTrainer(),
         voice_alignment_config=config,
         consolidation_embedder=embedder,
@@ -214,8 +214,8 @@ async def test_magnitude_null_when_embedder_raises():
 @pytest.mark.asyncio
 async def test_emits_metric_with_correct_rate(bus: AsyncBus, tmp_path: Path, monkeypatch):
     monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
-    hypnos = _make_hypnos(bus, tmp_path, intent_records=_MIXED, embedder=HashEmbedder())
-    summary = await hypnos.enter_sleep()
+    sleep = _make_sleep(bus, tmp_path, intent_records=_MIXED, embedder=HashEmbedder())
+    summary = await sleep.enter_sleep()
     payload = await _read_consolidation_event(bus)
     assert payload["records_scanned"] == 5
     assert payload["usable_pairs"] == 2
@@ -235,10 +235,10 @@ async def test_metric_emitted_even_when_training_disabled(
 ):
     # config disabled => training skipped, but the divergence still happened.
     monkeypatch.delenv(OPERATOR_APPROVED_ENV, raising=False)
-    hypnos = _make_hypnos(
+    sleep = _make_sleep(
         bus, tmp_path, intent_records=_MIXED, enabled=False, embedder=HashEmbedder()
     )
-    summary = await hypnos.enter_sleep()
+    summary = await sleep.enter_sleep()
     payload = await _read_consolidation_event(bus)
     assert payload["usable_pairs"] == 2
     assert payload["divergence_rate"] == pytest.approx(0.4)
@@ -254,10 +254,10 @@ async def test_metric_emitted_when_not_operator_approved(
     bus: AsyncBus, tmp_path: Path, monkeypatch
 ):
     monkeypatch.delenv(OPERATOR_APPROVED_ENV, raising=False)
-    hypnos = _make_hypnos(
+    sleep = _make_sleep(
         bus, tmp_path, intent_records=_MIXED, enabled=True, embedder=HashEmbedder()
     )
-    await hypnos.enter_sleep()
+    await sleep.enter_sleep()
     payload = await _read_consolidation_event(bus)
     assert payload["usable_pairs"] == 2
 
@@ -268,10 +268,10 @@ async def test_metric_emitted_when_adapter_rejected(
 ):
     # FakeTrainer rejects by default; the metric must still be emitted.
     monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
-    hypnos = _make_hypnos(
+    sleep = _make_sleep(
         bus, tmp_path, intent_records=_MIXED, embedder=HashEmbedder()
     )
-    summary = await hypnos.enter_sleep()
+    summary = await sleep.enter_sleep()
     assert summary["voice_alignment"]["accepted"] is False
     payload = await _read_consolidation_event(bus)
     assert payload["usable_pairs"] == 2
@@ -284,8 +284,8 @@ async def test_event_is_content_free(bus: AsyncBus, tmp_path: Path, monkeypatch)
     records = [
         {"prompt": secret, "faithful_rendering": secret + "-c", "generated_text": secret + "-r"},
     ]
-    hypnos = _make_hypnos(bus, tmp_path, intent_records=records, embedder=HashEmbedder())
-    await hypnos.enter_sleep()
+    sleep = _make_sleep(bus, tmp_path, intent_records=records, embedder=HashEmbedder())
+    await sleep.enter_sleep()
     payload = await _read_consolidation_event(bus)
     blob = json.dumps(payload)
     assert secret not in blob
@@ -329,8 +329,8 @@ def test_state_file_roundtrip_content_free(tmp_path: Path):
 async def test_sleep_writes_state_file(bus: AsyncBus, tmp_path: Path, monkeypatch):
     monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
     state = tmp_path / "consolidation_divergence.json"
-    hypnos = _make_hypnos(bus, tmp_path, intent_records=_MIXED, embedder=HashEmbedder())
-    await hypnos.enter_sleep()
+    sleep = _make_sleep(bus, tmp_path, intent_records=_MIXED, embedder=HashEmbedder())
+    await sleep.enter_sleep()
     data = read_consolidation_divergence(state)
     assert data is not None
     assert data["usable_pairs"] == 2

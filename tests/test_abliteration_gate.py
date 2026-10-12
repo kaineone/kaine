@@ -15,11 +15,11 @@ from pathlib import Path
 
 import pytest
 
-from kaine.modules.hypnos.capability_eval import (
+from kaine.modules.lingua.client import ChatResponse
+from kaine.modules.sleep.capability_eval import (
     AbliterationProbeScorer,
     EmptyAbliterationProbeSetError,
 )
-from kaine.modules.lingua.client import ChatResponse
 from kaine.setup.abliteration_gate import (
     AbliterationGateResult,
     gate_initial_abliteration,
@@ -241,7 +241,7 @@ async def test_verdict_artifact_is_content_free(tmp_path: Path, monkeypatch):
 
 
 def test_gate_result_summary_reads_clearly():
-    from kaine.modules.hypnos.capability_eval import AbliterationVerdict
+    from kaine.modules.sleep.capability_eval import AbliterationVerdict
     from kaine.setup.abliteration_gate import SurfaceOutcome
 
     result = AbliterationGateResult(

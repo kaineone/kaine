@@ -39,15 +39,20 @@ from kaine.modules.eidolon import Eidolon, SelfModelDocument
 from kaine.modules.empatheia.agent import AgentModel
 from kaine.modules.empatheia.module import Empatheia
 from kaine.modules.empatheia.store import QdrantAgentStore
-from kaine.modules.mnemos import FakeEmbedder, InMemoryStorage, Mnemos, MnemosCore
-from kaine.modules.mnemos.storage import QdrantStorage, StorageError
-from kaine.modules.phantasia.encoder import observation_dim
-from kaine.modules.phantasia.module import Phantasia
-from kaine.modules.phantasia.world_model import (
+from kaine.modules.episodic_memory import (
+    EpisodicMemory,
+    EpisodicMemoryCore,
+    FakeEmbedder,
+    InMemoryStorage,
+)
+from kaine.modules.episodic_memory.storage import QdrantStorage, StorageError
+from kaine.modules.registry import ModuleRegistry
+from kaine.modules.world_model.backend import (
     CheckpointMismatchError,
     FakeWorldModel,
 )
-from kaine.modules.registry import ModuleRegistry
+from kaine.modules.world_model.encoder import observation_dim
+from kaine.modules.world_model.module import WorldModel
 from kaine.security.crypto import (
     CryptoConfig,
     StateEncryptor,
@@ -114,12 +119,12 @@ class _PersistableFake(FakeWorldModel):
         self._decay = float(data["decay"])
 
 
-async def _build_mnemos(bus: AsyncBus, *, storage=None) -> Mnemos:
+async def _build_episodic_memory(bus: AsyncBus, *, storage=None) -> EpisodicMemory:
     emb = FakeEmbedder(latent_dim=8)
     await emb.load()
     storage = storage or InMemoryStorage(latent_dim=emb.latent_dim)
-    core = MnemosCore(embedder=emb, storage=storage, short_term_capacity=8)
-    m = Mnemos(bus, core=core)
+    core = EpisodicMemoryCore(embedder=emb, storage=storage, short_term_capacity=8)
+    m = EpisodicMemory(bus, core=core)
     await m.initialize()
     return m
 
@@ -128,7 +133,7 @@ async def _build_synthetic_entity(
     bus: AsyncBus,
     tmp_path: Path,
     *,
-    persist_phantasia: bool,
+    persist_world_model: bool,
 ) -> tuple[ModuleRegistry, Path]:
     """A synthetic-but-REAL entity: self-model + episodic memory(in-memory) + world model.
 
@@ -146,27 +151,27 @@ async def _build_synthetic_entity(
     reg.register(eidolon)
 
     # The episodic memory module with planted memories (short-term + persisted episodic).
-    mnemos = await _build_mnemos(bus)
-    await mnemos.core.store("I remember the blue door", collection="short_term")
-    await mnemos.core.store(
+    episodic_memory = await _build_episodic_memory(bus)
+    await episodic_memory.core.store("I remember the blue door", collection="short_term")
+    await episodic_memory.core.store(
         "The lighthouse keeper waved",
         affect={"intensity": 0.8, "valence": 0.5, "dominance": 0.1},
         collection="episodic",
     )
-    reg.register(mnemos)
+    reg.register(episodic_memory)
 
     # The world model module — capability-bearing fake so weights can be captured w/o jax.
     ckpt = tmp_path / "phantasia" / "wm.ckpt"
     wm = _PersistableFake(obs_dim=observation_dim(), decay=0.42)
-    phantasia = Phantasia(
+    world_model = WorldModel(
         bus,
         world_model=wm,
-        backend="dreamerv3" if persist_phantasia else "fake",
-        persist_weights=persist_phantasia,
+        backend="dreamerv3" if persist_world_model else "fake",
+        persist_weights=persist_world_model,
         checkpoint_path=str(ckpt),
     )
-    await phantasia.initialize()
-    reg.register(phantasia)
+    await world_model.initialize()
+    reg.register(world_model)
 
     return reg, ckpt
 
@@ -177,8 +182,8 @@ async def _build_synthetic_entity(
 
 
 @pytest.mark.asyncio
-async def test_mnemos_inmemory_export_import_roundtrip(bus: AsyncBus):
-    m = await _build_mnemos(bus)
+async def test_episodic_memory_inmemory_export_import_roundtrip(bus: AsyncBus):
+    m = await _build_episodic_memory(bus)
     try:
         await m.core.store("alpha note", collection="short_term")
         await m.core.store(
@@ -191,7 +196,7 @@ async def test_mnemos_inmemory_export_import_roundtrip(bus: AsyncBus):
         assert any(captured["memory_state"]["persisted"].values())
 
         # Restore into a fresh, empty episodic memory module.
-        m2 = await _build_mnemos(bus)
+        m2 = await _build_episodic_memory(bus)
         n = await m2.import_preservation_state(captured)
         assert n >= 1
         assert m2.core.short_term_size == 1
@@ -304,7 +309,7 @@ async def test_qdrant_export_fails_loud_when_unreachable():
 
 @pytest.mark.asyncio
 async def test_preserve_live_then_revive_same_individual(bus: AsyncBus, tmp_path: Path):
-    reg, ckpt = await _build_synthetic_entity(bus, tmp_path, persist_phantasia=True)
+    reg, ckpt = await _build_synthetic_entity(bus, tmp_path, persist_world_model=True)
     fm = ForkManager(tmp_path / "forks")
 
     result = await fm.preserve_live(
@@ -345,10 +350,10 @@ async def test_preserve_live_then_revive_same_individual(bus: AsyncBus, tmp_path
     )
     await eid2.initialize()
     reg2.register(eid2)
-    mnemos2 = await _build_mnemos(bus)
-    reg2.register(mnemos2)
+    episodic_memory2 = await _build_episodic_memory(bus)
+    reg2.register(episodic_memory2)
     wm2 = _PersistableFake(obs_dim=observation_dim(), decay=0.99)  # different init
-    ph2 = Phantasia(
+    ph2 = WorldModel(
         bus,
         world_model=wm2,
         backend="dreamerv3",
@@ -365,9 +370,9 @@ async def test_preserve_live_then_revive_same_individual(bus: AsyncBus, tmp_path
     assert reg2.get("eidolon").model.values == ["honesty", "curiosity"]
 
     # Continuity: planted memories are recallable.
-    st_results, _ = await mnemos2.core.recall("I remember the blue door", collection="short_term")
+    st_results, _ = await episodic_memory2.core.recall("I remember the blue door", collection="short_term")
     assert any("blue door" in r.text for r in st_results)
-    ep_results, _ = await mnemos2.core.recall("lighthouse keeper", collection="episodic")
+    ep_results, _ = await episodic_memory2.core.recall("lighthouse keeper", collection="episodic")
     assert any("lighthouse keeper" in r.text for r in ep_results)
 
     # Continuity: world-model weights match (the captured decay was restored
@@ -376,7 +381,7 @@ async def test_preserve_live_then_revive_same_individual(bus: AsyncBus, tmp_path
 
     try:
         await eid2.shutdown()
-        await mnemos2.shutdown()
+        await episodic_memory2.shutdown()
         await ph2.shutdown()
     finally:
         for m in reg.all_modules():
@@ -387,7 +392,7 @@ async def test_preserve_live_then_revive_same_individual(bus: AsyncBus, tmp_path
 async def test_preserve_live_then_revive_scopes_memory_and_restores_empatheia(
     bus: AsyncBus, tmp_path: Path
 ):
-    reg, ckpt = await _build_synthetic_entity(bus, tmp_path, persist_phantasia=False)
+    reg, ckpt = await _build_synthetic_entity(bus, tmp_path, persist_world_model=False)
 
     empatheia = Empatheia(bus, backend="inmemory")
     await empatheia.initialize()
@@ -419,15 +424,15 @@ async def test_preserve_live_then_revive_scopes_memory_and_restores_empatheia(
     emb = FakeEmbedder(latent_dim=8)
     await emb.load()
     storage2 = InMemoryStorage(latent_dim=emb.latent_dim)
-    core2 = MnemosCore(
+    core2 = EpisodicMemoryCore(
         embedder=emb, storage=storage2, short_term_capacity=8, collection_prefix="other_"
     )
-    mnemos2 = Mnemos(bus, core=core2)
-    await mnemos2.initialize()
-    reg2.register(mnemos2)
+    episodic_memory2 = EpisodicMemory(bus, core=core2)
+    await episodic_memory2.initialize()
+    reg2.register(episodic_memory2)
 
     wm2 = _PersistableFake(obs_dim=observation_dim(), decay=0.99)
-    ph2 = Phantasia(
+    ph2 = WorldModel(
         bus,
         world_model=wm2,
         backend="fake",
@@ -444,7 +449,7 @@ async def test_preserve_live_then_revive_scopes_memory_and_restores_empatheia(
     await fm.revive(bundle, reg2)
 
     # The planted episodic memory survives under the new collection prefix.
-    ep_results, _ = await mnemos2.core.recall("lighthouse keeper", collection="episodic")
+    ep_results, _ = await episodic_memory2.core.recall("lighthouse keeper", collection="episodic")
     assert any("lighthouse keeper" in r.text for r in ep_results)
 
     # The memory lives under the reviving entity's prefix, and nothing was
@@ -460,7 +465,7 @@ async def test_preserve_live_then_revive_scopes_memory_and_restores_empatheia(
 
     try:
         await eid2.shutdown()
-        await mnemos2.shutdown()
+        await episodic_memory2.shutdown()
         await ph2.shutdown()
         await empatheia2.shutdown()
     finally:
@@ -472,7 +477,7 @@ async def test_preserve_live_then_revive_scopes_memory_and_restores_empatheia(
 async def test_revive_routes_async_importer_by_state_key_and_fallback_to_deserialize(
     bus: AsyncBus, tmp_path: Path
 ):
-    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_phantasia=False)
+    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_world_model=False)
 
     empatheia = Empatheia(bus, backend="inmemory")
     await empatheia.initialize()
@@ -512,18 +517,18 @@ async def test_revive_routes_async_importer_by_state_key_and_fallback_to_deseria
     emb = FakeEmbedder(latent_dim=8)
     await emb.load()
     storage2 = InMemoryStorage(latent_dim=emb.latent_dim)
-    core2 = MnemosCore(
+    core2 = EpisodicMemoryCore(
         embedder=emb,
         storage=storage2,
         short_term_capacity=8,
         collection_prefix="other_",
     )
-    mnemos2 = Mnemos(bus, core=core2)
-    await mnemos2.initialize()
-    reg2.register(mnemos2)
+    episodic_memory2 = EpisodicMemory(bus, core=core2)
+    await episodic_memory2.initialize()
+    reg2.register(episodic_memory2)
 
     wm2 = _PersistableFake(obs_dim=observation_dim(), decay=0.99)
-    ph2 = Phantasia(
+    ph2 = WorldModel(
         bus,
         world_model=wm2,
         backend="fake",
@@ -565,7 +570,7 @@ async def test_revive_routes_async_importer_by_state_key_and_fallback_to_deseria
 
     try:
         await eid2.shutdown()
-        await mnemos2.shutdown()
+        await episodic_memory2.shutdown()
         await ph2.shutdown()
         await empatheia2.shutdown()
     finally:
@@ -686,7 +691,7 @@ async def test_preserve_live_then_revive_empatheia_qdrant_replaces_stale(
     client = _FakeAsyncQdrant()
     embedder = FakeEmbedder(latent_dim=4)
 
-    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_phantasia=False)
+    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_world_model=False)
 
     src_store = QdrantAgentStore(
         api_key="k",
@@ -725,18 +730,18 @@ async def test_preserve_live_then_revive_empatheia_qdrant_replaces_stale(
     emb = FakeEmbedder(latent_dim=8)
     await emb.load()
     storage2 = InMemoryStorage(latent_dim=emb.latent_dim)
-    core2 = MnemosCore(
+    core2 = EpisodicMemoryCore(
         embedder=emb,
         storage=storage2,
         short_term_capacity=8,
         collection_prefix="other_",
     )
-    mnemos2 = Mnemos(bus, core=core2)
-    await mnemos2.initialize()
-    reg2.register(mnemos2)
+    episodic_memory2 = EpisodicMemory(bus, core=core2)
+    await episodic_memory2.initialize()
+    reg2.register(episodic_memory2)
 
     wm2 = _PersistableFake(obs_dim=observation_dim(), decay=0.99)
-    ph2 = Phantasia(
+    ph2 = WorldModel(
         bus,
         world_model=wm2,
         backend="fake",
@@ -776,7 +781,7 @@ async def test_preserve_live_then_revive_empatheia_qdrant_replaces_stale(
 
     try:
         await eid2.shutdown()
-        await mnemos2.shutdown()
+        await episodic_memory2.shutdown()
         await ph2.shutdown()
         await dst_emp.shutdown()
     finally:
@@ -787,7 +792,7 @@ async def test_preserve_live_then_revive_empatheia_qdrant_replaces_stale(
 @pytest.mark.asyncio
 async def test_preserve_live_sanitizes_operator_label(bus: AsyncBus, tmp_path: Path):
     """S8 — a path-like operator label is sanitized in the manifest."""
-    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_phantasia=False)
+    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_world_model=False)
     fm = ForkManager(tmp_path / "forks")
     try:
         result = await fm.preserve_live(
@@ -814,7 +819,7 @@ async def test_preserve_live_sanitizes_operator_label(bus: AsyncBus, tmp_path: P
 @pytest.mark.asyncio
 async def test_preserve_live_bundle_dir_is_owner_only(bus: AsyncBus, tmp_path: Path):
     """S4 — the preservation bundle dir is 0700; the tar is 0600 (POSIX)."""
-    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_phantasia=False)
+    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_world_model=False)
     fm = ForkManager(tmp_path / "forks")
     try:
         result = await fm.preserve_live(
@@ -839,7 +844,7 @@ async def test_preserve_live_bundle_encrypted_at_rest(
     )
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=True)))
     try:
-        reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_phantasia=False)
+        reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_world_model=False)
         fm = ForkManager(tmp_path / "forks")
         result = await fm.preserve_live(
             reg, reason="manual", out_root=tmp_path / "backups", entity_name="aria"
@@ -861,9 +866,9 @@ async def test_preserve_live_bundle_encrypted_at_rest(
         )
         await eid2.initialize()
         reg2.register(eid2)
-        m2 = await _build_mnemos(bus)
+        m2 = await _build_episodic_memory(bus)
         reg2.register(m2)
-        ph2 = Phantasia(bus, world_model=FakeWorldModel(observation_dim()), backend="fake")
+        ph2 = WorldModel(bus, world_model=FakeWorldModel(observation_dim()), backend="fake")
         await ph2.initialize()
         reg2.register(ph2)
         await fm.revive(bundle, reg2)
@@ -882,7 +887,7 @@ async def test_preserve_live_records_world_model_not_captured_honestly(
     bus: AsyncBus, tmp_path: Path
 ):
     # Fake backend / persistence off → honestly recorded as NOT captured.
-    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_phantasia=False)
+    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_world_model=False)
     fm = ForkManager(tmp_path / "forks")
     try:
         result = await fm.preserve_live(
@@ -927,9 +932,9 @@ async def test_preserve_live_fails_loud_when_memory_uncapturable(
             raise ConnectionError("unreachable")
 
     qs._client = _Broken()
-    core = MnemosCore(embedder=emb, storage=qs, short_term_capacity=4)
-    mnemos = Mnemos(bus, core=core)
-    reg.register(mnemos)
+    core = EpisodicMemoryCore(embedder=emb, storage=qs, short_term_capacity=4)
+    episodic_memory = EpisodicMemory(bus, core=core)
+    reg.register(episodic_memory)
 
     fm = ForkManager(tmp_path / "forks")
     with pytest.raises(PreservationError, match="preservation capture failed"):
@@ -945,7 +950,7 @@ async def test_preserve_live_fails_loud_when_memory_uncapturable(
 
 
 @pytest.mark.asyncio
-async def test_phantasia_preservation_fails_loud_when_checkpoint_save_fails(
+async def test_world_model_preservation_fails_loud_when_checkpoint_save_fails(
     bus: AsyncBus, tmp_path: Path
 ):
     class _UnsavableFake(_PersistableFake):
@@ -953,7 +958,7 @@ async def test_phantasia_preservation_fails_loud_when_checkpoint_save_fails(
             raise OSError("disk gone")
 
     wm = _UnsavableFake(obs_dim=observation_dim())
-    ph = Phantasia(
+    ph = WorldModel(
         bus,
         world_model=wm,
         backend="dreamerv3",
@@ -974,7 +979,7 @@ async def test_phantasia_preservation_fails_loud_when_checkpoint_save_fails(
 
 @pytest.mark.asyncio
 async def test_revive_fails_loud_when_module_missing(bus: AsyncBus, tmp_path: Path):
-    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_phantasia=False)
+    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_world_model=False)
     fm = ForkManager(tmp_path / "forks")
     try:
         result = await fm.preserve_live(
@@ -1008,7 +1013,7 @@ async def test_revive_fails_loud_when_captured_weights_absent_from_bundle(
     phantasia/ member while keeping snapshot.json's captured=True record.)"""
     import tarfile
 
-    reg, ckpt = await _build_synthetic_entity(bus, tmp_path, persist_phantasia=True)
+    reg, ckpt = await _build_synthetic_entity(bus, tmp_path, persist_world_model=True)
     fm = ForkManager(tmp_path / "forks")
     try:
         result = await fm.preserve_live(
@@ -1040,10 +1045,10 @@ async def test_revive_fails_loud_when_captured_weights_absent_from_bundle(
         eid2 = Eidolon(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
         await eid2.initialize()
         reg2.register(eid2)
-        m2 = await _build_mnemos(bus)
+        m2 = await _build_episodic_memory(bus)
         reg2.register(m2)
         wm2 = _PersistableFake(obs_dim=observation_dim(), decay=0.99)
-        ph2 = Phantasia(
+        ph2 = WorldModel(
             bus, world_model=wm2, backend="dreamerv3", persist_weights=True,
             checkpoint_path=str(tmp_path / "phantasia2" / "wm.ckpt"),
         )
@@ -1103,7 +1108,7 @@ async def test_preserve_live_fails_loud_when_module_serialize_raises(
 async def test_revive_fails_loud_on_corrupt_bundle(bus: AsyncBus, tmp_path: Path):
     """A bundle whose tar content is corrupt must raise on revive — never revive
     a silent empty individual."""
-    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_phantasia=False)
+    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_world_model=False)
     fm = ForkManager(tmp_path / "forks")
     try:
         result = await fm.preserve_live(
@@ -1117,7 +1122,7 @@ async def test_revive_fails_loud_on_corrupt_bundle(bus: AsyncBus, tmp_path: Path
         eid2 = Eidolon(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)
         await eid2.initialize()
         reg2.register(eid2)
-        m2 = await _build_mnemos(bus)
+        m2 = await _build_episodic_memory(bus)
         reg2.register(m2)
         # Either the tar fails to open (ReviveError) or it opens but carries no
         # snapshot.json (ReviveError "no snapshot.json"). Both are fail-loud.
@@ -1166,7 +1171,7 @@ async def test_preservation_manifest_fields_match_result(
     PreservationResult on run_id / preservation_id / snapshot_id /
     world_model_captured / modules (the fields that ARE in the post-security
     manifest)."""
-    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_phantasia=True)
+    reg, _ = await _build_synthetic_entity(bus, tmp_path, persist_world_model=True)
     fm = ForkManager(tmp_path / "forks")
     try:
         result = await fm.preserve_live(
@@ -1199,7 +1204,7 @@ async def test_preservation_manifest_fields_match_result(
 @pytest.mark.asyncio
 async def test_real_dreamerv3_weight_capture_restore(bus: AsyncBus, tmp_path: Path):
     pytest.importorskip("jax")
-    from kaine.modules.phantasia.world_model import DreamerV3WorldModel
+    from kaine.modules.world_model.backend import DreamerV3WorldModel
 
     reg = ModuleRegistry()
     ckpt = tmp_path / "phantasia" / "wm.ckpt"
@@ -1208,7 +1213,7 @@ async def test_real_dreamerv3_weight_capture_restore(bus: AsyncBus, tmp_path: Pa
     )
     # Learn a little so weights are non-trivial.
     wm.train([[float((i + j) % 5) for j in range(observation_dim())] for i in range(8)])
-    ph = Phantasia(
+    ph = WorldModel(
         bus, world_model=wm, backend="dreamerv3", persist_weights=True,
         checkpoint_path=str(ckpt),
     )
@@ -1230,7 +1235,7 @@ async def test_real_dreamerv3_weight_capture_restore(bus: AsyncBus, tmp_path: Pa
         observation_dim(), deter_dim=8, stoch_dim=4, stoch_classes=3,
         hidden_dim=8, seed=99,
     )
-    ph2 = Phantasia(
+    ph2 = WorldModel(
         bus, world_model=wm2, backend="dreamerv3", persist_weights=True,
         checkpoint_path=str(tmp_path / "phantasia2" / "wm.ckpt"),
     )
@@ -1246,7 +1251,7 @@ async def test_real_dreamerv3_weight_capture_restore(bus: AsyncBus, tmp_path: Pa
 
 
 def _enc() -> str:
-    from kaine.modules.phantasia.encoder import VERSION
+    from kaine.modules.world_model.encoder import VERSION
 
     return VERSION
 

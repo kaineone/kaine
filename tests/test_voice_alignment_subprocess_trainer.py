@@ -22,11 +22,11 @@ from pathlib import Path
 
 import pytest
 
-from kaine.modules.hypnos.subprocess_trainer import (
+from kaine.modules.sleep.subprocess_trainer import (
     SubprocessTrainerError,
     SubprocessVoiceTrainer,
 )
-from kaine.modules.hypnos.voice_alignment import DPOPair, VoiceAlignmentConfig
+from kaine.modules.sleep.voice_alignment import DPOPair, VoiceAlignmentConfig
 
 VENV_PY = str(Path(sys.executable))
 

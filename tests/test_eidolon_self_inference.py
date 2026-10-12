@@ -34,7 +34,7 @@ def _lingua_payload(text: str = "hello") -> dict:
     return {"text": text, "model": "qwen"}
 
 
-def _thymos_state_payload(v: float, a: float, d: float) -> dict:
+def _affect_state_payload(v: float, a: float, d: float) -> dict:
     return {"state": {"valence": v, "arousal": a, "dominance": d}}
 
 
@@ -120,7 +120,7 @@ def test_vad_stats_update_on_maintenance_cycle():
     model = SelfModelDocument()
 
     # Feed two VAD samples via thymos.state events.
-    engine.observe_thymos_state(_thymos_state_payload(0.5, 0.3, 0.1))
+    engine.observe_affect_state(_affect_state_payload(0.5, 0.3, 0.1))
     updated = engine.maintenance_cycle_end(model)
     # After first cycle, the window has one sample.
     pb = updated.personality_baseline
@@ -141,7 +141,7 @@ def test_vad_stats_rolling_mean():
 
     # Three cycles with different VAD.
     for v, a, d in [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0), (0.5, 0.5, 0.5)]:
-        engine.observe_thymos_state(_thymos_state_payload(v, a, d))
+        engine.observe_affect_state(_affect_state_payload(v, a, d))
         model = engine.maintenance_cycle_end(model)
 
     pb = model.personality_baseline
@@ -217,8 +217,8 @@ def test_disabled_engine_no_update():
 
     # Try to feed observations — must be silently ignored.
     engine.observe_lingua({"text": "ignored"}, "internal.thought")
-    engine.observe_thymos_state(_thymos_state_payload(0.5, 0.3, 0.0))
-    engine.observe_thymos_drive(_drive_payload("curiosity"))
+    engine.observe_affect_state(_affect_state_payload(0.5, 0.3, 0.0))
+    engine.observe_affect_drive(_drive_payload("curiosity"))
     engine.observe_nous_policy(_policy_payload("request_think"))
 
     updated = engine.maintenance_cycle_end(model)
@@ -237,8 +237,8 @@ def test_disabled_engine_no_crash():
 
     for _ in range(100):
         engine.observe_lingua({"text": "x"}, "internal.thought")
-        engine.observe_thymos_state({"state": {}})
-        engine.observe_thymos_drive({"drive": "curiosity"})
+        engine.observe_affect_state({"state": {}})
+        engine.observe_affect_drive({"drive": "curiosity"})
         engine.observe_nous_policy({"policy": "no_op"})
         model = engine.maintenance_cycle_end(model)
 
@@ -260,7 +260,7 @@ def test_values_derived_from_norms_and_drives():
 
     # Enough drive crossings.
     for _ in range(2):
-        engine.observe_thymos_drive(_drive_payload("curiosity"))
+        engine.observe_affect_drive(_drive_payload("curiosity"))
 
     model = engine.maintenance_cycle_end(model)
     assert "drive:curiosity" in model.values
@@ -273,7 +273,7 @@ def test_values_empty_when_no_norms():
 
     # Only drives, no norms.
     for _ in range(5):
-        engine.observe_thymos_drive(_drive_payload("curiosity"))
+        engine.observe_affect_drive(_drive_payload("curiosity"))
 
     model = engine.maintenance_cycle_end(model)
     assert model.values == []

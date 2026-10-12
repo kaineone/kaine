@@ -40,8 +40,8 @@ NOUS_PROPOSAL_TYPE = "nous.proposal"
 
 # Drive summary helpers are mirrored here so this module stays independent of
 # kaine.workspace.drive_policy (the drive policy already imports from the action selection module).
-THYMOS_DRIVE_SOURCE = "thymos"
-THYMOS_DRIVE_TYPE = "thymos.drive"
+AFFECT_DRIVE_SOURCE = "thymos"
+AFFECT_DRIVE_TYPE = "thymos.drive"
 
 
 class NousProposalSource:
@@ -245,8 +245,8 @@ class NousProposalSource:
             if text:
                 return text, "heard"
         if (
-            event.source == THYMOS_DRIVE_SOURCE
-            and event.type == THYMOS_DRIVE_TYPE
+            event.source == AFFECT_DRIVE_SOURCE
+            and event.type == AFFECT_DRIVE_TYPE
         ):
             name = event.payload.get("drive")
             if isinstance(name, str):

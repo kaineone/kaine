@@ -21,31 +21,36 @@ from kaine.entity_clock import EntityClock
 from kaine.experiment.run_context import RunContext, set_run_context
 from kaine.lifecycle import preservation
 from kaine.lifecycle.manager import ForkManager
+from kaine.modules.affect import DimensionalState
+from kaine.modules.affect.module import Affect
 from kaine.modules.audition.module import Audition
 from kaine.modules.eidolon.module import Eidolon, SelfModelDocument
 from kaine.modules.empatheia.agent import AgentModel
 from kaine.modules.empatheia.module import Empatheia
 from kaine.modules.empatheia.store import InMemoryAgentStore
-from kaine.modules.hypnos import VoiceAlignmentConfig
-from kaine.modules.hypnos.module import Hypnos
+from kaine.modules.episodic_memory import (
+    EpisodicMemory,
+    EpisodicMemoryCore,
+    FakeEmbedder,
+    InMemoryStorage,
+)
 from kaine.modules.interoception.module import Interoception
 from kaine.modules.lingua.intent_log import IntentExpressionLog
 from kaine.modules.lingua.module import Lingua
-from kaine.modules.mnemos import FakeEmbedder, InMemoryStorage, Mnemos, MnemosCore
 from kaine.modules.mundus.module import Mundus
 from kaine.modules.nous.module import Nous
 from kaine.modules.perception.module import PerceptionLocus
-from kaine.modules.phantasia.module import Phantasia
 from kaine.modules.praxis.module import Praxis
 from kaine.modules.registry import ModuleRegistry
 from kaine.modules.sequence.anomaly import RollingZScoreAnomaly
 from kaine.modules.sequence.featurizer import SnapshotFeaturizer
 from kaine.modules.sequence.module import Sequence
 from kaine.modules.sequence.rumination import RecurrenceRuminationDetector
-from kaine.modules.thymos import DimensionalState
-from kaine.modules.thymos.module import Thymos
+from kaine.modules.sleep import VoiceAlignmentConfig
+from kaine.modules.sleep.module import Sleep
 from kaine.modules.vision.module import Vision
 from kaine.modules.vox.module import Vox
+from kaine.modules.world_model.module import WorldModel
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
 # ---------------------------------------------------------------------------
@@ -345,34 +350,34 @@ async def test_roundtrip_lingua(bus: AsyncBus, tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_roundtrip_thymos(bus: AsyncBus, tmp_path: Path) -> None:
-    m1 = Thymos(bus, publish_interval_s=0.5, clock=lambda: 0.0)
+async def test_roundtrip_affect(bus: AsyncBus, tmp_path: Path) -> None:
+    m1 = Affect(bus, publish_interval_s=0.5, clock=lambda: 0.0)
     m1._state = DimensionalState(valence=0.5, arousal=0.6, dominance=0.1)
     m1._baseline = DimensionalState(valence=0.1, arousal=0.3, dominance=0.0)
     m1._familiarity_cache = {"operator": 0.8}
     m1._goals.add("test goal", priority=0.5)
     state = _json_roundtrip(m1.serialize())
-    m2 = Thymos(bus, publish_interval_s=0.5, clock=lambda: 0.0)
+    m2 = Affect(bus, publish_interval_s=0.5, clock=lambda: 0.0)
     m2.deserialize(state)
     assert _json_roundtrip(m2.serialize()) == state
 
 
 @pytest.mark.asyncio
-async def test_roundtrip_mnemos(bus: AsyncBus, tmp_path: Path) -> None:
+async def test_roundtrip_episodic_memory(bus: AsyncBus, tmp_path: Path) -> None:
     emb = FakeEmbedder(latent_dim=8)
     await emb.load()
-    core = MnemosCore(
+    core = EpisodicMemoryCore(
         embedder=emb,
         storage=InMemoryStorage(latent_dim=emb.latent_dim),
         short_term_capacity=8,
     )
-    m1 = Mnemos(bus, core=core)
+    m1 = EpisodicMemory(bus, core=core)
     # Synchronous serialize() is metadata-only; the matching deserialize is a
     # no-op unless a memory_state capture is present (Mnemos.deserialize docstring).
     state = _json_roundtrip(m1.serialize())
-    m2 = Mnemos(
+    m2 = EpisodicMemory(
         bus,
-        core=MnemosCore(
+        core=EpisodicMemoryCore(
             embedder=FakeEmbedder(latent_dim=8),
             storage=InMemoryStorage(latent_dim=8),
             short_term_capacity=8,
@@ -383,12 +388,12 @@ async def test_roundtrip_mnemos(bus: AsyncBus, tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_roundtrip_hypnos(bus: AsyncBus, tmp_path: Path) -> None:
+async def test_roundtrip_sleep(bus: AsyncBus, tmp_path: Path) -> None:
     intent_log = tmp_path / "hypnos" / "intent.jsonl"
     adapter_dir = tmp_path / "hypnos" / "adapters"
     intent_log.parent.mkdir(parents=True, exist_ok=True)
     adapter_dir.mkdir(parents=True, exist_ok=True)
-    m1 = Hypnos(
+    m1 = Sleep(
         bus,
         trainer=_FakeTrainer(),
         voice_alignment_config=VoiceAlignmentConfig(
@@ -401,7 +406,7 @@ async def test_roundtrip_hypnos(bus: AsyncBus, tmp_path: Path) -> None:
     )
     m1._last_sleep_at = 12345.0
     state = _json_roundtrip(m1.serialize())
-    m2 = Hypnos(
+    m2 = Sleep(
         bus,
         trainer=_FakeTrainer(),
         voice_alignment_config=VoiceAlignmentConfig(
@@ -421,15 +426,15 @@ async def test_roundtrip_hypnos(bus: AsyncBus, tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_roundtrip_phantasia(bus: AsyncBus, tmp_path: Path) -> None:
-    m1 = Phantasia(bus, backend="fake")
+async def test_roundtrip_world_model(bus: AsyncBus, tmp_path: Path) -> None:
+    m1 = WorldModel(bus, backend="fake")
     m1._training_enabled = True
     state = _json_roundtrip(m1.serialize())
-    m2 = Phantasia(bus, backend="fake")
+    m2 = WorldModel(bus, backend="fake")
     m2.deserialize(state)
     got = _json_roundtrip(m2.serialize())
     # These keys are echoed configuration; the configured checkpoint path wins.
-    fresh = Phantasia(bus, backend="fake")
+    fresh = WorldModel(bus, backend="fake")
     fresh_state = _json_roundtrip(fresh.serialize())
     config_keys = (
         "backend",
@@ -635,32 +640,32 @@ async def _build_lingua(bus: AsyncBus, tmp_path: Path, name: str) -> Lingua:
     return m
 
 
-async def _build_thymos(bus: AsyncBus, tmp_path: Path, name: str) -> Thymos:
-    m = Thymos(bus, publish_interval_s=0.5, clock=lambda: 0.0)
+async def _build_affect(bus: AsyncBus, tmp_path: Path, name: str) -> Affect:
+    m = Affect(bus, publish_interval_s=0.5, clock=lambda: 0.0)
     await m.initialize()
     return m
 
 
-async def _build_mnemos(bus: AsyncBus, tmp_path: Path, name: str) -> Mnemos:
+async def _build_episodic_memory(bus: AsyncBus, tmp_path: Path, name: str) -> EpisodicMemory:
     emb = FakeEmbedder(latent_dim=8)
     await emb.load()
     storage = InMemoryStorage(latent_dim=emb.latent_dim)
-    core = MnemosCore(
+    core = EpisodicMemoryCore(
         embedder=emb,
         storage=storage,
         short_term_capacity=8,
     )
-    m = Mnemos(bus, core=core)
+    m = EpisodicMemory(bus, core=core)
     await m.initialize()
     return m
 
 
-async def _build_hypnos(bus: AsyncBus, tmp_path: Path, name: str) -> Hypnos:
+async def _build_sleep(bus: AsyncBus, tmp_path: Path, name: str) -> Sleep:
     intent_log = tmp_path / name / "intent.jsonl"
     adapter_dir = tmp_path / name / "adapters"
     intent_log.parent.mkdir(parents=True, exist_ok=True)
     adapter_dir.mkdir(parents=True, exist_ok=True)
-    m = Hypnos(
+    m = Sleep(
         bus,
         trainer=_FakeTrainer(),
         voice_alignment_config=VoiceAlignmentConfig(
@@ -675,8 +680,8 @@ async def _build_hypnos(bus: AsyncBus, tmp_path: Path, name: str) -> Hypnos:
     return m
 
 
-async def _build_phantasia(bus: AsyncBus, tmp_path: Path, name: str) -> Phantasia:
-    m = Phantasia(bus, backend="fake")
+async def _build_world_model(bus: AsyncBus, tmp_path: Path, name: str) -> WorldModel:
+    m = WorldModel(bus, backend="fake")
     await m.initialize()
     return m
 
@@ -749,10 +754,10 @@ BASE_FACTORIES: dict[str, Any] = {
 }
 
 ORDER: list[tuple[str, Any]] = [
-    ("thymos", _build_thymos),
-    ("mnemos", _build_mnemos),
-    ("hypnos", _build_hypnos),
-    ("phantasia", _build_phantasia),
+    ("thymos", _build_affect),
+    ("mnemos", _build_episodic_memory),
+    ("hypnos", _build_sleep),
+    ("phantasia", _build_world_model),
     ("nous", _build_nous),
     ("eidolon", _build_eidolon),
     ("empatheia", _build_empatheia),
@@ -790,7 +795,7 @@ def _mutate_lingua(m: Lingua, i: int) -> None:
     m._intent_cursor = f"{i}-0"
 
 
-def _mutate_thymos(m: Thymos, i: int) -> None:
+def _mutate_affect(m: Affect, i: int) -> None:
     m._state = DimensionalState(
         valence=0.1 * i, arousal=0.3 + 0.05 * i, dominance=0.0
     )
@@ -799,15 +804,15 @@ def _mutate_thymos(m: Thymos, i: int) -> None:
     m._goals.add(f"goal {i}", priority=0.5)
 
 
-async def _mutate_mnemos(m: Mnemos, i: int) -> None:
+async def _mutate_episodic_memory(m: EpisodicMemory, i: int) -> None:
     await m._core.store(f"memory {i}")
 
 
-def _mutate_hypnos(m: Hypnos, i: int) -> None:
+def _mutate_sleep(m: Sleep, i: int) -> None:
     m._last_sleep_at = 5000.0 + i
 
 
-def _mutate_phantasia(m: Phantasia, i: int) -> None:
+def _mutate_world_model(m: WorldModel, i: int) -> None:
     m._training_enabled = True
 
 
@@ -855,10 +860,10 @@ MUTATORS: dict[str, Any] = {
     "topos": _mutate_vision,
     "audition": _mutate_audition,
     "lingua": _mutate_lingua,
-    "thymos": _mutate_thymos,
-    "mnemos": _mutate_mnemos,
-    "hypnos": _mutate_hypnos,
-    "phantasia": _mutate_phantasia,
+    "thymos": _mutate_affect,
+    "mnemos": _mutate_episodic_memory,
+    "hypnos": _mutate_sleep,
+    "phantasia": _mutate_world_model,
     "nous": _mutate_nous,
     "eidolon": _mutate_eidolon,
     "empatheia": _mutate_empatheia,

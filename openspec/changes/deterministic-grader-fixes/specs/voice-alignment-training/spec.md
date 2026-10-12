@@ -3,7 +3,7 @@
 ### Requirement: Capability-eval harness is pluggable
 The trainer SHALL accept a `capability_eval: CapabilityEval`
 collaborator via `__init__`. The default `LocalProbeSetCapabilityEval`
-SHALL read `kaine/modules/hypnos/eval_probes/default.jsonl` and
+SHALL read `kaine/modules/sleep/eval_probes/default.jsonl` and
 compute `correct / total` against the model. The operator MAY
 substitute their own evaluator by passing one explicitly or by
 overriding the probe-set path via

@@ -24,20 +24,20 @@ from kaine.boot import (
     SIMPLE_FACTORIES,
     ConfigurationError,
     build_registry,
+    make_affect,
     make_audition,
     make_eidolon,
     make_empatheia,
-    make_hypnos,
+    make_episodic_memory,
     make_interoception,
     make_lingua,
-    make_mnemos,
     make_nous,
-    make_phantasia,
     make_praxis,
     make_sequence,
-    make_thymos,
+    make_sleep,
     make_vision,
     make_vox,
+    make_world_model,
     rewire_module,
 )
 from kaine.bus.client import AsyncBus
@@ -298,9 +298,9 @@ def test_make_nous_rejects_oversized_envelope():
         )
 
 
-def test_make_mnemos_from_config_does_not_connect_qdrant():
+def test_make_episodic_memory_from_config_does_not_connect_qdrant():
     bus = _bus()
-    mnemos = make_mnemos(
+    episodic_memory = make_episodic_memory(
         bus,
         {
             "backend": "inmemory",  # avoid Qdrant connect at construction
@@ -312,13 +312,13 @@ def test_make_mnemos_from_config_does_not_connect_qdrant():
             "alert_salience": 0.6,
         },
     )
-    assert mnemos.name == "mnemos"
+    assert episodic_memory.name == "mnemos"
 
 
-def test_make_mnemos_rejects_embedder_model_id():
+def test_make_episodic_memory_rejects_embedder_model_id():
     bus = _bus()
     with pytest.raises(ConfigurationError) as exc:
-        make_mnemos(
+        make_episodic_memory(
             bus,
             {
                 "backend": "inmemory",
@@ -331,10 +331,10 @@ def test_make_mnemos_rejects_embedder_model_id():
     assert "[embedding].model_id" in str(exc.value)
 
 
-def test_make_mnemos_rejects_device():
+def test_make_episodic_memory_rejects_device():
     bus = _bus()
     with pytest.raises(ConfigurationError) as exc:
-        make_mnemos(
+        make_episodic_memory(
             bus,
             {
                 "backend": "inmemory",
@@ -365,9 +365,9 @@ def test_make_eidolon_from_config(tmp_path):
     assert eidolon.name == "eidolon"
 
 
-def test_make_thymos_from_config_builds_baseline():
+def test_make_affect_from_config_builds_baseline():
     bus = _bus()
-    thymos = make_thymos(
+    affect = make_affect(
         bus,
         {
             "baseline_valence": 0.0,
@@ -379,10 +379,10 @@ def test_make_thymos_from_config_builds_baseline():
             "alert_salience": 0.7,
         },
     )
-    assert thymos.name == "thymos"
+    assert affect.name == "thymos"
 
 
-def test_make_thymos_tolerates_legacy_coupling_max_rate_key(caplog):
+def test_make_affect_tolerates_legacy_coupling_max_rate_key(caplog):
     """A stale [thymos.coupling].coupling_max_rate_per_s key is ignored with a warning.
 
     The DriftSafeguard it backed was removed (thymos-emergent-affect-coupling);
@@ -390,7 +390,7 @@ def test_make_thymos_tolerates_legacy_coupling_max_rate_key(caplog):
     """
     bus = _bus()
     with caplog.at_level(logging.WARNING):
-        thymos = make_thymos(
+        affect = make_affect(
             bus,
             {
                 "coupling": {
@@ -401,33 +401,33 @@ def test_make_thymos_tolerates_legacy_coupling_max_rate_key(caplog):
                 },
             },
         )
-    assert thymos.name == "thymos"
-    assert thymos._coupling.enabled is True
-    assert thymos._coupling.decay_s == 8.0
-    assert not hasattr(thymos._coupling, "coupling_max_rate_per_s")
+    assert affect.name == "thymos"
+    assert affect._coupling.enabled is True
+    assert affect._coupling.decay_s == 8.0
+    assert not hasattr(affect._coupling, "coupling_max_rate_per_s")
     assert "[thymos.coupling].coupling_max_rate_per_s is retired" in caplog.text
 
 
-def test_make_thymos_ignores_retired_social_drive_time_scale(caplog):
+def test_make_affect_ignores_retired_social_drive_time_scale(caplog):
     """A stale [thymos].social_drive_time_scale_s key is ignored with a warning."""
     with caplog.at_level(logging.WARNING):
-        thymos = make_thymos(
+        affect = make_affect(
             _bus(),
             {
                 "publish_interval_s": 1.0,
                 "social_drive_time_scale_s": 600.0,
             },
         )
-    assert thymos.name == "thymos"
-    assert not hasattr(thymos, "_social_drive_time_scale_s")
+    assert affect.name == "thymos"
+    assert not hasattr(affect, "_social_drive_time_scale_s")
     assert "[thymos].social_drive_time_scale_s is retired" in caplog.text
 
 
-def test_make_thymos_rejects_truly_unknown_coupling_key():
+def test_make_affect_rejects_truly_unknown_coupling_key():
     """A genuinely unknown coupling key still raises (tolerance is legacy-only)."""
     bus = _bus()
     with pytest.raises(ValueError):
-        make_thymos(bus, {"coupling": {"bogus_key": 1.0}})
+        make_affect(bus, {"coupling": {"bogus_key": 1.0}})
 
 
 def test_make_praxis_with_empty_whitelist(tmp_path):
@@ -629,9 +629,9 @@ def test_make_empatheia_rejects_unknown_keys():
         make_empatheia(bus, {"backend": "inmemory", "bogus_key": True})
 
 
-def test_make_phantasia_from_config():
+def test_make_world_model_from_config():
     bus = _bus()
-    phantasia = make_phantasia(
+    world_model = make_world_model(
         bus,
         {
             "backend": "fake",
@@ -643,18 +643,18 @@ def test_make_phantasia_from_config():
             "world_model": {"deter_dim": 32, "stoch_dim": 8},
         },
     )
-    assert phantasia.name == "phantasia"
+    assert world_model.name == "phantasia"
 
 
-def test_make_phantasia_rejects_unknown_keys():
+def test_make_world_model_rejects_unknown_keys():
     bus = _bus()
     with pytest.raises(ValueError, match="unknown config keys"):
-        make_phantasia(bus, {"backend": "fake", "bogus_key": True})
+        make_world_model(bus, {"backend": "fake", "bogus_key": True})
 
 
-def test_make_hypnos_without_deps(tmp_path):
+def test_make_sleep_without_deps(tmp_path):
     bus = _bus()
-    hypnos = make_hypnos(
+    sleep = make_sleep(
         bus,
         {
             "interval_seconds": 3600.0,
@@ -667,13 +667,13 @@ def test_make_hypnos_without_deps(tmp_path):
             },
         },
     )
-    assert hypnos.name == "hypnos"
+    assert sleep.name == "hypnos"
 
 
-def test_make_hypnos_ignores_retired_nous_step_burst(tmp_path, caplog):
+def test_make_sleep_ignores_retired_nous_step_burst(tmp_path, caplog):
     """A stale [hypnos].nous_step_burst key is ignored with a warning."""
     with caplog.at_level(logging.WARNING):
-        hypnos = make_hypnos(
+        sleep = make_sleep(
             _bus(),
             {
                 "interval_seconds": 3600.0,
@@ -685,15 +685,15 @@ def test_make_hypnos_ignores_retired_nous_step_burst(tmp_path, caplog):
                 },
             },
         )
-    assert hypnos.name == "hypnos"
-    assert not hasattr(hypnos, "_nous_step_burst")
+    assert sleep.name == "hypnos"
+    assert not hasattr(sleep, "_nous_step_burst")
     assert "[hypnos].nous_step_burst is retired" in caplog.text
 
 
-def test_make_hypnos_still_rejects_unknown_key():
+def test_make_sleep_still_rejects_unknown_key():
     """A typoed sleep key is still rejected."""
     with pytest.raises(ValueError, match="unknown config keys"):
-        make_hypnos(_bus(), {"nous_step_bursts": 200})
+        make_sleep(_bus(), {"nous_step_bursts": 200})
 
 
 def test_build_registry_respects_disabled_toggles():
@@ -715,7 +715,7 @@ def test_build_registry_respects_disabled_toggles():
     assert "topos" not in registry
 
 
-def test_build_registry_constructs_hypnos_last():
+def test_build_registry_constructs_sleep_last():
     bus = _bus()
     registry = build_registry(
         bus,
@@ -746,10 +746,10 @@ def test_build_registry_constructs_hypnos_last():
         },
     )
     assert set(["mnemos", "thymos", "hypnos"]).issubset(set(registry._modules))
-    hypnos = registry.get("hypnos")
+    sleep = registry.get("hypnos")
     # the sleep module should have been wired to the constructed episodic memory module and the affect module.
-    assert hypnos._mnemos is registry.get("mnemos")
-    assert hypnos._thymos is registry.get("thymos")
+    assert sleep._episodic_memory is registry.get("mnemos")
+    assert sleep._affect is registry.get("thymos")
 
 
 def test_factory_rejects_unknown_config_key():

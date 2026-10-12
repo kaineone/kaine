@@ -13,7 +13,7 @@ Two things still run on every sleep:
 - the consolidation-divergence metric is computed and published (see [sleep module](../09-modules/sleep.md#consolidation-divergence)), and a scan that fails or finds no records keeps the earlier record in place;
 - after the phase, the sleep module moves the waking intent log into the per-sleep corpus under `state/lingua/intent_log/`.
 
-The training path described below (`Hypnos._train_on_pairs` and the trainer backends) is built and tested, and runs only once a training source exists.
+The training path described below (`Sleep._train_on_pairs` and the trainer backends) is built and tested, and runs only once a training source exists.
 
 ## Gates
 
@@ -57,7 +57,7 @@ The builder skips records with an empty field and records where `chosen == rejec
 
 ```mermaid
 sequenceDiagram
-    participant Hypnos as Hypnos Phase 4
+    participant Sleep as Sleep Phase 4
     participant Builder as DPOPairBuilder
     participant Log as intent_expression.jsonl
     participant Trainer as Trainer backend
@@ -65,11 +65,11 @@ sequenceDiagram
     participant AblEval as AbliterationProbeScorer
     participant Store as AdapterStore
 
-    Hypnos->>Builder: build(intent_log_path, max_pairs)
+    Sleep->>Builder: build(intent_log_path, max_pairs)
     Builder->>Log: read JSONL records
-    Builder-->>Hypnos: list[DPOPair]
+    Builder-->>Sleep: list[DPOPair]
 
-    Hypnos->>Trainer: train(pairs, config)
+    Sleep->>Trainer: train(pairs, config)
     Trainer->>Trainer: Load base model (HF format)
     Trainer->>Trainer: Attach LoRA adapter (bf16, or 4-bit with train_precision = "4bit")
     Trainer->>CapEval: eval(model, tokenizer) BEFORE
@@ -77,17 +77,17 @@ sequenceDiagram
     Trainer->>Trainer: Save adapter
     Trainer->>AblEval: score(model), abliteration veto
     alt deflection detected
-        Trainer-->>Hypnos: TrainingResult(accepted=False, reason="abliteration veto")
+        Trainer-->>Sleep: TrainingResult(accepted=False, reason="abliteration veto")
     else probes pass
         Trainer->>CapEval: eval(model, tokenizer) AFTER
         Trainer->>Trainer: capability_loss = before - after
         alt capability_loss > threshold
-            Trainer-->>Hypnos: TrainingResult(accepted=False, reason="capability regression")
+            Trainer-->>Sleep: TrainingResult(accepted=False, reason="capability regression")
         else capability OK
             Trainer->>Store: promote(adapter_path)
             Store->>Store: atomic tmp → final + current symlink swing
             Trainer->>Trainer: hot_swap dispatch (mode-dependent)
-            Trainer-->>Hypnos: TrainingResult(accepted=True, adapter_path=tmp_dir)
+            Trainer-->>Sleep: TrainingResult(accepted=True, adapter_path=tmp_dir)
         end
     end
 ```
@@ -104,7 +104,7 @@ Probes with `in_character: true` ignore balanced double-quoted spans: character 
 
 ### Capability-loss veto
 
-`LocalProbeSetCapabilityEval` scores the model before and after training using a JSONL probe set. An answer counts when the expected text appears as a whole token sequence in the response, cut at the first later line that opens a new `Question:` or `Q:` turn, so `5` does not match `15`, `-5` or `5.5`, and an answer the model invents in a continuation earns nothing. The default probe set is `kaine/modules/hypnos/eval_probes/default.jsonl`, a small check that training has not broken the model. Like the abliteration set, the capability set must not be empty: boot refuses voice alignment when it has no usable probe, and the external trainer script rejects it before loading the model. An empty set would otherwise score both models 0 and let every adapter through.
+`LocalProbeSetCapabilityEval` scores the model before and after training using a JSONL probe set. An answer counts when the expected text appears as a whole token sequence in the response, cut at the first later line that opens a new `Question:` or `Q:` turn, so `5` does not match `15`, `-5` or `5.5`, and an answer the model invents in a continuation earns nothing. The default probe set is `kaine/modules/sleep/eval_probes/default.jsonl`, a small check that training has not broken the model. Like the abliteration set, the capability set must not be empty: boot refuses voice alignment when it has no usable probe, and the external trainer script rejects it before loading the model. An empty set would otherwise score both models 0 and let every adapter through.
 
 If `score_before - score_after > capability_loss_threshold` (default 0.05), the adapter is rejected and removed. The sleep module applies the same check again to the result a backend returns.
 
@@ -114,19 +114,19 @@ If `score_before - score_after > capability_loss_threshold` (default 0.05), the 
 
 | Backend | How it runs | Use when |
 |---------|-------------|----------|
-| `in_process` (default) | Inside the entity runtime. `SubprocessVoiceTrainer` loads `scripts/hypnos_external_train.py` by path and calls its entry point in a worker thread, with the same job spec, gates and result checks as `subprocess`. | The runtime venv can host the trainer stack (compatible Python, torch and CUDA). Requires the `[training]` extra. |
-| `subprocess` | A separate Python interpreter, via `SubprocessVoiceTrainer` shelling out to `scripts/hypnos_external_train.py`. | The runtime venv cannot host the trainer stack. |
+| `in_process` (default) | Inside the entity runtime. `SubprocessVoiceTrainer` loads `scripts/sleep_external_train.py` by path and calls its entry point in a worker thread, with the same job spec, gates and result checks as `subprocess`. | The runtime venv can host the trainer stack (compatible Python, torch and CUDA). Requires the `[training]` extra. |
+| `subprocess` | A separate Python interpreter, via `SubprocessVoiceTrainer` shelling out to `scripts/sleep_external_train.py`. | The runtime venv cannot host the trainer stack. |
 | `job_queue` | A separate `kaine-trainer` service that picks up job specs from a shared directory. | Containerized deployments or hosts where training must run outside the entity cycle. |
 
 ### In-process backend
 
-`SubprocessVoiceTrainer` loads `scripts/hypnos_external_train.py` by path and calls its entry point in a worker thread inside the entity runtime. The script writes the same job spec, runs the same abliteration and capability gates, promotes an accepted adapter atomically, and writes `result.json`. The bridge applies the same containment and non-empty adapter checks as the subprocess path. This backend requires the `[training]` extra installed in the entity venv.
+`SubprocessVoiceTrainer` loads `scripts/sleep_external_train.py` by path and calls its entry point in a worker thread inside the entity runtime. The script writes the same job spec, runs the same abliteration and capability gates, promotes an accepted adapter atomically, and writes `result.json`. The bridge applies the same containment and non-empty adapter checks as the subprocess path. This backend requires the `[training]` extra installed in the entity venv.
 
 Because the trainer script does not import `kaine`, it cannot compute `mean_intent_expression_similarity_before/after`. Those fields are absent on every backend.
 
 ### Subprocess backend
 
-`kaine/modules/hypnos/subprocess_trainer.py` runs the trainer stack in an external Python environment. The entry script `scripts/hypnos_external_train.py` imports only unsloth, trl, peft, datasets and the standard library, never `kaine`, and is invoked by explicit path. The runtime and trainer environments share only the filesystem.
+`kaine/modules/sleep/subprocess_trainer.py` runs the trainer stack in an external Python environment. The entry script `scripts/sleep_external_train.py` imports only unsloth, trl, peft, datasets and the standard library, never `kaine`, and is invoked by explicit path. The runtime and trainer environments share only the filesystem.
 
 `SubprocessVoiceTrainer` writes a per-job directory under `trainer_workdir` (default `state/hypnos/voice_align_jobs`):
 
@@ -188,7 +188,7 @@ The study overlay enables voice alignment with `job_queue`, `organ_adapter` and 
 
 ## Atomic adapter promotion
 
-`kaine/modules/hypnos/adapter_store.py` manages:
+`kaine/modules/sleep/adapter_store.py` manages:
 
 ```
 state/hypnos/adapters/
@@ -243,7 +243,7 @@ The served GGUF and the `base_model_path` safetensors that training starts from 
 
 ### Organ adapter mode details
 
-In `organ_adapter` mode, `kaine/modules/hypnos/organ_adapter.py` activates the adapter by pruning old `active-*.gguf` files, writing the new one with mode `0600`, and updating the manifest. The organ launcher (`docker/organ-launcher.sh`) verifies the sha256 and restarts `llama-server`. It stops the server with SIGTERM, then SIGKILL after `KAINE_ORGAN_STOP_TIMEOUT_S` (default 30) seconds, because an idle-asleep server can ignore SIGTERM.
+In `organ_adapter` mode, `kaine/modules/sleep/organ_adapter.py` activates the adapter by pruning old `active-*.gguf` files, writing the new one with mode `0600`, and updating the manifest. The organ launcher (`docker/organ-launcher.sh`) verifies the sha256 and restarts `llama-server`. It stops the server with SIGTERM, then SIGKILL after `KAINE_ORGAN_STOP_TIMEOUT_S` (default 30) seconds, because an idle-asleep server can ignore SIGTERM.
 
 The language module applies the adapter per request through `set_lora_resolver`, sending `lora` and `cache_prompt: false` only when the organ's `GET /lora-adapters` lists the manifest file and the manifest sha256 equals this entity's own promoted adapter. Every other request, from other entities or the evaluation A/B baseline, gets the base organ.
 
@@ -298,7 +298,7 @@ Voice alignment does not publish training-phase events to the bus. The sleep mod
 | `restart_service_unit` | string | `""` | `systemd --user` unit for `restart_service` |
 | `organ_adapters_dir` | string | `"/organ-adapters"` | Shared organ-adapters volume for `organ_adapter` |
 | `organ_url` | string | `""` | Organ base URL for `organ_adapter`; empty uses `[lingua].chat_url` |
-| `capability_probe_path` | string | `""` | Capability probe JSONL; empty uses `kaine/modules/hypnos/eval_probes/default.jsonl` |
+| `capability_probe_path` | string | `""` | Capability probe JSONL; empty uses `kaine/modules/sleep/eval_probes/default.jsonl` |
 | `abliteration_probe_path` | string | `""` | Abliteration probe JSONL; empty uses `eval_probes/abliteration_probes.jsonl` |
 | `trainer_backend` | string | `"in_process"` | `in_process`, `subprocess` or `job_queue` |
 | `trainer_python` | string | `""` | External interpreter; required for `subprocess` |
@@ -331,18 +331,18 @@ export KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1
 
 | File | Role |
 |------|------|
-| `kaine/modules/hypnos/voice_alignment.py` | `VoiceAlignmentConfig`, `DPOPairBuilder`, `FakeTrainer`, `DPOPair`, `TrainingResult`, the preference sources. |
-| `kaine/boot/factories/hypnos.py` | Parses `[hypnos.voice_alignment]`, validates the backend and hot-swap pairing, and picks the trainer. |
-| `kaine/modules/hypnos/subprocess_trainer.py` | `SubprocessVoiceTrainer`, the bridge used by the `in_process` and `subprocess` backends. |
-| `kaine/modules/hypnos/job_queue_trainer.py` | `JobQueueVoiceTrainer`, the shared-directory bridge to the `kaine-trainer` service. |
-| `kaine/modules/hypnos/trainer_service.py` | The `kaine-trainer` service that consumes jobs, runs the external trainer, and writes `DONE`. |
-| `kaine/modules/hypnos/organ_adapter.py` | Stages the adapter file and manifest; the organ launcher verifies the hash and restarts `llama-server` to load it. |
-| `kaine/modules/hypnos/adapter_store.py` | Atomic promotion, symlink management, and retention. |
-| `kaine/modules/hypnos/capability_eval.py` | `LocalProbeSetCapabilityEval`, `AbliterationProbe`, `AbliterationProbeScorer`, `AbliterationVerdict`. |
-| `kaine/modules/hypnos/hot_swap.py` | `dispatch()`, which notifies the inference server according to `hot_swap_mode`. |
-| `kaine/modules/hypnos/voice_audit.py` | `append_voice_audit()`, an atomic JSONL trail of abliteration-veto verdicts (reason, matched pattern, probe count). |
-| `kaine/modules/hypnos/organ_window.py` | `run_with_organ_window()`, the single-GPU unload, train and reload bracket, which always reloads a working organ before wake. |
-| `scripts/hypnos_external_train.py` | External trainer entry script (runs in the external env; never imports `kaine`). |
+| `kaine/modules/sleep/voice_alignment.py` | `VoiceAlignmentConfig`, `DPOPairBuilder`, `FakeTrainer`, `DPOPair`, `TrainingResult`, the preference sources. |
+| `kaine/boot/factories/sleep.py` | Parses `[hypnos.voice_alignment]`, validates the backend and hot-swap pairing, and picks the trainer. |
+| `kaine/modules/sleep/subprocess_trainer.py` | `SubprocessVoiceTrainer`, the bridge used by the `in_process` and `subprocess` backends. |
+| `kaine/modules/sleep/job_queue_trainer.py` | `JobQueueVoiceTrainer`, the shared-directory bridge to the `kaine-trainer` service. |
+| `kaine/modules/sleep/trainer_service.py` | The `kaine-trainer` service that consumes jobs, runs the external trainer, and writes `DONE`. |
+| `kaine/modules/sleep/organ_adapter.py` | Stages the adapter file and manifest; the organ launcher verifies the hash and restarts `llama-server` to load it. |
+| `kaine/modules/sleep/adapter_store.py` | Atomic promotion, symlink management, and retention. |
+| `kaine/modules/sleep/capability_eval.py` | `LocalProbeSetCapabilityEval`, `AbliterationProbe`, `AbliterationProbeScorer`, `AbliterationVerdict`. |
+| `kaine/modules/sleep/hot_swap.py` | `dispatch()`, which notifies the inference server according to `hot_swap_mode`. |
+| `kaine/modules/sleep/voice_audit.py` | `append_voice_audit()`, an atomic JSONL trail of abliteration-veto verdicts (reason, matched pattern, probe count). |
+| `kaine/modules/sleep/organ_window.py` | `run_with_organ_window()`, the single-GPU unload, train and reload bracket, which always reloads a working organ before wake. |
+| `scripts/sleep_external_train.py` | External trainer entry script (runs in the external env; never imports `kaine`). |
 | `docker/organ-launcher.sh` | Organ container entrypoint that verifies adapter sha256 and reloads `llama-server`. |
-| `kaine/modules/hypnos/eval_probes/default.jsonl` | Default capability probe set. |
+| `kaine/modules/sleep/eval_probes/default.jsonl` | Default capability probe set. |
 | `eval_probes/abliteration_probes.jsonl` | Abliteration probe set at the repository root. |

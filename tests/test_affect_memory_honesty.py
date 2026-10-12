@@ -22,6 +22,10 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.modules.affect import Affect
+from kaine.modules.affect.goals import GoalLedger
+from kaine.modules.affect.regulation import PassiveDecay
+from kaine.modules.affect.state import DimensionalState
 from kaine.modules.audition import (
     CATEGORIES,
     Audition,
@@ -31,17 +35,13 @@ from kaine.modules.audition import (
 )
 from kaine.modules.empatheia.module import Empatheia
 from kaine.modules.empatheia.store import InMemoryAgentStore
-from kaine.modules.mnemos import (
+from kaine.modules.episodic_memory import (
+    EpisodicMemory,
+    EpisodicMemoryCore,
     FakeEmbedder,
     InMemoryStorage,
-    Mnemos,
-    MnemosCore,
     StorageError,
 )
-from kaine.modules.thymos import Thymos
-from kaine.modules.thymos.goals import GoalLedger
-from kaine.modules.thymos.regulation import PassiveDecay
-from kaine.modules.thymos.state import DimensionalState
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -81,26 +81,26 @@ def _ev(source="soma", type_="t", salience=0.5, eid="e0", **payload):
 
 
 @pytest.mark.asyncio
-async def test_thymos_emotion_carries_norm_unavailable_flag(bus: AsyncBus):
+async def test_affect_emotion_carries_norm_unavailable_flag(bus: AsyncBus):
     """thymos.emotion event must signal that norm_compatibility is not a real reading."""
     fake_now = [0.0]
-    thymos = Thymos(
+    affect = Affect(
         bus,
         publish_interval_s=5.0,
         drift_rate_per_s=0.0,
         clock=lambda: fake_now[0],
     )
-    await thymos.initialize()
+    await affect.initialize()
     try:
         # Add a goal so goal_significance can become non-zero → emotion change fires.
-        thymos.goals.add("explore", priority=1.0)
+        affect.goals.add("explore", priority=1.0)
         # Errors falling over a minute (the averages run on 10 s and 100 s time
         # constants) yield positive learning progress / pleasantness.
         for idx, r in enumerate(
             [3.0 - 2.0 * i / 599 for i in range(600)]
         ):
             fake_now[0] = idx * 0.1
-            await thymos._handle_peer_event(
+            await affect._handle_peer_event(
                 "topos.out",
                 Event(
                     source="topos",
@@ -111,10 +111,10 @@ async def test_thymos_emotion_carries_norm_unavailable_flag(bus: AsyncBus):
                 ),
             )
             if (idx + 1) % 3 == 0:
-                await thymos._tick()
+                await affect._tick()
         fake_now[0] = 61.0
-        await thymos._tick()
-        await thymos.on_workspace(
+        await affect._tick()
+        await affect.on_workspace(
             _snapshot([_ev(salience=0.9, type_="explore_event", normalised_error=3.0)])
         )
         entries = await bus.read("thymos.out", last_id="0", count=20)
@@ -126,7 +126,7 @@ async def test_thymos_emotion_carries_norm_unavailable_flag(bus: AsyncBus):
             "until Eidolon norm signals are wired"
         )
     finally:
-        await thymos.shutdown()
+        await affect.shutdown()
 
 
 # ---------------------------------------------------------------------------
@@ -135,25 +135,25 @@ async def test_thymos_emotion_carries_norm_unavailable_flag(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_thymos_emotion_carries_goal_significance_method(bus: AsyncBus):
+async def test_affect_emotion_carries_goal_significance_method(bus: AsyncBus):
     """thymos.emotion must carry goal_significance_method to disclose proxy."""
     fake_now = [0.0]
-    thymos = Thymos(
+    affect = Affect(
         bus,
         publish_interval_s=5.0,
         drift_rate_per_s=0.0,
         clock=lambda: fake_now[0],
     )
-    await thymos.initialize()
+    await affect.initialize()
     try:
-        thymos.goals.add("navigate", priority=1.0)
+        affect.goals.add("navigate", priority=1.0)
         # Errors falling over a minute (the averages run on 10 s and 100 s time
         # constants) yield positive learning progress / pleasantness.
         for idx, r in enumerate(
             [3.0 - 2.0 * i / 599 for i in range(600)]
         ):
             fake_now[0] = idx * 0.1
-            await thymos._handle_peer_event(
+            await affect._handle_peer_event(
                 "topos.out",
                 Event(
                     source="topos",
@@ -164,10 +164,10 @@ async def test_thymos_emotion_carries_goal_significance_method(bus: AsyncBus):
                 ),
             )
             if (idx + 1) % 3 == 0:
-                await thymos._tick()
+                await affect._tick()
         fake_now[0] = 61.0
-        await thymos._tick()
-        await thymos.on_workspace(
+        await affect._tick()
+        await affect.on_workspace(
             _snapshot([_ev(salience=0.9, type_="navigate_event", normalised_error=3.0)])
         )
         entries = await bus.read("thymos.out", last_id="0", count=20)
@@ -178,7 +178,7 @@ async def test_thymos_emotion_carries_goal_significance_method(bus: AsyncBus):
             "thymos.emotion must disclose goal_significance is a token-overlap proxy"
         )
     finally:
-        await thymos.shutdown()
+        await affect.shutdown()
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +211,7 @@ async def test_passive_decay_logs_on_first_use(caplog):
     import logging
     policy = PassiveDecay()
     state = DimensionalState()
-    with caplog.at_level(logging.DEBUG, logger="kaine.modules.thymos.regulation"):
+    with caplog.at_level(logging.DEBUG, logger="kaine.modules.affect.regulation"):
         await policy.suggest(state)
     assert any(
         "PassiveDecay" in r.message or "passive" in r.message.lower()
@@ -225,13 +225,13 @@ async def test_passive_decay_logs_only_once(caplog):
     import logging
     policy = PassiveDecay()
     state = DimensionalState()
-    with caplog.at_level(logging.DEBUG, logger="kaine.modules.thymos.regulation"):
+    with caplog.at_level(logging.DEBUG, logger="kaine.modules.affect.regulation"):
         await policy.suggest(state)
         await policy.suggest(state)
         await policy.suggest(state)
     regulation_records = [
         r for r in caplog.records
-        if r.name.startswith("kaine.modules.thymos.regulation")
+        if r.name.startswith("kaine.modules.affect.regulation")
     ]
     assert len(regulation_records) == 1, (
         "PassiveDecay must log exactly once, not on every tick"
@@ -373,7 +373,7 @@ async def test_empatheia_folds_real_emotion_event(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_mnemos_recall_publishes_error_on_storage_failure(bus: AsyncBus):
+async def test_episodic_memory_recall_publishes_error_on_storage_failure(bus: AsyncBus):
     """mnemos.recall event must carry error=True on StorageError, not fake count=0."""
     class FailingStorage(InMemoryStorage):
         async def search(self, collection, *, query_vector, limit):
@@ -382,11 +382,11 @@ async def test_mnemos_recall_publishes_error_on_storage_failure(bus: AsyncBus):
     emb = FakeEmbedder(latent_dim=8)
     await emb.load()
     storage = FailingStorage(latent_dim=8)
-    core = MnemosCore(embedder=emb, storage=storage, short_term_capacity=4)
-    mnemos = Mnemos(bus, core=core)
-    await mnemos.initialize()
+    core = EpisodicMemoryCore(embedder=emb, storage=storage, short_term_capacity=4)
+    episodic_memory = EpisodicMemory(bus, core=core)
+    await episodic_memory.initialize()
     try:
-        results = await mnemos.recall("test query")
+        results = await episodic_memory.recall("test query")
         # Should return [] (graceful return) but publish error=True
         assert results == []
         entries = await bus.read("mnemos.out", last_id="0", count=10)
@@ -398,20 +398,20 @@ async def test_mnemos_recall_publishes_error_on_storage_failure(bus: AsyncBus):
             "not silently publish count=0 as if the search succeeded"
         )
     finally:
-        await mnemos.shutdown()
+        await episodic_memory.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_mnemos_recall_no_error_flag_on_success(bus: AsyncBus):
+async def test_episodic_memory_recall_no_error_flag_on_success(bus: AsyncBus):
     """Successful mnemos.recall must not carry error flag."""
     emb = FakeEmbedder(latent_dim=8)
     await emb.load()
     storage = InMemoryStorage(latent_dim=8)
-    core = MnemosCore(embedder=emb, storage=storage, short_term_capacity=4)
-    mnemos = Mnemos(bus, core=core)
-    await mnemos.initialize()
+    core = EpisodicMemoryCore(embedder=emb, storage=storage, short_term_capacity=4)
+    episodic_memory = EpisodicMemory(bus, core=core)
+    await episodic_memory.initialize()
     try:
-        await mnemos.recall("test query")
+        await episodic_memory.recall("test query")
         entries = await bus.read("mnemos.out", last_id="0", count=10)
         recall_events = [e for _, e in entries if e.type == "mnemos.recall"]
         assert recall_events
@@ -420,7 +420,7 @@ async def test_mnemos_recall_no_error_flag_on_success(bus: AsyncBus):
             "successful mnemos.recall must not carry error flag"
         )
     finally:
-        await mnemos.shutdown()
+        await episodic_memory.shutdown()
 
 
 @pytest.mark.asyncio
@@ -428,7 +428,7 @@ async def test_storage_error_is_raised_by_qdrant_search():
     """QdrantStorage.search must raise StorageError (not return []) on backend failure."""
     from unittest.mock import AsyncMock
 
-    from kaine.modules.mnemos.storage import QdrantStorage
+    from kaine.modules.episodic_memory.storage import QdrantStorage
 
     storage = QdrantStorage.__new__(QdrantStorage)
     storage._latent_dim = 8

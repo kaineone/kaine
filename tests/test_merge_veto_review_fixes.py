@@ -21,7 +21,7 @@ from kaine.lifecycle.adapter_merge import (
     TiesDareAdapterMerger,
     TiesDareMergeConfig,
 )
-from kaine.modules.hypnos.capability_eval import (
+from kaine.modules.sleep.capability_eval import (
     LocalProbeSetCapabilityEval,
 )
 

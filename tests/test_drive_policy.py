@@ -273,7 +273,7 @@ def test_unknown_drive_name_ignored():
     assert policy(_snapshot([bad])) == []
 
 
-def test_non_drive_thymos_event_ignored():
+def test_non_drive_affect_event_ignored():
     policy = DriveBiasedActionSelectionPolicy()
     other = ("t1", _event("thymos", "thymos.emotion", {"valence": 0.1}))
     assert policy(_snapshot([other])) == []

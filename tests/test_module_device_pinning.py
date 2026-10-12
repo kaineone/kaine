@@ -12,7 +12,7 @@ import pytest
 
 from kaine.boot import make_audition, make_vision
 from kaine.modules.audition.module import Audition
-from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
+from kaine.modules.sleep.voice_alignment import VoiceAlignmentConfig
 from kaine.modules.vision.module import Vision
 from kaine.text_embedding import make_text_embedder
 from tests.systems._harness import SubsystemHarness

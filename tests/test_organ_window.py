@@ -14,14 +14,14 @@ from typing import Any, Optional
 
 import pytest
 
-from kaine.modules.hypnos.organ_window import (
+from kaine.modules.sleep.organ_window import (
     MULTI_GPU_CONCURRENT_HEADROOM_GB,
     PHASE_IDLE,
     OrganServerController,
     run_with_organ_window,
     second_gpu_has_room,
 )
-from kaine.modules.hypnos.voice_alignment import TrainingResult
+from kaine.modules.sleep.voice_alignment import TrainingResult
 from kaine.organ_window_state import organ_unloaded, read_window_state
 
 

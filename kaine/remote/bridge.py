@@ -67,8 +67,8 @@ AUDITION_STREAM = "audition.out"
 # single `thymos.out` stream. Both carry dimensional affect nested under the
 # payload `"state"` key ({valence, arousal, dominance}) and a discrete label
 # under `"emotion"`. The /affect channel tails this stream read-only.
-THYMOS_STREAM = "thymos.out"
-THYMOS_AFFECT_TYPES = ("thymos.state", "thymos.emotion")
+AFFECT_STREAM = "thymos.out"
+AFFECT_AFFECT_TYPES = ("thymos.state", "thymos.emotion")
 # Coalesce affect forwarding to at most ~10/s (keep-latest) so a chatty affect module
 # can't flood mood-ring clients. Lines arriving sooner than this are dropped.
 AFFECT_MIN_INTERVAL_S = 0.1
@@ -739,7 +739,7 @@ class RemoteBridge:
         subscribers. Read-only: this loop never writes to the bus or disk.
         Coalesced to <=~10/s so a chatty affect module can't flood clients."""
         try:
-            latest = await self._bus.client.xrevrange(THYMOS_STREAM, count=1)
+            latest = await self._bus.client.xrevrange(AFFECT_STREAM, count=1)
         except Exception:
             latest = []
         if latest:
@@ -753,7 +753,7 @@ class RemoteBridge:
             while True:
                 try:
                     entries, last_scanned = await self._bus.read_entries(
-                        THYMOS_STREAM,
+                        AFFECT_STREAM,
                         last_id=cursor,
                         count=32,
                         block_ms=0,
@@ -763,7 +763,7 @@ class RemoteBridge:
                 if last_scanned is not None:
                     cursor = last_scanned
                     for _, event in entries:
-                        line = self._affect_line(THYMOS_STREAM, event)
+                        line = self._affect_line(AFFECT_STREAM, event)
                         if line is not None:
                             self._fanout_affect(line)
                 else:
@@ -773,7 +773,7 @@ class RemoteBridge:
 
     @staticmethod
     def _affect_line(stream: str, event: Event) -> Optional[str]:
-        if stream != THYMOS_STREAM or event.type not in THYMOS_AFFECT_TYPES:
+        if stream != AFFECT_STREAM or event.type not in AFFECT_AFFECT_TYPES:
             return None
         payload = event.payload or {}
         # Both thymos.state and thymos.emotion nest the dimensional values under

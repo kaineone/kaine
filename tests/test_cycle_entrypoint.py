@@ -352,7 +352,7 @@ def test_qdrant_key_absent_everywhere_injects_nothing(tmp_path: Path):
     secrets = _write(tmp_path / "secrets.toml", "[redis]\npassword = \"x\"\n")
     cfg = cycle_main._load_kaine_config(path=kaine, secrets_path=secrets, env={})
     # No empty key injected -> each module surfaces its own explicit error
-    # (covered by tests/test_mnemos_module.py / test_empatheia_module.py).
+    # (covered by tests/test_episodic_memory_module.py / test_empatheia_module.py).
     assert "api_key" not in cfg["mnemos"]["qdrant"]
     assert "api_key" not in cfg["empatheia"]["qdrant"]
 
@@ -400,7 +400,7 @@ class _FakeMnemos:
         return []
 
 
-def test_eval_provider_factories_none_without_mnemos():
+def test_eval_provider_factories_none_without_episodic_memory():
     _cognitive_query_client_factory = cycle_main._cognitive_query_client_factory
     _memory_source_factory = cycle_main._memory_source_factory
     from kaine.evaluation.config import EvaluationConfig
@@ -410,7 +410,7 @@ def test_eval_provider_factories_none_without_mnemos():
     assert _cognitive_query_client_factory(reg, EvaluationConfig()) is None
 
 
-def test_eval_provider_factories_present_with_mnemos():
+def test_eval_provider_factories_present_with_episodic_memory():
     _cognitive_query_client_factory = cycle_main._cognitive_query_client_factory
     _memory_source_factory = cycle_main._memory_source_factory
     from kaine.evaluation.config import EvaluationConfig

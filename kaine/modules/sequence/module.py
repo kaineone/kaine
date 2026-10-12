@@ -31,7 +31,7 @@ DEFAULT_INTERACTION_EVENT_TYPES: tuple[str, ...] = (
     "audition.transcription",
     "audition.emotion",
 )
-_HYPNOS_STREAM: str = "hypnos.out"
+_SLEEP_STREAM: str = "hypnos.out"
 
 
 class Sequence(BaseModule):
@@ -116,9 +116,9 @@ class Sequence(BaseModule):
         self._last_hidden: Optional[list[float]] = None  # hidden state from previous tick
 
         # sleep flag — set True when hypnos.sleep.started, False on completed
-        self._in_hypnos: bool = False
+        self._in_sleep: bool = False
         # Initialize resolves this to the current stream tail via last_entry_id().
-        self._hypnos_cursor: str = "$"
+        self._sleep_cursor: str = "$"
 
     @property
     def has_network(self) -> bool:
@@ -193,7 +193,7 @@ class Sequence(BaseModule):
 
         # Seed the sleep module's cursor from the stream tail before starting the loop,
         # otherwise a literal "$" under a non-blocking XREAD never advances.
-        self._hypnos_cursor = await self._bus.last_entry_id(_HYPNOS_STREAM)
+        self._sleep_cursor = await self._bus.last_entry_id(_SLEEP_STREAM)
 
         await super().initialize()
         self._tasks.append(
@@ -203,7 +203,7 @@ class Sequence(BaseModule):
         )
         self._tasks.append(
             asyncio.create_task(
-                self._hypnos_loop(), name=f"{self.name}-hypnos-consumer"
+                self._sleep_loop(), name=f"{self.name}-hypnos-consumer"
             )
         )
 
@@ -249,7 +249,7 @@ class Sequence(BaseModule):
                 )
                 self._pred_errors.append(temporal_prediction_error)
                 # Online adaptation step toward the observed feature vector
-                self._pred_head.suspended = self._in_hypnos
+                self._pred_head.suspended = self._in_sleep
                 self._pred_head.adapt(self._last_hidden, feature_vec)
             self._last_hidden = list(hidden)
 
@@ -331,27 +331,27 @@ class Sequence(BaseModule):
         except asyncio.CancelledError:
             raise
 
-    async def _hypnos_loop(self) -> None:
+    async def _sleep_loop(self) -> None:
         """Subscribe to hypnos.out to gate adaptation during sleep."""
         try:
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
-                        _HYPNOS_STREAM,
-                        last_id=self._hypnos_cursor,
+                        _SLEEP_STREAM,
+                        last_id=self._sleep_cursor,
                         count=64,
                         block_ms=0,
                     )
                     if last_scanned is not None:
-                        self._hypnos_cursor = last_scanned
+                        self._sleep_cursor = last_scanned
                         for _, event in entries:
                             if event.type == "hypnos.sleep.started":
-                                self._in_hypnos = True
+                                self._in_sleep = True
                                 if self._pred_head is not None:
                                     self._pred_head.suspended = True
                                 log.debug("chronos: adaptation suspended (hypnos sleep started)")
                             elif event.type == "hypnos.sleep.completed":
-                                self._in_hypnos = False
+                                self._in_sleep = False
                                 if self._pred_head is not None:
                                     self._pred_head.suspended = False
                                 log.debug("chronos: adaptation resumed (hypnos sleep completed)")

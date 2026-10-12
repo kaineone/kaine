@@ -18,12 +18,12 @@ from typing import Any, Optional
 import pytest
 
 from kaine.boot import VoiceAlignmentConfigError, _validate_backend_pairing
-from kaine.modules.hypnos.organ_window import (
+from kaine.modules.sleep.organ_window import (
     OrganServerController,
     run_with_organ_window,
 )
-from kaine.modules.hypnos.subprocess_trainer import SubprocessVoiceTrainer
-from kaine.modules.hypnos.voice_alignment import (
+from kaine.modules.sleep.subprocess_trainer import SubprocessVoiceTrainer
+from kaine.modules.sleep.voice_alignment import (
     DPOPair,
     TrainingResult,
     VoiceAlignmentConfig,
@@ -225,7 +225,7 @@ async def test_subprocess_dispatches_hot_swap_after_accepted_adapter(tmp_path, m
         return {"mode": mode, "ok": True, "notified": reload_endpoint_url}
 
     monkeypatch.setattr(
-        "kaine.modules.hypnos.subprocess_trainer.dispatch_hot_swap",
+        "kaine.modules.sleep.subprocess_trainer.dispatch_hot_swap",
         recorder,
     )
 
@@ -269,7 +269,7 @@ async def test_subprocess_does_not_dispatch_when_rejected(tmp_path, monkeypatch)
         return {"mode": mode, "ok": True}
 
     monkeypatch.setattr(
-        "kaine.modules.hypnos.subprocess_trainer.dispatch_hot_swap",
+        "kaine.modules.sleep.subprocess_trainer.dispatch_hot_swap",
         recorder,
     )
 
@@ -300,7 +300,7 @@ async def test_subprocess_hot_swap_failure_keeps_result_accepted(tmp_path, monke
         raise RuntimeError("reload endpoint unreachable")
 
     monkeypatch.setattr(
-        "kaine.modules.hypnos.subprocess_trainer.dispatch_hot_swap",
+        "kaine.modules.sleep.subprocess_trainer.dispatch_hot_swap",
         raiser,
     )
 

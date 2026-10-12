@@ -388,7 +388,7 @@ def test_affect_line_returns_none_for_unrelated_stream_and_type():
     from datetime import datetime, timezone
 
     from kaine.bus.schema import Event
-    from kaine.remote.bridge import THYMOS_STREAM
+    from kaine.remote.bridge import AFFECT_STREAM
 
     def _ev(type_: str, payload: dict) -> Event:
         return Event(
@@ -401,21 +401,21 @@ def test_affect_line_returns_none_for_unrelated_stream_and_type():
 
     good = {"state": {"valence": 0.1, "arousal": 0.2}, "emotion": "calm"}
     # Right stream + type → a line.
-    assert RemoteBridge._affect_line(THYMOS_STREAM, _ev("thymos.state", good)) is not None
+    assert RemoteBridge._affect_line(AFFECT_STREAM, _ev("thymos.state", good)) is not None
     # Wrong stream → None.
     assert RemoteBridge._affect_line("audition.out", _ev("thymos.state", good)) is None
     # Wrong type on the right stream → None.
-    assert RemoteBridge._affect_line(THYMOS_STREAM, _ev("thymos.drive", good)) is None
+    assert RemoteBridge._affect_line(AFFECT_STREAM, _ev("thymos.drive", good)) is None
     # Right type but no nested state → None (never invent values).
-    assert RemoteBridge._affect_line(THYMOS_STREAM, _ev("thymos.state", {})) is None
+    assert RemoteBridge._affect_line(AFFECT_STREAM, _ev("thymos.state", {})) is None
     # Right type, state present but missing arousal → None.
     assert (
-        RemoteBridge._affect_line(THYMOS_STREAM, _ev("thymos.state", {"state": {"valence": 0.1}}))
+        RemoteBridge._affect_line(AFFECT_STREAM, _ev("thymos.state", {"state": {"valence": 0.1}}))
         is None
     )
     # No discrete label in payload → line omits "label" (only forwards what exists).
     line = RemoteBridge._affect_line(
-        THYMOS_STREAM, _ev("thymos.state", {"state": {"valence": 0.1, "arousal": 0.2}})
+        AFFECT_STREAM, _ev("thymos.state", {"state": {"valence": 0.1, "arousal": 0.2}})
     )
     assert line is not None and "label" not in json.loads(line)
 

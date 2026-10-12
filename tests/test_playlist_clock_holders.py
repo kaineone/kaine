@@ -250,7 +250,7 @@ def test_freeze_watch_loop_pauses_and_resumes_playlist_clock(patched_control_pat
     asyncio.run(_run())
 
 
-def test_hypnos_pause_survives_freeze_thaw(patched_control_path):
+def test_sleep_pause_survives_freeze_thaw(patched_control_path):
     async def _run():
         clock = PlaylistClock(1, clock=_FakeClock())
         clock.start()

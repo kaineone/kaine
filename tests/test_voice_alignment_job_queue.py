@@ -27,15 +27,15 @@ from kaine.boot import (
     _effective_hot_swap_mode,
     _resolve_trainer,
 )
-from kaine.modules.hypnos.adapter_store import current_path
-from kaine.modules.hypnos.hot_swap import VALID_MODES
-from kaine.modules.hypnos.job_queue_trainer import JobQueueVoiceTrainer
-from kaine.modules.hypnos.organ_adapter import organ_root_url
-from kaine.modules.hypnos.subprocess_trainer import (
+from kaine.modules.sleep.adapter_store import current_path
+from kaine.modules.sleep.hot_swap import VALID_MODES
+from kaine.modules.sleep.job_queue_trainer import JobQueueVoiceTrainer
+from kaine.modules.sleep.organ_adapter import organ_root_url
+from kaine.modules.sleep.subprocess_trainer import (
     SubprocessTrainerError,
     SubprocessVoiceTrainer,
 )
-from kaine.modules.hypnos.voice_alignment import (
+from kaine.modules.sleep.voice_alignment import (
     OPERATOR_APPROVED_ENV,
     DPOPair,
     VoiceAlignmentConfig,
@@ -126,7 +126,7 @@ async def test_round_trip_with_fake_service(tmp_path, monkeypatch):
         return {"mode": kwargs.get("mode"), "ok": True}
 
     monkeypatch.setattr(
-        "kaine.modules.hypnos.job_queue_trainer.hot_swap.dispatch",
+        "kaine.modules.sleep.job_queue_trainer.hot_swap.dispatch",
         fake_dispatch,
     )
 

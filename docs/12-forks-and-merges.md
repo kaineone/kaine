@@ -70,7 +70,7 @@ If both parents carry trained LoRA adapters and no real adapter merger is availa
 
 Last-write-wins for scalar keys; recursive union for dicts; deduplication by `repr()` for lists (first occurrence wins). State B is applied on top of state A.
 
-### MnemosMergeStrategy
+### EpisodicMemoryMergeStrategy
 
 | Field | Resolution |
 |-------|-----------|
@@ -105,7 +105,7 @@ Lower entropy wins. Ties go to state A. The merged planning module state records
 | `personality_baseline` | Per-trait average across both parents |
 | `drift_count` | Sum |
 
-### ThymosMergeStrategy
+### AffectMergeStrategy
 
 | Field | Resolution |
 |-------|-----------|

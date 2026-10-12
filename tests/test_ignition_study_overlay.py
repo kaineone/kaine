@@ -148,7 +148,7 @@ def test_overlay_operator_values_kept(repo, plan):
     assert overlay["inference"]["server"] == "http://operator.local:8080"
 
 
-def test_overlay_phantasia_and_preservation(repo, plan):
+def test_overlay_world_model_and_preservation(repo, plan):
     overlay, _, _ = build_overlay(
         plan, "branch", "viewing", 0, repo, repo / "config" / "kaine.toml",
         repo / "config" / "kaine.operator.toml",

@@ -56,8 +56,8 @@ from kaine.workspace.volition import (
 )
 
 # The drive-crossing events the affect module publishes.
-THYMOS_DRIVE_SOURCE = "thymos"
-THYMOS_DRIVE_TYPE = "thymos.drive"
+AFFECT_DRIVE_SOURCE = "thymos"
+AFFECT_DRIVE_TYPE = "thymos.drive"
 
 # Drive → intent-kind mapping (conservative v1; see module docstring).
 DRIVE_INTENT_KINDS: dict[str, str] = {
@@ -160,7 +160,7 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
 
     def _drive_name(self, event) -> Optional[str]:
         """Return the drive name on a ``thymos.drive`` crossing event, else None."""
-        if event.source == THYMOS_DRIVE_SOURCE and event.type == THYMOS_DRIVE_TYPE:
+        if event.source == AFFECT_DRIVE_SOURCE and event.type == AFFECT_DRIVE_TYPE:
             name = event.payload.get("drive")
             if isinstance(name, str) and name in DRIVE_INTENT_KINDS:
                 return name

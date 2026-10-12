@@ -18,13 +18,13 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.lifecycle.manager import ForkManager
 from kaine.lifecycle.snapshot import artifacts_dir, copy_artifacts, snapshot_dir
-from kaine.modules.phantasia.encoder import VERSION, observation_dim
-from kaine.modules.phantasia.module import Phantasia
-from kaine.modules.phantasia.world_model import (
+from kaine.modules.registry import ModuleRegistry
+from kaine.modules.world_model.backend import (
     CheckpointMismatchError,
     NumpyDreamerV3WorldModel,
 )
-from kaine.modules.registry import ModuleRegistry
+from kaine.modules.world_model.encoder import VERSION, observation_dim
+from kaine.modules.world_model.module import WorldModel
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
 
@@ -57,12 +57,12 @@ def _small_wm(seed: int) -> NumpyDreamerV3WorldModel:
     )
 
 
-def _make_phantasia(
+def _make_world_model(
     bus: AsyncBus, tmp_path: Path, seed: int, persist: bool = True
-) -> tuple[Phantasia, NumpyDreamerV3WorldModel, Path]:
+) -> tuple[WorldModel, NumpyDreamerV3WorldModel, Path]:
     ckpt = tmp_path / f"phantasia_{seed}" / "wm.ckpt"
     wm = _small_wm(seed)
-    ph = Phantasia(
+    ph = WorldModel(
         bus,
         world_model=wm,
         backend="dreamerv3",
@@ -73,7 +73,7 @@ def _make_phantasia(
     return ph, wm, ckpt
 
 
-def _train_a_little(ph: Phantasia) -> None:
+def _train_a_little(ph: WorldModel) -> None:
     obs_dim = observation_dim()
     traj = [[float((i + j) % 5) for j in range(obs_dim)] for i in range(8)]
     ph.world_model.train(traj)
@@ -83,7 +83,7 @@ def _train_a_little(ph: Phantasia) -> None:
 async def test_fork_carries_its_own_copy(bus, tmp_path):
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
     reg = ModuleRegistry()
-    ph, wm, ckpt_a = _make_phantasia(bus, tmp_path, seed=1, persist=True)
+    ph, wm, ckpt_a = _make_world_model(bus, tmp_path, seed=1, persist=True)
     await ph.initialize()
     _train_a_little(ph)
     ph.export_preservation_weights()
@@ -99,7 +99,7 @@ async def test_fork_carries_its_own_copy(bus, tmp_path):
     child = fm.fork(parent_snap.id)
 
     reg2 = ModuleRegistry()
-    ph2, wm2, ckpt_b = _make_phantasia(bus, tmp_path, seed=99, persist=True)
+    ph2, wm2, ckpt_b = _make_world_model(bus, tmp_path, seed=99, persist=True)
     await ph2.initialize()
     reg2.register(ph2)
     fm.restore(child.id, reg2)
@@ -120,7 +120,7 @@ async def test_fork_carries_its_own_copy(bus, tmp_path):
 async def test_fork_then_diverges(bus, tmp_path):
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
     reg = ModuleRegistry()
-    ph, wm, ckpt_a = _make_phantasia(bus, tmp_path, seed=1, persist=True)
+    ph, wm, ckpt_a = _make_world_model(bus, tmp_path, seed=1, persist=True)
     await ph.initialize()
     _train_a_little(ph)
     ph.export_preservation_weights()
@@ -134,7 +134,7 @@ async def test_fork_then_diverges(bus, tmp_path):
     child = fm.fork(parent_snap.id)
 
     reg2 = ModuleRegistry()
-    ph2, wm2, ckpt_b = _make_phantasia(bus, tmp_path, seed=99, persist=True)
+    ph2, wm2, ckpt_b = _make_world_model(bus, tmp_path, seed=99, persist=True)
     await ph2.initialize()
     reg2.register(ph2)
     fm.restore(child.id, reg2)
@@ -152,7 +152,7 @@ async def test_fork_then_diverges(bus, tmp_path):
 async def test_two_forks_are_independent_copies(bus, tmp_path):
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
     reg = ModuleRegistry()
-    ph, wm, _ckpt = _make_phantasia(bus, tmp_path, seed=1, persist=True)
+    ph, wm, _ckpt = _make_world_model(bus, tmp_path, seed=1, persist=True)
     await ph.initialize()
     _train_a_little(ph)
     ph.export_preservation_weights()
@@ -176,10 +176,10 @@ async def test_two_forks_are_independent_copies(bus, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_shed_drops_phantasia_artifacts(bus, tmp_path):
+async def test_shed_drops_world_model_artifacts(bus, tmp_path):
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
     reg = ModuleRegistry()
-    ph, wm, _ckpt = _make_phantasia(bus, tmp_path, seed=1, persist=True)
+    ph, wm, _ckpt = _make_world_model(bus, tmp_path, seed=1, persist=True)
     await ph.initialize()
     _train_a_little(ph)
     reg.register(ph)
@@ -233,7 +233,7 @@ async def test_missing_artifact_warns_and_keeps_fresh_init(bus, tmp_path, caplog
     snap = fm.snapshot(reg)
 
     reg2 = ModuleRegistry()
-    ph2, wm2, _ckpt = _make_phantasia(bus, tmp_path, seed=99, persist=True)
+    ph2, wm2, _ckpt = _make_world_model(bus, tmp_path, seed=99, persist=True)
     await ph2.initialize()
     init_arrays = _npz_arrays(wm2.export_params(extra={"encoder_version": _enc()}))
     reg2.register(ph2)
@@ -251,7 +251,7 @@ async def test_missing_artifact_warns_and_keeps_fresh_init(bus, tmp_path, caplog
 async def test_mismatched_artifact_fails_closed(bus, tmp_path):
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
     reg = ModuleRegistry()
-    ph, wm, _ckpt = _make_phantasia(bus, tmp_path, seed=1, persist=True)
+    ph, wm, _ckpt = _make_world_model(bus, tmp_path, seed=1, persist=True)
     await ph.initialize()
     _train_a_little(ph)
     ph.export_preservation_weights()
@@ -270,7 +270,7 @@ async def test_mismatched_artifact_fails_closed(bus, tmp_path):
         hidden_dim=8,
         seed=99,
     )
-    ph2 = Phantasia(
+    ph2 = WorldModel(
         bus,
         world_model=wm2,
         backend="dreamerv3",
@@ -292,7 +292,7 @@ async def test_mismatched_artifact_fails_closed(bus, tmp_path):
 async def test_merge_refusal_and_choice(bus, tmp_path):
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
     reg_a = ModuleRegistry()
-    ph_a, wm_a, _ckpt_a = _make_phantasia(bus, tmp_path, seed=1, persist=True)
+    ph_a, wm_a, _ckpt_a = _make_world_model(bus, tmp_path, seed=1, persist=True)
     await ph_a.initialize()
     _train_a_little(ph_a)
     reg_a.register(ph_a)
@@ -301,7 +301,7 @@ async def test_merge_refusal_and_choice(bus, tmp_path):
     a = fm.snapshot(reg_a)
 
     reg_b = ModuleRegistry()
-    ph_b, wm_b, _ckpt_b = _make_phantasia(bus, tmp_path, seed=2, persist=True)
+    ph_b, wm_b, _ckpt_b = _make_world_model(bus, tmp_path, seed=2, persist=True)
     await ph_b.initialize()
     _train_a_little(ph_b)
     _train_a_little(ph_b)
@@ -330,7 +330,7 @@ async def test_merge_refusal_and_choice(bus, tmp_path):
 async def test_pass_count_travels(bus, tmp_path):
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
     reg = ModuleRegistry()
-    ph, wm, ckpt_a = _make_phantasia(bus, tmp_path, seed=1, persist=True)
+    ph, wm, ckpt_a = _make_world_model(bus, tmp_path, seed=1, persist=True)
     await ph.initialize()
     ph.restore_training_pass_count(3)
     assert ph.successful_training_passes == 3
@@ -341,7 +341,7 @@ async def test_pass_count_travels(bus, tmp_path):
     child = fm.fork(snap.id)
 
     reg2 = ModuleRegistry()
-    ph2, wm2, _ckpt_b = _make_phantasia(bus, tmp_path, seed=99, persist=True)
+    ph2, wm2, _ckpt_b = _make_world_model(bus, tmp_path, seed=99, persist=True)
     await ph2.initialize()
     reg2.register(ph2)
     fm.restore(child.id, reg2)
@@ -349,7 +349,7 @@ async def test_pass_count_travels(bus, tmp_path):
 
     # preserve_live + revive also carries the count.
     reg3 = ModuleRegistry()
-    ph3, wm3, _ckpt_c = _make_phantasia(bus, tmp_path, seed=101, persist=True)
+    ph3, wm3, _ckpt_c = _make_world_model(bus, tmp_path, seed=101, persist=True)
     await ph3.initialize()
     reg3.register(ph3)
     result = await fm.preserve_live(
@@ -371,7 +371,7 @@ async def test_pass_count_travels(bus, tmp_path):
 async def test_revive_without_weights_warns(bus, tmp_path, caplog):
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
     reg = ModuleRegistry()
-    ph, wm, _ckpt = _make_phantasia(bus, tmp_path, seed=1, persist=False)
+    ph, wm, _ckpt = _make_world_model(bus, tmp_path, seed=1, persist=False)
     await ph.initialize()
     reg.register(ph)
 
@@ -385,7 +385,7 @@ async def test_revive_without_weights_warns(bus, tmp_path, caplog):
     bundle = tmp_path / "backups" / f"preservation_{result.preservation_id}_aria"
 
     reg2 = ModuleRegistry()
-    ph2, wm2, _ckpt2 = _make_phantasia(bus, tmp_path, seed=99, persist=True)
+    ph2, wm2, _ckpt2 = _make_world_model(bus, tmp_path, seed=99, persist=True)
     await ph2.initialize()
     reg2.register(ph2)
 
@@ -397,9 +397,9 @@ async def test_revive_without_weights_warns(bus, tmp_path, caplog):
 
 
 @pytest.mark.asyncio
-async def test_non_persisting_phantasia_export_writes_nothing(bus, tmp_path):
+async def test_non_persisting_world_model_export_writes_nothing(bus, tmp_path):
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
-    ph, wm, _ckpt = _make_phantasia(bus, tmp_path, seed=1, persist=False)
+    ph, wm, _ckpt = _make_world_model(bus, tmp_path, seed=1, persist=False)
     await ph.initialize()
     dest = tmp_path / "artifact_dest"
     dest.mkdir(parents=True)
@@ -416,7 +416,7 @@ async def test_non_persisting_phantasia_export_writes_nothing(bus, tmp_path):
 async def test_symlinked_artifact_dir_is_not_copied(bus, tmp_path):
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
     reg = ModuleRegistry()
-    ph, wm, _ckpt = _make_phantasia(bus, tmp_path, seed=1, persist=True)
+    ph, wm, _ckpt = _make_world_model(bus, tmp_path, seed=1, persist=True)
     await ph.initialize()
     _train_a_little(ph)
     ph.export_preservation_weights()
@@ -448,7 +448,7 @@ async def test_symlinked_artifact_dir_is_not_copied(bus, tmp_path):
 async def test_failed_save_leaves_no_snapshot_dir(bus, tmp_path, monkeypatch):
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
     reg = ModuleRegistry()
-    ph, wm, _ckpt = _make_phantasia(bus, tmp_path, seed=1, persist=True)
+    ph, wm, _ckpt = _make_world_model(bus, tmp_path, seed=1, persist=True)
     await ph.initialize()
     _train_a_little(ph)
     ph.export_preservation_weights()
@@ -473,7 +473,7 @@ async def test_failed_save_leaves_no_snapshot_dir(bus, tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_sidecar_write_failure_raises(bus, tmp_path, monkeypatch):
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
-    ph, wm, _ckpt = _make_phantasia(bus, tmp_path, seed=1, persist=True)
+    ph, wm, _ckpt = _make_world_model(bus, tmp_path, seed=1, persist=True)
     await ph.initialize()
     _train_a_little(ph)
     ph.export_preservation_weights()

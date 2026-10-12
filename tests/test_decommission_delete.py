@@ -9,7 +9,12 @@ from pathlib import Path
 import pytest
 
 from kaine.lifecycle.decommission import delete_entity_state
-from kaine.memory_kinds import MNEMOS_STAMP_COLLECTION, stamp_key, stamp_point_id, strength_key
+from kaine.memory_kinds import (
+    EPISODIC_MEMORY_STAMP_COLLECTION,
+    stamp_key,
+    stamp_point_id,
+    strength_key,
+)
 
 HAS_QDRANT = importlib.util.find_spec("qdrant_client") is not None
 
@@ -86,7 +91,7 @@ class _DecommissionFakeQdrantClient:
             "mnemos_short_term": None,
             "mnemos_procedural": None,
             "empatheia_agents": None,
-            MNEMOS_STAMP_COLLECTION: None,
+            EPISODIC_MEMORY_STAMP_COLLECTION: None,
         }
         self.deleted_collections: list[str] = []
         self.deleted_points: list[tuple[str, list[str]]] = []
@@ -136,18 +141,18 @@ def test_decommission_deletes_stamp_point(tmp_path, monkeypatch):
     )
     expected_key = stamp_key("mnemos_")
     expected_pid = stamp_point_id(expected_key)
-    assert f"{MNEMOS_STAMP_COLLECTION}:{expected_key}" in result.dropped_collections
+    assert f"{EPISODIC_MEMORY_STAMP_COLLECTION}:{expected_key}" in result.dropped_collections
     assert any(
-        coll == MNEMOS_STAMP_COLLECTION and expected_pid in pids
+        coll == EPISODIC_MEMORY_STAMP_COLLECTION and expected_pid in pids
         for coll, pids in fake.deleted_points
     )
     assert "mnemos_episodic" in fake.deleted_collections
 
     strength_key_str = strength_key("mnemos_")
     strength_pid = stamp_point_id(strength_key_str)
-    assert f"{MNEMOS_STAMP_COLLECTION}:{strength_key_str}" in result.dropped_collections
+    assert f"{EPISODIC_MEMORY_STAMP_COLLECTION}:{strength_key_str}" in result.dropped_collections
     assert any(
-        coll == MNEMOS_STAMP_COLLECTION and strength_pid in pids
+        coll == EPISODIC_MEMORY_STAMP_COLLECTION and strength_pid in pids
         for coll, pids in fake.deleted_points
     )
 
@@ -188,14 +193,14 @@ def test_decommission_keeps_strength_meta_when_a_drop_fails(tmp_path, monkeypatc
     strength = strength_key("mnemos_")
     strength_pid = stamp_point_id(strength)
 
-    assert f"{MNEMOS_STAMP_COLLECTION}:{stamp}" in result.dropped_collections
+    assert f"{EPISODIC_MEMORY_STAMP_COLLECTION}:{stamp}" in result.dropped_collections
     assert any(
-        coll == MNEMOS_STAMP_COLLECTION and stamp_pid in pids
+        coll == EPISODIC_MEMORY_STAMP_COLLECTION and stamp_pid in pids
         for coll, pids in fake.deleted_points
     )
     assert not any(
-        coll == MNEMOS_STAMP_COLLECTION and strength_pid in pids
+        coll == EPISODIC_MEMORY_STAMP_COLLECTION and strength_pid in pids
         for coll, pids in fake.deleted_points
     )
-    assert f"{MNEMOS_STAMP_COLLECTION}:{strength}" not in result.dropped_collections
+    assert f"{EPISODIC_MEMORY_STAMP_COLLECTION}:{strength}" not in result.dropped_collections
     assert any("strength meta kept" in err for err in result.errors)

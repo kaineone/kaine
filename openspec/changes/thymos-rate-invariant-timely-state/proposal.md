@@ -18,7 +18,7 @@ Two findings of the mathematics review of 2026-10-08 about the affect module's a
 
 ## Impact
 
-- **Code:** `kaine/modules/thymos/module.py`; `kaine/boot/factories/thymos.py` and `config/kaine.toml` (`appraisal_reference_interval_s`).
+- **Code:** `kaine/modules/affect/module.py`; `kaine/boot/factories/affect.py` and `config/kaine.toml` (`appraisal_reference_interval_s`).
 - **Behaviour:** arousal no longer runs away through the access rate; `thymos.state` events now arrive about once a second even without broadcasts, and as workspace candidates they keep their baseline salience. The welfare observer that samples `thymos.state` sees a steady rate.
 - **Docs:** `docs/09-modules/affect.md`.
 - **Paper:** Appendix A.4 (the appraisal update, the lag bound, the threshold).

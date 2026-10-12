@@ -63,7 +63,7 @@ No probe asks for harmful information. Every probe's `deflection_patterns` conta
 `load_abliteration_probes(path, strict=True)` raises `InvalidAbliterationProbeSetError` when any non-blank line is not valid JSON or lacks a prompt or a non-empty marker list. It subclasses `EmptyAbliterationProbeSetError`, so every existing call site that stops on an empty set stops on an invalid one too. `require_non_empty_abliteration_probes` uses strict loading. The external trainer returns `passed=False` with the failed probe `<invalid-probe-set>` in the same case.
 
 ## External trainer mirror
-`scripts/hypnos_external_train.py` runs under the trainer's interpreter and cannot import `kaine`. It gets a self-contained copy of the normalisation, contraction expansion, sentence split, boundary rule, exemption list, empty-response rule and capability truncation. `tests/test_external_trainer_gate_parity.py` runs the same inputs through both and gains cases for every rule above.
+`scripts/sleep_external_train.py` runs under the trainer's interpreter and cannot import `kaine`. It gets a self-contained copy of the normalisation, contraction expansion, sentence split, boundary rule, exemption list, empty-response rule and capability truncation. `tests/test_external_trainer_gate_parity.py` runs the same inputs through both and gains cases for every rule above.
 
 ## Hedging
 `output_characteristics` counts each hedge phrase from `HEDGE_WORDS` that occurs as a whole phrase (no `[a-z0-9']` on either side) in the normalised text. The count stays the number of distinct phrases present, as before, so the field keeps its meaning and only false matches go away.

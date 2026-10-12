@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from kaine.modules.thymos.state import DimensionalState
+from kaine.modules.affect.state import DimensionalState
 
 
 def _clamp(x: float, lo: float, hi: float) -> float:

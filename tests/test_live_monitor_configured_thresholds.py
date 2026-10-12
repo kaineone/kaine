@@ -121,9 +121,9 @@ def _capture_assess_divergence(monkeypatch):
 @pytest.fixture
 def _consolidation_record(tmp_path):
     """Write the cheap consolidation-divergence record used by the monitor."""
-    hypnos_dir = tmp_path / "state" / "hypnos"
-    hypnos_dir.mkdir(parents=True)
-    with open(hypnos_dir / "consolidation_divergence.json", "w") as f:
+    sleep_dir = tmp_path / "state" / "hypnos"
+    sleep_dir.mkdir(parents=True)
+    with open(sleep_dir / "consolidation_divergence.json", "w") as f:
         json.dump({"divergence_rate": 0.3, "divergence_magnitude": 0.1}, f)
     return tmp_path / "state"
 

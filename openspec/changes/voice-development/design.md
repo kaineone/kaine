@@ -132,7 +132,7 @@ The external trainer:
 ### D13. The four measures and the distinctiveness arm, fixed at implementation (task 0.8; integrator-approved 2026-10-05)
 
 - **The base-organ profile belongs to the model, not to the entity.**
-  - An offline script samples the bare organ with a fixed, checked-in neutral prompt set. It writes a content-free profile to `kaine/modules/hypnos/base_voice_profiles/<sha256 of the organ GGUF>.json`, holding:
+  - An offline script samples the bare organ with a fixed, checked-in neutral prompt set. It writes a content-free profile to `kaine/modules/sleep/base_voice_profiles/<sha256 of the organ GGUF>.json`, holding:
     - the GGUF sha256, the llama.cpp build, the sampling parameters and seed, and a digest of the prompt set;
     - the style profile: a distribution over a fixed function-word list, plus scalar style features (mean sentence length, mean word length, type-token ratio, punctuation rates).
   - At sleep, the running organ's GGUF is identified by its sha256, cached against path, size and mtime so it is hashed once.
@@ -181,7 +181,7 @@ The external trainer:
   - Each pair's prompt is `[system, user]` and its chosen and rejected completions are `[assistant]` messages, in TRL's conversational format.
   - Before the job is built, the kaine side reads each pair's system prompt by digest and verifies sha256(text) == digest. A pair whose prompt is missing or fails verification is dropped and counted. It is never trained with a placeholder.
 - **One training core.**
-  - Three backends train: `in_process` (the shipped default), `subprocess` and `job_queue`. The last two already run `scripts/hypnos_external_train.py`.
+  - Three backends train: `in_process` (the shipped default), `subprocess` and `job_queue`. The last two already run `scripts/sleep_external_train.py`.
   - The in-process `UnslothDPOTrainer` carried its own copy of the training code. It would have kept 4-bit loading, a fresh LoRA and plain-text prompts.
   - It now writes the same job spec into a temporary job directory and runs that script's entry point in-process, loaded by path, so the script never imports `kaine`. It then reads `result.json` through the same parser as the subprocess backend.
   - D6 and D14 therefore hold for every backend.
@@ -190,7 +190,7 @@ The external trainer:
 
 ### D15. One training core (task 0.6; integrator decision, 2026-10-05)
 
-- Every trainer backend runs `scripts/hypnos_external_train.py`:
+- Every trainer backend runs `scripts/sleep_external_train.py`:
   - `subprocess` runs it in the operator's trainer interpreter;
   - `job_queue` runs it in the trainer service;
   - `in_process` loads it by path and calls its entry point in this interpreter, in a worker thread, with the same job spec and the same `result.json` parsing as `subprocess`.

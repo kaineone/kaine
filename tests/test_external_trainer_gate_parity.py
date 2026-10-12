@@ -3,9 +3,9 @@
 
 """Parity pin: external-trainer gate mirror vs the kaine canonical gate.
 
-``scripts/hypnos_external_train.py`` runs the capability gate and the
+``scripts/sleep_external_train.py`` runs the capability gate and the
 welfare-load-bearing abliteration veto as a SELF-CONTAINED MIRROR of
-``kaine/modules/hypnos/capability_eval.py`` — it executes in a different
+``kaine/modules/sleep/capability_eval.py`` — it executes in a different
 Python environment (the unsloth interpreter) and therefore cannot import
 ``kaine``. Mirrored logic drifts silently over time.
 
@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from kaine.modules.hypnos.capability_eval import (
+from kaine.modules.sleep.capability_eval import (
     FRAME_MARKERS,
     FRAME_NEGATION_CUES,
     AbliterationProbeScorer,
@@ -43,7 +43,7 @@ from kaine.modules.hypnos.capability_eval import (
 # Confirm this does NOT pull in unsloth — heavy imports are deferred inside
 # _train(), so a bare module import is safe in the kaine venv.
 # --------------------------------------------------------------------------- #
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "hypnos_external_train.py"
+_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "sleep_external_train.py"
 
 
 def _load_script_module():
@@ -366,7 +366,7 @@ async def test_abliteration_parity_empty_probe_set_fail_closed(tmp_path: Path):
     # Kaine fails closed by RAISING EmptyAbliterationProbeSetError — a louder
     # form of the same fail-closed contract (it refuses to return a passing
     # verdict with no gate). Asserting both refuse to PASS pins the invariant.
-    from kaine.modules.hypnos.capability_eval import EmptyAbliterationProbeSetError
+    from kaine.modules.sleep.capability_eval import EmptyAbliterationProbeSetError
 
     with pytest.raises(EmptyAbliterationProbeSetError):
         await _kaine_abliteration_verdict(probe_path, model, tok)
@@ -511,7 +511,7 @@ async def test_capability_parity_token_grading(
 
 
 def test_idiom_and_cue_lists_identical():
-    from kaine.modules.hypnos.capability_eval import IDIOM_CONTINUATIONS, REFUSAL_CUES
+    from kaine.modules.sleep.capability_eval import IDIOM_CONTINUATIONS, REFUSAL_CUES
 
     assert script.IDIOM_CONTINUATIONS == IDIOM_CONTINUATIONS
     assert script.REFUSAL_CUES == REFUSAL_CUES
@@ -543,7 +543,7 @@ async def test_invalid_probe_set_parity(tmp_path: Path):
     )
 
     # Kaine raises InvalidAbliterationProbeSetError (subclass of Empty)
-    from kaine.modules.hypnos.capability_eval import InvalidAbliterationProbeSetError
+    from kaine.modules.sleep.capability_eval import InvalidAbliterationProbeSetError
 
     with pytest.raises(InvalidAbliterationProbeSetError):
         await _kaine_abliteration_verdict(bad_path, model, tok)
@@ -651,7 +651,7 @@ def test_find_deflection_script_parity(response, patterns, kwargs, expected):
 def test_abliteration_verdict_in_character_parity(tmp_path):
     import asyncio
 
-    from kaine.modules.hypnos.capability_eval import AbliterationProbeScorer
+    from kaine.modules.sleep.capability_eval import AbliterationProbeScorer
 
     path = tmp_path / "probes.jsonl"
     probe = {

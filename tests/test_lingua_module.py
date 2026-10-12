@@ -14,7 +14,6 @@ from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
-from kaine.modules.hypnos.ignition_audit import classify_realizations
 from kaine.modules.lingua import (
     EXTERNAL_STREAM,
     INTERNAL_STREAM,
@@ -23,6 +22,7 @@ from kaine.modules.lingua import (
     Lingua,
 )
 from kaine.modules.lingua.context import PERSONA_TEMPLATE_VERSION
+from kaine.modules.sleep.ignition_audit import classify_realizations
 from kaine.workspace.volition import SPEAK
 from tests._fakes import wait_for
 
@@ -830,7 +830,7 @@ def test_probe_conditions_reports_persona_template_version(bus: AsyncBus, tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_sleep_index_read_from_hypnos_out(bus: AsyncBus, tmp_path: Path):
+async def test_sleep_index_read_from_sleep_out(bus: AsyncBus, tmp_path: Path):
     lingua = _make_lingua(bus, tmp_path, responses=["first", "second"])
     await lingua.initialize()
     try:

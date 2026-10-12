@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for kaine.modules.hypnos.capability_eval."""
+"""Tests for kaine.modules.sleep.capability_eval."""
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 
-from kaine.modules.hypnos.capability_eval import (
+from kaine.modules.sleep.capability_eval import (
     LocalProbeSetCapabilityEval,
     NoopCapabilityEval,
     _score_response,
@@ -44,7 +44,7 @@ def test_load_probes_parses_records(tmp_path: Path):
 
 
 def test_default_probe_set_ships():
-    from kaine.modules.hypnos.capability_eval import DEFAULT_PROBE_PATH
+    from kaine.modules.sleep.capability_eval import DEFAULT_PROBE_PATH
 
     probes = load_probes(DEFAULT_PROBE_PATH)
     assert len(probes) >= 10

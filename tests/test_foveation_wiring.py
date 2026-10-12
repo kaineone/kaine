@@ -40,7 +40,7 @@ class _FakeRegistry:
         return self._modules[name]
 
 
-def _thymos_state_event(arousal: float) -> tuple[str, Event]:
+def _affect_state_event(arousal: float) -> tuple[str, Event]:
     return (
         "1-0",
         Event(
@@ -76,7 +76,7 @@ def test_foveation_on_wires_live_arousal():
     # Before any thymos.state, the accessor reports the affect module's baseline (0.3).
     assert vision.arousal_provider() == 0.3
     # After a state update, the accessor reflects the live arousal.
-    provider.observe([_thymos_state_event(0.82)])
+    provider.observe([_affect_state_event(0.82)])
     assert vision.arousal_provider() == 0.82
 
 
@@ -114,5 +114,5 @@ def test_general_audition_on_wires_live_arousal():
     provider = AffectStateProvider()
     assert _wire_audition_arousal(_FakeRegistry(audition=a), provider) is True
     assert a.arousal_provider() == 0.3  # the affect module's baseline before any state
-    provider.observe([_thymos_state_event(0.77)])
+    provider.observe([_affect_state_event(0.77)])
     assert a.arousal_provider() == 0.77

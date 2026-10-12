@@ -15,7 +15,7 @@ return a `PhaseResult` carrying `phase` name, `success` bool, `elapsed_ms`, and
 NOT prevent later phases from running.
 
 #### Scenario: All five phases ran in order
-- **WHEN** `Hypnos.enter_sleep()` is awaited against fake collaborators
+- **WHEN** `Sleep.enter_sleep()` is awaited against fake collaborators
 - **THEN** the published `hypnos.sleep.completed` event's `phases` payload
   lists `light_consolidation`, `deep_consolidation`, `associative_replay`,
   `voice_alignment`, `affective_reset`, in that order

@@ -50,7 +50,7 @@ from kaine.modules.nous.engine import (
 from kaine.workspace.volition import VOLITION_FEEDBACK_STREAM
 
 log = logging.getLogger(__name__)
-HYPNOS_OUT_STREAM = "hypnos.out"
+SLEEP_OUT_STREAM = "hypnos.out"
 
 # Map an engine action name → a proposal kind for the action selection module's proposal path.
 # `request_think` is epistemic (internal elaboration) → a `think` proposal.
@@ -101,7 +101,7 @@ class Nous(BaseModule):
         self._last_posterior: list[list[float]] = []
         self._step_counter: int = 0
         self._feedback_cursor: Optional[str] = None
-        self._hypnos_cursor: Optional[str] = None
+        self._sleep_cursor: Optional[str] = None
         self._recent_proposals: collections.OrderedDict[str, int] = collections.OrderedDict()
         self._unknown_outcomes: int = 0
         self._pending_taken: Optional[int] = None
@@ -246,8 +246,8 @@ class Nous(BaseModule):
 
         if self._feedback_cursor is None:
             self._feedback_cursor = await self._seed_cursor(VOLITION_FEEDBACK_STREAM)
-        if self._hypnos_cursor is None:
-            self._hypnos_cursor = await self._seed_cursor(HYPNOS_OUT_STREAM)
+        if self._sleep_cursor is None:
+            self._sleep_cursor = await self._seed_cursor(SLEEP_OUT_STREAM)
 
         feedback_entries: list[tuple[str, Any]] = []
         feedback_last: str | None = None
@@ -258,12 +258,12 @@ class Nous(BaseModule):
             if feedback_last is not None:
                 self._feedback_cursor = feedback_last
 
-        hypnos_entries: list[tuple[str, Any]] = []
-        hypnos_last: str | None = None
-        if self._hypnos_cursor is not None:
-            hypnos_entries, hypnos_last = await self._read_stream(HYPNOS_OUT_STREAM, self._hypnos_cursor)
-            if hypnos_last is not None:
-                self._hypnos_cursor = hypnos_last
+        sleep_entries: list[tuple[str, Any]] = []
+        sleep_last: str | None = None
+        if self._sleep_cursor is not None:
+            sleep_entries, sleep_last = await self._read_stream(SLEEP_OUT_STREAM, self._sleep_cursor)
+            if sleep_last is not None:
+                self._sleep_cursor = sleep_last
 
         for _eid, event in feedback_entries:
             if event.type != "volition.proposal_outcome":
@@ -282,7 +282,7 @@ class Nous(BaseModule):
             if bool(payload.get("realized")):
                 self._pending_taken = action_index
 
-        for _eid, event in hypnos_entries:
+        for _eid, event in sleep_entries:
             if event.type != "hypnos.rest_request":
                 continue
             payload = event.payload

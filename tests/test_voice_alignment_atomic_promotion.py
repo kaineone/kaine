@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for kaine.modules.hypnos.adapter_store atomic promotion + retention."""
+"""Tests for kaine.modules.sleep.adapter_store atomic promotion + retention."""
 from __future__ import annotations
 
 import os
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from kaine.modules.hypnos import adapter_store
+from kaine.modules.sleep import adapter_store
 
 
 def _populate_tmp(tmp_dir: Path) -> Path:

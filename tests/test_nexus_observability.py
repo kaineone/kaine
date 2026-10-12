@@ -28,7 +28,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
-def test_diagnostics_streams_include_empatheia_phantasia_workspace():
+def test_diagnostics_streams_include_empatheia_world_model_workspace():
     from kaine.nexus.__main__ import DEFAULT_DIAGNOSTICS_STREAMS
 
     assert "empatheia.out" in DEFAULT_DIAGNOSTICS_STREAMS
@@ -100,7 +100,7 @@ def test_new_templates_return_non_empty_string(source, type_):
     assert out.strip()
 
 
-def test_mnemos_replay_template_omits_raw_text():
+def test_episodic_memory_replay_template_omits_raw_text():
     """mnemos.replay template must not output the raw text field."""
     from kaine.faithful.templates import TEMPLATES
 
@@ -1278,7 +1278,7 @@ async def test_vitals_health_contract(tmp_path):
     prober = HealthProber(
         modules_enabled={"mnemos": True, "nous": True, "praxis": False},
         dependencies=[
-            DependencySpec(name="Qdrant", role="Mnemos", module="mnemos", probe=up_probe)
+            DependencySpec(name="Qdrant", role="EpisodicMemory", module="mnemos", probe=up_probe)
         ],
         cache_ttl_s=0.0,
         cycle_runtime_path=runtime,

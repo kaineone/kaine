@@ -30,7 +30,7 @@ def _real_syn(top_k: int = 5, threshold: float = 0.35) -> Syneidesis:
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=64),
             goal_scorer=StaticGoalScorer(),
-            thymos_modulator=StaticThymosModulator(),
+            affect_modulator=StaticThymosModulator(),
         ),
         top_k=top_k,
         publication_threshold=threshold,

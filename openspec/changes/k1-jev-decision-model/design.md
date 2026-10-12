@@ -144,7 +144,7 @@ The builder has **no input for arbitrary paths**. It refuses to run if any confi
 
 ## 6. Training
 
-`scripts/k1jev/train_sft.py` runs under the trainer interpreter (Unsloth Studio, transformers v5), started by an explicit argv with no shell, exactly like `scripts/hypnos_external_train.py`.
+`scripts/k1jev/train_sft.py` runs under the trainer interpreter (Unsloth Studio, transformers v5), started by an explicit argv with no shell, exactly like `scripts/sleep_external_train.py`.
 
 - **Base:** stock `Qwen/Qwen3.5-4B` and `Qwen/Qwen3.5-0.8B` at pinned revisions, loaded with `local_files_only`, never `trust_remote_code`. The vision tower is excluded from LoRA targets.
 - **LoRA:** bf16; all linear layers of the language model, including the Gated DeltaNet projections; r 8, α 16, dropout 0. Batch 8, learning rate 5e-5 with a cosine schedule and 3% warmup, 1 epoch, 2,048-token sequences. The loss is cross-entropy over **the option letters' logits only**, at the prompt's last token, with the correct letter as the target. That is exactly the distribution `/v1/systemone` serves (a softmax over the option letters), so training optimises the served probabilities directly, which is what the temperature fit and thresholds then calibrate. Assembled examples record `n_options` for this. About half the non-score examples have shuffled options, so no letter carries a prior.

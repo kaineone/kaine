@@ -18,13 +18,13 @@ from pathlib import Path
 import pytest
 
 from kaine.boot import _require_non_empty_capability_probes
-from kaine.modules.hypnos.capability_eval import EmptyCapabilityProbeSetError
-from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
+from kaine.modules.sleep.capability_eval import EmptyCapabilityProbeSetError
+from kaine.modules.sleep.voice_alignment import VoiceAlignmentConfig
 
 # --------------------------------------------------------------------------- #
 # Load the external script module by path (it is not a package).
 # --------------------------------------------------------------------------- #
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "hypnos_external_train.py"
+_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "sleep_external_train.py"
 
 
 def _load_script_module():
@@ -113,7 +113,7 @@ def _run_script_job(tmp_path: Path, job: dict) -> dict:
         json.dumps({"prompt": "p", "chosen": "c", "rejected": "r", "system": "s"}) + "\n",
         encoding="utf-8",
     )
-    assert script.main(["hypnos_external_train.py", str(job_dir)]) == 0
+    assert script.main(["sleep_external_train.py", str(job_dir)]) == 0
     return json.loads((job_dir / "result.json").read_text(encoding="utf-8"))
 
 
@@ -169,7 +169,7 @@ def test_every_backend_refuses_an_empty_capability_probe_set(tmp_path, monkeypat
     import types
 
     from kaine.boot import _resolve_trainer
-    from kaine.modules.hypnos.voice_alignment import OPERATOR_APPROVED_ENV
+    from kaine.modules.sleep.voice_alignment import OPERATOR_APPROVED_ENV
 
     monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
     monkeypatch.setenv("KAINE_MODEL_SERVER_API_KEY", "boot-secret")

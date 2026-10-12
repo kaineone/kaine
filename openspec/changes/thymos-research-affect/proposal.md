@@ -34,7 +34,7 @@ What the research establishes (citations checked on 2026-10-08):
 
 ## Impact
 
-- **Code:** `kaine/modules/thymos/{drives,module}.py`, `kaine/boot/factories/thymos.py`, `config/kaine.toml`.
+- **Code:** `kaine/modules/affect/{drives,module}.py`, `kaine/boot/factories/affect.py`, `config/kaine.toml`.
 - **Behaviour:** drives rise and fall with the entity's own perceptual learning, engagement, contact and action; the dominant drive is no longer always curiosity; valence reflects whether the world is becoming more predictable; SURPRISE can fire. Arousal is driven by perceptual and interoceptive alerts only.
 - **Preserved entities:** drive and valence values restore as before and re-equilibrate under the new rules.
 - **Docs:** `docs/09-modules/affect.md`.

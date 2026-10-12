@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kaine.modules.hypnos.organ_window import OrganServerController
+from kaine.modules.sleep.organ_window import OrganServerController
 from kaine.organ_server.lifecycle import LORA_ADAPTER_ENV, build_launch_cmd
 
 

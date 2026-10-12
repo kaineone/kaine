@@ -103,7 +103,7 @@ def test_description_and_statement_are_content_fields():
     assert "statement" in CONTENT_FIELDS
 
 
-def test_novel_thymos_goal_description_is_scrubbed_at_top_level_and_nested():
+def test_novel_affect_goal_description_is_scrubbed_at_top_level_and_nested():
     """A thymos.goal-shaped event's `description` is stripped whether it sits at
     the payload top level, nested in a dict, or embedded in a list (the recursion
     that also protects workspace.broadcast's embedded payloads)."""
