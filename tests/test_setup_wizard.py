@@ -234,13 +234,39 @@ def test_full_run_multi_gpu_produces_config():
     assert tomllib.loads(tomlwriter.dumps(cfg)) == cfg
 
 
-def test_vox_enabled_requires_voice_id():
+def test_vox_enabled_with_blank_voice_id_stays_on():
     answers = [ACK_PHRASE, "", "", "y", "c"]
     for m in MODULE_ORDER:
         answers.append("y" if m in ("lingua", "vox") else "n")
     answers.append("the-model")  # language organ model id
-    # vocal voice id: first blank (rejected), then a real one
+    # vocal voice id: blank answer accepts shipped voice
     answers.append("")
+    answers.append("n")  # research
+    answers.append("n")  # encryption
+
+    a = _Answers(answers)
+    out, sink = _collect_out()
+    result = run_wizard(
+        input_fn=a,
+        out=sink,
+        host=_host(cuda=1),
+        shipped_config=_shipped(),
+        probe_services=lambda: {},
+    )
+    assert result.config["modules"]["vox"] is True
+    assert "predefined_voice_id" not in result.config.get("vox", {})
+    assert (
+        "no voice id given; the vocal module picks a shipped voice at startup."
+        in "\n".join(out)
+    )
+
+
+def test_vox_enabled_records_given_voice_id():
+    answers = [ACK_PHRASE, "", "", "y", "c"]
+    for m in MODULE_ORDER:
+        answers.append("y" if m in ("lingua", "vox") else "n")
+    answers.append("the-model")  # language organ model id
+    # vocal voice id: a specific voice file is recorded
     answers.append("Abigail.wav")
     answers.append("n")  # research
     answers.append("n")  # encryption

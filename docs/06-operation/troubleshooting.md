@@ -26,15 +26,15 @@ curl -fsS http://127.0.0.1:8000/v1/models
 
 The dashboard health board marks Speaches as `up` once `/v1/models` returns 200. The listed models must include `[audition].stt_model`.
 
-## Chatterbox has no voice configured
+## The vocal module is silent: no voice
 
-The [vocal module](../09-modules/vocal.md) sends text to a Chatterbox server, and with `voice_mode = "predefined"` it must name a voice file that the server serves. The shipped config leaves `[vox].predefined_voice_id` unset, and Chatterbox answers 400 ("Missing 'predefined_voice_id'") until you set it. List the voices your server has:
+The [vocal module](../09-modules/vocal.md) sends text to a Chatterbox server, and with `voice_mode = "predefined"` each request names a voice file that the server serves. The shipped config names no voice, so at startup the vocal module asks the server for its voices and uses the first in sorted order. If the server is unreachable at that moment or lists no voices, or `[vox].default_voice` is not among them, the log has a line beginning `vocal module silent:` and the vocal module plays nothing until it is restarted. List the voices your server has:
 
 ```bash
 curl -s http://127.0.0.1:8883/get_predefined_voices
 ```
 
-Then set one in the gitignored overlay `config/kaine.operator.toml`. Keep per-install changes out of the tracked `config/kaine.toml`: the loader, `kaine/config.py`, merges the overlay over the shipped file (see [How configuration works](../appendix-a-configuration/README.md)).
+Start the server, or add a voice to its `voices/` directory, and restart. To use a particular voice, set it in the gitignored overlay `config/kaine.operator.toml`. Keep per-install changes out of the tracked `config/kaine.toml`: the loader, `kaine/config.py`, merges the overlay over the shipped file (see [How configuration works](../appendix-a-configuration/README.md)).
 
 ```toml
 [vox]

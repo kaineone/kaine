@@ -91,7 +91,7 @@ Module-specific prerequisites:
 | `mnemos` | Qdrant container up; Qdrant API key in `config/secrets.toml` |
 | `lingua` | OpenAI-compatible model server serving `model_id` on `http://127.0.0.1:11434/v1`; `enable_thinking: false` honored via `chat_template_kwargs` |
 | `audition` | `[audio]` extra installed; Speaches up on CPU with `medium.en` |
-| `vox` | Chatterbox up; `predefined_voice_id` set to a valid filename |
+| `vox` | Chatterbox up and listing at least one voice, or `predefined_voice_id` set to a valid filename |
 | `topos` | `[internvideo]` extra installed; the pinned InternVideo-Next weights cached locally (DINOv2-small only when the per-frame fallback `encoder_backend = "dinov2"` is selected) |
 | `hypnos` | None. Fatigue-triggered sleep runs in the base-thesis form without the episodic memory module; its consolidation phases do work only once the episodic memory and world model modules are enabled, and the affective reset acts on the affect module | |
 | `empatheia` | Qdrant container up |

@@ -395,8 +395,9 @@ def _vox_backend(ctx: StepContext) -> str:
 
 
 def vox_voice_step() -> Step:
-    # Applies whenever the vocal module is on. Only the Chatterbox backend needs a voice id;
-    # any other backend asks nothing and says so, as the terminal wizard does.
+    # Applies whenever the vocal module is on. The Chatterbox backend asks for a voice id,
+    # but an empty answer leaves the choice to the vocal module; any other backend asks
+    # nothing and says so, as the terminal wizard does.
     def applies(ctx: StepContext) -> bool:
         return bool((ctx.config.get("modules") or {}).get("vox"))
 
@@ -407,9 +408,14 @@ def vox_voice_step() -> Step:
                 "[vox].sherpa_speaker_id); no Chatterbox voice needed."
             ]
         voices = (ctx.extra.get("discovered") or {}).get("voices") or []
+        lines: list[str] = []
         if voices:
-            return [f"  Chatterbox voices: {', '.join(str(v) for v in voices)}"]
-        return []
+            lines.append(f"  Chatterbox voices: {', '.join(str(v) for v in voices)}")
+        lines.append(
+            "  Leave it empty and the vocal module picks the first voice the "
+            "Chatterbox server ships."
+        )
+        return lines
 
     def fields(ctx: StepContext) -> tuple[Field, ...]:
         if _vox_backend(ctx) != "chatterbox":
@@ -426,16 +432,12 @@ def vox_voice_step() -> Step:
             or (str(voices[0]) if voices else "")
         )
 
-        def _require_voice(value: Any) -> str | None:
-            return None if value else "a voice id is required when vox is enabled."
-
         return (
             Field(
                 "voice_id",
-                "  [vox].predefined_voice_id (REQUIRED when vox is enabled)",
+                "  [vox].predefined_voice_id (empty: the vocal module picks a shipped voice)",
                 "text",
                 default=default,
-                validate=_require_voice,
             ),
         )
 
@@ -446,8 +448,7 @@ def vox_voice_step() -> Step:
         if voice_id:
             ctx.config.setdefault("vox", {})["predefined_voice_id"] = voice_id
         else:
-            ctx.config.setdefault("modules", {})["vox"] = False
-            _make_line(ctx)("    no voice id available; disabling vox.")
+            _make_line(ctx)("    no voice id given; the vocal module picks a shipped voice at startup.")
 
     return Step(
         id="vox-voice",

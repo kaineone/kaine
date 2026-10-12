@@ -515,11 +515,13 @@ The vocal module is the voice synthesis module. It calls Chatterbox or sherpa-on
 | `chatterbox_url` | string | `"http://127.0.0.1:8883"` | URL of the Chatterbox TTS server. |
 | `backend` | string | `"chatterbox"` | Synthesis backend: `"chatterbox"` or `"sherpa_onnx"`. |
 | `sherpa_model_id` | string | `"kokoro-en"` | sherpa-onnx TTS model ID. |
-| `sherpa_speaker_id` | integer | `0` | Kokoro speaker index. |
+| `sherpa_speaker_id` | integer | *(unset)* | Kokoro speaker index. Unset, the vocal module picks one from the model's speaker table. |
 | `sherpa_model_dir` | string | *(unset)* | Directory holding the downloaded sherpa-onnx model files. |
 | `sherpa_num_threads` | integer | `2` | ONNX Runtime threads for sherpa-onnx. |
 | `voice_mode` | string | `"predefined"` | Voice mode. Only `"predefined"` is currently used with Chatterbox. |
-| `predefined_voice_id` | string | *(unset)* | Required when `voice_mode = "predefined"`. Filename of a voice served by Chatterbox. |
+| `predefined_voice_id` | string | *(unset)* | Filename of a voice served by Chatterbox, used when `voice_mode = "predefined"`. Unset, the vocal module picks a voice the server ships. |
+| `default_voice` | string | *(unset)* | A voice the engine ships, named explicitly: a Chatterbox filename or display name, or a Kokoro speaker name. |
+| `voice_gender` | string | `"any"` | `"any"`, `"female"` or `"male"`. Filters the automatic pick where the engine reports gender (Kokoro only). |
 | `output_format` | string | `"wav"` | TTS output format passed to Chatterbox. |
 | `sink_path` | string | `"state/vox"` | Directory where synthesized audio files are written when sinking is enabled. |
 | `baseline_temperature` | float | `0.7` | Default sampling temperature. |
@@ -537,7 +539,7 @@ List Chatterbox voices with:
 curl -s http://127.0.0.1:8883/get_predefined_voices
 ```
 
-The vocal module cannot speak until `predefined_voice_id` is set.
+With no voice configured, the vocal module uses the first voice in that list in sorted order and logs it. If the list is empty or the server is unreachable at startup, the vocal module stays silent and the health surface shows why. See [Choosing a voice](../09-modules/vocal.md#choosing-a-voice).
 
 ### Additional playback and sink keys
 

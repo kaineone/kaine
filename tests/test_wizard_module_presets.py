@@ -215,7 +215,7 @@ def test_defaults_with_tier_recommendation_full_entity():
     assert "Module preset: full entity" in out()
 
 
-def test_full_entity_without_a_voice_turns_vox_off():
+def test_full_entity_without_a_voice_keeps_vox_on():
     shipped = _shipped()
     shipped.setdefault("vox", {})["backend"] = "chatterbox"
     shipped["vox"]["predefined_voice_id"] = ""
@@ -228,9 +228,10 @@ def test_full_entity_without_a_voice_turns_vox_off():
         recommend_tier_fn=_tier3_no_residency,
         defaults=True,
     )
-    assert result.config["modules"]["vox"] is False
+    assert result.config["modules"]["vox"] is True
     assert result.config["modules"]["lingua"] is True
-    assert "no voice id available; disabling vox." in out()
+    assert "predefined_voice_id" not in result.config.get("vox", {})
+    assert "no voice id given; the vocal module picks a shipped voice at startup." in out()
 
 
 def test_defaults_without_recommendation_base_thesis():

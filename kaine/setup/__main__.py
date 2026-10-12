@@ -73,21 +73,15 @@ def probe_services(*, timeout_s: float = 2.0) -> dict[str, Any]:
         # Failures are intentionally ignored so setup continues empty.
         pass
 
-    # Chatterbox: /get_predefined_voices -> list or dict of voice ids
+    # Chatterbox: /get_predefined_voices -> [{"display_name", "filename"}, ...]
     try:
+        from kaine.modules.vox.voices import parse_chatterbox_voices
         resp = httpx.get(
             "http://127.0.0.1:8883/get_predefined_voices", timeout=timeout_s,
             trust_env=False,
         )
         if resp.status_code == 200:
-            data = resp.json()
-            if isinstance(data, list):
-                voices = [str(v) for v in data]
-            elif isinstance(data, dict):
-                voices = [str(v) for v in data.keys()]
-            else:
-                voices = []
-            result["voices"] = voices
+            result["voices"] = [v.filename for v in parse_chatterbox_voices(resp.json())]
     except Exception:
         # Best-effort, optional probe: Chatterbox may not be running. Failures
         # are intentionally ignored so setup continues with voices empty.

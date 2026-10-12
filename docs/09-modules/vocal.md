@@ -1,6 +1,6 @@
 # Vocal
 
-The vocal module is KAINE's voice. It turns the language organ's external speech into sound with local speech synthesis, and it varies the prosody of that sound with the entity's affect. It draws on speech production along the dorsal stream (Hickok and Poeppel 2007), and the question it adds to the module-addition study is whether listeners can detect that affect-driven variation. This page covers the synthesis backends, the mapping from affect to prosody, optional prosodic mirroring of a conversation partner, and self-hearing suppression. Read it if you are enabling spoken output or changing how text becomes sound.
+The vocal module is KAINE's voice. It turns the language organ's external speech into sound with local speech synthesis, and it varies the prosody of that sound with the entity's affect. It draws on speech production along the dorsal stream (Hickok and Poeppel 2007), and the question it adds to the module-addition study is whether listeners can detect that affect-driven variation. This page covers the synthesis backends, how the voice is chosen, the mapping from affect to prosody, optional prosodic mirroring of a conversation partner, and self-hearing suppression. Read it if you are enabling spoken output or changing how text becomes sound.
 
 ## Status
 
@@ -25,6 +25,23 @@ The sherpa-onnx backend has these limits:
 - The voice is a preset speaker, so an entity moved from one backend to the other does not keep its voice.
 - `vox.synthesized` lists the parameters actually applied in `prosody_applied`: all four under Chatterbox, `["speed_factor"]` under Kokoro. Its `voice` field reads `"kokoro-en speaker N"` under sherpa-onnx.
 
+### Choosing a voice
+
+KAINE ships no voice files and its configuration names no voice. When no voice is configured, the vocal module picks one that the engine itself ships, so an enabled module can speak without operator-local files. The rule lives in `kaine/modules/vox/voices.py` and is deterministic: the same list and the same settings give the same voice on every start.
+
+An explicit voice always wins, in this order:
+
+1. `predefined_voice_id` (Chatterbox) or `sherpa_speaker_id` (Kokoro). A configured `predefined_voice_id` is sent as it is, without asking the server, so an operator's own uploaded voice keeps working.
+2. `default_voice`, which must name a voice in the engine's list: a Chatterbox filename or display name, or a Kokoro speaker name.
+3. The automatic pick: the first voice in sorted order of names, keeping only the voices whose gender matches `voice_gender` where the engine reports gender.
+
+| Engine | Where the list comes from | Gender |
+|---|---|---|
+| Chatterbox | `GET /get_predefined_voices` on the server, read once at startup. The upstream server ships 28 voices in its `voices/` directory, listed as `display_name` and `filename`. | Not reported. A `"female"` or `"male"` preference is logged as not applicable and the pick is made from all voices. With the upstream voices the pick is `Abigail.wav`. |
+| Kokoro (sherpa-onnx) | The speaker table of the pinned `kokoro-en` model (v0_19, 11 speakers) in `kaine/speech_manifest.py`, from the sherpa-onnx model documentation. | Encoded in the name prefix: the first letter is the accent (`a` American, `b` British), the second the gender (`f` female, `m` male). `"any"` and `"female"` give speaker 0 (`af`), `"male"` gives speaker 5 (`am_adam`). |
+
+The module logs the chosen voice once at startup, for example `vocal module voice: Abigail.wav (first of 28 shipped voices in sorted order)`. The `voice` field of `vox.synthesized` carries the Chatterbox filename, or `kokoro-en speaker N` under sherpa-onnx.
+
 ### Fetching the model
 
 Download models ahead of time with `python -m kaine.setup.speech_models [--tts ID] [--yes]`. The command shows each model's name, size and licence and asks for consent. Archives are pinned by URL and SHA-256, verified, and extracted into `state/models/sherpa-onnx/`. The command is idempotent, and nothing downloads at runtime. Kokoro English int8 is 103 MB. Its licences are Apache-2.0 for the model and GPL-3.0-or-later for espeak-ng-data and the espeak-ng engine built into sherpa-onnx. KAINE does not redistribute espeak-ng: the operator installs it with sherpa-onnx and the model after the consent prompt shows both licences.
@@ -34,6 +51,7 @@ Download models ahead of time with `python -m kaine.setup.speech_models [--tts I
 - A missing `sherpa-onnx` package stops the boot at the extras check. Install it with `pip install "kaine[speech-edge]"`.
 - Missing model files disable the vocal module only, and the health surface shows the reason.
 - The dashboard health surface probes Chatterbox only when `backend = "chatterbox"`. For sherpa-onnx it loads the model and runs one real inference once per process, then reports the remembered result with its age, retrying a failure after 60 s.
+- When no voice can be chosen (the Chatterbox server is unreachable at startup or lists no voices, `default_voice` is not in the list, or no voice matches `voice_gender`), the vocal module logs one line beginning `vocal module silent:` that names the key to set, records the failure for the health surface, and stays silent. With Chatterbox the module keeps running and plays nothing; restart it once the server answers. With sherpa-onnx the backend fails to build and the vocal module is disabled, as with missing model files. The cycle is never interrupted.
 - While speech synthesis is unavailable, the vocal module publishes a failure event at most once every 60 s.
 
 ## What it does
@@ -76,11 +94,13 @@ Full reference: [`[vox]` in the modules configuration](../appendix-a-configurati
 | `backend` | string | `"chatterbox"` | `"chatterbox"` or `"sherpa_onnx"` |
 | `sherpa_model_id` | string | `"kokoro-en"` | sherpa-onnx model id |
 | `sherpa_model_dir` | string | `<models dir>/sherpa-onnx/<id>` | Directory of the downloaded model files |
-| `sherpa_speaker_id` | int | `0` | Kokoro preset speaker (0 to 10) |
+| `sherpa_speaker_id` | int | unset | Kokoro preset speaker (0 to 10). Unset, the vocal module picks one (see [Choosing a voice](#choosing-a-voice)) |
 | `sherpa_num_threads` | int | `2` | ONNX Runtime threads |
 | `chatterbox_url` | string | `"http://127.0.0.1:8883"` | Chatterbox service URL |
 | `voice_mode` | string | `"predefined"` | `"predefined"` uses a voice file the operator has given Chatterbox |
-| `predefined_voice_id` | string | unset | Required in `predefined` mode: a voice filename the Chatterbox server serves. Unset, Chatterbox returns 400 and the vocal module cannot speak. List the voices with `curl -s http://127.0.0.1:8883/get_predefined_voices` and set, for example, `"Abigail.wav"`. |
+| `predefined_voice_id` | string | unset | A voice filename the Chatterbox server serves, sent without checking. Unset, the vocal module picks a voice the server ships. List the voices with `curl -s http://127.0.0.1:8883/get_predefined_voices`. |
+| `default_voice` | string | unset | A voice the engine ships, named explicitly: a Chatterbox filename or display name, or a Kokoro speaker name such as `"af_sarah"`. Used when the backend-specific key above is unset. |
+| `voice_gender` | string | `"any"` | `"any"`, `"female"` or `"male"`. Filters the automatic pick where the engine reports gender (Kokoro); Chatterbox reports none. Any other value stops the boot with a configuration error. |
 | `output_format` | string | `"wav"` | Audio format |
 | `sink_path` | string | `"state/vox"` | Directory of the optional clip sink |
 | `sink_enabled` | bool | `false` | Write clips to disk, bounded by `retain_count` |
@@ -172,7 +192,7 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 ## Enabling
 
 1. In the operator file `config/kaine.operator.toml`, set `[modules].vox = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
-2. For `backend = "chatterbox"`, start Chatterbox with the operator's voice in its `voices/` directory and set `predefined_voice_id` to that filename (keep personal filenames out of version control). For `backend = "sherpa_onnx"`, fetch the model with `python -m kaine.setup.speech_models --tts kokoro-en` and set `sherpa_speaker_id` to the preset you want.
+2. For `backend = "chatterbox"`, start the Chatterbox server. With no voice configured the vocal module uses the first voice the server ships; to use a particular one, set `default_voice` or `predefined_voice_id` (keep personal filenames out of version control). For `backend = "sherpa_onnx"`, fetch the model with `python -m kaine.setup.speech_models --tts kokoro-en`; the vocal module picks a preset speaker, or set `voice_gender`, `default_voice` or `sherpa_speaker_id`.
 3. Keep the [language module](language.md) on, since the vocal module speaks its output, and the [affect module](affect.md), since the vocal module's prosody follows its affect.
 4. For prosodic mirroring, turn on [Audition](audition.md)'s `prosody_enabled` and set `[vox.mirroring].enabled = true`.
 
@@ -181,6 +201,7 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 - Audio never goes on the bus; `vox.synthesized` carries numeric metadata such as `bytes_produced` and `latency_ms`.
 - The file sink is off by default and, when on, is bounded by `retain_count`.
 - `predefined_voice_id` names a file in Chatterbox's voices directory that the operator manages; the filename stays out of version control.
+- The project ships no voice files. A voice picked automatically is one the engine ships, and its name appears only in the log and in `vox.synthesized`.
 - The prosody cached for mirroring is six numbers; no waveform is kept in the module's state.
 
 ## Tests
@@ -192,6 +213,9 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 | `tests/test_vox_client.py` | `ChatterboxClient` request shaping |
 | `tests/test_vox_playback.py` | The `Player` abstraction; `wav_duration_s` |
 | `tests/test_vox_module.py` | Consumer loop, affect tracking, the mirroring switch |
+| `tests/test_vox_voices.py` | The voice selection rule: determinism, the gender filter, explicit voices, the Kokoro table |
+| `tests/test_vox_default_voice.py` | Picking a shipped voice against a fake Chatterbox server and a fake Kokoro table; silence with a clear message when none can be chosen |
+| `tests/test_setup_voice_discovery.py` | The setup wizard reads the server's voice list by filename |
 | `tests/test_sherpa_speech_engines.py` | sherpa-onnx engine integration |
 | `tests/test_speech_models.py` | Model download and verification |
 | `tests/test_speech_model_verification.py` | Hash pinning and extraction checks |
@@ -201,4 +225,5 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 - Spec: `openspec/specs/vox/spec.md`
 - Prosodic mirroring spec: `openspec/specs/vox-prosodic-mirroring/spec.md`
 - Archived change: `openspec/changes/archive/2026-06-15-audio-out-playback` (playback reliability and device selection)
+- Change: `openspec/changes/vox-default-voice` (the shipped default voice, and the design of a later choice by the entity)
 - See also: [language module](language.md) (the text), [affect module](affect.md) (the affect), [audition module](audition.md) (the partner's prosody), [sleep module](sleep.md) (uses the language module's intent log for voice-alignment training).

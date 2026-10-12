@@ -21,6 +21,7 @@ def make_vox(
     entity_clock: Optional[EntityClock] = None,
 ) -> BaseModule:
     from kaine.modules.vox.module import Vox
+    from kaine.modules.vox.voices import normalize_gender
 
     allowed = {
         "chatterbox_url",
@@ -51,14 +52,26 @@ def make_vox(
         "sherpa_speaker_id",
         "sherpa_num_threads",
         "mirroring",  # nested sub-table: enabled, mirror_strength, mirror_ceiling, decay_s
+        # shipped-voice selection, openspec vox-default-voice
+        "voice_gender",
+        "default_voice",
     }
     # Pop all top-level keys; handle mirroring sub-table separately.
     _require_keys(section, allowed)
+
+    # Validate voice_gender at boot time so a typo is a configuration error.
+    voice_gender = section.get("voice_gender", "any")
+    try:
+        normalized_gender = normalize_gender(voice_gender)
+    except ValueError as exc:
+        raise ConfigurationError(str(exc)) from exc
+    default_voice = section.get("default_voice")
+
     raw_backend = section.get("backend")
     backend = str(raw_backend or "chatterbox").strip().lower()
     sherpa_model_dir = section.pop("sherpa_model_dir", None)
     sherpa_model_id = section.pop("sherpa_model_id", None)
-    sherpa_speaker_id = section.pop("sherpa_speaker_id", 0)
+    sherpa_speaker_id = section.pop("sherpa_speaker_id", None)
     sherpa_num_threads = section.pop("sherpa_num_threads", 2)
     backend_keys = {
         "backend",
@@ -95,23 +108,47 @@ def make_vox(
     from kaine.modules.backends import BackendRegistry, UnknownBackendError
     from kaine.modules.vox.client import ChatterboxClient, TTSClient
     from kaine.modules.vox.sherpa_tts import APPLIED_PROSODY
+    from kaine.modules.vox.voices import kokoro_speaker_name, select_kokoro_speaker
 
     chatterbox_url = str(kw.get("chatterbox_url", "http://127.0.0.1:8883"))
     timeout_s = float(kw.get("request_timeout_s", 120.0))
+
+    resolved: dict[str, Any] = {}
 
     def _chatterbox_factory() -> TTSClient:
         return ChatterboxClient(base_url=chatterbox_url, timeout_s=timeout_s)
 
     def _sherpa_factory() -> TTSClient:
+        from kaine import speech_manifest
         from kaine.model_paths import speech_model_dir as model_dir
         from kaine.modules.vox.sherpa_tts import SherpaKokoroTTS
 
         model_id = sherpa_model_id or DEFAULT_TTS
         model_dir_path = sherpa_model_dir or model_dir(model_id)
+        entry = speech_manifest.MANIFEST.get(model_id)
+        speakers = tuple(entry.speakers) if entry is not None else ()
+
+        if sherpa_speaker_id is not None:
+            speaker_id = int(sherpa_speaker_id)
+            name = kokoro_speaker_name(speakers, speaker_id)
+            note = "configured in [vox].sherpa_speaker_id"
+        else:
+            choice = select_kokoro_speaker(
+                speakers,
+                gender=normalized_gender,
+                default_voice=default_voice,
+                model_id=model_id,
+            )
+            speaker_id = choice.speaker_id
+            name = choice.name
+            note = choice.note
+
+        resolved["speaker_id"] = speaker_id
+        resolved["note"] = f"{name}; {note}" if name else note
         return SherpaKokoroTTS(
             model_dir_path,
             model_id=model_id,
-            speaker_id=int(sherpa_speaker_id),
+            speaker_id=speaker_id,
             num_threads=int(sherpa_num_threads),
         )
 
@@ -129,5 +166,6 @@ def make_vox(
     kw["tts_client"] = client
     kw["backend"] = "sherpa_onnx"
     kw["applied_prosody"] = APPLIED_PROSODY
-    kw["voice_label"] = f"{resolved_model_id} speaker {int(sherpa_speaker_id)}"
+    kw["voice_label"] = f"{resolved_model_id} speaker {int(resolved['speaker_id'])}"
+    kw["voice_note"] = resolved.get("note")
     return Vox(bus, entity_clock=entity_clock, **kw)
