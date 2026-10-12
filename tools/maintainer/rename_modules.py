@@ -459,6 +459,117 @@ def _is_prose_like(ctx: str | None) -> bool:
     }
 
 
+def _is_code_reference(text: str, start: int, end: int, ctx: str | None) -> bool:
+    """Return True when a prose-context match is actually a code/config reference."""
+    if ctx not in {"md_prose", "comment", "docstring", "toml_comment"}:
+        return False
+
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", start)
+    if line_end == -1:
+        line_end = len(text)
+    line = text[line_start:line_end]
+    rel_start = start - line_start
+    rel_end = end - line_start
+
+    if ctx in {"comment", "docstring", "toml_comment"}:
+        # a) inline backtick span on the same line (`x` or ``x``)
+        i = 0
+        while i < len(line):
+            if line[i] == "`":
+                j = i
+                while j < len(line) and line[j] == "`":
+                    j += 1
+                run = j - i
+                close = line.find("`" * run, j)
+                if close != -1:
+                    if i + run <= rel_start and rel_end <= close:
+                        return True
+                    i = close + run
+                    continue
+                break
+            i += 1
+
+        # b) single- or double-quoted string with no whitespace in its content
+        i = 0
+        while i < len(line):
+            ch = line[i]
+            if ch in "'\"":
+                j = i
+                while j < len(line) and line[j] == ch:
+                    j += 1
+                run = j - i
+                if run >= 3:
+                    i = j
+                    continue
+                close = -1
+                k = j
+                while True:
+                    k = line.find(ch, k)
+                    if k == -1:
+                        break
+                    rlen = 1
+                    while k + rlen < len(line) and line[k + rlen] == ch:
+                        rlen += 1
+                    if rlen == run and (k + run >= len(line) or line[k + run] != ch):
+                        close = k
+                        break
+                    k += rlen
+                if close != -1:
+                    content_start = i + run
+                    content_end = close
+                    if content_start <= rel_start and rel_end <= content_end:
+                        if not any(c.isspace() for c in line[content_start:content_end]):
+                            return True
+                    i = close + run
+                    continue
+            i += 1
+
+    # c) bracketed reference, but not Markdown link text
+    def _pair_close(open_idx: int) -> int | None:
+        balance = 1
+        for k in range(open_idx + 1, line_end):
+            if text[k] == "[":
+                balance += 1
+            elif text[k] == "]":
+                balance -= 1
+                if balance == 0:
+                    return k
+        return None
+
+    def _pair_open(close_idx: int) -> int | None:
+        balance = 1
+        for k in range(close_idx - 1, line_start - 1, -1):
+            if text[k] == "]":
+                balance += 1
+            elif text[k] == "[":
+                balance -= 1
+                if balance == 0:
+                    return k
+        return None
+
+    if start > line_start and text[start - 1] == "[":
+        close = _pair_close(start - 1)
+        if close is not None:
+            if text[close + 1 : close + 2] == "(":
+                return False
+            return True
+
+    if end < line_end and text[end] == "]":
+        open_b = _pair_open(end)
+        if open_b is not None:
+            if text[end + 1 : end + 2] == "(":
+                return False
+            return True
+
+    # d) dotted reference on the same line (e.g. mundus.<adapter> or mnemos.replay)
+    if end < line_end and text[end] == ".":
+        if end + 1 < line_end and not text[end + 1].isspace():
+            return True
+
+    return False
+
+
 def _context_intervals(rel_path: str, text: str) -> list[tuple[int, int, str]]:
     kind = _file_kind(rel_path, text)
     if kind == "python":
@@ -1142,6 +1253,7 @@ def _assign_scope(
         ):
             first_seg = T.split("/")[0]
             if first_seg not in getattr(table, "REPO_TOP_DIRS", ()):
+
                 return "persisted"
 
     env_vars = _env_var_set(table)
@@ -1168,7 +1280,8 @@ def _assign_scope(
         return "operator"
 
     if ctx in {"md_prose", "comment", "docstring", "toml_comment"} and shape == "bare":
-        return "prose"
+        if not _is_code_reference(text, start, end, ctx):
+            return "prose"
     target = _link_target(rel_path, T, table)
     if target is not None:
         return _path_move_scope(target)
@@ -1465,6 +1578,8 @@ def _replacement_for(
     forms = _new_forms(entry, plural)
     matched = text[start:end]
 
+    code_like = _is_code_reference(text, start, end, ctx)
+
     kebab = False
     if start > 0 and text[start - 1] == "-":
         kebab = True
@@ -1485,7 +1600,7 @@ def _replacement_for(
             return forms["kebab"]
         if shape == "camel_lower":
             return forms["lower_camel"]
-        if _is_prose_like(ctx) and shape == "bare":
+        if not code_like and _is_prose_like(ctx) and shape == "bare":
             if forms["prose"][0].isupper():
                 return forms["prose"][0].lower() + forms["prose"][1:]
             return forms["prose"]
@@ -1497,11 +1612,11 @@ def _replacement_for(
         return forms["upper"]
 
     if matched[0].isupper():
-        if _is_prose_like(ctx) and shape == "bare":
+        if not code_like and _is_prose_like(ctx) and shape == "bare":
             return forms["prose"]
         return forms["class"]
 
-    if _is_prose_like(ctx) and shape == "bare":
+    if not code_like and _is_prose_like(ctx) and shape == "bare":
         return forms["prose"]
     return forms["key"]
 
