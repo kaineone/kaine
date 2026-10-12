@@ -43,6 +43,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from kaine import legacy_aliases
 from kaine.experiment.run_context import _utc_iso, get_run_context
 from kaine.lifecycle.identity import (
     EntityIdentity,
@@ -805,13 +806,21 @@ def extract_bundle_gestation(bundle: Path, dest_dir: Path) -> list[str]:
     restored: dict[str, bytes] = {}
     try:
         with tarfile.open(fileobj=io.BytesIO(data), mode="r") as tar:
-            targets = {f"gestation/{name}" for name in BUNDLED_GESTATION_FILES}
+            targets = set(BUNDLED_GESTATION_FILES)
             for member in tar.getmembers():
                 if not member.isfile():
                     continue
-                if member.name in targets:
-                    basename = member.name[len("gestation/") :]
-                    restored[basename] = tar.extractfile(member).read()
+                mapped = legacy_aliases.map_bundle_member(member.name)
+                if not mapped.startswith("gestation/"):
+                    continue
+                rest = mapped[len("gestation/") :]
+                basename = Path(legacy_aliases.map_state_path(f"lifecycle/{rest}")).name
+                if basename not in targets:
+                    continue
+                is_old = mapped != member.name or basename != rest
+                if basename in restored and is_old:
+                    continue
+                restored[basename] = tar.extractfile(member).read()
     except ReviveError:
         raise
     except Exception as exc:
@@ -859,11 +868,16 @@ def read_bundle_stage(bundle: Path) -> dict | None:
         text = raw.decode("utf-8")
 
     try:
-        return json.loads(text)
+        data = json.loads(text)
     except json.JSONDecodeError as exc:
         raise ReviveError(
             f"bundle {bundle.name}/stage.json is not valid JSON: {exc}"
         ) from exc
+    if not isinstance(data, dict):
+        raise ReviveError(
+            f"bundle {bundle.name}/stage.json is not a JSON object"
+        )
+    return data
 
 
 def extract_bundle_individuation(bundle: Path, dest: Path) -> bool:
@@ -1010,12 +1024,15 @@ def _read_bundle_members(bundle: Path) -> dict[str, Any]:
                     if fh is None:
                         continue
                     data = fh.read()
-                    if member.name == "snapshot.json":
+                    name = legacy_aliases.map_bundle_member(member.name)
+                    if name == "snapshot.json":
                         members["snapshot.json"] = encryptor.maybe_decrypt(
                             data
                         ).decode("utf-8")
-                    elif member.name.startswith("phantasia/"):
-                        members[member.name] = data
+                    elif name.startswith("phantasia/"):
+                        if name in members and name != member.name:
+                            continue
+                        members[name] = data
         except ReviveError:
             raise
         except Exception as exc:
@@ -1035,7 +1052,7 @@ def _read_bundle_members(bundle: Path) -> dict[str, Any]:
     if phantasia_dir.is_dir():
         for p in sorted(phantasia_dir.iterdir()):
             if p.is_file():
-                members[f"phantasia/{p.name}"] = p.read_bytes()
+                members[legacy_aliases.map_bundle_member(f"phantasia/{p.name}")] = p.read_bytes()
     return members
 
 

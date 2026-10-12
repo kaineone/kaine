@@ -24,6 +24,9 @@ one, so they are never treated as evidence that *this* tree has already lived.
 Only this tree's own lived artifacts (the developmental stage file, the world-model checkpoint,
 the sleep module's consolidation-divergence record and the
 perception desired-state) count as evidence for deriving a legacy identity.
+Each is recognized under its old and its new name, and the legacy digest uses the
+old name for both, so renaming a tree's directories does not change its legacy
+identity.
 """
 
 from __future__ import annotations
@@ -40,6 +43,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
+from kaine import legacy_names
+from kaine.legacy_aliases import lived_artifact_paths
 from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
@@ -50,11 +55,8 @@ _ORIGINS = frozenset({"minted", "legacy"})
 IDENTITY_PATH = Path("state/identity/entity.json")
 SIDECAR_NAME = "identity.json"
 
-OWN_LIVED_ARTIFACTS: tuple[Path, ...] = (
-    Path("lifecycle/stage.json"),
-    Path("phantasia/world_model.ckpt"),
-    Path("hypnos/consolidation_divergence.json"),
-    Path("perception/desired.json"),
+OWN_LIVED_ARTIFACTS: tuple[Path, ...] = (Path("lifecycle/stage.json"),) + tuple(
+    Path(rel) for rel in lived_artifact_paths()
 )
 
 
@@ -367,6 +369,18 @@ def own_lived_artifacts(state_root: Path | str = "state") -> list[Path]:
     return out
 
 
+def _canonical_relpath(relpath: str) -> str:
+    """Return the legacy (old) name for a lived-artifact relative path.
+
+    This keeps the legacy digest stable when a tree's directories are renamed.
+    """
+    for entry in legacy_names.LIVED_ARTIFACTS:
+        new = entry["new"]
+        if relpath == new or relpath.startswith(new + "/"):
+            return entry["old"] + relpath[len(new):]
+    return relpath
+
+
 def tree_digest(state_root: Path | str, artifacts: list[Path]) -> str:
     """Compute the deterministic digest of ``artifacts`` relative to ``state_root``.
 
@@ -390,10 +404,10 @@ def tree_digest(state_root: Path | str, artifacts: list[Path]) -> str:
                         file_path = Path(dirpath) / filename
                         if file_path.is_symlink():
                             continue
-                        relpath = (rel_dir / filename).as_posix()
+                        relpath = _canonical_relpath((rel_dir / filename).as_posix())
                         lines.append(f"{relpath}\0{_file_sha256(file_path)}")
             elif artifact.is_file():
-                relpath = artifact.relative_to(root).as_posix()
+                relpath = _canonical_relpath(artifact.relative_to(root).as_posix())
                 lines.append(f"{relpath}\0{_file_sha256(artifact)}")
         except (OSError, ValueError) as exc:
             # A legacy ID is derived once and frozen; an artifact that cannot be

@@ -24,14 +24,14 @@
 
 ## 5. Compatibility readers (PR 4)
 
-- [ ] 5.1 Config: per-layer normalization of tables, keys and values before the merge, one warning line per layer, both names in one layer refused, the study allowlist and the unknown-key guard after normalization.
-- [ ] 5.2 Environment variables: one lookup helper, the warning, refusal when old and new are both set and differ.
-- [ ] 5.3 CLI aliases for `--serve-nexus`, `--db-gestation`, `--gestation-budget-seconds`; plugin seam aliases.
-- [ ] 5.4 Read-maps for bundles, snapshots and fork sidecars (module keys, manifest `modules`, the `gestation/` member, stage values and fields) and for recorded datasets (stream names, `source`, per-module fields, sidecar directories).
-- [ ] 5.5 `kaine.lifecycle.rename_state`: state paths, file names, the stage file, the sqlite-vec file and `collection` column, Qdrant aliases, a move manifest with `--revert`, refusal of an old-and-new pair.
-- [ ] 5.6 Never-regress: `_coerce_stage` reads `gestation` as `development`; `OWN_LIVED_ARTIFACTS` lists old and new paths.
-- [ ] 5.7 Fail closed on an unrecognized stage value: `_coerce_stage` no longer reads an unknown or non-string value as `embodied`; the stage reader raises, and the cycle refuses to boot with a message naming the stage file and the value's `repr` (truncated to 64 characters). Independent of the `gestation` alias. Tests: a garbled value, a forward-versioned value, a non-string value, and the file left unchanged.
-- [ ] 5.8 Tests for 5.1 to 5.6 with synthetic table entries, plus import of the four local bundles and the nine local fork trees.
+- [x] 5.1 Config: per-layer normalization of tables, keys and values before the merge, one warning line per layer, both names in one layer refused, the study allowlist and the unknown-key guard after normalization.
+- [x] 5.2 Environment variables: one lookup helper, the warning, refusal when old and new are both set and differ.
+- [x] 5.3 CLI aliases for `--serve-nexus`, `--db-gestation`, `--gestation-budget-seconds`; plugin seam aliases.
+- [x] 5.4 Read-maps for bundles, snapshots and fork sidecars (module keys, manifest `modules`, the `gestation/` member, stage values and fields) and for recorded datasets (stream names, `source`, per-module fields, sidecar directories).
+- [x] 5.5 `kaine.lifecycle.rename_state`: state paths, file names, the stage file, the sqlite-vec file and `collection` column, Qdrant aliases, a move manifest with `--revert`, refusal of an old-and-new pair.
+- [x] 5.6 Never-regress: `_coerce_stage` reads `gestation` as `development`; `OWN_LIVED_ARTIFACTS` lists old and new paths.
+- [x] 5.7 Fail closed on an unrecognized stage value: `_coerce_stage` no longer reads an unknown or non-string value as `embodied`; the stage reader raises, and the cycle refuses to boot with a message naming the stage file and the value's `repr` (truncated to 64 characters). Independent of the `gestation` alias. Tests: a garbled value, a forward-versioned value, a non-string value, and the file left unchanged.
+- [x] 5.8 Tests for 5.1 to 5.6 with synthetic table entries, plus import of the four local bundles and the nine local fork trees.
 
 ## 6. Identifiers by layer (PRs 5a to 5d)
 

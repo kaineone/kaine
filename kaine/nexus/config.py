@@ -12,6 +12,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from kaine import legacy_aliases
 from kaine.config import deep_merge
 
 log = logging.getLogger(__name__)
@@ -108,10 +109,18 @@ def _env_flag(name: str) -> bool | None:
     spellings (``1``/``true``/``yes``/``on``, case-insensitive) to ``True`` and
     everything else to ``False``.
     """
-    raw = os.environ.get(name)
+    raw = _env(name)
     if raw is None:
         return None
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env(name: str) -> str | None:
+    """Read an environment variable, mapping a legacy-name conflict to an error."""
+    try:
+        return legacy_aliases.getenv(name)
+    except legacy_aliases.LegacyNameConflict as exc:
+        raise NexusConfigError(str(exc)) from exc
 
 
 _ACCESS_MODES = ("open", "token")
@@ -173,6 +182,14 @@ def _extra_host_origins(
     return tuple(result)
 
 
+def _normalize_nexus_layer(layer: dict[str, Any], source: Path | str) -> dict[str, Any]:
+    """Apply legacy name aliases to a parsed TOML layer."""
+    try:
+        return legacy_aliases.normalize_config_layer(layer, str(source))
+    except legacy_aliases.LegacyNameConflict as exc:
+        raise NexusConfigError(str(exc)) from exc
+
+
 def _raise_if_config_token(section: Any, file: Path) -> None:
     """Refuse to start if a config file (not a secrets file) holds a token."""
     if not isinstance(section, dict):
@@ -191,10 +208,17 @@ def load_nexus_config(
     operator_path: str | os.PathLike[str] | None = None,
     secrets_path: str | os.PathLike[str] | None = None,
 ) -> NexusConfig:
+    try:
+        legacy_aliases.check_environment()
+    except legacy_aliases.LegacyNameConflict as exc:
+        raise NexusConfigError(str(exc)) from exc
+
     target = Path(path or "config/kaine.toml")
     raw: dict[str, Any] = {}
     if target.exists():
         raw = tomllib.loads(target.read_text(encoding="utf-8"))
+
+    raw = _normalize_nexus_layer(raw, target)
 
     # The committed, tracked config/kaine.toml is not a secrets file.
     _raise_if_config_token(raw.get("nexus"), target)
@@ -209,6 +233,7 @@ def load_nexus_config(
             raise NexusConfigError(
                 f"malformed Nexus operator overlay: {operator_target}"
             ) from e
+        overlay = _normalize_nexus_layer(overlay, operator_target)
 
     # Operator overlays are config files, not secrets files.
     _raise_if_config_token(overlay.get("nexus"), operator_target)
@@ -227,8 +252,8 @@ def load_nexus_config(
     # via the published port mapping — while the compose publish rule keeps external
     # exposure loopback-only. KAINE_NEXUS_CONVERSATION_ENABLED toggles the
     # conversation surface (the only [nexus] delta with no other env knob).
-    host = os.environ.get("KAINE_NEXUS_HOST")
-    port = os.environ.get("KAINE_NEXUS_PORT")
+    host = _env("KAINE_NEXUS_HOST")
+    port = _env("KAINE_NEXUS_PORT")
     if host or port:
         config = replace(
             config,
@@ -247,14 +272,14 @@ def load_nexus_config(
     if read_only is not None:
         config = replace(config, read_only=read_only)
 
-    access_env = os.environ.get("KAINE_NEXUS_ACCESS")
+    access_env = _env("KAINE_NEXUS_ACCESS")
     if access_env is not None and access_env.strip():
         access_env = access_env.strip()
         config = replace(
             config, access=_validate_access(access_env, "[nexus].access")
         )
 
-    env_token = (os.environ.get("KAINE_NEXUS_TOKEN") or "").strip()
+    env_token = (_env("KAINE_NEXUS_TOKEN") or "").strip()
     if env_token:
         config = replace(config, operator_token=env_token)
     else:
@@ -266,6 +291,8 @@ def load_nexus_config(
                 raise NexusConfigError(
                     f"malformed Nexus secrets file: {secrets_target}"
                 ) from e
+            # Name the file by role, never by path: the path is derived from the secrets location.
+            secrets_raw = _normalize_nexus_layer(secrets_raw, "the dashboard secrets file")
             secrets_token = (secrets_raw.get("nexus") or {}).get("operator_token")
             if secrets_token:
                 token = str(secrets_token).strip()
@@ -277,7 +304,7 @@ def load_nexus_config(
             "operator token is shorter than 32 characters; generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
         )
 
-    origins_env = os.environ.get("KAINE_NEXUS_ALLOWED_ORIGINS")
+    origins_env = _env("KAINE_NEXUS_ALLOWED_ORIGINS")
     if origins_env is not None:
         config = replace(
             config,
@@ -293,9 +320,9 @@ def load_nexus_config(
             ),
         )
 
-    extra_hosts_env = os.environ.get("KAINE_NEXUS_EXTRA_HOSTS")
+    extra_hosts_env = _env("KAINE_NEXUS_EXTRA_HOSTS")
     extra_hosts = _parse_extra_hosts(extra_hosts_env)
-    published_port_env = os.environ.get("KAINE_NEXUS_PUBLISHED_PORT")
+    published_port_env = _env("KAINE_NEXUS_PUBLISHED_PORT")
     published_port = (
         int(published_port_env.strip())
         if published_port_env is not None and published_port_env.strip()

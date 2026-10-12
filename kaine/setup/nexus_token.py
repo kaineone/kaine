@@ -10,7 +10,7 @@ import tomllib
 from pathlib import Path
 from typing import Any, Callable
 
-from kaine import secrets_file
+from kaine import legacy_aliases, secrets_file
 
 # Where the dashboard reads its operator token (kaine.nexus.config.load_nexus_config).
 DEFAULT_SECRETS_PATH = Path("config/secrets.toml")
@@ -33,7 +33,11 @@ def ensure_nexus_token(
     env = os.environ if env is None else env
     out("\n")
 
-    env_token = env.get("KAINE_NEXUS_TOKEN", "").strip()
+    try:
+        env_token = (legacy_aliases.getenv("KAINE_NEXUS_TOKEN", "", environ=env) or "").strip()
+    except legacy_aliases.LegacyNameConflict as exc:
+        out(f"Dashboard sign-in token: {exc}. Nothing written.\n")
+        return "conflict"
     if env_token:
         if len(env_token) < _MIN_NEXUS_TOKEN_LEN:
             out(

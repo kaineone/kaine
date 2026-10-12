@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from kaine.lifecycle import stage as st
 from kaine.lifecycle.identity import mint_identity, write_identity_sidecar
 
@@ -53,8 +55,9 @@ def test_corrupt_stage_file_fails_safe_to_embodied(tmp_path: Path) -> None:
     assert st.read_stage(p).stage == st.EMBODIED
 
 
-def test_unknown_stage_value_reads_as_embodied_not_gestation(tmp_path: Path) -> None:
-    assert st.StageState.from_dict({"stage": "larval"}).stage == st.EMBODIED
+def test_unknown_stage_value_is_refused_not_read_as_a_stage(tmp_path: Path) -> None:
+    with pytest.raises(st.StageValueError):
+        st.StageState.from_dict({"stage": "larval"})
 
 
 # --- monotonicity / one-shot maturation (W1, W7.1, W7.5) -------------------------

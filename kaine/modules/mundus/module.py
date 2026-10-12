@@ -43,10 +43,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional
 
-from kaine import perception_state
+from kaine import legacy_aliases, perception_state
 from kaine.modules.base import BaseModule
 from kaine.modules.mundus.adapter import EmbodimentAdapter, FeedFrame
 from kaine.modules.mundus.channels import CONTINUOUS_CHANNEL_RANGE
@@ -68,7 +67,7 @@ _CONTROL_ACTION = "control"
 
 
 def operator_approved() -> bool:
-    return os.environ.get("KAINE_MUNDUS_OPERATOR_APPROVED") == "1"
+    return legacy_aliases.getenv("KAINE_MUNDUS_OPERATOR_APPROVED") == "1"
 
 
 class Mundus(BaseModule):

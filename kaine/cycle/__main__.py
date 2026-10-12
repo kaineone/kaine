@@ -175,6 +175,10 @@ IDENTITY_REFUSED_EXIT = 11
 # Exit code when a live planned-test study lacks a valid settings record (paper Appendix A.8).
 PLANNED_TEST_REFUSED_EXIT = 12
 
+# Exit code when the stored developmental stage holds a value this code does not
+# recognize (fail closed: the stage file is left for an operator to inspect).
+STAGE_REFUSED_EXIT = 13
+
 
 def _individuation_refusal(kaine_config: dict[str, Any]) -> tuple[Any | None, str | None]:
     """Parse [individuation] and check its prerequisites.
@@ -3011,6 +3015,16 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"Refusing to boot KAINE cycle: could not load config: {exc}\n")
         return 1
 
+    # An old and a new environment variable name that disagree stop the boot
+    # (names only are reported, never values).
+    from kaine import legacy_aliases
+
+    try:
+        legacy_aliases.check_environment()
+    except legacy_aliases.LegacyNameConflict as exc:
+        sys.stderr.write(f"kaine.cycle: configuration error: {exc}\n")
+        return 1
+
     try:
         _apply_log_level(config)
     except ValueError as exc:
@@ -3023,6 +3037,14 @@ def main(argv: list[str] | None = None) -> int:
     root = install_data_root(config)
     if root is not None:
         log.info("growing data under %s", root)
+
+    # Fail closed on an unrecognized stored stage value before anything reads or
+    # writes the stage file. An unreadable file keeps its fail-safe reading.
+    try:
+        lifecycle_stage.read_stage()
+    except lifecycle_stage.StageValueError as exc:
+        sys.stderr.write(f"kaine.cycle: stage refused: {exc}\n")
+        return STAGE_REFUSED_EXIT
 
     # Validate the automatic time-dilation settings before any resource opens;
     # _boot_and_run builds the controller itself from the same [cycle] table.

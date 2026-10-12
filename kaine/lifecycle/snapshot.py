@@ -14,6 +14,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from kaine import legacy_aliases
+
 # A snapshot id is a server-generated 16-hex UUID prefix (a fork/root id) or a
 # `<hex>+<hex>` pair (a merge parent id). This is the ONE source of truth shared
 # by the dashboard request boundary and the path-builder below — any id that fails it
@@ -70,7 +72,7 @@ class ForkSnapshot:
             parent_id=raw.get("parent_id"),
             label=str(raw.get("label") or ""),
             timestamp=float(raw.get("timestamp") or time.time()),
-            modules=dict(raw.get("modules") or {}),
+            modules=legacy_aliases.map_module_keys(dict(raw.get("modules") or {})),
             adapters=list(raw.get("adapters") or []),
             metadata=dict(raw.get("metadata") or {}),
         )

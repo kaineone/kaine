@@ -20,6 +20,8 @@ import logging
 import time
 from typing import Any, Callable, Iterable, Mapping, Protocol
 
+from kaine import legacy_aliases
+
 __all__ = [
     "PluginError",
     "INJECTABLE_SEAMS",
@@ -171,8 +173,9 @@ class LoadedPlugins:
             }
             if not declared_keys:
                 continue
+            plugin_module = info.get("module_aliases", {}).get(module, module)
             try:
-                provided = plugin.injections(module, cfg)
+                provided = plugin.injections(plugin_module, cfg)
             except Exception as exc:
                 raise PluginError(
                     f"plugin {name} raised {type(exc).__name__} while "
@@ -229,8 +232,9 @@ class LoadedPlugins:
                     f"plugin {name} declares {target} but has no "
                     f"make_oscillator method"
                 )
+            plugin_module = info.get("module_aliases", {}).get(module, module)
             try:
-                osc = maker(module, cfg, defaults)
+                osc = maker(plugin_module, cfg, defaults)
             except Exception as exc:
                 raise PluginError(
                     f"plugin {name} raised {type(exc).__name__} while making "
@@ -349,6 +353,23 @@ def load_plugins(
                 f"strings, got {type(seams).__name__}"
             )
 
+        module_aliases: dict[str, str] = {}
+        resolved_seams: set[str] = set()
+        for seam in seams:
+            new_seam = seam
+            if isinstance(seam, str):
+                new_seam = legacy_aliases.resolve_seam(seam)
+                if new_seam != seam:
+                    if seam.startswith("oscillator."):
+                        old_module = seam[len("oscillator.") :]
+                        new_module = new_seam[len("oscillator.") :]
+                    else:
+                        old_module = seam.split(".", 1)[0]
+                        new_module = new_seam.split(".", 1)[0]
+                    module_aliases[new_module] = old_module
+            resolved_seams.add(new_seam)
+        seams = resolved_seams
+
         for seam in seams:
             if not isinstance(seam, str):
                 raise PluginError(
@@ -411,6 +432,7 @@ def load_plugins(
             "plugin": plugin,
             "config": plugin_cfg,
             "seams": frozenset(seams),
+            "module_aliases": module_aliases,
             "distribution": dist_name,
             "version": version,
         }

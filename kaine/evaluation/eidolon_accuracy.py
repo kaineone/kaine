@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from kaine import legacy_aliases
 from kaine.evaluation._base import BaseObserver
 from kaine.evaluation.memory_probes import CognitiveQueryClient
 from kaine.evaluation.sink import AsyncJsonlSink
@@ -143,6 +144,9 @@ class EidolonAccuracyRunner(BaseObserver):
                         if not line.strip():
                             continue
                         entry = json.loads(line)
+                        if not isinstance(entry, dict):
+                            continue
+                        entry = legacy_aliases.map_record(entry)
                         th = entry.get("thymos_state") or {}
                         if isinstance(th, dict):
                             if "valence" in th:

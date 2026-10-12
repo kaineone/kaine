@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
+from kaine import legacy_aliases
 from kaine.evaluation.affect_correlation import correlate_from_log
 from kaine.evaluation.attribution import AttributionRecorder
 from kaine.evaluation.config import EvaluationConfig
@@ -64,10 +65,19 @@ def _scrub(value: Any) -> Any:
 
 
 def _latest_lines(log_dir: Path, *, name: str, limit: int = 200) -> list[dict[str, Any]]:
-    if not log_dir.exists():
+    candidates = legacy_aliases.sidecar_dir_candidates(name)
+    files: list[tuple[str, Path]] = []
+    for cand in candidates:
+        cand_dir = log_dir if cand == name else log_dir.parent / cand
+        if not cand_dir.is_dir():
+            continue
+        for jsonl in cand_dir.glob(f"{cand}-*.jsonl"):
+            files.append((jsonl.name[len(cand) + 1 :], jsonl))
+    if not files:
         return []
+    files.sort(key=lambda item: item[0])
     out: list[dict[str, Any]] = []
-    for jsonl in sorted(log_dir.glob(f"{name}-*.jsonl"))[-3:]:
+    for _, jsonl in files[-3:]:
         try:
             for line in jsonl.read_text(encoding="utf-8").splitlines():
                 if not line.strip():
@@ -76,6 +86,9 @@ def _latest_lines(log_dir: Path, *, name: str, limit: int = 200) -> list[dict[st
                     entry = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if not isinstance(entry, dict):
+                    continue
+                entry = legacy_aliases.map_record(entry)
                 out.append(_scrub(entry))
         except Exception:
             log.debug("skipped %s", jsonl, exc_info=True)

@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from kaine.lifecycle.identity import OWN_LIVED_ARTIFACTS, own_lived_artifacts
-from kaine.lifecycle.stage import EMBODIED, StageState, read_stage
+from kaine.lifecycle.stage import EMBODIED, StageState, StageValueError, read_stage
 
 
 def _deny_exists_under(tmp_path: Path):
@@ -45,25 +45,26 @@ def test_own_lived_artifacts_empty_readable_dir(tmp_path):
     assert own_lived_artifacts(tmp_path) == []
 
 
-def test_read_stage_value_error_returns_embodied(tmp_path):
+def test_read_stage_list_value_is_refused(tmp_path):
     stage_file = tmp_path / "stage.json"
-    # dict(["abc"]) raises ValueError: a sequence element of length 3, not a pair.
     stage_file.write_text(json.dumps(["abc"]))
-    with pytest.raises(ValueError):
+    before = stage_file.read_bytes()
+    with pytest.raises(StageValueError):
         StageState.from_dict(json.loads(stage_file.read_text()))
-    state = read_stage(stage_file)
-    assert state is not None
-    assert state.stage == EMBODIED
+    with pytest.raises(StageValueError):
+        read_stage(stage_file)
+    assert stage_file.read_bytes() == before
 
 
-def test_read_stage_type_error_returns_embodied(tmp_path):
+def test_read_stage_int_list_value_is_refused(tmp_path):
     stage_file = tmp_path / "stage.json"
     stage_file.write_text(json.dumps([1, 2, 3]))
-    with pytest.raises(TypeError):
+    before = stage_file.read_bytes()
+    with pytest.raises(StageValueError):
         StageState.from_dict(json.loads(stage_file.read_text()))
-    state = read_stage(stage_file)
-    assert state is not None
-    assert state.stage == EMBODIED
+    with pytest.raises(StageValueError):
+        read_stage(stage_file)
+    assert stage_file.read_bytes() == before
 
 
 def test_read_stage_exists_permission_error_returns_embodied(tmp_path, monkeypatch):

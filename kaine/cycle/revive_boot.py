@@ -121,7 +121,7 @@ def prepare_revive(bundle: str | Path) -> RevivePlan:
             StageState.from_dict(stage)
         except Exception as exc:
             raise ReviveRefused(
-                f"bundle stage is invalid: {type(exc).__name__}: {exc}"
+                f"bundle stage {bundle / 'stage.json'} is invalid: {type(exc).__name__}: {exc}"
             ) from exc
 
     identity = _plan_identity(bundle, members, preservation_id)
