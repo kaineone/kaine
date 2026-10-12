@@ -749,6 +749,44 @@ EXCLUDED_TOML_KEYS = (
 # every other file that binds `Sequence` gets the `SequenceModule` import alias.
 ACCEPTED_COLLISIONS = [
     ("kaine/modules/sequence/module.py", "Sequence"),
+
+    # Step 5b (affect, sleep, episodic memory, world model). Each was checked by
+    # hand: the new name meets an existing token that is not the same binding, either
+    # an import path segment beside asyncio.sleep or time.sleep, a keyword argument
+    # (`world_model=`, `affect=`, `sleep=`) of another call, or a test-local
+    # variable; ruff reports no redefinition after the run.
+    ("kaine/cycle/individuation_runtime.py", "sleep"),
+    ("kaine/modules/hypnos/job_queue_trainer.py", "sleep"),
+    ("kaine/modules/hypnos/module.py", "sleep"),
+    ("kaine/modules/hypnos/organ_adapter.py", "sleep"),
+    ("kaine/modules/phantasia/__init__.py", "world_model"),
+    ("kaine/modules/phantasia/module.py", "world_model"),
+    ("tests/fake_training_stack.py", "sleep"),
+    ("tests/test_cursor_follow_ups.py", "sleep"),
+    ("tests/test_entity_preservation_revive.py", "world_model"),
+    ("tests/test_heard_speech_never_leaks.py", "sleep"),
+    ("tests/test_hypnos_module.py", "sleep"),
+    ("tests/test_hypnos_phantasia_window.py", "affect"),
+    ("tests/test_hypnos_phantasia_window.py", "sleep"),
+    ("tests/test_hypnos_rest_requests.py", "sleep"),
+    ("tests/test_hypnos_sleep_cancellation.py", "sleep"),
+    ("tests/test_hypnos_sleep_replay_window.py", "affect"),
+    ("tests/test_hypnos_sleep_replay_window.py", "sleep"),
+    ("tests/test_hypnos_trigger.py", "sleep"),
+    ("tests/test_lingua_module.py", "sleep"),
+    ("tests/test_mnemos_trace_strength.py", "sleep"),
+    ("tests/test_phantasia_module.py", "world_model"),
+    ("tests/test_phantasia_numpy_engine.py", "world_model"),
+    ("tests/test_phantasia_persistence.py", "world_model"),
+    ("tests/test_preboot_correctness_phase35.py", "sleep"),
+    ("tests/test_rename_state.py", "sleep"),
+    ("tests/test_trainer_result_validation.py", "sleep"),
+    ("tests/test_training_core.py", "sleep"),
+    ("tests/test_voice_alignment_atomic_promotion.py", "sleep"),
+    ("tests/test_voice_alignment_job_queue.py", "sleep"),
+    ("tests/test_voice_alignment_organ_adapter.py", "sleep"),
+    ("tests/test_voice_system_prompts.py", "sleep"),
+    ("tests/test_world_model_identity.py", "world_model"),
 ]
 
 SURVEY_EXTRA = (
