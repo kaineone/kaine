@@ -616,6 +616,25 @@ are the ones the sections above leave open; each follows from those sections.
   list yet; the persisted step should add it. With every layer renamed, the
   table marks the identifiers scope done, so `tests/test_module_names_guard.py`
   now fails on any change that brings an old identifier back.
+- **After review of PR 5d.** A renamed dataclass field can change stored bytes
+  when the whole dataclass is serialized. `womb_params_digest` hashed
+  `asdict(StimulusSourceParams)` and the feed descriptor wrote it to run
+  manifests, so renaming `birth_transition_seconds` changed the digest that every
+  matured entity keeps in `stage.json`. Both now go through
+  `kaine/lifecycle/stored_field_names.py`, which maps renamed fields back to their
+  stored names, is excluded from the codemod and stays fixed for good (later
+  steps must not rename those stored names either); a golden test pins the
+  default digest and the descriptor bytes. An audit of every record class field
+  renamed in PRs 5a to 5d against every `asdict`, `fields`, `vars`, `__dict__`,
+  `model_dump`, `_asdict`, keyword-built dict and structure digest found no other
+  case: the rest are written through explicit old keys or never reach disk, a
+  hash, a manifest, the bus or a record. Also after review: `gestating` joins the
+  developmental table (`is_gestating` becomes `is_developing`; the gate action
+  value `"gestating"` keeps its text and is pinned); a Markdown link whose target
+  is a directory now follows its path (fixture `directory_link_targets`); the
+  codemod exclusions name the moved vendor and font folders; the done-scope guard
+  plans once for all done scopes, is slow-marked, and runs on every pull request
+  in CI and in the gate; and `individuation/birth_pending` joins `STATE_PATHS`.
 - **Local data.** `tests/test_legacy_local_data.py` runs only when
   `KAINE_LOCAL_DATA_ROOT` is set. It copies `backups/` and `state/forks/` to a
   temporary directory, reads everything from the copy with every read-map on,
