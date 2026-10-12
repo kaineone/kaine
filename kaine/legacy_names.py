@@ -1060,6 +1060,14 @@ EXCLUDED_GLOBS = (
     # Stored field names stay byte-identical for good.
     "kaine/lifecycle/stored_field_names.py",
     "tests/fixtures/rename_modules/",
+    # These tests exercise the compatibility readers with the old names as literals,
+    # so the codemod must never rewrite them.
+    "tests/test_legacy_aliases.py",
+    "tests/test_legacy_wiring_operator.py",
+    "tests/test_legacy_wiring_readers.py",
+    "tests/test_legacy_local_data.py",
+    "tests/test_rename_state.py",
+    "tests/test_rename_state_guards.py",
     # These documents record the rename itself and must keep the old names.
     "openspec/changes/functional-module-names/",
     "docs/appendix-e-module-names.md",
@@ -1148,6 +1156,43 @@ ACCEPTED_COLLISIONS = [
     ("tests/test_praxis_effectors.py", "effectors"),
     ("tests/test_praxis_module.py", "effectors"),
     ("tests/test_salience_factor_wiring.py", "workspace"),
+
+    # Keys step (module key strings, config tables, streams). Each was checked by hand.
+    # The new key already appears in the file with a different role and the two never
+    # meet as keys of one mapping: a pip extra named "vision" beside the module key
+    # (extras, wizard, setup steps), a device-map role "vision", a payload field
+    # "affect" beside the affect module's event names (faithful templates, episodic
+    # memory, their tests), the effectors module's own capability key "effectors",
+    # the world-model backend sub-table [world_model.world_model] read inside its own
+    # table, the dashboard package path segment, a "self_model" payload field the
+    # research log strips, and a test class name.
+    ("kaine/boot/factories/world_model.py", "world_model"),
+    ("kaine/extras.py", "vision"),
+    ("kaine/faithful/templates.py", "affect"),
+    ("kaine/modules/effectors/module.py", "effectors"),
+    ("kaine/modules/episodic_memory/module.py", "affect"),
+    ("kaine/organ_server/device_map.py", "vision"),
+    ("kaine/research/submission.py", "self_model"),
+    ("kaine/setup/hardware_steps.py", "vision"),
+    ("kaine/setup/web/app.py", "dashboard"),
+    ("kaine/setup/wizard_core.py", "vision"),
+    ("tests/test_boot_wiring.py", "effectors"),
+    ("tests/test_boot_wiring.py", "world_model"),
+    ("tests/test_dashboard_auth_js.py", "dashboard"),
+    ("tests/test_dashboard_observability.py", "affect"),
+    ("tests/test_dashboard_observability.py", "language"),
+    ("tests/test_dashboard_routers.py", "dashboard"),
+    ("tests/test_deterministic_cycle.py", "interoception"),
+    ("tests/test_episodic_memory_module.py", "EpisodicMemory"),
+    ("tests/test_episodic_memory_module.py", "affect"),
+    ("tests/test_extras.py", "dashboard"),
+    ("tests/test_extras.py", "interoception"),
+    ("tests/test_extras.py", "vision"),
+    ("tests/test_faithful_templates.py", "affect"),
+    ("tests/test_positive_control.py", "vision"),
+    ("tests/test_research_event_log.py", "self_model"),
+    ("tests/test_setup_device_map.py", "vision"),
+    ("tests/test_setup_wizard.py", "vision"),
 ]
 
 SURVEY_EXTRA = (
