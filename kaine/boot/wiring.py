@@ -334,9 +334,9 @@ def _wire_self_model_capabilities(registry: ModuleRegistry) -> None:
     engine = getattr(self_model, "self_inference", None)
     if engine is None or not hasattr(engine, "set_whitelist_commands"):
         return
-    effectors = sorted(getattr(effectors, "enabled_effectors", ()) or ())
-    engine.set_whitelist_commands(effectors)
-    log.info("wired eidolon capability whitelist from praxis (%d effectors)", len(effectors))
+    effector_names = sorted(getattr(effectors, "enabled_effectors", ()) or ())
+    engine.set_whitelist_commands(effector_names)
+    log.info("wired eidolon capability whitelist from praxis (%d effectors)", len(effector_names))
 
 
 def _wire_affect_drive_relevance(registry: ModuleRegistry) -> None:
