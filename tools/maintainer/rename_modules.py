@@ -1245,6 +1245,44 @@ def _is_dotted_python_path(term: str) -> bool:
     )
 
 
+def _enclosing_string_content(
+    text: str, offset: int, ctx: str | None, tokens: list[dict]
+) -> str | None:
+    """The literal content of the Python or TOML string that contains ``offset``."""
+    if ctx in {"py_string", "py_text"}:
+        for tok in tokens:
+            if (
+                tok.get("type") == tokenize.STRING
+                and tok.get("start", 0) <= offset < tok.get("end", 0)
+            ):
+                try:
+                    value = ast.literal_eval(tok.get("string", ""))
+                except Exception:
+                    return None
+                if isinstance(value, str):
+                    return value
+                return None
+        return None
+    if ctx in {"toml_string", "toml_text"}:
+        line_start = text.rfind("\n", 0, offset) + 1
+        line_end = text.find("\n", offset)
+        if line_end == -1:
+            line_end = len(text)
+        line = text[line_start:line_end]
+        pos_in_line = offset - line_start
+        q_single = line.rfind("'", 0, pos_in_line)
+        q_double = line.rfind('"', 0, pos_in_line)
+        quote = max(q_single, q_double)
+        if quote == -1:
+            return None
+        quote_char = line[quote]
+        end_quote = line.find(quote_char, pos_in_line)
+        if end_quote == -1:
+            return None
+        return line[quote + 1:end_quote]
+    return None
+
+
 def _assign_scope(
     rel_path: str,
     ctx: str | None,
@@ -1263,7 +1301,7 @@ def _assign_scope(
     lower_path = rel_path.lower().replace("\\", "/")
 
     if ctx in {"py_string", "py_text", "toml_string", "toml_text"}:
-        full_content = _string_content_at(text, start, end, ctx)
+        full_content = _enclosing_string_content(text, start, ctx, tokens)
         if full_content is not None:
             persisted = getattr(table, "PERSISTED_EXACT", {})
             if full_content in persisted:
@@ -1340,7 +1378,7 @@ def _assign_scope(
     if T.endswith(".py"):
         return "identifiers"
     if ctx in {"py_string", "py_text"}:
-        full = _string_content_at(text, start, end, ctx)
+        full = _enclosing_string_content(text, start, ctx, tokens)
         if full is not None and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", full) and any(
             ch.isupper() for ch in full
         ):
