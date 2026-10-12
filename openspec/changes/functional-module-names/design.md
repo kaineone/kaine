@@ -554,7 +554,10 @@ are the ones the sections above leave open; each follows from those sections.
   `workspace.syneidesis` and `workspace/syneidesis` to `workspace.core` and
   `workspace/core`, because the workspace module already lives in the
   `kaine.workspace` package and the plain rule would give
-  `kaine.workspace.workspace`. Fourteen collisions are accepted in
+  `kaine.workspace.workspace`. Two more path overrides keep test names from
+  stuttering (`tests/test_effectors.py`, `tests/test_workspace_core.py`), and the
+  repository dry-run test now fails on any planned move, or any tracked file, whose
+  name repeats a new module key. Fourteen collisions are accepted in
   `ACCEPTED_COLLISIONS` after a check by hand. One was a real clash: in
   `kaine/boot/wiring.py` the effectors module and the list of its effector names
   shared a local name, so the list is now `effector_names`. Strings that name a
