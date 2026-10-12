@@ -131,7 +131,7 @@ The offline suite's enforcement red team (`kaine/evaluation/redteam/`) drives th
 | File | Coverage |
 |---|---|
 | `tests/test_effectors_whitelist.py` | Whitelist matching, argument count, patterns |
-| `tests/test_effectors_effectors.py` | Sandbox escape, file write, notification fallback, shell timeout |
+| `tests/test_effectors.py` | Sandbox escape, file write, notification fallback, shell timeout |
 | `tests/test_effectors_audit_log.py` | Appends, fields, the hash chain |
 | `tests/test_effectors_module.py` | Intent loop, routing, unknown effectors |
 

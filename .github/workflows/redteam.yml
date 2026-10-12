@@ -67,7 +67,7 @@ jobs:
           tests/test_evaluation_redteam.py
           tests/test_fork_merge_snapshot.py
           tests/test_effectors_audit_log.py
-          tests/test_effectors_effectors.py
+          tests/test_effectors.py
           tests/test_nexus_privacy.py
 
       - name: Run P1 HTTP-boundary regression tests
