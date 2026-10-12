@@ -497,13 +497,19 @@ are the ones the sections above leave open; each follows from those sections.
   straight from a line's `stage.json`, outside `StageState.from_dict`, so it
   does not see the stage field map; it must read through the stage reader or
   map the field before the persisted scope is done.
-- **Codemod fixes found in PR 5a.** Three scope rules were corrected before the
+- **Codemod fixes found in PR 5a.** Six scope rules were corrected before the
   first identifiers run, each with a fixture case: a dotted module path inside
   code held in a string (`"from kaine.modules.x import Y"`) follows the
   identifiers scope; a string holding exactly a class or constant name (an
   `__all__` entry, a quoted forward reference) is read as a whole string and
-  follows the identifiers scope; and a plugin's own OpenSpec spec folders move
-  with the keys scope, like the repository's.
+  follows the identifiers scope; a plugin's own OpenSpec spec folders move with
+  the keys scope, like the repository's; a `/` path chain that starts at a
+  repository top directory is a source path, not persisted state; a dotted
+  string starting with `plugins.` is a config key path, not an import path; and
+  a `parametrize` argnames string or the attribute-name argument of `getattr`
+  and its siblings follows the identifiers scope. While PRs 5a to 5d are in
+  flight a module's package can differ from its key; `tests/_module_packages.py`
+  maps one to the other for the tests that relied on them being equal.
 - **Local data.** `tests/test_legacy_local_data.py` runs only when
   `KAINE_LOCAL_DATA_ROOT` is set. It copies `backups/` and `state/forks/` to a
   temporary directory, reads everything from the copy with every read-map on,
