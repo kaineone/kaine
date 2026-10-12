@@ -77,7 +77,7 @@ def test_entry_point_is_declared():
     assert p.name == "cl1"
 
 
-def test_seams_for_chronos():
+def test_seams_for_sequence():
     assert Cl1Plugin().seams(_cfg()) == frozenset({"chronos.network"})
 
 
@@ -201,7 +201,7 @@ def test_close_is_idempotent(reference_culture):
     assert plugin.territory_map() == {}
 
 
-async def test_plugin_network_drives_real_chronos(reference_culture):
+async def test_plugin_network_drives_real_sequence(reference_culture):
     pytest.importorskip("kaine")
     pytest.importorskip("fakeredis")
 
@@ -210,10 +210,10 @@ async def test_plugin_network_drives_real_chronos(reference_culture):
     from kaine.bus.client import AsyncBus
     from kaine.bus.config import BusConfig
     from kaine.cycle.types import WorkspaceSnapshot
-    from kaine.modules.chronos.anomaly import RollingZScoreAnomaly
-    from kaine.modules.chronos.featurizer import SnapshotFeaturizer
-    from kaine.modules.chronos.module import Chronos
-    from kaine.modules.chronos.rumination import RecurrenceRuminationDetector
+    from kaine.modules.sequence.anomaly import RollingZScoreAnomaly
+    from kaine.modules.sequence.featurizer import SnapshotFeaturizer
+    from kaine.modules.sequence.module import Sequence
+    from kaine.modules.sequence.rumination import RecurrenceRuminationDetector
 
     plugin = Cl1Plugin()
     try:
@@ -223,7 +223,7 @@ async def test_plugin_network_drives_real_chronos(reference_culture):
             client=client,
         )
 
-        chronos = Chronos(
+        sequence = Sequence(
             bus,
             featurizer=SnapshotFeaturizer(clock=lambda: 0.0),
             anomaly=RollingZScoreAnomaly(window=4),
@@ -231,10 +231,10 @@ async def test_plugin_network_drives_real_chronos(reference_culture):
             **plugin.injections("chronos", _cfg()),
         )
 
-        assert chronos.has_network is True
+        assert sequence.has_network is True
 
         for t in range(3):
-            await chronos.on_workspace(
+            await sequence.on_workspace(
                 WorkspaceSnapshot(tick_index=t, selected_events=[], inhibited=False)
             )
 

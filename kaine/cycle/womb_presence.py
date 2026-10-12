@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 from kaine.bus.schema import Event
 
 if TYPE_CHECKING:
-    from kaine.modules.topos.feed import WombClock
+    from kaine.modules.vision.feed import WombClock
 
 PRESENCE_SOURCE = "gestation"
 PRESENCE_TYPE = "gestation.womb"

@@ -46,7 +46,7 @@ from kaine.modules.perception_transition import (
     smoothstep,
     transition_alpha,
 )
-from kaine.modules.topos.feed import (
+from kaine.modules.vision.feed import (
     PlaylistClock,
     PlaylistSource,
     WombClock,
@@ -1018,8 +1018,8 @@ async def test_ignition_records_name_the_pause_holders(tmp_path):
     assert records[2]["offset_s"] == 0.0
 
 
-@pytest.mark.parametrize("topos_loads", [True, False])
-def test_build_registry_wires_one_transition_end_to_end(tmp_path, monkeypatch, topos_loads):
+@pytest.mark.parametrize("vision_loads", [True, False])
+def test_build_registry_wires_one_transition_end_to_end(tmp_path, monkeypatch, vision_loads):
     import asyncio
 
     from kaine import perception_state
@@ -1044,7 +1044,7 @@ def test_build_registry_wires_one_transition_end_to_end(tmp_path, monkeypatch, t
     def _recorder(name: str):  # noqa: ANN202
         def factory(bus_, section, *, entity_clock=None, intent_secret=None, injections=None):  # noqa: ANN001
             captured[name] = dict(section)
-            if name == "topos" and not topos_loads:
+            if name == "topos" and not vision_loads:
                 return None
             return _Fake(name)
 
@@ -1079,7 +1079,7 @@ def test_build_registry_wires_one_transition_end_to_end(tmp_path, monkeypatch, t
         assert captured[name]["perception_feed"]["_womb_world_transition"] is transition
         assert captured[name]["perception_feed"]["_shared_playlist_clock"] is pclock
     # A vision module that failed to load leaves the audio surface in charge.
-    assert transition.controller.video_present is topos_loads
+    assert transition.controller.video_present is vision_loads
     video = _build_perception_feed_video_factory(
         "playlist", captured["topos"]["perception_feed"], width=16, height=12
     )(0, width=16, height=12)

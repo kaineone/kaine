@@ -336,7 +336,7 @@ def _thymos_state_factory(registry):
     return _get
 
 
-def _wire_topos_arousal(registry, affect_provider) -> bool:
+def _wire_vision_arousal(registry, affect_provider) -> bool:
     """Give the vision module the live affect module's arousal scalar that sizes the fovea.
 
     Attention-driven foveation couples the fovea *size* to arousal (Easterbrook
@@ -348,14 +348,14 @@ def _wire_topos_arousal(registry, affect_provider) -> bool:
     it wired, so the caller can ensure the provider is actually refreshed.
     """
     try:
-        topos = registry.get("topos") if "topos" in registry else None
+        vision = registry.get("topos") if "topos" in registry else None
     except Exception:
-        topos = None
-    if topos is None or not getattr(topos, "foveation_enabled", False):
+        vision = None
+    if vision is None or not getattr(vision, "foveation_enabled", False):
         return False
-    if not hasattr(topos, "set_arousal_provider"):
+    if not hasattr(vision, "set_arousal_provider"):
         return False
-    topos.set_arousal_provider(lambda: affect_provider.dimensional_state().arousal)
+    vision.set_arousal_provider(lambda: affect_provider.dimensional_state().arousal)
     log.info("wired topos fovea size to live thymos arousal")
     return True
 
@@ -1199,9 +1199,9 @@ def _start_gestation_owner(
     feed = dict(kaine_config.get("perception_feed") or {})
     if str(feed.get("mode", "off")).lower() != "womb":
         return None
-    soma = registry.get("soma") if "soma" in registry else None
-    drive = getattr(soma, "maternal_drive", None) if soma is not None else None
-    if soma is None or drive is None or getattr(soma, "self_rhythm_state", None) is None:
+    interoception = registry.get("soma") if "soma" in registry else None
+    drive = getattr(interoception, "maternal_drive", None) if interoception is not None else None
+    if interoception is None or drive is None or getattr(interoception, "self_rhythm_state", None) is None:
         log.warning(
             "gestation readout unavailable: Soma with its self-rhythm and the "
             "maternal drive is required; birth will wait (C1 fails closed)"
@@ -1230,7 +1230,7 @@ def _start_gestation_owner(
 
     owner = GestationOwner(
         bus,
-        soma=soma,
+        interoception=interoception,
         drive=drive,
         beat_phase=beat_phase,
         surrogate_beat_phases=surrogate_beat_phases,
@@ -1373,7 +1373,7 @@ def _start_programme_end_watcher(
         return None
 
     from kaine.cycle.programme_end import ProgrammeEndWatcher
-    from kaine.modules.topos.feed import load_playlist_manifest
+    from kaine.modules.vision.feed import load_playlist_manifest
 
     manifest_path = (kaine_config.get("perception_feed") or {}).get(
         "playlist_manifest"
@@ -1840,7 +1840,7 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
     # Foveation's fovea size reads the same affect snapshot (arousal → size).
     # Wiring it also means the provider must be refreshed each tick so the arousal
     # it reads is live, not the frozen baseline.
-    topos_reads_arousal = _wire_topos_arousal(ctx.registry, ctx.affect_provider)
+    vision_reads_arousal = _wire_vision_arousal(ctx.registry, ctx.affect_provider)
     audition_reads_arousal = _wire_audition_arousal(ctx.registry, ctx.affect_provider)
     # The provider only needs refreshing when a real reader consumes it. When both
     # salience factors are the static negative control AND foveation / general
@@ -1862,7 +1862,7 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
     reads_affect = (
         isinstance(thymos_modulator, StateModulator)
         or isinstance(goal_scorer, DriveRelevanceGoalScorer)
-        or topos_reads_arousal
+        or vision_reads_arousal
         or audition_reads_arousal
         or ctx.access_rate is not None
     )
@@ -2141,7 +2141,7 @@ async def _phase_ignition_log(ctx: BootContext) -> int | None:
 
     if il_cfg.enabled:
         try:
-            from kaine.modules.topos.feed import load_playlist_manifest
+            from kaine.modules.vision.feed import load_playlist_manifest
 
             perception_cfg = ctx.kaine_config.get("perception_feed") or {}
             clock = perception_cfg.get("_shared_playlist_clock")

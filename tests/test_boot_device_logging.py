@@ -11,7 +11,7 @@ from tests.systems._harness import SubsystemHarness
 
 
 @pytest.mark.asyncio
-async def test_build_registry_logs_topos_device(caplog):
+async def test_build_registry_logs_vision_device(caplog):
     async with SubsystemHarness() as h:
         with caplog.at_level("INFO"):
             registry = build_registry(

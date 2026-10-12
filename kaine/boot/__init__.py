@@ -41,9 +41,6 @@ from kaine.boot.factories.audition import (  # noqa: F401 - re-exported
     _live_mic_source_label,
     make_audition,
 )
-from kaine.boot.factories.chronos import (  # noqa: F401 - re-exported
-    make_chronos,
-)
 from kaine.boot.factories.eidolon import (  # noqa: F401 - re-exported
     make_eidolon,
 )
@@ -60,6 +57,9 @@ from kaine.boot.factories.hypnos import (  # noqa: F401 - re-exported
     _validate_backend_pairing,
     make_hypnos,
     voice_alignment_config_from_section,
+)
+from kaine.boot.factories.interoception import (  # noqa: F401 - re-exported
+    make_interoception,
 )
 from kaine.boot.factories.lingua import (  # noqa: F401 - re-exported
     make_lingua,
@@ -83,14 +83,14 @@ from kaine.boot.factories.phantasia import (  # noqa: F401 - re-exported
 from kaine.boot.factories.praxis import (  # noqa: F401 - re-exported
     make_praxis,
 )
-from kaine.boot.factories.soma import (  # noqa: F401 - re-exported
-    make_soma,
+from kaine.boot.factories.sequence import (  # noqa: F401 - re-exported
+    make_sequence,
 )
 from kaine.boot.factories.thymos import (  # noqa: F401 - re-exported
     make_thymos,
 )
-from kaine.boot.factories.topos import (  # noqa: F401 - re-exported
-    make_topos,
+from kaine.boot.factories.vision import (  # noqa: F401 - re-exported
+    make_vision,
 )
 from kaine.boot.factories.vox import (  # noqa: F401 - re-exported
     make_vox,

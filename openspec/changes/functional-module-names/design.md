@@ -492,6 +492,38 @@ are the ones the sections above leave open; each follows from those sections.
   `kaine/nexus/health/config.py` (raw TOML reads). A plugin that declares both
   an old seam and its new seam must be refused rather than deduplicated, so a
   plugin cannot fill one seam twice under two names.
+- **Before the persisted scope flips (PR 8).**
+  `kaine/research/ignition_study/runner.py` reads `birth_bloom_ends_at`
+  straight from a line's `stage.json`, outside `StageState.from_dict`, so it
+  does not see the stage field map; it must read through the stage reader or
+  map the field before the persisted scope is done.
+- **Codemod fixes found in PR 5a.** Six scope rules were corrected before the
+  first identifiers run, each with a fixture case: a dotted module path inside
+  code held in a string (`"from kaine.modules.x import Y"`) follows the
+  identifiers scope; a string holding exactly a class or constant name (an
+  `__all__` entry, a quoted forward reference) is read as a whole string and
+  follows the identifiers scope; a plugin's own OpenSpec spec folders move with
+  the keys scope, like the repository's; a `/` path chain that starts at a
+  repository top directory is a source path, not persisted state; a dotted
+  string starting with `plugins.` is a config key path, not an import path; and
+  a `parametrize` argnames string or the attribute-name argument of `getattr`
+  and its siblings follows the identifiers scope. While PRs 5a to 5d are in
+  flight a module's package can differ from its key; `tests/_module_packages.py`
+  maps one to the other for the tests that relied on them being equal.
+- **Config keys feeding constructor arguments.** Several factories copy config
+  keys straight into constructor keyword arguments. An identifiers PR renames the
+  parameter (`interoception_stream`) one step before the keys PR renames the key
+  (`soma_stream`), which broke the affect module's build from the shipped config
+  in PR 5a before it merged. `kaine/boot/config_kwargs.py` maps each key
+  to the parameter it feeds by renaming its old module-key components through the
+  table, so there is no second list and the map becomes the identity once the keys
+  are renamed. `tests/test_factories_from_shipped_config.py` builds every module
+  factory from the shipped config, the base-thesis profile and each tier profile.
+- **Close-out by hand (PR 9).** `external/internvideo_next/UPSTREAM` (line 47) and
+  `external/internvideo_next/__init__.py` (line 9) name
+  `kaine/modules/topos/internvideo_next_loader.py`, which moved to
+  `kaine/modules/vision/`. The codemod excludes `external/`, but these are our own
+  pointer comments, so the close-out fixes them by hand.
 - **Local data.** `tests/test_legacy_local_data.py` runs only when
   `KAINE_LOCAL_DATA_ROOT` is set. It copies `backups/` and `state/forks/` to a
   temporary directory, reads everything from the copy with every read-map on,

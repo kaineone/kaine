@@ -151,12 +151,12 @@ cadence dilates with the EntityClock `time_scale` without additional clock wirin
 
 ### Requirement: The frame ring buffer is RAM-only and never persisted
 The `clip_len`-frame ring buffer SHALL exist only in process memory. It SHALL
-never be written to disk, and it SHALL NOT appear in `Topos.serialize()` output.
+never be written to disk, and it SHALL NOT appear in `Vision.serialize()` output.
 Each frame SHALL be released when it ages out of the bounded buffer, preserving
 the zero-raw-sense-data persistence invariant.
 
 #### Scenario: Buffer absent from serialized state
-- **WHEN** `Topos.serialize()` is called with a partially or fully filled ring
+- **WHEN** `Vision.serialize()` is called with a partially or fully filled ring
   buffer
 - **THEN** the returned state contains no raw frames and no raw clip-buffer data
 

@@ -415,7 +415,7 @@ async def test_content_fields_absent_from_every_record():
 
 
 @pytest.mark.asyncio
-async def test_soma_unexpected_error_is_recorded():
+async def test_interoception_unexpected_error_is_recorded():
     """soma.report's unexpected_error (the error beyond the interoception module's learned
     expected band, which drives sleep pressure) reaches the research log;
     a non-allowlisted field does not."""
@@ -1271,8 +1271,8 @@ def test_thymos_emotion_emotion_field_retained():
     assert record["norm_compatibility_available"] is True
 
 
-def test_topos_report_fields_and_no_scene_change():
-    # Real producer payload (kaine/modules/topos/module.py).
+def test_vision_report_fields_and_no_scene_change():
+    # Real producer payload (kaine/modules/vision/module.py).
     payload = {
         "prediction_error": 0.21,
         "normalised_error": 0.13,
@@ -1296,8 +1296,8 @@ def test_topos_report_fields_and_no_scene_change():
     assert _allowed_fields("topos.scene_change") is None
 
 
-def test_chronos_report_content_free_allowlist():
-    # Real sequence payload shape (kaine/modules/chronos/module.py) plus the
+def test_sequence_report_content_free_allowlist():
+    # Real sequence payload shape (kaine/modules/sequence/module.py) plus the
     # latent fields that must NEVER pass.
     payload = {
         "anomaly_score": 0.42,
@@ -1316,7 +1316,7 @@ def test_chronos_report_content_free_allowlist():
     assert "feature_vector" not in record
 
 
-def test_chronos_out_in_curated_streams():
+def test_sequence_out_in_curated_streams():
     from kaine.evaluation.observers.research_event_observer import _CURATED_STREAMS
 
     assert "chronos.out" in _CURATED_STREAMS

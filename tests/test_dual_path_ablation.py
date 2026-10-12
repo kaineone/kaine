@@ -281,12 +281,12 @@ async def _last_broadcast(bus: AsyncBus) -> dict:
 
 
 def _coherence_registry_and_syn():
-    osc_soma, osc_chronos = FakeOscillator(), FakeOscillator()
+    osc_interoception, osc_sequence = FakeOscillator(), FakeOscillator()
     for _ in range(12):
-        osc_soma.step(0.5)
-        osc_chronos.step(0.5)
+        osc_interoception.step(0.5)
+        osc_sequence.step(0.5)
     registry = _PhaseRegistry(
-        modules=[_PhaseModule("soma", osc_soma), _PhaseModule("chronos", osc_chronos)],
+        modules=[_PhaseModule("soma", osc_interoception), _PhaseModule("chronos", osc_sequence)],
         streams=["soma.out", "chronos.out"],
     )
     syn = Syneidesis(

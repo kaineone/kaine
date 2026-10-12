@@ -12,7 +12,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from kaine.modules.topos import internvideo_next_loader
+from kaine.modules.vision import internvideo_next_loader
 
 REPO = Path(internvideo_next_loader.__file__).resolve().parents[3]
 

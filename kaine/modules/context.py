@@ -17,7 +17,7 @@ from collections.abc import Callable, Collection, Sequence
 from typing import Optional
 
 from kaine.cycle.types import WorkspaceSnapshot
-from kaine.modules.chronos.featurizer import AUDITION_SOURCE, DEFAULT_KNOWN_SOURCES
+from kaine.modules.sequence.featurizer import AUDITION_SOURCE, DEFAULT_KNOWN_SOURCES
 
 CONTEXT_DIM: int = 24
 ADDITIVE_INDICES: tuple[int, ...] = tuple(range(4, 20)) + (23,)

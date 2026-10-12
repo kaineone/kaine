@@ -9,7 +9,7 @@ import asyncio
 import pytest
 
 from kaine.cycle.__main__ import _start_womb_presence
-from kaine.modules.topos.feed import WombClock
+from kaine.modules.vision.feed import WombClock
 
 
 @pytest.mark.asyncio

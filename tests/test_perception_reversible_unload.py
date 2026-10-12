@@ -20,8 +20,8 @@ import torch
 from PIL import Image
 
 from kaine.modules.audition.emotion import Emotion2vecClassifier
-from kaine.modules.topos.encoder import DINOv2Encoder, InternVideoNextEncoder
-from kaine.modules.topos.internvideo_next_loader import WEIGHTS_FILENAME
+from kaine.modules.vision.encoder import DINOv2Encoder, InternVideoNextEncoder
+from kaine.modules.vision.internvideo_next_loader import WEIGHTS_FILENAME
 
 # Upper bound for every wait in this file. The waits guard against a hang (an
 # in-flight count that never returns to zero), not against slowness: unload()
@@ -256,11 +256,11 @@ async def test_internvideo_next_unload_and_reload(monkeypatch):
         return {"pixel_values": torch.zeros(1, 16, 3, 224, 224)}
 
     monkeypatch.setattr(
-        "kaine.modules.topos.internvideo_next_loader.load_internvideo_next",
+        "kaine.modules.vision.internvideo_next_loader.load_internvideo_next",
         fake_loader,
     )
     monkeypatch.setattr(
-        "kaine.modules.topos.encoder._load_videomae_processor",
+        "kaine.modules.vision.encoder._load_videomae_processor",
         fake_processor,
     )
 
@@ -497,11 +497,11 @@ async def test_internvideo_next_double_cancel_does_not_leak_inflight(monkeypatch
         return {"pixel_values": torch.zeros(1, 16, 3, 224, 224)}
 
     monkeypatch.setattr(
-        "kaine.modules.topos.internvideo_next_loader.load_internvideo_next",
+        "kaine.modules.vision.internvideo_next_loader.load_internvideo_next",
         fake_loader,
     )
     monkeypatch.setattr(
-        "kaine.modules.topos.encoder._load_videomae_processor",
+        "kaine.modules.vision.encoder._load_videomae_processor",
         fake_processor,
     )
 
@@ -548,7 +548,7 @@ async def test_internvideo_next_double_cancel_does_not_leak_inflight(monkeypatch
 
 def test_internvideo_loader_uses_safetensors(tmp_path, monkeypatch):
     """The InternVideo-Next offline loader requests safetensors for weights only."""
-    from kaine.modules.topos.internvideo_next_loader import load_internvideo_next
+    from kaine.modules.vision.internvideo_next_loader import load_internvideo_next
 
     wdir = tmp_path / "internvideo_next"
     wdir.mkdir()

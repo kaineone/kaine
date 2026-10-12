@@ -1,0 +1,1 @@
+This fixture checks that a string holding exactly a class name (as in `__all__`) follows the identifiers scope. It also verifies that a lowercase key string remains in the keys scope and is not renamed.

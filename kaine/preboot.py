@@ -334,9 +334,9 @@ async def check_perception(config: dict[str, Any]) -> list[CheckResult]:
 
 
 def _check_perception_video(config: dict[str, Any], feed: dict[str, Any], mode: str) -> CheckResult:
-    topos_cfg = config.get("topos") or {}
-    width = int(topos_cfg.get("capture_width", 640))
-    height = int(topos_cfg.get("capture_height", 480))
+    vision_cfg = config.get("topos") or {}
+    width = int(vision_cfg.get("capture_width", 640))
+    height = int(vision_cfg.get("capture_height", 480))
     try:
         factory = _build_perception_feed_video_factory(mode, feed, width=width, height=height)
         source = factory(0, width=width, height=height)

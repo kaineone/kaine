@@ -45,7 +45,7 @@ The sleep lock stops a second sleep from starting while one runs. It blocks noth
 sequenceDiagram
     participant Hypnos
     participant Bus
-    participant Soma
+    participant Interoception
 
     Hypnos->>Bus: hypnos.sleep.started
     Note over Hypnos: Phase 1: set_frequency(0.5); mnemos.consolidate_now()
@@ -56,7 +56,7 @@ sequenceDiagram
     Note over Hypnos: Phase 5: thymos.affective_reset()
     Note over Hypnos: Intent audit
     Hypnos->>Bus: hypnos.sleep.completed
-    Bus->>Soma: reset fatigue and regulation
+    Bus->>Interoception: reset fatigue and regulation
 ```
 
 Each phase returns a `PhaseResult` with `phase`, `success`, `elapsed_ms`, `error` and `metadata`, and catches its own errors, so the phases always run in order and a failure in one does not stop the next. Phases 1 to 4 run inside a `try` whose `finally` runs the affective reset, so a sleep that raises or is cancelled still ends with it. The reset runs as its own task behind `asyncio.shield`, so a second cancel cannot interrupt it. On any exception, including a cancel, the sleep module publishes an aborted `hypnos.sleep.completed` and re-raises, so the interoception and episodic memory modules always see the sleep end.
@@ -119,6 +119,6 @@ The `[hypnos]`, `[hypnos.consolidation]` and `[hypnos.voice_alignment]` tables a
 | `kaine/modules/hypnos/scheduler.py` | `RestScheduler` |
 | `kaine/modules/hypnos/corpus.py` | Intent-log rotation and the corpus ceiling check |
 | `kaine/modules/hypnos/ignition_audit.py` | Sleep-time intent audit |
-| `kaine/modules/soma/module.py` | Faster fatigue decay during sleep; fatigue and regulation reset on completion |
+| `kaine/modules/interoception/module.py` | Faster fatigue decay during sleep; fatigue and regulation reset on completion |
 | `kaine/modules/thymos/module.py` | Affective reset |
-| `kaine/modules/topos/module.py`, `kaine/modules/audition/module.py`, `kaine/modules/chronos/module.py` | Adaptation suspended between `hypnos.sleep.started` and `hypnos.sleep.completed` |
+| `kaine/modules/vision/module.py`, `kaine/modules/audition/module.py`, `kaine/modules/sequence/module.py` | Adaptation suspended between `hypnos.sleep.started` and `hypnos.sleep.completed` |

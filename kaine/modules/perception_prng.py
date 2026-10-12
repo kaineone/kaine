@@ -3,7 +3,7 @@
 
 """Counter-based, seed-keyed PRNG shared by the deterministic perception feeds.
 
-Both the video source (``kaine/modules/topos/feed.py``) and the audio source
+Both the video source (``kaine/modules/vision/feed.py``) and the audio source
 (``kaine/modules/audition/feed.py``) synthesize a stimulus that is a *pure
 function of* ``(seed, frame_index)`` so a research run reproduces bit-identically
 and is seek-safe. They draw their randomness from the same counter-based keyed

@@ -16,7 +16,7 @@ async def passing_probe(config):
 
 
 @pytest.mark.asyncio
-async def test_refuses_when_soma_disabled():
+async def test_refuses_when_interoception_disabled():
     config = {
         "modules": {"topos": True, "audition": True, "soma": False},
         "soma": {"self_rhythm_enabled": True},

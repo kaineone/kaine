@@ -7,8 +7,8 @@ import random
 import pytest
 
 from kaine.modules.audition.forward import AuditoryForwardModel
-from kaine.modules.soma.forward import SubstrateForwardModel
-from kaine.modules.topos.forward import LatentForwardModel
+from kaine.modules.interoception.forward import SubstrateForwardModel
+from kaine.modules.vision.forward import LatentForwardModel
 
 torch = pytest.importorskip("torch")
 
@@ -80,7 +80,7 @@ def test_widened_copy_draws_no_random_numbers(model_cls, init_kw, monkeypatch):
     assert torch.equal(torch.get_rng_state(), state)
 
 
-def test_widened_copy_draws_no_random_numbers_soma_torch(monkeypatch):
+def test_widened_copy_draws_no_random_numbers_interoception_torch(monkeypatch):
     pytest.importorskip("ncps")
 
     def _raise(**kwargs):
@@ -124,7 +124,7 @@ def test_hindsight_matches_the_live_step(model_cls, dim, init_kw):
         assert h_null == pytest.approx(live.last_null_error, rel=1e-5, abs=1e-6)
 
 
-def test_soma_hindsight_matches_the_live_step():
+def test_interoception_hindsight_matches_the_live_step():
     live = SubstrateForwardModel(feature_dim=8, units=16, seed=5, context_dim=24)
     rng = random.Random(1)
     features = [[rng.random() for _ in range(8)] for _ in range(12)]
@@ -145,7 +145,7 @@ def test_soma_hindsight_matches_the_live_step():
         assert h_null == pytest.approx(live.last_null_error, rel=1e-5, abs=1e-6)
 
 
-def test_soma_widened_copy_predicts_like_the_original():
+def test_interoception_widened_copy_predicts_like_the_original():
     live = SubstrateForwardModel(feature_dim=8, units=16, seed=5, context_dim=24)
     for i in range(3):
         live.step(
@@ -163,7 +163,7 @@ def test_soma_widened_copy_predicts_like_the_original():
     )
 
 
-def test_soma_hindsight_skips_a_non_finite_reading():
+def test_interoception_hindsight_skips_a_non_finite_reading():
     live = SubstrateForwardModel(feature_dim=8, units=16, seed=5, context_dim=24)
     live.step([0.1] * 8, context=[0.0] * 24, null_context=[0.0] * 24, timespan=1.0)
     live.step([0.2] * 8, context=[0.0] * 24, null_context=[0.0] * 24, timespan=1.0)

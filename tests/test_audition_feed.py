@@ -22,7 +22,7 @@ from kaine.modules.audition.feed import (
     SeededProceduralAudioStream,
 )
 from kaine.modules.audition.live import PerceptionUnavailableError
-from kaine.modules.topos.feed import (
+from kaine.modules.vision.feed import (
     PlaylistVerificationError,
     SeededProceduralSource,
     SeededSchedule,

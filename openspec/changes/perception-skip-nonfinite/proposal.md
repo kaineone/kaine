@@ -32,5 +32,5 @@ The positive control's shadows (A.8) already skip a non-finite input and re-seed
 
 ## Impact
 
-- `kaine/modules/topos/forward.py`, `kaine/modules/audition/forward.py`, `kaine/modules/soma/forward.py`, `kaine/modules/topos/module.py`, `kaine/modules/audition/module.py`, `kaine/modules/soma/module.py`, `kaine/evaluation/observers/welfare_observer.py`, `kaine/cycle/preservation_monitor.py`, `kaine/modules/empatheia/agent.py`, `kaine/modules/empatheia/module.py`, `kaine/evaluation/benchmarks/workspace_mediation_ablation/runner.py`, docs, tests.
+- `kaine/modules/vision/forward.py`, `kaine/modules/audition/forward.py`, `kaine/modules/interoception/forward.py`, `kaine/modules/vision/module.py`, `kaine/modules/audition/module.py`, `kaine/modules/interoception/module.py`, `kaine/evaluation/observers/welfare_observer.py`, `kaine/cycle/preservation_monitor.py`, `kaine/modules/empatheia/agent.py`, `kaine/modules/empatheia/module.py`, `kaine/evaluation/benchmarks/workspace_mediation_ablation/runner.py`, docs, tests.
 - Finite readings behave exactly as before.

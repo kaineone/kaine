@@ -173,7 +173,7 @@ The metric is computed whether or not training runs and is persisted to `state/h
 | `tests/test_hypnos_oscillator_hook.py` | Phase-1 oscillator hook |
 | `tests/test_hypnos_nar_removal.py` | Replay reaching the workspace through the normal cycle |
 | `tests/test_hypnos_replay_handoff.py` | Phase 2 replaying the traces phase 1 consolidated, with the episodic memory module |
-| `tests/test_soma_hypnos_flag.py` | The interoception module's `crossed` flag |
+| `tests/test_interoception_hypnos_flag.py` | The interoception module's `crossed` flag |
 | `tests/test_sleep_suspension_cursor.py` | the vision, audition and sequence modules suspending adaptation during sleep |
 | `tests/test_hypnos_voice_alignment.py`, `tests/test_hypnos_voice_alignment_integration.py` | Pair builder, gates and vetoes |
 | `tests/test_hypnos_organ_window_bracket.py` | Organ window |

@@ -12,10 +12,10 @@ if TYPE_CHECKING:
 from kaine.boot.common import ModuleFactory, shared_embedder
 from kaine.boot.errors import ConfigurationError
 from kaine.boot.factories.audition import make_audition
-from kaine.boot.factories.chronos import make_chronos
 from kaine.boot.factories.eidolon import make_eidolon
 from kaine.boot.factories.empatheia import make_empatheia
 from kaine.boot.factories.hypnos import make_hypnos
+from kaine.boot.factories.interoception import make_interoception
 from kaine.boot.factories.lingua import make_lingua
 from kaine.boot.factories.mnemos import make_mnemos
 from kaine.boot.factories.mundus import make_mundus
@@ -23,9 +23,9 @@ from kaine.boot.factories.nous import make_nous
 from kaine.boot.factories.perception import make_perception
 from kaine.boot.factories.phantasia import make_phantasia
 from kaine.boot.factories.praxis import make_praxis
-from kaine.boot.factories.soma import make_soma
+from kaine.boot.factories.sequence import make_sequence
 from kaine.boot.factories.thymos import make_thymos
-from kaine.boot.factories.topos import make_topos
+from kaine.boot.factories.vision import make_vision
 from kaine.boot.factories.vox import make_vox
 from kaine.boot.metrics import _log_device_assignments
 from kaine.boot.perception_feed import _install_shared_womb_clock, _install_womb_world_transition
@@ -47,9 +47,9 @@ log = logging.getLogger(__name__)
 
 
 SIMPLE_FACTORIES: dict[str, ModuleFactory] = {
-    "soma": make_soma,
-    "chronos": make_chronos,
-    "topos": make_topos,
+    "soma": make_interoception,
+    "chronos": make_sequence,
+    "topos": make_vision,
     "nous": make_nous,
     "mnemos": make_mnemos,
     "eidolon": make_eidolon,
@@ -167,7 +167,7 @@ def build_registry(
         bool(toggles.get("topos", False)) or bool(toggles.get("audition", False))
     ):
         try:
-            from kaine.modules.topos.feed import (
+            from kaine.modules.vision.feed import (
                 PlaylistClock,
                 load_playlist_manifest,
             )

@@ -37,9 +37,9 @@ class FakeRegistry:
 
 def test_snapshot_captures_each_module(tmp_path):
     mgr = ForkManager(tmp_path)
-    soma = FakeModule("soma", {"wellness": 0.92})
-    chronos = FakeModule("chronos", {"steps": 17})
-    snap = mgr.snapshot(FakeRegistry([soma, chronos]), label="boot")
+    interoception = FakeModule("soma", {"wellness": 0.92})
+    sequence = FakeModule("chronos", {"steps": 17})
+    snap = mgr.snapshot(FakeRegistry([interoception, sequence]), label="boot")
     assert snap.id
     assert snap.label == "boot"
     assert snap.parent_id is None
@@ -51,8 +51,8 @@ def test_snapshot_captures_each_module(tmp_path):
 def test_snapshot_deepcopies_state(tmp_path):
     mgr = ForkManager(tmp_path)
     state = {"nested": {"v": 1}}
-    soma = FakeModule("soma", state)
-    snap = mgr.snapshot(FakeRegistry([soma]))
+    interoception = FakeModule("soma", state)
+    snap = mgr.snapshot(FakeRegistry([interoception]))
     # Mutate after snapshot — must not affect saved state.
     state["nested"]["v"] = 999
     loaded = mgr.load(snap.id)
@@ -76,16 +76,16 @@ def test_snapshot_handles_serialize_error(tmp_path):
 
 def test_restore_round_trips_into_fresh_modules(tmp_path):
     mgr = ForkManager(tmp_path)
-    src_soma = FakeModule("soma", {"wellness": 0.5})
-    src_chronos = FakeModule("chronos", {"steps": 42})
-    snap = mgr.snapshot(FakeRegistry([src_soma, src_chronos]))
+    src_interoception = FakeModule("soma", {"wellness": 0.5})
+    src_sequence = FakeModule("chronos", {"steps": 42})
+    snap = mgr.snapshot(FakeRegistry([src_interoception, src_sequence]))
 
-    fresh_soma = FakeModule("soma")
-    fresh_chronos = FakeModule("chronos")
-    mgr.restore(snap.id, FakeRegistry([fresh_soma, fresh_chronos]))
+    fresh_interoception = FakeModule("soma")
+    fresh_sequence = FakeModule("chronos")
+    mgr.restore(snap.id, FakeRegistry([fresh_interoception, fresh_sequence]))
 
-    assert fresh_soma.serialize() == {"wellness": 0.5}
-    assert fresh_chronos.serialize() == {"steps": 42}
+    assert fresh_interoception.serialize() == {"wellness": 0.5}
+    assert fresh_sequence.serialize() == {"steps": 42}
 
 
 def test_restore_ignores_module_not_in_snapshot(tmp_path):
@@ -93,11 +93,11 @@ def test_restore_ignores_module_not_in_snapshot(tmp_path):
     snap = mgr.snapshot(FakeRegistry([FakeModule("soma", {"wellness": 1.0})]))
 
     extra = FakeModule("topos", {"latent": "frozen"})
-    soma = FakeModule("soma")
-    mgr.restore(snap.id, FakeRegistry([soma, extra]))
+    interoception = FakeModule("soma")
+    mgr.restore(snap.id, FakeRegistry([interoception, extra]))
     # The vision module has no entry → state untouched
     assert extra.serialize() == {"latent": "frozen"}
-    assert soma.serialize() == {"wellness": 1.0}
+    assert interoception.serialize() == {"wellness": 1.0}
 
 
 def test_fork_excludes_shed_modules(tmp_path):

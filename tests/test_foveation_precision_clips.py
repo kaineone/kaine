@@ -12,8 +12,8 @@ import pytest
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
-from kaine.modules.topos import Topos
-from kaine.modules.topos.foveation import FoveaTarget, SpatialSaliency, select_fovea, tile_change
+from kaine.modules.vision import Vision
+from kaine.modules.vision.foveation import FoveaTarget, SpatialSaliency, select_fovea, tile_change
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("cv2") is None,
@@ -121,10 +121,10 @@ class FakeClipEncoder:
 @pytest.mark.asyncio
 async def test_module_foveates_every_buffered_frame(bus):
     enc = FakeClipEncoder()
-    topos = Topos(bus, encoder=enc, foveation_enabled=True, clip_stride=1)
+    vision = Vision(bus, encoder=enc, foveation_enabled=True, clip_stride=1)
     for i in range(4):
         frame = np.full((64, 64, 3), i * 50, dtype=np.uint8)
-        await topos.process_frame(frame)
+        await vision.process_frame(frame)
     assert len(enc.calls) == 2
     assert len(enc.calls[0]) == 4
     assert any(not np.array_equal(enc.calls[0][0], enc.calls[0][i]) for i in range(1, 4))

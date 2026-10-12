@@ -6,7 +6,7 @@
 source — a VLC ``.xspf`` playlist or a directory of media files.
 
 The perception feed's playlist mode reads a manifest of ordered media items, each
-pinned by sha256 (``kaine/modules/topos/feed.py``), and verifies files against it
+pinned by sha256 (``kaine/modules/vision/feed.py``), and verifies files against it
 fail-closed at open. This tool produces that manifest so a run's stimulus is
 reproducible: anyone with the same publicly-archived media (identified by the
 per-item sha256) can rebuild an identical manifest and drive the same stimulus.

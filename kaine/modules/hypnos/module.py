@@ -81,7 +81,7 @@ class Hypnos(BaseModule):
         *,
         mnemos: Optional[Any] = None,
         thymos: Optional[Any] = None,
-        chronos_resetters: Optional[list[Any]] = None,
+        sequence_resetters: Optional[list[Any]] = None,
         trainer: Optional[Trainer] = None,
         voice_alignment_config: Optional[VoiceAlignmentConfig] = None,
         # On-device GPU window runner: an async callable
@@ -144,7 +144,7 @@ class Hypnos(BaseModule):
             raise ValueError("alert_salience must be in [0, 1]")
         self._mnemos = mnemos
         self._thymos = thymos
-        self._chronos_resetters = list(chronos_resetters or [])
+        self._sequence_resetters = list(sequence_resetters or [])
         self._trainer: Trainer = trainer or FakeTrainer()
         self._organ_window_runner = organ_window_runner
         self._voice_config: VoiceAlignmentConfig = voice_alignment_config or VoiceAlignmentConfig(
@@ -200,7 +200,7 @@ class Hypnos(BaseModule):
         self._sleep_count: int = 0
 
         # Fatigue trigger state
-        self._soma_cursor: str = "0"
+        self._interoception_cursor: str = "0"
         self._fatigue_triggered_sleep: bool = False  # did fatigue fire this cycle?
         # The planning and action selection modules' rest-request handling
         self._requested_rest_min_interval_s: float = requested_rest_min_interval_s
@@ -319,9 +319,9 @@ class Hypnos(BaseModule):
                 entry_id = latest[0][0]
                 if isinstance(entry_id, bytes):
                     entry_id = entry_id.decode()
-                self._soma_cursor = entry_id
+                self._interoception_cursor = entry_id
             self._tasks.append(
-                asyncio.create_task(self._soma_consumer_loop(), name="hypnos-soma-consumer")
+                asyncio.create_task(self._interoception_consumer_loop(), name="hypnos-soma-consumer")
             )
 
     async def shutdown(self) -> None:
@@ -361,7 +361,7 @@ class Hypnos(BaseModule):
                 if not task.cancelled():
                     task.exception()
 
-    async def _soma_consumer_loop(self) -> None:
+    async def _interoception_consumer_loop(self) -> None:
         """Background loop: watch soma.out for maintenance triggers.
 
         Two event shapes on ``soma.out`` trigger an immediate maintenance
@@ -383,14 +383,14 @@ class Hypnos(BaseModule):
                 try:
                     entries, last_scanned = await self._bus.read_entries(
                         "soma.out",
-                        last_id=self._soma_cursor,
+                        last_id=self._interoception_cursor,
                         count=32,
                         block_ms=0,
                     )
                     if last_scanned:
                         # H2 — advance by the last SCANNED id (decodable or
                         # not) so a poison batch cannot wedge the cursor.
-                        self._soma_cursor = last_scanned
+                        self._interoception_cursor = last_scanned
                     if entries:
                         for _, event in entries:
                             fatigue_trigger = event.type == "soma.fatigue" and event.payload.get(

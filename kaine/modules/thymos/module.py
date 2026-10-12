@@ -63,8 +63,8 @@ class Thymos(BaseModule):
         goals: Optional[GoalLedger] = None,
         baseline_salience: float = 0.1,
         alert_salience: float = 0.7,
-        soma_stream: str = "soma.out",
-        chronos_stream: str = "chronos.out",
+        interoception_stream: str = "soma.out",
+        sequence_stream: str = "chronos.out",
         mnemos_stream: str = "mnemos.out",
         volition_stream: str = "volition.out",
         fast_time_constant_s: float = 10.0,
@@ -127,8 +127,8 @@ class Thymos(BaseModule):
         self._goals = goals or GoalLedger()
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
-        self._soma_stream = soma_stream
-        self._chronos_stream = chronos_stream
+        self._interoception_stream = interoception_stream
+        self._sequence_stream = sequence_stream
         self._mnemos_stream = mnemos_stream
         self._volition_stream = volition_stream
         self._fast_time_constant_s = float(fast_time_constant_s)
@@ -190,8 +190,8 @@ class Thymos(BaseModule):
         # prediction error, mirroring the interoception module's alert→arousal path.
         # These streams are read UNCONDITIONALLY (arousal is pre-attentive — a
         # startle does not require the emotion-coupling path to be enabled).
-        self._topos_stream = "topos.out"
-        self._perception_streams = [self._topos_stream, self._audition_emotion_stream]
+        self._vision_stream = "topos.out"
+        self._perception_streams = [self._vision_stream, self._audition_emotion_stream]
         # Gain on the normalised-surprise → arousal nudge (per alert event). The
         # per-event contribution is capped so arousal BUILDS over sustained surprise
         # rather than saturating on one frame.
@@ -283,14 +283,14 @@ class Thymos(BaseModule):
 
     async def initialize(self) -> None:
         peer_streams = [
-            self._soma_stream,
-            self._chronos_stream,
+            self._interoception_stream,
+            self._sequence_stream,
             self._mnemos_stream,
             self._volition_stream,
         ]
         # Perception→arousal streams are read unconditionally (topos.out always;
         # audition.out carries both perception and, when coupling is on, emotion).
-        peer_streams.append(self._topos_stream)
+        peer_streams.append(self._vision_stream)
         peer_streams.append(self._audition_emotion_stream)
         if self._coupling.enabled:
             peer_streams.append(self._empatheia_agent_model_stream)
@@ -599,11 +599,11 @@ class Thymos(BaseModule):
             while not self._stopped.is_set():
                 progressed = False
                 peer_streams = [
-                    self._soma_stream,
-                    self._chronos_stream,
+                    self._interoception_stream,
+                    self._sequence_stream,
                     self._mnemos_stream,
                     self._volition_stream,
-                    self._topos_stream,              # perception→arousal (always)
+                    self._vision_stream,              # perception→arousal (always)
                     self._audition_emotion_stream,   # perception + emotion (always)
                 ]
                 if self._coupling.enabled:
@@ -686,7 +686,7 @@ class Thymos(BaseModule):
                         arousal=self._perception_arousal_gain * surprise,
                     )
             return
-        if stream == self._soma_stream and event.type == "soma.report":
+        if stream == self._interoception_stream and event.type == "soma.report":
             wellness = event.payload.get("wellness")
             try:
                 w = float(wellness)
@@ -698,7 +698,7 @@ class Thymos(BaseModule):
             alerts = event.payload.get("alerts") or []
             if alerts:
                 self._state = self._state.nudged(arousal=0.05)
-        elif stream == self._chronos_stream and event.type == "chronos.report":
+        elif stream == self._sequence_stream and event.type == "chronos.report":
             tsli = event.payload.get("time_since_last_interaction_s")
             if isinstance(tsli, (int, float)) and math.isfinite(tsli):
                 if not self._interaction_seen:

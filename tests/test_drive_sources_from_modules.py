@@ -19,6 +19,7 @@ from kaine.cycle.affect_state import AffectStateProvider
 from kaine.modules.base import BaseModule
 from kaine.modules.registry import ModuleRegistry
 from kaine.workspace.strategies import DRIVES, build_drive_sources
+from tests._module_packages import identifier_for_key
 
 # The previous hardcoded drive-to-source table. Behaviour must not change.
 PREVIOUS = {
@@ -51,10 +52,11 @@ _MODULE_NAMES = [
 
 def _load_module_class(name: str) -> type[BaseModule]:
     # Most modules are packages with a ``module.py``; the recorder module is a single file.
+    key = identifier_for_key(name)
     try:
-        mod = importlib.import_module(f"kaine.modules.{name}.module")
+        mod = importlib.import_module(f"kaine.modules.{key}.module")
     except ModuleNotFoundError:
-        mod = importlib.import_module(f"kaine.modules.{name}")
+        mod = importlib.import_module(f"kaine.modules.{key}")
     for _, obj in inspect.getmembers(mod, inspect.isclass):
         if obj is BaseModule:
             continue

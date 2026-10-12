@@ -190,13 +190,13 @@ async def test_light_restart_keeps_oscillator(monkeypatch, bus):
     )
 
     registry = build_registry(bus, config, plugins=loaded)
-    original_chronos_osc = registry.get("chronos").oscillator
+    original_sequence_osc = registry.get("chronos").oscillator
     assert factory.calls == 2
 
     spot = _spot(registry, config, bus)
     result = await spot._restart_module("chronos")
     assert result.ok and result.path == "light"
-    assert registry.get("chronos").oscillator is original_chronos_osc
+    assert registry.get("chronos").oscillator is original_sequence_osc
     assert factory.calls == 2
 
     await _close_module(registry.get("chronos"))

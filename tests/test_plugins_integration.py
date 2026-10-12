@@ -50,7 +50,7 @@ class _FakeNetwork:
         return [0.0] * self.units
 
 
-class _ChronosNetworkPlugin:
+class _SequenceNetworkPlugin:
     def __init__(self, network_factory):
         self._network_factory = network_factory
         self.calls = 0
@@ -208,9 +208,9 @@ class _DummyForkManager:
 
 
 @pytest.mark.asyncio
-async def test_build_registry_plugin_fills_chronos_network(caplog, bus):
+async def test_build_registry_plugin_fills_sequence_network(caplog, bus):
     plugin_net = _FakeNetwork()
-    plugin = _ChronosNetworkPlugin(lambda: plugin_net)
+    plugin = _SequenceNetworkPlugin(lambda: plugin_net)
     lp = load_plugins(
         {"plugins": {"enabled": ["chronosnet"]}},
         known_modules=known_module_names(),
@@ -221,16 +221,16 @@ async def test_build_registry_plugin_fills_chronos_network(caplog, bus):
     config = {"modules": {"chronos": True}}
     with caplog.at_level(logging.WARNING, logger="kaine.plugins"):
         registry = build_registry(bus, config, plugins=lp)
-    chronos = registry.get("chronos")
-    assert chronos._network is plugin_net
+    sequence = registry.get("chronos")
+    assert sequence._network is plugin_net
     assert any(
         "plugin chronosnet fills chronos.network" in rec.message
         for rec in caplog.records
     )
 
     default_registry = build_registry(bus, config, plugins=None)
-    default_chronos = default_registry.get("chronos")
-    assert not default_chronos._network_injected
+    default_sequence = default_registry.get("chronos")
+    assert not default_sequence._network_injected
 
 
 # ---------------------------------------------------------------------------
@@ -241,7 +241,7 @@ async def test_build_registry_plugin_fills_chronos_network(caplog, bus):
 @pytest.mark.asyncio
 async def test_spot_restart_re_requests_fresh_plugin_network(bus):
     pytest.importorskip("torch")
-    plugin = _ChronosNetworkPlugin(_FakeNetwork)
+    plugin = _SequenceNetworkPlugin(_FakeNetwork)
     lp = load_plugins(
         {"plugins": {"enabled": ["chronosnet"]}},
         known_modules=known_module_names(),
@@ -258,18 +258,18 @@ async def test_spot_restart_re_requests_fresh_plugin_network(bus):
 
     instances = []
     for _ in range(2):
-        chronos = rebuild("chronos")
-        await chronos.initialize()
-        await chronos.on_workspace(_empty_snapshot())
-        instances.append(chronos)
+        sequence = rebuild("chronos")
+        await sequence.initialize()
+        await sequence.on_workspace(_empty_snapshot())
+        instances.append(sequence)
 
     # One request at boot plus one per restart, each a fresh object.
     boot_network = registry.get("chronos")._network
     networks = [boot_network, instances[0]._network, instances[1]._network]
     assert len({id(n) for n in networks}) == 3
     assert plugin.calls == 3
-    for chronos in instances:
-        await _close_module(chronos)
+    for sequence in instances:
+        await _close_module(sequence)
 
 
 # ---------------------------------------------------------------------------
@@ -347,7 +347,7 @@ def test_two_plugins_claim_same_oscillator_seam():
 
 
 def test_manifest_records_plugin_metadata():
-    plugin = _ChronosNetworkPlugin(_FakeNetwork)
+    plugin = _SequenceNetworkPlugin(_FakeNetwork)
     lp = load_plugins(
         {"plugins": {"enabled": ["chronosnet"]}},
         known_modules=known_module_names(),
@@ -521,10 +521,10 @@ async def test_spot_nous_heavy_restart_refreshes_engine_keeps_oscillator(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_spot_chronos_light_restart_keeps_same_network(bus):
+async def test_spot_sequence_light_restart_keeps_same_network(bus):
     """The sequence module restarts in place: it keeps its injected network and the plugin
     is not asked again."""
-    network_plugin = _ChronosNetworkPlugin(_FakeNetwork)
+    network_plugin = _SequenceNetworkPlugin(_FakeNetwork)
     config = {"modules": {"chronos": True}, "plugins": {"enabled": ["chronosnet"]}}
     loaded = load_plugins(
         config,

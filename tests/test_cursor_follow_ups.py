@@ -21,12 +21,12 @@ from kaine.cycle.preservation_monitor import (
 )
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.experiment.run_context import RunContext, set_run_context
-from kaine.modules.chronos.featurizer import SnapshotFeaturizer
-from kaine.modules.chronos.module import Chronos
 from kaine.modules.eidolon import Eidolon, SelfModelDocument
 from kaine.modules.hypnos.module import Hypnos
 from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
 from kaine.modules.registry import ModuleRegistry
+from kaine.modules.sequence.featurizer import SnapshotFeaturizer
+from kaine.modules.sequence.module import Sequence
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
 # ---------------------------------------------------------------------------
@@ -137,7 +137,7 @@ async def _entity(bus: AsyncBus, tmp_path: Path, *, name="Aria"):
     return reg, eid
 
 
-async def _push_soma_report(bus: AsyncBus, prediction_error: float):
+async def _push_interoception_report(bus: AsyncBus, prediction_error: float):
     await bus.publish(
         validate_event(
             source="soma",
@@ -202,7 +202,7 @@ async def test_welfare_notify_cursor_advances_to_end_after_one_poll(
 
     # Push enough above-threshold reports for a sustained-distress crossing.
     for _ in range(20):
-        await _push_soma_report(bus, 0.9)
+        await _push_interoception_report(bus, 0.9)
 
     stream_ids = await bus.client.xrange("soma.out")
     last_id = _str_id(stream_ids[-1][0])
@@ -321,28 +321,28 @@ async def test_hypnos_audit_drain_continues_past_undecodable_entries(bus, tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_chronos_ignores_undecodable_user_input_then_updates(bus, tmp_path):
+async def test_sequence_ignores_undecodable_user_input_then_updates(bus, tmp_path):
     network = _FakeNetwork()
     now = {"v": 1000.0}
-    chronos = Chronos(
+    sequence = Sequence(
         bus,
         featurizer=SnapshotFeaturizer(clock=lambda: now["v"]),
         network=network,
         user_input_streams=("user_input.out",),
         clock=lambda: now["v"],
     )
-    await chronos.initialize()
+    await sequence.initialize()
     try:
         for _ in range(5):
             await bus.client.xadd("user_input.out", {"junk": "x"})
 
         for _ in range(100):
-            if "user_input.out" in chronos._user_input_cursors:
+            if "user_input.out" in sequence._user_input_cursors:
                 break
             await asyncio.sleep(0.01)
 
-        assert "user_input.out" in chronos._user_input_cursors
-        assert chronos._last_interaction_at is None
+        assert "user_input.out" in sequence._user_input_cursors
+        assert sequence._last_interaction_at is None
 
         await bus.client.xadd(
             "user_input.out",
@@ -357,10 +357,10 @@ async def test_chronos_ignores_undecodable_user_input_then_updates(bus, tmp_path
         )
 
         for _ in range(100):
-            if chronos._last_interaction_at is not None:
+            if sequence._last_interaction_at is not None:
                 break
             await asyncio.sleep(0.01)
 
-        assert chronos._last_interaction_at == pytest.approx(1000.0)
+        assert sequence._last_interaction_at == pytest.approx(1000.0)
     finally:
-        await chronos.shutdown()
+        await sequence.shutdown()

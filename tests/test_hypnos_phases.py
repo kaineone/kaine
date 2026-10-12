@@ -459,7 +459,7 @@ async def test_fatigue_reset_on_sleep_completed(tmp_path: Path):
     The reset path is: the sleep module publishes hypnos.sleep.completed →
     Soma._hypnos_event_loop calls self._fatigue.reset().
     We verify this by checking the event is published after pipeline completion
-    (the actual interoception module wiring is an integration concern tested in test_soma_hypnos_flag.py).
+    (the actual interoception module wiring is an integration concern tested in test_interoception_hypnos_flag.py).
     """
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     from kaine.bus.client import AsyncBus

@@ -341,12 +341,12 @@ def test_gestation_holds_mundus_and_vox_dormant():
             self.dormant = dormant
 
     registry = ModuleRegistry()
-    vox, mundus, soma = _Effector("vox"), _Effector("mundus"), _Effector("soma")
-    for module in (vox, mundus, soma):
+    vox, mundus, interoception = _Effector("vox"), _Effector("mundus"), _Effector("soma")
+    for module in (vox, mundus, interoception):
         registry.register(module)
 
     held = _hold_effectors_for_gestation(registry)
 
     assert sorted(held) == ["mundus", "vox"]
     assert vox.dormant is True and mundus.dormant is True
-    assert soma.dormant is None
+    assert interoception.dormant is None

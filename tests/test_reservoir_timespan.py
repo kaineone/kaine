@@ -13,10 +13,10 @@ from kaine.cfc_numpy import (
     numpy_cfc_step,
 )
 from kaine.cycle.types import WorkspaceSnapshot
-from kaine.modules.chronos.featurizer import SnapshotFeaturizer
-from kaine.modules.chronos.module import Chronos
-from kaine.modules.soma import AlertResult, Soma
-from kaine.modules.soma.forward import SubstrateForwardModel, metrics_to_feature_vector
+from kaine.modules.interoception import AlertResult, Interoception
+from kaine.modules.interoception.forward import SubstrateForwardModel, metrics_to_feature_vector
+from kaine.modules.sequence.featurizer import SnapshotFeaturizer
+from kaine.modules.sequence.module import Sequence
 
 _TORCH = (
     importlib.util.find_spec("torch") is not None
@@ -97,7 +97,7 @@ def test_numpy_cfc_ts_varies_hidden_state():
 
 
 @pytest.mark.skipif(not _TORCH, reason="torch/ncps not installed")
-def test_soma_numpy_torch_parity_with_timespans():
+def test_interoception_numpy_torch_parity_with_timespans():
     torch = pytest.importorskip("torch")
     m_np = SubstrateForwardModel(
         backend="numpy", feature_dim=8, units=16, seed=123, lr=0.01
@@ -128,7 +128,7 @@ def test_soma_numpy_torch_parity_with_timespans():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_soma_passes_timespan_to_forward_model(bus: AsyncBus):
+async def test_interoception_passes_timespan_to_forward_model(bus: AsyncBus):
     class RecordingForwardModel(SubstrateForwardModel):
         def __init__(self) -> None:
             super().__init__(backend="numpy", feature_dim=8, units=8, seed=1)
@@ -140,7 +140,7 @@ async def test_soma_passes_timespan_to_forward_model(bus: AsyncBus):
 
     clock = _FakeClock(0.0)
     fm = RecordingForwardModel()
-    soma = Soma(
+    interoception = Interoception(
         bus,
         reader=FakeMetricsReader(),
         detector=NeverAlertDetector(),
@@ -148,15 +148,15 @@ async def test_soma_passes_timespan_to_forward_model(bus: AsyncBus):
         entity_clock=clock,
     )
 
-    await soma.tick_once()
+    await interoception.tick_once()
     clock.t += 3.0
-    await soma.tick_once()
+    await interoception.tick_once()
 
     assert fm.calls == [1.0, 3.0]
 
 
 @pytest.mark.asyncio
-async def test_soma_legacy_forward_model_called_without_timespan(bus: AsyncBus):
+async def test_interoception_legacy_forward_model_called_without_timespan(bus: AsyncBus):
     class LegacyForwardModel(SubstrateForwardModel):
         accepts_timespan = False
 
@@ -171,30 +171,30 @@ async def test_soma_legacy_forward_model_called_without_timespan(bus: AsyncBus):
             return super().step(feature)
 
     fm = LegacyForwardModel()
-    soma = Soma(
+    interoception = Interoception(
         bus,
         reader=FakeMetricsReader(),
         detector=NeverAlertDetector(),
         forward_model=fm,
     )
 
-    await soma.tick_once()
-    await soma.tick_once()
+    await interoception.tick_once()
+    await interoception.tick_once()
 
     # Two ticks reached the legacy model without a timespan keyword.
     assert fm.calls == [8, 8]
 
 
-def test_soma_feature_layout_serialization():
-    soma = Soma(
+def test_interoception_feature_layout_serialization():
+    interoception = Interoception(
         bus=None,  # type: ignore[arg-type]
         reader=FakeMetricsReader(),
         detector=NeverAlertDetector(),
     )
-    assert soma.serialize()["feature_layout"] == 2
+    assert interoception.serialize()["feature_layout"] == 2
 
-    soma.deserialize({})
-    assert soma._feature_layout == 1
+    interoception.deserialize({})
+    assert interoception._feature_layout == 1
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +227,7 @@ def _empty_snapshot(tick: int = 0) -> WorkspaceSnapshot:
 
 
 @pytest.mark.asyncio
-async def test_chronos_timespan_from_featurizer_dt(bus: AsyncBus):
+async def test_sequence_timespan_from_featurizer_dt(bus: AsyncBus):
     class TimespanNetwork:
         accepts_timespan: bool = True
 
@@ -241,28 +241,28 @@ async def test_chronos_timespan_from_featurizer_dt(bus: AsyncBus):
     times = [0.0]
     featurizer = SnapshotFeaturizer(clock=lambda: times[0])
     net = TimespanNetwork()
-    chronos = Chronos(
+    sequence = Sequence(
         bus,
         featurizer=featurizer,
         network=net,
     )
 
-    await chronos.on_workspace(_empty_snapshot())
+    await sequence.on_workspace(_empty_snapshot())
     times[0] = 1.0
-    await chronos.on_workspace(_empty_snapshot())
+    await sequence.on_workspace(_empty_snapshot())
     times[0] = 2.0
-    await chronos.on_workspace(_empty_snapshot())
+    await sequence.on_workspace(_empty_snapshot())
     times[0] = 3.0
-    await chronos.on_workspace(_empty_snapshot())
+    await sequence.on_workspace(_empty_snapshot())
     times[0] = 7.0
-    await chronos.on_workspace(_empty_snapshot())
+    await sequence.on_workspace(_empty_snapshot())
 
     assert net.calls[0] == pytest.approx(1.0)
     assert net.calls[-1] > 1.5
 
 
 @pytest.mark.asyncio
-async def test_chronos_long_pause_does_not_distort_later_steps(bus: AsyncBus):
+async def test_sequence_long_pause_does_not_distort_later_steps(bus: AsyncBus):
     class TimespanNetwork:
         accepts_timespan: bool = True
 
@@ -276,7 +276,7 @@ async def test_chronos_long_pause_does_not_distort_later_steps(bus: AsyncBus):
     times = [0.0]
     featurizer = SnapshotFeaturizer(clock=lambda: times[0])
     net = TimespanNetwork()
-    chronos = Chronos(
+    sequence = Sequence(
         bus,
         featurizer=featurizer,
         network=net,
@@ -284,12 +284,12 @@ async def test_chronos_long_pause_does_not_distort_later_steps(bus: AsyncBus):
 
     for i in range(11):
         times[0] = i * 0.2
-        await chronos.on_workspace(_empty_snapshot())
+        await sequence.on_workspace(_empty_snapshot())
 
     times[0] = 602.0
-    await chronos.on_workspace(_empty_snapshot())
+    await sequence.on_workspace(_empty_snapshot())
     times[0] = 602.2
-    await chronos.on_workspace(_empty_snapshot())
+    await sequence.on_workspace(_empty_snapshot())
 
     assert net.calls[-2] == pytest.approx(10.0)
     assert 0.5 <= net.calls[-1] <= 1.5

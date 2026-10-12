@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     pass
+from kaine.boot.config_kwargs import config_kwargs
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
@@ -22,7 +23,7 @@ def make_perception(
     from kaine.modules.perception.module import PerceptionLocus
 
     kwargs: dict[str, Any] = {}
-    for key in ("allow_self_switch", "min_dwell_s"):
-        if key in section:
-            kwargs[key] = section[key]
+    kwargs.update(
+        config_kwargs(section, ("allow_self_switch", "min_dwell_s"), PerceptionLocus)
+    )
     return PerceptionLocus(bus, entity_clock=entity_clock, **kwargs)

@@ -60,7 +60,7 @@ DEFAULT_EMBEDDER_REPO = "sentence-transformers/all-MiniLM-L6-v2"
 DEFAULT_TTS_REPO = "resemble-ai/chatterbox"
 
 # Shipped-default vision encoder backend. Kept in sync with
-# kaine.modules.topos.encoder.DEFAULT_ENCODER_BACKEND and config/kaine.toml
+# kaine.modules.vision.encoder.DEFAULT_ENCODER_BACKEND and config/kaine.toml
 # [topos].encoder_backend. Held as a bare string so the setup phase never pulls
 # the heavy torch-bearing encoder module just to read a default.
 DEFAULT_ENCODER_BACKEND = "internvideo_next"
@@ -69,8 +69,8 @@ DEFAULT_ENCODER_BACKEND = "internvideo_next"
 def encoder_backend(config: Optional[dict[str, Any]] = None) -> str:
     """The configured vision encoder backend, lower-cased; the shipped default
     (``internvideo_next``) when the operator sets none."""
-    topos = (config or {}).get("topos") or {}
-    val = topos.get("encoder_backend")
+    vision = (config or {}).get("topos") or {}
+    val = vision.get("encoder_backend")
     return str(val).strip().lower() if val else DEFAULT_ENCODER_BACKEND
 
 

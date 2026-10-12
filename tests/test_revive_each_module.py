@@ -22,16 +22,13 @@ from kaine.experiment.run_context import RunContext, set_run_context
 from kaine.lifecycle import preservation
 from kaine.lifecycle.manager import ForkManager
 from kaine.modules.audition.module import Audition
-from kaine.modules.chronos.anomaly import RollingZScoreAnomaly
-from kaine.modules.chronos.featurizer import SnapshotFeaturizer
-from kaine.modules.chronos.module import Chronos
-from kaine.modules.chronos.rumination import RecurrenceRuminationDetector
 from kaine.modules.eidolon.module import Eidolon, SelfModelDocument
 from kaine.modules.empatheia.agent import AgentModel
 from kaine.modules.empatheia.module import Empatheia
 from kaine.modules.empatheia.store import InMemoryAgentStore
 from kaine.modules.hypnos import VoiceAlignmentConfig
 from kaine.modules.hypnos.module import Hypnos
+from kaine.modules.interoception.module import Interoception
 from kaine.modules.lingua.intent_log import IntentExpressionLog
 from kaine.modules.lingua.module import Lingua
 from kaine.modules.mnemos import FakeEmbedder, InMemoryStorage, Mnemos, MnemosCore
@@ -41,10 +38,13 @@ from kaine.modules.perception.module import PerceptionLocus
 from kaine.modules.phantasia.module import Phantasia
 from kaine.modules.praxis.module import Praxis
 from kaine.modules.registry import ModuleRegistry
-from kaine.modules.soma.module import Soma
+from kaine.modules.sequence.anomaly import RollingZScoreAnomaly
+from kaine.modules.sequence.featurizer import SnapshotFeaturizer
+from kaine.modules.sequence.module import Sequence
+from kaine.modules.sequence.rumination import RecurrenceRuminationDetector
 from kaine.modules.thymos import DimensionalState
 from kaine.modules.thymos.module import Thymos
-from kaine.modules.topos.module import Topos
+from kaine.modules.vision.module import Vision
 from kaine.modules.vox.module import Vox
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
@@ -204,9 +204,9 @@ def _json_roundtrip(obj: Any) -> Any:
 
 
 @pytest.mark.asyncio
-async def test_roundtrip_soma(bus: AsyncBus, tmp_path: Path) -> None:
+async def test_roundtrip_interoception(bus: AsyncBus, tmp_path: Path) -> None:
     fwd = _FakeForwardModel({"weights": [9.0, 8.0]})
-    m1 = Soma(
+    m1 = Interoception(
         bus,
         reader=_FakeMetricsReader(),
         forward_model=fwd,
@@ -215,7 +215,7 @@ async def test_roundtrip_soma(bus: AsyncBus, tmp_path: Path) -> None:
     m1._cycle_cursor = "160-0"
     m1._read_interval_s = 2.5
     state = _json_roundtrip(m1.serialize())
-    m2 = Soma(
+    m2 = Interoception(
         bus,
         reader=_FakeMetricsReader(),
         forward_model=_FakeForwardModel(),
@@ -226,8 +226,8 @@ async def test_roundtrip_soma(bus: AsyncBus, tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_roundtrip_chronos(bus: AsyncBus, tmp_path: Path) -> None:
-    m1 = Chronos(
+async def test_roundtrip_sequence(bus: AsyncBus, tmp_path: Path) -> None:
+    m1 = Sequence(
         bus,
         featurizer=SnapshotFeaturizer(clock=lambda: 0.0),
         network=_FakeNetwork(units=4),
@@ -240,7 +240,7 @@ async def test_roundtrip_chronos(bus: AsyncBus, tmp_path: Path) -> None:
         {"lingua.external": "99-0", "volition.out": "100-0"}
     )
     state = _json_roundtrip(m1.serialize())
-    m2 = Chronos(
+    m2 = Sequence(
         bus,
         featurizer=SnapshotFeaturizer(clock=lambda: 0.0),
         network=_FakeNetwork(units=4),
@@ -258,9 +258,9 @@ async def test_roundtrip_chronos(bus: AsyncBus, tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_roundtrip_topos(bus: AsyncBus, tmp_path: Path) -> None:
+async def test_roundtrip_vision(bus: AsyncBus, tmp_path: Path) -> None:
     enc = _FakeEncoder(model_id="roundtrip-encoder")
-    m1 = Topos(
+    m1 = Vision(
         bus,
         encoder=enc,
         forward_prediction=False,
@@ -269,7 +269,7 @@ async def test_roundtrip_topos(bus: AsyncBus, tmp_path: Path) -> None:
         alert_salience=0.7,
     )
     state = _json_roundtrip(m1.serialize())
-    m2 = Topos(
+    m2 = Vision(
         bus,
         encoder=_FakeEncoder(model_id="roundtrip-encoder"),
         forward_prediction=False,
@@ -574,8 +574,8 @@ async def test_roundtrip_mundus(bus: AsyncBus, tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def _build_soma(bus: AsyncBus, tmp_path: Path, name: str) -> Soma:
-    m = Soma(
+async def _build_interoception(bus: AsyncBus, tmp_path: Path, name: str) -> Interoception:
+    m = Interoception(
         bus,
         reader=_FakeMetricsReader(),
         forward_model=_FakeForwardModel(),
@@ -585,8 +585,8 @@ async def _build_soma(bus: AsyncBus, tmp_path: Path, name: str) -> Soma:
     return m
 
 
-async def _build_chronos(bus: AsyncBus, tmp_path: Path, name: str) -> Chronos:
-    m = Chronos(
+async def _build_sequence(bus: AsyncBus, tmp_path: Path, name: str) -> Sequence:
+    m = Sequence(
         bus,
         featurizer=SnapshotFeaturizer(clock=lambda: 0.0),
         network=_FakeNetwork(units=4),
@@ -597,8 +597,8 @@ async def _build_chronos(bus: AsyncBus, tmp_path: Path, name: str) -> Chronos:
     return m
 
 
-async def _build_topos(bus: AsyncBus, tmp_path: Path, name: str) -> Topos:
-    m = Topos(
+async def _build_vision(bus: AsyncBus, tmp_path: Path, name: str) -> Vision:
+    m = Vision(
         bus,
         encoder=_FakeEncoder(),
         forward_prediction=False,
@@ -741,9 +741,9 @@ async def _build_mundus(bus: AsyncBus, tmp_path: Path, name: str) -> Mundus:
 
 
 BASE_FACTORIES: dict[str, Any] = {
-    "soma": _build_soma,
-    "chronos": _build_chronos,
-    "topos": _build_topos,
+    "soma": _build_interoception,
+    "chronos": _build_sequence,
+    "topos": _build_vision,
     "audition": _build_audition,
     "lingua": _build_lingua,
 }
@@ -763,19 +763,19 @@ ORDER: list[tuple[str, Any]] = [
 ]
 
 
-def _mutate_soma(m: Soma, i: int) -> None:
+def _mutate_interoception(m: Interoception, i: int) -> None:
     m._cycle_cursor = f"step-{i}"
     m._read_interval_s = 1.0 + i * 0.1
 
 
-def _mutate_chronos(m: Chronos, i: int) -> None:
+def _mutate_sequence(m: Sequence, i: int) -> None:
     m._last_interaction_at = 1000.0 + i
     # Keep the default "audition.out" cursor that deserialize preserves.
     m._user_input_cursors["lingua.external"] = f"{i}-0"
     m._user_input_cursors["volition.out"] = f"{i + 1}-0"
 
 
-def _mutate_topos(m: Topos, i: int) -> None:
+def _mutate_vision(m: Vision, i: int) -> None:
     # The vision module's serialize() is config/encoder-id only; no mutable snapshot state.
     pass
 
@@ -850,9 +850,9 @@ def _mutate_mundus(m: Mundus, i: int) -> None:
 
 
 MUTATORS: dict[str, Any] = {
-    "soma": _mutate_soma,
-    "chronos": _mutate_chronos,
-    "topos": _mutate_topos,
+    "soma": _mutate_interoception,
+    "chronos": _mutate_sequence,
+    "topos": _mutate_vision,
     "audition": _mutate_audition,
     "lingua": _mutate_lingua,
     "thymos": _mutate_thymos,

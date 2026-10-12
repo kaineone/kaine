@@ -96,10 +96,10 @@ class _FakeEncoder:
         return [1.0, 0.0, 0.0, 0.0]
 
 
-def _topos(bus):
-    from kaine.modules.topos import Topos
+def _vision(bus):
+    from kaine.modules.vision import Vision
 
-    return Topos(bus, encoder=_FakeEncoder())
+    return Vision(bus, encoder=_FakeEncoder())
 
 
 @pytest.fixture
@@ -115,44 +115,44 @@ async def bus():
 
 
 @pytest.mark.asyncio
-async def test_topos_tap_off_captures_nothing(bus, monkeypatch):
+async def test_vision_tap_off_captures_nothing(bus, monkeypatch):
     _disable(monkeypatch)
     Image = pytest.importorskip("PIL.Image")
-    topos = _topos(bus)
-    await topos.process_frame(Image.new("RGB", (16, 12), (1, 2, 3)))
-    assert topos._preview_jpeg is None
+    vision = _vision(bus)
+    await vision.process_frame(Image.new("RGB", (16, 12), (1, 2, 3)))
+    assert vision._preview_jpeg is None
     assert perception_preview.get_video_jpeg() is None
 
 
 @pytest.mark.asyncio
-async def test_topos_tap_on_holds_frame_in_memory(bus, monkeypatch, tmp_path):
+async def test_vision_tap_on_holds_frame_in_memory(bus, monkeypatch, tmp_path):
     _enable(monkeypatch)
     Image = pytest.importorskip("PIL.Image")
     # Scan a scratch tree before/after to prove no frame lands on disk.
     scan_root = tmp_path
     before = set(p for p in scan_root.rglob("*") if p.is_file())
 
-    topos = _topos(bus)
-    await topos.process_frame(Image.new("RGB", (16, 12), (9, 9, 9)))
+    vision = _vision(bus)
+    await vision.process_frame(Image.new("RGB", (16, 12), (9, 9, 9)))
 
-    assert topos._preview_jpeg is not None
-    assert topos._preview_jpeg[:2] == b"\xff\xd8"
-    assert perception_preview.get_video_jpeg() == topos._preview_jpeg
+    assert vision._preview_jpeg is not None
+    assert vision._preview_jpeg[:2] == b"\xff\xd8"
+    assert perception_preview.get_video_jpeg() == vision._preview_jpeg
 
     after = set(p for p in scan_root.rglob("*") if p.is_file())
     assert after == before, "preview tap must not write any file"
 
 
 @pytest.mark.asyncio
-async def test_topos_shutdown_drops_preview(bus, monkeypatch):
+async def test_vision_shutdown_drops_preview(bus, monkeypatch):
     _enable(monkeypatch)
     Image = pytest.importorskip("PIL.Image")
-    topos = _topos(bus)
-    await topos.initialize()
-    await topos.process_frame(Image.new("RGB", (8, 8), (5, 5, 5)))
-    assert topos._preview_jpeg is not None
-    await topos.shutdown()
-    assert topos._preview_jpeg is None
+    vision = _vision(bus)
+    await vision.initialize()
+    await vision.process_frame(Image.new("RGB", (8, 8), (5, 5, 5)))
+    assert vision._preview_jpeg is not None
+    await vision.shutdown()
+    assert vision._preview_jpeg is None
     assert perception_preview.get_video_jpeg() is None
 
 

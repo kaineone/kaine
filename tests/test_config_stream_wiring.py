@@ -48,9 +48,9 @@ def _configured_stream_refs() -> list[tuple[str, str]]:
     for key in ("lingua_external_stream", "thymos_state_stream"):
         if key in vox:
             refs.append((f"vox.{key}", vox[key]))
-    soma = _CONFIG.get("soma", {})
-    if "cycle_stream" in soma:
-        refs.append(("soma.cycle_stream", soma["cycle_stream"]))
+    interoception = _CONFIG.get("soma", {})
+    if "cycle_stream" in interoception:
+        refs.append(("soma.cycle_stream", interoception["cycle_stream"]))
     return refs
 
 
@@ -66,7 +66,7 @@ def test_config_stream_references_resolve_to_real_producers():
     )
 
 
-def test_chronos_reads_the_audition_producer_stream():
+def test_sequence_reads_the_audition_producer_stream():
     assert module_stream("audition") == "audition.out"
     assert "audition.out" in _CONFIG["chronos"]["user_input_streams"]
     # Verify no legacy stream name leaked back in.
@@ -74,10 +74,10 @@ def test_chronos_reads_the_audition_producer_stream():
         assert not stream.startswith("audio_"), f"legacy stream name found: {stream}"
 
 
-def test_chronos_code_default_user_input_stream_resolves():
+def test_sequence_code_default_user_input_stream_resolves():
     """The in-code fallback must also use the real producer stream, not just
     the config value (config overrides it, but the default must not be a typo)."""
-    from kaine.modules.chronos.module import DEFAULT_USER_INPUT_STREAMS
+    from kaine.modules.sequence.module import DEFAULT_USER_INPUT_STREAMS
 
     assert module_stream("audition") in DEFAULT_USER_INPUT_STREAMS
     legacy = [s for s in DEFAULT_USER_INPUT_STREAMS if s.startswith("audio_")]

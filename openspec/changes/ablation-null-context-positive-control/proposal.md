@@ -25,5 +25,5 @@ The positive control (§6.3, A.8) is not built in this change. The paper leaves 
 
 ## Impact
 
-- `kaine/modules/context.py`, `kaine/modules/topos/module.py`, `kaine/modules/audition/module.py`, `kaine/modules/soma/module.py`, `kaine/modules/soma/forward.py`, `kaine/evaluation/observers/research_event_observer.py`, `kaine/experiment/log_schema.py`, docs, tests.
+- `kaine/modules/context.py`, `kaine/modules/vision/module.py`, `kaine/modules/audition/module.py`, `kaine/modules/interoception/module.py`, `kaine/modules/interoception/forward.py`, `kaine/evaluation/observers/research_event_observer.py`, `kaine/experiment/log_schema.py`, docs, tests.
 - Learning, intensities and the competition are unchanged: the null prediction still never trains a model or enters a score.

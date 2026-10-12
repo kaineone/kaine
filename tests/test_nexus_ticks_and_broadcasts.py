@@ -166,14 +166,14 @@ async def test_bridge_relays_events_published_after_start():
     # Resolve cursors to the newest pre-start entry on each stream.
     await bridge._tick_once()
 
-    topos_event = Event(
+    vision_event = Event(
         source="topos",
         type="topos.report",
         payload={"change_score": 0.2, "latent": [0.1] * 768},
         salience=0.6,
         timestamp=datetime.now(timezone.utc),
     )
-    await bus.publish(topos_event)
+    await bus.publish(vision_event)
 
     cycle_event = Event(
         source="cycle",
@@ -215,11 +215,11 @@ async def test_bridge_relays_events_published_after_start():
 
     assert len(drained) == 3
 
-    topos_payloads = [
+    vision_payloads = [
         event.payload for _, event in drained if event.type == "topos.report"
     ]
-    assert all(payload.get("change_score") != 0.1 for payload in topos_payloads)
-    assert {"change_score": 0.2} in topos_payloads
+    assert all(payload.get("change_score") != 0.1 for payload in vision_payloads)
+    assert {"change_score": 0.2} in vision_payloads
 
     event_types = {event.type for _, event in drained}
     assert "cycle.tick" in event_types

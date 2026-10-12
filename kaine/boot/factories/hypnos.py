@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
 from kaine.boot.common import _effective_hot_swap_mode
+from kaine.boot.config_kwargs import config_kwargs
 from kaine.boot.errors import (
     ConfigurationError,
     VoiceAlignmentConfigError,
@@ -208,15 +209,19 @@ def make_hypnos(
             )
             voice_config = replace(voice_config, hot_swap_mode=effective)
     kwargs: dict[str, Any] = {}
-    for k in (
-        "interval_seconds",
-        "max_deferral_seconds",
-        "per_defer_seconds",
-        "baseline_salience",
-        "alert_salience",
-    ):
-        if k in section:
-            kwargs[k] = section[k]
+    kwargs.update(
+        config_kwargs(
+            section,
+            (
+                "interval_seconds",
+                "max_deferral_seconds",
+                "per_defer_seconds",
+                "baseline_salience",
+                "alert_salience",
+            ),
+            Hypnos,
+        )
+    )
     if "requested_rest_min_interval_s" in section:
         raw_interval = section["requested_rest_min_interval_s"]
         if (

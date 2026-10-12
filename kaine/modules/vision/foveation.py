@@ -1,0 +1,270 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
+"""Attention-driven foveation core — spatial attention and view derivation.
+
+Given a native-resolution frame, compute a coarse spatial saliency map (per-tile
+precision-weighted change — the deviation of the current tile change from its running
+mean divided by its running standard deviation, regularised by a floor term
+proportional to the mean change), select a single fovea target by the precision-weighted combination of that
+bottom-up saliency with an optional top-down bias, size the fovea from arousal
+(Easterbrook narrowing — higher arousal, tighter fovea), and derive a downsampled
+peripheral view plus a high-resolution foveal crop from the *same* in-memory frame.
+
+Precision weighting down-weights habitual flicker and up-weights unusual change, as
+in predictive coding (Feldman and Friston 2010). The top-down channel stays unwired.
+Pure and dependency-light (numpy + a lazily-imported cv2 for resizes). No disk I/O:
+frames and views exist only in memory, preserving the zero-raw-sense-data invariant.
+The direction and exact magnitude of the arousal→size mapping are tuning parameters,
+not asserted results. This is the algorithmic heart; the vision module wires it into the
+perception path and the capture layer supplies the native frame.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+import numpy as np
+
+
+@dataclass(frozen=True)
+class FoveaTarget:
+    """Normalized fovea. ``x``/``y`` are the centre in [0, 1]; ``size`` is the crop
+    half-extent as a fraction of ``min(H, W)`` in [0, 1]. Content-free."""
+
+    x: float
+    y: float
+    size: float
+
+    def to_dict(self) -> dict[str, float]:
+        return {"x": float(self.x), "y": float(self.y), "size": float(self.size)}
+
+
+def _clip01(value: float) -> float:
+    """Clamp a scalar to the normalized [0, 1] fovea range."""
+    return 0.0 if value < 0.0 else 1.0 if value > 1.0 else float(value)
+
+
+def _lazy_cv2() -> Any:
+    try:
+        import cv2  # type: ignore[import-untyped]
+
+        return cv2
+    except ImportError as exc:
+        from kaine.modules.vision.live import PerceptionUnavailableError
+
+        raise PerceptionUnavailableError(
+            "opencv-python-headless is required for foveation; "
+            "install with: pip install -e .[vision]"
+        ) from exc
+
+
+def tile_change(
+    frame: np.ndarray, prev_tiles: np.ndarray | None, *, grid: tuple[int, int]
+) -> tuple[np.ndarray, np.ndarray]:
+    """Reduce ``frame`` to per-tile grayscale means on ``grid`` and return
+    ``(change_map, tiles)`` where change is the absolute difference against
+    ``prev_tiles`` (zeros on the first frame)."""
+    cv2 = _lazy_cv2()
+    gh, gw = grid
+    gray = frame.mean(axis=2) if frame.ndim == 3 else frame
+    tiles = cv2.resize(gray.astype(np.float32), (gw, gh), interpolation=cv2.INTER_AREA)
+    if prev_tiles is None:
+        return np.zeros((gh, gw), dtype=np.float32), tiles
+    return np.abs(tiles - prev_tiles).astype(np.float32), tiles
+
+
+class SpatialSaliency:
+    """Stateful coarse per-tile precision-weighted change map over consecutive frames
+    (memory only).
+
+    The bottom-up map is the per-tile precision-weighted change: the deviation of
+    the current tile change from its running mean change, divided by the running
+    standard deviation of tile change, regularised as ``sqrt(var + s0**2)`` with
+    ``s0 = floor_fraction`` times the mean tile change (a soft floor). Habitual
+    flicker is therefore down-weighted and unusual change up-weighted, as precision weighting in predictive coding (Feldman and Friston
+    2010). The top-down channel stays unwired.
+    """
+
+    def __init__(
+        self,
+        grid: tuple[int, int] = (12, 12),
+        *,
+        alpha: float = 0.05,
+        warmup: int = 5,
+        floor_fraction: float = 0.1,
+    ) -> None:
+        if not (0.0 < alpha <= 1.0):
+            raise ValueError("alpha must be in (0, 1]")
+        if warmup < 0:
+            raise ValueError("warmup must be non-negative")
+        if floor_fraction <= 0.0:
+            raise ValueError("floor_fraction must be positive")
+        self._grid = (int(grid[0]), int(grid[1]))
+        self._alpha = float(alpha)
+        self._warmup = int(warmup)
+        self._floor_fraction = float(floor_fraction)
+        self._prev: np.ndarray | None = None
+        self._mu: np.ndarray | None = None
+        self._var: np.ndarray | None = None
+        self._count: int = 0
+
+    @property
+    def grid(self) -> tuple[int, int]:
+        return self._grid
+
+    def observe(self, frame: np.ndarray) -> np.ndarray:
+        prev = self._prev
+        change, self._prev = tile_change(frame, self._prev, grid=self._grid)
+        if prev is None:
+            return change
+        if self._count < self._warmup or self._mu is None:
+            out = change
+        else:
+            mean_mu = float(np.mean(self._mu))
+            s0 = self._floor_fraction * max(mean_mu, 1e-12)
+            denom = np.sqrt(self._var + s0 * s0)
+            out = (np.maximum(0.0, change.astype(np.float64) - self._mu) / denom).astype(
+                np.float32
+            )
+        # Exponential moving mean and variance (West's incremental form).
+        if self._mu is None:
+            self._mu = change.astype(np.float64)
+            self._var = np.zeros_like(self._mu, dtype=np.float64)
+        else:
+            delta = change.astype(np.float64) - self._mu
+            self._mu = self._mu + self._alpha * delta
+            self._var = (1.0 - self._alpha) * (
+                self._var + self._alpha * delta * delta
+            )
+        self._count += 1
+        return out
+
+
+def combine_saliency(
+    bottom_up: np.ndarray,
+    top_down: np.ndarray | None = None,
+    *,
+    w_bottom_up: float = 1.0,
+    w_top_down: float = 1.0,
+) -> np.ndarray:
+    """Precision-weighted combination of a bottom-up saliency map with an optional
+    same-shape top-down bias map. The weights are precisions."""
+    bu = np.asarray(bottom_up, dtype=np.float32)
+    if top_down is None:
+        return w_bottom_up * bu
+    td = np.asarray(top_down, dtype=np.float32)
+    if td.shape != bu.shape:
+        raise ValueError(f"top_down shape {td.shape} != bottom_up shape {bu.shape}")
+    return w_bottom_up * bu + w_top_down * td
+
+
+def arousal_to_size(
+    arousal: float, *, size_range: tuple[float, float] = (0.12, 0.5)
+) -> float:
+    """Map arousal in [0, 1] to a normalized fovea size. Easterbrook narrowing:
+    higher arousal → tighter fovea (nearer ``size_range`` min). The sign is a tuning
+    choice; flip ``size_range`` to widen under arousal instead."""
+    lo, hi = size_range
+    a = float(np.clip(arousal, 0.0, 1.0))
+    return hi - (hi - lo) * a
+
+
+def select_fovea(
+    saliency: np.ndarray,
+    *,
+    arousal: float = 0.0,
+    size_range: tuple[float, float] = (0.12, 0.5),
+    prev: FoveaTarget | None = None,
+    hysteresis: float = 0.0,
+) -> FoveaTarget:
+    """Select the single fovea target: the argmax tile of ``saliency`` (a grid map),
+    sized from arousal. When the map is flat (no salient region) the fovea holds its previous
+    location, or the centre when there is none. Hysteresis holds ``prev`` unless the new argmax beats the saliency at
+    ``prev``'s tile by more than ``hysteresis`` (fraction), damping thrash between
+    comparable tiles."""
+    sal = np.asarray(saliency, dtype=np.float32)
+    gh, gw = sal.shape
+    size = arousal_to_size(arousal, size_range=size_range)
+    if float(sal.max()) <= float(sal.min()):  # flat / all-zero → no salient region
+        if prev is not None:
+            return FoveaTarget(prev.x, prev.y, size)
+        return FoveaTarget(0.5, 0.5, size)
+    flat = int(np.argmax(sal))
+    ty, tx = divmod(flat, gw)
+    if prev is not None and hysteresis > 0.0:
+        pty = min(gh - 1, int(prev.y * gh))
+        ptx = min(gw - 1, int(prev.x * gw))
+        if float(sal[ty, tx]) <= float(sal[pty, ptx]) * (1.0 + hysteresis):
+            return FoveaTarget(prev.x, prev.y, size)  # hold location, resize
+    return FoveaTarget((tx + 0.5) / gw, (ty + 0.5) / gh, size)
+
+
+class FoveaPredictor:
+    """A small forward model of the fovea's own trajectory — the attention schema.
+
+    Publishing where the fovea *is* makes the entity's visual attention legible;
+    predicting where it will go *next* is the concrete attention-schema step
+    (Graziano and Webb 2015): the entity carries a model of its own attention. This
+    is a constant-velocity forward model — it estimates the fovea's velocity from
+    its recent trajectory (an exponential moving average of successive deltas,
+    ``momentum`` is the EMA retention) and extrapolates one step, clamped to the
+    normalized range. On the first observation velocity is zero, so the prediction
+    is the current target (best guess: the gaze stays put).
+
+    Content-free and memory-only: it consumes and emits only normalized
+    ``(x, y, size)`` — never pixels — so the predicted next fovea is publishable
+    for the self-model and diagnostics exactly like the current fovea location.
+    """
+
+    def __init__(self, *, momentum: float = 0.5) -> None:
+        if not 0.0 <= momentum <= 1.0:
+            raise ValueError("momentum must be in [0, 1]")
+        self._momentum = float(momentum)
+        self._prev: FoveaTarget | None = None
+        self._vx = 0.0
+        self._vy = 0.0
+        self._vsize = 0.0
+
+    def predict_next(self, current: FoveaTarget) -> FoveaTarget:
+        """Update the velocity estimate from ``current`` and return the predicted
+        next fovea (one-step constant-velocity extrapolation, clamped to [0, 1])."""
+        if self._prev is not None:
+            m = self._momentum
+            self._vx = m * self._vx + (1.0 - m) * (current.x - self._prev.x)
+            self._vy = m * self._vy + (1.0 - m) * (current.y - self._prev.y)
+            self._vsize = m * self._vsize + (1.0 - m) * (current.size - self._prev.size)
+        self._prev = current
+        return FoveaTarget(
+            _clip01(current.x + self._vx),
+            _clip01(current.y + self._vy),
+            _clip01(current.size + self._vsize),
+        )
+
+
+def foveate(
+    frame: np.ndarray,
+    target: FoveaTarget,
+    *,
+    peripheral_size: tuple[int, int] = (320, 180),
+    foveal_size: tuple[int, int] = (224, 224),
+) -> tuple[np.ndarray, np.ndarray]:
+    """From a native ``frame`` (H, W, 3) return ``(peripheral, foveal)`` arrays, both
+    derived from the one in-memory frame. ``peripheral`` is the whole frame resized
+    to ``peripheral_size`` (w, h); ``foveal`` is the native crop centred on
+    ``target`` at half-extent ``target.size * min(H, W)``, resized to ``foveal_size``
+    (w, h)."""
+    cv2 = _lazy_cv2()
+    h, w = frame.shape[:2]
+    pw, ph = peripheral_size
+    peripheral = cv2.resize(frame, (pw, ph), interpolation=cv2.INTER_AREA)
+    half = max(1, int(round(target.size * min(h, w))))
+    cx, cy = int(round(target.x * w)), int(round(target.y * h))
+    x0 = max(0, min(w - 1, cx - half))
+    x1 = max(x0 + 1, min(w, cx + half))
+    y0 = max(0, min(h - 1, cy - half))
+    y1 = max(y0 + 1, min(h, cy + half))
+    fw, fh = foveal_size
+    foveal = cv2.resize(frame[y0:y1, x0:x1], (fw, fh), interpolation=cv2.INTER_AREA)
+    return peripheral, foveal

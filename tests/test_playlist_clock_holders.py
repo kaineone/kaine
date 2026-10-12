@@ -17,7 +17,7 @@ from kaine.cycle.control_state import (
     pop_freeze,
     push_freeze,
 )
-from kaine.modules.topos.feed import PlaylistClock
+from kaine.modules.vision.feed import PlaylistClock
 
 
 class _FakeClock:

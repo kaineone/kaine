@@ -14,12 +14,12 @@ import math  # noqa: E402
 import cl.sim as clsim  # noqa: E402
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
-from kaine_cl1.backends.chronos import WetwareTimingModel  # noqa: E402
 from kaine_cl1.backends.oscillator import (  # noqa: E402
     MIN_PLV_WINDOW,
     WetwareOscillator,
     _hilbert_phase,
 )
+from kaine_cl1.backends.sequence import WetwareTimingModel  # noqa: E402
 from kaine_cl1.plugin import Cl1Plugin  # noqa: E402
 from kaine_cl1.substrate.broker import SubstrateBroker, TerritoryObservation  # noqa: E402
 from kaine_cl1.substrate.session import SubstrateConfig, SubstrateSession  # noqa: E402

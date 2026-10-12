@@ -178,7 +178,8 @@ async def test_intent_log_includes_faithful_rendering(bus: AsyncBus, tmp_path: P
     await lingua.speak("hi", snapshot=snap)
     records = [json.loads(line) for line in log_path.read_text().splitlines() if line.strip()]
     assert records[0]["faithful_rendering"]
-    assert "Soma" in records[0]["faithful_rendering"]  # template starts with "Interoception reports"
+    # the interoception template: "<name> reports wellness ..."
+    assert "reports wellness" in records[0]["faithful_rendering"]
 
 
 @pytest.mark.asyncio

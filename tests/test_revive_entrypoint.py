@@ -395,7 +395,7 @@ def test_install_shared_womb_clock_uses_stage_state_and_ignores_file(
         def mark_born(self) -> None:
             self.born = True
 
-    monkeypatch.setattr("kaine.modules.topos.feed.WombClock", FakeWombClock)
+    monkeypatch.setattr("kaine.modules.vision.feed.WombClock", FakeWombClock)
 
     feed: dict[str, Any] = {}
     _install_shared_womb_clock(feed, None, None, stage_state=override)

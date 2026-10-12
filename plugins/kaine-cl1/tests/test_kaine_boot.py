@@ -21,7 +21,7 @@ import math  # noqa: E402
 
 import cl.sim as clsim  # noqa: E402
 import fakeredis.aioredis  # noqa: E402
-from kaine_cl1.backends.chronos import WetwareTimingModel  # noqa: E402
+from kaine_cl1.backends.sequence import WetwareTimingModel  # noqa: E402
 
 from kaine.boot import build_registry, known_module_names  # noqa: E402
 from kaine.bus.client import AsyncBus  # noqa: E402
@@ -30,10 +30,10 @@ from kaine.cycle.types import WorkspaceSnapshot  # noqa: E402
 from kaine.plugins import PluginError, load_plugins  # noqa: E402
 
 
-def _config(backends=None, territories=None, chronos=None, enabled=("cl1",)):
+def _config(backends=None, territories=None, sequence=None, enabled=("cl1",)):
     return {
         "modules": {"chronos": True},
-        "chronos": dict(chronos or {}),
+        "chronos": dict(sequence or {}),
         "plugins": {
             "enabled": list(enabled),
             "cl1": {
@@ -70,16 +70,16 @@ class _FakeMetricsReader:
         pass
 
 
-def _soma_config(*, soma_backend="cl1", with_chronos=False):
+def _interoception_config(*, interoception_backend="cl1", with_sequence=False):
     modules = {"soma": True}
-    cl1_backends = {"soma": soma_backend}
+    cl1_backends = {"soma": interoception_backend}
     cl1_territories = {"soma": 12}
-    if with_chronos:
+    if with_sequence:
         modules["chronos"] = True
         cl1_backends["chronos"] = "cl1"
         cl1_territories["chronos"] = 12
     enabled = []
-    if soma_backend == "silicon" and not with_chronos:
+    if interoception_backend == "silicon" and not with_sequence:
         enabled = []
     else:
         enabled = ["cl1"]
@@ -162,19 +162,19 @@ def test_hardware_target_fails_the_boot():
         _load(cfg)
 
 
-async def test_booted_chronos_runs_on_the_substrate(reference_culture):
+async def test_booted_sequence_runs_on_the_substrate(reference_culture):
     cfg = _config()
     p = _load(cfg)
     bus = _bus()
     try:
         reg = build_registry(bus, cfg, plugins=p)
-        chronos = reg.get("chronos")
-        assert isinstance(chronos._network, WetwareTimingModel)
-        assert chronos._network.units == 12
+        sequence = reg.get("chronos")
+        assert isinstance(sequence._network, WetwareTimingModel)
+        assert sequence._network.units == 12
 
-        await chronos.initialize()
+        await sequence.initialize()
         for t in range(4):
-            await chronos.on_workspace(
+            await sequence.on_workspace(
                 WorkspaceSnapshot(tick_index=t, selected_events=[], inhibited=False)
             )
 
@@ -184,7 +184,7 @@ async def test_booted_chronos_runs_on_the_substrate(reference_culture):
             assert ev.type == "chronos.report"
             assert math.isfinite(float(ev.payload["temporal_prediction_error"]))
 
-        await chronos.shutdown()
+        await sequence.shutdown()
     finally:
         await bus.close()
         _close_cl1(p)
@@ -192,18 +192,18 @@ async def test_booted_chronos_runs_on_the_substrate(reference_culture):
 
 async def test_forward_prediction_uses_the_substrate_width(reference_culture):
     pytest.importorskip("torch", reason="the forward-prediction head needs torch")
-    cfg = _config(chronos={"forward_prediction": True})
+    cfg = _config(sequence={"forward_prediction": True})
     p = _load(cfg)
     bus = _bus()
     try:
         reg = build_registry(bus, cfg, plugins=p)
-        chronos = reg.get("chronos")
-        assert isinstance(chronos._network, WetwareTimingModel)
-        assert chronos._network.units == 12
+        sequence = reg.get("chronos")
+        assert isinstance(sequence._network, WetwareTimingModel)
+        assert sequence._network.units == 12
 
-        await chronos.initialize()
+        await sequence.initialize()
         for t in range(3):
-            await chronos.on_workspace(
+            await sequence.on_workspace(
                 WorkspaceSnapshot(tick_index=t, selected_events=[], inhibited=False)
             )
 
@@ -213,74 +213,74 @@ async def test_forward_prediction_uses_the_substrate_width(reference_culture):
             assert ev.type == "chronos.report"
             assert math.isfinite(float(ev.payload["temporal_prediction_error"]))
 
-        await chronos.shutdown()
+        await sequence.shutdown()
     finally:
         await bus.close()
         _close_cl1(p)
 
 
-async def test_booted_soma_runs_on_the_substrate(reference_culture):
-    cfg = _soma_config()
+async def test_booted_interoception_runs_on_the_substrate(reference_culture):
+    cfg = _interoception_config()
     p = _load(cfg)
     bus = _bus()
     try:
         reg = build_registry(bus, cfg, plugins=p)
-        soma = reg.get("soma")
-        assert type(soma._forward_model).__name__ == "WetwareInteroceptiveModel"
-        assert soma._forward_model.units == 12
-        soma._reader = _FakeMetricsReader()
-        await soma.tick_once()
-        await soma.tick_once()
-        await soma.tick_once()
+        interoception = reg.get("soma")
+        assert type(interoception._forward_model).__name__ == "WetwareInteroceptiveModel"
+        assert interoception._forward_model.units == 12
+        interoception._reader = _FakeMetricsReader()
+        await interoception.tick_once()
+        await interoception.tick_once()
+        await interoception.tick_once()
         entries = await bus.read("soma.out", last_id="0")
         assert len(entries) >= 3
-        assert soma._forward_model.adaptation_steps >= 1
+        assert interoception._forward_model.adaptation_steps >= 1
     finally:
         await bus.close()
         _close_cl1(p)
 
 
-async def test_chronos_and_soma_share_the_substrate(reference_culture):
-    cfg = _soma_config(with_chronos=True)
+async def test_sequence_and_interoception_share_the_substrate(reference_culture):
+    cfg = _interoception_config(with_sequence=True)
     p = _load(cfg)
     assert p.manifest_entry()["cl1"]["seams"] == ["chronos.network", "soma.forward_model"]
     bus = _bus()
     try:
         reg = build_registry(bus, cfg, plugins=p)
-        soma = reg.get("soma")
-        chronos = reg.get("chronos")
-        soma._reader = _FakeMetricsReader()
-        await chronos.initialize()
+        interoception = reg.get("soma")
+        sequence = reg.get("chronos")
+        interoception._reader = _FakeMetricsReader()
+        await sequence.initialize()
         for t in range(3):
-            await chronos.on_workspace(
+            await sequence.on_workspace(
                 WorkspaceSnapshot(tick_index=t, selected_events=[], inhibited=False)
             )
-            await soma.tick_once()
-        chronos_entries = await bus.read("chronos.out", last_id="0")
-        soma_entries = await bus.read("soma.out", last_id="0")
-        assert len(chronos_entries) == 3
-        assert len(soma_entries) >= 3
-        assert set(chronos._network._channels).isdisjoint(soma._forward_model._channels)
-        await chronos.shutdown()
+            await interoception.tick_once()
+        sequence_entries = await bus.read("chronos.out", last_id="0")
+        interoception_entries = await bus.read("soma.out", last_id="0")
+        assert len(sequence_entries) == 3
+        assert len(interoception_entries) >= 3
+        assert set(sequence._network._channels).isdisjoint(interoception._forward_model._channels)
+        await sequence.shutdown()
     finally:
         await bus.close()
         _close_cl1(p)
 
 
-async def test_soma_event_schema_matches_silicon(reference_culture):
+async def test_interoception_event_schema_matches_silicon(reference_culture):
     pytest.importorskip("torch", reason="the silicon Soma forward model needs torch")
 
     async def run(backend):
-        cfg = _soma_config(soma_backend=backend)
+        cfg = _interoception_config(interoception_backend=backend)
         p = _load(cfg)
         bus = _bus()
         try:
             reg = build_registry(bus, cfg, plugins=p)
-            soma = reg.get("soma")
-            soma._reader = _FakeMetricsReader()
-            await soma.tick_once()
-            await soma.tick_once()
-            await soma.tick_once()
+            interoception = reg.get("soma")
+            interoception._reader = _FakeMetricsReader()
+            await interoception.tick_once()
+            await interoception.tick_once()
+            await interoception.tick_once()
             entries = await bus.read("soma.out", last_id="0")
             return [ev for _id, ev in entries]
         finally:

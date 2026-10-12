@@ -20,6 +20,6 @@ The revised paper (predictive-workspace-paper #21, decisions D2 and R4) settles 
 
 ## Impact
 
-- **Code:** `kaine/modules/topos/module.py`, `kaine/modules/audition/module.py`, `kaine/modules/chronos/module.py`, `kaine/modules/soma/module.py`, `kaine/cycle/access_rate.py`.
+- **Code:** `kaine/modules/vision/module.py`, `kaine/modules/audition/module.py`, `kaine/modules/sequence/module.py`, `kaine/modules/interoception/module.py`, `kaine/cycle/access_rate.py`.
 - **Behaviour:** within a tick, candidates rank by graded surprise within each module's range; the access rate rests unless an alert arrives.
 - **Docs:** `docs/08-cognitive-cycle/` and the module pages that describe intensity.

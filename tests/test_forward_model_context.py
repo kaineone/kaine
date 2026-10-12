@@ -15,8 +15,8 @@ from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.audition.forward import AuditoryForwardModel
-from kaine.modules.topos import Topos
-from kaine.modules.topos.forward import LatentForwardModel
+from kaine.modules.vision import Vision
+from kaine.modules.vision.forward import LatentForwardModel
 
 
 @pytest.fixture
@@ -104,9 +104,9 @@ def _last_payload(entries):
 
 
 @pytest.mark.asyncio
-async def test_topos_reports_context_gain(bus):
-    topos = Topos(bus, encoder=FakeSmall(), forward_prediction=True)
-    topos._forward_model = LatentForwardModel(
+async def test_vision_reports_context_gain(bus):
+    vision = Vision(bus, encoder=FakeSmall(), forward_prediction=True)
+    vision._forward_model = LatentForwardModel(
         latent_dim=4, units=8, context_dim=24, seed=4
     )
 
@@ -128,10 +128,10 @@ async def test_topos_reports_context_gain(bus):
         salience_scores={"1-0": 0.5},
         metadata={"access_threshold": 0.35},
     )
-    await topos.on_workspace(snapshot)
+    await vision.on_workspace(snapshot)
 
     for _ in range(3):
-        await topos.process_frame(None)
+        await vision.process_frame(None)
 
     entries = await bus.read("topos.out", last_id="0")
     payload = _last_payload(entries)
@@ -142,9 +142,9 @@ async def test_topos_reports_context_gain(bus):
 
 
 @pytest.mark.asyncio
-async def test_topos_gain_is_zero_when_the_context_carries_nothing(bus):
-    topos = Topos(bus, encoder=FakeSmall(), forward_prediction=True)
-    topos._forward_model = LatentForwardModel(
+async def test_vision_gain_is_zero_when_the_context_carries_nothing(bus):
+    vision = Vision(bus, encoder=FakeSmall(), forward_prediction=True)
+    vision._forward_model = LatentForwardModel(
         latent_dim=4, units=8, context_dim=24, seed=4
     )
 
@@ -167,8 +167,8 @@ async def test_topos_gain_is_zero_when_the_context_carries_nothing(bus):
             salience_scores={f"{i}-0": 0.5},
             metadata={"access_threshold": 0.35},
         )
-        await topos.on_workspace(snapshot)
-        await topos.process_frame(None)
+        await vision.on_workspace(snapshot)
+        await vision.process_frame(None)
 
     entries = await bus.read("topos.out", last_id="0")
     payload = _last_payload(entries)
@@ -178,9 +178,9 @@ async def test_topos_gain_is_zero_when_the_context_carries_nothing(bus):
 
 
 @pytest.mark.asyncio
-async def test_topos_report_carries_the_paired_evaluations(bus):
-    topos = Topos(bus, encoder=FakeSmall(), forward_prediction=True)
-    topos._forward_model = LatentForwardModel(
+async def test_vision_report_carries_the_paired_evaluations(bus):
+    vision = Vision(bus, encoder=FakeSmall(), forward_prediction=True)
+    vision._forward_model = LatentForwardModel(
         latent_dim=4, units=8, context_dim=24, seed=4
     )
 
@@ -202,8 +202,8 @@ async def test_topos_report_carries_the_paired_evaluations(bus):
         salience_scores={"1-0": 0.5},
         metadata={"access_threshold": 0.35},
     )
-    await topos.on_workspace(first)
-    await topos.process_frame(None)
+    await vision.on_workspace(first)
+    await vision.process_frame(None)
 
     second = WorkspaceSnapshot(
         tick_index=2,
@@ -223,11 +223,11 @@ async def test_topos_report_carries_the_paired_evaluations(bus):
         salience_scores={"2-0": 0.75},
         metadata={"access_threshold": 0.35},
     )
-    await topos.on_workspace(second)
-    await topos.process_frame(None)
+    await vision.on_workspace(second)
+    await vision.process_frame(None)
 
     for _ in range(2):
-        await topos.process_frame(None)
+        await vision.process_frame(None)
 
     entries = await bus.read("topos.out", last_id="0")
     payload = _last_payload(entries)
@@ -263,7 +263,7 @@ class _ScriptedEncoder(FakeSmall):
 
 
 @pytest.mark.asyncio
-async def test_topos_skips_a_non_finite_latent(bus):
+async def test_vision_skips_a_non_finite_latent(bus):
     torch = pytest.importorskip("torch")
     nan = float("nan")
     embeddings = [
@@ -275,10 +275,10 @@ async def test_topos_skips_a_non_finite_latent(bus):
         [0.1, 0.4, 0.3, 0.2],
     ]
 
-    topos = Topos(
+    vision = Vision(
         bus, encoder=_ScriptedEncoder(embeddings), forward_prediction=True
     )
-    topos._forward_model = LatentForwardModel(
+    vision._forward_model = LatentForwardModel(
         latent_dim=4, units=8, context_dim=24, seed=4
     )
 
@@ -300,29 +300,29 @@ async def test_topos_skips_a_non_finite_latent(bus):
         salience_scores={"1-0": 0.5},
         metadata={"access_threshold": 0.35},
     )
-    await topos.on_workspace(snapshot)
+    await vision.on_workspace(snapshot)
 
     for _ in range(3):
-        await topos.process_frame(None)
+        await vision.process_frame(None)
 
-    model = topos._forward_model
+    model = vision._forward_model
     buffer_before = [list(v) for v in model._buffer]
     weights_before = [p.detach().clone() for p in model._net.parameters()]
-    errors_before = list(topos._pred_errors)
-    changes_before = list(topos._change_history)
-    frames_before = [list(f) for f in topos._habituator._frames]
+    errors_before = list(vision._pred_errors)
+    changes_before = list(vision._change_history)
+    frames_before = [list(f) for f in vision._habituator._frames]
 
-    await topos.process_frame(None)
+    await vision.process_frame(None)
 
     assert [list(v) for v in model._buffer] == buffer_before
-    assert [list(f) for f in topos._habituator._frames] == frames_before
+    assert [list(f) for f in vision._habituator._frames] == frames_before
     for saved, current in zip(weights_before, model._net.parameters()):
         assert torch.equal(saved, current)
-    assert list(topos._pred_errors) == errors_before
-    assert list(topos._change_history) == changes_before
+    assert list(vision._pred_errors) == errors_before
+    assert list(vision._change_history) == changes_before
 
     for _ in range(2):
-        await topos.process_frame(None)
+        await vision.process_frame(None)
 
     entries = await bus.read("topos.out", last_id="0", count=50)
     events = [e for _, e in entries if e.type == "topos.report"]
@@ -335,14 +335,14 @@ async def test_topos_skips_a_non_finite_latent(bus):
     assert events[3].payload["normalised_error"] == 0.0
     assert events[3].payload["change_score"] == 0.0
     assert events[3].payload["alert"] is False
-    assert events[3].salience == pytest.approx(topos._baseline_salience)
+    assert events[3].salience == pytest.approx(vision._baseline_salience)
     assert events[4].payload["context_gain"] is None
     assert events[4].payload["prediction_error"] is None  # undefined on first finite step after skip
     assert events[4].payload["normalised_error"] == 0.0
     assert isinstance(events[5].payload["context_gain"], float)
     assert events[3].payload["latent"] is None
     assert events[3].payload["habituation_score"] == events[2].payload["habituation_score"]
-    window = list(topos._pred_errors)
+    window = list(vision._pred_errors)
     assert window == errors_before + [events[5].payload["prediction_error"]]
     assert events[5].payload["normalised_error"] == pytest.approx(
         events[5].payload["prediction_error"] / (sum(window) / len(window))
@@ -352,7 +352,7 @@ async def test_topos_skips_a_non_finite_latent(bus):
 
 
 @pytest.mark.asyncio
-async def test_topos_periodic_gaps_keep_zeros_out_of_the_window(bus):
+async def test_vision_periodic_gaps_keep_zeros_out_of_the_window(bus):
     pytest.importorskip("torch")
     nan = float("nan")
     # 15 frames: 3 initial finite frames plus 4 cycles of NaN/finite/finite.
@@ -373,10 +373,10 @@ async def test_topos_periodic_gaps_keep_zeros_out_of_the_window(bus):
         )
         k += 1
 
-    topos = Topos(
+    vision = Vision(
         bus, encoder=_ScriptedEncoder(embeddings), forward_prediction=True
     )
-    topos._forward_model = LatentForwardModel(
+    vision._forward_model = LatentForwardModel(
         latent_dim=4, units=8, context_dim=24, seed=4
     )
 
@@ -398,12 +398,12 @@ async def test_topos_periodic_gaps_keep_zeros_out_of_the_window(bus):
         salience_scores={"1-0": 0.5},
         metadata={"access_threshold": 0.35},
     )
-    await topos.on_workspace(snapshot)
+    await vision.on_workspace(snapshot)
 
     for _ in range(15):
-        await topos.process_frame(None)
+        await vision.process_frame(None)
 
-    window = list(topos._pred_errors)
+    window = list(vision._pred_errors)
     assert len(window) == 7  # 3 initial readings + the second finite of each gap
     assert window[0] == 0.0
     assert all(e > 0.0 for e in window[1:])

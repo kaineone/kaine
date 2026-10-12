@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Optional
 if TYPE_CHECKING:
     pass
 from kaine.boot.common import _check_injections
+from kaine.boot.config_kwargs import config_kwargs
 from kaine.boot.errors import ConfigurationError, _require_keys
 from kaine.boot.perception_feed import _build_perception_feed_audio_factory
 from kaine.bus.client import AsyncBus
@@ -115,7 +116,7 @@ def make_audition(
         "baseline_salience",
         "alert_salience",
     }
-    kwargs: dict[str, Any] = {k: section[k] for k in base_keys if k in section}
+    kwargs = config_kwargs(section, base_keys, Audition)
     kwargs["positive_control"] = PositiveControlSettings.from_config(pc_section)
     if entity_clock is not None:
         kwargs["entity_clock"] = entity_clock
@@ -166,9 +167,14 @@ def make_audition(
             desired_state_poll_ms=int(section.get("desired_state_poll_ms", 250)),
         )
     # Forward model + prosody knobs.
-    for k in ("forward_model_units", "prediction_error_window", "auditory_buffer_size"):
-        if k in section:
-            kwargs[k] = int(section[k])
+    kwargs.update(
+        config_kwargs(
+            section,
+            ("forward_model_units", "prediction_error_window", "auditory_buffer_size"),
+            Audition,
+            convert=int,
+        )
+    )
     if "prosody_enabled" in section:
         kwargs["prosody_enabled"] = bool(section["prosody_enabled"])
     if "tone_rule" in section:

@@ -54,7 +54,7 @@ def _fatigue_after_two_ticks(scale: float, real_dt: float) -> float:
     ``dt = clock.now() delta = real_dt * scale``. With ``decay_per_s = 0`` the
     accumulated fatigue is exactly ``e * real_dt * scale`` — linear in scale.
     """
-    from kaine.modules.soma.fatigue import FatigueAccumulator
+    from kaine.modules.interoception.fatigue import FatigueAccumulator
 
     clk = ManualClock()
     clock = EntityClock(scale=scale, monotonic=clk)
@@ -83,7 +83,7 @@ def test_fatigue_integral_scales_with_time_scale():
 
 
 @pytest.mark.asyncio
-async def test_soma_fatigue_through_module_scales(monkeypatch):
+async def test_interoception_fatigue_through_module_scales(monkeypatch):
     """End-to-end through the interoception module: the SAME real elapsed time accrues
     more fatigue at a higher time_scale because the dt-integral reads the
     injected subjective clock."""
@@ -92,7 +92,7 @@ async def test_soma_fatigue_through_module_scales(monkeypatch):
 
     from kaine.bus.client import AsyncBus
     from kaine.bus.config import BusConfig
-    from kaine.modules.soma.module import Soma
+    from kaine.modules.interoception.module import Interoception
 
     class _Reader:
         async def initialize(self) -> None: ...
@@ -117,17 +117,17 @@ async def test_soma_fatigue_through_module_scales(monkeypatch):
             client=FakeRedis(decode_responses=True),
         )
         clock = EntityClock(scale=scale, monotonic=clk)
-        soma = Soma(
+        interoception = Interoception(
             bus,
             reader=_Reader(),
             fatigue_decay_per_s=0.0,
             fatigue_maintenance_threshold=1e9,
             entity_clock=clock,
         )
-        await soma.tick_once()  # seeds the fatigue _last_time
+        await interoception.tick_once()  # seeds the fatigue _last_time
         clk.advance(20.0)
-        await soma.tick_once()  # integrates e * (20 * scale)
-        value = soma._fatigue.value
+        await interoception.tick_once()  # integrates e * (20 * scale)
+        value = interoception._fatigue.value
         await bus.close()
         return value
 
@@ -144,11 +144,11 @@ async def test_soma_fatigue_through_module_scales(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_topos_capture_cadence_real_sleep_scales():
+async def test_vision_capture_cadence_real_sleep_scales():
     """The capture interval is a subjective cadence: at scale 2.0 the camera
     waits half as long in REAL seconds (samples twice as fast); at 0.5, twice
     as long. The desired-state poll (infra) is unaffected — covered below."""
-    from kaine.modules.topos.live import LiveCamera, LiveCameraConfig
+    from kaine.modules.vision.live import LiveCamera, LiveCameraConfig
 
     captured: list[float] = []
 

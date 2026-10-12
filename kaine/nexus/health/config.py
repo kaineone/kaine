@@ -315,12 +315,12 @@ def load_health_prober(
     research_submission_cfg = dict(cfg.get("research_submission") or {})
 
     # Unified deterministic perception-feed surface (unified-perception-feed).
-    topos_cfg = cfg.get("topos") or {}
+    vision_cfg = cfg.get("topos") or {}
     audition_cfg = cfg.get("audition") or {}
     perception_feed_cfg = dict(cfg.get("perception_feed") or {})
-    topos_capture_geometry = (
-        int(topos_cfg.get("capture_width", 640)),
-        int(topos_cfg.get("capture_height", 480)),
+    vision_capture_geometry = (
+        int(vision_cfg.get("capture_width", 640)),
+        int(vision_cfg.get("capture_height", 480)),
     )
     audition_capture_geometry = (
         int(audition_cfg.get("capture_sample_rate", 16000)),
@@ -367,7 +367,7 @@ def load_health_prober(
         dependencies=specs,
         research_submission_cfg=research_submission_cfg,
         perception_feed_cfg=perception_feed_cfg,
-        topos_capture_geometry=topos_capture_geometry,
+        vision_capture_geometry=vision_capture_geometry,
         audition_capture_geometry=audition_capture_geometry,
         model_server_cfg=model_server_cfg,
         consolidation_thresholds=consolidation_thresholds,

@@ -314,13 +314,13 @@ class RemoteBridge:
         config: RemoteBridgeConfig,
         *,
         bus: AsyncBus,
-        topos: Any = None,
+        vision: Any = None,
         audition: Any = None,
         vox: Any = None,
     ) -> None:
         self._cfg = config
         self._bus = bus
-        self._topos = topos
+        self._vision = vision
         self._audition = audition
         self._vox = vox
         self._server: Any = None
@@ -394,7 +394,7 @@ class RemoteBridge:
             self._cfg.port,
             "set" if self._cfg.token else "NOT set — tailnet ACL is the only boundary",
             list(self._cfg.allowed_origins),
-            "topos" if self._topos is not None else "absent",
+            "topos" if self._vision is not None else "absent",
             "audition" if self._audition is not None else "absent",
             self._vox is not None,
         )
@@ -489,7 +489,7 @@ class RemoteBridge:
     # -- video ----------------------------------------------------------
 
     async def _serve_video(self, connection: Any) -> None:
-        if self._topos is None:
+        if self._vision is None:
             await connection.close(code=4503, reason="topos not enabled")
             return
         self._claims.acquire("video")
@@ -536,7 +536,7 @@ class RemoteBridge:
                 )
                 return
             image.load()
-            await self._topos.process_frame(image)
+            await self._vision.process_frame(image)
             self.frames_in += 1
         except Exception:
             log.warning("remote frame decode/process failed", exc_info=True)
@@ -840,10 +840,10 @@ def build_remote_bridge(
         except Exception:
             return None
 
-    topos = _get("topos")
+    vision = _get("topos")
     audition = _get("audition")
     vox = _get("vox")
-    if topos is None and audition is None and vox is None:
+    if vision is None and audition is None and vox is None:
         log.warning("remote bridge enabled but none of topos/audition/vox are — not starting")
         return None
-    return RemoteBridge(cfg, bus=bus, topos=topos, audition=audition, vox=vox)
+    return RemoteBridge(cfg, bus=bus, vision=vision, audition=audition, vox=vox)

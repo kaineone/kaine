@@ -54,7 +54,7 @@ def _stub_perception_state(monkeypatch, locus, written):
 def test_suspend_pauses_clock_and_restores_pre_sleep_virtual_locus(
     tmp_path, monkeypatch
 ):
-    from kaine.modules.topos.feed import PlaylistClock
+    from kaine.modules.vision.feed import PlaylistClock
 
     written = []
     _stub_perception_state(monkeypatch, "virtual", written)
@@ -117,7 +117,7 @@ def test_missing_clock_is_an_honest_noop(tmp_path, monkeypatch):
 def test_replay_crash_still_restores_clock_and_locus(tmp_path, monkeypatch):
     """The pipeline invokes restore from a finally; a mid-window replay crash
     must leave BOTH the clock resumed and the locus restored."""
-    from kaine.modules.topos.feed import PlaylistClock
+    from kaine.modules.vision.feed import PlaylistClock
 
     written = []
     _stub_perception_state(monkeypatch, "virtual", written)
@@ -161,7 +161,7 @@ def test_desired_state_file_contains_flags_only(tmp_path):
 
 @pytest.mark.asyncio
 async def test_enter_sleep_pauses_feed_for_whole_sleep_without_mnemos(tmp_path, monkeypatch):
-    from kaine.modules.topos.feed import PlaylistClock
+    from kaine.modules.vision.feed import PlaylistClock
     written = []
     h = _bare_hypnos(tmp_path / "desired.json", clock=PlaylistClock(1, clock=_FakeClock()))
     h._sleep_lock = asyncio.Lock()
@@ -183,7 +183,7 @@ async def test_enter_sleep_pauses_feed_for_whole_sleep_without_mnemos(tmp_path, 
 
 @pytest.mark.asyncio
 async def test_enter_sleep_restores_feed_when_pipeline_raises(tmp_path, monkeypatch):
-    from kaine.modules.topos.feed import PlaylistClock
+    from kaine.modules.vision.feed import PlaylistClock
     written = []
     h = _bare_hypnos(tmp_path / "desired.json", clock=PlaylistClock(1, clock=_FakeClock()))
     h._sleep_lock = asyncio.Lock()
@@ -204,7 +204,7 @@ async def test_enter_sleep_restores_feed_when_pipeline_raises(tmp_path, monkeypa
 
 @pytest.mark.asyncio
 async def test_enter_sleep_restores_feed_when_cancelled(tmp_path, monkeypatch):
-    from kaine.modules.topos.feed import PlaylistClock
+    from kaine.modules.vision.feed import PlaylistClock
     written = []
     h = _bare_hypnos(tmp_path / "desired.json", clock=PlaylistClock(1, clock=_FakeClock()))
     h._sleep_lock = asyncio.Lock()

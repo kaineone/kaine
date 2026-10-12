@@ -744,7 +744,7 @@ async def test_acoustic_report_carries_the_paired_evaluations(bus: AsyncBus) -> 
     audition = _general_audition(bus)
     await audition.initialize()
     try:
-        soma_entry = (
+        interoception_entry = (
             "1-0",
             Event(
                 source="soma",
@@ -757,9 +757,9 @@ async def test_acoustic_report_carries_the_paired_evaluations(bus: AsyncBus) -> 
         await audition.on_workspace(
             WorkspaceSnapshot(
                 tick_index=1,
-                selected_events=[soma_entry],
+                selected_events=[interoception_entry],
                 inhibited=False,
-                salience_scores={soma_entry[0]: 0.5},
+                salience_scores={interoception_entry[0]: 0.5},
                 metadata={"access_threshold": 0.35},
             )
         )
@@ -822,7 +822,7 @@ async def test_acoustic_path_skips_a_non_finite_embedding(bus, monkeypatch) -> N
     audition = _general_audition(bus)
     await audition.initialize()
     try:
-        soma_entry = (
+        interoception_entry = (
             "1-0",
             Event(
                 source="soma",
@@ -835,9 +835,9 @@ async def test_acoustic_path_skips_a_non_finite_embedding(bus, monkeypatch) -> N
         await audition.on_workspace(
             WorkspaceSnapshot(
                 tick_index=1,
-                selected_events=[soma_entry],
+                selected_events=[interoception_entry],
                 inhibited=False,
-                salience_scores={soma_entry[0]: 0.5},
+                salience_scores={interoception_entry[0]: 0.5},
                 metadata={"access_threshold": 0.35},
             )
         )

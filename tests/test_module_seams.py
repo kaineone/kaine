@@ -17,20 +17,20 @@ from kaine.boot import (
     ConfigurationError,
     build_registry,
     construct_module,
-    make_chronos,
+    make_interoception,
     make_nous,
-    make_soma,
+    make_sequence,
 )
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
-from kaine.modules.chronos.featurizer import SnapshotFeaturizer
-from kaine.modules.chronos.module import Chronos
+from kaine.modules.interoception.forward import SubstrateForwardModel
+from kaine.modules.interoception.module import Interoception
 from kaine.modules.nous import FakeEngine, Nous
 from kaine.modules.registry import ModuleRegistry
-from kaine.modules.soma.forward import SubstrateForwardModel
-from kaine.modules.soma.module import Soma
+from kaine.modules.sequence.featurizer import SnapshotFeaturizer
+from kaine.modules.sequence.module import Sequence
 
 
 def _bus() -> AsyncBus:
@@ -82,57 +82,57 @@ class _FakeModule:
 
 
 @pytest.mark.asyncio
-async def test_chronos_injected_network_sizes_forward_prediction_head(bus: AsyncBus) -> None:
-    network_mod = pytest.importorskip("kaine.modules.chronos.network")
+async def test_sequence_injected_network_sizes_forward_prediction_head(bus: AsyncBus) -> None:
+    network_mod = pytest.importorskip("kaine.modules.sequence.network")
     CfCNetwork = network_mod.CfCNetwork
 
     featurizer = SnapshotFeaturizer()
     net = CfCNetwork(input_size=featurizer.feature_dim, units=12)
-    chronos = Chronos(
+    sequence = Sequence(
         bus,
         featurizer=featurizer,
         network=net,
         forward_prediction=True,
         prediction_error_window=4,
     )
-    await chronos.initialize()
+    await sequence.initialize()
     try:
-        assert chronos._pred_head is not None
-        assert _head_units(chronos._pred_head) == 12
+        assert sequence._pred_head is not None
+        assert _head_units(sequence._pred_head) == 12
 
         # Drive the real tick path twice so a prediction is compared.
-        await chronos.on_workspace(_empty_snapshot(0))
-        await chronos.on_workspace(_empty_snapshot(1))
+        await sequence.on_workspace(_empty_snapshot(0))
+        await sequence.on_workspace(_empty_snapshot(1))
     finally:
-        await chronos.shutdown()
+        await sequence.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_chronos_default_network_head_width_equals_cfc_units(bus: AsyncBus) -> None:
-    pytest.importorskip("kaine.modules.chronos.network")
-    chronos = Chronos(
+async def test_sequence_default_network_head_width_equals_cfc_units(bus: AsyncBus) -> None:
+    pytest.importorskip("kaine.modules.sequence.network")
+    sequence = Sequence(
         bus,
         forward_prediction=True,
         cfc_units=47,
         prediction_error_window=4,
     )
-    await chronos.initialize()
+    await sequence.initialize()
     try:
-        assert chronos._pred_head is not None
-        assert _head_units(chronos._pred_head) == 47
+        assert sequence._pred_head is not None
+        assert _head_units(sequence._pred_head) == 47
     finally:
-        await chronos.shutdown()
+        await sequence.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_chronos_injected_network_without_units_rejects_forward_prediction(
+async def test_sequence_injected_network_without_units_rejects_forward_prediction(
     bus: AsyncBus,
 ) -> None:
     # The sequence module's spec requires a construction error, so a bad plugin network
     # stops boot before any module starts.
     featurizer = SnapshotFeaturizer()
     with pytest.raises(ValueError, match="units"):
-        Chronos(
+        Sequence(
             bus,
             featurizer=featurizer,
             network=object(),  # injected, but no `units` attribute
@@ -146,11 +146,11 @@ async def test_chronos_injected_network_without_units_rejects_forward_prediction
 # ---------------------------------------------------------------------------
 
 
-def test_make_soma_default_builds_substrate_forward_model() -> None:
+def test_make_interoception_default_builds_substrate_forward_model() -> None:
     bus = _bus()
     try:
-        soma = make_soma(bus, {})
-        assert isinstance(soma._forward_model, SubstrateForwardModel)
+        interoception = make_interoception(bus, {})
+        assert isinstance(interoception._forward_model, SubstrateForwardModel)
     finally:
         asyncio.run(bus.close())
 
@@ -195,23 +195,23 @@ class _FakeForwardModel:
 
 
 @pytest.mark.asyncio
-async def test_soma_injected_forward_model_tick_never_builds_substrate(
+async def test_interoception_injected_forward_model_tick_never_builds_substrate(
     bus: AsyncBus, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "kaine.modules.soma.module.SubstrateForwardModel",
+        "kaine.modules.interoception.module.SubstrateForwardModel",
         _FailingCallable("SubstrateForwardModel"),
     )
 
     fake_reader = _FakeMetricsReader()
     fake_forward = _FakeForwardModel()
-    soma = Soma(
+    interoception = Interoception(
         bus,
         reader=fake_reader,
         forward_model=fake_forward,
         entity_clock=EntityClock(),
     )
-    await soma.tick_once()
+    await interoception.tick_once()
     assert fake_forward.step_called == 1
     assert fake_forward.last_suspended is False
 
@@ -285,7 +285,7 @@ def test_make_nous_rejects_unknown_injection() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_make_chronos_rejects_unknown_injection() -> None:
+def test_make_sequence_rejects_unknown_injection() -> None:
     bus = _bus()
     try:
         section = {
@@ -296,7 +296,7 @@ def test_make_chronos_rejects_unknown_injection() -> None:
             "forward_prediction": False,
         }
         with pytest.raises(ConfigurationError, match="does not accept injection"):
-            make_chronos(
+            make_sequence(
                 bus,
                 section,
                 injections={"network": object(), "unknown": 1},
@@ -305,7 +305,7 @@ def test_make_chronos_rejects_unknown_injection() -> None:
         asyncio.run(bus.close())
 
 
-def test_make_soma_rejects_unknown_injection() -> None:
+def test_make_interoception_rejects_unknown_injection() -> None:
     bus = _bus()
     try:
         section = {
@@ -314,7 +314,7 @@ def test_make_soma_rejects_unknown_injection() -> None:
             "alert_salience": 0.7,
         }
         with pytest.raises(ConfigurationError, match="does not accept injection"):
-            make_soma(
+            make_interoception(
                 bus,
                 section,
                 injections={"forward_model": object(), "unknown": 1},
@@ -446,8 +446,8 @@ def test_construct_module_matches_build_registry_calls(monkeypatch: pytest.Monke
         assert reg_call["injections"] == dir_call["injections"]
 
     # the vision and audition modules receive the shared perception feed.
-    topos_call = by_name_dir["topos"]
-    assert topos_call["section"]["perception_feed"] == kaine_config["perception_feed"]
+    vision_call = by_name_dir["topos"]
+    assert vision_call["section"]["perception_feed"] == kaine_config["perception_feed"]
 
     # The effectors module receives the intent secret.
     assert by_name_dir["praxis"]["intent_secret"] is secret
@@ -537,8 +537,8 @@ def test_make_rebuild_module_passes_clock_and_secret(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
-async def test_chronos_restart_network_identity() -> None:
-    network_mod = pytest.importorskip("kaine.modules.chronos.network")
+async def test_sequence_restart_network_identity() -> None:
+    network_mod = pytest.importorskip("kaine.modules.sequence.network")
     CfCNetwork = network_mod.CfCNetwork
 
     bus = _bus()
@@ -559,7 +559,7 @@ async def test_chronos_restart_network_identity() -> None:
     for units in (11, 22, 33):
         net = CfCNetwork(input_size=feature_dim, units=units)
         injected_nets.append(net)
-        chronos = construct_module(
+        sequence = construct_module(
             "chronos",
             bus,
             kaine_config,
@@ -568,9 +568,9 @@ async def test_chronos_restart_network_identity() -> None:
             intent_secret=None,
             injections={"network": net},
         )
-        assert chronos._network is net
+        assert sequence._network is net
 
-    default_chronos = construct_module(
+    default_sequence = construct_module(
         "chronos",
         bus,
         kaine_config,
@@ -579,11 +579,11 @@ async def test_chronos_restart_network_identity() -> None:
         intent_secret=None,
         injections=None,
     )
-    await default_chronos.initialize()
+    await default_sequence.initialize()
     try:
-        assert default_chronos._network is not None
+        assert default_sequence._network is not None
         for net in injected_nets:
-            assert default_chronos._network is not net
+            assert default_sequence._network is not net
     finally:
-        await default_chronos.shutdown()
+        await default_sequence.shutdown()
         await bus.close()

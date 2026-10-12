@@ -8,4 +8,4 @@ KAINE's interoception decides from its forward model's `last_error_defined` whet
 
 ## Impact
 
-- `src/kaine_cl1/backends/soma.py`, `tests/test_soma_wetware.py`. KAINE's side of the change is `openspec/changes/missing-error-consistency/` in the main tree.
+- `src/kaine_cl1/backends/interoception.py`, `tests/test_interoception_wetware.py`. KAINE's side of the change is `openspec/changes/missing-error-consistency/` in the main tree.

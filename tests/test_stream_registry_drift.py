@@ -10,6 +10,9 @@ loudly here."""
 def test_canonical_names_match_module_packages():
     """The static name tuple must track the real module packages on disk.
 
+    Keys whose packages have already moved under a new identifier are
+    translated back to their key before comparing.
+
     Documented non-package names (no kaine/modules/<name>/ package exists,
     by design):
 
@@ -27,6 +30,7 @@ def test_canonical_names_match_module_packages():
     from pathlib import Path
 
     from kaine.evaluation.stream_registry import CANONICAL_MODULE_NAMES
+    from tests._module_packages import key_for_identifier
 
     non_package_names = {
         "cycle",  # cycle-layer component
@@ -40,7 +44,7 @@ def test_canonical_names_match_module_packages():
 
     modules_dir = Path(importlib.import_module("kaine.modules").__file__).parent
     on_disk = {
-        p.name
+        key_for_identifier(p.name)
         for p in modules_dir.iterdir()
         if p.is_dir() and not p.name.startswith("__") and not p.name.startswith(".")
     } - test_only_excluded_packages

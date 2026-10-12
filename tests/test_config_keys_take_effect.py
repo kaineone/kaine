@@ -12,12 +12,12 @@ from typing import Any
 
 import pytest
 
-from kaine.boot import _resolve_job_queue_trainer, make_hypnos, make_mundus, make_topos
+from kaine.boot import _resolve_job_queue_trainer, make_hypnos, make_mundus, make_vision
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.__main__ import _apply_log_level
 from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
-from kaine.modules.topos.internvideo_next_loader import PINNED_REVISION
+from kaine.modules.vision.internvideo_next_loader import PINNED_REVISION
 
 
 def _bus() -> AsyncBus:
@@ -90,24 +90,24 @@ def test_resolve_job_queue_trainer_falls_back_to_env_when_config_empty(
     assert trainer._organ_api_key == "env-key"
 
 
-def test_make_topos_honours_habituation_window(bus: AsyncBus) -> None:
-    topos = make_topos(bus, {"habituation_window": 8})
-    assert topos._habituator.window == 8
+def test_make_vision_honours_habituation_window(bus: AsyncBus) -> None:
+    vision = make_vision(bus, {"habituation_window": 8})
+    assert vision._habituator.window == 8
 
 
-def test_make_topos_rejects_too_small_habituation_window(bus: AsyncBus) -> None:
+def test_make_vision_rejects_too_small_habituation_window(bus: AsyncBus) -> None:
     with pytest.raises(ValueError, match="must be an integer of at least 2"):
-        make_topos(bus, {"habituation_window": 1})
+        make_vision(bus, {"habituation_window": 1})
 
 
-def test_make_topos_rejects_non_pinned_encoder_revision(bus: AsyncBus) -> None:
+def test_make_vision_rejects_non_pinned_encoder_revision(bus: AsyncBus) -> None:
     with pytest.raises(ValueError, match="does not match the pinned"):
-        make_topos(bus, {"encoder_revision": "not-the-pin"})
+        make_vision(bus, {"encoder_revision": "not-the-pin"})
 
 
-def test_make_topos_accepts_pinned_encoder_revision(bus: AsyncBus) -> None:
-    topos = make_topos(bus, {"encoder_revision": PINNED_REVISION})
-    assert topos.name == "topos"
+def test_make_vision_accepts_pinned_encoder_revision(bus: AsyncBus) -> None:
+    vision = make_vision(bus, {"encoder_revision": PINNED_REVISION})
+    assert vision.name == "topos"
 
 
 def test_apply_log_level_sets_root_logger() -> None:

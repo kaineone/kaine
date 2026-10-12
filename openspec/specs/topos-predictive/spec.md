@@ -31,7 +31,7 @@ the fused whole-workspace state; the two predictors SHALL NOT be conflated.
   from the encoder rather than a hardcoded 384
 
 #### Scenario: Mismatched checkpoint is discarded, not loaded
-- **WHEN** `Topos.deserialize` receives a forward-model checkpoint whose tensor
+- **WHEN** `Vision.deserialize` receives a forward-model checkpoint whose tensor
   shapes do not match the running encoder's `latent_dim`
 - **THEN** the checkpoint's forward-model weights are discarded with a warning and
   the model continues to learn online, without raising a shape error
@@ -94,7 +94,7 @@ representation from which the original video frames could be meaningfully
 reconstructed.
 
 #### Scenario: Serialized buffer contains only statistical summaries
-- **WHEN** `Topos.serialize()` is called
+- **WHEN** `Vision.serialize()` is called
 - **THEN** the buffer representation in the returned dict contains only numeric
   statistical summary fields (mean, variance, or equivalent) and no raw latent
   tensors

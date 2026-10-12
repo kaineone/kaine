@@ -10,7 +10,7 @@ import pytest
 
 from kaine.cycle.__main__ import _start_programme_end_watcher
 from kaine.cycle.programme_end import ProgrammeEndWatcher
-from kaine.modules.topos.feed import PlaylistClock
+from kaine.modules.vision.feed import PlaylistClock
 
 pytestmark = pytest.mark.asyncio
 

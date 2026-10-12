@@ -25,18 +25,18 @@ from kaine.boot import (
     ConfigurationError,
     build_registry,
     make_audition,
-    make_chronos,
     make_eidolon,
     make_empatheia,
     make_hypnos,
+    make_interoception,
     make_lingua,
     make_mnemos,
     make_nous,
     make_phantasia,
     make_praxis,
-    make_soma,
+    make_sequence,
     make_thymos,
-    make_topos,
+    make_vision,
     make_vox,
     rewire_module,
 )
@@ -58,9 +58,9 @@ def _bus():
     return AsyncBus(BusConfig(password="x", audit_required=False), client=client)
 
 
-def test_make_soma_from_config():
+def test_make_interoception_from_config():
     bus = _bus()
-    soma = make_soma(
+    interoception = make_interoception(
         bus,
         {
             "read_interval_s": 1.0,
@@ -69,20 +69,20 @@ def test_make_soma_from_config():
             "alert_salience": 0.7,
         },
     )
-    assert soma.name == "soma"
+    assert interoception.name == "soma"
 
 
-def test_make_soma_wires_cycle_latency_window():
+def test_make_interoception_wires_cycle_latency_window():
     # The cycle_latency_window key must size the SystemMetricsReader's
     # latency-averaging window — not be silently dropped.
     bus = _bus()
-    soma = make_soma(bus, {"cycle_latency_window": 17})
-    assert soma._reader._latency_samples.maxlen == 17
+    interoception = make_interoception(bus, {"cycle_latency_window": 17})
+    assert interoception._reader._latency_samples.maxlen == 17
 
 
-def test_make_chronos_from_config():
+def test_make_sequence_from_config():
     bus = _bus()
-    chronos = make_chronos(
+    sequence = make_sequence(
         bus,
         {
             "cfc_units": 32,
@@ -91,14 +91,14 @@ def test_make_chronos_from_config():
             "anomaly_alert_threshold": 3.0,
         },
     )
-    assert chronos.name == "chronos"
+    assert sequence.name == "chronos"
 
 
-def test_make_chronos_wires_anomaly_and_rumination_windows():
+def test_make_sequence_wires_anomaly_and_rumination_windows():
     # The anomaly/rumination window knobs must reach the default detectors
     # rather than being accepted-then-dropped.
     bus = _bus()
-    chronos = make_chronos(
+    sequence = make_sequence(
         bus,
         {
             "anomaly_window": 21,
@@ -107,15 +107,15 @@ def test_make_chronos_wires_anomaly_and_rumination_windows():
             "rumination_bucket_resolution": 0.5,
         },
     )
-    assert chronos._anomaly.window == 21
-    assert chronos._rumination.window == 13
-    assert chronos._rumination.threshold == 7
-    assert chronos._rumination._resolution == 0.5
+    assert sequence._anomaly.window == 21
+    assert sequence._rumination.window == 13
+    assert sequence._rumination.threshold == 7
+    assert sequence._rumination._resolution == 0.5
 
 
-def test_make_topos_from_config_does_not_load_transformers():
+def test_make_vision_from_config_does_not_load_transformers():
     bus = _bus()
-    topos = make_topos(
+    vision = make_vision(
         bus,
         {
             "encoder_model_id": "facebook/dinov2-small",
@@ -125,20 +125,20 @@ def test_make_topos_from_config_does_not_load_transformers():
             "alert_salience": 0.7,
         },
     )
-    assert topos.name == "topos"
+    assert vision.name == "topos"
     # Encoder is lazy — the model is not loaded at __init__.
-    assert hasattr(topos, "_encoder")
+    assert hasattr(vision, "_encoder")
     # Default (no perception_feed) leaves the live cv2 path: no source_factory.
-    assert topos._source_factory is None
+    assert vision._source_factory is None
 
 
-def test_make_topos_seeded_feed_selects_source_factory():
+def test_make_vision_seeded_feed_selects_source_factory():
     """[perception_feed].mode = "seeded" supplies a deterministic source_factory
     and forces capture on (unified-perception-feed)."""
-    from kaine.modules.topos.feed import SeededProceduralSource
+    from kaine.modules.vision.feed import SeededProceduralSource
 
     bus = _bus()
-    topos = make_topos(
+    vision = make_vision(
         bus,
         {
             "encoder_model_id": "facebook/dinov2-small",
@@ -151,8 +151,8 @@ def test_make_topos_seeded_feed_selects_source_factory():
             },
         },
     )
-    assert topos._capture_enabled is True
-    factory = topos._source_factory
+    assert vision._capture_enabled is True
+    factory = vision._source_factory
     assert factory is not None
     src = factory(0, width=64, height=48)
     assert isinstance(src, SeededProceduralSource)
@@ -162,39 +162,39 @@ def test_make_topos_seeded_feed_selects_source_factory():
     assert src.schedule.surprise_strength == 0.5
 
 
-def test_make_topos_live_mode_forces_capture_on():
+def test_make_vision_live_mode_forces_capture_on():
     """mode = "live" turns the real camera path on (replaces old 'camera')."""
     bus = _bus()
-    topos = make_topos(
+    vision = make_vision(
         bus,
         {
             "encoder_model_id": "facebook/dinov2-small",
             "perception_feed": {"mode": "live"},
         },
     )
-    assert topos._capture_enabled is True
+    assert vision._capture_enabled is True
     # Live mode uses the real cv2 path — no deterministic source injected.
-    assert topos._source_factory is None
+    assert vision._source_factory is None
 
 
-def test_make_topos_off_feed_keeps_camera_path():
+def test_make_vision_off_feed_keeps_camera_path():
     """mode = "off" leaves capture disabled and no deterministic source."""
     bus = _bus()
-    topos = make_topos(
+    vision = make_vision(
         bus,
         {
             "encoder_model_id": "facebook/dinov2-small",
             "perception_feed": {"mode": "off"},
         },
     )
-    assert topos._capture_enabled is False
-    assert topos._source_factory is None
+    assert vision._capture_enabled is False
+    assert vision._source_factory is None
 
 
-def test_make_topos_rejects_bad_feed_mode():
+def test_make_vision_rejects_bad_feed_mode():
     bus = _bus()
     with pytest.raises(ValueError):
-        make_topos(
+        make_vision(
             bus,
             {
                 "encoder_model_id": "facebook/dinov2-small",
@@ -203,17 +203,17 @@ def test_make_topos_rejects_bad_feed_mode():
         )
 
 
-def test_make_topos_foveation_off_by_default():
+def test_make_vision_foveation_off_by_default():
     """No [topos].foveation key → foveation stays off (single whole-frame encode)."""
     bus = _bus()
-    topos = make_topos(bus, {"encoder_model_id": "facebook/dinov2-small"})
-    assert topos.foveation_enabled is False
+    vision = make_vision(bus, {"encoder_model_id": "facebook/dinov2-small"})
+    assert vision.foveation_enabled is False
 
 
-def test_make_topos_foveation_threads_config():
+def test_make_vision_foveation_threads_config():
     """[topos].foveation = true plus knobs flow through to the module."""
     bus = _bus()
-    topos = make_topos(
+    vision = make_vision(
         bus,
         {
             # Foveation is a per-frame spatial path — it requires the per-frame
@@ -230,22 +230,22 @@ def test_make_topos_foveation_threads_config():
             "foveal_size": 196,
         },
     )
-    assert topos.foveation_enabled is True
-    assert topos._saliency.grid == (8, 10)
-    assert topos._foveation_hysteresis == 0.25
-    assert topos._foveation_size_range == (0.1, 0.6)
-    assert topos._peripheral_size == (256, 144)
-    assert topos._foveal_size == (196, 196)
+    assert vision.foveation_enabled is True
+    assert vision._saliency.grid == (8, 10)
+    assert vision._foveation_hysteresis == 0.25
+    assert vision._foveation_size_range == (0.1, 0.6)
+    assert vision._peripheral_size == (256, 144)
+    assert vision._foveal_size == (196, 196)
 
 
-def test_make_topos_screen_native_grab_detects_and_passes_through(monkeypatch):
+def test_make_vision_screen_native_grab_detects_and_passes_through(monkeypatch):
     """[perception_feed.screen].native builds a native-passthrough source at the
     detected resolution; the ffmpeg command carries no scale filter."""
-    import kaine.modules.topos.screen as screen_mod
+    import kaine.modules.vision.screen as screen_mod
 
     monkeypatch.setattr(screen_mod, "detect_screen_size", lambda target: (2560, 1440))
     bus = _bus()
-    topos = make_topos(
+    vision = make_vision(
         bus,
         {
             "encoder_model_id": "facebook/dinov2-small",
@@ -257,7 +257,7 @@ def test_make_topos_screen_native_grab_detects_and_passes_through(monkeypatch):
             },
         },
     )
-    src = topos._source_factory(0, width=640, height=480)
+    src = vision._source_factory(0, width=640, height=480)
     assert src._native is True
     assert (src._width, src._height) == (2560, 1440)  # detected, not configured
     assert not any(a.startswith("scale=") for a in src.command())
@@ -755,7 +755,7 @@ def test_build_registry_constructs_hypnos_last():
 def test_factory_rejects_unknown_config_key():
     bus = _bus()
     with pytest.raises(ValueError, match="unknown config keys"):
-        make_soma(bus, {"baseline_salience": 0.1, "bogus_key": True})
+        make_interoception(bus, {"baseline_salience": 0.1, "bogus_key": True})
 
 
 def test_simple_factories_covers_expected_modules():
@@ -1033,24 +1033,24 @@ def test_rewire_module_leaves_oscillators_untouched():
 
     bus = _bus()
     section = {"read_interval_s": 1.0, "cycle_latency_target_ms": 300.0}
-    soma = make_soma(bus, dict(section))
+    interoception = make_interoception(bus, dict(section))
     registry = ModuleRegistry()
-    registry.register(soma)
+    registry.register(interoception)
     kaine_config = {
         "oscillator": {"enabled": True, "population_size": 16, "plv_window": 10}
     }
 
     existing = object()
-    soma.attach_oscillator(existing)
+    interoception.attach_oscillator(existing)
     rewire_module(registry, "soma", kaine_config)
-    assert soma.oscillator is existing
+    assert interoception.oscillator is existing
 
     # A freshly rebuilt instance swapped in without the supervisor's hand-over is not
     # given an oscillator by rewire_module.
-    new_soma = make_soma(bus, dict(section))
-    registry.replace("soma", new_soma)
+    new_interoception = make_interoception(bus, dict(section))
+    registry.replace("soma", new_interoception)
     rewire_module(registry, "soma", kaine_config)
-    assert new_soma.oscillator is None
+    assert new_interoception.oscillator is None
 
 
 # ---------------------------------------------------------------------------

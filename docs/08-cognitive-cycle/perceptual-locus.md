@@ -167,8 +167,8 @@ The `virtual` locus is gated by `[perception_feed].mode`. The valid modes are `o
 
 Feeds that boot binds to the virtual locus:
 
-- `seeded`: `SeededProceduralSource` in `kaine/modules/topos/feed.py`. Its `frame_at(frame_index)` is a pure function of `(seed, frame_index)`, so it has no time cutoff. It needs no external media, but it is procedural noise rather than naturalistic content.
-- `playlist`: `PlaylistSource` in `kaine/modules/topos/feed.py`. This is the intended replacement for `seeded`: an operator-curated, openly licensed media corpus pinned by one checksummed manifest. A digest mismatch fails the run closed.
+- `seeded`: `SeededProceduralSource` in `kaine/modules/vision/feed.py`. Its `frame_at(frame_index)` is a pure function of `(seed, frame_index)`, so it has no time cutoff. It needs no external media, but it is procedural noise rather than naturalistic content.
+- `playlist`: `PlaylistSource` in `kaine/modules/vision/feed.py`. This is the intended replacement for `seeded`: an operator-curated, openly licensed media corpus pinned by one checksummed manifest. A digest mismatch fails the run closed.
 - `womb`: the developmental stimulus, a dim, low-contrast visual field and a filtered soundscape pulsed by a simulated maternal heartbeat, used during the developmental phase.
 
 The offline experiment battery does not depend on these feeds. The planned live runs use the `playlist` feed with a reference film program pinned by its manifest.
@@ -208,7 +208,7 @@ For `[perception_feed]` settings, see [Perception feed and sleep configuration](
 | `kaine/perception_state.py` | `PerceptionState`, `DesiredState`, locus coercion, `effective_audio_capture`, `effective_video_capture`, `effective_virtual_*_capture`, `evaluate_locus_switch`, `select_virtual_feed` |
 | `kaine/modules/perception/module.py` | `PerceptionLocus`: entity self-switch gating and intent consumer |
 | `kaine/modules/audition/` | `LiveMicrophone`: polls desired state through `effective_audio_capture`, or `effective_virtual_audio_capture` for a configured feed |
-| `kaine/modules/topos/` | `LiveCamera`: polls desired state through `effective_video_capture`, or `effective_virtual_video_capture` for a configured feed |
+| `kaine/modules/vision/` | `LiveCamera`: polls desired state through `effective_video_capture`, or `effective_virtual_video_capture` for a configured feed |
 | `kaine/nexus/perception.py` | Operator perception endpoints |
 | `state/perception/desired.json` | Commanded locus, sensor flags, and lock |
 | `state/perception/runtime.json` | Live capture status |

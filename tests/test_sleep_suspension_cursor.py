@@ -12,9 +12,9 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.modules.audition import Audition, FakeEmotionClassifier, FakeSTTClient
 from kaine.modules.audition.acoustic import FakeAcousticEncoder
-from kaine.modules.chronos.featurizer import SnapshotFeaturizer
-from kaine.modules.chronos.module import Chronos
-from kaine.modules.topos.module import Topos
+from kaine.modules.sequence.featurizer import SnapshotFeaturizer
+from kaine.modules.sequence.module import Sequence
+from kaine.modules.vision.module import Vision
 
 
 @pytest.fixture
@@ -131,94 +131,94 @@ async def test_blocking_dollar_read_still_works(bus):
 
 
 @pytest.mark.asyncio
-async def test_chronos_suspends_forward_head_during_sleep(bus):
+async def test_sequence_suspends_forward_head_during_sleep(bus):
     now = {"t": 0.0}
-    chronos = Chronos(
+    sequence = Sequence(
         bus,
         featurizer=SnapshotFeaturizer(clock=lambda: now["t"]),
         forward_prediction=True,
         reservoir_seed=7,
         clock=lambda: now["t"],
     )
-    await chronos.initialize()
+    await sequence.initialize()
     try:
-        assert chronos._pred_head is not None
+        assert sequence._pred_head is not None
 
         await bus.publish(_sleep_event("hypnos.sleep.started"))
-        await _poll_for(lambda: chronos._pred_head.suspended)
-        assert chronos._in_hypnos
+        await _poll_for(lambda: sequence._pred_head.suspended)
+        assert sequence._in_hypnos
 
         await bus.publish(_sleep_event("hypnos.sleep.completed"))
-        await _poll_for(lambda: not chronos._pred_head.suspended)
-        assert not chronos._in_hypnos
+        await _poll_for(lambda: not sequence._pred_head.suspended)
+        assert not sequence._in_hypnos
     finally:
-        await _close_module(chronos)
+        await _close_module(sequence)
 
 
 @pytest.mark.asyncio
-async def test_chronos_sees_sleep_on_an_empty_stream_too(bus):
+async def test_sequence_sees_sleep_on_an_empty_stream_too(bus):
     now = {"t": 0.0}
-    chronos = Chronos(
+    sequence = Sequence(
         bus,
         featurizer=SnapshotFeaturizer(clock=lambda: now["t"]),
         forward_prediction=True,
         reservoir_seed=7,
         clock=lambda: now["t"],
     )
-    await chronos.initialize()
+    await sequence.initialize()
     try:
-        assert chronos._hypnos_cursor == "0-0"
+        assert sequence._hypnos_cursor == "0-0"
 
         await bus.publish(_sleep_event("hypnos.sleep.started"))
-        await _poll_for(lambda: chronos._pred_head.suspended)
+        await _poll_for(lambda: sequence._pred_head.suspended)
 
         await bus.publish(_sleep_event("hypnos.sleep.completed"))
-        await _poll_for(lambda: not chronos._pred_head.suspended)
+        await _poll_for(lambda: not sequence._pred_head.suspended)
     finally:
-        await _close_module(chronos)
+        await _close_module(sequence)
 
 
 @pytest.mark.asyncio
-async def test_chronos_ignores_sleep_published_before_boot(bus):
+async def test_sequence_ignores_sleep_published_before_boot(bus):
     await bus.publish(_sleep_event("hypnos.sleep.started"))
 
     now = {"t": 0.0}
-    chronos = Chronos(
+    sequence = Sequence(
         bus,
         featurizer=SnapshotFeaturizer(clock=lambda: now["t"]),
         forward_prediction=True,
         reservoir_seed=7,
         clock=lambda: now["t"],
     )
-    await chronos.initialize()
+    await sequence.initialize()
     try:
         await asyncio.sleep(0.3)
-        assert not chronos._pred_head.suspended
-        assert not chronos._in_hypnos
+        assert not sequence._pred_head.suspended
+        assert not sequence._in_hypnos
 
         # A fresh sleep event after boot must still be seen.
         await bus.publish(_sleep_event("hypnos.sleep.started"))
-        await _poll_for(lambda: chronos._pred_head.suspended)
+        await _poll_for(lambda: sequence._pred_head.suspended)
     finally:
-        await _close_module(chronos)
+        await _close_module(sequence)
 
 
 @pytest.mark.asyncio
-async def test_topos_suspends_forward_model_during_sleep(bus):
-    topos = Topos(bus, encoder=_FakeEncoder(), forward_prediction=True)
-    await topos.initialize()
+async def test_vision_suspends_forward_model_during_sleep(bus):
+    vision = Vision(bus, encoder=_FakeEncoder(), forward_prediction=True)
+    await vision.initialize()
     try:
-        assert topos._forward_model is not None
+        assert vision._forward_model is not None
 
         await bus.publish(_sleep_event("hypnos.sleep.started"))
-        await _poll_for(lambda: topos._forward_model.suspended)
-        assert topos._in_hypnos
+        await _poll_for(lambda: vision._forward_model.suspended)
+        assert vision._in_hypnos
 
         await bus.publish(_sleep_event("hypnos.sleep.completed"))
-        await _poll_for(lambda: not topos._forward_model.suspended)
-        assert not topos._in_hypnos
+        await _poll_for(lambda: not vision._forward_model.suspended)
+        assert not vision._in_hypnos
     finally:
-        await _close_module(topos)
+        await _close_module(vision)
 
 
 @pytest.mark.asyncio

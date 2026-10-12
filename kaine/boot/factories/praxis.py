@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     pass
+from kaine.boot.config_kwargs import config_kwargs
 from kaine.boot.errors import _require_keys
 from kaine.bus.client import AsyncBus
 from kaine.modules.base import BaseModule
@@ -56,15 +57,19 @@ def make_praxis(
     # fail-closed default in the effectors module then refuses every act intent.
     if intent_secret is not None:
         kwargs["intent_secret"] = intent_secret
-    for k in (
-        "sandbox_path",
-        "audit_log_path",
-        "notification_command",
-        "notification_fallback_log",
-        "max_file_bytes",
-        "baseline_salience",
-        "alert_salience",
-    ):
-        if k in section:
-            kwargs[k] = section[k]
+    kwargs.update(
+        config_kwargs(
+            section,
+            (
+                "sandbox_path",
+                "audit_log_path",
+                "notification_command",
+                "notification_fallback_log",
+                "max_file_bytes",
+                "baseline_salience",
+                "alert_salience",
+            ),
+            Praxis,
+        )
+    )
     return Praxis(bus, **kwargs)

@@ -18,11 +18,11 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.audition import Audition, FakeEmotionClassifier, FakeSTTClient
 from kaine.modules.audition.acoustic import FakeAcousticEncoder
 from kaine.modules.context import CONTEXT_DIM, BroadcastContext
-from kaine.modules.soma.detector import AlertResult
-from kaine.modules.soma.forward import SubstrateForwardModel
-from kaine.modules.soma.module import Soma
-from kaine.modules.topos import Topos
-from kaine.modules.topos.forward import LatentForwardModel
+from kaine.modules.interoception.detector import AlertResult
+from kaine.modules.interoception.forward import SubstrateForwardModel
+from kaine.modules.interoception.module import Interoception
+from kaine.modules.vision import Vision
+from kaine.modules.vision.forward import LatentForwardModel
 
 
 class _MutableClock:
@@ -177,17 +177,17 @@ def test_context_last_reading_after_accessed_then_inhibited() -> None:
 
 
 @pytest.mark.asyncio
-async def test_soma_prediction_stamp_end_to_end() -> None:
+async def test_interoception_prediction_stamp_end_to_end() -> None:
     bus = _bus()
     try:
         clock = _MutableClock(0.0)
-        soma = Soma(
+        interoception = Interoception(
             bus,
             reader=FakeMetricsReader({"cpu_percent": 10.0, "ram_percent": 20.0}),
             detector=NeverAlertDetector(),
             entity_clock=clock,
         )
-        soma._forward_model = SubstrateForwardModel(
+        interoception._forward_model = SubstrateForwardModel(
             feature_dim=8,
             units=16,
             seed=5,
@@ -195,14 +195,14 @@ async def test_soma_prediction_stamp_end_to_end() -> None:
         )
 
         clock.t = 10.0
-        await soma.on_workspace(_workspace(7, False, 0.5, published_at=10.0))
+        await interoception.on_workspace(_workspace(7, False, 0.5, published_at=10.0))
         clock.t = 11.0
-        await soma.tick_once()
-        await soma.on_workspace(_workspace(8, True, 0.1))
+        await interoception.tick_once()
+        await interoception.on_workspace(_workspace(8, True, 0.1))
         clock.t = 13.0
-        await soma.tick_once()
+        await interoception.tick_once()
         clock.t = 14.0
-        await soma.tick_once()
+        await interoception.tick_once()
 
         events = await bus.read("soma.out", last_id="0")
         reports = _typed_payloads(events, "soma.report")
@@ -291,10 +291,10 @@ async def bus():
 
 
 @pytest.mark.asyncio
-async def test_topos_skip_clears_prediction_stamp(bus) -> None:
+async def test_vision_skip_clears_prediction_stamp(bus) -> None:
     clock = _MutableClock(100.0)
-    topos = Topos(bus, encoder=_SkipsOnSecond(), forward_prediction=True, entity_clock=clock)
-    topos._forward_model = LatentForwardModel(
+    vision = Vision(bus, encoder=_SkipsOnSecond(), forward_prediction=True, entity_clock=clock)
+    vision._forward_model = LatentForwardModel(
         latent_dim=4, units=8, context_dim=24, seed=4
     )
 
@@ -316,10 +316,10 @@ async def test_topos_skip_clears_prediction_stamp(bus) -> None:
         salience_scores={"1-0": 0.5},
         metadata={"access_threshold": 0.35},
     )
-    await topos.on_workspace(snapshot)
+    await vision.on_workspace(snapshot)
 
     for _ in range(4):
-        await topos.process_frame(None)
+        await vision.process_frame(None)
 
     entries = await bus.read("topos.out", last_id="0")
     reports = _typed_payloads(entries, "topos.report")

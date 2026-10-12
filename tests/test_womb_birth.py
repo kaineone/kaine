@@ -19,7 +19,7 @@ from kaine.lifecycle import stage as lifecycle_stage
 from kaine.lifecycle.gate_runner import MaturationGateRunner
 from kaine.lifecycle.maturation_gate import MaturationConfig
 from kaine.modules.audition.feed import WombProceduralAudioStream
-from kaine.modules.topos.feed import (
+from kaine.modules.vision.feed import (
     BIRTH_BLOOM_PEAK,
     WombClock,
     WombProceduralSource,

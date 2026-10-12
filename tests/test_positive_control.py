@@ -32,7 +32,7 @@ from kaine.modules.positive_control import (
     ShadowProbe,
     publish_result,
 )
-from kaine.modules.topos.forward import LatentForwardModel
+from kaine.modules.vision.forward import LatentForwardModel
 
 try:
     import torch
@@ -408,7 +408,7 @@ def test_component_source():
     assert abs(out_a.std() - out_n1.std()) / out_a.std() < 0.15
 
 
-def _run_topos_detection(min_effect, min_reports=500):
+def _run_vision_detection(min_effect, min_reports=500):
     pc = _pc("topos", 4, direction=np.array([1.0, 0.0, 0.0, 0.0]))
     settings = PositiveControlSettings(
         enabled=True,
@@ -453,7 +453,7 @@ def _run_topos_detection(min_effect, min_reports=500):
 
 
 def test_detection_end_to_end():
-    result = _run_topos_detection(min_effect=0.02)
+    result = _run_vision_detection(min_effect=0.02)
     assert result["processor"] == "topos"
     assert result["mode"] == "control"
     assert result["n_reports"] > 900
@@ -465,7 +465,7 @@ def test_detection_end_to_end():
 
 
 def test_small_sample_does_not_pass():
-    result = _run_topos_detection(min_effect=0.02, min_reports=5000)
+    result = _run_vision_detection(min_effect=0.02, min_reports=5000)
     assert result["n_reports"] > 0
     assert result["detected"] is True
     assert result["passed"] is False

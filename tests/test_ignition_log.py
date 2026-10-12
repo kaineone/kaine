@@ -23,7 +23,7 @@ from kaine.cycle.ignition_log import (
     playlist_position_provider,
 )
 from kaine.modules.audition.feed import PlaylistAudioStream
-from kaine.modules.topos.feed import PlaylistClock
+from kaine.modules.vision.feed import PlaylistClock
 from kaine.persistence.jsonl_sink import AsyncJsonlSink
 from kaine.workspace import (
     NoveltyTracker,

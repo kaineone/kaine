@@ -100,7 +100,7 @@ def _make_hypnos(
         bus,
         mnemos=mnemos or FakeMnemos(),
         thymos=FakeThymos(),
-        chronos_resetters=[FakeResetter(), FakeResetter()],
+        sequence_resetters=[FakeResetter(), FakeResetter()],
         trainer=trainer or FakeTrainer(),
         voice_alignment_config=config,
     )
@@ -359,7 +359,7 @@ async def test_one_phase_failure_does_not_stop_others(bus: AsyncBus, tmp_path: P
         bus,
         mnemos=BoomMnemos(),
         thymos=FakeThymos(),
-        chronos_resetters=[FakeResetter()],
+        sequence_resetters=[FakeResetter()],
         trainer=FakeTrainer(),
         voice_alignment_config=VoiceAlignmentConfig(
             intent_log_path=tmp_path / "missing.jsonl",

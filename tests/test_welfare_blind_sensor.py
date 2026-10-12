@@ -415,8 +415,8 @@ async def test_observer_writes_a_reset_line_and_starts_new_streams_at_the_tail()
 
     assert sink.rows
     assert sink.rows[0]["advisory"] == ADVISORY_RESET
-    topos_entries = bus.streams["topos.out"]
-    assert cursors["topos.out"] == topos_entries[-1][0]
+    vision_entries = bus.streams["topos.out"]
+    assert cursors["topos.out"] == vision_entries[-1][0]
     assert cursors["soma.out"] == "0"
 
     obs._cursors = cursors

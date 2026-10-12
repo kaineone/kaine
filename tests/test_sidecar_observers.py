@@ -567,7 +567,7 @@ async def test_fatigue_observer_logs_threshold_crossing(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_fatigue_observer_logs_soma_report(tmp_path):
+async def test_fatigue_observer_logs_interoception_report(tmp_path):
     """task 5.1 — soma.report fatigue fields are also logged."""
     bus = FakeBus()
     sink = AsyncJsonlSink(tmp_path, name="fatigue", flush_interval_s=0.05)
@@ -636,13 +636,13 @@ async def test_prediction_error_observer_computes_statistics(tmp_path):
     await _run_observer(obs, bus, delay=0.4)
     assert sink.rows, "expected at least one flush"
     row = sink.rows[-1]
-    soma_stats = row["sources"]["soma.out"]
-    assert soma_stats["n"] == 5
-    assert soma_stats["mean"] == pytest.approx(0.3, abs=0.01)
-    assert soma_stats["p95"] is not None
-    assert soma_stats["p99"] is not None
-    chronos_stats = row["sources"]["chronos.out"]
-    assert chronos_stats["n"] == 1
+    interoception_stats = row["sources"]["soma.out"]
+    assert interoception_stats["n"] == 5
+    assert interoception_stats["mean"] == pytest.approx(0.3, abs=0.01)
+    assert interoception_stats["p95"] is not None
+    assert interoception_stats["p99"] is not None
+    sequence_stats = row["sources"]["chronos.out"]
+    assert sequence_stats["n"] == 1
     assert bus.published == []
 
 

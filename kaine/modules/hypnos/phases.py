@@ -541,7 +541,7 @@ async def reset_affect(thymos: Optional[_SupportsAffectiveReset]) -> PhaseResult
     return await affective_reset(thymos)
 
 
-async def recalibrate_time(chronos_resetters: list[Any]) -> PhaseResult:
+async def recalibrate_time(sequence_resetters: list[Any]) -> PhaseResult:
     """Reset the sequence module's habituation / rumination trackers via their reset() methods.
 
     Each item in ``chronos_resetters`` is anything with a ``reset()`` method
@@ -549,7 +549,7 @@ async def recalibrate_time(chronos_resetters: list[Any]) -> PhaseResult:
     shape lets callers pass several without an introspection dance.
     """
     start = _now_ms()
-    if not chronos_resetters:
+    if not sequence_resetters:
         return PhaseResult(
             phase="temporal_recalibration",
             success=True,
@@ -558,7 +558,7 @@ async def recalibrate_time(chronos_resetters: list[Any]) -> PhaseResult:
         )
     reset = 0
     errors: list[str] = []
-    for r in chronos_resetters:
+    for r in sequence_resetters:
         try:
             r.reset()
             reset += 1

@@ -353,7 +353,7 @@ def voice_alignment_window_block() -> dict[str, Any]:
 
 def perception_feed_block(
     perception_feed_cfg: dict[str, Any],
-    topos_capture_geometry: tuple[int, int],
+    vision_capture_geometry: tuple[int, int],
     audition_capture_geometry: tuple[int, int],
 ) -> dict[str, Any]:
     """Active deterministic perception-feed mode + reproducible descriptor.
@@ -367,7 +367,7 @@ def perception_feed_block(
     try:
         from kaine.boot import gather_perception_feed_descriptor
 
-        w, h = topos_capture_geometry
+        w, h = vision_capture_geometry
         sr, ch = audition_capture_geometry
         cfg = {
             "perception_feed": dict(perception_feed_cfg or {}),

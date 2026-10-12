@@ -23,10 +23,10 @@ from kaine.cfc_numpy import (
 )
 from kaine.experiment.seeding import set_global_seed
 from kaine.extras import REQUIREMENTS
-from kaine.modules.chronos.network import CfCNetwork, ForwardPredictionHead
-from kaine.modules.soma.expected_error import ExpectedErrorModel
-from kaine.modules.soma.forward import SubstrateForwardModel
-from kaine.modules.soma.module import Soma
+from kaine.modules.interoception.expected_error import ExpectedErrorModel
+from kaine.modules.interoception.forward import SubstrateForwardModel
+from kaine.modules.interoception.module import Interoception
+from kaine.modules.sequence.network import CfCNetwork, ForwardPredictionHead
 
 _TORCH = (
     importlib.util.find_spec("torch") is not None
@@ -90,7 +90,7 @@ def test_numpy_readout_sgd_step_changes_weights():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.skipif(not _TORCH, reason="torch/ncps not installed")
-def test_soma_numpy_torch_parity_over_500_steps():
+def test_interoception_numpy_torch_parity_over_500_steps():
     m_np = SubstrateForwardModel(
         backend="numpy", feature_dim=8, units=16, seed=123, lr=0.01
     )
@@ -130,7 +130,7 @@ def test_soma_numpy_torch_parity_over_500_steps():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.skipif(not _TORCH, reason="torch/ncps not installed")
-def test_chronos_head_numpy_torch_parity():
+def test_sequence_head_numpy_torch_parity():
     head_np = ForwardPredictionHead(
         backend="numpy", input_size=8, units=16, seed=55, lr=0.05
     )
@@ -160,7 +160,7 @@ def test_chronos_head_numpy_torch_parity():
 # Preservation / revive behaviour
 # ---------------------------------------------------------------------------
 
-def test_revive_keeps_soma_reservoir_and_readout():
+def test_revive_keeps_interoception_reservoir_and_readout():
     m1 = SubstrateForwardModel(
         backend="numpy", feature_dim=8, units=16, seed=777, lr=0.01
     )
@@ -188,7 +188,7 @@ def test_revive_keeps_soma_reservoir_and_readout():
         assert np.allclose(m1._last_prediction, m2._last_prediction, atol=1e-5)
 
 
-def test_revive_keeps_chronos_reservoir():
+def test_revive_keeps_sequence_reservoir():
     net1 = CfCNetwork(backend="numpy", input_size=12, units=16, seed=333)
     rng = np.random.default_rng(17)
     for _ in range(15):
@@ -209,8 +209,8 @@ def test_revive_keeps_chronos_reservoir():
 # Older snapshots start a new reservoir and log it
 # ---------------------------------------------------------------------------
 
-def test_soma_module_logs_new_reservoir_for_old_snapshot(caplog):
-    from kaine.modules.soma.module import Soma
+def test_interoception_module_logs_new_reservoir_for_old_snapshot(caplog):
+    from kaine.modules.interoception.module import Interoception
 
     fm = SubstrateForwardModel(backend="numpy", feature_dim=4, units=8, seed=10)
     for _ in range(5):
@@ -219,7 +219,7 @@ def test_soma_module_logs_new_reservoir_for_old_snapshot(caplog):
     # Simulate an old snapshot: readout but no reservoir_seed.
     old_state = {"forward_model": fm.state_dict()}
 
-    s = object.__new__(Soma)
+    s = object.__new__(Interoception)
     s._forward_model = SubstrateForwardModel(
         backend="numpy", feature_dim=4, units=8, seed=20
     )
@@ -228,7 +228,7 @@ def test_soma_module_logs_new_reservoir_for_old_snapshot(caplog):
     s._fatigue = MagicMock()
     s._self_rhythm = None
 
-    with caplog.at_level(logging.WARNING, logger="kaine.modules.soma.module"):
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.interoception.module"):
         s.deserialize(old_state)
 
     assert "soma: snapshot has no reservoir seed; the reservoir is new" in caplog.text
@@ -236,8 +236,8 @@ def test_soma_module_logs_new_reservoir_for_old_snapshot(caplog):
     assert s._forward_model.reservoir_seed == 20
 
 
-def test_soma_module_restore_with_seed_rebuilds_same_reservoir():
-    from kaine.modules.soma.module import Soma
+def test_interoception_module_restore_with_seed_rebuilds_same_reservoir():
+    from kaine.modules.interoception.module import Interoception
 
     fm1 = SubstrateForwardModel(backend="numpy", feature_dim=4, units=8, seed=10)
     for _ in range(5):
@@ -248,7 +248,7 @@ def test_soma_module_restore_with_seed_rebuilds_same_reservoir():
         "reservoir_seed": fm1.reservoir_seed,
     }
 
-    s = object.__new__(Soma)
+    s = object.__new__(Interoception)
     s._forward_model = SubstrateForwardModel(
         backend="numpy", feature_dim=4, units=8, seed=99
     )
@@ -266,16 +266,16 @@ def test_soma_module_restore_with_seed_rebuilds_same_reservoir():
     assert pred1 == pytest.approx(pred2, abs=1e-5)
 
 
-def test_chronos_module_logs_new_reservoir_for_old_snapshot(caplog):
-    from kaine.modules.chronos.featurizer import SnapshotFeaturizer
-    from kaine.modules.chronos.module import Chronos
+def test_sequence_module_logs_new_reservoir_for_old_snapshot(caplog):
+    from kaine.modules.sequence.featurizer import SnapshotFeaturizer
+    from kaine.modules.sequence.module import Sequence
 
     net = CfCNetwork(backend="numpy", input_size=8, units=8, seed=1)
     head = ForwardPredictionHead(
         backend="numpy", input_size=8, units=8, seed=net.reservoir_seed
     )
 
-    c = object.__new__(Chronos)
+    c = object.__new__(Sequence)
     c._network = net
     c._pred_head = head
     c._last_interaction_at = None
@@ -284,15 +284,15 @@ def test_chronos_module_logs_new_reservoir_for_old_snapshot(caplog):
 
     old_state = {"pred_head": head.state_dict()}
 
-    with caplog.at_level(logging.WARNING, logger="kaine.modules.chronos.module"):
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.sequence.module"):
         c.deserialize(old_state)
 
     assert "chronos: snapshot has no reservoir seed; the reservoir is new" in caplog.text
 
 
-def test_chronos_module_restore_with_seed_rebuilds_same_reservoir():
-    from kaine.modules.chronos.featurizer import SnapshotFeaturizer
-    from kaine.modules.chronos.module import Chronos
+def test_sequence_module_restore_with_seed_rebuilds_same_reservoir():
+    from kaine.modules.sequence.featurizer import SnapshotFeaturizer
+    from kaine.modules.sequence.module import Sequence
 
     net1 = CfCNetwork(backend="numpy", input_size=8, units=8, seed=5)
     head1 = ForwardPredictionHead(
@@ -304,7 +304,7 @@ def test_chronos_module_restore_with_seed_rebuilds_same_reservoir():
         h = net1.tick(rng.uniform(-1.0, 1.0, size=8).tolist())
         head1.adapt(h, rng.uniform(-1.0, 1.0, size=8).tolist())
 
-    c = object.__new__(Chronos)
+    c = object.__new__(Sequence)
     c._network = CfCNetwork(backend="numpy", input_size=8, units=8, seed=50)
     c._pred_head = ForwardPredictionHead(
         backend="numpy", input_size=8, units=8, seed=c._network.reservoir_seed
@@ -352,8 +352,8 @@ sys.meta_path.insert(0, _Blocker())
 sys.modules.pop("torch", None)
 sys.modules.pop("ncps", None)
 
-from kaine.modules.soma.forward import SubstrateForwardModel
-from kaine.modules.chronos.network import CfCNetwork
+from kaine.modules.interoception.forward import SubstrateForwardModel
+from kaine.modules.sequence.network import CfCNetwork
 
 m = SubstrateForwardModel(backend="numpy", feature_dim=8, units=8, seed=1)
 _ = m.predict([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
@@ -375,47 +375,47 @@ assert "ncps" not in sys.modules
 # ---------------------------------------------------------------------------
 
 def test_extras_predicates_torch_only_when_backend_is_torch():
-    soma_torch = next(
+    interoception_torch = next(
         r for r in REQUIREMENTS["soma"] if r.import_name == "torch"
     )
-    soma_ncps = next(
+    interoception_ncps = next(
         r for r in REQUIREMENTS["soma"] if r.import_name == "ncps"
     )
-    chronos_torch = next(
+    sequence_torch = next(
         r for r in REQUIREMENTS["chronos"] if r.import_name == "torch"
     )
-    chronos_ncps = next(
+    sequence_ncps = next(
         r for r in REQUIREMENTS["chronos"] if r.import_name == "ncps"
     )
 
-    assert not soma_torch.applies({"soma": {"cfc_backend": "numpy"}})
-    assert soma_torch.applies({"soma": {"cfc_backend": "torch"}})
-    assert not soma_ncps.applies({"soma": {"cfc_backend": "numpy"}})
-    assert soma_ncps.applies({"soma": {"cfc_backend": "torch"}})
+    assert not interoception_torch.applies({"soma": {"cfc_backend": "numpy"}})
+    assert interoception_torch.applies({"soma": {"cfc_backend": "torch"}})
+    assert not interoception_ncps.applies({"soma": {"cfc_backend": "numpy"}})
+    assert interoception_ncps.applies({"soma": {"cfc_backend": "torch"}})
 
-    assert not chronos_torch.applies({"chronos": {"cfc_backend": "numpy"}})
-    assert chronos_torch.applies({"chronos": {"cfc_backend": "torch"}})
-    assert not chronos_ncps.applies({"chronos": {"cfc_backend": "numpy"}})
-    assert chronos_ncps.applies({"chronos": {"cfc_backend": "torch"}})
+    assert not sequence_torch.applies({"chronos": {"cfc_backend": "numpy"}})
+    assert sequence_torch.applies({"chronos": {"cfc_backend": "torch"}})
+    assert not sequence_ncps.applies({"chronos": {"cfc_backend": "numpy"}})
+    assert sequence_ncps.applies({"chronos": {"cfc_backend": "torch"}})
 
 
-async def test_chronos_keeps_the_preserved_seed_when_restored_before_initialize():
+async def test_sequence_keeps_the_preserved_seed_when_restored_before_initialize():
     # A revive may restore state before the lazily built network exists; the
     # network built afterwards must still be the preserved reservoir.
     from kaine.bus.client import AsyncBus
     from kaine.bus.config import BusConfig
-    from kaine.modules.chronos.module import Chronos
+    from kaine.modules.sequence.module import Sequence
 
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     bus = AsyncBus(
         BusConfig(password="x", audit_required=False),
         client=fakeredis.FakeRedis(decode_responses=True),
     )
-    preserved = Chronos(bus)
+    preserved = Sequence(bus)
     await preserved.initialize()
     seed = preserved.serialize()["reservoir_seed"]
 
-    revived = Chronos(bus)
+    revived = Sequence(bus)
     revived.deserialize({"reservoir_seed": seed})
     await revived.initialize()
     assert revived._network.reservoir_seed == seed
@@ -431,24 +431,24 @@ async def test_chronos_keeps_the_preserved_seed_when_restored_before_initialize(
 
 def test_seeded_experiment_reproduces_unseeded_reservoirs():
     set_global_seed(99)
-    soma1 = SubstrateForwardModel()
+    interoception1 = SubstrateForwardModel()
     net1 = CfCNetwork(input_size=8, units=16)
     head1 = ForwardPredictionHead(input_size=8, units=16)
 
-    soma_seed1 = soma1.reservoir_seed
+    interoception_seed1 = interoception1.reservoir_seed
     net_seed1 = net1.reservoir_seed
     head_pred1 = head1.predict([0.1] * 16)
 
     set_global_seed(99)
-    soma2 = SubstrateForwardModel()
+    interoception2 = SubstrateForwardModel()
     net2 = CfCNetwork(input_size=8, units=16)
     head2 = ForwardPredictionHead(input_size=8, units=16)
 
-    soma_seed2 = soma2.reservoir_seed
+    interoception_seed2 = interoception2.reservoir_seed
     net_seed2 = net2.reservoir_seed
     head_pred2 = head2.predict([0.1] * 16)
 
-    assert soma_seed1 == soma_seed2
+    assert interoception_seed1 == interoception_seed2
     assert net_seed1 == net_seed2
     assert head_pred1 == pytest.approx(head_pred2, abs=1e-5)
 
@@ -509,14 +509,14 @@ def test_numpy_readout_from_arrays_rejects_invalid():
         NumpyReadout.from_arrays(w, np.zeros(8, dtype=np.float32))
 
 
-def test_soma_load_state_dict_wrong_width_raises_and_module_recover():
+def test_interoception_load_state_dict_wrong_width_raises_and_module_recover():
     fm64 = SubstrateForwardModel(backend="numpy", feature_dim=8, units=64, seed=1)
     fm32 = SubstrateForwardModel(backend="numpy", feature_dim=8, units=32, seed=2)
 
     with pytest.raises(ValueError):
         fm32.load_state_dict(fm64.state_dict())
 
-    s = object.__new__(Soma)
+    s = object.__new__(Interoception)
     s._forward_model = fm32
     s._cycle_cursor = "0"
     s._read_interval_s = 1.0
@@ -528,7 +528,7 @@ def test_soma_load_state_dict_wrong_width_raises_and_module_recover():
     assert math.isfinite(result)
 
 
-def test_chronos_head_load_state_dict_wrong_width_raises():
+def test_sequence_head_load_state_dict_wrong_width_raises():
     head64 = ForwardPredictionHead(backend="numpy", input_size=8, units=64, seed=1)
     head32 = ForwardPredictionHead(backend="numpy", input_size=8, units=32, seed=2)
     with pytest.raises(ValueError):
@@ -548,14 +548,14 @@ def test_numpy_readout_sgd_step_nonfinite_returns_nan_and_model_logs(caplog):
 
     model = SubstrateForwardModel(backend="numpy", feature_dim=8, units=8, seed=4)
     model._last_hidden = [float("inf")] * model.units
-    with caplog.at_level(logging.WARNING, logger="kaine.modules.soma.forward"):
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.interoception.forward"):
         result = model.step([0.1] * 8)
     assert math.isfinite(result)
     assert "non-finite" in caplog.text
 
 
-def test_soma_serialize_omits_none_seed_and_deserialize_none(caplog):
-    s = object.__new__(Soma)
+def test_interoception_serialize_omits_none_seed_and_deserialize_none(caplog):
+    s = object.__new__(Interoception)
     s._forward_model = MagicMock(spec=["state_dict"])
     s._forward_model.state_dict.return_value = {"weight": [], "bias": []}
     s._cycle_cursor = "0"
@@ -569,7 +569,7 @@ def test_soma_serialize_omits_none_seed_and_deserialize_none(caplog):
     assert "reservoir_seed" not in state
     assert state["forward_model"] == {"weight": [], "bias": []}
 
-    s2 = object.__new__(Soma)
+    s2 = object.__new__(Interoception)
     s2._forward_model = SubstrateForwardModel(
         backend="numpy", feature_dim=4, units=8, seed=5
     )
@@ -579,7 +579,7 @@ def test_soma_serialize_omits_none_seed_and_deserialize_none(caplog):
     s2._expected_error = ExpectedErrorModel()
     s2._self_rhythm = None
 
-    with caplog.at_level(logging.WARNING, logger="kaine.modules.soma.module"):
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.interoception.module"):
         s2.deserialize({"reservoir_seed": None})
 
     assert "soma: snapshot has no reservoir seed; the reservoir is new" in caplog.text

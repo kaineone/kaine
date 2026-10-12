@@ -8,7 +8,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from kaine.modules.topos.foveation import (
+from kaine.modules.vision.foveation import (
     FoveaPredictor,
     FoveaTarget,
     SpatialSaliency,

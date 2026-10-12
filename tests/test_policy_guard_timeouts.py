@@ -30,7 +30,7 @@ def _event(
     )
 
 
-def _soma_report(value: float = 0.5) -> tuple[str, Event]:
+def _interoception_report(value: float = 0.5) -> tuple[str, Event]:
     return ("s1", _event("soma", "soma.report", {"wellness": value}))
 
 
@@ -136,7 +136,7 @@ def test_report_think_guard_times_out_without_own_output():
 def test_report_think_guard_from_own_emission_times_out():
     clock = _Clock()
     p = _report_policy(clock=clock)
-    snap = _snapshot([_soma_report(0.5)])  # crosses think but not report bar
+    snap = _snapshot([_interoception_report(0.5)])  # crosses think but not report bar
     intents = p(snap)
 
     assert [i.kind for i in intents] == [THINK]
@@ -192,7 +192,7 @@ def test_nous_think_guard_timeout_through_report_policy():
 
     # Non-proposal salience stays below the inner policy's think bar so the
     # report policy itself stays silent; the planning module's think proposals drive action.
-    base = _soma_report(0.5)
+    base = _interoception_report(0.5)
 
     snap1 = _snapshot([base, _proposal("p1", THINK)])
     intents1 = v.select(snap1)
@@ -247,12 +247,12 @@ def test_report_speak_refractory_uses_subjective_clock():
     wall.advance(1000.0)
     sub.advance(1.0)
 
-    high_soma = ("s2", _event("soma", "soma.report", {"wellness": 1.0}, salience=1.0))
-    snap_before = _snapshot([high_soma])
+    high_interoception = ("s2", _event("soma", "soma.report", {"wellness": 1.0}, salience=1.0))
+    snap_before = _snapshot([high_interoception])
     # The speak refractory holds; the report policy may still think instead.
     assert SPEAK not in [i.kind for i in p(snap_before)]
 
     sub.advance(8.0)
-    snap_after = _snapshot([high_soma])
+    snap_after = _snapshot([high_interoception])
     intents = p(snap_after)
     assert [i.kind for i in intents] == [SPEAK]

@@ -14,7 +14,7 @@ import io
 import numpy as np
 import pytest
 
-from kaine.modules.topos.screen import (
+from kaine.modules.vision.screen import (
     CaptureSpec,
     ScreenCaptureSource,
     ScreenTarget,

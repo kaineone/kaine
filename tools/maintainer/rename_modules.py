@@ -1232,6 +1232,53 @@ def _in_pip_extra(text: str, start: int, end: int) -> bool:
     return False
 
 
+def _is_dotted_python_path(term: str) -> bool:
+    """True for a dotted Python path into this repository, e.g. kaine.modules.x.y."""
+    if not re.fullmatch(
+        r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+", term
+    ):
+        return False
+    return term.startswith("kaine.") or term.startswith("tests.")
+
+
+def _enclosing_string_content(
+    text: str, offset: int, ctx: str | None, tokens: list[dict]
+) -> str | None:
+    """The literal content of the Python or TOML string that contains ``offset``."""
+    if ctx in {"py_string", "py_text"}:
+        for tok in tokens:
+            if (
+                tok.get("type") == tokenize.STRING
+                and tok.get("start", 0) <= offset < tok.get("end", 0)
+            ):
+                try:
+                    value = ast.literal_eval(tok.get("string", ""))
+                except Exception:
+                    return None
+                if isinstance(value, str):
+                    return value
+                return None
+        return None
+    if ctx in {"toml_string", "toml_text"}:
+        line_start = text.rfind("\n", 0, offset) + 1
+        line_end = text.find("\n", offset)
+        if line_end == -1:
+            line_end = len(text)
+        line = text[line_start:line_end]
+        pos_in_line = offset - line_start
+        q_single = line.rfind("'", 0, pos_in_line)
+        q_double = line.rfind('"', 0, pos_in_line)
+        quote = max(q_single, q_double)
+        if quote == -1:
+            return None
+        quote_char = line[quote]
+        end_quote = line.find(quote_char, pos_in_line)
+        if end_quote == -1:
+            return None
+        return line[quote + 1:end_quote]
+    return None
+
+
 def _assign_scope(
     rel_path: str,
     ctx: str | None,
@@ -1250,13 +1297,19 @@ def _assign_scope(
     lower_path = rel_path.lower().replace("\\", "/")
 
     if ctx in {"py_string", "py_text", "toml_string", "toml_text"}:
-        full_content = _string_content_at(text, start, end, ctx)
+        full_content = _enclosing_string_content(text, start, ctx, tokens)
         if full_content is not None:
             persisted = getattr(table, "PERSISTED_EXACT", {})
             if full_content in persisted:
                 return "persisted"
+        if ctx in {"py_string", "py_text"} and _names_python_symbol(tokens, start):
+            return "identifiers"
         if ctx.startswith("py"):
             if _operand_of_div(tokens, start, end):
+                parts = _div_chain_strings(tokens, start)
+                top_dirs = getattr(table, "REPO_TOP_DIRS", ())
+                if parts and parts[0] in top_dirs:
+                    return _path_move_scope("/".join(parts))
                 return "persisted"
         if ("/" in T) or any(
             T.endswith(ext)
@@ -1297,6 +1350,8 @@ def _assign_scope(
     if _in_pip_extra(text, start, end):
         return "operator"
 
+    if ctx == "py_text" and _is_dotted_python_path(T):
+        return "identifiers"
     if ctx in {"py_text", "toml_text"}:
         return "operator"
 
@@ -1316,7 +1371,7 @@ def _assign_scope(
 
     if ctx == "py_name":
         return "identifiers"
-    for prefix in ("kaine.", "tests.", "plugins."):
+    for prefix in ("kaine.", "tests."):
         if T.startswith(prefix):
             return "identifiers"
     for prefix in _repo_top_prefixes(table):
@@ -1325,7 +1380,7 @@ def _assign_scope(
     if T.endswith(".py"):
         return "identifiers"
     if ctx in {"py_string", "py_text"}:
-        full = _string_content_at(text, start, end, ctx)
+        full = _enclosing_string_content(text, start, ctx, tokens)
         if full is not None and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", full) and any(
             ch.isupper() for ch in full
         ):
@@ -1365,6 +1420,166 @@ def _strip_quotes(raw: str) -> str | None:
         if raw[0] in "\"'" and raw[-1] == raw[0]:
             return raw[1:-1]
     return None
+
+
+def _div_chain_strings(tokens: list[dict], start: int) -> list[str]:
+    """The string operands of the ``/`` chain around the string token at ``start``."""
+    if not tokens:
+        return []
+    fstring_start = getattr(tokenize, "FSTRING_START", None)
+    fstring_middle = getattr(tokenize, "FSTRING_MIDDLE", None)
+    fstring_end = getattr(tokenize, "FSTRING_END", None)
+    fstring_types = tuple(
+        t for t in (fstring_start, fstring_middle, fstring_end) if t is not None
+    )
+    skip = {
+        tokenize.NL,
+        tokenize.NEWLINE,
+        tokenize.COMMENT,
+        tokenize.INDENT,
+        tokenize.DEDENT,
+    }
+
+    containing = None
+    for idx, tok in enumerate(tokens):
+        if tok["start"] <= start < tok["end"]:
+            containing = idx
+            break
+    if containing is None:
+        return []
+    if fstring_types and tokens[containing]["type"] in fstring_types:
+        return []
+    if tokens[containing]["type"] != tokenize.STRING:
+        return []
+
+    def _prev_sig(idx: int) -> int | None:
+        for j in range(idx - 1, -1, -1):
+            if tokens[j]["type"] not in skip:
+                return j
+        return None
+
+    def _next_sig(idx: int) -> int | None:
+        for j in range(idx + 1, len(tokens)):
+            if tokens[j]["type"] not in skip:
+                return j
+        return None
+
+    string_indices: list[int] = [containing]
+
+    current = containing
+    while True:
+        prev = _prev_sig(current)
+        if prev is None or not (
+            tokens[prev]["type"] == tokenize.OP and tokens[prev]["string"] == "/"
+        ):
+            break
+        before = _prev_sig(prev)
+        if before is None:
+            break
+        btype = tokens[before]["type"]
+        if btype == tokenize.STRING:
+            string_indices.append(before)
+            current = before
+        elif btype == tokenize.NAME or (
+            btype == tokenize.OP and tokens[before]["string"] == ")"
+        ):
+            current = before
+        else:
+            break
+
+    current = containing
+    while True:
+        nxt = _next_sig(current)
+        if nxt is None or not (
+            tokens[nxt]["type"] == tokenize.OP and tokens[nxt]["string"] == "/"
+        ):
+            break
+        after = _next_sig(nxt)
+        if after is None:
+            break
+        atype = tokens[after]["type"]
+        if atype == tokenize.STRING:
+            string_indices.append(after)
+            current = after
+        elif atype == tokenize.NAME or (
+            atype == tokenize.OP and tokens[after]["string"] == ")"
+        ):
+            current = after
+        else:
+            break
+
+    result: list[str] = []
+    for idx in sorted(string_indices):
+        try:
+            val = ast.literal_eval(tokens[idx]["string"])
+        except Exception:
+            continue
+        if isinstance(val, str):
+            result.append(val)
+    return result
+
+
+def _names_python_symbol(tokens: list[dict], start: int) -> bool:
+    """True when the string at ``start`` is a parametrize argnames string or the
+    attribute-name argument of getattr, hasattr, setattr or delattr."""
+    if not tokens:
+        return False
+    skip = {tokenize.NL, tokenize.NEWLINE, tokenize.COMMENT}
+
+    containing = None
+    for idx, tok in enumerate(tokens):
+        if tok["start"] <= start < tok["end"]:
+            containing = idx
+            break
+    if containing is None or tokens[containing]["type"] != tokenize.STRING:
+        return False
+
+    def _prev_sig(idx: int) -> int | None:
+        for j in range(idx - 1, -1, -1):
+            if tokens[j]["type"] not in skip:
+                return j
+        return None
+
+    prev = _prev_sig(containing)
+    if prev is None:
+        return False
+
+    if tokens[prev]["type"] == tokenize.OP and tokens[prev]["string"] == "(":
+        before = _prev_sig(prev)
+        if (
+            before is not None
+            and tokens[before]["type"] == tokenize.NAME
+            and tokens[before]["string"] == "parametrize"
+        ):
+            return True
+
+    if tokens[prev]["type"] == tokenize.OP and tokens[prev]["string"] == ",":
+        depth = 0
+        comma_count = 0
+        for j in range(prev, -1, -1):
+            ttype = tokens[j]["type"]
+            tstring = tokens[j]["string"]
+            if ttype == tokenize.OP:
+                if tstring in (")", "]", "}"):
+                    depth += 1
+                elif tstring in ("(", "[", "{"):
+                    if depth == 0:
+                        if comma_count == 1:
+                            before = _prev_sig(j)
+                            if (
+                                before is not None
+                                and tokens[before]["type"] == tokenize.NAME
+                                and tokens[before]["string"]
+                                in {"getattr", "hasattr", "setattr", "delattr"}
+                            ):
+                                return True
+                        return False
+                    depth -= 1
+                elif depth == 0 and tstring == ",":
+                    comma_count += 1
+        return False
+
+    return False
 
 
 def _operand_of_div(tokens: list[dict], start: int, end: int) -> bool:
@@ -1578,7 +1793,7 @@ def _resolve_non_guarded(
         for prefix in _repo_top_prefixes(table):
             if T.startswith(prefix):
                 return (True, "unlisted")
-        for prefix in ("kaine.", "tests.", "plugins."):
+        for prefix in ("kaine.", "tests."):
             if T.startswith(prefix):
                 return (True, "unlisted")
         if "." in T and T.islower():
@@ -2374,8 +2589,8 @@ def rewrite_text(
 
 def _path_move_scope(rel_norm: str) -> str:
     """Return the move scope for a repo-relative path."""
-    if rel_norm.startswith("openspec/specs/") or re.match(
-        r"openspec/changes/[^/]+/specs/", rel_norm
+    if re.match(r"(?:plugins/[^/]+/)?openspec/specs/", rel_norm) or re.match(
+        r"(?:plugins/[^/]+/)?openspec/changes/[^/]+/specs/", rel_norm
     ):
         return "keys"
     if rel_norm.startswith("docs/"):

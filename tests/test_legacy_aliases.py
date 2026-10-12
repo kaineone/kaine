@@ -437,3 +437,19 @@ def test_lived_artifact_paths() -> None:
     assert "hypnos/consolidation_divergence.json" in paths
     assert "sleep/consolidation_divergence.json" in paths
     assert len(paths) == len(set(paths))
+
+
+@pytest.mark.parametrize("old", ["topos", "soma", "chronos"])
+def test_renamed_layer_5a_modules_read_old_names(monkeypatch, caplog, old) -> None:
+    _set_scope(monkeypatch, "keys")
+    new = legacy_names.MODULES[old]["new_key"]
+    assert legacy_aliases.normalize_config_layer(
+        {old: {"x": 1}, "modules": {old: True}}, "op.toml"
+    ) == {new: {"x": 1}, "modules": {new: True}}
+    assert legacy_aliases.map_module_key(old) == new
+    assert legacy_aliases.map_module_keys({old: {"s": 1}}) == {new: {"s": 1}}
+    assert legacy_aliases.map_stream(f"{old}.out") == f"{new}.out"
+    assert legacy_aliases.resolve_seam(f"oscillator.{old}") == f"oscillator.{new}"
+    mapped_record = legacy_aliases.map_record({"source": old, "event_type": f"{old}.out"})
+    assert mapped_record["source"] == new
+    assert mapped_record["event_type"] == f"{new}.out"

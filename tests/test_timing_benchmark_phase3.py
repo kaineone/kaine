@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from kaine.modules.topos.live import LiveCameraConfig
+from kaine.modules.vision.live import LiveCameraConfig
 
 # scripts/ is not a package; load the benchmark module by path (mirrors
 # tests/test_license_headers.py). Cached on the module so each test reuses it.
@@ -69,7 +69,7 @@ def test_non_positive_rates_rejected():
 
 
 def test_boot_vision_sample_hz_takes_precedence_over_interval():
-    from kaine.boot import make_topos
+    from kaine.boot import make_vision
 
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     from kaine.bus.client import AsyncBus
@@ -78,7 +78,7 @@ def test_boot_vision_sample_hz_takes_precedence_over_interval():
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
     # vision_sample_hz wins when both keys are present.
-    topos = make_topos(
+    vision = make_vision(
         bus,
         {
             "capture_enabled": True,
@@ -86,14 +86,14 @@ def test_boot_vision_sample_hz_takes_precedence_over_interval():
             "vision_sample_hz": 5.0,
         },
     )
-    cam = topos._live_camera  # type: ignore[attr-defined]
+    cam = vision._live_camera  # type: ignore[attr-defined]
     assert cam is not None
     assert cam.config.capture_interval_s == pytest.approx(0.2)
     assert cam.config.vision_sample_hz == pytest.approx(5.0)
 
 
 def test_boot_default_interval_unchanged_when_no_rate_key():
-    from kaine.boot import make_topos
+    from kaine.boot import make_vision
 
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     from kaine.bus.client import AsyncBus
@@ -101,8 +101,8 @@ def test_boot_default_interval_unchanged_when_no_rate_key():
 
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
-    topos = make_topos(bus, {"capture_enabled": True})
-    cam = topos._live_camera  # type: ignore[attr-defined]
+    vision = make_vision(bus, {"capture_enabled": True})
+    cam = vision._live_camera  # type: ignore[attr-defined]
     # Behavior-preserving: no rate key → the 1 Hz default holds.
     assert cam.config.capture_interval_s == pytest.approx(1.0)
 
@@ -154,7 +154,7 @@ def test_benchmark_vision_skips_honestly_without_encoder(monkeypatch, capsys):
     """When the vision encoder is unavailable the section is SKIPPED with a
     reason, not faked."""
     # Force the encoder load to fail (simulating a missing model / extra).
-    import kaine.modules.topos.encoder as enc
+    import kaine.modules.vision.encoder as enc
 
     async def _boom(self):
         raise RuntimeError("encoder model not present")

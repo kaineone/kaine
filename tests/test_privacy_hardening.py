@@ -23,7 +23,7 @@ from pathlib import Path
 
 def test_dinov2_encoder_sets_hf_telemetry_flag(monkeypatch):
     """DINOv2Encoder.load() must set HF_HUB_DISABLE_TELEMETRY before loading."""
-    from kaine.modules.topos.encoder import DINOv2Encoder
+    from kaine.modules.vision.encoder import DINOv2Encoder
 
     # Remove any pre-existing value so we can detect the setdefault.
     monkeypatch.delenv("HF_HUB_DISABLE_TELEMETRY", raising=False)
@@ -65,7 +65,7 @@ def test_dinov2_encoder_source_sets_env(monkeypatch):
     """Inspect the actual encoder source to verify os.environ.setdefault call."""
     import inspect
 
-    from kaine.modules.topos.encoder import DINOv2Encoder
+    from kaine.modules.vision.encoder import DINOv2Encoder
 
     src = inspect.getsource(DINOv2Encoder._ensure_loaded_locked)
     assert "HF_HUB_DISABLE_TELEMETRY" in src, (
@@ -99,7 +99,7 @@ def test_dinov2_load_disables_telemetry_before_from_pretrained(monkeypatch):
 
     import torch
 
-    from kaine.modules.topos.encoder import DINOv2Encoder
+    from kaine.modules.vision.encoder import DINOv2Encoder
 
     monkeypatch.delenv("HF_HUB_DISABLE_TELEMETRY", raising=False)
 

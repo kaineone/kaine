@@ -69,7 +69,7 @@ from kaine.storage import resolve
 log = logging.getLogger(__name__)
 
 _MONITOR_OUT_SALIENCE = 0.5
-_SOMA_STREAM = "soma.out"
+_INTEROCEPTION_STREAM = "soma.out"
 _WELFARE_STREAM = "welfare.out"
 
 
@@ -703,7 +703,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # interoception-module-reported warm-up: the mind's own signal (warmup_active in the
         # latest soma.report) that gating should continue even past the fixed
         # cold-start window.
-        self._soma_warmup_active = False
+        self._interoception_warmup_active = False
         self._distress = SustainedThresholdTracker(
             threshold=config.distress_threshold,
             duration_s=config.distress_duration_s,
@@ -747,7 +747,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         """
         seen = 0
         for stream, cursor_attr in (
-            (_SOMA_STREAM, "_cursor"),
+            (_INTEROCEPTION_STREAM, "_cursor"),
             (_WELFARE_STREAM, "_welfare_cursor"),
         ):
             try:
@@ -763,10 +763,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                 continue
             for entry_id, event in entries:
                 setattr(self, cursor_attr, entry_id)
-                if stream == _SOMA_STREAM and event.type == "soma.report":
+                if stream == _INTEROCEPTION_STREAM and event.type == "soma.report":
                     # Track the mind's own warm-up signal from every
                     # soma.report observed during warm-up.
-                    self._soma_warmup_active = bool(
+                    self._interoception_warmup_active = bool(
                         (event.payload or {}).get("warmup_active", False)
                     )
                 seen += 1
@@ -826,18 +826,18 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # Honor the interoception module's own warm-up flag past the fixed floor, but only up to
         # warmup_ceiling_s of wall time, so a stuck/stale flag or a long freeze
         # cannot blind the net forever. A ceiling of 0 means the flag never extends it.
-        soma_gate = (
-            self._soma_warmup_active
+        interoception_gate = (
+            self._interoception_warmup_active
             and self._started_at_wall is not None
             and (now - self._started_at_wall) < self._config.warmup_ceiling_s
         )
-        if self._in_warmup(u_now, now) or soma_gate:
+        if self._in_warmup(u_now, now) or interoception_gate:
             await self._drain_during_warmup(u_now)
             return
         # Drain soma.out, feeding the distress tracker.
         try:
             entries, last_scanned = await self._bus.read_entries(
-                _SOMA_STREAM, last_id=self._cursor, count=128, block_ms=0
+                _INTEROCEPTION_STREAM, last_id=self._cursor, count=128, block_ms=0
             )
         except Exception:
             log.warning("welfare monitor: soma.out read failed", exc_info=True)
@@ -848,7 +848,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             if event.type != "soma.report":
                 continue
             payload = event.payload or {}
-            self._soma_warmup_active = bool(payload.get("warmup_active", False))
+            self._interoception_warmup_active = bool(payload.get("warmup_active", False))
             raw = payload.get("prediction_error", 0.0)
             if raw is None:
                 # A reading the interoception module skipped as non-finite has no error: it is no sample,

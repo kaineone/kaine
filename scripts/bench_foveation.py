@@ -57,13 +57,13 @@ def _pct(samples: list[float], q: float) -> float:
     return ordered[idx]
 
 
-def _fovea_knobs(topos_cfg: dict[str, Any]) -> dict[str, Any]:
-    grid = topos_cfg.get("foveation_grid") or [12, 12]
-    pw = int(topos_cfg.get("peripheral_width", 320))
-    ph = int(topos_cfg.get("peripheral_height", 180))
-    fs = int(topos_cfg.get("foveal_size", 224))
-    lo = float(topos_cfg.get("foveation_arousal_size_min", 0.12))
-    hi = float(topos_cfg.get("foveation_arousal_size_max", 0.5))
+def _fovea_knobs(vision_cfg: dict[str, Any]) -> dict[str, Any]:
+    grid = vision_cfg.get("foveation_grid") or [12, 12]
+    pw = int(vision_cfg.get("peripheral_width", 320))
+    ph = int(vision_cfg.get("peripheral_height", 180))
+    fs = int(vision_cfg.get("foveal_size", 224))
+    lo = float(vision_cfg.get("foveation_arousal_size_min", 0.12))
+    hi = float(vision_cfg.get("foveation_arousal_size_max", 0.5))
     return {
         "grid": (int(grid[0]), int(grid[1])),
         "peripheral_size": (pw, ph),
@@ -78,7 +78,7 @@ def _open_native_source(cfg: dict[str, Any]) -> tuple[Optional[Any], str]:
     releases it — spawning ffmpeg per frame would measure process startup, not the
     per-tick read the running system actually pays."""
     try:
-        from kaine.modules.topos.screen import (
+        from kaine.modules.vision.screen import (
             ScreenCaptureSource,
             ScreenTarget,
             detect_screen_size,
@@ -108,15 +108,15 @@ def _open_native_source(cfg: dict[str, Any]) -> tuple[Optional[Any], str]:
 
 
 async def _run(cfg: dict[str, Any], iters: int, use_screen: bool) -> dict[str, Any]:
-    from kaine.modules.topos.foveation import (
+    from kaine.modules.vision.foveation import (
         SpatialSaliency,
         combine_saliency,
         foveate,
         select_fovea,
     )
 
-    topos_cfg = cfg.get("topos") or {}
-    knobs = _fovea_knobs(topos_cfg)
+    vision_cfg = cfg.get("topos") or {}
+    knobs = _fovea_knobs(vision_cfg)
     out: dict[str, Any] = {"knobs": knobs, "grab": {}, "iters": iters}
 
     # --- source frame: a real native grab if asked, else a seeded synthetic ---
@@ -144,9 +144,9 @@ async def _run(cfg: dict[str, Any], iters: int, use_screen: bool) -> dict[str, A
         if screen_src is not None:
             screen_src.release()
             screen_src = None
-        w = int(topos_cfg.get("capture_width", 640))
-        h = int(topos_cfg.get("capture_height", 480))
-        from kaine.modules.topos.feed import SeededProceduralSource, SeededSchedule
+        w = int(vision_cfg.get("capture_width", 640))
+        h = int(vision_cfg.get("capture_height", 480))
+        from kaine.modules.vision.feed import SeededProceduralSource, SeededSchedule
 
         src = SeededProceduralSource(SeededSchedule(seed=0, width=w, height=h))
         src.open()
@@ -162,10 +162,10 @@ async def _run(cfg: dict[str, Any], iters: int, use_screen: bool) -> dict[str, A
         screen_src.release()  # done sampling; the encode benchmark reuses `frame`
 
     # --- encoder ---
-    model_id = topos_cfg.get("encoder_model_id")
-    device_pref = topos_cfg.get("device", "auto")
+    model_id = vision_cfg.get("encoder_model_id")
+    device_pref = vision_cfg.get("device", "auto")
     try:
-        from kaine.modules.topos.encoder import DINOv2Encoder
+        from kaine.modules.vision.encoder import DINOv2Encoder
 
         kw: dict[str, Any] = {"device_preference": device_pref}
         if model_id:
@@ -257,8 +257,8 @@ async def main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     cfg = _load_config(args.config)
-    topos_cfg = cfg.get("topos") or {}
-    vision_hz = float(topos_cfg.get("vision_sample_hz", 10.0))
+    vision_cfg = cfg.get("topos") or {}
+    vision_hz = float(vision_cfg.get("vision_sample_hz", 10.0))
     budget_ms = 1000.0 / vision_hz if vision_hz > 0 else float("inf")
 
     print("KAINE foveation benchmark (topos-foveation task 1.7)")

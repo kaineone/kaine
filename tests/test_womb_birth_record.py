@@ -10,7 +10,7 @@ import pytest
 
 from kaine.cycle.__main__ import _make_birth_hook
 from kaine.lifecycle import stage as lifecycle_stage
-from kaine.modules.topos.feed import WombClock
+from kaine.modules.vision.feed import WombClock
 from kaine.modules.womb_signal import WombParams
 
 

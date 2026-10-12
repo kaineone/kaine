@@ -40,7 +40,7 @@ import psutil
 from kaine.config import load_runtime_config
 from kaine.hostmem import classify_accelerator_memory
 from kaine.model_paths import DEFAULT_STT, DEFAULT_TTS, speech_model_dir
-from kaine.modules.topos.internvideo_next_loader import default_weights_dir
+from kaine.modules.vision.internvideo_next_loader import default_weights_dir
 from kaine.residency.budget import current_budgets
 from kaine.residency.catalogue import (
     DEFAULT_CATALOGUE_PATH,
@@ -526,11 +526,11 @@ def _select_components(
             )
 
     if _is_enabled(modules, "topos"):
-        topos = config.get("topos", {})
-        backend = topos.get("encoder_backend", "internvideo_next")
+        vision = config.get("topos", {})
+        backend = vision.get("encoder_backend", "internvideo_next")
         if backend == "internvideo_next":
-            model_id = topos.get("encoder_model_id") or "internvideo_next"
-            weights_dir = topos.get("encoder_local_dir") or default_weights_dir()
+            model_id = vision.get("encoder_model_id") or "internvideo_next"
+            weights_dir = vision.get("encoder_local_dir") or default_weights_dir()
             present = (Path(weights_dir) / "model.safetensors").is_file()
             if present:
                 components.append(
@@ -539,7 +539,7 @@ def _select_components(
                         kind="in_process",
                         backend="internvideo_next",
                         model_id=model_id,
-                        config_section=topos,
+                        config_section=vision,
                     )
                 )
             else:
@@ -553,7 +553,7 @@ def _select_components(
                     )
                 )
         elif backend == "dinov2":
-            model_id = topos.get("encoder_model_id") or "facebook/dinov2-small"
+            model_id = vision.get("encoder_model_id") or "facebook/dinov2-small"
             if _hf_cached(model_id):
                 components.append(
                     ComponentInfo(
@@ -561,7 +561,7 @@ def _select_components(
                         kind="in_process",
                         backend="dinov2",
                         model_id=model_id,
-                        config_section=topos,
+                        config_section=vision,
                     )
                 )
             else:
@@ -736,11 +736,11 @@ def _target_embedding(task: _ChildTask) -> dict[str, Any]:
     return {"mapped": mapped}
 
 
-def _target_topos_encoder(task: _ChildTask) -> dict[str, Any]:
+def _target_vision_encoder(task: _ChildTask) -> dict[str, Any]:
     _set_offline_env()
     from PIL import Image
 
-    from kaine.modules.topos.encoder import make_encoder
+    from kaine.modules.vision.encoder import make_encoder
 
     enc = make_encoder(
         task.backend,
@@ -800,7 +800,7 @@ def _run_component_target(task: _ChildTask) -> dict[str, Any]:
     if task.component == "embedding":
         return _target_embedding(task)
     if task.component == "topos.encoder":
-        return _target_topos_encoder(task)
+        return _target_vision_encoder(task)
     if task.component == "audition.emotion":
         return _target_audition_emotion(task)
     raise ValueError(f"unknown in-process component {task.component}")

@@ -17,9 +17,9 @@ The other nine modules (the planning, episodic memory, self-model, world model, 
 ```mermaid
 graph TD
     subgraph Prediction["Prediction group"]
-        Soma["Soma\n(interoception)"]
-        Chronos["Chronos\n(temporal)"]
-        Topos["Topos\n(vision)"]
+        Interoception["Interoception\n(interoception)"]
+        Sequence["Sequence\n(temporal)"]
+        Vision["Vision\n(vision)"]
         Audition["Audition\n(hearing)"]
     end
 
@@ -55,9 +55,9 @@ graph TD
     Volition["Volition\n(action selection)"]
     OscillatorLayer["Oscillatory layer\n(optional, off)"]
 
-    Soma -->|"soma.out"| Bus
-    Chronos -->|"chronos.out"| Bus
-    Topos -->|"topos.out"| Bus
+    Interoception -->|"soma.out"| Bus
+    Sequence -->|"chronos.out"| Bus
+    Vision -->|"topos.out"| Bus
     Audition -->|"audition.out"| Bus
     Thymos -->|"thymos.out"| Bus
     Lingua -->|"lingua.out"| Bus
@@ -75,15 +75,15 @@ graph TD
     Syneidesis -->|"workspace.broadcast"| Bus
     Syneidesis --> Volition
     Volition -->|"intent.speak / think / act / rest\nvia volition.out"| Bus
-    Bus -->|"accessed content as context"| Topos
+    Bus -->|"accessed content as context"| Vision
     Bus -->|"accessed content as context"| Audition
-    Bus -->|"accessed content as context"| Soma
-    Bus -->|"every broadcast as input"| Chronos
+    Bus -->|"accessed content as context"| Interoception
+    Bus -->|"every broadcast as input"| Sequence
     Bus -->|"every broadcast, appraised"| Thymos
     Bus -->|"accessed content"| Lingua
 
     Lingua -.->|"text to speak"| Vox
-    PerceptionLocus -.->|"physical XOR virtual gate"| Topos
+    PerceptionLocus -.->|"physical XOR virtual gate"| Vision
     PerceptionLocus -.->|"physical XOR virtual gate"| Audition
     Mundus -.->|"mundus.*"| Bus
 
@@ -97,9 +97,9 @@ graph TD
 
 | # | Name | Group | Base thesis | Code | Backing technology |
 |---|------|-------|-------------|------|--------------------|
-| 1 | **Interoception** | Prediction | Active | `kaine/modules/soma/` | NumPy CfC reservoir with an online readout by default (`[soma].cfc_backend = "numpy"`); ncps/torch optional; pynvml and psutil; fatigue and regulation integrate only prediction error beyond the learned expected band |
-| 2 | **Sequence** | Prediction | Active | `kaine/modules/chronos/` | NumPy CfC reservoir (32 units) by default; ncps/torch optional; predicts the next broadcast's features |
-| 3 | **Vision** | Prediction | Active | `kaine/modules/topos/` | Frozen InternVideo-Next clip encoder; DINOv2 fallback; online forward model with foveation |
+| 1 | **Interoception** | Prediction | Active | `kaine/modules/interoception/` | NumPy CfC reservoir with an online readout by default (`[soma].cfc_backend = "numpy"`); ncps/torch optional; pynvml and psutil; fatigue and regulation integrate only prediction error beyond the learned expected band |
+| 2 | **Sequence** | Prediction | Active | `kaine/modules/sequence/` | NumPy CfC reservoir (32 units) by default; ncps/torch optional; predicts the next broadcast's features |
+| 3 | **Vision** | Prediction | Active | `kaine/modules/vision/` | Frozen InternVideo-Next clip encoder; DINOv2 fallback; online forward model with foveation |
 | 4 | **Audition** | Prediction | Active | `kaine/modules/audition/` | NumPy log-spectral acoustic encoder by default; emotion2vec+ tone classifier; optional speaches distil-Whisper and sherpa-onnx Moonshine speech-to-text backends (off in the base thesis) |
 | 5 | **Planning** | Cognition | Held | `kaine/modules/nous/` | Active inference (belief updating and expected-free-energy policy selection). The code default in `kaine/boot/factories/nous.py` is `"pymdp"` (JAX) because `config/kaine.toml` leaves `[nous].backend` commented out; only `tier0.toml` and `tier1.toml` select the NumPy engine |
 | 6 | **Episodic memory** | Cognition | Held | `kaine/modules/mnemos/` | Qdrant; shared all-MiniLM-L6-v2 embedder (384-dim, CPU); episodic, semantic and procedural stores |

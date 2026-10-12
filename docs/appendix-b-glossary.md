@@ -134,7 +134,7 @@ A learned predictor of a module's own next input. The vision and audition module
 
 ### Foveation
 
-The vision module's front-end attention (`kaine/modules/topos/foveation.py`). Each tile of a coarse grid over the raw frames keeps a running mean and variance of its frame change, and its salience is a z-score of the current change against them. The fovea moves to the most salient tile when it beats the held tile by a hysteresis margin, and arousal sets its size (narrower when arousal is high). The peripheral gist and the foveal crop pass through the same clip encoder. Off in `config/kaine.toml` (`[topos].foveation = false`) and on in the base-thesis form.
+The vision module's front-end attention (`kaine/modules/vision/foveation.py`). Each tile of a coarse grid over the raw frames keeps a running mean and variance of its frame change, and its salience is a z-score of the current change against them. The fovea moves to the most salient tile when it beats the held tile by a hysteresis margin, and arousal sets its size (narrower when arousal is high). The peripheral gist and the foveal crop pass through the same clip encoder. Off in `config/kaine.toml` (`[topos].foveation = false`) and on in the base-thesis form.
 
 ---
 

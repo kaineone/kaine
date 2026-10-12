@@ -44,7 +44,7 @@ from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     import numpy as np
 
-    from kaine.modules.topos.feed import PlaylistClock, PlaylistPosition
+    from kaine.modules.vision.feed import PlaylistClock, PlaylistPosition
     from kaine.modules.womb_signal import WombParams
 
 log = logging.getLogger(__name__)
@@ -209,7 +209,7 @@ def render_birth_field(
     ``floor(womb_t_at_birth * frame_rate_hz)``, with the recorded seed and the
     entity's lived developmental time.
     """
-    from kaine.modules.topos.feed import (
+    from kaine.modules.vision.feed import (
         WombClock,
         WombProceduralSource,
         WombSchedule,

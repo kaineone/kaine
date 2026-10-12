@@ -117,7 +117,7 @@ The shipped `config/kaine.toml` disables it (`[oscillator].enabled = false`). En
 
 The sequence and interoception modules use Closed-form Continuous-time (CfC) networks. The default is the NumPy CfC in `kaine/cfc_numpy.py` via `cfc_backend = "numpy"` for both modules. A PyTorch alternative via `ncps.torch.CfC` is in the `[core]` extra.
 
-CfC networks handle irregular time steps, which suits a cognitive cycle with non-uniform event timing. The networks are small (about 24 K parameters for the sequence module: 24-dimensional input, 32 units, a 128-unit backbone), and the sequence module's network is pinned to CPU in `kaine/modules/chronos/network.py`. The interoception module's fatigue and regulation integrate only prediction error beyond the learned expected-error band, not all cumulative error.
+CfC networks handle irregular time steps, which suits a cognitive cycle with non-uniform event timing. The networks are small (about 24 K parameters for the sequence module: 24-dimensional input, 32 units, a 128-unit backbone), and the sequence module's network is pinned to CPU in `kaine/modules/sequence/network.py`. The interoception module's fatigue and regulation integrate only prediction error beyond the learned expected-error band, not all cumulative error.
 
 
 ## Memory
@@ -227,7 +227,7 @@ The shipped config targets a dual-GPU reference host: a modern multi-core CPU wi
 | Vision InternVideo-Next encoder | `cuda:1` | `[topos].device` |
 | Sentence-transformers embedder | `cpu` | `[embedding].device` (NumPy backend ignores this) |
 | Audition emotion2vec+ | `cpu` | `[audition].emotion_device` |
-| Sequence CfC network | `cpu` | pinned in `kaine/modules/chronos/network.py` |
+| Sequence CfC network | `cpu` | pinned in `kaine/modules/sequence/network.py` |
 | Chatterbox TTS | `cuda:1` | The container's GPU assignment (`AddDevice=nvidia.com/gpu=N` in the quadlet unit) |
 | Speaches STT | `cpu` | The `latest-cpu` image; no GPU is assigned |
 

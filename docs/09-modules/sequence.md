@@ -27,7 +27,7 @@ Inhibited broadcasts reach the sequence module as well as accessed ones, so the 
 
 ### Broadcast featurizer
 
-`SnapshotFeaturizer` (`kaine/modules/chronos/featurizer.py`) builds the vector from the broadcast's coalition, weighting each member by the intensity its module reported (not by its score). The broadcast context of the vision, audition, and interoception modules uses the same layout, computed over accessed members only.
+`SnapshotFeaturizer` (`kaine/modules/sequence/featurizer.py`) builds the vector from the broadcast's coalition, weighting each member by the intensity its module reported (not by its score). The broadcast context of the vision, audition, and interoception modules uses the same layout, computed over accessed members only.
 
 | Components | Feature |
 |---|---|
@@ -44,7 +44,7 @@ Layout 2 is the default for new entities. Layout 1 is kept for entities restored
 
 ### Reservoir
 
-`CfCNetwork` (`kaine/modules/chronos/network.py`) runs either the NumPy step in `kaine/cfc_numpy.py` (`cfc_backend = "numpy"`) or `ncps.torch.CfC` (`cfc_backend = "torch"`). The two compute the same step and agree to 1e-5 from the same weights. Every reservoir parameter is frozen; the reservoir extracts temporal features and is never trained. Its weights are generated in NumPy from a reservoir seed, identically for both backends, and copied into the ncps module for torch. A custom `network` can be injected at boot, for example for a CL1 substrate; it must expose `units` (its hidden width) when forward prediction is on.
+`CfCNetwork` (`kaine/modules/sequence/network.py`) runs either the NumPy step in `kaine/cfc_numpy.py` (`cfc_backend = "numpy"`) or `ncps.torch.CfC` (`cfc_backend = "torch"`). The two compute the same step and agree to 1e-5 from the same weights. Every reservoir parameter is frozen; the reservoir extracts temporal features and is never trained. Its weights are generated in NumPy from a reservoir seed, identically for both backends, and copied into the ncps module for torch. A custom `network` can be injected at boot, for example for a CL1 substrate; it must expose `units` (its hidden width) when forward prediction is on.
 
 The hidden state (`cfc_units` components) accumulates across broadcasts during a run. It starts at zero after revival and is never persisted.
 
@@ -75,7 +75,7 @@ Without a temporal error, a report that is not an alert is at `baseline_salience
 
 ### Recurrence detection
 
-`RecurrenceRuminationDetector` (`kaine/modules/chronos/rumination.py`; the code calls recurrence "rumination") quantizes each dimension of the hidden state with step `rumination_bucket_resolution` and hashes the result to a bucket. Recurrence is detected when one bucket occurs at least `rumination_threshold` times among the last `rumination_window` hidden states, meaning the workspace keeps returning to the same state. The report's `habituation_score` is one minus the share of distinct buckets in that window.
+`RecurrenceRuminationDetector` (`kaine/modules/sequence/rumination.py`; the code calls recurrence "rumination") quantizes each dimension of the hidden state with step `rumination_bucket_resolution` and hashes the result to a bucket. Recurrence is detected when one bucket occurs at least `rumination_threshold` times among the last `rumination_window` hidden states, meaning the workspace keeps returning to the same state. The report's `habituation_score` is one minus the share of distinct buckets in that window.
 
 ### Time since the last interaction
 
@@ -171,11 +171,11 @@ graph TD
 
 | File | Role |
 |---|---|
-| `kaine/modules/chronos/module.py` | `Chronos` class: `on_workspace()`, intensity and alert rule, user-input loop, sleep loop, serialization |
-| `kaine/modules/chronos/featurizer.py` | `SnapshotFeaturizer`: the 24-component broadcast features |
-| `kaine/modules/chronos/network.py` | `CfCNetwork` (NumPy or torch backend), `ForwardPredictionHead`, plugin injection |
-| `kaine/modules/chronos/anomaly.py` | `RollingZScoreAnomaly`: z-score over hidden-state norms |
-| `kaine/modules/chronos/rumination.py` | `RecurrenceRuminationDetector`: recurrence of quantized hidden states |
+| `kaine/modules/sequence/module.py` | `Sequence` class: `on_workspace()`, intensity and alert rule, user-input loop, sleep loop, serialization |
+| `kaine/modules/sequence/featurizer.py` | `SnapshotFeaturizer`: the 24-component broadcast features |
+| `kaine/modules/sequence/network.py` | `CfCNetwork` (NumPy or torch backend), `ForwardPredictionHead`, plugin injection |
+| `kaine/modules/sequence/anomaly.py` | `RollingZScoreAnomaly`: z-score over hidden-state norms |
+| `kaine/modules/sequence/rumination.py` | `RecurrenceRuminationDetector`: recurrence of quantized hidden states |
 | `kaine/modules/intensity.py` | `graded_intensity()`, shared by the four predictive processors |
 
 ## Enabling and use
@@ -196,13 +196,13 @@ The sequence module needs no external service.
 
 | File | What it verifies |
 |---|---|
-| `tests/test_chronos_module.py` | `on_workspace()` loop, intensity and alert logic, sleep interaction |
-| `tests/test_chronos_featurizer.py` | `SnapshotFeaturizer` determinism and layout |
-| `tests/test_chronos_network.py` | `CfCNetwork` CPU pinning, parameter count under 100 K, `ForwardPredictionHead` |
-| `tests/test_chronos_anomaly.py` | `RollingZScoreAnomaly` empty-window and outlier cases |
-| `tests/test_chronos_rumination.py` | Recurrence threshold and habituation score |
+| `tests/test_sequence_module.py` | `on_workspace()` loop, intensity and alert logic, sleep interaction |
+| `tests/test_sequence_featurizer.py` | `SnapshotFeaturizer` determinism and layout |
+| `tests/test_sequence_network.py` | `CfCNetwork` CPU pinning, parameter count under 100 K, `ForwardPredictionHead` |
+| `tests/test_sequence_anomaly.py` | `RollingZScoreAnomaly` empty-window and outlier cases |
+| `tests/test_sequence_rumination.py` | Recurrence threshold and habituation score |
 | `tests/test_graded_intensity.py` | The shared graded-intensity rule |
-| `tests/systems/test_chronos_subsystem.py` | Redis-backed subsystem integration |
+| `tests/systems/test_sequence_subsystem.py` | Redis-backed subsystem integration |
 
 ## Spec and related
 

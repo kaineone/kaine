@@ -309,7 +309,7 @@ async def test_apply_rate_control_event_recomputes_period():
 
 
 @pytest.mark.asyncio
-async def test_soma_reduce_rate_recomputes_period_regression():
+async def test_interoception_reduce_rate_recomputes_period_regression():
     """The audit's divergence bug: reduce_rate used to mutate _processing_rate
     WITHOUT recomputing _target_tick_period, so the logical clock kept stamping at
     the stale period. Routing reduce_rate through the single setter fixes it."""
@@ -318,7 +318,7 @@ async def test_soma_reduce_rate_recomputes_period_regression():
     # Feed a soma.regulation/reduce_rate advisory through the real consumer.
     bus = _ReduceRateBus()
     cycle._bus = bus  # type: ignore[assignment]
-    await cycle.consume_soma_regulation()
+    await cycle.consume_interoception_regulation()
     after_rate = cycle.processing_rate_hz
     assert after_rate < before_rate  # the throttle actually lowered the rate
     # The cached period must equal 1/new_rate — NOT the stale 1/before_rate.

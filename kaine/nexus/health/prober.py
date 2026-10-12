@@ -84,7 +84,7 @@ class HealthProber:
     perception_feed_cfg: dict[str, Any] = field(default_factory=dict)
     # The vision module's frame geometry (capture_width/height), needed to render the seeded
     # video schedule descriptor exactly as the run will generate it.
-    topos_capture_geometry: tuple[int, int] = (640, 480)
+    vision_capture_geometry: tuple[int, int] = (640, 480)
     # Audition capture geometry (capture_sample_rate/channels), needed to render
     # the seeded audio schedule descriptor exactly as the run will generate it.
     audition_capture_geometry: tuple[int, int] = (16000, 1)
@@ -259,7 +259,7 @@ class HealthProber:
     def _perception_feed_block(self) -> dict[str, Any]:
         return blocks.perception_feed_block(
             self.perception_feed_cfg,
-            self.topos_capture_geometry,
+            self.vision_capture_geometry,
             self.audition_capture_geometry,
         )
 

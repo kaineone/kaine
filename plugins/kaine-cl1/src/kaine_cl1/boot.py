@@ -26,9 +26,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from kaine_cl1.backends.chronos import WetwareTimingModel
+from kaine_cl1.backends.interoception import WetwareInteroceptiveModel
 from kaine_cl1.backends.nous import WetwarePolicyEngine
-from kaine_cl1.backends.soma import WetwareInteroceptiveModel
+from kaine_cl1.backends.sequence import WetwareTimingModel
 from kaine_cl1.substrate.broker import ChannelTerritory, SubstrateBroker
 
 

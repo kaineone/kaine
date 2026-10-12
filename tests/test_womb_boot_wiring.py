@@ -14,7 +14,7 @@ from kaine.boot import (
     gather_perception_feed_descriptor,
 )
 from kaine.lifecycle.stage import StageState, write_stage
-from kaine.modules.topos.feed import WombClock
+from kaine.modules.vision.feed import WombClock
 
 
 def test_womb_video_factory_returns_readable_bgr_frame():

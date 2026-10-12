@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
-    from kaine.modules.topos.feed import WombClock
+    from kaine.modules.vision.feed import WombClock
     from kaine.modules.womb_signal import WombParams
 from kaine.entity_clock import EntityClock
 
@@ -49,7 +49,7 @@ def _womb_lived_offset(stage_path: Path | None = None) -> float:
 
 
 def _shared_womb_objects(feed: dict[str, Any]) -> tuple[WombClock, Callable[[], float]]:
-    from kaine.modules.topos.feed import WombClock
+    from kaine.modules.vision.feed import WombClock
 
     clock = feed.get("_shared_womb_clock")
     lived = feed.get("_womb_lived_seconds")
@@ -77,7 +77,7 @@ def _install_shared_womb_clock(
     import math
 
     from kaine.lifecycle import stage as _lifecycle_stage
-    from kaine.modules.topos.feed import WombClock
+    from kaine.modules.vision.feed import WombClock
 
     if stage_state is not None:
         lived = float(stage_state.lived_seconds)
@@ -395,13 +395,13 @@ def _install_womb_world_transition(
 
     if stage_state is None:
         stage_state = _lifecycle_stage.read_stage(stage_path)
-    topos = (kaine_config or {}).get("topos") or {}
+    vision = (kaine_config or {}).get("topos") or {}
     transition = _build_womb_world_transition(
         perception_feed,
         playlist_clock,
         stage_state=stage_state,
-        width=int(topos.get("capture_width", 640)),
-        height=int(topos.get("capture_height", 480)),
+        width=int(vision.get("capture_width", 640)),
+        height=int(vision.get("capture_height", 480)),
         perceiving=_transition_perceived,
         video_present=video_present,
         on_event=_transition_event_publisher(bus) if bus is not None else None,
@@ -426,7 +426,7 @@ def _build_perception_feed_video_factory(
     resolves + (later, at open()) verifies the operator manifest; stimulus source uses a
     shared stimulus source clock so the maternal environment is seen and heard together.
     """
-    from kaine.modules.topos.feed import (
+    from kaine.modules.vision.feed import (
         PlaylistSource,
         SeededProceduralSource,
         SeededSchedule,
@@ -501,7 +501,7 @@ def _build_screen_source_factory(feed: dict[str, Any]) -> Any:
     and screen contents are the operator's own or public media, so no separate
     consent gate is imposed here.
     """
-    from kaine.modules.topos.screen import (
+    from kaine.modules.vision.screen import (
         ScreenCaptureSource,
         ScreenTarget,
         detect_screen_size,
@@ -619,7 +619,7 @@ def _build_perception_feed_audio_factory(
         WombAudioSchedule,
         WombProceduralAudioStream,
     )
-    from kaine.modules.topos.feed import load_playlist_manifest
+    from kaine.modules.vision.feed import load_playlist_manifest
     from kaine.modules.womb_signal import _LOWPASS_TAPS
 
     video = dict(feed.get("video") or {})
@@ -735,13 +735,13 @@ def gather_perception_feed_descriptor(
     modules package (import-boundary contract). Mirrors ``_gather_model_ids``.
     """
     feed = config.get("perception_feed") or {}
-    topos = config.get("topos") or {}
+    vision = config.get("topos") or {}
     audition = config.get("audition") or {}
     mode = str(feed.get("mode", "off")).lower()
     descriptor: dict[str, Any] = {"mode": mode}
     if mode == "seeded":
         from kaine.modules.audition.feed import SeededAudioSchedule
-        from kaine.modules.topos.feed import SeededSchedule
+        from kaine.modules.vision.feed import SeededSchedule
 
         seed = int(feed.get("seed", 0))
         video = dict(feed.get("video") or {})
@@ -750,8 +750,8 @@ def gather_perception_feed_descriptor(
         descriptor["seed"] = seed
         descriptor["video"] = SeededSchedule(
             seed=seed,
-            width=int(topos.get("capture_width", 640)),
-            height=int(topos.get("capture_height", 480)),
+            width=int(vision.get("capture_width", 640)),
+            height=int(vision.get("capture_height", 480)),
             surprise_interval=surprise_interval,
             surprise_strength=float(video.get("surprise_strength", 1.0)),
         ).as_descriptor()
@@ -772,7 +772,7 @@ def gather_perception_feed_descriptor(
         import dataclasses
 
         from kaine.modules.audition.feed import WombAudioSchedule
-        from kaine.modules.topos.feed import WombSchedule
+        from kaine.modules.vision.feed import WombSchedule
 
         seed = int(feed.get("seed", 0))
         audio = dict(feed.get("audio") or {})
@@ -786,8 +786,8 @@ def gather_perception_feed_descriptor(
             descriptor["womb"] = {"invalid": True}
         descriptor["video"] = WombSchedule(
             seed=seed,
-            width=int(topos.get("capture_width", 640)),
-            height=int(topos.get("capture_height", 480)),
+            width=int(vision.get("capture_width", 640)),
+            height=int(vision.get("capture_height", 480)),
         ).as_descriptor()
         sample_rate = int(audio.get("sample_rate", audition.get("capture_sample_rate", 16000)))
         channels = int(audio.get("channels", audition.get("capture_channels", 1)))
@@ -802,7 +802,7 @@ def gather_perception_feed_descriptor(
     elif mode == "playlist":
         manifest_path = str(feed.get("playlist_manifest", "")).strip()
         try:
-            from kaine.modules.topos.feed import load_playlist_manifest
+            from kaine.modules.vision.feed import load_playlist_manifest
 
             manifest = load_playlist_manifest(manifest_path)
             # ONE manifest pins both surfaces — no per-surface duplication.

@@ -92,7 +92,7 @@ async def test_coupled_battery_exercises_and_reports_float_gains():
 
 
 @pytest.mark.asyncio
-async def test_workspace_on_and_pooled_soma_gain_series_differ():
+async def test_workspace_on_and_pooled_interoception_gain_series_differ():
     cfg = MediationConfig(seed=4, ticks=60, warmup_ticks=20)
     result = await run_ablation(cfg)
     on = result["records"][0]
@@ -107,7 +107,7 @@ async def test_stimulus_is_pure_function_and_independent_runs():
     assert first == second
 
     different = COUPLED_STIMULUS.script(6, 30)
-    assert different.topos_frames != first.topos_frames
+    assert different.vision_frames != first.vision_frames
 
     cfg = MediationConfig(seed=8, ticks=30, warmup_ticks=10)
     result = await run_ablation(cfg, stimulus=INDEPENDENT_STIMULUS)

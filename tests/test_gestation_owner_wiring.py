@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from kaine.cycle.__main__ import _start_gestation_owner
-from kaine.modules.topos.feed import WombClock
+from kaine.modules.vision.feed import WombClock
 
 
 class _Registry:
@@ -30,7 +30,7 @@ class _Drive:
     scale = 1.0
 
 
-class _Soma:
+class _Interoception:
     def __init__(self) -> None:
         self.maternal_drive = _Drive()
 
@@ -62,7 +62,7 @@ def _feed(**extra) -> dict:
 
 @pytest.mark.asyncio
 async def test_not_started_outside_womb_mode() -> None:
-    reg = _Registry({"soma": _Soma()}, now=lambda: 0.0)
+    reg = _Registry({"soma": _Interoception()}, now=lambda: 0.0)
     task = _start_gestation_owner(
         {"perception_feed": {"mode": "seeded"}}, _Bus(), reg, asyncio.Event(),
         is_paused=lambda: False,
@@ -86,7 +86,7 @@ async def test_not_started_without_a_self_rhythm_and_says_why(caplog) -> None:
 async def test_started_and_publishes_a_readiness_readout(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)  # the owner's default state path is relative
     clock = {"t": 0.0}
-    reg = _Registry({"soma": _Soma()}, now=lambda: clock["t"])
+    reg = _Registry({"soma": _Interoception()}, now=lambda: clock["t"])
     bus = _Bus()
     stop = asyncio.Event()
     feed = _feed(womb={"readout": {"readout_period_seconds": 0.05, "sample_hz": 100.0}})

@@ -24,14 +24,14 @@ from kaine.evaluation.sink import AsyncJsonlSink
 
 log = logging.getLogger(__name__)
 
-_SOMA_STREAM = "soma.out"
+_INTEROCEPTION_STREAM = "soma.out"
 
 
 class FatigueObserver(StreamSubscriberObserver):
     """Logs soma.fatigue threshold crossings and periodic fatigue reports."""
 
     name = "fatigue"
-    streams = (_SOMA_STREAM,)
+    streams = (_INTEROCEPTION_STREAM,)
 
     def __init__(self, bus: BusReader, sink: AsyncJsonlSink) -> None:
         super().__init__(bus, poll_interval_s=0.5)

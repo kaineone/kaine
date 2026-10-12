@@ -10,18 +10,18 @@ from __future__ import annotations
 
 import pytest
 
-from kaine.boot import make_audition, make_topos
+from kaine.boot import make_audition, make_vision
 from kaine.modules.audition.module import Audition
 from kaine.modules.hypnos.voice_alignment import VoiceAlignmentConfig
-from kaine.modules.topos.module import Topos
+from kaine.modules.vision.module import Vision
 from kaine.text_embedding import make_text_embedder
 from tests.systems._harness import SubsystemHarness
 
 
 @pytest.mark.asyncio
-async def test_topos_factory_forwards_cuda_index():
+async def test_vision_factory_forwards_cuda_index():
     async with SubsystemHarness() as h:
-        topos = make_topos(
+        vision = make_vision(
             h.bus,
             {
                 "encoder_backend": "dinov2",
@@ -32,9 +32,9 @@ async def test_topos_factory_forwards_cuda_index():
                 "alert_salience": 0.7,
             },
         )
-        assert isinstance(topos, Topos)
+        assert isinstance(vision, Vision)
         # Encoder hasn't loaded — but the preference is stored.
-        assert topos._encoder._device_preference == "cuda:1"
+        assert vision._encoder._device_preference == "cuda:1"
 
 
 @pytest.mark.asyncio
@@ -79,7 +79,7 @@ def test_voice_alignment_config_default_training_device():
     assert cfg.training_device == "cuda:0"
 
 
-def test_topos_factory_rejects_unknown_device_key():
+def test_vision_factory_rejects_unknown_device_key():
     """Unknown TOML keys still trip the allowlist."""
     import fakeredis.aioredis
 
@@ -89,7 +89,7 @@ def test_topos_factory_rejects_unknown_device_key():
     client = fakeredis.aioredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
     with pytest.raises(ValueError, match="unknown config keys"):
-        make_topos(
+        make_vision(
             bus,
             {
                 "device": "cuda:1",
