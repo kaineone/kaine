@@ -1068,6 +1068,9 @@ EXCLUDED_GLOBS = (
     "tests/test_legacy_local_data.py",
     "tests/test_rename_state.py",
     "tests/test_rename_state_guards.py",
+    "tests/test_legacy_keys_readers.py",
+    # Golden pins on stored names that never change.
+    "tests/test_stimulus_source_params_digest.py",
     # These documents record the rename itself and must keep the old names.
     "openspec/changes/functional-module-names/",
     "docs/appendix-e-module-names.md",

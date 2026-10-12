@@ -6,6 +6,7 @@ import hashlib
 import json
 from dataclasses import fields
 
+import kaine.legacy_names as legacy_names
 from kaine.boot.perception_feed import gather_perception_feed_descriptor
 from kaine.lifecycle.stage import womb_params_digest
 from kaine.lifecycle.stored_field_names import (
@@ -49,3 +50,12 @@ def test_non_default_value_round_trips_under_stored_name() -> None:
         {"birth_transition_seconds": 7.5}, None, None
     )
     assert stimulus_source_params_record(params)["birth_transition_seconds"] == 7.5
+
+
+def test_stored_names_are_frozen_pre_rename_config_keys() -> None:
+    """Stored names are the config keys from before the rename, and the codemod never rewrites them."""
+    assert "kaine/lifecycle/stored_field_names.py" in legacy_names.EXCLUDED_GLOBS
+    assert "tests/test_stimulus_source_params_digest.py" in legacy_names.EXCLUDED_GLOBS
+    for field, stored in STIMULUS_SOURCE_PARAMS.items():
+        assert stored != field
+        assert any(e["old"] == stored and e["new"] == field for e in legacy_names.CONFIG_KEYS)
