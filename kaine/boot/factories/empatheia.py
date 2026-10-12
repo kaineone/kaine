@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     pass
+from kaine.boot.config_kwargs import config_kwargs
 from kaine.boot.errors import _require_keys
 from kaine.bus.client import AsyncBus
 from kaine.modules.base import BaseModule
@@ -31,7 +32,7 @@ def make_empatheia(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     }
     _require_keys(section, allowed)
     qdrant = section.get("qdrant") or {}
-    kwargs: dict[str, Any] = {k: section[k] for k in allowed - {"qdrant"} if k in section}
+    kwargs = config_kwargs(section, sorted(allowed - {"qdrant"}), Empatheia)
     if "operator_sources" in kwargs:
         ops = kwargs["operator_sources"]
         if not isinstance(ops, list) or not all(isinstance(x, str) for x in ops):

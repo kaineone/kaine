@@ -151,7 +151,7 @@ def build(tmp_path: Path, **over: Any):
         "tick_index": lambda: 0,
         "is_paused": lambda: False,
         "organ_unloaded": lambda: False,
-        "hypnos_sleeping": None,
+        "sleep_sleeping": None,
         "born_at": lambda: None,
         "is_gestating": lambda: False,
         "bus": bus,

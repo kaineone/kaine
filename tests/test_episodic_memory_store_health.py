@@ -132,7 +132,7 @@ def test_episodic_memory_store_template_critical(tmp_path):
     env = Environment(loader=FileSystemLoader("kaine/nexus/templates"), autoescape=select_autoescape(["html"]))
     template = env.get_template("_episodic_memory_store.html")
     html = template.render(
-        episodic_memory_store={
+        **{"mnemos_store": {
             "state": "critical",
             "import_pending": True,
             "blocked_sleeps": 1,
@@ -141,7 +141,7 @@ def test_episodic_memory_store_template_critical(tmp_path):
             "budget_bytes": 200,
             "message": "an interrupted import is blocking sleep",
             "since": "2026-01-02T03:04:05Z",
-        }
+        }}
     )
     assert "Memory store" in html
     assert "chip down" in html
@@ -151,7 +151,7 @@ def test_episodic_memory_store_template_unavailable(tmp_path):
     """The episodic memory module's store template shows unavailable when the block is missing."""
     env = Environment(loader=FileSystemLoader("kaine/nexus/templates"), autoescape=select_autoescape(["html"]))
     template = env.get_template("_episodic_memory_store.html")
-    html = template.render(episodic_memory_store=None)
+    html = template.render(**{"mnemos_store": None})
     assert "unavailable" in html.lower()
 
 

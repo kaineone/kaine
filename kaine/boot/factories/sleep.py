@@ -4,6 +4,7 @@
 """The sleep module factory, with the voice-alignment trainer resolvers, probe-set checks and organ-window runner it needs."""
 from __future__ import annotations
 
+import inspect
 import logging
 import math
 from dataclasses import replace
@@ -13,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     from kaine.modules.sleep.voice_alignment import VoiceAlignmentConfig
 from kaine.boot.common import _effective_hot_swap_mode
-from kaine.boot.config_kwargs import config_kwargs
+from kaine.boot.config_kwargs import config_kwargs, parameter_for_config_key
 from kaine.boot.errors import (
     ConfigurationError,
     VoiceAlignmentConfigError,
@@ -296,12 +297,13 @@ def make_sleep(
         runner = _make_organ_window_runner(voice_config, kaine_config or {})
         if runner is not None:
             kwargs["organ_window_runner"] = runner
+    sleep_params = inspect.signature(Sleep).parameters
     if episodic_memory is not None:
-        kwargs["mnemos"] = episodic_memory
+        kwargs[parameter_for_config_key("mnemos", sleep_params)] = episodic_memory
     if affect is not None:
-        kwargs["thymos"] = affect
+        kwargs[parameter_for_config_key("thymos", sleep_params)] = affect
     if world_model is not None:
-        kwargs["phantasia"] = world_model
+        kwargs[parameter_for_config_key("phantasia", sleep_params)] = world_model
     # Shared playlist clock (playlist-sleep-pause): boot stashes the SAME
     # instance used by both playlist feeds under the [perception_feed] section;
     # pass it to the sleep module so sleep suspends/resumes playback at the same seam as

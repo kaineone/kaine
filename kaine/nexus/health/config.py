@@ -382,5 +382,5 @@ def load_health_prober(
         spot_control_path=resolve(_defaults["spot_control_path"]),
         spot_escalation_path=resolve(_defaults["spot_escalation_path"]),
         gpu_preflight_path=resolve(_defaults["gpu_preflight_path"]),
-        episodic_memory_store_health_path=resolve(_defaults["mnemos_store_health_path"]),
+        episodic_memory_store_health_path=resolve(_defaults["episodic_memory_store_health_path"]),
     )

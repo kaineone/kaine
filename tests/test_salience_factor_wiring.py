@@ -355,7 +355,7 @@ def test_make_salience_factors_shipped_defaults():
 
 def test_make_salience_factors_affect_static_is_a_downgrade():
     affect, goal, downgraded = make_salience_factors(
-        _cfg(salience_affect_factor="static"), AffectStateProvider()
+        _cfg(**{"salience_thymos_factor": "static"}), AffectStateProvider()
     )
     assert isinstance(affect, StaticThymosModulator)
     assert any("thymos" in d for d in downgraded), downgraded
@@ -374,7 +374,7 @@ def test_make_salience_factors_goal_drive_relevance_activates_real_scorer():
 def test_make_salience_factors_unknown_affect_value_raises():
     with pytest.raises(ConfigurationError):
         make_salience_factors(
-            _cfg(salience_affect_factor="bogus"), AffectStateProvider()
+            _cfg(**{"salience_thymos_factor": "bogus"}), AffectStateProvider()
         )
 
 

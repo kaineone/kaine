@@ -377,7 +377,7 @@ class _JaxBlocker:
 sys.meta_path.insert(0, _JaxBlocker())
 
 import numpy as np
-from kaine.modules.world_model.world_model import load_world_model
+from kaine.modules.world_model.backend import load_world_model
 
 obs_dim = 6
 wm = load_world_model(
