@@ -17,6 +17,7 @@ from typing import Any, Literal
 from kaine.model_paths import speech_model_dir
 
 __all__ = [
+    "KOKORO_EN_V0_19_SPEAKERS",
     "SpeechKind",
     "SpeechModel",
     "MANIFEST",
@@ -40,10 +41,31 @@ class SpeechModel:
     licence: str
     top_dir: str
     required_files: tuple[str, ...]
+    # Preset speaker names by id, for multi-speaker TTS models (empty when unknown).
+    speakers: tuple[str, ...] = ()
 
 
 def _archive_url(tag: str, name: str) -> str:
     return f"https://github.com/k2-fsa/sherpa-onnx/releases/download/{tag}/{name}"
+
+
+# Speaker ids 0 to 10 of Kokoro English v0_19, the archive pinned below by SHA-256.
+# Source: the sherpa-onnx Kokoro model documentation ("v0_19 (English, 11 speakers)")
+# and the id2speaker table of sherpa-onnx scripts/kokoro/v0.19/generate_voices_bin.py.
+# The prefix encodes the voice: a/b = American/British English, f/m = female/male.
+KOKORO_EN_V0_19_SPEAKERS: tuple[str, ...] = (
+    "af",
+    "af_bella",
+    "af_nicole",
+    "af_sarah",
+    "af_sky",
+    "am_adam",
+    "am_michael",
+    "bf_emma",
+    "bf_isabella",
+    "bm_george",
+    "bm_lewis",
+)
 
 
 # Pinned on 2026-09-27 from the sherpa-onnx release assets.
@@ -97,6 +119,7 @@ MANIFEST: dict[str, SpeechModel] = {
             "tokens.txt",
             "espeak-ng-data",
         ),
+        speakers=KOKORO_EN_V0_19_SPEAKERS,
     ),
 }
 
