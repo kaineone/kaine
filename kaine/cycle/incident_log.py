@@ -100,7 +100,7 @@ def scrub_paths(text: Optional[str]) -> Optional[str]:
 
 
 class IncidentLog:
-    """Durable JSONL writer for Supervisor lifecycle transitions.
+    """Durable JSONL writer for the supervisor lifecycle transitions.
 
     Wraps an :class:`AsyncJsonlSink` configured for the incident log's storage
     contract (no-purge, daily rotation, encrypted-at-rest when enabled). When
@@ -108,7 +108,7 @@ class IncidentLog:
     ever written.
 
     The class is deliberately thin -- it stamps ``ts`` if absent and forwards to
-    the sink, guarding the write so a broken sink can never crash Supervisor (the
+    the sink, guarding the write so a broken sink can never crash the supervisor (the
     watchdog must keep running precisely when things are failing).
     """
 

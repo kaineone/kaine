@@ -16,7 +16,7 @@ from tests.systems._harness import SubsystemHarness
 
 @pytest.mark.asyncio
 async def test_lingua_constructs_with_fake_chat_client(tmp_path):
-    """Verifies the Language contract: takes workspace snapshots, can be
+    """Verifies the language module's contract: takes workspace snapshots, can be
     constructed independently of any external service. With Unsloth not
     set in env, we substitute the fake — this is the default path the
     rest of the suite uses."""

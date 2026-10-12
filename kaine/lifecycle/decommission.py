@@ -353,7 +353,7 @@ def capture_backup(
             errors=[f"could not create backup dir: {type(exc).__name__}: {exc}"],
         )
 
-    # --- 1. Self-model self-model ------------------------------------------
+    # --- 1. Self-model ------------------------------------------
     self_model_src = state_root / "eidolon" / "self_model.json"
     if self_model_src.is_file():
         try:
@@ -391,7 +391,7 @@ def capture_backup(
         except Exception as exc:
             errors.append(f"copy adapters/: {exc}")
 
-    # --- 4. World model world-model weight checkpoints ---------------------
+    # --- 4. World-model weight checkpoints ---------------------
     # Learned-from-experience RSSM weights (opt-in persist_weights). The whole
     # directory is copied so custom checkpoint filenames are covered. These
     # are transferable cognitive state per CAL 4.2(b) — learned weights, never

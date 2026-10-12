@@ -84,7 +84,7 @@ from kaine.evaluation.sink import AsyncJsonlSink
 # IDENTICAL threshold/duration rule without importing kaine.evaluation. Imported
 # here (and re-exported) so the observer and the monitor never drift. The
 # blind-sensor constants and run tracker live there too, so the research log and
-# Dashboard read the same processor labels.
+# the dashboard read the same processor labels.
 from kaine.lifecycle.welfare_signal import (  # noqa: F401  (re-export)
     ADVISORY_RESET,
     BLIND_SENSOR_CLEARED_TYPE,
@@ -172,7 +172,7 @@ class WelfareObserver(StreamSubscriberObserver):
         self._interoceptive_distress_duration_s = float(interoceptive_distress_duration_s)
         self._blind_sensor_samples = blind_sensor_samples
 
-        # --- Gray-zone counters (Dashboard diagnostics). ---
+        # --- Gray-zone counters (dashboard diagnostics). ---
         self._unmaintained_fatigue_count: int = 0
         self._sustained_extreme_vad_count: int = 0
         self._replay_overload_count: int = 0
@@ -207,7 +207,7 @@ class WelfareObserver(StreamSubscriberObserver):
         self._sensor_silent_count: int = 0
         self._silence_trackers: dict[str, SilenceTracker] = {}
 
-    # --- Public counters for Dashboard diagnostics ---------------------------
+    # --- Public counters for dashboard diagnostics ---------------------------
 
     @property
     def unmaintained_fatigue_count(self) -> int:
@@ -355,7 +355,7 @@ class WelfareObserver(StreamSubscriberObserver):
 
         now = self._unfrozen.now()
 
-        # Ignore samples that predate this observer start (e.g. Interoception backlog).
+        # Ignore samples that predate this observer start (e.g. the interoception module's backlog).
         if self._is_before_start(event):
             return
 
@@ -570,13 +570,13 @@ class WelfareObserver(StreamSubscriberObserver):
         elif event.type == "soma.report":
             # (d) Track interoceptive prediction-error magnitude through the
             # shared sustained-threshold tracker. ``prediction_error`` is a
-            # scalar float published by Interoception's SubstrateForwardModel on every
+            # scalar float published by the interoception module's SubstrateForwardModel on every
             # tick — no reduction needed. The tracker fires once per sustained
             # episode (rising-edge), resetting its own timer.
             payload = event.payload or {}
             raw = payload.get("prediction_error", 0.0)
             if raw is None:
-                # A reading Interoception skipped as non-finite has no error: it is no sample,
+                # A reading the interoception module skipped as non-finite has no error: it is no sample,
                 # so it neither feeds nor resets the distress tracker.
                 return
             magnitude = float(raw)
@@ -662,7 +662,7 @@ class WelfareObserver(StreamSubscriberObserver):
         ):
             self._unmaintained_fatigue_count += 1
             # CONTENT CONTRACT: numeric scalars + the gray_zone_event label only;
-            # nothing is copied from any source (interoception/sleep) event payload.
+            # nothing is copied from any source (the interoception and sleep modules) event payload.
             record = {
                 "ts": datetime.now(timezone.utc).isoformat(),
                 "gray_zone_event": "unmaintained_fatigue",
@@ -682,7 +682,7 @@ class WelfareObserver(StreamSubscriberObserver):
         ):
             self._sustained_extreme_vad_count += 1
             # CONTENT CONTRACT: numeric scalars + the gray_zone_event label only;
-            # the raw affect VAD values are NOT copied — only the derived
+            # the raw affect module's VAD values are NOT copied — only the derived
             # seconds_sustained scalar.
             record = {
                 "ts": datetime.now(timezone.utc).isoformat(),

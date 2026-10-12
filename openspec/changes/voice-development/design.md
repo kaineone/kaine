@@ -7,7 +7,7 @@
   - `2026-10-01-voice-alignment-in-containers` and `2026-10-02-voice-alignment-backend-coherence`: trainer placement.
   - `2026-10-03-voice-alignment-capability-probes-required`.
   - `individuation-rebuild`: the probe and the one verdict.
-- **Retired:** the archived sleep rule "chosen is never LLM output" (from `2026-05-20-hypnos`), replaced by the defences in D3.
+- **Retired:** the archived sleep module rule "chosen is never LLM output" (from `2026-05-20-hypnos`), replaced by the defences in D3.
 
 ## Decisions
 
@@ -28,7 +28,7 @@ Rules:
 
 - A drive-initiated intent's `about` becomes a felt-state phrase rendered by the faithful renderer's drive templates, for example a pull towards company or restlessness. It never carries `value=`.
 - The phrase set is small, fixed and reviewed, one per drive and intensity band. It names the felt state, never what to say.
-- **Justification.** Drives are innate homeostatic states (the Affect drives are cited at their code site). Naming the felt state is the prompt's description of the entity's real state, not a scripted behaviour.
+- **Justification.** Drives are innate homeostatic states (the affect module's drives are cited at their code site). Naming the felt state is the prompt's description of the entity's real state, not a scripted behaviour.
 
 ### D3. Collapse defences in place of "never LLM output"
 
@@ -37,7 +37,7 @@ Self-generated text may become preferred training data only when all of these ho
 - **(b) A real-data anchor:** a fixed share of every training batch comes from a fixed real-data set, never self-generated (Alemohammad 2023).
 - **(c) External verification:** selection is by a signal the generator does not control, such as the outcome record or the internal re-reading check (Feng 2024).
 - **(d) Previous-self reference:** training starts from the previous accepted adapter, and the DPO or KTO reference is that adapter.
-- **(e) Monitors:** distinct-n and the stylometric measures stay inside the maturation band in both directions, or training halts for that sleep.
+- **(e) Monitors:** distinct-n and the stylometric measures stay inside the maturation band in both directions, or training halts for that sleep module.
 
 Until Stage 2 provides a validated preference source, the voice-alignment phase trains nothing and says so in its sleep summary. That is honest, not a fallback.
 
@@ -46,7 +46,7 @@ Until Stage 2 provides a validated preference source, the voice-alignment phase 
 - **The intent-log record gains:**
   - `record_id` (uuid4 hex);
   - `intent_entry_id` and `intent_origin` (the intent's coalition `entry_id` and its ignition origin);
-  - `sleep_index` (Sleep's count of completed sleeps);
+  - `sleep_index` (the sleep module's count of completed sleeps);
   - `system_digest` (SHA-256 of the system prompt);
   - `seed` (sampling seed, or null).
 - **A cycle-layer observer** (`kaine/cycle/utterance_outcome.py`) watches `lingua.external`, `audition.out`, `empatheia.out` and `thymos.out`. For each external utterance it writes one content-free record to `state/lingua/utterance_outcomes.jsonl`:
@@ -75,7 +75,7 @@ The external trainer:
 
 - When the intent log is written, every heard-speech line in the rendering and the heard input in the prompt are replaced with the fixed placeholder `[heard speech]`.
 - The organ's own generated text is logged as is. It is the entity's own content, not heard speech.
-- Language's own bus events never carry heard text. `user_input` is published only for felt and event triggers, and the published rendering is the redacted one. Audition's transcription events still carry heard text on the bus, where it is transient.
+- The language module's own bus events never carry heard text. `user_input` is published only for felt and event triggers, and the published rendering is the redacted one. The audition module's transcription events still carry heard text on the bus, where it is transient.
 - Redaction goes by event type and by field. Every text value of an external-input event (`EXTERNAL_INPUT_TYPES`: `audition.transcription`, `mundus.chat`, one shared definition also used by the ignition audit) is heard input. On every other event, the heard-speech fields are redacted at any depth.
 - The placeholder keeps the structure of a reply context without its content.
 - The A/B divergence sidecar measures only felt- and event-triggered replies. Replies to heard speech carry no `user_input`, so they are recorded as content-free skips (`no_user_input_heard_reply`), not measured. Studies are unaffected, because evaluation is off in studies.
@@ -97,25 +97,25 @@ The external trainer:
 
 ### D10. Stage 0 details fixed at implementation
 
-- **What the `about` is.** A Action selection intent carries `about_kind`: `heard` (the text of heard speech), `felt` (a drive's felt-state phrase) or `event` (a summary of another coalition event). Language treats an `about` as heard unless its kind is `felt` or `event`, so an unmarked intent, or a direct `speak()`/`think()` call, is redacted in the log. Failing closed is deliberate (V4).
+- **What the `about` is.** An action selection module intent carries `about_kind`: `heard` (the text of heard speech), `felt` (a drive's felt-state phrase) or `event` (a summary of another coalition event). The language module treats an `about` as heard unless its kind is `felt` or `event`, so an unmarked intent, or a direct `speak()`/`think()` call, is redacted in the log. Failing closed is deliberate (V4).
 - **The input heading follows the kind.** Heard input stays under "What was just said to me". A felt or event `about` in external mode goes under "What moves me to speak", because a drive is not something said to the entity. Internal mode keeps "What is prompting me to think".
 - **Redaction keeps the organ's view.** The logged rendering picks the same events, in the same order and within the same budget, as the rendering the organ saw. Only each heard-speech line's text becomes `[heard speech]`. Heard speech means every `audition.transcription` in the coalition, whatever its source label.
-- **`sleep_index`.** This is the number of sleeps Sleep has completed since it started, which is the same count the maturation gate reads, and Sleep stamps it on its bus events. Language records the latest value it has seen on `hypnos.out`, or `null` before it has seen one. `null` means unknown, never 0. The count is not durable across restarts, so the corpus (D5) must not rely on it alone to name files. Making it durable would change what the maturation gate reads, so that is left to a separate change.
-- **`record_id` on the bus.** Language's `external_speech` and `internal_speech` events carry the record's `record_id`, so the outcome observer (D4) can key its records without any text.
+- **`sleep_index`.** This is the number of sleeps the sleep module has completed since it started, which is the same count the maturation gate reads, and the sleep module stamps it on its bus events. The language module records the latest value it has seen on `hypnos.out`, or `null` before it has seen one. `null` means unknown, never 0. The count is not durable across restarts, so the corpus (D5) must not rely on it alone to name files. Making it durable would change what the maturation gate reads, so that is left to a separate change.
+- **`record_id` on the bus.** The language module's `external_speech` and `internal_speech` events carry the record's `record_id`, so the outcome observer (D4) can key its records without any text.
 - **`seed`** is the sampling seed of the organ request. Ordinary utterances set none, so it is `null` until Stage 2 sets one.
 
 ### D11. The outcome observer, fixed at implementation (task 0.4)
 
 - **What it watches.**
   - `lingua.external` (`external_speech`, carrying `record_id`) opens a record.
-  - `audition.out`: an `audition.transcription` from an operator source (`OPERATOR_SOURCES`) with non-empty text counts as a reply. This is the same rule Sequence uses for an interaction.
+  - `audition.out`: an `audition.transcription` from an operator source (`OPERATOR_SOURCES`) with non-empty text counts as a reply. This is the same rule the sequence module uses for an interaction.
   - `empatheia.out`: `empatheia.social_error` gives `deviation_magnitude`.
   - `thymos.out`: `thymos.state` gives `drives.social_drive`.
 - **The window.** `reply_window_s` (default 30 s, wall clock, from the utterance's event timestamp). The record closes at the first operator reply, at the end of the window, or at the entity's next external utterance, whichever comes first.
 - **The fields.**
   - `replied` is whether an operator reply arrived first.
   - `reply_latency_s` is the reply time minus the utterance time, else null.
-  - `preempted` is true when the entity's own next utterance closed the window before any reply. A published utterance can't be cancelled (Language cancels before publishing), so this is what "preempted" can mean for one that was heard.
+  - `preempted` is true when the entity's own next utterance closed the window before any reply. A published utterance can't be cancelled (the language module cancels before publishing), so this is what "preempted" can mean for one that was heard.
   - `empatheia_deviation` is the largest deviation seen in the window, else null.
   - `social_drive_delta` is the last social-drive value in the window minus the last one at or before the utterance, else null.
 - **No text, and no guesses.**
@@ -153,7 +153,7 @@ The external trainer:
 ## Risks
 
 - **A changed persona changes everything the entity says.** That is the intent, and it is why the change must precede maturation-reference capture.
-- **Sycophancy (Stage 2, external signal).** It is mitigated by Social cognition weighting rather than reply count, and by V3, which limits the external signal to full-entity configurations with real conversation.
+- **Sycophancy (Stage 2, external signal).** It is mitigated by the social cognition module's weighting rather than reply count, and by V3, which limits the external signal to full-entity configurations with real conversation.
 - **Weak evidence.** No study shows these methods yield a human-like individual voice from a 4B organ with tens of utterances per sleep. The stages are measured as research.
 
 ### D14. Trainer hygiene, fixed at implementation (task 0.6; integrator-approved 2026-10-05)
@@ -173,8 +173,8 @@ The external trainer:
   - The capability "before" score is taken with the previous adapter loaded, so it measures the entity's current voice, not the base.
   - **Known limit: cumulative drift from the base.** Because the baseline is the previous adapter, the capability-loss veto bounds the drift of each step, not the total drift from the base model. With the 12 bundled probes, one probe is worth more than the 0.05 threshold, so no step can lose a probe and pass, and drift is impossible today. With 20 or more probes, small per-step losses could add up. A follow-up can add a base-model floor, scoring with `disable_adapter()` as well, before the probe set grows.
 - **The system prompt store.**
-  - Language writes each distinct system prompt once, to `state/lingua/system_prompts/<system_digest>.txt`.
-  - The text is the persona only: the template, the name, the Self-model values and norms, and the situation facts. No heard speech enters it, and a test plants a sentinel heard-speech phrase and checks that it never appears in a stored prompt.
+  - The language module writes each distinct system prompt once, to `state/lingua/system_prompts/<system_digest>.txt`.
+  - The text is the persona only: the template, the name, the self-model module's values and norms, and the situation facts. No heard speech enters it, and a test plants a sentinel heard-speech phrase and checks that it never appears in a stored prompt.
   - The text is the entity's own self-model content. Each file is written as `get_state_encryptor().encrypt(text)` and read with `maybe_decrypt`, so it is never plaintext on disk when state encryption is enabled. The digest is verified over the decrypted text.
   - It is covered by the same caps-not-culls disk guard as the corpus.
 - **The conversational format.**

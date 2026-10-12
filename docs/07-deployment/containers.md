@@ -4,7 +4,7 @@ KAINE's container deployment runs the supporting services, the dashboard, the co
 
 With no profile selected, the configuration loader applies the base-thesis `thesis_test` profile. It turns on `soma`, `chronos`, `topos`, `audition`, `lingua`, `thymos` and `hypnos` and turns every other module off. It also sets `[perception_feed].mode = "seeded"` with `seed = 0`, `[topos].foveation = true`, `[audition].transcription_enabled = false` with `general_audition = true`, `[chronos].forward_prediction = true`, and `[volition]` with `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`. Every other value, from the organ model to the rates, comes from the shipped `config/kaine.toml`, which sets `[perception_feed].mode = "off"`, `[hypnos.voice_alignment].hot_swap_mode = "manual"` and `trainer_backend = "in_process"`, and `[security.state_encryption].enabled = true`.
 
-`config/kaine.operator.toml` merges last and wins. The first-run wizard (`python -m kaine.setup`) writes a full `[modules]` table there, so after the wizard runs, its module choice replaces the profile's. The wizard offers two presets: the base-thesis set (the `thesis_test` modules) and a full set with every cognitive module except Perceptual locus and Embodiment. It recommends the full set on a Tier 2 or Tier 3 host that needs no module residency and the base-thesis set otherwise.
+`config/kaine.operator.toml` merges last and wins. The first-run wizard (`python -m kaine.setup`) writes a full `[modules]` table there, so after the wizard runs, its module choice replaces the profile's. The wizard offers two presets: the base-thesis set (the `thesis_test` modules) and a full set with every cognitive module except the perceptual locus and embodiment modules. It recommends the full set on a Tier 2 or Tier 3 host that needs no module residency and the base-thesis set otherwise.
 
 ## Topology
 
@@ -29,9 +29,9 @@ Every published port is bound to `127.0.0.1`. Inside the Compose network, servic
 
 ## Opening Dashboard
 
-Open `http://127.0.0.1:8088/diagnostics/` on the host. The shipped `[nexus].access` is `"open"`, so no token or sign-in is needed. Compose passes these Dashboard variables from `compose/.env`: `KAINE_NEXUS_ACCESS` (`open` or `token`), `KAINE_NEXUS_TOKEN`, `KAINE_NEXUS_EXTRA_HOSTS` (tailnet names to add to the allowed hosts and origins) and `KAINE_NEXUS_HOST_PORT`, which also sets `KAINE_NEXUS_PUBLISHED_PORT` and the allowed origins. `compose/.env.example` lists only `KAINE_NEXUS_HOST_PORT`.
+Open `http://127.0.0.1:8088/diagnostics/` on the host. The shipped `[nexus].access` is `"open"`, so no token or sign-in is needed. Compose passes these dashboard variables from `compose/.env`: `KAINE_NEXUS_ACCESS` (`open` or `token`), `KAINE_NEXUS_TOKEN`, `KAINE_NEXUS_EXTRA_HOSTS` (tailnet names to add to the allowed hosts and origins) and `KAINE_NEXUS_HOST_PORT`, which also sets `KAINE_NEXUS_PUBLISHED_PORT` and the allowed origins. `compose/.env.example` lists only `KAINE_NEXUS_HOST_PORT`.
 
-The service sets `KAINE_NEXUS_HOST=0.0.0.0` (the bind inside the container, so the published loopback port can reach it), `KAINE_NEXUS_NON_LOOPBACK_ALLOWED=1` and `KAINE_NEXUS_ALLOWED_ORIGINS` to the loopback origins. Dashboard also reads `KAINE_NEXUS_PORT`, `KAINE_NEXUS_CONVERSATION_ENABLED` and `KAINE_NEXUS_READ_ONLY`, but Compose does not pass them, so setting them in `.env` has no effect. To make the dashboard read-only, set `[nexus].read_only = true` in `config/kaine.operator.toml`, which is mounted into the container, or pass the variable through a local overlay (`compose/*.local.yml` files are ignored by git). Host and Origin checks always apply, and `/` redirects to `/diagnostics/` when conversation is off. See [Dashboard, the dashboard](../05-dashboard.md).
+The service sets `KAINE_NEXUS_HOST=0.0.0.0` (the bind inside the container, so the published loopback port can reach it), `KAINE_NEXUS_NON_LOOPBACK_ALLOWED=1` and `KAINE_NEXUS_ALLOWED_ORIGINS` to the loopback origins. The dashboard also reads `KAINE_NEXUS_PORT`, `KAINE_NEXUS_CONVERSATION_ENABLED` and `KAINE_NEXUS_READ_ONLY`, but Compose does not pass them, so setting them in `.env` has no effect. To make the dashboard read-only, set `[nexus].read_only = true` in `config/kaine.operator.toml`, which is mounted into the container, or pass the variable through a local overlay (`compose/*.local.yml` files are ignored by git). Host and Origin checks always apply, and `/` redirects to `/diagnostics/` when conversation is off. See [the dashboard](../05-dashboard.md).
 
 ## The images
 
@@ -69,7 +69,7 @@ cp compose/.env.example compose/.env      # then fill in the secrets
 docker compose -f compose/kaine.yml --profile setup run --rm kaine-provision
 ```
 
-The service runs `python -m kaine.setup.provision`. It downloads the abliterated organ, the InternVideo-Next weights (the default vision encoder; DINOv2-small instead when `[topos].encoder_backend = "dinov2"`), the all-MiniLM-L6-v2 embedder and emotion2vec+. It downloads faster-distil-Whisper when Audition uses the Speaches backend and Chatterbox when Vocal uses the Chatterbox backend, which are the shipped backends. The sherpa-onnx speech archives (Kokoro, which bundles the espeak-ng data, Moonshine and any other speech model Audition or Vocal selects) are fetched only when a module selects `"sherpa_onnx"` and the operator passes `--speech-models` or sets `KAINE_PROVISION_SPEECH_MODELS=1` after the plan has shown each archive's name, size and licence.
+The service runs `python -m kaine.setup.provision`. It downloads the abliterated organ, the InternVideo-Next weights (the default vision encoder; DINOv2-small instead when `[topos].encoder_backend = "dinov2"`), the all-MiniLM-L6-v2 embedder and emotion2vec+. It downloads faster-distil-Whisper when the audition module uses the Speaches backend and Chatterbox when the vocal module uses the Chatterbox backend, which are the shipped backends. The sherpa-onnx speech archives (Kokoro, which bundles the espeak-ng data, Moonshine and any other speech model the audition module or the vocal module selects) are fetched only when a module selects `"sherpa_onnx"` and the operator passes `--speech-models` or sets `KAINE_PROVISION_SPEECH_MODELS=1` after the plan has shown each archive's name, size and licence.
 
 Provisioning is the only phase that fetches models. At runtime the containers set `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1`.
 
@@ -79,7 +79,7 @@ Provisioning is the only phase that fetches models. At runtime the containers se
 docker compose -f compose/kaine.yml up -d
 ```
 
-This starts the bus, the vector store, the model server, the speech services and Dashboard. It does not start the entity: `kaine-cycle` has `profiles: [cycle]`, so a plain `up` never runs it. A bare `docker run kaine:<flavor>` does not start an entity either, because the cycle refuses to boot without the operator gate.
+This starts the bus, the vector store, the model server, the speech services and the dashboard. It does not start the entity: `kaine-cycle` has `profiles: [cycle]`, so a plain `up` never runs it. A bare `docker run kaine:<flavor>` does not start an entity either, because the cycle refuses to boot without the operator gate.
 
 CPU-only and single-GPU hosts add an overlay:
 
@@ -138,7 +138,7 @@ A run whose system changes in the middle of a study is not admissible. After cha
 
 The `kaine-trainer` service can run voice alignment next to the organ in its container, so no organ server on the host is needed. For `hot_swap_mode = "organ_adapter"`, mount `kaine-organ-adapters` at `organ_adapters_dir` (default `/organ-adapters`). When an activation raises the adapter generation, the launcher restarts `llama-server` in the same container with the adapter loaded at scale 0 (`--lora-scaled <path>:0 --no-cache-prompt`): requests without a `lora` field get the base organ, requests with one apply the adapter, and prompt caching is off while an adapter is loaded. This mode works only in Compose, because the quadlet model-server unit does not use the launcher or the adapter volume.
 
-To use an organ server on the host instead, such as an Unsloth server that shares one process for inference and training, add `compose/kaine.organ-host.yml`, which disables `kaine-model-server` and maps `host.docker.internal` to the host gateway for Dashboard and the cycle. Point `[lingua].chat_url` at `http://host.docker.internal:11434/v1` (`host.containers.internal` on Podman). When `model_server` is declared a shared service (`[services.model_server].shared = true`), KAINE forces `[hypnos.voice_alignment].hot_swap_mode` to `"manual"`, because the cycle cannot manage the adapters of a server it does not own. A host server that is not declared shared does not trigger that override.
+To use an organ server on the host instead, such as an Unsloth server that shares one process for inference and training, add `compose/kaine.organ-host.yml`, which disables `kaine-model-server` and maps `host.docker.internal` to the host gateway for the dashboard and the cycle. Point `[lingua].chat_url` at `http://host.docker.internal:11434/v1` (`host.containers.internal` on Podman). When `model_server` is declared a shared service (`[services.model_server].shared = true`), KAINE forces `[hypnos.voice_alignment].hot_swap_mode` to `"manual"`, because the cycle cannot manage the adapters of a server it does not own. A host server that is not declared shared does not trigger that override.
 
 ## Voice alignment
 

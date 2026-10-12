@@ -22,7 +22,7 @@ The first version left three questions open. Paper PR #30 settled them, and this
 
 ## Second-review changes
 
-- The tone ratio is published as `tone_error_ratio`. Affect reads any member's `normalised_error` as appraisal novelty, so a tone event never carries that key, and the default build's Affect novelty is as on main.
+- The tone ratio is published as `tone_error_ratio`. The affect module reads any member's `normalised_error` as appraisal novelty, so a tone event never carries that key, and the default build's affect module novelty is as on main.
 - Under `error_ratio` a failed classification is graded by the ratio like every other tone event (A.8, "for every tone event"); under the default rule it keeps the alert level.
 - The analysis refuses a broadcast whose members share an entry id, because the cycle keys scores by entry id alone. It adopts the stream-and-id key once the `salience-score-keys` change merges.
 - The calibration tool refuses an arm pilot whose tone events carry the variant's rule.

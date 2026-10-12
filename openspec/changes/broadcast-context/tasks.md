@@ -1,8 +1,8 @@
 ## 1. Context plumbing
 
 - [x] 1.1 `kaine/modules/context.py`: `featurize_events`, per-event additive contributions, `BroadcastContext` (adopt accessed members, ignore inhibited, vector with age, null vector from running per-source sums).
-- [x] 1.2 Workspace writes `metadata["access_threshold"]`.
-- [x] 1.3 Tests: the featurization matches Sequence's featurizer on the shared components; inhibited broadcasts are not adopted; riders below the threshold are excluded; the null vector keeps kept sources' share and replaces the rest by its running mean.
+- [x] 1.2 The workspace writes `metadata["access_threshold"]`.
+- [x] 1.3 Tests: the featurization matches the sequence module's featurizer on the shared components; inhibited broadcasts are not adopted; riders below the threshold are excluded; the null vector keeps kept sources' share and replaces the rest by its running mean.
 
 ## 2. Vision and Audition
 
@@ -11,7 +11,7 @@
 
 ## 3. Interoception
 
-- [x] 3.1 Readout takes the context; Language's share is kept in Interoception's null context.
+- [x] 3.1 Readout takes the context; the language organ's share is kept in the interoception module's null context.
 
 ## 4. Docs
 

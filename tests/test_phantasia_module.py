@@ -131,7 +131,7 @@ async def test_replay_cue_during_window_emits_scenario(bus: AsyncBus):
         for i in range(6):
             await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
 
-        # Sleep opens the scenario window, then a mnemos.replay cue arrives.
+        # The sleep module opens the scenario window, then a mnemos.replay cue arrives.
         ph.open_scenario_window()
         assert ph.window_active is True
         await ph._handle_peer_event(
@@ -171,7 +171,7 @@ async def test_replay_cue_while_awake_emits_nothing(bus: AsyncBus):
 async def test_scenario_reinjected_onto_phantasia_out(bus: AsyncBus):
     """phantasia.scenario must be published on phantasia.out so the workspace
     selection re-injects it into the broadcast for downstream on_workspace
-    consumers (Planning/Affect/Self-model)."""
+    consumers (the planning, affect and self-model modules)."""
     ph = Phantasia(bus, backend="fake", rollout_horizon=4)
     await ph.initialize()
     try:
@@ -181,7 +181,7 @@ async def test_scenario_reinjected_onto_phantasia_out(bus: AsyncBus):
         await ph.generate_scenario(seed_memory_id="seed-x")
 
         # The event is readable on the module's output stream — that IS the
-        # re-injection path (workspace selects from module .out streams).
+        # re-injection path (the workspace selects from module .out streams).
         events = await _drain(bus, "phantasia.out")
         scenarios = [e for e in events if e.type == "phantasia.scenario"]
         assert scenarios
@@ -564,7 +564,7 @@ async def test_serialize_emits_metadata_only(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_no_inference_during_window(bus: AsyncBus):
-    """During an open Sleep window the waking inference path is suspended."""
+    """During an open sleep window the waking inference path is suspended."""
     ph = Phantasia(bus, backend="fake")
     await ph.initialize()
     try:

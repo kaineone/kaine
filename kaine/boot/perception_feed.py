@@ -26,7 +26,7 @@ def _womb_params(feed: dict[str, Any]) -> WombParams:
     audio = womb.pop("audio", None)
     if audio is not None and not isinstance(audio, dict):
         raise ValueError("[perception_feed.womb.audio] must be a table")
-    # [perception_feed.womb.readout] belongs to the development owner, which
+    # [perception_feed.womb.readout] belongs to the developmental phase owner, which
     # validates it itself (GestationReadoutConfig).
     readout = womb.pop("readout", None)
     if readout is not None and not isinstance(readout, dict):
@@ -386,8 +386,8 @@ def _install_womb_world_transition(
     ``stage_state`` is the boot's resolved stage (a revive's preserved stage
     included); without it the stage file is read. The transition is stashed
     beside the shared playlist clock so the video and audio factories (and
-    Supervisor's restart path) wrap their playlist sources with the same instance.
-    ``video_present`` says whether Vision is enabled (build_registry corrects it
+    the supervisor's restart path) wrap their playlist sources with the same instance.
+    ``video_present`` says whether the vision module is enabled (build_registry corrects it
     once the modules are constructed); ``bus`` receives the
     ``perception.transition`` outcome events.
     """
@@ -606,7 +606,7 @@ def _build_perception_feed_audio_factory(
     reads the shared ``seed`` + the ``[perception_feed.video].surprise_interval``
     (so the surprise cadence is shared cross-modally) + the
     ``[perception_feed.audio]`` knobs. Playlist walks the SAME manifest as the
-    video surface. Stimulus source reads a shared seed and the same shared stimulus source clock so
+    video surface. The stimulus source reads a shared seed and the same shared stimulus source clock so
     the maternal heartbeat stays phase-locked across surfaces.
     """
     if mode == "screen":

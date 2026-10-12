@@ -6,8 +6,8 @@
 
 ## 2. Wiring
 
-- [x] 2.1 `WETWARE_BACKENDS["soma"]` injecting through `forward_model`; remove Interoception from `PENDING_CONVERSIONS`.
-- [x] 2.2 Update tests that used Interoception as the example of an unimplemented backend.
+- [x] 2.1 `WETWARE_BACKENDS["soma"]` injecting through `forward_model`; remove the interoception module from `PENDING_CONVERSIONS`.
+- [x] 2.2 Update tests that used the interoception module as the example of an unimplemented backend.
 
 ## 3. Acceptance (simulator)
 
@@ -15,5 +15,5 @@
 - [x] 3.2 Suspension verified.
 - [x] 3.3 Predictive-work check: a load excursion raises the error above the steady-state level.
 - [x] 3.4 Snapshot shape check.
-- [x] 3.5 Sequence and Interoception converted together boot through kaine and both publish.
+- [x] 3.5 The sequence and interoception modules converted together boot through kaine and both publish.
 - [x] 3.6 `openspec validate soma-on-wetware --strict` passes.

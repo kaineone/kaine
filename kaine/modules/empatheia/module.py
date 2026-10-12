@@ -144,7 +144,7 @@ class Empatheia(BaseModule):
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         """React to workspace ticks — currently a no-op placeholder.
 
-        Social cognition's actual work is event-driven, not tick-driven: it runs in
+        The social cognition module's actual work is event-driven, not tick-driven: it runs in
         `_audition_consumer_loop`, reacting to `audition.out` emotion and
         transcription events. This hook is reserved for future coalition-aware
         behaviour (e.g. speaker diarization cues) and intentionally does nothing.

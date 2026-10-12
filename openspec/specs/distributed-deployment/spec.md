@@ -8,7 +8,7 @@ Distributed-deployment keeps KAINE's live cognitive cycle and stateful stores on
 ### Requirement: The live cognitive loop and stateful stores never run on untrusted compute
 
 The system SHALL NOT distribute the live cognitive cycle, the modules in its
-per-tick feedback path, or the stateful stores (Episodic memory memory, the Self-model
+per-tick feedback path, or the stateful stores (episodic memory, the self-model
 self-model, and the Redis workspace state) onto untrusted nodes (volunteer /
 BOINC-style / public-swarm compute). This boundary holds even when such
 distribution is technically requested.
@@ -45,9 +45,9 @@ contract, not in-process Python object references.
 
 #### Scenario: The language organ runs on a separate trusted host
 
-- **WHEN** Language runs in a process on a different trusted host from the
+- **WHEN** the language module runs in a process on a different trusted host from the
   coordinator
-- **THEN** it obtains the Self-model self-model via a bus-mediated snapshot rather
+- **THEN** it obtains the self-model via a bus-mediated snapshot rather
   than an in-process reference
 - **AND** it emits the same speech and evaluation events as in the single-host
   deployment

@@ -116,7 +116,7 @@ malformed `[tier]` table or malformed `[oscillator]` shape, naming the problem.
 
 #### Scenario: Tier fit fails when tier0 is recorded with vision enabled
 - **WHEN** the recorded tier is tier0 and the operator config has `[modules] topos = true`
-- **THEN** the pre-boot Tier-fit row FAILS, naming vision as unsupported at tier0
+- **THEN** the pre-boot Tier-fit row FAILS, naming the vision module as unsupported at tier0
   and advising the operator to disable it or record a larger tier
 
 #### Scenario: Non-tier file named as tier is refused

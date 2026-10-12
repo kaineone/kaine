@@ -747,7 +747,7 @@ def test_build_registry_constructs_hypnos_last():
     )
     assert set(["mnemos", "thymos", "hypnos"]).issubset(set(registry._modules))
     hypnos = registry.get("hypnos")
-    # Sleep should have been wired to the constructed episodic memory and affect.
+    # the sleep module should have been wired to the constructed episodic memory module and the affect module.
     assert hypnos._mnemos is registry.get("mnemos")
     assert hypnos._thymos is registry.get("thymos")
 
@@ -776,7 +776,7 @@ def test_simple_factories_covers_expected_modules():
         "empatheia",
         "phantasia",
     }
-    # Sleep is intentionally outside SIMPLE_FACTORIES (interdependency
+    # the sleep module is intentionally outside SIMPLE_FACTORIES (interdependency
     # wiring happens in build_registry's second pass).
 
 
@@ -834,7 +834,7 @@ def test_shipped_lingua_model_id_is_published_kaine_organ():
 
 
 def test_shipped_config_ships_spot_disabled():
-    """Guard: the shipped config/kaine.toml must keep the Supervisor supervisor off.
+    """Guard: the shipped config/kaine.toml must keep the supervisor off.
 
     Reads the working-copy file directly (the [spot] section may not yet be in
     HEAD), matching the all-off first-boot convention for module toggles."""
@@ -847,8 +847,8 @@ def test_shipped_config_ships_spot_disabled():
     assert spot.get("enabled", False) is False, (
         "shipped config must ship [spot].enabled = false (operator-supervised first boot)"
     )
-    # [spot.incident_log] ships enabled = true, but it is dormant because Supervisor
-    # itself ships disabled — turning Supervisor on later gives the operator the
+    # [spot.incident_log] ships enabled = true, but it is dormant because the supervisor
+    # itself ships disabled — turning the supervisor on later gives the operator the
     # durable incident log automatically.
     incident_log = spot.get("incident_log", {})
     assert incident_log.get("enabled", False) is True, (
@@ -877,7 +877,7 @@ def test_shipped_config_research_submission_disabled():
 
 
 def test_make_lingua_accepts_outcome_reply_window(tmp_path):
-    # Language factory should accept cycle-specific config keys it does not consume.
+    # the language module factory should accept cycle-specific config keys it does not consume.
     lingua = make_lingua(
         _bus(),
         {"intent_log_path": str(tmp_path / "i.jsonl"), "outcome_reply_window_s": 45},
@@ -902,8 +902,8 @@ def test_make_lingua_api_key_from_config_wins_over_env(monkeypatch, tmp_path):
 
 
 def test_wire_eidolon_capabilities_injects_praxis_whitelist(tmp_path):
-    """_wire_eidolon_capabilities feeds the Effectors effector whitelist into
-    Self-model's self-inference engine, so the self-model's capability_map reflects
+    """_wire_eidolon_capabilities feeds the effectors module's effector whitelist into
+    the self-model module's self-inference engine, so the self-model's capability_map reflects
     what the entity can execute (eidolon-self-inference spec)."""
     from kaine.boot import _wire_eidolon_capabilities
     from kaine.modules.eidolon.document import SelfModelDocument
@@ -944,8 +944,8 @@ def test_wire_eidolon_capabilities_injects_praxis_whitelist(tmp_path):
 
 
 def test_rewire_module_restores_self_hearing_gate():
-    """After Supervisor rebuilds a module, rewire_module must re-inject the shared
-    SpeakingGate between vocal and audition."""
+    """After the supervisor rebuilds a module, rewire_module must re-inject the shared
+    SpeakingGate between the vocal module and the audition module."""
     from kaine.modules.registry import ModuleRegistry
     from kaine.modules.vox.coordination import SpeakingGate
 
@@ -969,7 +969,7 @@ def test_rewire_module_restores_self_hearing_gate():
     assert isinstance(original_gate, SpeakingGate)
     assert vox._speaking_gate is original_gate
 
-    # Simulate Supervisor rebuilding audition with a fresh instance.
+    # Simulate the supervisor rebuilding audition with a fresh instance.
     new_audition = make_audition(bus, {"speaches_url": "http://127.0.0.1:8000"})
     registry.replace("audition", new_audition)
     rewire_module(registry, "audition", {})
@@ -979,7 +979,7 @@ def test_rewire_module_restores_self_hearing_gate():
 
 
 def test_rewire_module_reseeds_eidolon_whitelist(tmp_path):
-    """After Supervisor rebuilds self-model, rewire_module must re-inject the Effectors
+    """After the supervisor rebuilds the self-model module, rewire_module must re-inject the effectors module's
     effector whitelist into the new self-inference engine."""
     from kaine.modules.eidolon.document import SelfModelDocument
     from kaine.modules.registry import ModuleRegistry
@@ -1009,7 +1009,7 @@ def test_rewire_module_reseeds_eidolon_whitelist(tmp_path):
     model = eidolon.self_inference.maintenance_cycle_end(SelfModelDocument())
     assert model.capability_map.get("effectors") == ["file_write", "notify"]
 
-    # Simulate Supervisor rebuilding self-model.
+    # Simulate the supervisor rebuilding the self-model module.
     new_eidolon = make_eidolon(
         bus,
         {
@@ -1026,9 +1026,9 @@ def test_rewire_module_reseeds_eidolon_whitelist(tmp_path):
 
 def test_rewire_module_leaves_oscillators_untouched():
     """rewire_module never builds or replaces oscillators: a restarted module
-    receives its predecessor's oscillator from Supervisor's heavy restart path, and
+    receives its predecessor's oscillator from the supervisor's heavy restart path, and
     every other module keeps its own (oscillator-continuity-on-restart; the
-    Supervisor hand-over is covered in tests/test_oscillator_continuity.py)."""
+    the supervisor hand-over is covered in tests/test_oscillator_continuity.py)."""
     from kaine.modules.registry import ModuleRegistry
 
     bus = _bus()
@@ -1045,7 +1045,7 @@ def test_rewire_module_leaves_oscillators_untouched():
     rewire_module(registry, "soma", kaine_config)
     assert soma.oscillator is existing
 
-    # A freshly rebuilt instance swapped in without Supervisor's hand-over is not
+    # A freshly rebuilt instance swapped in without the supervisor's hand-over is not
     # given an oscillator by rewire_module.
     new_soma = make_soma(bus, dict(section))
     registry.replace("soma", new_soma)

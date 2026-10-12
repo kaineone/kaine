@@ -53,7 +53,7 @@ def make_metrics_snapshot(
     """Build the metrics_snapshot reader closure.
 
     The cycle process writes ``state/cycle/runtime.json`` on every tick (or every
-    1s when idle). Dashboard reads it on each request so it shows live values without
+    1s when idle). The dashboard reads it on each request so it shows live values without
     an in-process cycle reference. The snapshot surfaces only non-content
     operational fields plus the run-identity / boot-mode metadata.
     """
@@ -214,7 +214,7 @@ def _load_security_state_encryption_config() -> dict[str, Any]:
 
 
 async def _build():
-    # Install the process-wide data root for this Dashboard process.
+    # Install the process-wide data root for this dashboard process.
     try:
         kaine_config = load_kaine_config()
     except Exception as exc:

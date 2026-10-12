@@ -22,7 +22,7 @@ states: the unattended gate covers every condition of the research net.
   changed: `[individuation].enabled`, a valid `[individuation]` section, and
   the `lingua` module enabled.
 - Conditions 6 to 8 keep their numbers, so the `checks` keys recorded in
-  runtime.json, the incident log and Dashboard do not move.
+  runtime.json, the incident log and the dashboard do not move.
 - The condition checks that the individuation producer will run. It does not
   require the entity to have individuated.
 - Condition 7 (the caretaker start notice) already runs only when every other
@@ -30,7 +30,7 @@ states: the unattended gate covers every condition of the research net.
 - A test asserts that every check the research net's evaluator returns maps
   to an unattended condition, so the next check added to the net cannot be
   left out without a failing test.
-- Docs and the Dashboard run-identity label say nine conditions, and the exit-6
+- Docs and the dashboard run-identity label say nine conditions, and the exit-6
   row of the refusal table is pinned by the docs test.
 
 ## Capabilities
@@ -50,5 +50,5 @@ states: the unattended gate covers every condition of the research net.
   `tests/test_cycle_entrypoint.py`.
 - Docs: the unattended sections of the book and the exit-code table, and
   the condition list in the header of `quadlet/kaine-cycle-unattended.container`.
-- Behaviour: an unattended start with `[individuation]` disabled or Language off
+- Behaviour: an unattended start with `[individuation]` disabled or the language module off
   now refuses with exit 6. Operator-present and research boots are unchanged.

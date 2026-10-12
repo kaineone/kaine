@@ -97,7 +97,7 @@ async def test_restart_does_not_replay_stale_events():
     )
     eng = _engine_stub(bus)
     eng._seed_cursors_to_tail = True  # tail-seeding behavior under test
-    # Interoception consumer: cursor must be seeded to the tail before any read...
+    # the interoception module's consumer: cursor must be seeded to the tail before any read...
     await eng.consume_soma_regulation("soma.out")
     assert all(last_id == tail for _, last_id in bus.reads), (
         "cursor must be seeded at the stream tail, not 0"
@@ -129,7 +129,7 @@ async def test_poison_batch_does_not_stall_streams():
     eng2 = _engine_stub(bus2, _read_count=16)
     entries, last_scanned = await eng2._safe_read("workspace", "0")
     assert entries == [] and last_scanned == "9-1"
-    # Interoception module cycle consumer.
+    # interoception module cycle consumer.
     SomaModule = _find_class("kaine.modules.soma.module", "_cycle_consumer_loop")
     bus3 = _ScriptedBus(
         batches=[
@@ -258,7 +258,7 @@ class _M2Stub:
         self.published = []
         self._baseline_salience = 0.5
         self._failed_once = False
-        self._shielded_tasks = set()  # Sleep holds its shielded publish here
+        self._shielded_tasks = set()  # the sleep module holds its shielded publish here
 
     async def _run_pipeline_inner(self):
         await self.publish("hypnos.sleep.completed", {})
@@ -282,7 +282,7 @@ async def test_transient_publish_failure_does_not_wedge_soma():
     completed = [p for t, p in stub.published if t == "hypnos.sleep.completed"]
     assert completed, "a completed event MUST be published even after failure"
     assert completed[0].get("aborted") is True
-    # Interoception consumes hypnos.sleep.completed to exit _in_hypnos; the aborted
+    # the interoception module consumes hypnos.sleep.completed to exit _in_hypnos; the aborted
     # flavour is the same event type, so it exits and faster_decay stops.
 
 

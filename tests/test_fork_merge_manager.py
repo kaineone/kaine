@@ -95,7 +95,7 @@ def test_restore_ignores_module_not_in_snapshot(tmp_path):
     extra = FakeModule("topos", {"latent": "frozen"})
     soma = FakeModule("soma")
     mgr.restore(snap.id, FakeRegistry([soma, extra]))
-    # vision has no entry → state untouched
+    # The vision module has no entry → state untouched
     assert extra.serialize() == {"latent": "frozen"}
     assert soma.serialize() == {"wellness": 1.0}
 

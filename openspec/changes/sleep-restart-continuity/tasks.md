@@ -17,5 +17,5 @@
 
 - [x] 4.1 Valence stays near baseline for 30 s after a reset that follows strong learning progress.
 - [x] 4.2 After one 600 s gap, the next normal interval's timespan is close to 1.
-- [x] 4.3 A restored Sequence reports the saved time since the last interaction, not 0.
+- [x] 4.3 A restored sequence module reports the saved time since the last interaction, not 0.
 - [x] 4.4 A peer event whose handling raises does not stop later events from being handled.

@@ -309,10 +309,10 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
 
 
 def _thymos_state_factory(registry):
-    """Return a thunk the sidecar can call to read Affect's current state.
+    """Return a thunk the sidecar can call to read the affect module's current state.
 
     The sidecar must not import any kaine.modules.* code, but the cycle
-    entrypoint can — it inspects the registered Affect module and exposes
+    entrypoint can — it inspects the registered affect module and exposes
     a closure that pulls a fresh state dict on every call.
     """
 
@@ -333,14 +333,14 @@ def _thymos_state_factory(registry):
 
 
 def _wire_topos_arousal(registry, affect_provider) -> bool:
-    """Give Vision the live Affect arousal scalar that sizes the fovea.
+    """Give the vision module the live affect module's arousal scalar that sizes the fovea.
 
     Attention-driven foveation couples the fovea *size* to arousal (Easterbrook
-    narrowing) — a distinct visual coupling, not the Workspace salience window.
+    narrowing) — a distinct visual coupling, not the workspace salience window.
     The composition root already holds the ``AffectStateProvider`` it refreshes
-    each tick from ``thymos.state``; this hands Vision a read-only accessor to its
-    arousal in [0, 1] (dependency injection — Vision never imports the workspace or
-    Affect). No-op unless Vision is present with foveation enabled. Returns whether
+    each tick from ``thymos.state``; this hands the vision module a read-only accessor to its
+    arousal in [0, 1] (dependency injection — the vision module never imports the workspace or
+    the affect module). No-op unless the vision module is present with foveation enabled. Returns whether
     it wired, so the caller can ensure the provider is actually refreshed.
     """
     try:
@@ -357,7 +357,7 @@ def _wire_topos_arousal(registry, affect_provider) -> bool:
 
 
 def _wire_audition_arousal(registry, affect_provider) -> bool:
-    """Give Audition the live Affect arousal scalar that sizes the auditory window.
+    """Give Audition the live affect module's arousal scalar that sizes the auditory window.
 
     The auditory analog of ``_wire_topos_arousal``: general auditory perception
     couples the breadth of the auditory attentional window to arousal (Easterbrook
@@ -379,7 +379,7 @@ def _wire_audition_arousal(registry, affect_provider) -> bool:
 
 
 def _sleep_state_factory(registry):
-    """Thunk returning a paired snapshot of episodic memory/planning/affect/sequence
+    """Thunk returning a paired snapshot of the episodic memory, planning, affect and sequence modules
     states for sleep_snapshots observer."""
 
     def _get():
@@ -410,7 +410,7 @@ def _parse_epoch(raw: Any) -> float | None:
 
 
 def _memory_source_factory(registry):
-    """Adapter over Episodic memory for the memory-probe observer's MemorySource protocol.
+    """Adapter over the episodic memory module for the memory-probe observer's MemorySource protocol.
 
     Best-effort: recalls a broad set and returns the oldest episodic memory older
     than the threshold, or None (the observer then skips this tick). Lives at the
@@ -496,14 +496,14 @@ def build_ab_divergence_control_client(eval_cfg, *, assembler=None):
     control instrument (negative + positive controls).
 
     Lives at the entrypoint — the allowed module-coupling point — so
-    ``kaine.evaluation`` imports no ``kaine.modules.*`` code. It wraps Language's
+    ``kaine.evaluation`` imports no ``kaine.modules.*`` code. It wraps the language module's
     own ``ContextAssembler`` and the language-organ chat client, then hands a
     duck-typed ``AssemblerConditionedClient`` to ``divergence_control``. Both
     control arms run through this one path, so any divergence is attributable to
     the workspace conditioning alone — the property the meter measures.
 
     ``conditioning`` is the rendered awareness/working-memory block: an empty
-    string reproduces Language's "nothing salient" prompt (the bare arm); a
+    string reproduces the language module's "nothing salient" prompt (the bare arm); a
     populated string injects workspace contents (the conditioned arm). Both arms
     are built by the SAME assembler and run on the SAME model, so this is the
     production conditioning path, not a parallel reimplementation.
@@ -678,10 +678,10 @@ async def _freeze_watch_loop(
     """Poll the freeze control and pause/resume the cycle to match.
 
     Runs independently of `run_forever`'s pause gate, so it can resume a frozen
-    cycle (a paused tick loop never reads its own resume). A development-only
+    cycle (a paused tick loop never reads its own resume). A developmental-phase-only
     freeze pauses the cycle but keeps perception on so a local stimulus source can prove
     its return through real deliveries. Perception flags are reconciled on
-    every poll so adding or removing a non-development holder while already
+    every poll so adding or removing a non-developmental-phase holder while already
     paused is reflected immediately.
     """
     # C1: snapshot of the desired perception flags at freeze time, restored
@@ -752,7 +752,7 @@ async def _freeze_watch_loop(
                             "freeze: playlist clock resume failed", exc_info=True
                         )
                 # C1 — restore the pre-freeze desired flags so a freeze/resume
-                # cycle (Supervisor recovery included) never leaves the entity
+                # cycle (supervisor recovery included) never leaves the entity
                 # deaf/blind for the rest of an unattended run.
                 if desired_snapshot is not None:
                     try:
@@ -816,8 +816,8 @@ async def _write_runtime_state(
     runtime_path = resolve(RUNTIME_PATH)
     runtime_path.parent.mkdir(parents=True, exist_ok=True)
     control = read_control()
-    # Supervisor supervisor state (cheap, guarded): critical when escalated, recovery
-    # while Supervisor holds the freeze, otherwise ok.
+    # the supervisor state (cheap, guarded): critical when escalated, recovery
+    # while the supervisor holds the freeze, otherwise ok.
     spot_escalated = False
     spot_state = "ok"
     try:
@@ -844,7 +844,7 @@ async def _write_runtime_state(
         # TARGET real processing rate (processing_rate_hz * time_scale) vs the
         # ACHIEVED rate measured from recent ticks, plus recent slip and an
         # `overrunning` flag. Surfaces a `time_scale > 1` (or any) overrun so it
-        # is visible in Dashboard, never silently capped or faked. Inert at the
+        # is visible in the dashboard, never silently capped or faked. Inert at the
         # shipped default (time_scale=1.0, sustainable rate) — overrunning=False.
         "pacing": cycle.pacing_stats,
         "time_scale": cycle.time_scale,
@@ -858,7 +858,7 @@ async def _write_runtime_state(
         "spot_escalated": spot_escalated,
         # Deterministic mode: when true the engine stamps events from a logical
         # clock so chart timestamps are not wall-clock. Non-content operational
-        # flag; Dashboard uses it to show a "logical time" indicator.
+        # flag; the dashboard uses it to show a "logical time" indicator.
         "deterministic": bool(getattr(cycle, "deterministic", False)),
         # Supervision mode (operator | research) and, in research mode, the
         # four-condition safety-net gate result. Non-content operational flags.
@@ -866,7 +866,7 @@ async def _write_runtime_state(
     }
     if gate_checks is not None:
         payload["gate_checks"] = dict(gate_checks)
-    # Developmental stage surface for Dashboard left rail. Non-content operational
+    # Developmental stage surface for the dashboard left rail. Non-content operational
     # metadata; omitted when staging is disabled so an ordinary boot is unchanged.
     if staging_enabled:
         payload["developmental_stage"] = {}
@@ -1018,7 +1018,7 @@ def _resolve_boot_stage(
         )
     resolved = lifecycle_stage.resolve_boot_stage(has_prior_lived_history=prior)
     # The gate runner persists the resolved stage on its first tick so the
-    # development clock is anchored and evidence is owned by one writer.
+    # developmental clock is anchored and evidence is owned by one writer.
     fresh = resolved.is_gestating
     return resolved, True, fresh
 
@@ -1032,7 +1032,7 @@ def _resolve_start_stage(
     reviving one that carries a stage, otherwise the stage file as usual.
 
     A revived bundle counts as a lived being even when it carries no stage
-    state, so a preserved entity is never regressed into development.
+    state, so a preserved entity is never regressed into the developmental phase.
     """
     override = revive.stage_state if revive is not None else None
     return _resolve_boot_stage(
@@ -1105,13 +1105,13 @@ def _persist_revived_identity(state_root: Path, identity: EntityIdentity) -> Non
     save_identity(identity, resolve(state_root) / "identity" / "entity.json")
 
 
-# Effectors that have nothing to act on in the stimulus source: Embodiment has no world and
-# Vocal has no air to speak into. Both are activated by the gate runner at maturation.
+# Effectors that have nothing to act on in the stimulus source: the embodiment module has no world and
+# The vocal module has no air to speak into. Both are activated by the gate runner at maturation.
 GESTATION_DORMANT_EFFECTORS = ("mundus", "vox")
 
 
 def _hold_effectors_for_gestation(registry) -> list[str]:
-    """Hold the stimulus-source-less effectors dormant; return the names held."""
+    """Hold the stimulus-source-less effectors module dormant; return the names held."""
     held: list[str] = []
     for name in GESTATION_DORMANT_EFFECTORS:
         if name in registry and hasattr(registry.get(name), "set_dormant"):
@@ -1143,20 +1143,20 @@ def _make_rebuild_module(
     registry: Any,
     intent_secret: bytes | None,
 ) -> Any:
-    """Return Supervisor's heavy-restart constructor, bound to this boot's bus,
-    configuration, registry and Effectors intent secret."""
+    """Return the supervisor's heavy-restart constructor, bound to this boot's bus,
+    configuration, registry and the effectors module's intent secret."""
 
     def rebuild_module(name: str) -> Any:
-        """Rebuild a single module exactly as build_registry would, for Supervisor's
-        heavy restart path. Sleep re-fetches its siblings from the registry.
+        """Rebuild a single module exactly as build_registry would, for the supervisor's
+        heavy restart path. The sleep module re-fetches its siblings from the registry.
 
         A restarted cognitive module must keep timing on the SAME shared
         subjective clock the rest of the mind uses, so the one EntityClock on
         the registry is re-injected here exactly as build_registry injects it.
         """
         # One construction path with build_registry (boot.construct_module):
-        # the same clock, the same Effectors intent secret, the same perception
-        # feed for Vision/Audition, and Sleep rebuilt with its siblings.
+        # the same clock, the same effectors module's intent secret, the same perception
+        # feed for the vision module, the audition module, and the sleep module rebuilt with its siblings.
         result = construct_module(
             name,
             bus,
@@ -1183,9 +1183,9 @@ def _start_gestation_owner(
     *,
     is_paused: Callable[[], bool],
 ) -> "asyncio.Task[None] | None":
-    """Start the development readout owner for a gestating entity in the local stimulus source.
+    """Start the developmental readout owner for a gestating entity in the local stimulus source.
 
-    It needs Interoception's self-rhythm and its maternal-drive provider. Without them
+    It needs the interoception module's self-rhythm and its maternal-drive provider. Without them
     there is nothing to measure: the readout stays absent and the maturation
     gate's C1 fails closed, so maturation waits. Setting up the owner never happens
     silently; the reason is logged.
@@ -1266,7 +1266,7 @@ async def _revive_or_refuse(revive, registry) -> int | None:
     The caller is responsible for stopping the welfare producer and closing
     the bus after this returns.
 
-    Initialisation happens first because Self-model's initialize() reloads its
+    Initialisation happens first because the self-model module's initialize() reloads its
     disk file. Module background loops run briefly on fresh state before the
     revive lands, which is safe because the cognitive cycle (and so the
     workspace) has not started.
@@ -1440,7 +1440,7 @@ async def _phase_stage(ctx: BootContext) -> int | None:
         ctx.identity.origin,
     )
 
-    # Developmental stage resolution. Done early so development can gate locus and
+    # Developmental stage resolution. Done early so the developmental phase can gate locus and
     # embodiment before any module opens. With staging off (the shipped
     # default) a boot is unaffected; with it on, a fresh spawn gestates even
     # beside other entities' records, and anything that has lived does not.
@@ -1462,13 +1462,13 @@ async def _phase_stage(ctx: BootContext) -> int | None:
 async def _phase_preconditions(ctx: BootContext) -> int | None:
     """Check the evaluation, individuation and research-event-log configs before anything opens."""
 
-    # Development locus pinning happens once the bus exists and a stimulus source is proven
+    # Developmental locus pinning happens once the bus exists and a stimulus source is proven
     # ready (below): a configuration value alone never pins the entity to a
     # senseless locked locus.
 
     # supervision_mode + (research-mode) gate_checks are evaluated ONCE in
     # main() — the authoritative, pre-event-loop gate — and threaded in here for
-    # runtime.json (so Dashboard can surface the boot mode and the four-condition
+    # runtime.json (so the dashboard can surface the boot mode and the four-condition
     # gate result). They are deliberately NOT recomputed here: the gate's dry
     # preserve→revive self-check uses asyncio.run(), which cannot nest inside
     # this already-running loop, and a second evaluation would also double the
@@ -1621,7 +1621,7 @@ async def _phase_gates(ctx: BootContext) -> int | None:
     # Boot-time organ CONTENT gate. verify_served_alias proves the right model is
     # LISTED; a served-but-MUTE organ (chain-of-thought not suppressed → empty
     # content) would still pass that yet leave the entity voiceless — the exact
-    # way a prior boot came up silent. When Language is enabled, probe the organ for
+    # way a prior boot came up silent. When the language module is enabled, probe the organ for
     # real content here and refuse to boot if it returns empty/unreachable. A
     # deliberately-voiceless boot must opt in via KAINE_ALLOW_MUTE_ORGAN=1.
     if (ctx.kaine_config.get("modules") or {}).get("lingua"):
@@ -1682,9 +1682,9 @@ async def _phase_bus(ctx: BootContext) -> int | None:
 
 
 async def _phase_womb_hold(ctx: BootContext) -> int | None:
-    """Announce a fresh development and hold a gestating entity until the stimulus source is ready."""
+    """Announce a fresh developmental phase and hold a gestating entity until the stimulus source is ready."""
 
-    # Emit the first-development event now that the bus exists. This is the only
+    # Emit the first-developmental-phase event now that the bus exists. This is the only
     # lifecycle event that fires at boot; the gate loop emits the rest on a
     # cadence once modules are up.
     if ctx.fresh_gestation:
@@ -1757,8 +1757,8 @@ async def _phase_registry(ctx: BootContext) -> int | None:
     # Per-boot act-intent provenance secret (authenticate-intent-provenance,
     # Mechanism B). Generated HERE — the cycle composition root — and held ONLY
     # in the boot context, whose repr leaves out every field: it is never
-    # published to the bus, written to disk, or logged. The SAME bytes are injected into Effectors (to verify, via
-    # build_registry) and Action selection (to sign, below), so an act intent forged by
+    # published to the bus, written to disk, or logged. The SAME bytes are injected into the effectors module (to verify, via
+    # build_registry) and the action selection module (to sign, below), so an act intent forged by
     # any other bus writer fails verification and never reaches an effector.
     ctx.intent_secret = generate_intent_secret()
 
@@ -1772,7 +1772,7 @@ async def _phase_registry(ctx: BootContext) -> int | None:
     if not len(ctx.registry):
         log.warning("no modules enabled in [modules]; cycle will run but never collect events")
 
-    # Development: keep effectors dormant until maturation. The gate_runner will
+    # Developmental phase: keep effectors dormant until maturation. The gate_runner will
     # call activate() at maturation before unlocking the locus.
     if ctx.staging_enabled and ctx.stage_state.is_gestating:
         _hold_effectors_for_gestation(ctx.registry)
@@ -1780,7 +1780,7 @@ async def _phase_registry(ctx: BootContext) -> int | None:
     for module in list(ctx.registry.all_modules()):
         await module.initialize()
 
-    # Revive the preserved individual after modules initialise (so Self-model's
+    # Revive the preserved individual after modules initialise (so the self-model module's
     # initialize() reloads its disk file) and before the cognitive cycle starts.
     # Module background loops run briefly on fresh state before the revive lands,
     # which is safe because the cognitive cycle (and so the workspace) has not started.
@@ -1799,7 +1799,7 @@ async def _phase_maturation_gate(ctx: BootContext) -> int | None:
     """Build the maturation gate runner."""
 
     # Developmental maturation gate. Constructed after modules exist so it can
-    # read Sleep/World model/Embodiment signals; started as a background task once
+    # read the sleep, world model and embodiment modules' signals; started as a background task once
     # the runtime loop is about to run. Ship-inert when staging is disabled.
     ctx.ds_config = MaturationConfig.from_dict(ctx.kaine_config.get("developmental_stage"))
     ctx.gate_runner = MaturationGateRunner(
@@ -1819,13 +1819,13 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
     ctx.cycle_cfg = ctx.kaine_config.get("cycle") or {}
     syn_cfg = ctx.kaine_config.get("syneidesis") or {}
     # Oscillatory-binding coherence layer. `make_coherence_scorer` returns None
-    # when [oscillator].enabled is false, in which case Workspace selection is
+    # when [oscillator].enabled is false, in which case workspace selection is
     # bit-for-bit the pre-change behavior (no coherence factor, no metadata key).
     ctx.coherence_scorer = make_coherence_scorer(ctx.kaine_config)
     # Live four-factor salience (wire-salience-goal-thymos). Both real factors
     # read the entity's current affect/drives through an AffectStateProvider the
     # engine refreshes each tick from thymos.state — dependency injection, so the
-    # workspace layer never imports kaine.modules. The Affect factor ships LIVE
+    # workspace layer never imports kaine.modules. The affect factor ships LIVE
     # by default (the paper's real, already-tested StateModulator); the goal
     # factor is BUILT but ships on the static negative control by default, staged
     # pending validation on logged runs (see config/kaine.toml [syneidesis]).
@@ -1844,8 +1844,8 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
     # pre-change behavior (no affect observation at all).
     # Adaptive access (adaptive-access-rate): the broadcast rate rises
     # from the resting [cycle].experiential_rate_hz toward the processing rate
-    # with Affect arousal (tonic) and salient module reports (phasic). The
-    # arousal baseline defaults to Affect's own so the two cannot disagree.
+    # with affect arousal (tonic) and salient module reports (phasic). The
+    # arousal baseline defaults to the affect module's own so the two cannot disagree.
     from kaine.cycle.access_rate import AccessRateConfig, AccessRateController
 
     access_rate_cfg = AccessRateConfig.from_section(
@@ -1889,13 +1889,13 @@ async def _phase_volition(ctx: BootContext) -> int | None:
     # self-response, one-in-flight guard) AND turns drive threshold-crossings
     # that reached the non-inhibited coalition into intents (social_drive →
     # speak initiative; curiosity/boredom/restlessness → internal think).
-    # Inhibition still gates everything (Action selection checks `inhibited` first).
+    # Inhibition still gates everything (the action selection module checks `inhibited` first).
     # An operator can disable drive initiative — falling back to the plain
     # default policy — via `[volition].drive_initiative = false`.
     volition_cfg = ctx.kaine_config.get("volition") or {}
     policy_name = str(volition_cfg.get("policy", "")).strip().lower()
     drive_initiative = bool(volition_cfg.get("drive_initiative", True))
-    # Operator-channel set is shared between Social cognition attribution and Action selection
+    # Operator-channel set is shared between social cognition attribution and the action selection module
     # user-utterance detection. A single [empatheia].operator_sources key
     # configures both.
     empatheia_cfg = ctx.kaine_config.get("empatheia") or {}
@@ -1907,12 +1907,12 @@ async def _phase_volition(ctx: BootContext) -> int | None:
         ):
             raise ValueError("[empatheia].operator_sources must be a list of strings")
         operator_sources = list(_operator_sources_raw)
-    # Sign act intents with the per-boot secret so Effectors can verify their
+    # Sign act intents with the per-boot secret so the effectors module can verify their
     # provenance. run_id ties the signature to this run; the signer mints a
     # monotonic seq per intent so a captured signed intent cannot be replayed.
     intent_signer = IntentSigner(ctx.intent_secret, ctx.run_ctx.run_id)
 
-    # Planning proposal realization wraps the chosen policy when the Planning module is
+    # The planning proposal realization wraps the chosen policy when the planning module is
     # enabled. [nous].drive_actions (default true) disables the source for
     # ablation runs while still recording proposal outcomes.
     modules_cfg = ctx.kaine_config.get("modules") or {}
@@ -1995,7 +1995,7 @@ async def _phase_volition(ctx: BootContext) -> int | None:
 
 
 def _hypnos_is_sleeping(registry: Any) -> bool:
-    """Whether Sleep is asleep now (False without Sleep)."""
+    """Whether the sleep module is asleep now (False without the sleep module)."""
     if "hypnos" not in registry:
         return False
     return bool(registry.get("hypnos").is_sleeping)
@@ -2053,15 +2053,15 @@ async def _phase_cycle(ctx: BootContext) -> int | None:
             else None
         ),
     )
-    # Sleep sleep stops awake time; read through the registry so a rebuilt Sleep is still read.
+    # sleep stops awake time; read through the registry so a rebuilt sleep module is still read.
     ctx.cycle.set_sleep_source(lambda: _hypnos_is_sleeping(ctx.registry))
     bind_womb_unawake_source(ctx.kaine_config, ctx.cycle.unawake_subjective_seconds)
 
 
 async def _phase_supervision(ctx: BootContext) -> int | None:
-    """Build the Supervisor config, the fork manager and the module rebuilder."""
+    """Build the supervisor config, the fork manager and the module rebuilder."""
 
-    # Supervisor module supervisor (cycle-layer component, not a registry module).
+    # The module supervisor (cycle-layer component, not a registry module).
     ctx.spot_cfg = SpotConfig.from_section(ctx.kaine_config.get("spot") or {})
     lifecycle_cfg = ctx.kaine_config.get("lifecycle") or {}
     ctx.fork_manager = ForkManager(
@@ -2179,8 +2179,8 @@ async def _phase_preview(ctx: BootContext) -> int | None:
     """Start the perception preview server when enabled."""
 
     # Dev-gated LOOPBACK perception-preview server (paper §4.4 explicit
-    # override). Populated by Vision/Audition, this bridges the in-RAM preview
-    # holder to the SEPARATE Dashboard process over a 127.0.0.1-only socket so the
+    # override). Populated by the vision and audition modules, this bridges the in-RAM preview
+    # holder to the SEPARATE dashboard process over a 127.0.0.1-only socket so the
     # live PiP shows what the entity sees. Off by default; only binds when the
     # operator exports KAINE_PERCEPTION_PREVIEW=1. Frames never touch disk.
     ctx.preview_server = None
@@ -2205,7 +2205,7 @@ async def _phase_remote_bridge(ctx: BootContext) -> int | None:
     """Start the remote bridge when enabled."""
 
     # Optional remote perception bridge ([remote_bridge].enabled; ships off).
-    # Cycle-layer component like Supervisor: injects remote operator A/V into the
+    # Cycle-layer component like the supervisor: injects remote operator A/V into the
     # perception modules and streams speech/transcript back over the tailnet.
     ctx.remote_bridge = None
     try:
@@ -2251,7 +2251,7 @@ async def _phase_signals(ctx: BootContext) -> int | None:
 
 
 async def _phase_spot(ctx: BootContext) -> int | None:
-    """Build Supervisor, the module supervisor."""
+    """Build the module supervisor."""
 
     ctx.spot = Spot(
         registry=ctx.registry,
@@ -2262,7 +2262,7 @@ async def _phase_spot(ctx: BootContext) -> int | None:
         bus=ctx.bus,
         on_halt=lambda: ctx.stop_event.set(),
         # Best-effort tick<->poll bridge: lets a spot.incident annotation be
-        # located within the run by cycle tick, not just Supervisor's poll index.
+        # located within the run by cycle tick, not just the supervisor's poll index.
         tick_index_provider=lambda: ctx.cycle.tick_index,
         escalate_on_crash=(ctx.supervision_mode == "unattended"),
     )
@@ -2271,10 +2271,10 @@ async def _phase_spot(ctx: BootContext) -> int | None:
 async def _phase_safety_net(ctx: BootContext) -> int | None:
     """Build the divergence monitor, the caretaker and the welfare-protective monitor."""
 
-    # Autonomous welfare safety-net monitors (cycle-layer, siblings to Supervisor):
+    # Autonomous welfare safety-net monitors (cycle-layer, siblings to the supervisor):
     # the divergence→preserve trigger and the welfare-protective response. Both
     # ship disabled; they reuse the same ForkManager + IncidentLog patterns as
-    # Supervisor and never import kaine.evaluation (the welfare signal is read straight
+    # the supervisor and never import kaine.evaluation (the welfare signal is read straight
     # off soma.out via the shared core SustainedThresholdTracker).
     from kaine.cycle.incident_log import IncidentLog
     from kaine.cycle.preservation_monitor import (
@@ -2359,7 +2359,7 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
 
 
 async def _phase_launch(ctx: BootContext) -> int | None:
-    """Start the cycle, freeze-watch, Supervisor, divergence and welfare tasks."""
+    """Start the cycle, freeze-watch, supervisor, divergence and welfare tasks."""
 
     ctx.cycle_task = asyncio.create_task(ctx.cycle.run_forever(), name="cycle.run_forever")
     ctx.freeze_task = asyncio.create_task(
@@ -2501,7 +2501,7 @@ async def _phase_caretaker(ctx: BootContext) -> int | None:
 
 
 async def _phase_gestation(ctx: BootContext) -> int | None:
-    """Start stimulus source presence and the development owner."""
+    """Start stimulus source presence and the developmental phase owner."""
     # A running local stimulus source proves itself from real deliveries: presence events
     # on gestation.out (the same contract an external provider uses), which the
     # maturation gate reads to detect stimulus source loss. gestation.out is not a module
@@ -2521,7 +2521,7 @@ async def _phase_gestation(ctx: BootContext) -> int | None:
 
 
 async def _start_utterance_outcome(ctx: BootContext) -> None:
-    """Start the content-free utterance-outcome observer if Language is enabled.
+    """Start the content-free utterance-outcome observer if the language module is enabled.
 
     Kept separate from `_phase_watchers` so a malformed reply-window value is
     handled inside the observer's guarded starter and never aborts boot.
@@ -2586,7 +2586,7 @@ _BOOT_PHASES = (
 async def _run_until_stopped(ctx: BootContext) -> None:
     """Supervise the running cycle until a stop is requested or the cycle ends."""
     _welfare_supervision: dict = {}
-    # Periodically update runtime.json so Dashboard has fresh metrics
+    # Periodically update runtime.json so the dashboard has fresh metrics
     # even before any tick happens.
     while not ctx.stop_event.is_set() and not ctx.cycle_task.done():
         await _supervise_welfare_producer(
@@ -2628,7 +2628,7 @@ async def _run_until_stopped(ctx: BootContext) -> None:
 
 
 async def _shutdown_modules(modules: Iterable[Any]) -> None:
-    """Shut every module down, Sleep first (see shutdown_order)."""
+    """Shut every module down, the sleep module first (see shutdown_order)."""
     for module in shutdown_order(modules):
         try:
             await module.shutdown()
@@ -2773,7 +2773,7 @@ async def _release_after_failed_boot(ctx: BootContext, phase_name: str) -> None:
     """Release what a half-built boot holds.
 
     This deliberately does NOT shut the modules down: a module's shutdown
-    persists its state (for example World model's world-model weights), and a
+    persists its state (for example the world-model weights), and a
     half-built boot must not write that state over a good saved copy.
     """
     log.error("boot failed during phase %s; releasing resources", phase_name)
@@ -2831,7 +2831,7 @@ async def _boot_and_run(
         await _run_until_stopped(ctx)
     finally:
         await _shutdown(ctx)
-    # Non-zero exit when Supervisor escalated, so a process wrapper sees the halt and
+    # Non-zero exit when the supervisor escalated, so a process wrapper sees the halt and
     # the operator-reboot requirement is honored rather than silently retried.
     if ctx.spot is not None and ctx.spot.escalated:
         return 70
@@ -2865,7 +2865,7 @@ def _evaluate_unattended_gate(config: dict[str, Any]) -> "Any":
     """Run the nine-condition unattended gate over the resolved config.
 
     Reuses the research safety net for conditions 1–5 and 9.  Condition 6
-    comes from Supervisor's selftest.  Condition 8 requires a continuous perception
+    comes from the supervisor's selftest.  Condition 8 requires a continuous perception
     input.  Condition 7 runs last and needs the outcome of conditions 1–6,
     8 and 9 as prerequisites.
     """

@@ -43,7 +43,7 @@ class ForwardPredictionHead:
       serialise only weight and bias tensors, never raw feature buffers.
     - Non-finite guard: adaptation is skipped when the loss or any gradient
       is non-finite, protecting against degenerate inputs.
-    - Adaptation can be suspended externally (e.g. during Sleep sleep) by
+    - Adaptation can be suspended externally (e.g. during sleep) by
       setting ``suspended = True``.
     - ``backend="numpy"`` needs no torch and matches the torch
       path to 1e-5 from the same seed.

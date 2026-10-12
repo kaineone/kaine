@@ -25,7 +25,7 @@ def _hermetic_cwd(tmp_path: Path) -> Path:
     relative to CWD. Running in the repo root would deep-merge whatever LOCAL
     operator override a developer/operator has — which can enable the safety
     net and therefore make these tests BOOT A REAL ENTITY instead of refusing.
-    A test must never be able to maturation an entity, so we run in a temp dir with
+    A test must never be able to mature an entity, so we run in a temp dir with
     only the shipped config and no operator override.
     """
     cfg_dir = tmp_path / "config"
@@ -123,7 +123,7 @@ def test_research_gate_evaluated_once_and_threaded_to_boot(monkeypatch):
     assert rc == 0
     assert calls["eval"] == 1, "gate must be evaluated exactly once (in main)"
     assert captured["supervision_mode"] == "research"
-    # The safety-net checks are threaded through for runtime.json (Dashboard),
+    # The safety-net checks are threaded through for runtime.json (the dashboard),
     # not recomputed inside the loop.
     assert captured["gate_checks"] == {
         "preservation_enabled": True,
@@ -358,8 +358,8 @@ def test_qdrant_key_absent_everywhere_injects_nothing(tmp_path: Path):
 
 
 def test_existing_kaine_toml_qdrant_key_left_intact(tmp_path: Path):
-    # Episodic memory has an explicit key; Social cognition does not. The explicit key wins for
-    # Episodic memory, while Social cognition still receives the resolved key.
+    # The episodic memory module has an explicit key; the social cognition module does not. The explicit key wins for
+    # the episodic memory module, while the social cognition module still receives the resolved key.
     toml = _KAINE_TOML_QDRANT.replace(
         '[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 6533\n',
         '[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 6533\napi_key = "in-file"\n',
@@ -374,7 +374,7 @@ def test_existing_kaine_toml_qdrant_key_left_intact(tmp_path: Path):
 
 
 def test_empatheia_only_qdrant_consumer_still_gets_key(tmp_path: Path):
-    # Social cognition enabled without Episodic memory: the merge must still reach it.
+    # The social cognition module enabled without the episodic memory module: the merge must still reach it.
     kaine = _write(
         tmp_path / "kaine.toml",
         '[empatheia]\nbackend = "qdrant"\n\n[empatheia.qdrant]\nhost = "127.0.0.1"\nport = 6533\n',

@@ -19,7 +19,7 @@ server.
 
 #### Scenario: Organ inference uses the OpenAI endpoint
 
-- **WHEN** Language issues a generation request
+- **WHEN** the language module issues a generation request
 - **THEN** it POSTs to the configured server's `/v1/chat/completions`
 - **AND** it issues no request to an Ollama-native `/api/*` endpoint
 
@@ -32,7 +32,7 @@ server.
 ### Requirement: Reasoning suppression is backend-portable
 
 The language organ SHALL run with the served model's chain-of-thought
-suppressed (the organ is a voice; reasoning lives in Planning). Suppression SHALL use
+suppressed (the organ is a voice; reasoning lives in the planning module). Suppression SHALL use
 the OpenAI-compatible / `llama.cpp` mechanism (`reasoning_format` or the
 `enable_thinking=false` chat-template keyword argument), NOT Ollama's native
 `think` flag. When the served model does not support the parameter, the client
@@ -119,10 +119,10 @@ Every launch path of the organ server SHALL pass llama-server's `--sleep-idle-se
 - **THEN** the organ reloads the model and answers the request
 
 ### Requirement: Health reports a sleeping organ as up and asleep
-Dashboard's organ health probe and the pre-boot `Chat LLM` row SHALL read the server's `/props` and report a sleeping organ as up and asleep, never as degraded or down. Health polling SHALL NOT wake a sleeping organ. The pre-boot `Organ content` row SHALL still send a real completion, so a boot proves the organ answers.
+The dashboard's organ health probe and the pre-boot `Chat LLM` row SHALL read the server's `/props` and report a sleeping organ as up and asleep, never as degraded or down. Health polling SHALL NOT wake a sleeping organ. The pre-boot `Organ content` row SHALL still send a real completion, so a boot proves the organ answers.
 
 #### Scenario: Dashboard while nothing runs
-- **WHEN** the organ is asleep and Dashboard polls its health
+- **WHEN** the organ is asleep and the dashboard polls its health
 - **THEN** the organ shows as up and asleep, and it stays asleep
 
 ### Requirement: Organ probes authenticate

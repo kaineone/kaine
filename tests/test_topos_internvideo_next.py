@@ -637,7 +637,7 @@ async def test_deserialize_discards_mismatched_forward_model(bus):
     big = LatentForwardModel(latent_dim=768, units=256, seed=1)
     big_state = big.state_dict()
 
-    # A running Vision whose forward model is sized to a 4-dim encoder.
+    # A running vision module whose forward model is sized to a 4-dim encoder.
     small_enc = FakeSmall()
     topos = Topos(bus, encoder=small_enc, forward_prediction=True)
     topos._forward_model = LatentForwardModel(latent_dim=4, units=16, seed=2)

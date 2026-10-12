@@ -134,7 +134,7 @@ def plan_organ_download(
     GGUF is always required (what the OpenAI-compatible server serves);
     safetensors is added ONLY when Stage-2 voice-alignment training is enabled
     (the trainer's base model). Returns an empty plan (``needed=False``) when
-    language is not enabled — the wizard then offers no organ step.
+    the language module is not enabled — the wizard then offers no organ step.
 
     ``config`` is the resolved config used to read the Stage-2 toggle; when None it
     is derived from ``modules`` alone (Stage-2 treated as off). Pure: builds the

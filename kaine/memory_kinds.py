@@ -24,7 +24,7 @@ __all__ = [
     "strength_key",
 ]
 
-# Canonical Episodic memory memory-collection kinds.
+# Canonical episodic memory-collection kinds.
 MNEMOS_COLLECTION_KINDS: tuple[str, str, str, str] = (
     "short_term",
     "episodic",
@@ -35,7 +35,7 @@ MNEMOS_COLLECTION_KINDS: tuple[str, str, str, str] = (
 #: Shared Qdrant collection used for embedding-space stamps.
 MNEMOS_STAMP_COLLECTION: str = "kaine_meta"
 
-#: Shared path to the Episodic memory store health state file written by Episodic memory and read by Dashboard.
+#: Shared path to the episodic memory module's store health state file written by the episodic memory module and read by the dashboard.
 MNEMOS_STORE_HEALTH_PATH: str = "state/mnemos/store_health.json"
 
 #: Fixed namespace for deriving deterministic Qdrant point ids for
@@ -56,5 +56,5 @@ def stamp_point_id(key: str) -> str:
 
 
 def strength_key(prefix: str) -> str:
-    """Key of the trace-strength record (Episodic memory meta) for a collection prefix."""
+    """Key of the trace-strength record (episodic memory module meta) for a collection prefix."""
     return f"{prefix}strength"

@@ -458,7 +458,7 @@ async def test_stored_traces_carry_affect_tag_from_thymos_state(bus: AsyncBus):
     await mnemos.initialize()
     try:
         # Simulate a thymos.state arriving on the bus by directly calling the
-        # internal handler (unit-style — avoids spinning up Affect and a real bus
+        # internal handler (unit-style — avoids spinning up the affect module and a real bus
         # while still exercising the tagging path through the actual handler).
         from datetime import datetime, timezone
 
@@ -477,7 +477,7 @@ async def test_stored_traces_carry_affect_tag_from_thymos_state(bus: AsyncBus):
         )
         mnemos._handle_peer_event(mnemos._thymos_stream, fake_event)
 
-        # Cached affect should now reflect the affect state.
+        # Cached affect should now reflect the affect module's state.
         assert mnemos.cached_affect is not None
         assert mnemos.cached_affect["intensity"] == pytest.approx(0.8)
         assert mnemos.cached_affect["valence"] == pytest.approx(0.5)
@@ -562,7 +562,7 @@ async def test_recall_affect_bias_intact(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_hypnos_owns_the_replay_window(bus: AsyncBus):
-    """Sleep opens the replay window through Episodic memory; sleep start on the bus does not open it, and sleep completion closes it."""
+    """The sleep module opens the replay window through the episodic memory module; sleep start on the bus does not open it, and sleep completion closes it."""
     mnemos = await _new_mnemos(bus)
     await mnemos.initialize()
     try:
@@ -603,7 +603,7 @@ async def test_hypnos_owns_the_replay_window(bus: AsyncBus):
         await mnemos.shutdown()
 
 
-# --- select_cross_period_traces (real Episodic memory, phase-3 gap closure) -----------
+# --- select_cross_period_traces (real episodic memory module, phase-3 gap closure) -----------
 
 
 async def _mnemos_with_traces(
@@ -613,7 +613,7 @@ async def _mnemos_with_traces(
     short_term_texts: list[tuple[str, float]] | None = None,
     episodic_texts: list[tuple[str, float]] | None = None,
 ) -> "Mnemos":
-    """Build a Episodic memory with pre-populated short-term and/or episodic traces.
+    """Build an episodic memory module with pre-populated short-term and/or episodic traces.
 
     Each entry is ``(text, timestamp)`` so callers can spread traces across
     distinct timestamps (and therefore distinct time-window buckets).
@@ -651,7 +651,7 @@ async def _mnemos_with_traces(
 
 @pytest.mark.asyncio
 async def test_select_cross_period_returns_two_distinct_periods(bus: AsyncBus):
-    """Real Episodic memory returns ≥2 populated period buckets when traces span two epochs."""
+    """The real episodic memory module returns ≥2 populated period buckets when traces span two epochs."""
     # Two short-term traces early, two short-term traces late — guaranteed to
     # fall in different time-window buckets when divided into 2 periods.
     mnemos = await _mnemos_with_traces(
@@ -742,16 +742,16 @@ async def test_select_cross_period_all_same_timestamp(bus: AsyncBus):
     assert all(k == "period_0" for k in by_period)
 
 
-# --- Phase-3 driven by REAL Episodic memory (not a fake) ------------------------------
+# --- Phase-3 driven by REAL episodic memory module (not a fake) ------------------------------
 
 
 @pytest.mark.asyncio
 async def test_phase3_with_real_mnemos_spans_two_periods(bus: AsyncBus):
-    """Phase 3 driven by the real Episodic memory module yields a batch spanning ≥2 periods.
+    """Phase 3 driven by the real episodic memory module yields a batch spanning ≥2 periods.
 
     This is the load-bearing integration test: ensures the spec requirement
     'traces from at least two distinct memory periods appear in the same
-    replay batch' is satisfied by the real Episodic memory implementation, not just
+    replay batch' is satisfied by the real episodic memory module's implementation, not just
     by a duck-typed fake.
     """
     from kaine.modules.hypnos.phases import associative_replay
@@ -768,7 +768,7 @@ async def test_phase3_with_real_mnemos_spans_two_periods(bus: AsyncBus):
 
     result = await associative_replay(
         enabled=True,
-        mnemos=mnemos,  # type: ignore[arg-type]  # real Episodic memory satisfies the duck-type
+        mnemos=mnemos,  # type: ignore[arg-type]  # real episodic memory module satisfies the duck-type
         phantasia=None,
         periods=2,
         per_period=3,

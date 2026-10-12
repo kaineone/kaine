@@ -137,12 +137,12 @@ def build_registry(
         time_scale = float((kaine_config.get("cycle") or {}).get("time_scale", 1.0))
         entity_clock = EntityClock(scale=time_scale)
     registry.entity_clock = entity_clock
-    # Loaded module plugins (kaine.plugins); Supervisor's restart path and the
+    # Loaded module plugins (kaine.plugins); the supervisor's restart path and the
     # oscillator wiring read them back from the registry.
     registry.plugins = plugins
     # The unified perception feed is a single top-level [perception_feed] section
     # (unified-perception-feed) that parameterizes BOTH the vision surface
-    # (Vision) and the hearing surface (Audition) from one source of truth. Read
+    # (the vision module) and the hearing surface (the audition module) from one source of truth. Read
     # it once and inject it into both factories' sections under a reserved key
     # the factories pop. Keeping it top-level (not under [topos]/[audition])
     # means picture and sound cannot drift to different seeds/manifests.
@@ -151,7 +151,7 @@ def build_registry(
     # world, so booting with one selected must bind the senses to it: select the
     # `virtual` locus and mark both modalities desired. Without this the locus-
     # gated capture supervisors keep the virtual feed dark (the shipped desired-
-    # state defaults to locus=`physical`, flags off) and Vision/Audition publish
+    # state defaults to locus=`physical`, flags off) and the vision and audition modules publish
     # nothing — the "awake but senseless" failure. mode off/live leave the
     # desired-state to the operator (live = real camera/mic, operator-toggled).
     _feed_mode = str(perception_feed.get("mode", "off")).lower()
@@ -160,7 +160,7 @@ def build_registry(
     # playlist feeds must share ONE start-clock so they present the same manifest
     # item at the same wall-clock moment and cross item boundaries together. Build
     # it once here from the manifest's item count and inject the SAME instance
-    # into both the Vision (video) and Audition (audio) factory sections, so
+    # into both the vision module's video and the audition module's audio factory sections, so
     # picture and sound cannot drift onto different items. Any manifest problem is
     # left for the factories to surface with their existing errors.
     if _feed_mode == "playlist" and (
@@ -178,7 +178,7 @@ def build_registry(
                 _pl_clock = PlaylistClock(len(_pl_manifest.items))
                 perception_feed["_shared_playlist_clock"] = _pl_clock
                 # Also stash the clock in the config section itself so the
-                # Sleep factory (which reads kaine_config, not this local
+                # the sleep module factory (which reads kaine_config, not this local
                 # copy) can inject the SAME instance — sleep pauses playback
                 # via the clock at the perception suspend/restore seam
                 # (playlist-sleep-pause). No new bus/event channel: the
@@ -208,7 +208,7 @@ def build_registry(
                 video_present=bool(toggles.get("topos", False)),
             )
     # Stimulus source (local-womb-feed): one shared stimulus source clock for both surfaces, offset by
-    # the lived development time, so the heartbeat is seen and heard together and
+    # the lived developmental time, so the heartbeat is seen and heard together and
     # the maternal trajectory continues across boots instead of replaying.
     if _feed_mode == "womb" and (
         bool(toggles.get("topos", False)) or bool(toggles.get("audition", False))
@@ -236,8 +236,8 @@ def build_registry(
                 _desired.audio_live_desired,
                 _desired.video_live_desired,
             )
-    # Vision and Audition read the shared feed (and the playlist clock stashed
-    # into kaine_config above) inside construct_module, so boot and Supervisor's
+    # The vision and audition modules read the shared feed (and the playlist clock stashed
+    # into kaine_config above) inside construct_module, so boot and the supervisor's
     # restart path hand them the same instance.
     for name in SIMPLE_FACTORIES:
         if not bool(toggles.get(name, False)):
@@ -260,13 +260,13 @@ def build_registry(
         registry.register(module)
         log.info("registered module %s", name)
     if _womb_world_transition is not None:
-        # The video surface starts and judges the crossfade only if Vision is
-        # really there; without it the audio surface does, so a Vision whose
+        # The video surface starts and judges the crossfade only if the vision module is
+        # really there; without it the audio surface does, so a vision module whose
         # backend could not load never leaves the programme held.
         _womb_world_transition.controller.set_video_present("topos" in registry)
 
     if bool(toggles.get("hypnos", False)):
-        # construct_module hands Sleep its sibling modules from the registry.
+        # construct_module hands the sleep module its sibling modules from the registry.
         hypnos = construct_module(
             "hypnos",
             bus,
@@ -299,9 +299,9 @@ def construct_module(
     """Construct a single module exactly as `build_registry` would.
 
     Copies the module's section from ``kaine_config``, wires the shared
-    perception feed for Vision/Audition/Interoception, injects ``entity_clock`` into
-    clocked factories, injects ``intent_secret`` into Effectors, and dispatches
-    plugin injections to Sequence, Interoception, Planning and Audition.
+    perception feed for the vision, audition and interoception modules, injects ``entity_clock`` into
+    clocked factories, injects ``intent_secret`` into the effectors module, and dispatches
+    plugin injections to the sequence, interoception, planning and audition modules.
 
     Returns ``None`` when the module's factory returns ``None`` — i.e. its
     configured backend could not load. The caller is responsible for skipping
@@ -353,16 +353,16 @@ def construct_module(
 
 
 def rewire_module(registry: ModuleRegistry, name: str, kaine_config: dict[str, Any]) -> None:
-    """Re-run the post-registration wiring after Supervisor rebuilds ``name``.
+    """Re-run the post-registration wiring after the supervisor rebuilds ``name``.
 
-    Supervisor's heavy restart path constructs a fresh module and swaps it into the
+    The supervisor's heavy restart path constructs a fresh module and swaps it into the
     registry via ``replace``; the new instance must be re-wired exactly as
     ``build_registry`` wires the full set, except for oscillators (below). The individual wirings are idempotent
     and cheap, so we re-run the global helpers rather than scoping to one
     module (the ``name`` argument documents intent and lets a future
     optimization narrow the work without changing callers).
 
-    Oscillators are deliberately NOT rebuilt here: Supervisor hands the rebuilt
+    Oscillators are deliberately NOT rebuilt here: the supervisor hands the rebuilt
     module its predecessor's oscillator, and every other module keeps its own,
     so no module's phase history is reset by another module's restart
     (oscillator-continuity-on-restart).

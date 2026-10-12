@@ -62,7 +62,7 @@ async def hold_until_womb_ready(
     """Block until the stimulus source is ready for spawn, or until shutdown is requested.
 
     While held, publish ``stage.gestation.no_stimulus`` after each failed
-    check so the development state is visible on ``lifecycle.out``.
+    check so the developmental state is visible on ``lifecycle.out``.
     """
     _validate_positive("retry_seconds", retry_seconds)
     while not stop_event.is_set():
@@ -106,7 +106,7 @@ class WombLossWatcher:
     does not judge transient quiet periods while the stimulus source is still starting.
     If no live observation occurs within ``arm_timeout_seconds``, the stimulus source is
     declared lost immediately.  Once armed, hysteresis prevents a single
-    missed event from freezing the entity, and a development-only freeze leaves
+    missed event from freezing the entity, and a developmental-phase-only freeze leaves
     perception on so a local stimulus source can prove its return.  Arming survives a
     stimulus source return.
     """

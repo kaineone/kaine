@@ -185,7 +185,7 @@ class AccessRateController:
         events:
             Canonically-ordered ``(entry_id, Event)`` pairs gathered this tick.
         arousal:
-            Current Affect arousal, or ``None`` when unavailable.
+            Current affect module arousal, or ``None`` when unavailable.
         dt_s:
             Subjective time since the previous tick (used for phasic decay).
         resting_hz:

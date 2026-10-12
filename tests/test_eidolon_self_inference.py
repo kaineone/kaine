@@ -156,7 +156,7 @@ def test_vad_stats_rolling_mean():
 def test_no_raw_speech_text_in_self_model(tmp_path: Path):
     """Raw speech text must NOT appear anywhere in the persisted self-model JSON.
 
-    This is a load-bearing safety invariant: Self-model derives only numeric /
+    This is a load-bearing safety invariant: the self-model module derives only numeric /
     categorical summaries from speech events; transcript content is never
     stored.
     """
@@ -280,7 +280,7 @@ def test_values_empty_when_no_norms():
 
 
 def test_set_whitelist_commands_surfaces_effectors():
-    """set_whitelist_commands injects the Effectors effector whitelist so a
+    """set_whitelist_commands injects the effectors module's effector whitelist so a
     maintenance cycle surfaces capability_map['effectors'], sorted
     (eidolon-self-inference "Capability map from Effectors whitelist")."""
     engine = SelfInferenceEngine(enabled=True)

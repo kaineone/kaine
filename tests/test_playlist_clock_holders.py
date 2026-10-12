@@ -273,7 +273,7 @@ def test_hypnos_pause_survives_freeze_thaw(patched_control_path):
 
         pop_freeze()
         await _wait_for(lambda: "freeze" not in clock._holders)
-        assert clock.paused  # sleep still holds the clock
+        assert clock.paused  # the sleep module still holds the clock
         assert "hypnos" in clock._holders
         assert clock.elapsed() == 0.0
 

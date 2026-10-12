@@ -1,8 +1,8 @@
 ## ADDED Requirements
 
 ### Requirement: The reply-window key is accepted
-The Language factory SHALL accept `[lingua].outcome_reply_window_s`, which the utterance-outcome observer reads, without passing it to Language.
+The language module factory SHALL accept `[lingua].outcome_reply_window_s`, which the utterance-outcome observer reads, without passing it to the language module.
 
 #### Scenario: Setting the reply window does not stop boot
 - **WHEN** `[lingua].outcome_reply_window_s` is set to 45
-- **THEN** the Language factory builds Language without error
+- **THEN** the language module factory builds the language module without error

@@ -174,7 +174,7 @@ async def test_control_tick_publishes_efference_copy(bus):
 
 def test_closed_loop_uses_existing_forward_model_no_new_learner():
     loop = EfferenceLoop()
-    # The loop reuses Interoception's SubstrateForwardModel — it adds no new learner.
+    # The loop reuses the interoception module's SubstrateForwardModel — it adds no new learner.
     assert isinstance(loop.forward_model, SubstrateForwardModel)
     # No torch.nn.Module subclass is defined in the control-surface module.
     import torch.nn as nn

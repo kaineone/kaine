@@ -56,13 +56,13 @@ date._
       covering any sound (not the emotion/timing/energy feature vector). Keep the
       buffer a statistical descriptor (mean/variance), never raw audio/embeddings.
 - [x] 1.3 A workspace→Audition arousal seam (provider/callback, no workspace
-      import, like the affect / vision-arousal seams); arousal sets the auditory
+      import, like the vision and affect modules' arousal seams); arousal sets the auditory
       attentional window (distinct affective→perceptual coupling; sign tunable).
 - [x] 1.4 A single arousal-modulated attended window over the input; publish a
       content-free attended-stream/salience descriptor (which stream, how salient
       — never audio) on `audition.out`.
 - [x] 1.5 Speech as a specialization: a voice-activity/speech detector routes
-      detected-speech segments to the existing STT + vocal-emotion path (→ Language),
+      detected-speech segments to the existing STT + vocal-emotion path (→ the language module),
       off the general perceptual path; the general path perceives the rest.
 - [x] 1.6 Config: a general-audition toggle under `[audition]`, off by default;
       encoder id, buffer/window sizes, arousal→window mapping, speech-gate mode.
@@ -141,7 +141,7 @@ still-unbuilt foveation Phase 3–4._
       encoder `model_id`: load on matching shapes, discard on a mismatch with a
       warning, carry other encoders' entries forward untouched.
 - [x] 5.4 A `hypnos.out` consumer suspends adaptation of both forward models during
-      sleep, as Vision does.
+      sleep, as the vision module does.
 - [x] 5.5 Tests: config selection, the plugin seam (honoured, conflict, recorded),
       a persistence round-trip through `serialize`/`deserialize` in a fresh
       instance, the mismatch discard, encoder switch-and-back, sleep suspension

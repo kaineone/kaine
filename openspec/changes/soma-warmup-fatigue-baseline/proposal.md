@@ -1,11 +1,11 @@
 ## Why
 
-During Interoception's developmental warm-up, the fatigue accumulator's input is damped by subtracting a "warming baseline", the typical recent error, so that cold-start model ignorance does not build sleep pressure while a genuine spike still does. Since `soma-expected-error`, the accumulator integrates the **unexpected** error `U_t` (error beyond each channel's learned band), but the warming baseline is still the mean of the **raw** prediction-error window. The two are different quantities, and the raw mean is usually much larger than `U_t`, so during warm-up the damped input is almost always zero: a spike contributes only when its unexpected part exceeds the mean raw error. The damping no longer does what it was designed to do. The mathematics review of 2026-10-08 found this.
+During the interoception module's developmental warm-up, the fatigue accumulator's input is damped by subtracting a "warming baseline", the typical recent error, so that cold-start model ignorance does not build sleep pressure while a genuine spike still does. Since `soma-expected-error`, the accumulator integrates the **unexpected** error `U_t` (error beyond each channel's learned band), but the warming baseline is still the mean of the **raw** prediction-error window. The two are different quantities, and the raw mean is usually much larger than `U_t`, so during warm-up the damped input is almost always zero: a spike contributes only when its unexpected part exceeds the mean raw error. The damping no longer does what it was designed to do. The mathematics review of 2026-10-08 found this.
 
 ## What Changes
 
-- **Like with like.** Interoception keeps a rolling window of the accumulator's own input quantity (`U_t`, or the raw error while a hard threshold is breached), and the warming baseline is the mean of that window before the current tick. The damped input during warm-up is `max(0, action_error - baseline)`, as designed.
-- The raw window keeps its other uses (Interoception salience and the error-stabilisation guard), unchanged.
+- **Like with like.** The interoception module keeps a rolling window of the accumulator's own input quantity (`U_t`, or the raw error while a hard threshold is breached), and the warming baseline is the mean of that window before the current tick. The damped input during warm-up is `max(0, action_error - baseline)`, as designed.
+- The raw window keeps its other uses (the interoception module's salience and the error-stabilisation guard), unchanged.
 
 ## Capabilities
 

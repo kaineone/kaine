@@ -12,13 +12,13 @@ Implemented. The shipped `config/kaine.toml` sets `[modules].audition = false`, 
 - Vocal-emotion classification (`emotion2vec+`) and live microphone capture need the `[audio]` extras: `pip install -e .[audio]`. Without `funasr`, emotion degrades to neutral with a one-time warning. An empty `emotion_model_id` disables the classifier.
 - Prosody extraction (`audition.prosody`) needs `librosa`, also in the `[audio]` extras.
 - The tone forward model is always built once the module is enabled. It is a small CPU network that needs only `torch`.
-- Audition is paired with [Vocal](vocal.md) for speech output.
+- The audition module is paired with [the vocal module](vocal.md) for speech output.
 
 ## What Audition does
 
 Audition is the architecture's analog of the auditory cortex, where sound is processed as prediction error against a learned model of the auditory environment. For each window that the microphone or a feed delivers (`process_audio()`):
 
-1. Self-hearing suppression: while [Vocal](vocal.md) is playing the entity's own voice, a shared `SpeakingGate` drops the window.
+1. Self-hearing suppression: while [the vocal module](vocal.md) is playing the entity's own voice, a shared `SpeakingGate` drops the window.
 2. General acoustic perception, when `general_audition` is on: Audition attends to the most recent part of the window (its length set by arousal), encodes it, steps the acoustic forward model, and publishes `audition.perception`. A voice-activity heuristic (`detect_speech()`) then decides whether the window is speech. Non-speech windows stop here. With `general_audition` off, every window is treated as speech.
 3. Tone of voice: the emotion classifier labels the window, and speech-to-text runs alongside it only when `transcription_enabled = true` (both start together through `asyncio.gather()`).
 4. The tone forward model steps on a 9-component vector built from the tone scores, the utterance's duration, and its energy, and its error grades the intensity of the speech-path events.
@@ -45,7 +45,7 @@ When the classifier fails, the tone model receives a fully neutral distribution.
 
 ### Broadcast context
 
-Both models take the broadcast context as an extra input. Audition reads the workspace broadcast stream (`on_workspace`). When a broadcast arrives that is not inhibited, it keeps the coalition members whose scores reach the access threshold recorded in the broadcast's metadata (`access_threshold`); if at least one does, they become its new context. An inhibited broadcast, or one in which no member reaches the threshold, leaves the context unchanged, and before the first accessed broadcast the context slots are zeros. The context is the 24-component featurization of the accessed members weighted by their reported intensities, computed by `kaine/modules/context.py`; [Vision](vision.md#broadcast-context) lists its components. It records which modules' reports gained access and how strongly, and carries no payloads.
+Both models take the broadcast context as an extra input. The audition module reads the workspace broadcast stream (`on_workspace`). When a broadcast arrives that is not inhibited, it keeps the coalition members whose scores reach the access threshold recorded in the broadcast's metadata (`access_threshold`); if at least one does, they become its new context. An inhibited broadcast, or one in which no member reaches the threshold, leaves the context unchanged, and before the first accessed broadcast the context slots are zeros. The context is the 24-component featurization of the accessed members weighted by their reported intensities, computed by `kaine/modules/context.py`; [the vision module](vision.md#broadcast-context) lists its components. It records which modules' reports gained access and how strongly, and carries no payloads.
 
 Audition holds no entity clock, so the age of its context (component 20 and `context_age_s`) is measured in wall-clock seconds since receipt. Wall-clock and entity seconds are equal at the default time scale.
 
@@ -67,11 +67,11 @@ over the last `prediction_error_window` acoustic errors. It is `null` when the s
 baseline_salience + (alert_salience − baseline_salience) × min(1, ratio / 2)
 ```
 
-`audition.emotion` (tone path). The tone model's error ratio is its error over the running mean of its last `prediction_error_window` defined errors, the current one included, and 0 when the error is not defined or the mean is 0 (paper A.2). `tone_rule` picks the rule. With `"categorical"`, the default, a non-neutral tone is an alert and is reported at `alert_salience`, and a neutral tone is graded by the error ratio with the same formula; the payload's `alert` is true exactly when the tone is not neutral. With `"error_ratio"`, the tone variant of the planned test (paper A.8), every tone event is graded by the error ratio and none is an alert, so a tone event drives the access rate's phasic input by surprise only. The payload carries the ratio as `tone_error_ratio`, the rule as `tone_rule`, and `classified`, false when the classifier failed or reported a degraded result. The ratio is not called `normalised_error` on a tone event, because Affect reads that key as appraisal novelty. A failed classification keeps `alert_salience` under the default rule and is graded by the ratio, with `alert` false, under `"error_ratio"`.
+`audition.emotion` (tone path). The tone model's error ratio is its error over the running mean of its last `prediction_error_window` defined errors, the current one included, and 0 when the error is not defined or the mean is 0 (paper A.2). `tone_rule` picks the rule. With `"categorical"`, the default, a non-neutral tone is an alert and is reported at `alert_salience`, and a neutral tone is graded by the error ratio with the same formula; the payload's `alert` is true exactly when the tone is not neutral. With `"error_ratio"`, the tone variant of the planned test (paper A.8), every tone event is graded by the error ratio and none is an alert, so a tone event drives the access rate's phasic input by surprise only. The payload carries the ratio as `tone_error_ratio`, the rule as `tone_rule`, and `classified`, false when the classifier failed or reported a degraded result. The ratio is not called `normalised_error` on a tone event, because the affect module reads that key as appraisal novelty. A failed classification keeps `alert_salience` under the default rule and is graded by the ratio, with `alert` false, under `"error_ratio"`.
 
 `audition.transcription` is graded by the tone model's error ratio. A failed classification or transcription is published at `alert_salience` with an `error` field and no `alert` flag. `audition.prosody` is always at `baseline_salience`.
 
-The access rate's phasic input counts only events whose payload has `alert` set to true, so a failed classification does not raise the access rate. Affect reads acoustic alerts directly from `audition.out` and raises arousal in proportion to how far `normalised_error` exceeds 1.
+The access rate's phasic input counts only events whose payload has `alert` set to true, so a failed classification does not raise the access rate. The affect module reads acoustic alerts directly from `audition.out` and raises arousal in proportion to how far `normalised_error` exceeds 1.
 
 ## Inputs
 
@@ -81,8 +81,8 @@ The access rate's phasic input counts only events whose payload has `alert` set 
 | Workspace broadcast | `on_workspace(snapshot)` | Adopts accessed broadcasts as the forward models' context |
 | `kaine.perception_state` | `effective_audio_capture()`, polled every 250 ms | The real microphone runs only when the locus is `physical` and audio is desired |
 | Vocal `SpeakingGate` | `gate.is_speaking()` | Drops windows captured during the entity's own speech |
-| External callers | `process_audio()` | Programmatic input, for example from a virtual-world body through Embodiment |
-| Affect arousal | `set_arousal_provider()` (general audition only) | Sets the attended window |
+| External callers | `process_audio()` | Programmatic input, for example from a virtual-world body through the embodiment module |
+| The affect module's arousal | `set_arousal_provider()` (general audition only) | Sets the attended window |
 | `hypnos.out` | `hypnos.sleep.started` / `hypnos.sleep.completed` | Suspends and resumes adaptation of both forward models |
 
 ## Outputs
@@ -105,7 +105,7 @@ All events are published to the `audition.out` stream.
 
 ## Sleep
 
-During sleep Sleep switches the perceptual locus off and pauses a playlist feed's shared clock, so no windows reach Audition. Independently, both forward models are marked `suspended` from `hypnos.sleep.started` to `hypnos.sleep.completed`, and no gradient step is taken while the flag is set.
+During sleep the sleep module switches the perceptual locus off and pauses a playlist feed's shared clock, so no windows reach the audition module. Independently, both forward models are marked `suspended` from `hypnos.sleep.started` to `hypnos.sleep.completed`, and no gradient step is taken while the flag is set.
 
 ## Persistence
 
@@ -173,7 +173,7 @@ The `dasheng` and `wavjepa` encoders need their weights fetched once (`python -m
 
 `_perceive_acoustic()` in `kaine/modules/audition/module.py`, backed by `kaine/modules/audition/acoustic.py`, runs these steps:
 
-1. Attended window. `arousal_to_window()` maps the current Affect arousal in `[0, 1]` linearly from `arousal_window_max` down to `arousal_window_min`, and `attend_recent()` keeps only that most recent fraction of the window (never less than one 25 ms frame). Higher arousal therefore means a shorter, more recent span, a temporal analogue of the narrowing of cue utilization under arousal (Easterbrook 1959). Arousal arrives through a provider wired at boot (`set_arousal_provider()`); with no provider the whole window is attended.
+1. Attended window. `arousal_to_window()` maps the current affect module arousal in `[0, 1]` linearly from `arousal_window_max` down to `arousal_window_min`, and `attend_recent()` keeps only that most recent fraction of the window (never less than one 25 ms frame). Higher arousal therefore means a shorter, more recent span, a temporal analogue of the narrowing of cue utilization under arousal (Easterbrook 1959). Arousal arrives through a provider wired at boot (`set_arousal_provider()`); with no provider the whole window is attended.
 2. Encoding. `AcousticEncoder.embed(bytes, sample_rate)` turns the attended span into a fixed embedding. The default `SpectralAcousticEncoder` (encoder ID `spectral-logband-32-v2`) takes log energy in 32 log-spaced frequency bands, pools their mean and standard deviation over frames, and L2-normalizes the result into 64 dimensions; band edges are forced onto distinct FFT bins above DC, so all 32 bands carry information at 16 kHz. It represents speech, music, and environmental sound in one space. The frozen self-supervised encoders `dasheng` and `wavjepa` (student path only) are 768-dimensional at 16 kHz. They load offline from vendored code under `external/` and weights fetched at setup, and keep a RAM rolling window (2 s by default) of recent audio for context. Tests use `FakeAcousticEncoder`, a deterministic hash-based embedding.
 3. Prediction and scoring. `cosine_change()` scores the change from the previous embedding, and the acoustic forward model steps as described above.
 4. Publication of `audition.perception`.
@@ -203,9 +203,9 @@ The command shows name, size, and licence and asks for consent. Archives are pin
 Limits:
 
 - sherpa-onnx publishes `audition.transcription` with `"backend": "sherpa_onnx"`.
-- The Dashboard health surface probes Speaches only when `backend = "speaches"`. For sherpa-onnx it loads the model and runs one real inference once per process, then reports the remembered result with its age; a failure is retried after 60 s.
+- The dashboard health surface probes Speaches only when `backend = "speaches"`. For sherpa-onnx it loads the model and runs one real inference once per process, then reports the remembered result with its age; a failure is retried after 60 s.
 - A missing `sherpa-onnx` package refuses boot through the extras check (`pip install "kaine[speech-edge]"`) only when transcription is enabled.
-- A missing or corrupt model, with either backend, disables transcription only. Audition keeps hearing and reporting tone, the reason is logged, and the Dashboard row shows DOWN.
+- A missing or corrupt model, with either backend, disables transcription only. The audition module keeps hearing and reporting tone, the reason is logged, and the Dashboard row shows DOWN.
 
 ## Emotion classification
 
@@ -217,12 +217,12 @@ Limits:
 
 ## Deterministic auditory feed
 
-For reproducible research runs, the shared top-level `[perception_feed]` section (documented under [Vision](vision.md#reproducible-perception-feed)) drives Audition alongside Vision from one source. When `[perception_feed].mode` is `seeded`, `playlist`, `screen`, or `womb`, boot injects an audio stream factory through Audition's `stream_factory` seam and forces capture on, so `LiveMicrophone` reads from the feed instead of the real microphone:
+For reproducible research runs, the shared top-level `[perception_feed]` section (documented under [the vision module](vision.md#reproducible-perception-feed)) drives the audition module alongside the vision module from one source. When `[perception_feed].mode` is `seeded`, `playlist`, `screen`, or `womb`, boot injects an audio stream factory through the audition module's `stream_factory` seam and forces capture on, so `LiveMicrophone` reads from the feed instead of the real microphone:
 
 - `seeded`: `SeededProceduralAudioStream` synthesizes int16 PCM as a pure function of `(seed, block_index)`, a learnable base soundscape of low-frequency sinusoids plus surprise bursts on the shared cross-modal cadence (`[perception_feed.video].surprise_interval`). It is sound, not speech.
 - `playlist`: `PlaylistAudioStream` decodes the audio track of the same checksummed manifest media through PyAV (`av`, in the `[audio]` extra), resamples it, and emits PCM. A digest mismatch fails closed; without PyAV it raises `PerceptionUnavailableError` with an install hint and never substitutes silence. To install both playlist surfaces in one step, use `bash scripts/install.sh --research` or `pip install -e .[perception]`.
 - `screen`: `MonitorAudioStream` (`kaine/modules/audition/monitor.py`) captures the desktop audio monitor through the system ffmpeg binary (`pulse` on Linux, `dshow` on Windows, `avfoundation` on macOS), so the entity hears whatever plays on the shared screen. The device comes from `[perception_feed.screen].monitor_device` (on Linux the current sink's `.monitor` when unset). It is not reproducible and is for demos with an operator present.
-- `womb`: the development audio source; see [Development](../06-operation/development.md).
+- `womb`: the developmental audio source; see [the developmental phase](../06-operation/development.md).
 
 Raw PCM lives only in memory, never on disk.
 
@@ -236,7 +236,7 @@ live mic: N chunks (B pcm bytes) flushed, K below minimum…
 
 ## Dashboard live-preview tap
 
-`_tap_audio_level()` in `kaine/modules/audition/live.py` computes the normalized RMS (0 to 1) of each captured PCM frame and hands it to the in-memory preview holder through `perception_preview.set_audio_level()`, which feeds the Dashboard audio-level meter. Unless the operator sets `KAINE_PERCEPTION_PREVIEW=1` it does nothing, and it keeps only the current value.
+`_tap_audio_level()` in `kaine/modules/audition/live.py` computes the normalized RMS (0 to 1) of each captured PCM frame and hands it to the in-memory preview holder through `perception_preview.set_audio_level()`, which feeds the dashboard audio-level meter. Unless the operator sets `KAINE_PERCEPTION_PREVIEW=1` it does nothing, and it keeps only the current value.
 
 ## Key files
 
@@ -286,7 +286,7 @@ To enable prosody extraction:
 prosody_enabled = true    # requires librosa (in the [audio] extras)
 ```
 
-The `thesis_test` profile turns `general_audition` on and leaves `transcription_enabled` off, so audio enters only as prediction error and tone, and no text reaches Language. To re-enable speech-to-text, which takes the configuration beyond the base-thesis form:
+The `thesis_test` profile turns `general_audition` on and leaves `transcription_enabled` off, so audio enters only as prediction error and tone, and no text reaches the language module. To re-enable speech-to-text, which takes the configuration beyond the base-thesis form:
 
 ```toml
 [audition]

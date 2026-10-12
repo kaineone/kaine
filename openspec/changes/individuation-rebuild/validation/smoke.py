@@ -320,7 +320,7 @@ async def main_async(args: argparse.Namespace) -> int:
 
     section = dict(kaine_config.get("lingua") or {})
 
-    # Baseline Language: no Self-model self-model, only the disclosure fact.
+    # Baseline language module: no self-model, only the disclosure fact.
     lingua = make_lingua(_NullBus(), section)
     lingua.set_expects_self_model(False)
     await lingua.add_situation_fact(ind.disclosure)
@@ -471,7 +471,7 @@ async def main_async(args: argparse.Namespace) -> int:
 
     lines_after = _line_count(intent_path)
 
-    # Language's bus loops were never started (probe_request needs none of
+    # The language module's bus loops were never started (probe_request needs none of
     # them), so only the chat clients need closing.
     await lingua.chat_client.aclose()
     await lingua_id.chat_client.aclose()

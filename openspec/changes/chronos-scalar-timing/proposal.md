@@ -1,14 +1,14 @@
 ## Why
 
-The paper grounds Sequence in thalamo-cortico-striatal interval timing (Buhusi and Meck 2005). That mechanism's behavioural signature is the **scalar property**: timing variability grows in proportion to the interval timed, which is Weber's law for time. Sequence's CfC reservoir is a generic learner and nothing guarantees the property (alternatives review 2026-10-05, §5.1).
+The paper grounds the sequence module in thalamo-cortico-striatal interval timing (Buhusi and Meck 2005). That mechanism's behavioural signature is the **scalar property**: timing variability grows in proportion to the interval timed, which is Weber's law for time. The sequence module's CfC reservoir is a generic learner and nothing guarantees the property (alternatives review 2026-10-05, §5.1).
 
-The emergence-friendly route is to keep the generic learner and **test** it. A recent benchmark (arXiv 2608.16666) shows a CTRNN baseline fails the scalar variance test, which makes it a ready falsification test for Sequence.
+The emergence-friendly route is to keep the generic learner and **test** it. A recent benchmark (arXiv 2608.16666) shows a CTRNN baseline fails the scalar variance test, which makes it a ready falsification test for the sequence module.
 
-**Design document only.** This change defines the test. Whether Sequence passes, and what to do if it fails, follows the workspace-mediation ablation.
+**Design document only.** This change defines the test. Whether the sequence module passes, and what to do if it fails, follows the workspace-mediation ablation.
 
 ## What Changes
 
-A design for an offline scalar-property test of Sequence, and the two candidate mechanisms from the cited lineage if it fails.
+A design for an offline scalar-property test of the sequence module, and the two candidate mechanisms from the cited lineage if it fails.
 
 ## Impact
 

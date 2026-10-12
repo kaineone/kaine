@@ -39,9 +39,9 @@ Core KAINE never imports this package; an import-linter contract enforces that.
   process, a broker that leases disjoint channel territories and runs the closed
   loop, stimulation encoders and spike decoders, and the `reference_culture`
   synthetic data source.
-- **Backends** (`src/kaine_cl1/backends/`): `WetwareTimingModel` for Sequence,
-  `WetwareInteroceptiveModel` for Interoception, `WetwareOscillator` for oscillatory
-  binding, and `WetwarePolicyEngine`, which wraps Planning's engine with a policy
+- **Backends** (`src/kaine_cl1/backends/`): `WetwareTimingModel` for the sequence module,
+  `WetwareInteroceptiveModel` for the interoception module, `WetwareOscillator` for oscillatory
+  binding, and `WetwarePolicyEngine`, which wraps the planning module's engine with a policy
   proposal from the substrate.
 - **Plugin** (`src/kaine_cl1/plugin.py`): validation, the operator messages, and
   the process-wide substrate. A module rebuilt by KAINE's supervisor reuses its

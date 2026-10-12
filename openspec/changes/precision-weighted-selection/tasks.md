@@ -11,7 +11,7 @@
 ## 3. Wiring and config
 
 - [x] 3.1 `[syneidesis]` keys allowed and validated; the cycle builds the tracker when `precision_weighting` is true and passes the contrast gain and baseline to the modulator.
-- [x] 3.2 Amend the note in `openspec/changes/thymos-active-inference-affect` (the Sleep note concerns sleep consolidation, not the precision term, and stays).
+- [x] 3.2 Amend the note in `openspec/changes/thymos-active-inference-affect` (the sleep module note concerns sleep consolidation, not the precision term, and stays).
 
 ## 4. Tests, docs
 

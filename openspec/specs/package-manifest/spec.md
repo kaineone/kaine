@@ -14,4 +14,4 @@ A wheel built from the source tree SHALL contain every Python package under `kai
 
 #### Scenario: Dashboard is installed from a wheel
 - **WHEN** KAINE is installed from a wheel rather than in editable mode
-- **THEN** Dashboard's templates, fonts and vendored scripts are present
+- **THEN** the dashboard's templates, fonts and vendored scripts are present

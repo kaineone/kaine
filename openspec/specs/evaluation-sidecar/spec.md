@@ -183,7 +183,7 @@ for a controlled `(utterance, workspace-conditioning)` input by running BOTH
 arms through the SAME inference path, varying ONLY the workspace conditioning:
 the conditioned arm is the utterance under the supplied conditioning, the bare
 arm is the SAME utterance under EMPTY conditioning. The control SHALL reuse the
-language organ's real conditioning path (Language's `ContextAssembler` + the
+language organ's real conditioning path (the language module's `ContextAssembler` + the
 language-organ chat client, wired at the cycle entrypoint) rather than a
 parallel reimplementation, so any divergence it reports is attributable to the
 conditioning alone — which is exactly the quantity the meter is defined to
@@ -214,9 +214,9 @@ while running.
 #### Scenario: The control exercises the real conditioning path
 
 - **WHEN** the real control client is constructed at the cycle entrypoint
-- **THEN** it builds the conditioned prompt with Language's own `ContextAssembler`
+- **THEN** it builds the conditioned prompt with the language module's own `ContextAssembler`
   and runs it through the language-organ chat client
-- **AND** empty conditioning reproduces Language's "nothing salient" prompt
+- **AND** empty conditioning reproduces the language module's "nothing salient" prompt
 - **AND** `kaine.evaluation` imports no `kaine.modules.*` code (the coupling is a
   duck-typed seam injected at the entrypoint)
 
@@ -246,7 +246,7 @@ model to execute.
   rather than faked when the model is absent
 
 ### Requirement: Controlled offline runners for the passive instruments
-The system SHALL provide a controlled, seeded, offline runner for each of the A/B-divergence, memory-coherence, and self-model (Self-model) instruments. Each runner SHALL execute a FIXED stimulus battery against the instrument's production control seam and emit a shared-schema `Verdict` plus seeded JSONL. Each runner SHALL call `set_global_seed(seed)` at the start of a run so that, given the same seed and battery, the verdict and reported metrics are reproducible. Each runner SHALL run headless without an entity boot and without attaching to live modules, the network, or any external service — using deterministic / echo clients and an in-memory Episodic memory only. Each runner SHALL expose a `__main__` CLI accepting at least `--seed` and `--out`.
+The system SHALL provide a controlled, seeded, offline runner for each of the A/B-divergence, memory-coherence, and self-model instruments. Each runner SHALL execute a FIXED stimulus battery against the instrument's production control seam and emit a shared-schema `Verdict` plus seeded JSONL. Each runner SHALL call `set_global_seed(seed)` at the start of a run so that, given the same seed and battery, the verdict and reported metrics are reproducible. Each runner SHALL run headless without an entity boot and without attaching to live modules, the network, or any external service — using deterministic / echo clients and an in-memory episodic memory module only. Each runner SHALL expose a `__main__` CLI accepting at least `--seed` and `--out`.
 
 #### Scenario: Each runner emits a verdict on its battery
 
@@ -273,17 +273,17 @@ The system SHALL provide a controlled, seeded, offline runner for each of the A/
 
 - **WHEN** the memory-coherence runner runs its planted-fact battery through a
   full-system retrieval arm and a bare arm, then re-runs the SAME full-system client
-  against an EMPTIED Episodic memory as a recorded check
+  against an emptied episodic memory module as a recorded check
 - **THEN** with the facts planted, the full-system arm's accuracy exceeds the bare
   arm's by at least the configured floor
 - **AND** a never-stored fact yields honest non-recall scored 0
-- **AND** with the Episodic memory emptied the full-system advantage vanishes, proving the
+- **AND** with the episodic memory module emptied the full-system advantage vanishes, proving the
   advantage is produced by retrieval and not a hard-coded answer
 
 #### Scenario: The self-model runner validates the scorer
 
 - **WHEN** the self-model runner runs its battery of planted-signal / claim cases
-  through the calibrated Self-model scorer
+  through the calibrated self-model scorer
 - **THEN** the verdict reports the scorer's accuracy on the known cases
 - **AND** the record states that this validates the scorer's
   trait-keyword-vs-derived-signal arithmetic, not predicted-vs-actual self-knowledge
@@ -291,7 +291,7 @@ The system SHALL provide a controlled, seeded, offline runner for each of the A/
 #### Scenario: Offline, no entity boot
 
 - **WHEN** any of the three runners is invoked
-- **THEN** it uses only deterministic / echo clients and an in-memory Episodic memory over
+- **THEN** it uses only deterministic / echo clients and an in-memory episodic memory module over
   no network
 - **AND** it does NOT boot an entity, attach to live modules, or open a network
   connection
@@ -311,7 +311,7 @@ When `[evaluation].workspace_trajectory` is enabled, `TrajectoryRecorder` SHALL 
 - **THEN** the row holds the member's entry id, source, type, salience and timestamp and neither the text nor the vector
 
 #### Scenario: No affect state
-- **WHEN** a Affect state is available while a row is written
+- **WHEN** an affect state is available while a row is written
 - **THEN** the row does not contain it
 
 ### Requirement: Workspace trajectory is filtered before persistence

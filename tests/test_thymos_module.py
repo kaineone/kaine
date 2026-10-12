@@ -250,7 +250,7 @@ async def test_serialize_roundtrips(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_audition_emotion_event_is_consumed_by_peer_loop(bus: AsyncBus):
-    """audition.emotion events published on the bus are recorded by Affect's peer
+    """audition.emotion events published on the bus are recorded by the affect module's peer
     consumer loop when coupling is enabled, then fed to the entity's appraisal.
 
     Rewritten for research affect: the perceived signal is NOT written directly to
@@ -353,7 +353,7 @@ async def test_disabled_coupling_no_emotion_stream_consumption(bus: AsyncBus):
     """When emotion coupling is disabled the social cognition stream is not subscribed.
 
     (Perception→arousal reads topos.out / audition.out unconditionally — arousal
-    is pre-attentive — so those ARE subscribed; the emotion/social cognition coupling
+    is pre-attentive — so those ARE subscribed; the emotion and social cognition module coupling
     stays gated by CouplingConfig.enabled.)
     """
     cfg = CouplingConfig(enabled=False)
@@ -372,7 +372,7 @@ async def test_disabled_coupling_no_emotion_stream_consumption(bus: AsyncBus):
 async def test_perceptual_surprise_arouses_scaled_by_normalised_error(bus: AsyncBus):
     """Perception→arousal coupling: a perceptual ALERT raises arousal, scaled by the
     normalised prediction error (surprise above the expected level); a well-predicted
-    event does not arouse. Mirrors the interoceptive interoception-alert→arousal path."""
+    event does not arouse. Mirrors the interoception module's alert→arousal path."""
     thymos = Thymos(bus, publish_interval_s=999.0)
     for stream, typ in (("topos.out", "topos.report"),
                         ("audition.out", "audition.perception")):

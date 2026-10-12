@@ -59,7 +59,7 @@ class TrainOutcome:
 class CheckpointMismatchError(RuntimeError):
     """A weight checkpoint does not match the running world-model config.
 
-    Raised by ``import_params`` (and propagated by World model at initialize)
+    Raised by ``import_params`` (and propagated by the world model module at initialize)
     instead of silently discarding the checkpoint — throwing away learned
     weights without operator consent would destroy entity experience. The
     operator resolves it by moving/deleting the file or reverting the config
@@ -68,13 +68,13 @@ class CheckpointMismatchError(RuntimeError):
 
 @runtime_checkable
 class WorldModelBackend(Protocol):
-    """The contract World model depends on. Implementations hold all state
+    """The contract the world model module depends on. Implementations hold all state
     in-memory and write NOTHING to disk.
 
     Optional capability (not part of the protocol): implementations with
     *real learned parameters* may additionally provide
     ``export_params(*, extra=None) -> bytes`` / ``import_params(blob, *,
-    extra=None)`` so World model can persist learned weights across restarts
+    extra=None)`` so the world model module can persist learned weights across restarts
     (opt-in via ``persist_weights``). ``FakeWorldModel`` deliberately does
     NOT implement it — persisting the EMA stub would dress a fake up as
     learned state."""
@@ -413,7 +413,7 @@ class DreamerV3WorldModel:
         # No actor/critic/reward/return groups exist in the tree.
         return sorted(self._params.keys())
 
-    # -- weight persistence codec (opt-in via World model persist_weights) ---
+    # -- weight persistence codec (opt-in via the world model module's persist_weights) ---
 
     def export_params(self, *, extra: dict[str, Any] | None = None) -> bytes:
         """Serialize the RSSM param tree to opaque bytes (in-memory NPZ).

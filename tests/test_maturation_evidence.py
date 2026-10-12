@@ -279,7 +279,7 @@ async def test_womb_readiness_readout_trustworthiness(
     assert await runner._womb_readiness_readout() is None
     await bus.client.delete("gestation.out")
 
-    # A readout from a source other than the development owner is ignored.
+    # A readout from a source other than the developmental phase owner is ignored.
     await bus.client.xadd(
         "gestation.out",
         _encode_event(

@@ -18,7 +18,7 @@ from kaine.bus.schema import Event
 
 _BASE_EPOCH = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
-# Metric keys Interoception's feature vector reads (see soma/forward.py metrics_to_feature_vector).
+# Metric keys the interoception module's feature vector reads (see soma/forward.py metrics_to_feature_vector).
 _BASE_METRICS = {
     "cpu_percent": 12.0,
     "ram_percent": 30.0,
@@ -30,10 +30,10 @@ _BASE_METRICS = {
 class ScriptedMetricsReader:
     """A ``MetricsReader`` returning caller-scripted metrics per tick.
 
-    Implements the injectable metrics-source protocol Interoception accepts (``reader=``),
-    so the real Interoception forward model runs against deterministic substrate readings
+    Implements the injectable metrics-source protocol the interoception module accepts (``reader=``),
+    so the real interoception module forward model runs against deterministic substrate readings
     with no psutil/pynvml and no wall-clock — the reproducibility keystone for the
-    Interoception arm.
+    the interoception module arm.
     """
 
     def __init__(self, per_tick: list[dict[str, float]]) -> None:
@@ -63,7 +63,7 @@ class VectorEncoder:
     """A per-frame vector encoder for the harness.
 
     The frame is its own latent, so encode is the identity cast to float.
-    Implements the Vision Encoder protocol with ``clip_len == 1``.
+    Implements the vision encoder protocol with ``clip_len == 1``.
     """
 
     model_id = "harness/vector-encoder"

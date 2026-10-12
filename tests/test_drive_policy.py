@@ -130,7 +130,7 @@ def test_drive_intensity_selects_strong_or_moderate_phrase(name, strong, moderat
     assert moderate_intent.about == moderate
 
 
-# --- 3.3 inhibited snapshot → no intent (via Action selection gate) ----------------
+# --- 3.3 inhibited snapshot → no intent (via the action selection gate) ----------------
 
 
 def test_inhibited_snapshot_produces_no_intent_via_volition():

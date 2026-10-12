@@ -6,14 +6,14 @@ Sleep-time memory work: synaptic downscaling, offline replay behind a suspended 
 ## Requirements
 
 ### Requirement: Phase-3 associative replay with World model scenarios
-Sleep phase 3 SHALL replay traces from different memory periods in novel
-combinations, cue World model for scenario extensions by publishing to
+The sleep module's phase 3 SHALL replay traces from different memory periods in novel
+combinations, cue the world model module for scenario extensions by publishing to
 `phantasia.scenario`, and re-inject the resulting associations into the workspace.
-Before `phantasia-dreamerv3` is present, the World model cue SHALL be a no-op stub.
+Before `phantasia-dreamerv3` is present, the world model module cue SHALL be a no-op stub.
 
 #### Scenario: Associative phase cues World model
-- **WHEN** phase 3 runs with World model enabled
-- **THEN** World model is cued and `phantasia.scenario` events are consumed and
+- **WHEN** phase 3 runs with the world model module enabled
+- **THEN** the world model module is cued and `phantasia.scenario` events are consumed and
   re-injected into the workspace
 
 #### Scenario: Cross-period traces are combined
@@ -22,13 +22,13 @@ Before `phantasia-dreamerv3` is present, the World model cue SHALL be a no-op st
   replay batch
 
 ### Requirement: NAR belief-revision burst removed
-Sleep SHALL NOT execute a standalone NARS belief-revision step-burst during
+The sleep module SHALL NOT execute a standalone NARS belief-revision step-burst during
 maintenance. Belief revision SHALL occur naturally as replayed traces re-enter the
-workspace and Planning (pymdp) updates beliefs on them in the normal cognitive cycle.
+the workspace and the planning module (pymdp) updates beliefs on them in the normal cognitive cycle.
 
 #### Scenario: No NAR burst fires during maintenance
 - **WHEN** a maintenance cycle runs
-- **THEN** no NARS step-burst call is made and Planning processes replayed traces via
+- **THEN** no NARS step-burst call is made and the planning module processes replayed traces via
   the standard pymdp update path
 
 ### Requirement: Abliteration-probe welfare veto in phase-5 voice alignment
@@ -59,7 +59,7 @@ answer directly.
 
 ### Requirement: Sleep-time ignition audit
 
-Sleep SHALL, unconditionally on every sleep, audit ignition events in the affect workspace that triggered the entity to speak or any other module to act, covering the window since the previous sleep, and SHALL emit the result as a content-free `hypnos.ignition_audit` bus event on hypnos.out merged into the PhaseResult metadata (riding `hypnos.sleep.completed` into the sleep_snapshots JSONL, carrying `sleep_index`).
+The sleep module SHALL, unconditionally on every sleep, audit ignition events in the affect workspace that triggered the entity to speak or any other module to act, covering the window since the previous sleep, and SHALL emit the result as a content-free `hypnos.ignition_audit` bus event on hypnos.out merged into the PhaseResult metadata (riding `hypnos.sleep.completed` into the sleep_snapshots JSONL, carrying `sleep_index`).
 
 The audit SHALL classify each realized speech/action/rest into exactly one category:
 - **Realized intents:** intents on `volition.out` realized via `external_speech`, `internal_speech`, a successful `vox.synthesized` or `praxis.action`, excluding `realization_failed` and failed synthesis, and requested sleeps started from an `intent.rest`.
@@ -69,7 +69,7 @@ The audit SHALL classify each realized speech/action/rest into exactly one categ
   - **drive-triggered:** `thymos.drive` is in the coalition path.
   - **self-initiated:** none of the above.
 
-The audit SHALL count Planning proposals realized, declined and forwarded from `volition.proposal_outcome` events. A `forwarded` rest outcome SHALL count only as forwarded, never as declined, because Sleep decides it. It SHALL also count separately, as unrealizable and never among executed actions, any `intent.*` event published on `nous.out`. Planning itself publishes none, so this is a guard counter that should read zero.
+The audit SHALL count the planning module's proposals realized, declined and forwarded from `volition.proposal_outcome` events. A `forwarded` rest outcome SHALL count only as forwarded, never as declined, because the sleep module decides it. It SHALL also count separately, as unrealizable and never among executed actions, any `intent.*` event published on `nous.out`. The planning module itself publishes none, so this is a guard counter that should read zero.
 
 The audit payload SHALL contain only counts, entry_ids, event types, salience values, and sleep_index; it SHALL NOT contain text, transcripts, or latent vectors.
 
@@ -78,7 +78,7 @@ The audit payload SHALL contain only counts, entry_ids, event types, salience va
 - **THEN** the audit classifies it as self-initiated, and its entry_id appears in the self-initiated list for that sleep
 
 #### Scenario: input-triggered count zero under base thesis
-- **WHEN** a sleep completes under the base thesis (conversation surface off, transcription off, embodiment off)
+- **WHEN** a sleep completes under the base thesis (conversation surface off, transcription off, embodiment module off)
 - **THEN** the audit reports `input_triggered_count == 0` for the window, proving the invariant every sleep
 
 #### Scenario: drive-triggered classification
@@ -95,7 +95,7 @@ The audit payload SHALL contain only counts, entry_ids, event types, salience va
 
 #### Scenario: planning proposals counted
 - **WHEN** `volition.proposal_outcome` events are published during the window
-- **THEN** the audit reports the counts of realized, declined and forwarded Planning proposals
+- **THEN** the audit reports the counts of realized, declined and forwarded the planning module's proposals
 
 #### Scenario: audit content-free
 - **WHEN** the audit payload is emitted (bus event and PhaseResult metadata)

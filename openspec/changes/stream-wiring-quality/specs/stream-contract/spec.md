@@ -1,6 +1,6 @@
 ## Purpose
 
-Provide canonical stream names and validation so modules, Dashboard, evaluation, and configuration never drift on which stream carries which signal.
+Provide canonical stream names and validation so modules, the dashboard, evaluation, and configuration never drift on which stream carries which signal.
 
 ## ADDED Requirements
 

@@ -313,7 +313,7 @@ def test_birth_field_is_the_womb_bloom_peak_at_the_recorded_time():
     i_birth = math.floor(5003.2 * schedule.frame_rate_hz)
     assert np.array_equal(field, womb.frame_at(i_birth, birth_progress=1.0))
     assert field.shape == (WOMB_H, WOMB_W, 3) and field.dtype == np.uint8
-    # Bright bloom (well above the dim development field) and bounded.
+    # Bright bloom (well above the dim developmental field) and bounded.
     assert field.max() <= int(0.8 * 255) + 1
     assert field.mean() > womb.frame_at(i_birth).mean()
 
@@ -1078,7 +1078,7 @@ def test_build_registry_wires_one_transition_end_to_end(tmp_path, monkeypatch, t
     for name in ("topos", "audition"):
         assert captured[name]["perception_feed"]["_womb_world_transition"] is transition
         assert captured[name]["perception_feed"]["_shared_playlist_clock"] is pclock
-    # A Vision that failed to load leaves the audio surface in charge.
+    # A vision module that failed to load leaves the audio surface in charge.
     assert transition.controller.video_present is topos_loads
     video = _build_perception_feed_video_factory(
         "playlist", captured["topos"]["perception_feed"], width=16, height=12

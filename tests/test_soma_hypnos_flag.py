@@ -102,7 +102,7 @@ async def test_weights_frozen_during_hypnos(bus: AsyncBus):
         # Do a warm-up tick to get a non-None last_prediction.
         await soma.tick_once()
 
-        # Enter Sleep.
+        # Enter the sleep module.
         await bus.publish(_make_hypnos_event("hypnos.sleep.started"))
         for _ in range(100):
             if soma._in_hypnos:
@@ -154,7 +154,7 @@ async def test_adaptation_resumes_after_sleep_completed(bus: AsyncBus):
     soma = Soma(bus, reader=FakeMetricsReader(), detector=NeverAlertDetector())
     await soma.initialize()
     try:
-        # Enter and exit Sleep.
+        # Enter and exit the sleep module.
         await bus.publish(_make_hypnos_event("hypnos.sleep.started"))
         for _ in range(100):
             if soma._in_hypnos:

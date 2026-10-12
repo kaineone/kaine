@@ -70,7 +70,7 @@ def _empty_snapshot() -> WorkspaceSnapshot:
 
 
 def _make_thymos_with_coupling(bus: AsyncBus, fake_now, **coupling_kwargs) -> Thymos:
-    """Build a Affect with coupling enabled at given settings + a synthetic clock."""
+    """Build an affect module with coupling enabled at given settings + a synthetic clock."""
     cfg = CouplingConfig(enabled=True, **coupling_kwargs)
     return Thymos(
         bus,

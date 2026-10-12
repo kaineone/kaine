@@ -92,7 +92,7 @@ def _event(source, type_, payload, salience=0.6):
 @pytest.mark.asyncio
 async def test_heard_sentinel_never_leaves_lingua(bus: AsyncBus, tmp_path: Path):
     """Heard speech never reaches the bus or the log, including through
-    Language's own earlier external_speech event coming back in a coalition."""
+    the language module's own earlier external_speech event coming back in a coalition."""
     sentinel = "PURPLE-HERON-4471 said this"
     lingua = _make_lingua(bus, tmp_path, responses=["First reply.", "Second reply."])
     await lingua.initialize()
@@ -162,7 +162,7 @@ async def test_payload_user_input_follows_the_trigger(bus: AsyncBus, tmp_path: P
 
 @pytest.mark.asyncio
 async def test_felt_phrase_echoed_by_lingua_stays_felt(bus: AsyncBus, tmp_path: Path):
-    """Language's own earlier event carries a felt phrase as user_input. The same
+    """The language module's own earlier event carries a felt phrase as user_input. The same
     phrase driving the next utterance is still felt, not heard."""
     lingua = _make_lingua(bus, tmp_path, responses=["one", "two"])
     await lingua.initialize()

@@ -123,7 +123,7 @@ class VoiceAlignmentConfig:
     adapter_retention: int = 0
     # Hot-swap mode: "manual" | "reload_endpoint" | "restart_service".
     hot_swap_mode: str = "manual"
-    # When hot_swap_mode = "reload_endpoint": URL Sleep POSTs to with
+    # When hot_swap_mode = "reload_endpoint": URL the sleep module POSTs to with
     # the new adapter path. Format: {"adapter_path": "<path>"}.
     reload_endpoint_url: Optional[str] = None
     # When hot_swap_mode = "restart_service": systemd --user unit name.
@@ -220,8 +220,8 @@ class TrainingResult:
 
 OPERATOR_APPROVED_ENV = "KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED"
 
-#: Where Sleep persists the latest consolidation-divergence metric so the
-#: core lifecycle ``assess_divergence`` can read it WITHOUT importing Sleep's
+#: Where the sleep module persists the latest consolidation-divergence metric so the
+#: core lifecycle ``assess_divergence`` can read it WITHOUT importing the sleep module's
 #: bus or ``kaine.evaluation`` (the boundary-neutral seam: a written record).
 CONSOLIDATION_DIVERGENCE_STATE = Path("state/hypnos/consolidation_divergence.json")
 
@@ -310,7 +310,7 @@ class Trainer(Protocol):
 
 
 class DPOPairBuilder:
-    """Reads the Language intent-expression JSONL and emits DPO pairs.
+    """Reads the language module's intent-expression JSONL and emits DPO pairs.
 
     Filtering rules:
     - drop records with empty `faithful_rendering` (we can't build a
@@ -431,7 +431,7 @@ async def consolidation_magnitude(
     divergence to measure).
 
     The embedder is duck-typed (``load`` + ``embed``) and supplied by the
-    caller; this keeps Sleep importing the boundary-neutral
+    caller; this keeps the sleep module importing the boundary-neutral
     :mod:`kaine.text_embedding`, never ``kaine.evaluation``.
     """
     if embedder is None:

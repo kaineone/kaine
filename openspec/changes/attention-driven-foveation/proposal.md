@@ -2,7 +2,7 @@
 
 ## Why
 
-Screen perception currently scales the whole screen to Vision's fixed capture
+Screen perception currently scales the whole screen to the vision module's fixed capture
 geometry — a uniform downsample. A shared 4K screen rendered to 640×480 loses fine
 detail *everywhere*: text, small UI, a game HUD, a face in a video. Raising the
 global capture resolution raises both the streamed data and the per-frame encoder
@@ -17,39 +17,39 @@ attention.** Foveation can therefore be driven by cognition directly, which turn
 it from a one-way capture optimization into a genuine perception–action loop.
 
 This is the architecture's own machinery applied *spatially*: precision-weighted
-attentional selection (already in Workspace), forward-model prediction error
-(already in Vision), and epistemic action valued by expected free energy (already
-in Planning). Moving the fovea to reduce uncertainty is textbook active vision —
+attentional selection (already in the workspace), forward-model prediction error
+(already in the vision module), and epistemic action valued by expected free energy (already
+in the planning module). Moving the fovea to reduce uncertainty is textbook active vision —
 saccades as experiments (Friston et al. 2012). Two properties fall out for free:
 publishing the fovea location (and a *predicted* next fovea) is a concrete
 **attention schema**, an indicator the paper (§5) currently marks "not implemented
 in the full sense"; and the same fovea-target signal is the screen-perception
 analog of the "gaze direction decoupled from the body" scalar the paper's §3.4.6
-Embodiment plan already names — one attention mechanism, two effectors.
+the embodiment module's plan already names — one attention mechanism, two effectors.
 
 This is a **design-first** OpenSpec change. It specifies the mechanism; it does not
 implement it. The lead reviews this design before any code lands.
 
 ## What Changes
 
-- **Vision gains a coarse spatial saliency map.** In addition to today's whole-frame
-  salience scalars, Vision computes a low-resolution per-tile map of change /
+- **The vision module gains a coarse spatial saliency map.** In addition to today's whole-frame
+  salience scalars, the vision module computes a low-resolution per-tile map of change /
   forward-model prediction error over the current frame — *where* on the frame is
   surprising, not just how surprising the frame is. This is a modest extension of
   the existing per-frame scoring, and it never leaves memory.
 - **A fovea target is selected by precision-weighted competition.** The bottom-up
   saliency argmax combines with an optional top-down bias (a goal- or agent-driven
-  region from the workspace / Planning / Social cognition) under precision weighting — the same
-  precision-as-attentional-gain the architecture already uses. The Affect arousal
+  region from the workspace / the planning module / the social cognition module) under precision weighting — the same
+  precision-as-attentional-gain the architecture already uses. The affect module's arousal
   value drives the fovea *size* — a **new, distinct visual coupling**, not the
-  existing arousal→Workspace salience-selection window (§3.4.3), which gates *which
+  existing arousal→workspace salience-selection window (§3.4.3), which gates *which
   candidates* reach the workspace, a different system entirely. The visual coupling
   is grounded in the psychophysics of arousal and the breadth of visual attention
   (arousal narrows the effective field — the Easterbrook cue-utilization effect),
   and the exact size↔arousal mapping and its sign are a tuning parameter, not an
   asserted result.
 - **Two views per tick: peripheral + foveal.** From a single moderate-resolution
-  screen grab held in memory, Vision derives a downsampled peripheral view (whole
+  screen grab held in memory, the vision module derives a downsampled peripheral view (whole
   field, coarse gist) and a foveal crop around the target scaled to the encoder's
   native patch. Both are encoded; the report carries both latents plus the fovea
   location. Optionally (Phase 3) a second native-resolution region capture, pinned
@@ -89,7 +89,7 @@ implement it. The lead reviews this design before any code lands.
 - **Depends on:** `topos`, `topos-predictive` (the forward-model prediction error
   that drives the spatial map), `reproducible-perception` (the screen/live capture
   path the two views are derived from), `oscillatory-binding` (precision weighting
-  in Workspace for the bottom-up/top-down combination), `entity-time` (the
+  in the workspace for the bottom-up/top-down combination), `entity-time` (the
   two-clocks cadence the fovea updates on). All shipped.
 - **Repo (at implementation time, not in this change):** would touch
   `kaine/modules/topos/module.py` and the salience/forward-model path (spatial

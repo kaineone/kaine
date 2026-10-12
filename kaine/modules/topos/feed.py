@@ -642,7 +642,7 @@ class PlaylistManifest:
         """Hash every item under ``root`` and compare to the manifest, failing
         CLOSED on the first missing file or sha256 mismatch.
 
-        Shared by both the video (vision) and audio (audition) playlist sources
+        Shared by both the video (vision module) and audio (audition module) playlist sources
         so the fail-closed reproducibility semantics — and the exact error
         messages — never diverge. ``root`` is the media root; absolute item
         paths are used as-is, relative ones are resolved against it.
@@ -755,7 +755,7 @@ class PlaylistClock:
     time while any holder holds the clock; ``resume(holder)`` releases that
     holder, and when the set empties playback continues from the pre-pause
     position with sub-millisecond error (one clock read; no re-origin, no
-    content skipped). Overlapping pauses — e.g. a Sleep replay window and a
+    content skipped). Overlapping pauses — e.g. a sleep module replay window and a
     cycle freeze — keep the clock frozen until every holder has released it.
     The no-argument ``pause()`` / ``resume()`` calls act on holder ``default``.
     Pausing before the origin is fixed makes the clock born paused: ``start()``

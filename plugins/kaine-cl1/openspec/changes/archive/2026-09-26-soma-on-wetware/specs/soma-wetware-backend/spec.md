@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: Interoception runs its interoceptive forward model on the substrate
-When the plugin configuration sets `soma = "cl1"` and gives Interoception a channel territory, kaine SHALL construct stock Interoception with a `WetwareInteroceptiveModel` injected through the `soma.forward_model` seam. Interoception's name, bus subscriptions and `soma.out` event shapes SHALL be unchanged. Silicon SHALL remain the default when the key is absent or `"silicon"`.
+When the plugin configuration sets `soma = "cl1"` and gives the interoception module a channel territory, kaine SHALL construct the stock interoception module with a `WetwareInteroceptiveModel` injected through the `soma.forward_model` seam. The interoception module's name, bus subscriptions and `soma.out` event shapes SHALL be unchanged. Silicon SHALL remain the default when the key is absent or `"silicon"`.
 
 #### Scenario: Event contract preserved
-- **WHEN** Interoception runs with `soma = "cl1"`
+- **WHEN** the interoception module runs with `soma = "cl1"`
 - **THEN** its `soma.out` events have the same types and payload keys as under the silicon model
 
 ### Requirement: Prediction error keeps the silicon semantics

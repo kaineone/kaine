@@ -247,7 +247,7 @@ def test_phase_exception_skips_shutdown(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_boot_context_repr_hides_the_intent_secret() -> None:
-    """The context holds the Effectors intent secret, so its repr shows no field."""
+    """The context holds the effectors module's intent secret, so its repr shows no field."""
     ctx = cyc.BootContext(kaine_config={})
     ctx.intent_secret = b"\x01secret-bytes\x02"
     assert "secret-bytes" not in repr(ctx)

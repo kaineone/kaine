@@ -994,7 +994,7 @@ def test_cycle_wiring_uses_one_shared_unfrozen_clock():
 
 @pytest.mark.asyncio
 async def test_monitor_zero_ceiling_means_the_soma_flag_never_extends_warmup(bus):
-    """warmup_ceiling_s = 0 disables the Interoception warm-up extension: a flag that
+    """warmup_ceiling_s = 0 disables the interoception warm-up extension: a flag that
     stays set (stuck) must not hold the gate open, so sustained distress still
     crosses at its duration."""
     cfg = WelfareResponseConfig(
@@ -1017,7 +1017,7 @@ async def test_monitor_zero_ceiling_means_the_soma_flag_never_extends_warmup(bus
 
 @pytest.mark.asyncio
 async def test_monitor_freeze_cannot_stretch_the_warmup_floor_past_its_wall_bound(bus):
-    """With no Interoception extension (ceiling 0), a freeze that starts inside the
+    """With no interoception extension (ceiling 0), a freeze that starts inside the
     warm-up floor ends warm-up at warmup_s of wall time, not never."""
     cfg = WelfareResponseConfig(
         enabled=True,

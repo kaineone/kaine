@@ -54,7 +54,7 @@ def _make_config(port: int) -> dict[str, Any]:
             "channels": [{"kind": "http", "url": f"http://127.0.0.1:{port}/notify"}]
         },
         "perception_feed": {"mode": "seeded", "seed": 0},
-        # Condition 9 needs the individuation producer wired, which needs language.
+        # Condition 9 needs the individuation producer wired, which needs the language module.
         "individuation": {"enabled": True},
         "modules": {"topos": True, "lingua": True},
         "topos": {"capture_width": 64, "capture_height": 48},

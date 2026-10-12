@@ -1,8 +1,8 @@
 # Tier 1 — embodied CPU agent (openspec deployment-tiers)
 #
 # Host class: 4–8 GB-class single-board computer, or a retired 8 GB flagship
-# smartphone under a userland like Termux. Interoception and Sequence run a NumPy CfC
-# network, and Episodic memory/Social cognition/Sleep run their shared memory embedder in NumPy;
+# smartphone under a userland like Termux. The interoception and sequence modules run a NumPy CfC
+# network, and the episodic memory, social cognition and sleep modules run their shared memory embedder in NumPy;
 # there is no accelerator, so heavy models run on the edge runtimes at CPU pace:
 # a 1–2B GGUF LLM at chat pace, periodic (not streaming) vision, NumPy embeddings.
 #

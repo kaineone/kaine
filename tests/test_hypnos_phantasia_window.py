@@ -59,7 +59,7 @@ async def _new_mnemos(bus: AsyncBus, *, capacity: int = 8, **kwargs) -> Mnemos:
 
 
 class FakeThymos:
-    """Stand-in affect that only counts affective resets."""
+    """Stand-in affect module that only counts affective resets."""
 
     def __init__(self) -> None:
         self.resets = 0
@@ -94,7 +94,7 @@ def _make_hypnos(
 
 
 class RecordingMnemos:
-    """Episodic memory fake that records call order for phase sequencing tests."""
+    """The episodic memory module fake that records call order for phase sequencing tests."""
 
     def __init__(
         self,
@@ -140,7 +140,7 @@ class RecordingMnemos:
 
 
 class RecordingPhantasia:
-    """World model fake that records window calls and scenario generation."""
+    """The world model module fake that records window calls and scenario generation."""
 
     def __init__(self, calls: list[str]) -> None:
         self.calls = calls
@@ -211,7 +211,7 @@ async def test_sleep_cues_phantasia_through_the_bus(bus: AsyncBus, tmp_path: Pat
 
 
 async def test_window_is_open_during_phases_two_and_three(bus: AsyncBus, tmp_path: Path):
-    """World model's window wraps deep consolidation and associative replay."""
+    """The world model module's window wraps deep consolidation and associative replay."""
     calls: list = []
     mnemos = RecordingMnemos(calls)
     phantasia = RecordingPhantasia(calls)
@@ -239,7 +239,7 @@ async def test_window_is_open_during_phases_two_and_three(bus: AsyncBus, tmp_pat
 
 
 async def test_cancel_in_phase_two_closes_the_window(bus: AsyncBus, tmp_path: Path):
-    """Cancellation during phase 2 still runs the World model window cleanup."""
+    """Cancellation during phase 2 still runs the world model module's window cleanup."""
     calls: list = []
     mnemos = RecordingMnemos(calls, hang_in="replay")
     phantasia = RecordingPhantasia(calls)
@@ -264,7 +264,7 @@ async def test_cancel_in_phase_two_closes_the_window(bus: AsyncBus, tmp_path: Pa
 
 
 async def test_phantasia_without_window_methods_is_still_cued(bus: AsyncBus, tmp_path: Path):
-    """A World model collaborator that only implements generate_scenario still works."""
+    """A world model module collaborator that only implements generate_scenario still works."""
     class CueOnlyPhantasia:
         def __init__(self) -> None:
             self.calls: list[str] = []

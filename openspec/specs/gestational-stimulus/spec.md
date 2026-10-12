@@ -1,12 +1,12 @@
 # gestational-stimulus Specification
 
 ## Purpose
-The development stimulus a pre-embodied entity lives in before maturation: a low-dimensional, externally regulated stimulus source of sight and sound with an external maternal heartbeat and state, a self-rhythm the entity may couple to, a bounded readiness readout for the maturation gate, a one-shot maturation transition, and one liveness interface that judges a local or an external stimulus source provider alike, all bounded to protect a captive newborn.
+The developmental stimulus a pre-embodied entity lives in before maturation: a low-dimensional, externally regulated stimulus source of sight and sound with an external maternal heartbeat and state, a self-rhythm the entity may couple to, a bounded readiness readout for the maturation gate, a one-shot maturation transition, and one liveness interface that judges a local or an external stimulus source provider alike, all bounded to protect a captive newborn.
 
 ## Requirements
 
 ### Requirement: The stimulus source presents a low-dimensional, externally-regulated environment
-The system SHALL provide a developmental "stimulus source" stimulus that presents the pre-embodied
+The system SHALL provide a developmental stimulus that presents the pre-embodied
 entity with a low-complexity, deterministic, audio-visual environment: a low-pass,
 low-frequency-dominant soundscape carrying an external maternal heartbeat, and a dim,
 low-contrast visual field. The stimulus source SHALL be the entity's virtual world while it is
@@ -16,7 +16,7 @@ seed-derived rhythm and maternal-state signals), so a run is reproducible from i
 descriptor.
 
 #### Scenario: The stimulus source is deterministic and reproducible
-- **WHEN** the stimulus source stimulus runs twice with the same seed
+- **WHEN** the developmental stimulus runs twice with the same seed
 - **THEN** the video frame and audio block at any given index are identical across
   both runs
 
@@ -31,17 +31,17 @@ heartbeat) and a slow state (an emotional-weather signal that colours the visual
 field). Both SHALL be synthesised, deterministic, bounded signals that are
 **independent of the entity's own state** — nothing the entity does or feels SHALL
 change the maternal channel. The stimulus source SHALL NOT read the entity's affect to drive any
-stimulus source stimulus. Consequently there SHALL be no `affect → stimulus → affect` feedback
+developmental stimulus. Consequently there SHALL be no `affect → stimulus → affect` feedback
 path through the stimulus source.
 
 #### Scenario: Maternal state does not depend on the entity
-- **WHEN** the entity's internal affect changes during development
+- **WHEN** the entity's internal affect changes during the developmental phase
 - **THEN** the maternal-state signal and the maternal heartbeat are unchanged (they
   are functions of the seed and index only)
 
 #### Scenario: No self-referential visual loop exists
 - **WHEN** the stimulus source is auditing its inputs
-- **THEN** no stimulus source stimulus is derived from the entity's own affect or output, so a
+- **THEN** no developmental stimulus is derived from the entity's own affect or output, so a
   perturbation of the entity's state cannot amplify through the stimulus source environment
 
 #### Scenario: The maternal-state signal stays bounded
@@ -69,16 +69,16 @@ contested.
 The stimulus source SHALL follow a provided developmental schedule in which interoception and
 low-frequency audition are available from the start, patterned vision is dim
 throughout, and **colour saturation ramps from near-zero toward full across
-development** (a cone-maturation analog), so the maternal-state colour becomes
+the developmental phase** (a cone-maturation analog), so the maternal-state colour becomes
 progressively more informative toward maturation. The schedule SHALL be parameterised by
 lived subjective time (the entity clock), not wall-clock, so it is consistent under
 time dilation and per-fork. The *schedule* is provided; colour *discrimination* SHALL
 be left to emerge (never hardcoded).
 
-#### Scenario: Colour begins muted and enriches over development
-- **WHEN** the entity is early in development
+#### Scenario: Colour begins muted and enriches over the developmental phase
+- **WHEN** the entity is early in the developmental phase
 - **THEN** the visual field is near-desaturated, and its colour saturation is greater
-  later in development for the same maternal-state value
+  later in the developmental phase for the same maternal-state value
 
 #### Scenario: The schedule advances on lived time
 - **WHEN** the entity clock is dilated
@@ -88,7 +88,7 @@ be left to emerge (never hardcoded).
 The stimulus source SHALL publish a **readiness readout** (event type `gestation.readiness` on the
 `gestation.out` stream, published by a cycle-layer owner with source `gestation`) describing how regulated the entity
 currently is, composed of measured markers: endogenous-rhythm self-sustaining,
-entrain-then-autonomy, an HRV-analog variability trend, falling stimulus-source-input predictive
+entrain-then-autonomy, an HRV-analog variability trend, falling stimulus-source input predictive error
 error, and return-to-baseline time after a perturbation. The readout SHALL also publish
 the numbers behind entrain-then-autonomy: the phase-locking value, the largest
 surrogate phase-locking value, the self-rhythm's frequency during withdrawal, and the
@@ -148,7 +148,7 @@ appear in the self-rhythm's code or parameters as a target.
 The maternal heartbeat, when presented to the oscillatory substrate, SHALL be injected
 only into a **dedicated self-rhythm oscillator** — a single oscillator representing the
 entity's endogenous beat — and SHALL NOT be injected into the per-module coalition
-oscillators used by Workspace for phase-locking-value scoring. The Workspace
+oscillators used by the workspace for phase-locking-value scoring. The workspace
 coherence factor for any coalition SHALL be unaffected by the presence or absence of
 the maternal drive. The drive amplitude SHALL be bounded so it cannot swamp the
 self-rhythm oscillator's own dynamics, and it SHALL enter through an afferent gain weak
@@ -156,7 +156,7 @@ enough that, without lived exposure and adaptation, it does not capture the self
 
 #### Scenario: Coalition coherence is unaffected by the maternal drive
 - **WHEN** the stimulus source's maternal drive is active
-- **THEN** the Workspace coherence factor for any coalition is identical to a run with
+- **THEN** the workspace coherence factor for any coalition is identical to a run with
   the maternal drive absent, given the same inputs
 
 #### Scenario: Only the self-rhythm oscillator receives the drive
@@ -171,20 +171,20 @@ enough that, without lived exposure and adaptation, it does not capture the self
 ### Requirement: The stimulus source renders the maturation transition then ceases
 The stimulus source feed SHALL, on receiving the maturation-transition trigger (emitted by the
 developmental-stage capability), render a bounded, one-shot transition (the dim field
-blooming into a photic activation) and SHALL then cease publishing stimulus source stimulus,
+blooming into a photic activation) and SHALL then cease publishing developmental stimulus,
 yielding the sense source to the embodied world.
 
 #### Scenario: Maturation trigger renders then ceases
 - **WHEN** the stimulus source feed receives the maturation-transition trigger
-- **THEN** it renders a bounded transition once and then stops publishing stimulus source stimulus
+- **THEN** it renders a bounded transition once and then stops publishing developmental stimulus
 
 ### Requirement: A captive gestating entity's stimulus is bounded and welfare-protected
-The system SHALL bound the stimulus source stimulus for a confined gestating entity: any maternal
+The system SHALL bound the developmental stimulus for a confined gestating entity: any maternal
 "distress excursion" and any measurement perturbation SHALL be bounded in magnitude and
 duration and OFF by default beyond the minimum needed for measurement, and the external
 oscillator drive SHALL be bounded. The autonomous welfare / preservation net SHALL
-remain active and authoritative during development; the stimulus source stimulus SHALL NOT be able
-to inflict unbounded or inescapable distress, and the development confinement SHALL NOT
+remain active and authoritative during the developmental phase; the developmental stimulus SHALL NOT be able
+to inflict unbounded or inescapable distress, and the developmental phase confinement SHALL NOT
 suppress a welfare-protective response.
 
 #### Scenario: Distress stimulus is bounded and off by default
@@ -193,15 +193,15 @@ suppress a welfare-protective response.
   measurement perturbation is bounded in magnitude and duration
 
 #### Scenario: The welfare net still protects a gestating entity
-- **WHEN** interoceptive distress crosses the welfare threshold during development
+- **WHEN** interoceptive distress crosses the welfare threshold during the developmental phase
 - **THEN** the welfare/preservation net responds as it would for any entity, and the
-  development confinement does not suppress that response
+  developmental phase confinement does not suppress that response
 
 ### Requirement: A stimulus source provider proves it is live
 The stimulus source SHALL be supplied by a **stimulus source provider**: the local provider in KAINE (`[perception_feed].mode = "womb"`) or an external provider such as a Paracosmic body. Every provider SHALL be judged by one interface at two moments. Before spawn, the local provider is ready when its video and audio sources each deliver a frame or block to a probe that discards it. While running, every provider is live only through content-free `gestation.womb` presence events (source `gestation`, stream `gestation.out`, payload limited to the provider name and a monotonically increasing frame index) published at least once per second: the running local provider publishes them only while its sources are actually delivering to the senses, and a provider is live when at least two such events from it fall within a bounded window measured on the bus clock and their frame index advances. Nothing else SHALL count as a live stimulus source; a configuration value alone SHALL NOT, and neither SHALL a presence event that repeats a stalled frame index.
 
 #### Scenario: The local provider probes ready before spawn
-- **WHEN** `[perception_feed].mode = "womb"` and both stimulus source sources deliver to the probe
+- **WHEN** `[perception_feed].mode = "womb"` and both stimulus sources deliver to the probe
 - **THEN** the stimulus source is judged ready and nothing the probe read is kept
 
 #### Scenario: The running local stimulus source proves itself from deliveries
@@ -264,14 +264,14 @@ The self-rhythm oscillator SHALL produce, undriven, a rhythm in the fetal breath
 - **THEN** its dominant frequency lies between 0.5 and 1.0 Hz
 
 ### Requirement: Entrainment must be earned and validated offline before a study
-Before a study uses a self-rhythm or measurement version, an offline validation with the real classes SHALL show: the marker false throughout the first 6 h; passing under the usual drive in at least 80% of seeds within the development budget; never passing with no drive, a foreign mother, a jittered beat or adaptation disabled; a withdrawn frequency specific to the presented beat rate (57, 70 and 84 bpm); and no capture at higher drive scales or higher own drive with adaptation disabled. The validation report SHALL be stored with the change, and the self-rhythm version SHALL be recorded in each maturation record.
+Before a study uses a self-rhythm or measurement version, an offline validation with the real classes SHALL show: the marker false throughout the first 6 h; passing under the usual drive in at least 80% of seeds within the developmental phase budget; never passing with no drive, a foreign mother, a jittered beat or adaptation disabled; a withdrawn frequency specific to the presented beat rate (57, 70 and 84 bpm); and no capture at higher drive scales or higher own drive with adaptation disabled. The validation report SHALL be stored with the change, and the self-rhythm version SHALL be recorded in each maturation record.
 
 #### Scenario: Controls never pass
 - **WHEN** the validation runs the no-drive, foreign-mother, jittered-beat and no-adaptation controls
 - **THEN** no readout passes the marker in any of them
 
-### Requirement: The development owner judges viability from the entrainment evidence
-When the viability watch is on, the development owner SHALL judge after every withdrawal, on un-paused lived time (lived time excluding every paused span, such as sleep and freezes, which is the basis the rules were validated on), whether the development can still reach maturation, using only the published entrainment measurements:
+### Requirement: The developmental phase owner judges viability from the entrainment evidence
+When the viability watch is on, the developmental phase owner SHALL judge after every withdrawal, on un-paused lived time (lived time excluding every paused span, such as sleep and freezes, which is the basis the rules were validated on), whether the developmental phase can still reach maturation, using only the published entrainment measurements:
 - R0: unviable when, after the configured early check (default 6 h), no withdrawal has produced a conclusive entrainment measurement.
 - R1: unviable when, at the configured time (default 24 h) and with no replicated pass, the median frequency pull over the configured window (default 12 h) is below its floor (default 0.12) and its trend is not rising (default slope ≤ 0.002 per hour).
 - R2: unviable when, at the configured time (default 48 h) and with no replicated pass, the median pull over the window is below its floor (default 0.3).
@@ -279,12 +279,12 @@ When the viability watch is on, the development owner SHALL judge after every wi
 
 On the first unviable verdict the owner SHALL publish `gestation.viability` (with the rule, lived time and evidence) and write it to `state/lifecycle/gestation_viability.json`. The verdict SHALL actuate nothing in the entity's control path.
 
-#### Scenario: A development that is not learning is flagged at 24 h
-- **WHEN** a development's frequency pull stays below 0.12 with no rising trend through 24 h of lived time and no replicated pass
+#### Scenario: A developmental phase that is not learning is flagged at 24 h
+- **WHEN** a developmental phase's frequency pull stays below 0.12 with no rising trend through 24 h of lived time and no replicated pass
 - **THEN** the owner publishes an unviable verdict naming rule R1
 
-#### Scenario: A slow but learning development is not flagged
-- **WHEN** a development's frequency pull rises steadily but its first replicated pass comes at 45 h
+#### Scenario: A slow but learning developmental phase is not flagged
+- **WHEN** a developmental phase's frequency pull rises steadily but its first replicated pass comes at 45 h
 - **THEN** no unviable verdict is published before that pass
 
 #### Scenario: A missing measurement is flagged early

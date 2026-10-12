@@ -547,7 +547,7 @@ async def test_freeze_watch_perception_reconciled_while_paused(freeze_loop_env):
     task = asyncio.create_task(cycle_main._freeze_watch_loop(env.cycle, stop))
     await asyncio.sleep(0.05)
 
-    # 1. Development-only freeze: cycle pauses, perception stays on.
+    # 1. Developmental-phase-only freeze: cycle pauses, perception stays on.
     env.control = CycleControl(
         frozen=True,
         source=GESTATION_FREEZE_SOURCE,
@@ -579,7 +579,7 @@ async def test_freeze_watch_perception_reconciled_while_paused(freeze_loop_env):
     await _until(lambda: env.writes == [("audio", False), ("video", False)])
     assert env.cycle.is_paused
 
-    # 3. Operator removed while development remains: perception restored, cycle stays paused.
+    # 3. Operator removed while the developmental phase remains: perception restored, cycle stays paused.
     env.control = CycleControl(
         frozen=True,
         source=GESTATION_FREEZE_SOURCE,

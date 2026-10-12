@@ -68,7 +68,7 @@ async def test_flag_off_nothing_bound_on_port(monkeypatch):
     server = await start_preview_server(port=0)
     assert server is None
     # A raw connect to an unused high port is refused — sanity that "not started"
-    # means "connection refused", which the Dashboard proxy maps to 404.
+    # means "connection refused", which the dashboard proxy maps to 404.
     with pytest.raises((ConnectionRefusedError, OSError)):
         with socket.create_connection(("127.0.0.1", 59997), timeout=0.5):
             pass
@@ -149,7 +149,7 @@ async def test_unknown_path_404(running):
 
 @pytest.mark.asyncio
 async def test_query_string_is_tolerated(running):
-    """The Dashboard PiP cache-busts with ?t=<ts>; the router must ignore the query."""
+    """The dashboard PiP cache-busts with ?t=<ts>; the router must ignore the query."""
     _server, base = running
     perception_preview.set_video_jpeg(b"\xff\xd8\xff\xd9")
     async with httpx.AsyncClient(timeout=2.0) as c:

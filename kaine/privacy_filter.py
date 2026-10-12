@@ -51,25 +51,25 @@ from kaine.bus.schema import Event
 # operational familiarity label (metrics), so it is not entity-interior content.
 # ---------------------------------------------------------------------------
 
-# Perceptual/latent embeddings (Vision clip embeddings 768/384-dim; Sequence
+# Perceptual/latent embeddings (vision clip embeddings 768/384-dim; sequence
 # CfC hidden state 32-dim and 24-dim feature vector); never displayed by
-# Dashboard; persisting them would break zero raw-sense-data persistence.
+# the dashboard; persisting them would break zero raw-sense-data persistence.
 VECTOR_FIELDS: frozenset[str] = frozenset(
     {"latent", "peripheral", "foveal", "temporal_context", "feature_vector"}
 )
 
 # Backstop for embeddings published under a name not in VECTOR_FIELDS. 16 sits
 # above the longest small numeric list on the diagnostics streams (5-element
-# Affect appraisal scores, 3-element proprioceptive position) and below the
-# shortest embedding (the 24-element Sequence feature vector).
+# affect appraisal scores, 3-element proprioceptive position) and below the
+# shortest embedding (the 24-element sequence feature vector).
 VECTOR_BACKSTOP_MIN_LEN: int = 16
 
-# Reviewed non-embedding numeric lists of unbounded length (Sleep ignition-audit
-# saliences, World model per-step magnitudes); adding a key here is a reviewed
+# Reviewed non-embedding numeric lists of unbounded length (sleep ignition-audit
+# saliences, world model per-step magnitudes); adding a key here is a reviewed
 # change with a test.
 VECTOR_EXEMPT_KEYS: frozenset[str] = frozenset({"saliences", "step_magnitudes"})
 
-# Self-model self-model values and norms are entity-interior text; Language reads them
+# The self-model module's values and norms are entity-interior text; the language module reads them
 # from the raw bus, and no diagnostics consumer does.
 CONTENT_FIELDS: frozenset[str] = frozenset(
     {
@@ -80,18 +80,18 @@ CONTENT_FIELDS: frozenset[str] = frozenset(
         "belief_text",
         "memory_text",
         "affect_reason",
-        # Retired field removed: Planning no longer emits the pre-pymdp-swap field.
+        # Retired field removed: the planning module no longer emits the pre-pymdp-swap field.
         "transcription",
-        # Language's external-speech events carry these for the A/B evaluation
+        # the language module's external-speech events carry these for the A/B evaluation
         # observers (raw bus access). They are content - the triggering user
         # utterance and the rendered workspace-access block - so they must be
         # scrubbed from the diagnostics surface.
         "user_input",
         "faithful_rendering",
-        # Affect goal events carry a free-text goal `description`; Planning belief
+        # The affect module's goal events carry a free-text goal `description`; the planning module's belief
         # events carry a free-text `statement` (the dominant latent-factor label).
         # Both are entity-interior content — the research taxonomy and the eval
-        # dashboard tab already exclude/drop them — so they must not reach diagnostics.
+        # the dashboard tab already exclude/drop them — so they must not reach diagnostics.
         "description",
         "statement",
         "values",
@@ -200,7 +200,7 @@ def _scrub(
 def strip_vectors(payload: Any) -> Any:
     """Strip vector fields and long numeric lists from *payload*.
 
-    This is the one vector rule shared by the diagnostics surface and Episodic memory
+    This is the one vector rule shared by the diagnostics surface and the episodic memory module
     memory text: it removes every named vector field (``VECTOR_FIELDS``) and
     any numeric list of ``VECTOR_BACKSTOP_MIN_LEN`` or more items, but keeps
     all content keys intact.

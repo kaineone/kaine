@@ -78,7 +78,7 @@ Operator-present mode SHALL remain available and unchanged: `KAINE_CYCLE_OPERATO
 
 #### Scenario: Operator boot unchanged
 - **WHEN** an operator-present boot runs with the flag set
-- **THEN** it is admitted exactly as before this change, with no Supervisor selftest, caretaker notice, or input probe
+- **THEN** it is admitted exactly as before this change, with no supervisor selftest, caretaker notice, or input probe
 
 #### Scenario: Research boot unchanged
 - **WHEN** a research boot fails any of its conditions

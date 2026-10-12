@@ -20,12 +20,12 @@ log = logging.getLogger(__name__)
 
 
 class IntentExpressionLog:
-    """JSONL append log of every Language output.
+    """JSONL append log of every language module output.
 
-    Each record is the input to Phase 6 Sleep's DPO pair construction.
+    Each record is the input to the sleep module's Phase 6 DPO pair construction.
     The "chosen" side is the `faithful_rendering` field; the "rejected"
     side (when applicable) is the `generated_text`. Mode and metadata
-    let Sleep partition the training data.
+    let the sleep module partition the training data.
 
     The log is the corpus of the entity's own utterances, and it never holds
     heard speech.

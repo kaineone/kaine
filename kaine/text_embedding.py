@@ -90,10 +90,10 @@ class SentenceTransformerTextEmbedder:
     """The single sentence-transformer embedder for the whole system.
 
     Satisfies both the lightweight :class:`TextEmbedder` protocol
-    (``load`` / ``embed``, used by the evaluation sidecar and Sleep) and
+    (``load`` / ``embed``, used by the evaluation sidecar and the sleep module) and
     the richer :class:`Embedder` protocol (``encode`` / ``encode_batch`` /
-    ``latent_dim`` / ``model_id`` / ``shutdown``, used by Episodic memory and
-    Social cognition). ``embed`` is an alias of ``encode`` so both names address
+    ``latent_dim`` / ``model_id`` / ``shutdown``, used by the episodic memory module and
+    the social cognition module). ``embed`` is an alias of ``encode`` so both names address
     the same vectors on the same cosine scale.
 
     Pins HF telemetry off so the runtime stays fully local after the
@@ -253,7 +253,7 @@ class SentenceTransformerTextEmbedder:
 class HashEmbedder:
     """Deterministic, dep-free embedder for tests and offline use.
 
-    Satisfies the richer :class:`Embedder` protocol, so Episodic memory can use it in
+    Satisfies the richer :class:`Embedder` protocol, so the episodic memory module can use it in
     tests and offline instruments. Hashes tokens into a fixed-dim vector. Not
     semantically meaningful, but cosine similarity stays in [0, 1] and is
     repeatable.
@@ -367,9 +367,9 @@ class SharedEmbedder:
     """Wraps an embedder so many consumers can share one model instance.
 
     ``load()`` is serialised with an ``asyncio.Lock`` so the inner embedder
-    loads exactly once, even across concurrent callers or a Supervisor rebuild.
+    loads exactly once, even across concurrent callers or a supervisor rebuild.
     ``shutdown()`` is intentionally a no-op: MnemosCore shuts its embedder
-    down when it stops, and a Supervisor restart of one module must not unload
+    down when it stops, and a supervisor restart of one module must not unload
     the model underneath the other modules that still hold a reference to it.
     ``unload()`` is the residency path and delegates to the inner embedder.
     """

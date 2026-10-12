@@ -487,7 +487,7 @@ def test_dry_run_e2e(tmp_path: Path, known_modules):
     # an operator acknowledgement.
     seed_overlay = _read_overlay(study_dir / "gestation")
     assert seed_overlay["developmental_stage"]["require_operator_ack_for_birth"] is False
-    # World model's world model is checked wherever it is enabled.
+    # The world model module is checked wherever it is enabled.
     for s in steps:
         if "phantasia" in s["modules"]:
             assert s["world_model_captured"] is True
@@ -1579,7 +1579,7 @@ def test_resume_adopts_an_unrecorded_birth_preservation(tmp_path: Path, known_mo
     assert steps[0]["bundle"] == str(seed)
     assert steps[0]["preservation_id"] == "p-born"
     assert steps[0]["adopted"] is True
-    # No second development: the first child is branch 0, revived from the seed.
+    # No second developmental phase: the first child is branch 0, revived from the seed.
     env_logs = _load_jsonl(study_dir / "env_log.jsonl")
     assert env_logs[0]["line"] == "branch"
     assert "/10" not in [urlsplit(u).path for u in flush_log]

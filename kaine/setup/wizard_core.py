@@ -59,7 +59,7 @@ MODULE_ORDER = [
     "mundus",
 ]
 
-#: Cognitive modules (the embodiment modules Perceptual locus and Embodiment, and Recorder,
+#: Cognitive modules (the perceptual locus and embodiment modules, and the recorder module,
 #: which is test infrastructure, are never part of a preset).
 FULL_ENTITY_MODULES: dict[str, bool] = {
     m: m not in ("perception", "mundus") for m in MODULE_ORDER
@@ -194,7 +194,7 @@ def implied_extras(modules: dict[str, bool], shipped: dict[str, Any]) -> list[st
     Module-based:
     - planning + [nous].backend == "pymdp" -> reasoning
     - audition + capture -> audio
-    - vision + capture -> vision
+    - the vision module + capture -> vision
     - oscillator.enabled -> oscillator
     - hypnos.voice_alignment -> training
     - world model + [phantasia].backend == "dreamerv3" + [phantasia].engine == "jax"

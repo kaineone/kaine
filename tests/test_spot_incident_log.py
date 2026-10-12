@@ -233,7 +233,7 @@ def test_scrub_paths_replaces_non_home_posix_roots():
 
 
 async def test_disabled_spot_writes_no_incident_files(bus, tmp_path):
-    # Scenario: Disabled Supervisor produces no log.
+    # Scenario: Disabled supervisor produces no log.
     incidents = tmp_path / "incidents"
     mod = _LightDeadMod(bus)
     await mod.initialize()
@@ -258,7 +258,7 @@ async def test_disabled_spot_writes_no_incident_files(bus, tmp_path):
 
 
 async def test_enabled_spot_disabled_log_writes_nothing_but_keeps_bus(bus, tmp_path):
-    # Scenario: Enabled Supervisor with disabled incident log.
+    # Scenario: Enabled supervisor with disabled incident log.
     incidents = tmp_path / "incidents"
     mod = _LightDeadMod(bus)
     await mod.initialize()
@@ -707,7 +707,7 @@ async def test_log_survives_reboot_and_clear_escalation(bus, tmp_path):
     assert files_after == files_before
     assert records_after == records_before
 
-    # A second Supervisor instance (a new run) appends rather than wiping.
+    # A second supervisor instance (a new run) appends rather than wiping.
     mod2 = _LightDeadMod(bus)
     await mod2.initialize()
     reg2 = ModuleRegistry()

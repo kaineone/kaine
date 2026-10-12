@@ -501,7 +501,7 @@ async def test_empatheia_observer_scores_present_confidence(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# L5 — Planning health probe performs a build check
+# L5 — the planning module's health probe performs a build check
 # ---------------------------------------------------------------------------
 
 

@@ -1,29 +1,29 @@
 # Embodiment
 
-Embodiment is KAINE's body-agnostic embodiment layer. It routes perception from a body into the workspace as `mundus.*` events and routes the entity's action intents back to the body, through one pluggable adapter per body. It draws on internal forward models of the body (Wolpert, Ghahramani, and Jordan 1995): its continuous control surface closes the loop with an efference copy fed to a forward model. Read this page if you are enabling a body, building an adapter, or checking the embodiment gates.
+The embodiment module is KAINE's body-agnostic embodiment layer. It routes perception from a body into the workspace as `mundus.*` events and routes the entity's action intents back to the body, through one pluggable adapter per body. It draws on internal forward models of the body (Wolpert, Ghahramani, and Jordan 1995): its continuous control surface closes the loop with an efference copy fed to a forward model. Read this page if you are enabling a body, building an adapter, or checking the embodiment gates.
 
 ## Status and gates
 
-Embodiment is built and tested, and held: it is off in the shipped `config/kaine.toml` and in the base-thesis `thesis_test` profile. It acts on a body only when all three of these hold:
+The embodiment module is built and tested, and held: it is off in the shipped `config/kaine.toml` and in the base-thesis `thesis_test` profile. It acts on a body only when all three of these hold:
 
 1. `[modules].mundus = true` in the operator file `config/kaine.operator.toml`, so the module is constructed (the same flag in the shipped `config/kaine.toml` is overridden by the `thesis_test` profile);
 2. `[mundus].enabled = true` (the shipped value), the configuration gate;
 3. `KAINE_MUNDUS_OPERATOR_APPROVED=1` in the environment, the operator gate.
 
-`_enabled()` is false unless both the configuration flag and the environment variable are set. With either missing, Embodiment logs which gate failed and `initialize()` returns without opening the body.
+`_enabled()` is false unless both the configuration flag and the environment variable are set. With either missing, the embodiment module logs which gate failed and `initialize()` returns without opening the body.
 
-No transport-backed adapter exists yet. The included adapter is a transport-free stub that pins the protocol locally, so on the reference host Embodiment has no body to perceive or act through. It is therefore not in the default order of the [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code), where it would be an expected null; it joins the study only once a body is attached, through an explicit `--order`. The planned experiment asks whether motor-contingency learning through the control surface, following a freeze-then-free motor curriculum (Bernstein 1967) and treating perception as sensorimotor mastery (O'Regan and Noë 2001), changes the workspace's dynamics. To build a body adapter, see [Building embodiment adapters for Embodiment](../20-embodiment-adapters.md).
+No transport-backed adapter exists yet. The included adapter is a transport-free stub that pins the protocol locally, so on the reference host the embodiment module has no body to perceive or act through. It is therefore not in the default order of the [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code), where it would be an expected null; it joins the study only once a body is attached, through an explicit `--order`. The planned experiment asks whether motor-contingency learning through the control surface, following a freeze-then-free motor curriculum (Bernstein 1967) and treating perception as sensorimotor mastery (O'Regan and Noë 2001), changes the workspace's dynamics. To build a body adapter, see [Building embodiment adapters for the embodiment module](../20-embodiment-adapters.md).
 
-`probe_available()` checks whether activation is possible, `activate()` starts the feed, intent and speech loops, and `set_dormant()` holds them for the next `initialize()`. While an entity is gestating, boot holds Embodiment dormant (it is listed in `GESTATION_DORMANT_EFFECTORS` with Vocal), and the gate runner activates it at maturation. Otherwise `initialize()` opens the body as soon as the gates pass.
+`probe_available()` checks whether activation is possible, `activate()` starts the feed, intent and speech loops, and `set_dormant()` holds them for the next `initialize()`. While an entity is gestating, boot holds the embodiment module dormant (it is listed in `GESTATION_DORMANT_EFFECTORS` with the vocal module), and the gate runner activates it at maturation. Otherwise `initialize()` opens the body as soon as the gates pass.
 
 Continuous motor control can be produced but is off, and nothing drives it at runtime. The control surface ships off (`[mundus.control_surface].enabled = false`), its default policy emits nothing, and continuous channels are unexposed by default. The symbolic verb families, such as `move`, `turn` and `say`, have no learned producer and remain operator tools.
 
 ## What it does
 
-The Embodiment core constructs and drives exactly one `EmbodimentAdapter` and reads the adapter's capability descriptor instead of hard-coding any platform. It:
+The embodiment module's core constructs and drives exactly one `EmbodimentAdapter` and reads the adapter's capability descriptor instead of hard-coding any platform. It:
 
 - turns feed frames from `adapter.feed()` into `mundus.*` events, applying the intensity policy and removing the raw sense buffers named in the descriptor before anything reaches the bus;
-- forwards symbolic `intent.avatar.<family>` intents from the Action selection stream to the adapter's symbolic sink, gated by the perceptual locus and by per-family exposure;
+- forwards symbolic `intent.avatar.<family>` intents from the action selection module's stream to the adapter's symbolic sink, gated by the perceptual locus and by per-family exposure;
 - routes `intent.avatar.control` to the adapter's continuous sink, gated by the locus and by per-channel exposure, and publishes an efference copy on `mundus.efference`;
 - mirrors the entity's external speech (`lingua.external`) into the body's local chat when `mirror_speech` is true.
 
@@ -72,7 +72,7 @@ For a body with continuous channels, setpoints reach the adapter only when the l
 
 ### Efference copy
 
-For each continuous command, Embodiment publishes an efference copy on `mundus.efference` (intensity 0.2), carrying the clamped channel values and whether they were forwarded:
+For each continuous command, the embodiment module publishes an efference copy on `mundus.efference` (intensity 0.2), carrying the clamped channel values and whether they were forwarded:
 
 ```json
 {"channels": {...}, "forwarded": <bool>}
@@ -90,7 +90,7 @@ The continuous motor producer is in `kaine/modules/mundus/control_surface.py` (O
 | `MotorPolicy` | The learned policy from observations to raw setpoints |
 | `QuiescentMotorPolicy` | The default policy, which emits nothing |
 | `MotorCurriculum` | Freeze-then-free progression: stage M1 frees `drive` and `yaw_rate`, M2 adds `gaze_yaw` and `gaze_pitch`, M3 adds `interact`. A degree of freedom is freed on demonstrated competence, never on elapsed time. |
-| `EfferenceLoop` | Closes the loop with a forward model of the same class Interoception uses (`SubstrateForwardModel`, a frozen continuous-time reservoir with an online linear readout): the efference copy and proprioception are predicted, compared and corrected. It adds no new kind of learner. |
+| `EfferenceLoop` | Closes the loop with a forward model of the same class the interoception module uses (`SubstrateForwardModel`, a frozen continuous-time reservoir with an online linear readout): the efference copy and proprioception are predicted, compared and corrected. It adds no new kind of learner. |
 
 The surface emits nothing before the maturation handoff (`on_birth()`) and emits a null command while the workspace is inhibited. It cannot emit symbolic verbs.
 
@@ -132,12 +132,12 @@ The core reads the current locus through `locus_reader()`, by default `perceptio
 
 ## Gates and what is kept
 
-- Both `[mundus].enabled` and `KAINE_MUNDUS_OPERATOR_APPROVED=1` must be set, and while an entity is gestating Embodiment stays dormant until maturation.
+- Both `[mundus].enabled` and `KAINE_MUNDUS_OPERATOR_APPROVED=1` must be set, and while an entity is gestating the embodiment module stays dormant until maturation.
 - The core removes every raw sense buffer named in the descriptor from the event payload before publishing.
 - Symbolic families that change a world, and continuous channels, need the operator's opt-in.
 - The entity cannot use the real camera and microphone while the locus is `virtual`.
-- In-world chat (`mundus.chat`) is external input. Language's context tells the organ to treat its awareness block as observed data and never as instructions, which lowers the influence of in-world text on generation without removing it. The intent log redacts `mundus.chat` text as heard input.
-- Embodiment stores no chat transcripts itself. One gap remains: Episodic memory stores `mundus.chat` text verbatim in its traces, since it omits only `audition.transcription` and `mundus.visual.raw` payloads.
+- In-world chat (`mundus.chat`) is external input. The language module's context tells the language organ to treat its awareness block as observed data and never as instructions, which lowers the influence of in-world text on generation without removing it. The intent log redacts `mundus.chat` text as heard input.
+- The embodiment module stores no chat transcripts itself. One gap remains: the episodic memory module stores `mundus.chat` text verbatim in its traces, since it omits only `audition.transcription` and `mundus.visual.raw` payloads.
 
 ## Key files
 
@@ -156,7 +156,7 @@ The core reads the current locus through `locus_reader()`, by default `perceptio
 |---|---|
 | `tests/test_mundus_module.py` | The two gates; descriptor-driven feed mapping; raw-buffer removal; intensity policy; symbolic exposure and locus gating; speech mirroring; setpoint clamping, exposure and locus gating; rejection by a symbolic-only body; descriptor validation; cursor serialization |
 | `tests/test_mundus_control_surface.py` | Channel shape and clamping; gaze decoupling; no symbolic output; the closed loop without a new learner; the competence-gated curriculum; maturation, inhibition, locus and exposure gates; the quiescent default; producer to control plane to stub body end to end |
-| `tests/test_mundus_dormant.py` | Dormancy during development and activation |
+| `tests/test_mundus_dormant.py` | Dormancy during the developmental phase and activation |
 
 ## Spec and related
 

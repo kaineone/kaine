@@ -52,7 +52,7 @@ def _default_embedder() -> HashEmbedder:
 
 
 def _prompt_for(utterance: str, conditioning: str) -> tuple[str, str]:
-    """Build the conditioned prompt the way Language's assembler does in shape.
+    """Build the conditioned prompt the way the language module's assembler does in shape.
 
     A stable persona scaffold + the (variable) conditioning block + the (constant)
     utterance. With empty conditioning the prompt is byte-identical across arms;

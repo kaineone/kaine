@@ -111,7 +111,7 @@ async def test_audition_processes_when_not_speaking(bus: AsyncBus):
         await audition.shutdown()
 
 
-# ---- vocal opens the window (only when suppression is on) ---------------
+# ---- the vocal module opens the window (only when suppression is on) ---------------
 
 def _make_vox(bus, tmp_path, **overrides):
     overrides.setdefault("player", FakePlayer())

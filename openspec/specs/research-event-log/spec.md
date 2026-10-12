@@ -75,13 +75,13 @@ record, regardless of what the bus event carries:
 
 - Raw audio or raw video frames (`mundus.visual.raw`, PCM samples)
 - `audition.transcription` text (the verbatim speech transcript)
-- The Language intent log content or intent params text
-- Episodic memory/Qdrant memory text bodies (`text` field in `mnemos.recall` /
+- The language module's intent log content or intent params text
+- the episodic memory module's Qdrant memory text bodies (`text` field in `mnemos.recall` /
   `mnemos.replay`)
-- The Self-model self-model document (only drift scalars are logged)
-- Social cognition agent model content (only familiarity scalar is logged)
+- The self-model document (only drift scalars are logged)
+- The social cognition module's agent model content (only familiarity scalar is logged)
 - Conversation turn content (any form of user input or entity response text)
-- Effectors action content, body, or stdout (stripped by `_sanitize()`)
+- The effectors module's action content, body, or stdout (stripped by `_sanitize()`)
 - Operator hostname, IP address, or voice name
 
 #### Scenario: CONTENT_FIELDS are absent from every record
@@ -231,26 +231,26 @@ instead of by deleting records.
 When `[research_event_log.external_utterances].enabled` is true, the cycle SHALL record each `external_speech` event from `lingua.external`, with its text and timestamps, through the encrypted JSONL sink under `state/research/external_utterances/`. It SHALL NOT subscribe to `lingua.internal`, SHALL NOT record any `internal_speech` event, and SHALL NOT record `user_input`. The log SHALL NOT be export-eligible.
 
 #### Scenario: An inner thought is not recorded
-- **WHEN** Language publishes an `internal_speech` event while the log is enabled
+- **WHEN** the language module publishes an `internal_speech` event while the log is enabled
 - **THEN** nothing about it is written to the external-utterance log
 
 #### Scenario: An utterance is recorded
-- **WHEN** Language publishes an `external_speech` event while the log is enabled
+- **WHEN** the language module publishes an `external_speech` event while the log is enabled
 - **THEN** its text and timestamps are written to the external-utterance log
 
 ### Requirement: What Dashboard displays is recorded for each run
-When `[research_event_log.nexus_record].enabled` is true, the cycle SHALL record every event on the streams Dashboard displays, after the same privacy filter Dashboard applies, through the encrypted JSONL sink under `data/nexus_record/`. The record SHALL contain nothing that Dashboard's filtered feed does not contain. It SHALL NOT be export-eligible.
+When `[research_event_log.nexus_record].enabled` is true, the cycle SHALL record every event on the streams the dashboard displays, after the same privacy filter the dashboard applies, through the encrypted JSONL sink under `data/nexus_record/`. The record SHALL contain nothing that the dashboard's filtered feed does not contain. It SHALL NOT be export-eligible.
 
 #### Scenario: The record matches the display
 - **WHEN** an event on a displayed stream is published during a run with the record enabled
-- **THEN** the record holds the same filtered payload the Dashboard bridge sends
+- **THEN** the record holds the same filtered payload the dashboard bridge sends
 
 #### Scenario: Filtered content stays out
 - **WHEN** an event carries a field the privacy filter removes
 - **THEN** that field does not appear in the record
 
 ### Requirement: The diagnostics privacy filter removes numeric vectors
-The diagnostics privacy filter SHALL remove, at every nesting depth, every field named in its vector-field set (`latent`, `peripheral`, `foveal`, `temporal_context`, `feature_vector`) and every list or tuple of 16 or more numbers (booleans excluded) whose key is not a reviewed non-embedding key (`saliences`, `step_magnitudes`). No perceptual or latent embedding SHALL reach the Dashboard stream, the Dashboard record or any other surface that uses the filter.
+The diagnostics privacy filter SHALL remove, at every nesting depth, every field named in its vector-field set (`latent`, `peripheral`, `foveal`, `temporal_context`, `feature_vector`) and every list or tuple of 16 or more numbers (booleans excluded) whose key is not a reviewed non-embedding key (`saliences`, `step_magnitudes`). No perceptual or latent embedding SHALL reach the dashboard stream, the dashboard record or any other surface that uses the filter.
 
 #### Scenario: A vision report
 - **WHEN** a `topos.report` carrying `latent`, `peripheral` and `foveal` passes the filter

@@ -231,7 +231,7 @@ class AuditoryForwardModel:
         if any(not math.isfinite(v) for v in feature):
             # A skipped reading touches neither the buffer nor the weights and
             # leaves no prediction behind, so the next reading scores nothing,
-            # reports no gain and makes no update, as in Interoception's forward model.
+            # reports no gain and makes no update, as in the interoception module's forward model.
             log.warning("AuditoryForwardModel: non-finite feature vector; skipping step")
             self.last_null_error = None
             self.last_scored_had_context = False

@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Divergence assessment for decommission
-The system SHALL provide `assess_divergence()` that determines whether an entity has individuated through the shared decision function (`divergence-assessment`). Individuation SHALL be keyed on the individuation instrument's result against the entity's own reference: the entity is individuated when the ledger is latched or the latest fresh scored report has `significant == true`. The assessment SHALL also mark the entity diverged on the secondary identity signals (consolidation divergence over threshold, Self-model `drift_count` and `identity_history`, presence of trained voice adapters). It SHALL NOT key on A/B divergence-from-pretrained, which measures architecture conditioning rather than individuation. The assessment SHALL be read-only, SHALL NOT raise, and when it cannot confirm SHALL advise treating the entity as mature.
+The system SHALL provide `assess_divergence()` that determines whether an entity has individuated through the shared decision function (`divergence-assessment`). Individuation SHALL be keyed on the individuation instrument's result against the entity's own reference: the entity is individuated when the ledger is latched or the latest fresh scored report has `significant == true`. The assessment SHALL also mark the entity diverged on the secondary identity signals (consolidation divergence over threshold, the self-model module's `drift_count` and `identity_history`, presence of trained voice adapters). It SHALL NOT key on A/B divergence-from-pretrained, which measures architecture conditioning rather than individuation. The assessment SHALL be read-only, SHALL NOT raise, and when it cannot confirm SHALL advise treating the entity as mature.
 
 The summary SHALL state the individuation evidence honestly:
 
@@ -33,7 +33,7 @@ Each of these summaries SHALL include the advice to treat the entity as mature i
 - **THEN** the summary says the drift is measured only since the capture date and advises treating the entity as mature if unsure
 
 ### Requirement: Transferable backup before deletion
-Decommission SHALL capture an encrypted, transferable backup of the entity's durable state before any deletion, satisfying CAL Article 4.2(b). The backup SHALL bundle the Self-model self-model, the Language intent log, the Sleep voice adapters, the latest fork snapshot, the whole `state/individuation/` directory (reference, adapter copy, ledger and reports), and an export (or explicit volume-copy instructions) for the Episodic memory and Social cognition Qdrant collections, plus a manifest describing the entity, timestamp, divergence assessment, and contents. If the backup cannot be completed, decommission SHALL abort without deleting anything.
+Decommission SHALL capture an encrypted, transferable backup of the entity's durable state before any deletion, satisfying CAL Article 4.2(b). The backup SHALL bundle the self-model, the language intent log, the sleep voice adapters, the latest fork snapshot, the whole `state/individuation/` directory (reference, adapter copy, ledger and reports), and an export (or explicit volume-copy instructions) for the episodic memory and social cognition Qdrant collections, plus a manifest describing the entity, timestamp, divergence assessment, and contents. If the backup cannot be completed, decommission SHALL abort without deleting anything.
 
 #### Scenario: Backup precedes deletion
 - **WHEN** an operator runs the decommission CLI

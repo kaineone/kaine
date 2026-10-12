@@ -1,20 +1,20 @@
 # Sequence
 
-Sequence is KAINE's temporal prediction. Its input is the workspace itself: on every broadcast, accessed or inhibited, it encodes the broadcast as a feature vector, advances a frozen continuous-time reservoir, predicts the broadcast's features from the previous hidden state, and reports the prediction error back to the workspace. It also detects recurrence and tracks how long it has been since the entity last heard a voice. This page covers what Sequence computes, its intensity and alert rule, its events, sleep, persistence, and configuration. Read it if you are configuring KAINE, studying the temporal signal, or integrating Sequence with another module.
+The sequence module is KAINE's temporal prediction. Its input is the workspace itself: on every broadcast, accessed or inhibited, it encodes the broadcast as a feature vector, advances a frozen continuous-time reservoir, predicts the broadcast's features from the previous hidden state, and reports the prediction error back to the workspace. It also detects recurrence and tracks how long it has been since the entity last heard a voice. This page covers what the sequence module computes, its intensity and alert rule, its events, sleep, persistence, and configuration. Read it if you are configuring KAINE, studying the temporal signal, or integrating the sequence module with another module.
 
 ## Status
 
-Implemented. The bare `config/kaine.toml` has every module off; with no profile selected the loader applies the `thesis_test` profile, which enables Sequence (`chronos = true`).
+Implemented. The bare `config/kaine.toml` has every module off; with no profile selected the loader applies the `thesis_test` profile, which enables the sequence module (`chronos = true`).
 
 - The reservoir backend is `[chronos].cfc_backend`: `"numpy"` (shipped default; needs neither `torch` nor `ncps`) or `"torch"` (uses `ncps.torch.CfC` and needs the `core` extra).
 - The network runs on the CPU by policy, whatever the host. It is small enough that a GPU adds nothing, and the CPU keeps the cycle's timing predictable. A warning is logged if the selected device is not `cpu`.
-- Forward prediction is off in the shipped `config/kaine.toml` (`forward_prediction = false`) and on in `thesis_test`. With it off, Sequence reports only at its baseline or alert level.
+- Forward prediction is off in the shipped `config/kaine.toml` (`forward_prediction = false`) and on in `thesis_test`. With it off, the sequence module reports only at its baseline or alert level.
 
 ## What Sequence does
 
-Sequence models interval timing, the estimation of durations from seconds to minutes. It is the one predictive processor whose input is the broadcast sequence, so the broadcast is its observation, not a context it conditions on. It therefore holds no broadcast context and reports no `context_gain`; the planned information-gain measure excludes it.
+The sequence module models interval timing, the estimation of durations from seconds to minutes. It is the one predictive processor whose input is the broadcast sequence, so the broadcast is its observation, not a context it conditions on. It therefore holds no broadcast context and reports no `context_gain`; the planned information-gain measure excludes it.
 
-On every broadcast it receives (`on_workspace`), Sequence:
+On every broadcast it receives (`on_workspace`), the sequence module:
 
 1. Featurizes the broadcast into a fixed 24-component vector (below).
 2. Advances the reservoir on that vector. The step's timespan is the latest inter-broadcast interval divided by the mean of the last 32 intervals, clipped to `[0, 10]`, and 1.0 on the first broadcast. Before an interval enters that window it is clipped to ten times the window's current mean (the first interval enters unchanged), so one long pause cannot dominate the mean for the next 31 steps. A steady cadence keeps the timespan near 1.0, and a gap reaches the cell's time gates. A network supplied by a plugin receives a timespan only if it declares `accepts_timespan = True`.
@@ -23,21 +23,21 @@ On every broadcast it receives (`on_workspace`), Sequence:
 5. Reads the time since the last interaction.
 6. Publishes `chronos.report`.
 
-Inhibited broadcasts reach Sequence as well as accessed ones, so the whole broadcast sequence is predicted, and content that did not gain access can still influence later processing through Sequence's reports.
+Inhibited broadcasts reach the sequence module as well as accessed ones, so the whole broadcast sequence is predicted, and content that did not gain access can still influence later processing through the sequence module's reports.
 
 ### Broadcast featurizer
 
-`SnapshotFeaturizer` (`kaine/modules/chronos/featurizer.py`) builds the vector from the broadcast's coalition, weighting each member by the intensity its module reported (not by its score). The broadcast context of Vision, Audition, and Interoception uses the same layout, computed over accessed members only.
+`SnapshotFeaturizer` (`kaine/modules/chronos/featurizer.py`) builds the vector from the broadcast's coalition, weighting each member by the intensity its module reported (not by its score). The broadcast context of the vision, audition, and interoception modules uses the same layout, computed over accessed members only.
 
 | Components | Feature |
 |---|---|
 | 0 | `log1p(number of coalition members)`, clamped at 8 |
 | 1 to 3 | Mean, maximum, and sample standard deviation of the members' intensities |
-| 4 to 11 | Intensity mass per source for interoception, sequence, vision, planning, episodic memory, affect, language, and effectors; other sources fall into component 11 (Audition too, in layout 1) |
+| 4 to 11 | Intensity mass per source for the interoception, sequence, vision, planning, episodic memory, affect, language, and effectors modules; other sources fall into component 11 (the audition module too, in layout 1) |
 | 12 to 19 | Intensity mass per (source, event type) pair, hashed with blake2b into eight buckets |
 | 20 | `log1p(interval)`, the entity seconds since the previous broadcast (0 on the first) |
 | 21 | 1.0 if the broadcast is inhibited |
-| 22 | 1.0 for a broadcast (`is_experiential`), which every broadcast Sequence receives is |
+| 22 | 1.0 for a broadcast (`is_experiential`), which every broadcast the sequence module receives is |
 | 23 | Audition's intensity mass in layout 2; always 0.0 in layout 1 |
 
 Layout 2 is the default for new entities. Layout 1 is kept for entities restored from snapshots saved before layouts were versioned, so their trained readout keeps the input it learned on (see [Persistence](#persistence)). The vector length is 24 in both, so the reservoir, the readout, and plugin networks are unaffected.
@@ -79,12 +79,12 @@ Without a temporal error, a report that is not an alert is at `baseline_salience
 
 ### Time since the last interaction
 
-Sequence reads the configured user-input streams (default `audition.out`) and resets its interaction clock on speech-path events from an operator channel:
+The sequence module reads the configured user-input streams (default `audition.out`) and resets its interaction clock on speech-path events from an operator channel:
 
 - The event type must be in `interaction_event_types` (default `audition.transcription` and `audition.emotion`); an `audition.transcription` must also have non-empty `text`.
 - The event's `payload.source_label` must be one of the operator sources (`live_mic`, `microphone`, `remote`).
 
-`audition.perception`, `audition.prosody`, and speech from the seeded, playlist, stimulus source, or screen feeds do not count. The operator-source set is a fixed constant in Sequence; it does not read `[empatheia].operator_sources`, which Action selection and Social cognition use. `time_since_last_interaction_s` is measured on the entity clock and is `inf` until the first interaction. Affect reads it for the social drive.
+`audition.perception`, `audition.prosody`, and speech from the seeded, playlist, stimulus source, or screen feeds do not count. The operator-source set is a fixed constant in the sequence module; it does not read `[empatheia].operator_sources`, which the action selection and social cognition modules use. `time_since_last_interaction_s` is measured on the entity clock and is `inf` until the first interaction. The affect module reads it for the social drive.
 
 ## Inputs
 
@@ -106,11 +106,11 @@ All events are published to the `chronos.out` stream.
 
 ## Sleep
 
-The cycle keeps broadcasting during sleep, so Sequence keeps featurizing, advancing the reservoir, predicting, and reporting. From `hypnos.sleep.started` to `hypnos.sleep.completed` the readout takes no learning steps.
+The cycle keeps broadcasting during sleep, so the sequence module keeps featurizing, advancing the reservoir, predicting, and reporting. From `hypnos.sleep.started` to `hypnos.sleep.completed` the readout takes no learning steps.
 
 ## Persistence
 
-Sequence persists no workspace events. `serialize()` writes:
+The sequence module persists no workspace events. `serialize()` writes:
 
 - `featurizer_layout`, the layout of the 24-component vector;
 - `reservoir_seed`, from which the frozen reservoir is rebuilt;
@@ -171,7 +171,7 @@ graph TD
 
 | File | Role |
 |---|---|
-| `kaine/modules/chronos/module.py` | `Chronos` class: `on_workspace()`, intensity and alert rule, user-input loop, Sleep loop, serialization |
+| `kaine/modules/chronos/module.py` | `Chronos` class: `on_workspace()`, intensity and alert rule, user-input loop, sleep loop, serialization |
 | `kaine/modules/chronos/featurizer.py` | `SnapshotFeaturizer`: the 24-component broadcast features |
 | `kaine/modules/chronos/network.py` | `CfCNetwork` (NumPy or torch backend), `ForwardPredictionHead`, plugin injection |
 | `kaine/modules/chronos/anomaly.py` | `RollingZScoreAnomaly`: z-score over hidden-state norms |
@@ -190,13 +190,13 @@ chronos = true
 forward_prediction = true
 ```
 
-Sequence needs no external service.
+The sequence module needs no external service.
 
 ## Tests
 
 | File | What it verifies |
 |---|---|
-| `tests/test_chronos_module.py` | `on_workspace()` loop, intensity and alert logic, Sleep interaction |
+| `tests/test_chronos_module.py` | `on_workspace()` loop, intensity and alert logic, sleep interaction |
 | `tests/test_chronos_featurizer.py` | `SnapshotFeaturizer` determinism and layout |
 | `tests/test_chronos_network.py` | `CfCNetwork` CPU pinning, parameter count under 100 K, `ForwardPredictionHead` |
 | `tests/test_chronos_anomaly.py` | `RollingZScoreAnomaly` empty-window and outlier cases |

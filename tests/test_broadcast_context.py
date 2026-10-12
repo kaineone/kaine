@@ -78,8 +78,8 @@ def test_inhibited_broadcast_is_not_adopted():
 
     vec = ctx.vector()
     assert vec is not None
-    assert vec[4 + 2] == pytest.approx(0.5)  # vision bin
-    assert vec[4 + 0] == pytest.approx(0.0)  # interoception bin
+    assert vec[4 + 2] == pytest.approx(0.5)  # the vision module bin
+    assert vec[4 + 0] == pytest.approx(0.0)  # the interoception module bin
 
 
 def test_riders_below_threshold_are_excluded():
@@ -98,8 +98,8 @@ def test_riders_below_threshold_are_excluded():
     assert ctx.observe(snapshot) is True
 
     vec = ctx.vector()
-    assert vec[4 + 2] == pytest.approx(0.5)  # vision
-    assert vec[4 + 5] == pytest.approx(0.0)  # affect
+    assert vec[4 + 2] == pytest.approx(0.5)  # the vision module
+    assert vec[4 + 5] == pytest.approx(0.0)  # the affect module
 
 
 def test_null_vector_keeps_kept_share_and_averages_the_rest():
@@ -142,9 +142,9 @@ def test_null_vector_keeps_kept_share_and_averages_the_rest():
     assert null is not None
 
     # Kept source uses the current context's share.
-    assert null[4 + 2] == pytest.approx(0.5)  # current vision
+    assert null[4 + 2] == pytest.approx(0.5)  # the current vision module
     # Dropped source uses the running mean over adopted contexts.
-    assert null[4 + 0] == pytest.approx((0.3 + 0.9) / 2)  # mean interoception
+    assert null[4 + 0] == pytest.approx((0.3 + 0.9) / 2)  # the mean interoception module
     # Components 0..3 are running means.
     assert null[0] == pytest.approx(math.log1p(2))
     assert null[1] == pytest.approx((0.5 + 0.7) / 2)

@@ -109,7 +109,7 @@ def test_shutdown_order_puts_hypnos_first():
 
 
 async def test_cycle_shuts_hypnos_down_while_thymos_is_up(bus, tmp_path):
-    """Sleep shutdown calls affective_reset while Affect is still up."""
+    """The sleep module's shutdown calls affective_reset while the affect module is still up."""
     calls: list[str] = []
     mnemos = RecordingMnemos(calls, hang_in="replay")
     thymos = FakeThymos()
@@ -124,7 +124,7 @@ async def test_cycle_shuts_hypnos_down_while_thymos_is_up(bus, tmp_path):
 
 
 async def test_spot_shutdown_all_shuts_hypnos_down_first():
-    """Supervisor shuts Sleep down before the other modules."""
+    """The supervisor shuts the sleep module down before the other modules."""
     order: list[str] = []
 
     async def record_shutdown(name: str) -> None:

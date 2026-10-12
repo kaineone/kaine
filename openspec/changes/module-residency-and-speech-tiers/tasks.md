@@ -9,7 +9,7 @@
 ## 2. Measure first: calibration and the fit report
 
 - [x] 2.1 Residency budget: available system memory (`hostmem.system_memory_pool`), clamped by any cgroup limit, minus a reserve (default `max(1 GiB, 10% of physical RAM)`). On discrete hosts, per-device free memory for accelerator-resident rungs. Unified versus discrete comes from `hostmem.classify_accelerator_memory`. No board or product-name branches.
-- [ ] 2.2 `python -m kaine.setup.footprint`: with consent, load each enabled component's configured backend in isolation, run one representative inference, and measure peak resident memory (in-process RSS; the server process's RSS for external services; device memory on discrete hosts). Skip and name absent models; never download. (Built: `kaine/setup/footprint.py` measures the in-process engines (sherpa STT and TTS, the text embedder, the Vision encoder, the emotion classifier) each in its own spawned child with the Hugging Face hub offline, and an external service from its listening process. A service behind a container port forwarder, which includes the compose organ, is reported as not measured; measuring it from inside its container comes with 3.3.)
+- [ ] 2.2 `python -m kaine.setup.footprint`: with consent, load each enabled component's configured backend in isolation, run one representative inference, and measure peak resident memory (in-process RSS; the server process's RSS for external services; device memory on discrete hosts). Skip and name absent models; never download. (Built: `kaine/setup/footprint.py` measures the in-process engines (sherpa STT and TTS, the text embedder, the vision encoder, the emotion classifier) each in its own spawned child with the Hugging Face hub offline, and an external service from its listening process. A service behind a container port forwarder, which includes the compose organ, is reported as not measured; measuring it from inside its container comes with 3.3.)
 - [x] 2.3 Footprint catalogue at `state/residency/footprints.json`: component, backend, model id, bytes, whether the weights are mapped, host class, timestamp, KAINE version; content-free; refreshed by live observations.
 - [ ] 2.4 Fit report as a pure function (budget, catalogue, enabled set, ladders → co-resides or plan with shortfall, pinned organ, multiplexed organs, rung per organ, expected feel), shown by the calibration command, `scripts/probe-host` and the wizard. (The pure function is built in `kaine/residency/fit.py`; the three surfaces come with 2.2 and 8.2.)
 - [ ] 2.5 Operator step: run calibration on this desktop, the Orin Nano Super and the Pixel 6a, and commit the results under `docs/benchmarks/`. Use them to set the defaults in 3.x (reserve, TTLs, pin, which organs route through the manager first), and record any published figure they contradict.
@@ -17,11 +17,11 @@
 ## 3. Reversible unload
 
 - [x] 3.1 `ensure_loaded()` / `unload()` on `SherpaMoonshineSTT` and `SherpaKokoroTTS`: releasing the model keeps the client and its executor usable, `unload()` waits for in-flight inference, and `aclose()` stays terminal.
-- [ ] 3.2 The same pair on the Vision encoders, the emotion classifier and the text embedders (freeing framework caches where the backend has them). (Text embedders done: NumPy, sentence-transformers and the shared wrapper.)
+- [ ] 3.2 The same pair on the vision encoders, the emotion classifier and the text embedders (freeing framework caches where the backend has them). (Text embedders done: NumPy, sentence-transformers and the shared wrapper.)
 - [ ] 3.3 A service controller for external model servers (organ `llama-server`, Chatterbox, Speaches): stop, start and a health confirmation, generalised from `OrganServerController`.
 - [ ] 3.4 Tests: unload → reload gives results identical to a never-unloaded client; unload during inference waits; memory is actually released (RSS drops, measured). (Speech engines: done with fakes, including a weakref check that the model object is freed; the RSS measurement on real models runs with the calibration command in 2.2.)
 - [x] 3.5 NumPy text embedder: `read_safetensors` maps the file read-only (`numpy.memmap`) and builds tensor views; `unload()` drops the views and the map.
-- [ ] 3.6 Torch engines (emotion classifier, Vision encoders) load through `safetensors.safe_open` on CPU; the Vision encoder is built lazily through `ensure_loaded()`. (Done for the Vision encoders: both load with `use_safetensors=True`, which transformers reads through `safe_open`, and never through pickle. The emotion classifier loads through funasr's own checkpoint reader, so its host copy is measured by calibration, not mapped. The lazy Vision start moves to 4.6, so behaviour with the manager off matches main (9.4).)
+- [ ] 3.6 Torch engines (the emotion classifier, the vision encoders) load through `safetensors.safe_open` on CPU; the vision encoder is built lazily through `ensure_loaded()`. (Done for the vision encoders: both load with `use_safetensors=True`, which transformers reads through `safe_open`, and never through pickle. The emotion classifier loads through funasr's own checkpoint reader, so its host copy is measured by calibration, not mapped. The lazy vision start moves to 4.6, so behaviour with the manager off matches main (9.4).)
 - [ ] 3.7 ONNX Runtime sessions KAINE creates: mapped external initializers, `session.save_external_prepacked_constant_initializers = 1`, `arena_extend_strategy = kSameAsRequested`, a per-rung `gpu_mem_limit`, and `disable_prepacking` measured per operation by the calibration tool. sherpa-onnx's limits are documented, not claimed.
 
 ## 4. Residency manager
@@ -31,12 +31,12 @@
 - [ ] 4.3 Two lanes (interactive, background) with deadlines. Preemption uses the yield contract (grace 2 s, hard timeout 10 s, resume from checkpoint).
 - [ ] 4.4 Pinning, keep-resident TTL, prewarm, and the pressure valve (unload warm rungs, least recently used first, as available memory nears the reserve).
 - [ ] 4.5 Content-free residency events (`load_start`, `load_end` with duration, `unload`, `evict`, `downgrade` with reason, `queue_drop`) on the operator status surface and in logs.
-- [ ] 4.6 Route the speech organs, the Vision encoder, the emotion classifier and the embedder through the manager. Record a diff-scope review showing no changes to cognitive-cycle, workspace or module-semantics files.
+- [ ] 4.6 Route the speech organs, the vision encoder, the emotion classifier and the embedder through the manager. Record a diff-scope review showing no changes to cognitive-cycle, workspace or module-semantics files.
 
 ## 5. Integration
 
-- [ ] 5.1 Sleep organ window: release and re-admit the organ through the manager, and hold the training footprint in the ledger for the window's duration; behaviour is unchanged when the manager is passive.
-- [ ] 5.2 Supervisor: a module whose model is loading within its measured bound is alive; an over-bound load is a residency failure (ladder-down, surfaced), not a restart. Test this with the Supervisor self-test harness.
+- [ ] 5.1 the sleep module's organ window: release and re-admit the organ through the manager, and hold the training footprint in the ledger for the window's duration; behaviour is unchanged when the manager is passive.
+- [ ] 5.2 the supervisor: a module whose model is loading within its measured bound is alive; an over-bound load is a residency failure (ladder-down, surfaced), not a supervisor restart. Test this with the supervisor self-test harness.
 - [ ] 5.3 Audition: bounded in-memory queue (count and age) for audio that arrives while STT is not resident; oldest dropped first; drops counted and surfaced; never persisted. Test that no queued audio reaches disk.
 - [ ] 5.4 The fit report recommends `[cycle].auto_time_scale = true` on hosts whose plan multiplexes an interactive organ; the operator decides.
 
@@ -86,10 +86,10 @@
 - [ ] 12.1 Stall indicator into `TimeScaleController.observe`; identical behaviour when `[residency]` is passive (test).
 - [ ] 12.2 `Event.tick` and `Event.seq` optional fields; older events parse (test).
 - [ ] 12.3 `BaseModule`: tick context variable around `on_workspace`, `publish` stamps `tick` and `seq`, `self.track(task)`, `module.tick_done` emission; the `seq` counter travels in snapshots.
-- [ ] 12.4 Language tracks its generation tasks; Interoception and the perception sources gain a tick-driven lockstep mode fed by the seeded feed.
+- [ ] 12.4 the language module tracks its generation tasks; the interoception module and the perception sources gain a tick-driven lockstep mode fed by the seeded feed.
 - [ ] 12.5 Engine (`kaine/cycle/engine.py`, shared file, integrator told first): `cycle.tick_start`, the barrier, intake by `(tick, source, seq)`, logical `entry_id` and `timestamp` in the broadcast payload.
 - [ ] 12.6 Logical `EntityClock` for the registry in lockstep.
 - [ ] 12.7 Boot refuses lockstep without deterministic mode or with an unsupported module (names them); `lockstep_timeout_s` freezes the cycle, records an incident and marks the run inadmissible.
-- [ ] 12.8 Supervisor: alive while loading within bound or waiting at the barrier for another module.
+- [ ] 12.8 the supervisor: alive while loading within bound or waiting at the barrier for another module.
 - [ ] 12.9 Tests: two lockstep runs on the same scripted inputs, one with random injected load delays per model call, give identical normalised traces and workspace contents; every existing determinism test stays green with lockstep off; module-aware dilation lowers the scale under sustained stalls and not under one short stall.
 - [ ] 12.10 Docs: the entity-time chapter and the residency guide describe dilation, lockstep, its cost, and that lockstep is a study mode.

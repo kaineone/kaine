@@ -164,7 +164,7 @@ def test_implied_extras_seeded_feed_implies_nothing_extra():
 
 
 def test_implied_extras_deduplicates():
-    # vision capture + playlist feed both imply vision; the result must not repeat.
+    # vision capture + playlist feed both imply the vision module; the result must not repeat.
     shipped = {
         "topos": {"capture_enabled": True},
         "perception_feed": {"mode": "playlist"},
@@ -199,15 +199,15 @@ def test_full_run_multi_gpu_produces_config():
     #  2 accept device assignments? -> y
     #  3 module preset? -> c (custom)
     #  4..M enable <module>? for each MODULE_ORDER entry
-    #  language model id
+    #  language organ model id
     #  research opt-in? -> n
     #  encryption? -> n
 
     answers = [ACK_PHRASE, "", "", "y", "c"]
-    # enable only interoception + language, the rest off
+    # enable only the interoception module + the language module, the rest off
     for m in MODULE_ORDER:
         answers.append("y" if m in ("soma", "lingua") else "n")
-    answers.append("my-model:latest")  # language model id
+    answers.append("my-model:latest")  # language organ model id
     answers.append("n")  # research
     answers.append("n")  # encryption
 
@@ -238,7 +238,7 @@ def test_vox_enabled_requires_voice_id():
     answers = [ACK_PHRASE, "", "", "y", "c"]
     for m in MODULE_ORDER:
         answers.append("y" if m in ("lingua", "vox") else "n")
-    answers.append("the-model")  # language model id
+    answers.append("the-model")  # language organ model id
     # vocal voice id: first blank (rejected), then a real one
     answers.append("")
     answers.append("Abigail.wav")
@@ -262,7 +262,7 @@ def test_metrics_only_when_opted_in():
     answers = [ACK_PHRASE, "", "", "y", "c"]
     for m in MODULE_ORDER:
         answers.append("n")
-    # no language/vocal/audition -> no model prompts
+    # no language, vocal and audition modules -> no model prompts
     answers.append("y")  # research opt-in
     answers.append("alice@example.com")  # recipient
     answers.append("n")  # encryption
@@ -473,7 +473,7 @@ def test_defaults_full_run_does_not_download_organ(tmp_path: Path, monkeypatch):
     )
     assert rc == 0
     text = out.getvalue()
-    # language is on in the default set → organ step fires and shows the published
+    # the language module is on in the default set → the language organ step fires and shows the published
     # repo + command, but [--defaults] does not download.
     assert "Language organ download" in text
     assert "kaineone/Qwen3.5-4B-abliterated-GGUF" in text

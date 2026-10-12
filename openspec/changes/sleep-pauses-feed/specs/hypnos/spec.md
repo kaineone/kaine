@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: Sleep pauses the perceptual feed
-Sleep SHALL suspend external perception (desired locus `off` and the shared playlist clock paused under the `hypnos` holder) when a sleep starts, whatever modules are active, and SHALL restore the pre-sleep locus and resume the clock when the sleep ends, including when the sleep pipeline fails or is cancelled.
+The sleep module SHALL suspend external perception (desired locus `off` and the shared playlist clock paused under the `hypnos` holder) when a sleep starts, whatever modules are active, and SHALL restore the pre-sleep locus and resume the clock when the sleep ends, including when the sleep pipeline fails or is cancelled.
 
 #### Scenario: Sleep without Episodic memory pauses the feed
-- **WHEN** a sleep runs on a profile with Episodic memory off and the pre-sleep locus is `virtual`
+- **WHEN** a sleep runs on a profile with the episodic memory module off and the pre-sleep locus is `virtual`
 - **THEN** the desired locus is `off` while the sleep runs and `virtual` after it ends
 
 #### Scenario: A failed sleep restores perception

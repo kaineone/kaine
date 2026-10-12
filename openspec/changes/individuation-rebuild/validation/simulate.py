@@ -126,7 +126,7 @@ def being_samples(
 
 
 def reference_vector(birth_samples: list[np.ndarray]) -> np.ndarray:
-    """Maturation reference used by the old percentile rule.
+    """maturation reference used by the old percentile rule.
 
     Mean of the maturation sample over prompts, normalised.
     """

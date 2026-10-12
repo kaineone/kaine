@@ -6,11 +6,11 @@ Module-level crash/hang recovery for unattended runs: freeze, restart, escalate 
 ## Requirements
 
 ### Requirement: Always-on module supervisor
-The cycle entrypoint SHALL run a supervisor component (Supervisor) as a task alongside
-`cycle.run_forever`, when `[spot].enabled` is true. Supervisor SHALL NOT be a registered
+The cycle entrypoint SHALL run a supervisor component as a task alongside
+`cycle.run_forever`, when `[spot].enabled` is true. The supervisor SHALL NOT be a registered
 module (it must act when modules fail and cannot watch itself). On each poll
-(default `poll_interval_s = 2.0`) Supervisor SHALL assess every registered module's
-liveness and drive recovery for at most one incident at a time. Supervisor SHALL ship
+(default `poll_interval_s = 2.0`) the supervisor SHALL assess every registered module's
+liveness and drive recovery for at most one incident at a time. The supervisor SHALL ship
 disabled by default.
 
 #### Scenario: Disabled by default
@@ -19,11 +19,11 @@ disabled by default.
 
 #### Scenario: Supervisor runs when enabled
 - **WHEN** the cycle entrypoint boots with `[spot].enabled = true`
-- **THEN** a Supervisor task is created next to the cycle and freeze-watch tasks and is
+- **THEN** a supervisor task is created next to the cycle and freeze-watch tasks and is
   awaited during shutdown
 
 ### Requirement: Module liveness detection
-Supervisor SHALL classify each module as `alive`, `dead`, or `hung`. A module SHALL be
+The supervisor SHALL classify each module as `alive`, `dead`, or `hung`. A module SHALL be
 `dead` when any of its tasks finished with an exception, or returned while the
 module was not stopping (an organ loop that exited on its own). A module SHALL be
 `hung` only when its heartbeat age exceeds the configured timeout AND at least one
@@ -34,98 +34,98 @@ suppressed (the crash signal still applies).
 
 #### Scenario: Crashed task is dead
 - **WHEN** a module's task has finished with an exception
-- **THEN** Supervisor classifies that module as `dead`
+- **THEN** the supervisor classifies that module as `dead`
 
 #### Scenario: Quiet but live module is alive
 - **WHEN** a module has published nothing recently but its tasks are running and
   its heartbeat is fresh
-- **THEN** Supervisor classifies it as `alive` and takes no recovery action
+- **THEN** the supervisor classifies it as `alive` and takes no recovery action
 
 #### Scenario: Sleep suppresses hang flags
 - **WHEN** `hypnos.is_sleeping` is true and a module's heartbeat is stale
-- **THEN** Supervisor does not classify that module as `hung`
+- **THEN** the supervisor does not classify that module as `hung`
 
 ### Requirement: Freeze the entity during recovery
-On detecting a failed module Supervisor SHALL freeze the entity by pushing a freeze entry
+On detecting a failed module the supervisor SHALL freeze the entity by pushing a freeze entry
 with `source = "spot"` onto the freeze stack, so the existing freeze-watch loop pauses
-the cycle and halts perception. On recovery Supervisor SHALL remove only its own entry,
+the cycle and halts perception. On recovery the supervisor SHALL remove only its own entry,
 wherever it sits in the stack, and SHALL never lift a freeze held by another source.
 When a freeze held by any other source is active (operator, welfare, or any stack that
-contains one), Supervisor SHALL take no recovery action. The exception is a freeze held only
-by `gestation` (a gestating entity whose stimulus source is lost): there Supervisor SHALL keep supervising,
+contains one), the supervisor SHALL take no recovery action. The exception is a freeze held only
+by `gestation` (a gestating entity whose stimulus source is lost): there the supervisor SHALL keep supervising,
 act only on crashed (`dead`) modules, and never flag a module `hung` from a stale
 heartbeat, because heartbeats go stale by design while the cycle is paused.
 
 #### Scenario: Supervisor freeze halts the entity
-- **WHEN** Supervisor detects a `dead` module
+- **WHEN** the supervisor detects a `dead` module
 - **THEN** it pushes a freeze entry with `source = "spot"` before attempting restart
 
 #### Scenario: Supervisor does not clear an operator freeze
 - **WHEN** the freeze control is frozen with `source = "operator"`
-- **THEN** Supervisor performs no recovery and does not modify the control
+- **THEN** the supervisor performs no recovery and does not modify the control
 
 #### Scenario: Supervisor lifts only its own entry
-- **WHEN** Supervisor recovers a module while other freeze entries are on the stack
+- **WHEN** the supervisor recovers a module while other freeze entries are on the stack
 - **THEN** it removes only its own entry and every other entry remains
 
 #### Scenario: Supervisor restarts a crashed module during a stimulus source-loss freeze
 - **WHEN** the only freeze holder is `gestation` and a module's task has crashed
-- **THEN** Supervisor pushes its own entry, restarts the module and removes only its own entry,
-  leaving the development freeze in place
+- **THEN** the supervisor pushes its own entry, restarts the module and removes only its own entry,
+  leaving the developmental phase freeze in place
 
 #### Scenario: Stale heartbeats are ignored during a stimulus source-loss freeze
 - **WHEN** the only freeze holder is `gestation` and a module's heartbeat is stale
-- **THEN** Supervisor takes no action
+- **THEN** the supervisor takes no action
 
 ### Requirement: Snapshot before restart and at escalation
-Supervisor SHALL take a last-good `ForkManager` snapshot before the first restart attempt
+The supervisor SHALL take a last-good `ForkManager` snapshot before the first restart attempt
 of an incident, and a final snapshot at escalation. Snapshots SHALL contain only
 each module's `serialize()` output (numeric/derived state); no raw sensory data.
 
 #### Scenario: Pre-restart snapshot
-- **WHEN** Supervisor begins recovery for a module (attempt count 0)
+- **WHEN** the supervisor begins recovery for a module (attempt count 0)
 - **THEN** it records a snapshot labeled for that module before the first restart
 
 #### Scenario: Escalation snapshot
-- **WHEN** Supervisor reaches the maximum restart attempts
+- **WHEN** the supervisor reaches the maximum restart attempts
 - **THEN** it records a final snapshot before shutting modules down
 
 ### Requirement: Restart ladder
-Supervisor SHALL attempt a light restart (recreate the module's own tasks via
+The supervisor SHALL attempt a light restart (recreate the module's own tasks via
 `BaseModule.restart`) for modules that hold no external resources, and a heavy
 rebuild (reconstruct via the boot factory, swap via `ModuleRegistry.replace`,
 re-run post-build wiring, then `ForkManager.restore` the last-good state) for
 modules whose `holds_external_resources()` is true. A heavy rebuild SHALL shut the
 old instance down before constructing the new one, and SHALL re-fetch any sibling
-references (e.g. Sleep's episodic memory/affect/world model) from the registry.
+references (e.g. the sleep module's episodic memory, affect and world model modules) from the registry.
 
 #### Scenario: Light restart for a pure module
-- **WHEN** Supervisor restarts a module whose `holds_external_resources()` is false
+- **WHEN** the supervisor restarts a module whose `holds_external_resources()` is false
 - **THEN** it calls the module's `restart()` and re-assesses liveness
 
 #### Scenario: Heavy rebuild for a resource-holding module
-- **WHEN** Supervisor restarts a module whose `holds_external_resources()` is true
+- **WHEN** the supervisor restarts a module whose `holds_external_resources()` is true
 - **THEN** it shuts the old instance down, builds a fresh instance via the boot
   factory, swaps it in via `ModuleRegistry.replace`, re-runs post-build wiring, and
   restores the last-good snapshot into it
 
 ### Requirement: Escalation after repeated failures
-Supervisor SHALL escalate after `max_restart_attempts` (default 5) failed restarts of the
+The supervisor SHALL escalate after `max_restart_attempts` (default 5) failed restarts of the
 same module in one incident. Escalation SHALL take a final snapshot, shut down all
 modules cleanly, write `state/cycle/escalation.json` with operational fields only
 (`escalated`, `module`, `attempts`, `snapshot_id`, `escalated_at`, operator
 `message`), and cause the cycle process to exit non-zero so it does not auto-retry.
-Supervisor SHALL NOT reboot the machine; the escalation message SHALL instruct the
+The supervisor SHALL NOT reboot the machine; the escalation message SHALL instruct the
 operator to reboot and restart. A clean boot SHALL clear any prior escalation
 record.
 
 #### Scenario: Five failures escalate
 - **WHEN** a module fails restart five times in one incident
-- **THEN** Supervisor writes `escalation.json`, shuts down all modules, and signals a
+- **THEN** the supervisor writes `escalation.json`, shuts down all modules, and signals a
   non-zero process exit
 
 #### Scenario: Escalation does not auto-retry
-- **WHEN** Supervisor has escalated
+- **WHEN** the supervisor has escalated
 - **THEN** the process exits and does not itself restart the modules or the machine
 
 #### Scenario: Clean boot clears escalation
@@ -133,21 +133,21 @@ record.
 - **THEN** any existing `escalation.json` is cleared
 
 ### Requirement: Incident events on the bus
-Supervisor SHALL publish incident events to a `spot.out` stream: `spot.status` events
+The supervisor SHALL publish incident events to a `spot.out` stream: `spot.status` events
 carrying the current state (`ok` | `recovery` | `critical`) with the affected
 module, attempt count, and a human message; and `spot.log` events carrying a
 level and a human-readable line as the incident progresses. These events SHALL
-contain only operational data (no sensory content) so the Dashboard diagnostics stream
+contain only operational data (no sensory content) so the dashboard diagnostics stream
 can fan them out.
 
 #### Scenario: Recovery publishes status and log
-- **WHEN** Supervisor begins recovering a module
+- **WHEN** the supervisor begins recovering a module
 - **THEN** it publishes a `spot.status` event with state `recovery` and one or more
   `spot.log` events describing the attempt
 
 ### Requirement: Durable incident logging
 
-Supervisor SHALL write a durable, append-only, structured incident log capturing one
+The supervisor SHALL write a durable, append-only, structured incident log capturing one
 JSONL record per lifecycle transition (detect, freeze, snapshot, restart, escalate).
 All records belonging to one incident SHALL share a generated `incident_id` (UUID4).
 Every record SHALL carry `ts` (ISO-8601 UTC), `incident_id`, `module`, and
@@ -161,13 +161,13 @@ reasons. The `clear_escalation()` call in the cycle entrypoint SHALL NOT touch t
 incident log.
 
 The incident log is governed by a `[spot.incident_log]` config block. It SHALL
-ship with `enabled = true` so any operator who enables Supervisor automatically receives
+ship with `enabled = true` so any operator who enables the supervisor automatically receives
 the log. Because `[spot].enabled` ships `false`, the entire feature is dormant in
 the shipped all-off configuration; no module enables are added or changed.
 
 #### Scenario: Log survives reboot
 
-- **WHEN** Supervisor records incident transitions across multiple runs
+- **WHEN** the supervisor records incident transitions across multiple runs
 - **THEN** previous runs' JSONL files remain in `state/cycle/incidents/`
   after a clean boot
 - **AND** `clear_escalation()` at boot does not delete or truncate incident files
@@ -189,13 +189,13 @@ the shipped all-off configuration; no module enables are added or changed.
 
 ### Requirement: Crash cause capture
 
-At fault detection, Supervisor SHALL capture the exception from `t.exception()` and
+At fault detection, the supervisor SHALL capture the exception from `t.exception()` and
 include its repr in the `detect` transition record rather than discarding it. The
 captured repr SHALL be scrubbed of operator filesystem paths before write, replacing
 matching tokens with the sentinel `<PATH>`. For hung modules (no completed task
 exception), `exception_repr` SHALL be `null`.
 
-Supervisor SHALL also read `BaseModule.health()` at detection time and include
+The supervisor SHALL also read `BaseModule.health()` at detection time and include
 `heartbeat_age_s`, `tasks_failed`, and `tasks_total` in the detect record. A
 monotonic `poll_index` counter SHALL be included to identify which poll cycle the
 detection occurred in.
@@ -205,7 +205,7 @@ unchanged; the detect record is a durable side-channel, not a replacement.
 
 #### Scenario: Dead module — exception captured
 
-- **WHEN** Supervisor detects a module as `dead` because a task finished with an exception
+- **WHEN** the supervisor detects a module as `dead` because a task finished with an exception
 - **THEN** the `detect` transition record carries `fault_class = "dead"` and a
   non-null `exception_repr` containing the scrubbed repr of that exception
 
@@ -219,13 +219,13 @@ unchanged; the detect record is a durable side-channel, not a replacement.
 
 #### Scenario: Hung module — no exception repr
 
-- **WHEN** Supervisor detects a module as `hung` (stale heartbeat, task still running)
+- **WHEN** the supervisor detects a module as `hung` (stale heartbeat, task still running)
 - **THEN** the `detect` transition record carries `fault_class = "hung"` and
   `exception_repr = null`
 
 #### Scenario: Health metrics present
 
-- **WHEN** Supervisor emits a `detect` record
+- **WHEN** the supervisor emits a `detect` record
 - **THEN** the record carries `heartbeat_age_s`, `tasks_failed`, and `tasks_total`
   read from `BaseModule.health()` at the moment of detection
 
@@ -233,7 +233,7 @@ unchanged; the detect record is a durable side-channel, not a replacement.
 
 ### Requirement: Snapshot outcome recording
 
-Supervisor SHALL write a `snapshot` transition record after each `ForkManager.snapshot()`
+The supervisor SHALL write a `snapshot` transition record after each `ForkManager.snapshot()`
 call. The record SHALL include: `snapshot_id`, `byte_size` (total bytes of the
 snapshot bundle), `modules_serialized_ok` (count of modules that serialized without
 error), `modules_serialize_errored` (list of module names that raised in
@@ -267,7 +267,7 @@ than buried inside the snapshot bundle JSON.
 
 ### Requirement: Restart transition recording
 
-Supervisor SHALL write a `restart` transition record after each restart attempt,
+The supervisor SHALL write a `restart` transition record after each restart attempt,
 capturing: `attempt` (1-based), `max_attempts`, `path` (`"light"` or `"heavy"`),
 `outcome` (`"recovered"` or `"failed"`), `latency_ms`, `last_good_restored`
 (whether `ForkManager.restore` was called), and `post_assess` (the liveness
@@ -293,7 +293,7 @@ assessment after restart).
 The incident log SHALL be encrypted at rest when `[security.state_encryption]`
 is enabled, using the same `StateEncryptor` path (`get_state_encryptor().encrypt_text`)
 that `AsyncJsonlSink._encode_line` already calls. No additional encryption code
-is required in Supervisor.
+is required in the supervisor.
 
 The incident log retention purge SHALL be unconditionally disabled (equivalent to
 `retention_days=0` on `AsyncJsonlSink`). The 30-day default purge behaviour of
@@ -322,19 +322,19 @@ auto-deletion.
 
 ### Requirement: Structured incident bus event per lifecycle transition
 
-Supervisor SHALL publish a structured `spot.incident` bus event at each lifecycle
+The supervisor SHALL publish a structured `spot.incident` bus event at each lifecycle
 transition (detect, freeze, snapshot, restart, escalate), IN ADDITION to — and
 never in place of — the existing ephemeral `spot.status` / `spot.log` events and
-the durable `state/cycle/incidents/` log. The event SHALL be published via Supervisor's
+the durable `state/cycle/incidents/` log. The event SHALL be published via the supervisor's
 existing bus publish path with `source = "spot"` and `type = "spot.incident"`,
 and SHALL carry the incident's `incident_id`, the `transition`, the affected
 `module`, the fault metadata (`fault_class` for detect; `fault_type` for freeze),
 the transition-specific operational fields already recorded in the durable
 incident record (freeze reason; snapshot id/byte size; restart path / outcome /
 latency / restored-checkpoint flag; escalate attempts / outcome / final snapshot
-id), and a cycle position. The cycle position SHALL always include Supervisor's
+id), and a cycle position. The cycle position SHALL always include the supervisor's
 `poll_index` and SHALL include the cycle's `tick_index` when a tick-index
-provider is available to Supervisor (a best-effort callable wired at construction); a
+provider is available to the supervisor (a best-effort callable wired at construction); a
 `tick_index` SHALL NOT be fabricated when no provider is available. Any free-text
 field SHALL be scrubbed of operator filesystem paths (the same scrubber used by
 the durable incident log) before publish. The durable incident log and the
@@ -344,19 +344,19 @@ the durable incident log) before publish. The durable incident log and the
 
 - **WHEN** a `dead` module is detected, frozen, snapshotted, and restarted in one
   poll
-- **THEN** Supervisor publishes a `spot.incident` event with `source = "spot"` for the
+- **THEN** the supervisor publishes a `spot.incident` event with `source = "spot"` for the
   `detect`, `freeze`, `snapshot`, and `restart` transitions, each carrying the
   same `incident_id`, the `module`, and the transition-specific fields
 
 #### Scenario: Ephemeral status/log events are still published
 
-- **WHEN** Supervisor handles an incident
+- **WHEN** the supervisor handles an incident
 - **THEN** the existing `spot.status` and `spot.log` events are still published
   alongside the new `spot.incident` events (none is replaced)
 
 #### Scenario: Cycle position is included
 
-- **WHEN** Supervisor is constructed with a tick-index provider and publishes a
+- **WHEN** the supervisor is constructed with a tick-index provider and publishes a
   `spot.incident` event
 - **THEN** the event payload carries `poll_index` and a `tick_index` read from
   the provider
@@ -375,7 +375,7 @@ the durable incident log) before publish. The durable incident log and the
 The research event log SHALL capture `spot.incident` bus events (and the
 `spot.incident.*` subtype family) into privacy-filtered records under the
 export-eligible `data/evaluation/research_events/` directory, so that a run whose
-data was collected across a Supervisor freeze carries the annotation. Each captured
+data was collected across a supervisor freeze carries the annotation. Each captured
 record SHALL carry the `incident_id` (joining it to the durable incident
 provenance) and SHALL be stamped with the active run's `run_id` (joining it to
 the run) when a run context is set. The record SHALL include only the allowlisted
@@ -404,7 +404,7 @@ SHALL NOT include any content field.
   field (per the observer's allowlist-by-construction privacy filter)
 
 ### Requirement: Supervisor selftest against a synthetic probe
-Supervisor SHALL provide a selftest that constructs a scratch Supervisor from the given `[spot]` section, with snapshot and incident paths redirected to a temporary directory, registers one synthetic probe module, induces a failure in it, and passes only if Supervisor detects the failure, freezes, snapshots the probe, restarts it, releases the freeze, and writes an incident record within a bounded window. The selftest SHALL NOT import or construct any entity module, read or write entity state, or act on a live supervised target, and SHALL remove its scratch directory when it finishes.
+The supervisor SHALL provide a selftest that constructs a scratch supervisor from the given `[spot]` section, with snapshot and incident paths redirected to a temporary directory, registers one synthetic probe module, induces a failure in it, and passes only if the supervisor detects the failure, freezes, snapshots the probe, restarts it, releases the freeze, and writes an incident record within a bounded window. The selftest SHALL NOT import or construct any entity module, read or write entity state, or act on a live supervised target, and SHALL remove its scratch directory when it finishes.
 
 #### Scenario: Healthy Supervisor passes
 - **WHEN** the selftest runs against a valid `[spot]` section
@@ -423,12 +423,12 @@ Supervisor SHALL provide a selftest that constructs a scratch Supervisor from th
 - **THEN** its scratch directory no longer exists
 
 ### Requirement: Loss of supervision escalates during an unattended run
-When the cycle runs in unattended mode and Supervisor's supervision task exits for any reason other than shutdown, the cycle SHALL run Supervisor's escalation — final snapshot, shutdown of every module, and `escalation.json` — and SHALL send a caretaker notice. In operator-present and research modes this requirement SHALL NOT apply.
+When the cycle runs in unattended mode and the supervisor's supervision task exits for any reason other than shutdown, the cycle SHALL run the supervisor's escalation — final snapshot, shutdown of every module, and `escalation.json` — and SHALL send a caretaker notice. In operator-present and research modes this requirement SHALL NOT apply.
 
 #### Scenario: Supervisor task crashes unattended
-- **WHEN** Supervisor's supervision task raises during an unattended run
+- **WHEN** the supervisor's supervision task raises during an unattended run
 - **THEN** the cycle escalates, the entity is preserved and shut down, and a caretaker notice is sent
 
 #### Scenario: Operator-present boot unaffected
-- **WHEN** Supervisor's supervision task exits during an operator-present boot
+- **WHEN** the supervisor's supervision task exits during an operator-present boot
 - **THEN** the unattended escalation is not applied and behavior is unchanged

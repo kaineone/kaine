@@ -1,7 +1,7 @@
 # entity-identity Specification
 
 ## Purpose
-This capability gives each entity one persistent, opaque identity and lineage that survives restarts, forks, preservation and revival, so every lifecycle decision can tell which being it concerns and whether it has lived before.
+This capability gives each entity one persistent, opaque identity and lineage that survives restarts, forks, preservation and revival, so every lifecycle decision can tell which entity it concerns and whether it has lived before.
 
 ## Requirements
 
@@ -17,19 +17,19 @@ KAINE SHALL give each entity one `EntityIdentity`, holding an opaque `entity_id`
 - **THEN** saving raises an error and the file is unchanged
 
 ### Requirement: An identity is minted only at a fresh spawn
-The cycle SHALL mint a new identity only when the state tree has no identity file and none of its own lived artifacts: the developmental stage file, the World model world-model checkpoint, the Sleep consolidation-divergence record and the perception desired-state. Fork snapshots and preservation bundles under the state tree SHALL NOT count as the tree's own lived artifacts. A state tree with own lived artifacts but no identity file SHALL receive a legacy identity derived deterministically from those artifacts, persisted at once. Revival, restart and merge SHALL NOT mint.
+The cycle SHALL mint a new identity only when the state tree has no identity file and none of its own lived artifacts: the developmental stage file, the world-model checkpoint, the sleep module's consolidation-divergence record and the perception desired-state. Fork snapshots and preservation bundles under the state tree SHALL NOT count as the tree's own lived artifacts. A state tree with own lived artifacts but no identity file SHALL receive a legacy identity derived deterministically from those artifacts, persisted at once. Revival, restart and merge SHALL NOT mint.
 
 #### Scenario: Fresh spawn
 - **WHEN** the cycle starts on a state tree with no identity file and no prior lived history
 - **THEN** a minted identity with empty lineage is saved
 
 #### Scenario: Lived tree without an identity
-- **WHEN** the cycle starts on a state tree with a World model checkpoint and no identity file
+- **WHEN** the cycle starts on a state tree with a checkpoint from the world model module and no identity file
 - **THEN** a legacy identity is saved, and starting again yields the same `entity_id`
 
 #### Scenario: Fresh spawn beside other entities
 - **WHEN** the cycle starts on a state tree with no identity file and none of its own lived artifacts, while `state/forks` and `state/preservation` hold other entities' snapshots and bundles
-- **THEN** a minted identity is saved and the entity resolves to development
+- **THEN** a minted identity is saved and the entity resolves to the developmental phase
 
 ### Requirement: Snapshots carry the identity and forks record lineage
 Fork and preservation snapshots SHALL record the entity's identity in their metadata. A fork SHALL receive a newly minted `entity_id` whose lineage is the parent's lineage followed by the parent's `entity_id`. A merge SHALL keep the target entity's identity and record the merged-in entity's `entity_id` as `merged_from_entity`.
@@ -53,7 +53,7 @@ Revival SHALL restore the identity recorded in the bundle. A bundle without an i
 The lineage-scoped history query SHALL report prior lived history when any fork snapshot or preservation record carries the entity's `entity_id` or an ID in its lineage, reading metadata and manifests only. Records belonging to other entities, and records without an identity, SHALL NOT count for an entity with a known identity. An entity whose identity cannot be determined SHALL count as having lived.
 
 #### Scenario: Another entity's bundle
-- **WHEN** the state tree holds a preservation bundle of a different being and nothing of this entity's lineage
+- **WHEN** the state tree holds a preservation bundle of a different entity and nothing of this entity's lineage
 - **THEN** the query reports no prior history
 
 #### Scenario: Unknown identity

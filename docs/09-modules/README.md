@@ -4,7 +4,7 @@ KAINE is built from modules that publish events to the bus, compete for access t
 
 ## Module roster
 
-The shipped `[modules]` block in [`config/kaine.toml`](../../config/kaine.toml) has 17 flags: 14 cognitive modules, 2 embodiment helpers (Embodiment and Perceptual locus), and `echo`, which is permanent test infrastructure.
+The shipped `[modules]` block in [`config/kaine.toml`](../../config/kaine.toml) has 17 flags: 14 cognitive modules, 2 embodiment helpers (the embodiment and perceptual locus modules), and `echo`, which is permanent test infrastructure.
 
 | Module | Role | Enabled in `thesis_test` |
 |---|---|---|
@@ -28,13 +28,13 @@ The shipped `[modules]` block in [`config/kaine.toml`](../../config/kaine.toml) 
 
 `echo` must stay disabled in production. `mundus` also needs `KAINE_MUNDUS_OPERATOR_APPROVED=1` before it leaves the default stub body.
 
-Vision, Audition, Interoception, and Sequence are the four predictive processors. In the base-thesis profile each one scales its prediction error by its own recent errors, reports an intensity graded by that ratio, and marks every report with a boolean `alert`. See each module's page and [The global workspace](../08-cognitive-cycle/global-workspace.md) for how the reports compete.
+The vision, audition, interoception, and sequence modules are the four predictive processors. In the base-thesis profile each one scales its prediction error by its own recent errors, reports an intensity graded by that ratio, and marks every report with a boolean `alert`. See each module's page and [The global workspace](../08-cognitive-cycle/global-workspace.md) for how the reports compete.
 
 ## Enabling and disabling modules
 
-Every module is controlled by a flag under `[modules]` in `config/kaine.toml`. The shipped `config/kaine.toml` has every module flag off, but when no profile is selected the loader applies the base-thesis `thesis_test` profile automatically (`kaine/config.py`). The operator file merges last, and the first-run wizard writes its own `[modules]` table there, so a wizard-configured install runs the wizard's module set instead (see [Module defaults](../appendix-a-configuration/README.md#module-defaults)). Without an operator `[modules]` table, the entity runs the `thesis_test` module set. The workspace (Workspace) and action selection (Action selection) are always on and have no module flags.
+Every module is controlled by a flag under `[modules]` in `config/kaine.toml`. The shipped `config/kaine.toml` has every module flag off, but when no profile is selected the loader applies the base-thesis `thesis_test` profile automatically (`kaine/config.py`). The operator file merges last, and the first-run wizard writes its own `[modules]` table there, so a wizard-configured install runs the wizard's module set instead (see [Module defaults](../appendix-a-configuration/README.md#module-defaults)). Without an operator `[modules]` table, the entity runs the `thesis_test` module set. The workspace and the action selection module are always on and have no module flags.
 
-Modules that are off in `thesis_test` are built and tested in isolation and held. The module-addition study (the code calls it the ignition study, see [The module-ignition study](../15-experiments/ignition-study.md)) adds six of them one at a time, in the order Episodic memory, World model, Planning, Self-model, Social cognition, Vocal. Effectors, Perceptual locus, and Embodiment join through an explicit order once an effector, a body, or an alternative sensor feed is attached, since on the reference host they would have nothing to work with.
+Modules that are off in `thesis_test` are built and tested in isolation and held. The module-addition study (the code calls it the ignition study, see [The module-ignition study](../15-experiments/ignition-study.md)) adds six of them one at a time, in the order episodic memory, world model, planning, self-model, social cognition, vocal modules. The effectors, perceptual locus and embodiment modules join through an explicit order once an effector, a body, or an alternative sensor feed is attached, since on the reference host they would have nothing to work with.
 
 ## The base-thesis profile
 
@@ -51,7 +51,7 @@ thymos = true
 hypnos = true
 ```
 
-The profile also turns on Vision foveation, Audition's general acoustic path, and Sequence's forward prediction, keeps speech-to-text off, and selects the seeded perception feed. The language organ samples at the shipped temperature; study configurations set greedy decoding.
+The profile also turns on the vision module's foveation, the audition module's general acoustic path, and the sequence module's forward prediction, keeps speech-to-text off, and selects the seeded perception feed. The language organ samples at the shipped temperature; study configurations set greedy decoding.
 
 With no profile selected, `thesis_test` is loaded automatically, so a bare `python -m kaine.cycle` already uses it. You can also request it explicitly:
 

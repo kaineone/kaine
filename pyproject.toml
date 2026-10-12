@@ -45,7 +45,7 @@ nexus = [
 nvidia = [
     "pynvml>=13.0.1,<14",
 ]
-# Vision: the vision encoder (transformers, Pillow) and the live camera / playlist
+# the vision module: the vision encoder (transformers, Pillow) and the live camera / playlist
 # video reader (OpenCV). Lazy-imported.
 vision = [
     "opencv-python-headless>=5.0.0.93,<6",
@@ -67,7 +67,7 @@ test = [
     # tests/test_import_boundary_contracts.py). See docs/02-architecture/boundaries.md.
     "import-linter>=2.15",
 ]
-# Real-browser layout tests for the Dashboard dashboard (tests/test_nexus_detail_layout.py).
+# Real-browser layout tests for the dashboard (tests/test_nexus_detail_layout.py).
 # Kept out of `test` because the runtime images install that extra and a browser
 # driver does not belong there. The tests drive the system Google Chrome
 # (Playwright channel "chrome") and skip when no browser is available.
@@ -90,7 +90,7 @@ audio = [
     "librosa>=0.10,<1",
     "av>=18.1.0,<19",  # PyAV — playlist-audio track decode for the perception feed (PlaylistAudioStream)
 ]
-# Temporally-native InternVideo-Next clip encoder for Vision
+# Temporally-native InternVideo-Next clip encoder for the vision module
 # (topos-temporal-video-encoder). Required only when
 # [topos].encoder_backend = "internvideo_next" (the shipped default) AND the
 # encoder is actually loaded — the vendored modeling code (external/
@@ -120,7 +120,7 @@ internvideo-flash = [
 # decode playlist audio, mic/camera for live mode). Self-referential extras are
 # valid; this one name provisions both sense surfaces for a research install.
 perception = ["kaine[audio]", "kaine[vision]"]
-# Active-inference reasoning engine for Planning (pymdp 1.0, JAX).
+# Active-inference reasoning engine for the planning module (pymdp 1.0, JAX).
 # Required only when [modules].nous = true. Lazy-imported by the engine; the
 # build/test suite stays green without it (module tests use a FakeEngine). The
 # REAL package is `inferactively-pymdp` (import name `pymdp`); the bare `pymdp`
@@ -130,7 +130,7 @@ reasoning = [
     "inferactively-pymdp>=1.0.4",
     "jax[cpu]>=0.10.2",
 ]
-# Voice-alignment DPO training stack (Sleep sleep-cycle phase).
+# Voice-alignment DPO training stack (the sleep module's sleep-cycle phase).
 # Required only when [hypnos.voice_alignment].enabled = true AND
 # KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1. Lazy-imported by the
 # trainer; sleep cycle still completes cleanly if missing.
@@ -141,20 +141,20 @@ training = [
     "peft>=0.21.0,<1",
     "datasets>=2.20,<5",
 ]
-# DreamerV3 RSSM world model for World model (paper §3.3.2).
+# DreamerV3 RSSM world model for the world model module (paper §3.3.2).
 # Required only when [phantasia].backend = "dreamerv3". Lazy-imported by the
 # world-model adapter; the build/test suite stays green without it (module
 # tests use FakeWorldModel). JAX is pinned CPU-only — KAINE runs no cloud or
 # CUDA at runtime; jax[cpu] logs a one-line GPU-fallback notice (expected).
 # The vendored RSSM core (external/dreamerv3, path b — see external/dreamerv3/
 # UPSTREAM) needs only jax; chex/einops are declared for upstream-toolchain
-# parity. Excludes any actor/critic/return heads — World model is world-model only.
+# parity. Excludes any actor/critic/return heads — the world model module is world-model only.
 worldmodel = [
     "jax[cpu]>=0.10.2",
     "chex>=0.1.92",
     "einops>=0.8.2",
 ]
-# Oscillatory-binding layer for Workspace (oscillatory-layer / paper §3.2).
+# Oscillatory-binding layer for the workspace (oscillatory-layer / paper §3.2).
 # Required only when [oscillator].enabled = true. Lazy-imported by the
 # oscillator; the build/test suite stays green without it (tests use
 # FakeOscillator). CPU-only. scipy supplies the Hilbert transform used by the
@@ -210,7 +210,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# The Dashboard __main__ dependency check deliberately runs before the heavy
+# The dashboard __main__ dependency check deliberately runs before the heavy
 # FastAPI/uvicorn imports so the module can fail fast on a slim host.
 "kaine/nexus/__main__.py" = ["E402"]
 
@@ -363,9 +363,9 @@ type = "forbidden"
 source_modules = ["kaine"]
 forbidden_modules = ["kaine_cl1"]
 
-# The evaluation sidecar observes the bus; it must not reach into Dashboard
+# The evaluation sidecar observes the bus; it must not reach into the dashboard
 # internals (the operator UI). Keeping these decoupled means evaluation can run
-# headless and Dashboard stays a pure presentation seam.
+# headless and the dashboard stays a pure presentation seam.
 [[tool.importlinter.contracts]]
 name = "Evaluation must not import Nexus internals"
 type = "forbidden"
@@ -388,7 +388,7 @@ source_modules = [
     "kaine.lifecycle.welfare_signal",
     # Cross-cutting stdlib-only primitives shared by core, the modules, and the
     # evaluation sidecar alike (atomic JSON state writer, local-service port
-    # registry/probe, the canonical Episodic memory collection-kinds list). They must
+    # registry/probe, the canonical episodic memory collection-kinds list). They must
     # stay dependency-free so any side can reuse them without coupling.
     "kaine.state_io",
     "kaine.storage",
@@ -413,7 +413,7 @@ forbidden_modules = [
 
 # The workspace (global-workspace selection + salience) must NOT reach into the
 # cognitive modules. The salience factors that need module-produced signals
-# (Affect affect for the Affect factor, drives for the goal factor) receive them
+# (the affect module's affect for the affect factor, drives for the goal factor) receive them
 # by dependency injection at cycle assembly — the cycle constructs the real
 # StateModulator / feeds an AffectStateProvider and injects them — so the
 # workspace layer stays free of `kaine.modules`. No ignore_imports: the DI seam

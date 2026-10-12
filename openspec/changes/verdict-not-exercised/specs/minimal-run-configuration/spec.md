@@ -1,7 +1,7 @@
 ## REMOVED Requirements
 
 ### Requirement: Minimal experiment configuration
-**Reason**: The profile served a retired design of the workspace-mediation ablation (Interoception, Sequence and Language with an output-divergence measure). The planned test runs the base-thesis form in the three arms of paper §6.3, and the paper holds that a system limited to substrate telemetry and event timing offers too little diversity for competition to matter.
+**Reason**: The profile served a retired design of the workspace-mediation ablation (the interoception, sequence and language modules with an output-divergence measure). The planned test runs the base-thesis form in the three arms of paper §6.3, and the paper holds that a system limited to substrate telemetry and event timing offers too little diversity for competition to matter.
 **Migration**: Use the base-thesis default (`thesis_test`) and the study configurations of the planned test; enable a reduced set of modules in `config/kaine.operator.toml` when one is needed.
 
 ### Requirement: Workspace capacity forces competition in the minimal set
@@ -17,13 +17,13 @@
 ### Requirement: Minimal build boots without disabled modules
 
 A reduced module set SHALL boot and run the cognitive cycle without any hard
-dependency on disabled modules (Episodic memory, Self-model, Affect, Perceptual locus, Audition, and the
+dependency on disabled modules (the episodic memory, self-model, affect, perceptual locus, audition modules, and the
 rest). Cross-module wiring SHALL degrade cleanly when a module is absent, and a
 disabled module SHALL return when its `[modules]` toggle is flipped back on.
 
 #### Scenario: Clean boot on three modules
 
-- **WHEN** the registry is built with only Interoception, Sequence, and Language enabled
+- **WHEN** the registry is built with only the interoception, sequence, and language modules enabled
 - **THEN** exactly those three modules are registered and no disabled-module
   dependency raises an error
 

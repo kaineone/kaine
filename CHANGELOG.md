@@ -12,9 +12,9 @@ The public brand is **26.06.0a1**; pip normalizes this to `26.6.0a1` (expected).
 
 ### The base-thesis reconfiguration (July 2026)
 - The default configuration became the base-thesis test (#71): six diverse
-  predictive processors (Interoception, Sequence, Vision, Audition, Affect #79/#84,
-  Language) competing through the workspace, everything richer gated off.
-- STT and the conversation surface deactivated by default (#77); Language's
+  predictive processors (the interoception, sequence, vision, audition, affect #79/#84,
+  language module) competing through the workspace, everything richer gated off.
+- STT and the conversation surface deactivated by default (#77); the language module's
   prompt became a neutral state-verbalizer with no roleplay persona (#73);
   interruptible, redirectable utterance landed (#81).
 - Perception drives the workspace: prediction-error salience with
@@ -35,13 +35,13 @@ The public brand is **26.06.0a1**; pip normalizes this to `26.6.0a1` (expected).
   easydict 1.13, unsloth 2026.7.3, chex 0.1.92 (#94).
 - Eleven shipped OpenSpec changes archived; specs reconciled with shipped
   reality under the openspec 1.12 validator (#95, #98).
-- Research-event contract drift fixed — intents, Sequence, the Affect emotion
-  label, and the Vision discontinuity signal now reach the curated research
+- Research-event contract drift fixed — intents, the sequence module, the affect module's emotion
+  label, and the vision discontinuity signal now reach the curated research
   log; a canonical stream registry with reality-anchored drift tests replaced
   three hand-maintained stream lists; [volition].interrupt_threshold wired
   (#96).
 - The pre-boot correctness batch (#97): stacked freeze sources (a
-  welfare-protective pause survives Supervisor recovery), freeze/resume restores
+  welfare-protective pause survives supervisor recovery), freeze/resume restores
   the desired perception flags, speech-liveness guard timeouts and a
   realization-failed audit event, novelty-signature expiry, playlist-audio
   clock resync on producer start, poison-batch-proof cursors, tail-seeded

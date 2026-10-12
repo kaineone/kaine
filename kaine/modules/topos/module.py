@@ -107,7 +107,7 @@ class Topos(BaseModule):
         # Relative alert multiplier: a change (or its normalised analogue) alerts
         # when it reaches change_alert_factor times the module's rolling-window
         # mean. Mirrors the forward-model prediction-error criterion (normalised
-        # >= 2.0, the Sequence convention), so both perceptual-salience paths use
+        # >= 2.0, the sequence module convention), so both perceptual-salience paths use
         # the same embedding-scale-agnostic, self-calibrating rule.
         change_alert_factor: float = 2.0,
         # Live camera (eyes-only). See kaine/modules/topos/live.py.
@@ -182,7 +182,7 @@ class Topos(BaseModule):
         self._capture_enabled = bool(capture_enabled)
         self._source_factory = source_factory
         self._clock = entity_clock or EntityClock()
-        # Adopted accessed broadcasts provide Vision's prediction context (Appendix A.1).
+        # Adopted accessed broadcasts provide the vision module's prediction context (Appendix A.1).
         self._context = BroadcastContext(self._clock.now)
         # Latest broadcast tick and context age when the pending prediction was formed (paper A.8).
         self._prediction_stamp: tuple[Optional[int], Optional[float]] = (None, None)
@@ -243,7 +243,7 @@ class Topos(BaseModule):
         # shipped encoder) is retired; the peripheral gist still drives
         # change/habituation/salience while the fovea is sized by arousal.
 
-        # Sleep sleep flag — suspend forward-model adaptation during sleep.
+        # sleep flag — suspend forward-model adaptation during sleep.
         self._in_hypnos: bool = False
         # Initialize resolves this to the current stream tail via last_entry_id().
         self._hypnos_cursor: str = "$"
@@ -276,9 +276,9 @@ class Topos(BaseModule):
             FoveaPredictor() if self._foveation_enabled else None
         )
         # Injected seams (wired at boot, like the affect / speaking-gate seams).
-        # Vision never imports the workspace: the top-down bias provider returns a
+        # The vision module never imports the workspace: the top-down bias provider returns a
         # saliency-grid-shaped bias map (or None) sourced from the workspace /
-        # Planning / a goal, and the arousal provider returns the current Affect
+        # the planning module / a goal, and the arousal provider returns the current affect module's
         # arousal scalar in [0, 1] that sizes the fovea (Easterbrook narrowing).
         self._top_down_bias_provider: Optional[Any] = None
         self._arousal_provider: Optional[Any] = None
@@ -302,7 +302,7 @@ class Topos(BaseModule):
                 context_dim=CONTEXT_DIM,
             )
 
-        # Seed the sleep cursor from the stream tail before starting the loop,
+        # Seed the sleep module's cursor from the stream tail before starting the loop,
         # otherwise a literal "$" under a non-blocking XREAD never advances.
         self._hypnos_cursor = await self._bus.last_entry_id(_HYPNOS_STREAM)
 
@@ -384,7 +384,7 @@ class Topos(BaseModule):
         """Cumulative alert-level perception counts (perception-drives-salience
         task 4.2): ``reports`` published, ``alerts`` that crossed alert level, and
         the ``alert_rate`` fraction. Makes 'perception actually fired N times'
-        legible to diagnostics / the Dashboard perception panel without re-deriving
+        legible to diagnostics / the dashboard perception panel without re-deriving
         the salience decision off the bus."""
         reports = self._report_count
         return {
@@ -394,21 +394,21 @@ class Topos(BaseModule):
         }
 
     def set_top_down_bias_provider(self, provider: Optional[Any]) -> None:
-        """Inject the workspace→Vision top-down attention channel.
+        """Inject the workspace→vision module top-down attention channel.
 
         ``provider`` is a zero-arg callable returning either ``None`` (no bias
         this tick) or a 2-D saliency bias map; a map whose shape differs from the
-        spatial-saliency grid is resized to the grid before combination. Vision
+        spatial-saliency grid is resized to the grid before combination. The vision module
         never imports the workspace — this seam is wired at boot.
         """
         self._top_down_bias_provider = provider
 
     def set_arousal_provider(self, provider: Optional[Any]) -> None:
-        """Inject the Affect arousal channel that sizes the fovea.
+        """Inject the affect module's arousal channel that sizes the fovea.
 
         ``provider`` is a zero-arg callable returning the current arousal scalar
         in [0, 1]. This is the distinct *visual* coupling (Easterbrook
-        narrowing), NOT the Workspace salience-selection window.
+        narrowing), NOT the workspace salience-selection window.
         """
         self._arousal_provider = provider
 
@@ -646,7 +646,7 @@ class Topos(BaseModule):
 
             # Alert on EITHER a surprising forward-model prediction error OR a
             # self-calibrating perceptual discontinuity — both relative to their
-            # own rolling baselines (the Sequence `normalised >= 2.0` convention),
+            # own rolling baselines (the sequence module's `normalised >= 2.0` convention),
             # so salience is stimulus-driven prediction error, not a constant. The
             # prediction-error threshold stays fixed at the proven 2.0; the tunable
             # change_alert_factor governs the change-detector path.
@@ -664,7 +664,7 @@ class Topos(BaseModule):
             self._alert_count += 1
 
         # Dev-gated preview tap (LAST thing, after all real perception work):
-        # mirror this frame as a single in-memory JPEG so a Dashboard diagnostic can
+        # mirror this frame as a single in-memory JPEG so a dashboard diagnostic can
         # show what the entity currently sees. No-op unless KAINE_PERCEPTION_PREVIEW
         # is set; encodes to a BytesIO (never a file); wrapped so it can never
         # break the perception path. The single slot is overwritten each frame.
@@ -679,7 +679,7 @@ class Topos(BaseModule):
             log.debug("topos preview tap failed (non-fatal)", exc_info=True)
 
         # A report without a defined error publishes none, so consumers such as
-        # Affect do not pool a made-up 0.
+        # the affect module do not pool a made-up 0.
         published_error: Optional[float] = (
             None
             if skipped or not getattr(self._forward_model, "last_error_defined", True)
@@ -711,7 +711,7 @@ class Topos(BaseModule):
             "entity_time_s": entity_time_s,
             "awake": not self._in_hypnos,
             # Whether this report crossed alert level (perception-drives-salience):
-            # lets the Dashboard perception panel and off-bus analysis count stimulus-
+            # lets the dashboard perception panel and off-bus analysis count stimulus-
             # driven perceptual events without re-deriving the salience decision.
             "alert": alert,
         }
@@ -808,7 +808,7 @@ class Topos(BaseModule):
                 live_mean_error,
                 entity_time_s=entity_time_s,
                 # Wakefulness as it was at the report: the forward model is suspended
-                # exactly while Sleep holds the processor asleep.
+                # exactly while the sleep module holds the processor asleep.
                 awake=not suspended,
                 suspended=suspended,
             )
@@ -907,7 +907,7 @@ class Topos(BaseModule):
         return state
 
     def deserialize(self, state: dict[str, Any]) -> None:
-        # Encoder identity is immutable per Vision instance; just note any
+        # Encoder identity is immutable per vision module instance; just note any
         # divergence in the log for forensic value.
         recorded = state.get("encoder_model_id")
         if recorded and recorded != self._encoder.model_id:

@@ -182,7 +182,7 @@ async def test_bundle_without_gestation_files_restores_nothing(tmp_path, eidolon
 @pytest.mark.asyncio
 async def test_gestation_files_travel_encrypted(tmp_path, eidolon, monkeypatch):
     # The key comes from the environment, as in production; no skip: an
-    # encrypted bundle must carry and return the development progress.
+    # encrypted bundle must carry and return the developmental progress.
     monkeypatch.setenv(
         "KAINE_STATE_KEY", base64.b64encode(os.urandom(32)).decode("ascii")
     )

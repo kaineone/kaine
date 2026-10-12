@@ -12,7 +12,7 @@ from kaine.bus.errors import EventValidationError, ReservedStreamError
 
 WORKSPACE_STREAM = "workspace.broadcast"
 SYNEIDESIS_SOURCE = "syneidesis"
-# Audio channels whose voices are the operator's (shared by Action selection, Social cognition and Sequence).
+# Audio channels whose voices are the operator's (shared by the action selection, social cognition and sequence modules).
 OPERATOR_SOURCES: tuple[str, ...] = ("live_mic", "microphone", "remote")
 
 

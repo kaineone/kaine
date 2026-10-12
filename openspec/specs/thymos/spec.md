@@ -1,12 +1,12 @@
 # affect Specification
 
 ## Purpose
-Affect is KAINE's affect module. This capability covers its dimensional affect state and homeostatic drift, appraisal into categorical emotions, its four drives, the goal ledger and goal relevance, and the salience multiplier it gives Workspace.
+The affect module is KAINE's affect module. This capability covers its dimensional affect state and homeostatic drift, appraisal into categorical emotions, its four drives, the goal ledger and goal relevance, and the salience multiplier it gives the workspace.
 
 ## Requirements
 
 ### Requirement: Dimensional state with homeostatic drift
-Affect SHALL maintain a `DimensionalState` containing `valence`
+The affect module SHALL maintain a `DimensionalState` containing `valence`
 (float in `[-1, 1]`), `arousal` (float in `[0, 1]`), and `dominance`
 (float in `[-1, 1]`). On every internal tick the state SHALL drift
 toward its configured baseline by a configurable fraction
@@ -24,7 +24,7 @@ range for each dimension.
 - **THEN** the resulting state has `arousal == 1.0`
 
 ### Requirement: Scherer CPM five-check appraisal produces categorical emotions
-Affect SHALL run an appraisal sequence implementing Scherer's
+The affect module SHALL run an appraisal sequence implementing Scherer's
 Component Process Model: five callables in order (novelty,
 intrinsic_pleasantness, goal_significance, coping_potential,
 norm_compatibility), each returning a score in `[-1, 1]`. The
@@ -47,12 +47,12 @@ emotions via a pure function `classify(scores) -> CategoricalEmotion`:
 - **THEN** the returned emotion is `CategoricalEmotion.NEUTRAL`
 
 ### Requirement: Four drive states with build, threshold, and hysteresis
-Affect SHALL maintain four drive accumulators: `curiosity`,
+The affect module SHALL maintain four drive accumulators: `curiosity`,
 `boredom`, `social_drive`, `restlessness`. Each SHALL be a float in
 `[0, 1]`. Each `tick(dt, signals)` SHALL increment the drive by its
 configured build rate (modulated by the relevant signal) and decay it
 toward 0 by its decay rate. When a drive crosses its threshold,
-Affect SHALL publish a `thymos.drive` event at alert salience. The
+The affect module SHALL publish a `thymos.drive` event at alert salience. The
 drive SHALL only re-fire after dropping below `threshold * 0.9`
 (hysteresis) — no event storms from a value oscillating around the
 threshold.
@@ -70,7 +70,7 @@ threshold.
 - **THEN** no additional `thymos.drive` event is published
 
 ### Requirement: Goal ledger supports add/complete/abandon and relevance scoring
-Affect SHALL expose a `GoalLedger` with `add(description, priority)`
+The affect module SHALL expose a `GoalLedger` with `add(description, priority)`
 returning a goal id, plus `complete(id)`, `abandon(id)`, and
 `relevance(event) -> float`. Each lifecycle change SHALL publish a
 `thymos.goal` event. `relevance` SHALL return a float in `[0, 1]`
@@ -90,7 +90,7 @@ event's source/type/payload string, weighted by goal priority.
   from the completed goal
 
 ### Requirement: ThymosModulator exposes salience multiplier to Workspace
-Affect SHALL expose an instance implementing Workspace's existing
+The affect module SHALL expose an instance implementing the workspace's existing
 `ThymosModulator` protocol (`async modulate(event) -> float in
 [0, 1]`). The returned multiplier SHALL be a function of the current
 dimensional state — at least, higher arousal SHALL produce a strictly
@@ -102,9 +102,9 @@ larger multiplier than lower arousal for the same event.
 - **THEN** the second call returns a strictly greater value
 
 ### Requirement: Affective reset entry point for Sleep
-Affect SHALL expose `async affective_reset()` that snaps the
+The affect module SHALL expose `async affective_reset()` that snaps the
 dimensional state to its configured baseline and decays every drive
-to zero in a single call. Phase 6 Sleep calls this during sleep.
+to zero in a single call. Phase 6 the sleep module calls this during sleep.
 
 #### Scenario: Reset restores baseline and zeroes drives
 - **WHEN** state is `valence=0.7, arousal=0.8` and a drive is at 0.9,
@@ -118,7 +118,7 @@ with default values for `baseline_valence`, `baseline_arousal`,
 `baseline_dominance`, `drift_rate_per_s`, per-drive build/decay/
 thresholds, appraisal weights, `publish_interval_s`,
 `baseline_salience`, and `alert_salience`. `[modules].thymos = false`
-SHALL keep first boot from auto-registering Affect.
+SHALL keep first boot from auto-registering the affect module.
 
 #### Scenario: kaine.toml carries defaults
 - **WHEN** an operator inspects `config/kaine.toml`
@@ -128,14 +128,14 @@ SHALL keep first boot from auto-registering Affect.
 ### Requirement: thymos.emotion event discloses unavailable appraisal dimensions
 
 The `thymos.emotion` event payload SHALL carry `"norm_compatibility_available": false`
-until Self-model norm signals are wired into the appraisal pipeline.  While
+until the self-model module's norm signals are wired into the appraisal pipeline.  While
 `norm_compatibility_available` is false, the DISGUST classification branch is
 unreachable by design.
 
 #### Scenario: norm_compatibility not wired
 
 - **WHEN** a `thymos.emotion` event is published
-- **AND** the Self-model norm signal is not integrated
+- **AND** the self-model module's norm signal is not integrated
 - **THEN** the payload carries `"norm_compatibility_available": false`
 - **AND** downstream consumers MUST NOT interpret the numeric norm value as a real measurement
 
@@ -147,12 +147,12 @@ The `thymos.emotion` event payload SHALL carry `goal_significance_method`, namin
 
 #### Scenario: goal_significance is a proxy
 
-- **WHEN** a `thymos.emotion` event is published by a Affect assembled into the cycle with no active goals
+- **WHEN** a `thymos.emotion` event is published by the affect module assembled into the cycle with no active goals
 - **THEN** the payload carries `"goal_significance_method": "drive_relevance_v1"`
 
 #### Scenario: No table
 
-- **WHEN** a `thymos.emotion` event is published by a Affect that was given no drive-to-source table and holds no active goals
+- **WHEN** a `thymos.emotion` event is published by the affect module that was given no drive-to-source table and holds no active goals
 - **THEN** the payload carries `"goal_significance_method": "unavailable"` and `goal_significance` is `0.0`
 
 ### Requirement: GoalLedger.relevance returns zero with no active goals
@@ -181,18 +181,18 @@ traces rather than silently doing nothing every tick.
 - **AND** subsequent calls do not repeat the message
 
 ### Requirement: Goals survive preservation
-Affect SHALL include its goal ledger in its serialized state — each goal's id, description, priority, state, and created and completed times — and SHALL restore it on deserialize, so a revived entity holds the goals it held when preserved. A restore SHALL NOT publish goal lifecycle events. Invalid goal entries SHALL be dropped with a log, and the rest SHALL load.
+The affect module SHALL include its goal ledger in its serialized state — each goal's id, description, priority, state, and created and completed times — and SHALL restore it on deserialize, so a revived entity holds the goals it held when preserved. A restore SHALL NOT publish goal lifecycle events. Invalid goal entries SHALL be dropped with a log, and the rest SHALL load.
 
 #### Scenario: Goals round-trip
-- **WHEN** Affect holds an active, a completed and an abandoned goal and is serialized and restored into a fresh Affect
+- **WHEN** the affect module holds an active, a completed and an abandoned goal and is serialized and restored into a fresh affect module
 - **THEN** the restored ledger holds the same three goals with the same ids, states and priorities, and relevance scoring counts only the active one
 
 #### Scenario: A snapshot without goals
-- **WHEN** Affect is restored from a snapshot that has no goals key
+- **WHEN** the affect module is restored from a snapshot that has no goals key
 - **THEN** its goal ledger is left as it was
 
 ### Requirement: Goal significance is scored against the entity's dominant drive
-Affect's goal-significance appraisal check SHALL score the selected events against the entity's dominant drive (the highest-valued Affect drive, ties broken by name), using the drive-to-source table built from each registered module's `relieves_drives` declaration and injected by the boot wiring and re-injected when Affect is restarted. With dominant drive value `v > 0` and `f` the salience-weighted share of selected events whose source relieves that drive, the drive score SHALL be `v × (2f − 1)`. With no drive above zero, the drive score SHALL be `0.0`. When the goal ledger holds active goals, the check SHALL return the larger of the drive score and `relevance × 2 − 1` (the ledger score alone when no table was injected); otherwise it SHALL return the drive score, or `0.0` when no table was injected. No constant offset SHALL be applied.
+The affect module's goal-significance appraisal check SHALL score the selected events against the entity's dominant drive (the highest-valued affect drive, ties broken by name), using the drive-to-source table built from each registered module's `relieves_drives` declaration and injected by the boot wiring and re-injected when the affect module is restarted. With dominant drive value `v > 0` and `f` the salience-weighted share of selected events whose source relieves that drive, the drive score SHALL be `v × (2f − 1)`. With no drive above zero, the drive score SHALL be `0.0`. When the goal ledger holds active goals, the check SHALL return the larger of the drive score and `relevance × 2 − 1` (the ledger score alone when no table was injected); otherwise it SHALL return the drive score, or `0.0` when no table was injected. No constant offset SHALL be applied.
 
 #### Scenario: Content serving a pressing need is goal-conducive
 - **WHEN** the social drive is the dominant drive at 0.8 and every selected event comes from a source that relieves the social drive

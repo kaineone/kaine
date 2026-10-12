@@ -85,7 +85,7 @@ class Soma(BaseModule):
         regulation_sustain_window_s: float = 30.0,
         regulation_threshold: float = 0.5,
         # --- Learned expected prediction error per interoceptive channel ---
-        # Window (seconds of subjective time) over which Interoception learns each
+        # Window (seconds of subjective time) over which the interoception module learns each
         # channel's typical absolute prediction error and its spread. The
         # unexpected error is the L2 norm of residual beyond expected + band *
         # spread (Feldman & Friston 2010; Seth 2013). A channel's own history,
@@ -108,13 +108,13 @@ class Soma(BaseModule):
         # Shared subjective clock (injected at boot). The fatigue accumulator's
         # dt integral and the interoception sampling cadence are COGNITIVE
         # timers and so run in subjective time: at time_scale != 1.0 fatigue
-        # accrues — and Interoception samples — at the dilated rate, coherently with the
+        # accrues — and the interoception module samples — at the dilated rate, coherently with the
         # rest of the mind. Defaults to a real-time clock so standalone use and
         # the existing tests are behavior-identical.
         entity_clock: Optional[EntityClock] = None,
         # --- Self-rhythm oscillator (endogenous beat) -----------------------
         # The entity's own rhythm, preserved with the mind. It is separate from
-        # the per-module coalition oscillator used by Workspace.
+        # the per-module coalition oscillator used by the workspace.
         self_rhythm: Any | None = None,
         self_rhythm_step_hz: float = 20.0,
         maternal_drive: Callable[[], float] | None = None,
@@ -139,7 +139,7 @@ class Soma(BaseModule):
         )
         self._read_interval_s = float(read_interval_s)
         self._clock = entity_clock or EntityClock()
-        # Accessed broadcast prediction context for Interoception (paper Appendix A.1).
+        # Accessed broadcast prediction context for the interoception module (paper Appendix A.1).
         self._context = BroadcastContext(self._clock.now)
         # Latest broadcast tick and context age when the pending prediction was formed (paper A.8).
         self._prediction_stamp: tuple[Optional[int], Optional[float]] = (None, None)
@@ -226,10 +226,10 @@ class Soma(BaseModule):
         self._warmup_started_emitted: bool = False
         self._warmup_completed: bool = False
 
-        # --- Sleep sleep flag ---
+        # --- sleep flag ---
         self._in_hypnos: bool = False
 
-        # --- Sleep event consumer ---
+        # --- the sleep module event consumer ---
         self._hypnos_cursor: str = "0"
 
         # --- Self-rhythm state ---
@@ -247,7 +247,7 @@ class Soma(BaseModule):
     # until the entity has accumulated a minimum of logged lived events and a
     # minimum of lived running time, so a just-booted or sensory-starved entity
     # never trips a false individuation." We apply the identical warmed-up-signal
-    # shape to Interoception's allostatic regulation (§3.4.1): a just-booted entity should
+    # shape to the interoception module's allostatic regulation (§3.4.1): a just-booted entity should
     # not trip a false *substrate* alarm from a forward model that has not yet
     # learned its own body. The two thresholds below are the direct analogues of
     # "logged lived events" (adaptation samples) and "lived running time"
@@ -256,7 +256,7 @@ class Soma(BaseModule):
     # ------------------------------------------------------------------
 
     def _lived_seconds(self) -> float:
-        """Subjective seconds since Interoception's first tick (per-boot / per-fork)."""
+        """Subjective seconds since the interoception module's first tick (per-boot / per-fork)."""
         if self._boot_subjective_time is None:
             return 0.0
         return max(0.0, self._clock.now() - self._boot_subjective_time)
@@ -342,9 +342,9 @@ class Soma(BaseModule):
     def self_rhythm_activity(self) -> float | None:
         """Return the self-rhythm generator's current population activity, or None.
 
-        The development readout measures entrainment on this slow activity signal
+        The developmental readout measures entrainment on this slow activity signal
         (band-limited, against surrogate beats), not on the spiking readout.
-        The development owner reads the oscillator ``identity`` attribute via
+        The developmental owner reads the oscillator ``identity`` attribute via
         ``getattr(osc, "identity", None)`` to tie the self-rhythm baseline to
         this entity."""
         if self._self_rhythm is None:
@@ -434,7 +434,7 @@ class Soma(BaseModule):
                 live_mean_error,
                 entity_time_s=entity_time_s,
                 # Wakefulness as it was at the report: the forward model is suspended
-                # exactly while Sleep holds the processor asleep.
+                # exactly while the sleep module holds the processor asleep.
                 awake=not suspended,
                 timespan=timespan,
                 suspended=suspended,
@@ -603,7 +603,7 @@ class Soma(BaseModule):
         if self._boot_subjective_time is None:
             self._boot_subjective_time = now
         # samples_seen = real forward-model adaptation steps ("logged lived
-        # events" analogue). Read straight from the model so a suspended/Sleep
+        # events" analogue). Read straight from the model so a suspended or sleeping
         # or sensory-starved entity does not age out of warm-up.
         self._samples_seen = int(getattr(self._forward_model, "adaptation_steps", 0))
 

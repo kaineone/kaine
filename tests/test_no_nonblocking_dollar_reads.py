@@ -30,7 +30,7 @@ _BUILDERS = {
 
 
 def test_every_configurable_module_has_a_builder():
-    # Recorder is the only configurable module without a revive builder; it reads
+    # The recorder module is the only configurable module without a revive builder; it reads
     # no stream with a cursor (grep: no read_entries in kaine/modules/echo).
     missing = sorted(set(MODULE_ORDER) - set(_BUILDERS) - {"echo"})
     assert not missing, f"add a _build_<name> for {missing} to test_revive_each_module"

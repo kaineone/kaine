@@ -38,9 +38,9 @@ from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES
 # Internal drive coalition member type.
 DRIVE_TYPE = "thymos.drive"
 # Realization markers (a realized ignition). realization_failed is NOT here.
-# NOTE: when Vocal is enabled an utterance may appear as BOTH external_speech
-# and vox.synthesized (counted twice in realized_total; acceptable while Vocal
-# ships disabled in the base thesis — revisit if Vocal is enabled).
+# NOTE: when the vocal module is enabled an utterance may appear as BOTH external_speech
+# and vox.synthesized (counted twice in realized_total; acceptable while the vocal module
+# ships disabled in the base thesis — revisit if the vocal module is enabled).
 REALIZATION_TYPES = frozenset(
     {"external_speech", "internal_speech", "vox.synthesized", "praxis.action"}
 )
@@ -140,7 +140,7 @@ def classify_realizations(
     proposal_outcomes: List[Dict[str, Any]] = (),
     sleep_index: int = 0,
 ) -> IgnitionAuditReport:
-    """Classify realized action selection intents into ignition categories.
+    """Classify realized action selection module intents into ignition categories.
 
     ``broadcasts`` are workspace.broadcast snapshot dicts (each with a
     ``selected`` / ``coalition`` list of members carrying ``entry_id``,
@@ -156,7 +156,7 @@ def classify_realizations(
     intent of the matching kind: via the realization payload's ``entry_id``
     when present, else the most recent intent of that kind. The intent's
     ``entry_id`` is then matched against broadcast coalition members:
-    Planning-originated intents (``origin == "nous"``) win first as
+    The planning-module-originated intents (``origin == "nous"``) win first as
     ``nous_initiated``; otherwise input-triggered if the resolved member's
     source/type is an external-input type, or such a type was anywhere in the
     winning coalition of the triggering broadcast; drive-triggered if
@@ -166,7 +166,7 @@ def classify_realizations(
     and never counted among executed actions. ``volition.proposal_outcome``
     events contribute ``nous_proposals_realized``, ``nous_proposals_declined``
     and ``nous_proposals_forwarded`` counts; a ``forwarded`` rest outcome
-    counts only as forwarded, because Sleep decides it.
+    counts only as forwarded, because the sleep module decides it.
     """
     coalitions: List[List[Dict[str, Any]]] = []
     for snap in broadcasts:
@@ -251,9 +251,9 @@ def classify_realizations(
             intent_entry = entry_id
 
         # Provenance is attributed only from evidence: the realization's own
-        # origin (Language copies it from the intent it realized), an intent
+        # origin (the language module copies it from the intent it realized), an intent
         # linked exactly by entry_id, or a requested sleep's intent.rest.
-        # A speech realization is never marked planning-initiated merely because
+        # A speech realization is never marked planning-module-initiated merely because
         # the last intent of that kind in the window had origin "nous".
         if payload.get("origin") == "nous":
             category = "nous"

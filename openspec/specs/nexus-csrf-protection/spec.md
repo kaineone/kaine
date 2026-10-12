@@ -1,12 +1,12 @@
 # nexus-csrf-protection Specification
 
 ## Purpose
-Protect Dashboard state-changing endpoints against cross-site request forgery and DNS rebinding by validating the Origin, enforcing same-site semantics, and refusing unsafe binds unless the operator explicitly opts in.
+Protect dashboard state-changing endpoints against cross-site request forgery and DNS rebinding by validating the Origin, enforcing same-site semantics, and refusing unsafe binds unless the operator explicitly opts in.
 
 ## Requirements
 
 ### Requirement: State-changing endpoints validate Origin or Host
-All state-changing Dashboard endpoints SHALL validate that the request Origin matches the expected operator origin, or that the Host header matches a strict allowlist. If neither check passes, the server SHALL respond with HTTP 403 and perform no state change.
+All state-changing dashboard endpoints SHALL validate that the request Origin matches the expected operator origin, or that the Host header matches a strict allowlist. If neither check passes, the server SHALL respond with HTTP 403 and perform no state change.
 
 #### Scenario: Cross-origin POST is rejected
 - **WHEN** a POST request arrives with an Origin header that does not match the configured operator origin
@@ -17,37 +17,37 @@ All state-changing Dashboard endpoints SHALL validate that the request Origin ma
 - **THEN** the server processes the request normally
 
 ### Requirement: Non-loopback binds require explicit operator opt-in
-Dashboard SHALL refuse to bind to `0.0.0.0` or any non-loopback interface unless the operator has explicitly set an opt-in flag and configured a token. The default bind SHALL remain `127.0.0.1`.
+The dashboard SHALL refuse to bind to `0.0.0.0` or any non-loopback interface unless the operator has explicitly set an opt-in flag and configured a token. The default bind SHALL remain `127.0.0.1`.
 
 #### Scenario: Default loopback bind starts without opt-in
-- **WHEN** Dashboard starts with the shipped default `[nexus].host = "127.0.0.1"`
+- **WHEN** the dashboard starts with the shipped default `[nexus].host = "127.0.0.1"`
 - **THEN** it starts normally
 
 #### Scenario: Non-loopback bind without opt-in fails closed
 - **WHEN** `[nexus].host` is set to `0.0.0.0` and the non-loopback opt-in flag is not set
-- **THEN** Dashboard logs a clear error and exits without opening the socket
+- **THEN** the dashboard logs a clear error and exits without opening the socket
 
 ### Requirement: SameSite cookies and CORS are configured defensively
-If Dashboard uses cookies or CORS, they SHALL be configured with SameSite=Strict, no wildcard origins, and no credentials shared with untrusted origins.
+If the dashboard uses cookies or CORS, they SHALL be configured with SameSite=Strict, no wildcard origins, and no credentials shared with untrusted origins.
 
 #### Scenario: CORS preflight from untrusted origin is rejected
 - **WHEN** a preflight request arrives from an origin not in the allowlist
 - **THEN** the server responds without CORS credentials and rejects the actual request
 
 ### Requirement: Host header is validated on every request
-Dashboard SHALL reject with HTTP 403 any request, including GET, whose `Host` header (parsed correctly for bracketed IPv6 literals such as `[::1]:8088`) is not in `[nexus].host_allowlist`, so a DNS-rebinding page cannot read any Dashboard surface. State-changing requests SHALL additionally pass the Origin check. When `allowed_origins` is not configured explicitly, it SHALL be derived from the configured port, and it SHALL be overridable with `KAINE_NEXUS_ALLOWED_ORIGINS` for deployments that publish Dashboard on a different host port.
+The dashboard SHALL reject with HTTP 403 any request, including GET, whose `Host` header (parsed correctly for bracketed IPv6 literals such as `[::1]:8088`) is not in `[nexus].host_allowlist`, so a DNS-rebinding page cannot read any dashboard surface. State-changing requests SHALL additionally pass the Origin check. When `allowed_origins` is not configured explicitly, it SHALL be derived from the configured port, and it SHALL be overridable with `KAINE_NEXUS_ALLOWED_ORIGINS` for deployments that publish the dashboard on a different host port.
 
 #### Scenario: Rebinding GET is rejected
 - **WHEN** a GET request for `/diagnostics/metrics.json` arrives with `Host: attacker.example`
-- **THEN** Dashboard responds 403
+- **THEN** the dashboard responds 403
 
 #### Scenario: IPv6 loopback host is accepted
 - **WHEN** `host_allowlist` contains `::1` and a request arrives with `Host: [::1]:8088`
 - **THEN** the Host check passes
 
 ### Requirement: Containerised Dashboard starts with a loopback-only publish
-The shipped container deployments SHALL set the non-loopback opt-in and the operator token through the environment (`KAINE_NEXUS_NON_LOOPBACK_ALLOWED`, `KAINE_NEXUS_TOKEN`) while publishing Dashboard only on the host loopback interface, so the container starts and the dashboard remains unreachable from other hosts.
+The shipped container deployments SHALL set the non-loopback opt-in and the operator token through the environment (`KAINE_NEXUS_NON_LOOPBACK_ALLOWED`, `KAINE_NEXUS_TOKEN`) while publishing the dashboard only on the host loopback interface, so the container starts and the dashboard remains unreachable from other hosts.
 
 #### Scenario: Compose deployment starts
-- **WHEN** the compose Dashboard service starts with `KAINE_NEXUS_HOST=0.0.0.0`, `KAINE_NEXUS_NON_LOOPBACK_ALLOWED=1` and a token
-- **THEN** Dashboard binds and the published port is `127.0.0.1` only
+- **WHEN** the compose dashboard service starts with `KAINE_NEXUS_HOST=0.0.0.0`, `KAINE_NEXUS_NON_LOOPBACK_ALLOWED=1` and a token
+- **THEN** the dashboard binds and the published port is `127.0.0.1` only

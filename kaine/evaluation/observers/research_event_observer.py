@@ -112,13 +112,13 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "tick_count",
         }
     ),
-    # Real Action selection intent types (kaine/workspace/volition.py) — EXACT keys,
+    # Real action selection module's intent types (kaine/workspace/volition.py) — EXACT keys,
     # no prefix matching: an unknown intent.* subtype is NOT logged.
     "intent.speak": frozenset({"kind", "about_tag", "effector", "origin"}),
     "intent.think": frozenset({"kind", "about_tag", "effector", "origin"}),
     "intent.act": frozenset({"kind", "about_tag", "effector", "origin"}),
     "intent.rest": frozenset({"kind", "about_tag", "origin"}),
-    # Planning proposal / Action selection feedback / Sleep rest request (change nous-drives-action)
+    # planning module's proposal / action selection module's feedback / sleep module's rest request (change nous-drives-action)
     "nous.proposal": frozenset({"proposal_id", "action", "kind", "step", "preference"}),
     "volition.proposal_outcome": frozenset({"proposal_id", "realized", "reason"}),
     "hypnos.rest_request": frozenset({"accepted", "reason", "origin"}),
@@ -161,7 +161,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "awake",
         }
     ),
-    # Sequence report (kaine/modules/chronos/module.py) — content-free
+    # the sequence module's report (kaine/modules/chronos/module.py) — content-free
     # aggregates ONLY: `temporal_context` and `feature_vector` are latent
     # content and are deliberately excluded.
     "chronos.report": frozenset(
@@ -331,7 +331,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
         }
     ),
     # --- Safety / ops ---
-    # Supervisor's structured freeze annotation (run<->incident cross-link). Field
+    # The supervisor's structured freeze annotation (run<->incident cross-link). Field
     # names mirror the durable incident_log transition records (incident_log.py
     # / spot.py). `incident_id` and `tick_index` are lifted to the top level by
     # _build_record; the rest are non-sensitive operational metadata. NO content

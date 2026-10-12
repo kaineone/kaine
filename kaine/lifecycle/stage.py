@@ -75,7 +75,7 @@ def has_prior_lived_history(
       * its identity is unknown (``None``) — lineage is unavailable, so the
         non-regressing answer is ``True``;
       * any of this tree's own lived artifacts exist (lifecycle stage file,
-        World model checkpoint, Sleep divergence record, perception
+        the world model checkpoint, the sleep divergence record, perception
         desired-state) — these prove the *current* tree has lived regardless
         of sidecars;
       * a fork sidecar, preservation manifest, or configured bundle manifest
@@ -170,10 +170,10 @@ class StageState:
     """The persisted developmental stage.
 
     ``stage``                — ``gestation`` | ``embodied``.
-    ``gestation_started_at`` — ISO time development began (the C3 lived-time anchor).
+    ``gestation_started_at`` — ISO time the developmental phase began (the C3 lived-time anchor).
     ``born_at``              — ISO time of the maturation transition (None until born).
-    ``lived_seconds``        — cumulative subjective lived time in development.
-    ``sleep_count``          — cumulative Sleep sleep completions.
+    ``lived_seconds``        — cumulative subjective lived time in the developmental phase.
+    ``sleep_count``          — cumulative sleep completions.
     ``hypnos_cursor``        — last scanned ``hypnos.out`` stream id.
     ``womb_t_at_birth``      — stimulus source time in seconds when the maturation bloom ended (None until recorded).
     ``womb_seed``            — procedural stimulus source seed active at maturation (None until recorded).

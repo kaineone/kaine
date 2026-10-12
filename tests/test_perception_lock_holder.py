@@ -20,14 +20,14 @@ def desired_path(tmp_path: Path) -> Path:
 def test_gestation_lock_holds_womb_against_other_writers(desired_path: Path) -> None:
     write_desired_locus("virtual", locked=True, locked_by="gestation", path=desired_path)
 
-    # A non-development write (no locked_by) cannot move the locus.
+    # A non-developmental-phase write (no locked_by) cannot move the locus.
     write_desired_locus("physical", path=desired_path)
     state = read_desired(desired_path)
     assert state.locus == "virtual"
     assert state.locus_locked is True
     assert state.locked_by == "gestation"
 
-    # Another non-development write still cannot move it.
+    # Another non-developmental-phase write still cannot move it.
     write_desired_locus("off", path=desired_path)
     state = read_desired(desired_path)
     assert state.locus == "virtual"
@@ -49,11 +49,11 @@ def test_gestation_holder_can_unlock_and_then_normal_writes_work(desired_path: P
     state = read_desired(desired_path)
     assert state.locus == "physical"
     assert state.locus_locked is False
-    # The unlock is recorded as the development holder's action (spec: the unlock
-    # is attributed to development, not the operator).
+    # The unlock is recorded as the developmental phase holder's action (spec: the unlock
+    # is attributed to the developmental phase, not the operator).
     assert state.locked_by == "gestation"
 
-    # After the development holder unlocks, normal writes apply.
+    # After the developmental phase holder unlocks, normal writes apply.
     write_desired_locus("off", path=desired_path)
     assert read_desired(desired_path).locus == "off"
 
@@ -87,7 +87,7 @@ def test_unknown_locus_when_unlocked_resolves_to_physical(desired_path: Path) ->
 def test_hypnos_restore_path_does_not_move_gestation_lock(desired_path: Path) -> None:
     write_desired_locus("virtual", locked=True, locked_by="gestation", path=desired_path)
 
-    # Sleep records the pre-sleep locus as raw string (physical, virtual, off)
+    # The sleep module records the pre-sleep locus as raw string (physical, virtual, off)
     # and restores with exactly this call shape:
     pre_sleep_locus = "physical"
     write_desired_locus(pre_sleep_locus, path=desired_path)

@@ -26,10 +26,10 @@ without a key. Key sources, rotation and the cryptographic details are in
 
 | Store or file | Contents | Protection |
 |---|---|---|
-| `state/eidolon/self_model.json` | Self-model self-model: name, values, norms, identity history | App-layer AES-256-GCM |
-| `state/forks/<id>/snapshot.json` | Fork and merge bundles, including World model world-model weights | App-layer AES-256-GCM |
+| `state/eidolon/self_model.json` | self-model: name, values, norms, identity history | App-layer AES-256-GCM |
+| `state/forks/<id>/snapshot.json` | Fork and merge bundles, including world-model weights | App-layer AES-256-GCM |
 | `data/evaluation/<observer>/` | Evaluation sidecar observer JSONL logs | App-layer AES-256-GCM per line |
-| `state/phantasia/world_model.ckpt` | World model world-model weights | App-layer AES-256-GCM |
+| `state/phantasia/world_model.ckpt` | world-model weights | App-layer AES-256-GCM |
 | Episodic memory Qdrant collection (`kaine-qdrant-data`) | Memory embeddings and payloads | Qdrant API key; plain HTTP on the host or compose network (no TLS); OS-layer |
 | Social cognition Qdrant collection (`kaine-qdrant-data`) | Agent-model embeddings | Qdrant API key; plain HTTP on the host or compose network (no TLS); OS-layer |
 | `state/lingua/intent_expression.jsonl` | Intent and expression pairs, **high sensitivity** | OS-layer |
@@ -48,7 +48,7 @@ Security fixes land on `main`. There are no maintained release branches.
 
 ## Threat model and design
 
-The threat model, the enforced boundaries (bus authentication, the Effectors
-sandbox, state encryption, the Dashboard access modes and privacy filter) and the
+The threat model, the enforced boundaries (bus authentication, the effectors module
+sandbox, state encryption, the dashboard access modes and privacy filter) and the
 operator's responsibilities are documented in
 [Security and privacy](docs/13-security-and-privacy.md).

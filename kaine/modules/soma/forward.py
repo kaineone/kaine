@@ -58,7 +58,7 @@ log = logging.getLogger(__name__)
 # Default learning rate for online adaptation of the readout.
 _DEFAULT_LR: float = 1e-3
 
-# Default feature vector dimension. Interoception's normalized metrics include
+# Default feature vector dimension. The interoception module's normalized metrics include
 # cpu_percent, ram_percent, cycle_latency_avg_ms, and (where available) GPU
 # temperature; the model uses a fixed-size vector padded/truncated to match.
 DEFAULT_FEATURE_DIM: int = 8
@@ -75,12 +75,12 @@ class SubstrateForwardModel:
     units) turns the current feature vector into a recurrent hidden state.
     The reservoir's weights are randomly initialised and FROZEN (never
     trained) — it is a fixed temporal feature extractor, exactly like
-    Sequence's `CfCNetwork`. A linear readout (``units`` -> ``feature_dim``)
+    the sequence module's `CfCNetwork`. A linear readout (``units`` -> ``feature_dim``)
     maps that hidden state to a feature prediction and adapts online via
-    SGD, exactly like Sequence's `ForwardPredictionHead`.
+    SGD, exactly like the sequence module's `ForwardPredictionHead`.
 
     When a ``context_dim`` is provided, the broadcast context vector is
-    concatenated to the hidden state before the readout, so Interoception can
+    concatenated to the hidden state before the readout, so the interoception module can
     condition its substrate predictions on the global broadcast context.
     The reservoir remains frozen; only the readout learns.
 
@@ -189,7 +189,7 @@ class SubstrateForwardModel:
 
         # Count of real online-adaptation steps taken (one SGD step per tick
         # where a finite feature vector was learned from, not suspended). This
-        # is the direct "logged lived events" analogue the Interoception developmental
+        # is the direct "logged lived events" analogue the interoception module's developmental
         # warm-up reads for its samples-seen end-condition (see module.py and
         # paper §6.6). Runtime-only; never serialised.
         self._adaptation_steps: int = 0
@@ -246,7 +246,7 @@ class SubstrateForwardModel:
 
         Increments only on ticks where the readout actually learned from a
         finite feature vector (not suspended, prior context available). During
-        Sleep sleep (``suspended``) or on a non-finite/first tick it does not
+        sleep (``suspended``) or on a non-finite/first tick it does not
         advance — so a paused or sensory-starved entity does not accrue
         "samples", exactly what the warm-up end-condition needs.
         """
@@ -422,7 +422,7 @@ class SubstrateForwardModel:
            hidden state.
 
         When ``context_dim > 0`` and ``null_context`` is supplied, the null
-        prediction is recorded so Interoception can report the information gain of the
+        prediction is recorded so the interoception module can report the information gain of the
         broadcast context.
 
         Returns the L2 prediction error ``||feature - last_prediction||``
@@ -692,7 +692,7 @@ class SubstrateForwardModel:
 
     # ------------------------------------------------------------------
     # Serialisation — readout weights only. The frozen CfC reservoir is
-    # rebuilt from ``reservoir_seed`` (kept in Interoception's snapshot), and the
+    # rebuilt from ``reservoir_seed`` (kept in the interoception module's snapshot), and the
     # recurrent hidden state is ephemeral runtime context, never persisted.
     # ------------------------------------------------------------------
 
@@ -749,14 +749,14 @@ def metrics_to_feature_vector(
     cycle_latency_target_ms: float = 300.0,
     gpu_temp_max_c: float = 100.0,
 ) -> list[float]:
-    """Convert a interoception metrics dict to a fixed-size normalized feature vector.
+    """Convert an interoception metrics dict to a fixed-size normalized feature vector.
 
     Layout:
       [0] cpu_percent / 100.0                    (0 = 0%, 1 = 100%)
       [1] ram_percent / 100.0                     (0 = 0%, 1 = 100%)
       [2] cycle_latency_avg_ms / (2 * target)     (0 = no latency, 1 = 2x target)
       [3] max(gpu_*_temp_c) / gpu_temp_max_c      (0 = no GPU data, else hottest GPU)
-      [4..6] self-rhythm slots filled by Interoception when the self-rhythm runs
+      [4..6] self-rhythm slots filled by the interoception module when the self-rhythm runs
       [7] VRAM (layout 2): max(gpu_*_vram_percent) / 100.0; 0.0 in layout 1
       [8..feature_dim-1] zero-padded
 

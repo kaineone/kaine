@@ -45,7 +45,7 @@ def test_write_desired_locus_preserves_attribution_when_omitted(tmp_path: Path) 
     assert d.locked_by == "gestation"
 
 
-# --- honest denial reason (W2.2, spec: self-switch refused during development) --
+# --- honest denial reason (W2.2, spec: self-switch refused during the developmental phase) --
 
 
 def _switch(locked_by: str):

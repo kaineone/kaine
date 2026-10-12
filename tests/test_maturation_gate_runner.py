@@ -145,7 +145,7 @@ def _make_registry(
     phantasia = MagicMock()
     phantasia.successful_training_passes = consolidation_passes
     mundus = MagicMock()
-    # Public Embodiment API the gate uses (operator approval itself is read from
+    # Public embodiment module API the gate uses (operator approval itself is read from
     # KAINE_MUNDUS_OPERATOR_APPROVED; tests that need it set the variable).
     mundus.enabled_by_config = mundus_enabled
     mundus.probe_available = AsyncMock(
@@ -156,7 +156,7 @@ def _make_registry(
     vox = MagicMock()
     vox.set_dormant = MagicMock()
 
-    # Sleep is present so the gate applies the sleep and consolidation floors.
+    # The sleep module is present so the gate applies the sleep and consolidation floors.
     modules = {"hypnos": MagicMock(), "phantasia": phantasia, "mundus": mundus, "vox": vox}
 
     def _get(name: str):
@@ -174,7 +174,7 @@ def _make_clock(now: float = 0.0) -> Any:
 
 
 def _fresh_gestation_state(tmp_path: Path) -> lifecycle_stage.StageState:
-    """Build a fresh development state without mutating the global STAGE_PATH."""
+    """Build a fresh developmental phase state without mutating the global STAGE_PATH."""
     p = tmp_path / "stage.json"
     return lifecycle_stage.resolve_boot_stage(has_prior_lived_history=False, path=p)
 
@@ -398,7 +398,7 @@ def _make_registry_with_mundus(mundus: _RecordingMundus) -> Any:
     vox = MagicMock()
     vox.set_dormant = MagicMock()
 
-    # Sleep is present so the gate applies the sleep and consolidation floors.
+    # The sleep module is present so the gate applies the sleep and consolidation floors.
     modules = {"hypnos": MagicMock(), "phantasia": phantasia, "mundus": mundus, "vox": vox}
 
     def _get(name: str):
@@ -452,7 +452,7 @@ async def test_birth_calls_mundus_activate_before_stage_file_and_unlocks_as_gest
     await runner._evaluate_once()
     await runner._evaluate_once()
 
-    # activate ran while the stage was still development, then the stage file
+    # activate ran while the stage was still the developmental phase, then the stage file
     # was written as embodied.
     assert mundus.activate_calls
     at_activation = mundus.activate_calls[0]
@@ -461,7 +461,7 @@ async def test_birth_calls_mundus_activate_before_stage_file_and_unlocks_as_gest
     assert persisted is not None
     assert persisted.is_embodied
 
-    # Unlock attributed to development.
+    # Unlock attributed to the developmental phase
     desired = read_desired(desired_path)
     assert desired.locus == "virtual"
     assert desired.locus_locked is False
@@ -520,7 +520,7 @@ async def test_birth_deferred_when_mundus_activate_fails(
     assert persisted is not None
     assert persisted.is_gestating
 
-    # Locus should stay locked and attributed to development.
+    # Locus should stay locked and attributed to the developmental phase
     desired = read_desired(desired_path)
     assert desired.locus == "virtual"
     assert desired.locus_locked is True

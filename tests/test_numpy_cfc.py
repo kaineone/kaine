@@ -86,7 +86,7 @@ def test_numpy_readout_sgd_step_changes_weights():
 
 
 # ---------------------------------------------------------------------------
-# Interoception numpy / torch parity
+# The interoception module's numpy / torch parity
 # ---------------------------------------------------------------------------
 
 @pytest.mark.skipif(not _TORCH, reason="torch/ncps not installed")
@@ -126,7 +126,7 @@ def test_soma_numpy_torch_parity_over_500_steps():
 
 
 # ---------------------------------------------------------------------------
-# Sequence head numpy / torch parity
+# The sequence module's head numpy / torch parity
 # ---------------------------------------------------------------------------
 
 @pytest.mark.skipif(not _TORCH, reason="torch/ncps not installed")
@@ -462,7 +462,7 @@ def test_unseeded_draws_differ():
 
 
 # ---------------------------------------------------------------------------
-# Hardened NumPy CfC readout and Interoception seed restore
+# Hardened NumPy CfC readout and the interoception module's seed restore
 # ---------------------------------------------------------------------------
 
 def test_numpy_readout_load_state_dict_rejects_invalid_and_leaves_state():

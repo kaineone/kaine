@@ -94,9 +94,9 @@ async def _make_client(
 
 
 def test_conversation_sleep_state_follows_hypnos_lifecycle():
-    """The sleep badge must react to the canonical Sleep lifecycle event types
+    """The sleep badge must react to the canonical sleep module's lifecycle event types
     (hypnos.sleep.started/completed), not the old began_rest/ended_rest variants
-    Sleep never emits."""
+    The sleep module never emits."""
     state = ConversationState()
     assert state.sleeping is False
     state.update_from_hypnos("hypnos.sleep.started")
@@ -334,7 +334,7 @@ class _SomaOnlyRegistry:
 
 @pytest.mark.asyncio
 async def test_post_merge_two_phantasia_world_models_requires_choice(tmp_path):
-    """When both parents carry a Phantasia world model and no choice is given,
+    """When both parents carry a world model and no choice is given,
     the merge endpoint surfaces a 409 pointing at world_model_from."""
     fm = ForkManager(tmp_path)
     snap_a = fm.snapshot(_SomaOnlyRegistry(), label="a")
@@ -1052,7 +1052,7 @@ def test_fonts_served_locally_no_external_font_url():
     assert "font-weight: 400 700" in css, "Zen Dots must declare a 400 700 weight range"
 
 
-# ---- Supervisor supervisor health block ----------------------------------------
+# ---- the supervisor health block ----------------------------------------
 
 
 import json  # noqa: E402

@@ -38,14 +38,14 @@ speech.
 ### Requirement: Arousal-modulated auditory attention
 
 Audition SHALL select a single attended sound stream by salience and SHALL derive
-the breadth of the auditory attentional window from Affect arousal — a distinct
-affective→perceptual coupling, not the Workspace salience-selection window. The
+the breadth of the auditory attentional window from the affect module's arousal — a distinct
+affective→perceptual coupling, not the workspace's salience-selection window. The
 sign and exact mapping of the arousal→window relation are tuning parameters, not
 asserted results.
 
 #### Scenario: Arousal sets the auditory window
 
-- **WHEN** Affect arousal differs between two ticks
+- **WHEN** the affect module's arousal differs between two ticks
 - **THEN** the auditory attentional window changes monotonically with arousal (a
   distinct visual/auditory coupling; default sign tunable)
 

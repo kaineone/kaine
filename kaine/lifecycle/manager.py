@@ -97,7 +97,7 @@ class ForkManager:
     modules.
 
     The manager never deletes a snapshot. The root holds preserved entities
-    and Supervisor escalation snapshots, and removing an entity's state is the
+    and supervisor escalation snapshots, and removing an entity's state is the
     CAL-gated decommission path only (`kaine.lifecycle.decommission`).
     Disk space is checked before boot by `python -m kaine.preboot`.
     """

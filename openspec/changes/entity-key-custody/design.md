@@ -11,7 +11,7 @@ The entity-ID dependency (task 0.2) is closed: `entity-identity` has merged, and
 Today KAINE has one AES-256-GCM key per install. It comes from `KAINE_STATE_KEY`, the kernel keyring entry `kaine:state_key`, or `secrets/state_key` (loaded by pre-boot), and a process-global `StateEncryptor` applies it everywhere (`kaine/security/crypto.py`). The envelope is `KAINEgcm1:` ‖ 12-byte nonce ‖ ciphertext. It carries no key id and no associated data.
 
 There are about 23 call sites. Most run inside the live cycle for its one entity. A few handle several entities in one process:
-- `ForkManager` (fork, merge, Supervisor snapshots, Dashboard `/forks` and `/merges`);
+- `ForkManager` (fork, merge, the supervisor's snapshots, the dashboard's `/forks` and `/merges`);
 - preservation revive;
 - the divergence reader;
 - decommission;

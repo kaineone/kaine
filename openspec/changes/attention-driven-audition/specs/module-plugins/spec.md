@@ -8,7 +8,7 @@ A plugin SHALL declare its seams when it is loaded, and SHALL be able to fill on
 - **THEN** boot raises `PluginError` naming the plugin and the seam before any module is constructed
 
 #### Scenario: Returned seam was not declared
-- **WHEN** a plugin declared only `chronos.network` and its `injections` for Interoception returns `{"forward_model": model}`
+- **WHEN** a plugin declared only `chronos.network` and its `injections` for the interoception module returns `{"forward_model": model}`
 - **THEN** boot raises `PluginError` naming the plugin, the module and the key
 
 #### Scenario: Two plugins claim one seam
@@ -20,8 +20,8 @@ A plugin SHALL declare its seams when it is loaded, and SHALL be able to fill on
 - **THEN** boot raises `PluginError` naming the plugin and the seam
 
 #### Scenario: Declared seam is honoured
-- **WHEN** an enabled plugin returns `{"network": model}` for Sequence and Sequence is enabled
-- **THEN** the constructed Sequence uses `model` as its network and builds no default CfC network
+- **WHEN** an enabled plugin returns `{"network": model}` for the sequence module and the sequence module is enabled
+- **THEN** the constructed sequence module uses `model` as its network and builds no default CfC network
 
 #### Scenario: Audition encoder seam is honoured
 - **WHEN** an enabled plugin declares `audition.acoustic_encoder` and returns `{"acoustic_encoder": encoder}` for Audition

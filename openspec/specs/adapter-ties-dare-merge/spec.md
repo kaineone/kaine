@@ -167,7 +167,7 @@ combined, or were combined into an adapter that failed its checks.
 
 ### Requirement: Dashboard POST /diagnostics/merges surfaces UnmergedAdaptersError as HTTP 409
 
-The Dashboard `POST /diagnostics/merges` handler SHALL catch
+The dashboard `POST /diagnostics/merges` handler SHALL catch
 `UnmergedAdaptersError` and return HTTP 409 (Conflict) with the error message
 as the response body. The request body SHALL accept an `allow_unmerged_adapters`
 boolean field (default `false`) that is threaded through to `ForkManager.merge()`.
@@ -204,10 +204,10 @@ union), and the error message SHALL name the extra required to enable a real mer
 - **AND** the error names the extra to install
 
 ### Requirement: The merge caller supplies the merged-adapter checks
-`merger_from_name` SHALL accept a `merge_checks` factory that returns the capability evaluator and the abliteration scorer, and SHALL call it only when it builds the real merger, which also receives a PEFT model loader for `[lifecycle.adapter_merge].base_model_path`. Dashboard SHALL pass a factory that builds the probe-set capability evaluator and the abliteration probe scorer from `[lifecycle.adapter_merge].capability_probe_path` and `abliteration_probe_path` (empty selects the bundled probe sets), and SHALL run `ForkManager.merge` in a worker thread rather than on its event loop.
+`merger_from_name` SHALL accept a `merge_checks` factory that returns the capability evaluator and the abliteration scorer, and SHALL call it only when it builds the real merger, which also receives a PEFT model loader for `[lifecycle.adapter_merge].base_model_path`. The dashboard SHALL pass a factory that builds the probe-set capability evaluator and the abliteration probe scorer from `[lifecycle.adapter_merge].capability_probe_path` and `abliteration_probe_path` (empty selects the bundled probe sets), and SHALL run `ForkManager.merge` in a worker thread rather than on its event loop.
 
 #### Scenario: Dashboard merges are checked
-- **WHEN** Dashboard builds its fork manager with the real merger available
+- **WHEN** the dashboard builds its fork manager with the real merger available
 - **THEN** the merger holds a capability evaluator, an abliteration scorer and a model loader
 
 #### Scenario: The fake merger never builds the checks

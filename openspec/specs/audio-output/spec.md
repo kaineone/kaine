@@ -1,12 +1,12 @@
 # audio-output Specification
 
 ## Purpose
-Speech output: rendering the entity's external utterances as audio, with Affect state shaping expressivity, and keeping audio bytes off the bus and rendered audio out of long-term storage. Vocal is the module that speaks today.
+Speech output: rendering the entity's external utterances as audio, with the affect module's state shaping expressivity, and keeping audio bytes off the bus and rendered audio out of long-term storage. The vocal module is the module that speaks today.
 
 ## Requirements
 
 ### Requirement: TTSClient protocol with Chatterbox default
-Vocal SHALL accept a `TTSClient` collaborator implementing
+The vocal module SHALL accept a `TTSClient` collaborator implementing
 `async synthesize(request) -> SynthesisResult`. The default
 `ChatterboxClient` SHALL POST to
 `http://127.0.0.1:8883/tts` with the Chatterbox `/tts` endpoint's
@@ -22,7 +22,7 @@ affect mapping.
 - **THEN** its `base_url` property equals `"http://127.0.0.1:8883"`
 
 #### Scenario: Custom client substitutes cleanly
-- **WHEN** Vocal is constructed with a custom `TTSClient` that
+- **WHEN** the vocal module is constructed with a custom `TTSClient` that
   returns canned audio bytes
 - **THEN** every synthesis call returns those bytes
 
@@ -49,18 +49,18 @@ larger `cfg_weight` (more committed delivery).
   the first's
 
 ### Requirement: Vocal subscribes to lingua.external
-Vocal SHALL subscribe to the `lingua.external` stream and, for each
+The vocal module SHALL subscribe to the `lingua.external` stream and, for each
 `lingua.external` event observed while not in a muted or dormant state,
 SHALL invoke the TTS client to synthesize audio for the event's `text`
 field. The synthesis SHALL use parameters derived from the most-recent
 `thymos.state` observed on the `thymos.out` stream (or configured
 baseline if none seen yet). When `[vox.mirroring].enabled` is true,
-Vocal SHALL also subscribe to `audition.out` and use `audition.prosody`
+The vocal module SHALL also subscribe to `audition.out` and use `audition.prosody`
 events for prosodic mirroring.
 
 #### Scenario: lingua.external event triggers one synthesis
-- **WHEN** Language publishes one event on `lingua.external` while
-  Vocal is running
+- **WHEN** the language module publishes one event on `lingua.external` while
+  the vocal module is running
 - **THEN** the TTS client receives exactly one `synthesize` call
   whose request `text` equals the event's `text`
 
@@ -72,20 +72,20 @@ events for prosodic mirroring.
   `affect_to_chatterbox` produces for arousal=0.8
 
 #### Scenario: A dormant Vocal stays silent
-- **WHEN** Vocal is dormant (the entity is in the stimulus source)
+- **WHEN** the vocal module is dormant (the entity is in the stimulus source)
 - **AND** a `lingua.external` event arrives
 - **THEN** no TTS request is made
 - **AND** no `vox.synthesized` event is published
 
 #### Scenario: A muted Vocal reports that it cannot speak
-- **WHEN** Vocal is muted because its text-to-speech backend is unavailable
+- **WHEN** the vocal module is muted because its text-to-speech backend is unavailable
 - **AND** `lingua.external` events arrive
 - **THEN** no TTS request is made
 - **AND** at most one `vox.synthesized` event per 60 seconds is published, with `success` false and an `error` naming the unavailable backend
 
 #### Scenario: Prosody mirroring is off by default
 - **WHEN** `[vox.mirroring].enabled` is false (shipped default)
-- **THEN** Vocal does not subscribe to `audition.out` for prosody
+- **THEN** the vocal module does not subscribe to `audition.out` for prosody
 
 ### Requirement: Audio bytes never appear on the bus
 The published `vox.synthesized` event payload SHALL contain
@@ -123,7 +123,7 @@ The repository SHALL ship a `[vox]` block in
 `thymos_state_stream`, `backend`, and `sherpa_*`. `predefined_voice_id`
 is accepted at runtime but is not present in the shipped file.
 `[modules].vox = false` SHALL keep first boot from auto-registering
-Vocal. Vocal also accepts `playback_enabled` (default true),
+The vocal module also accepts `playback_enabled` (default true),
 `sink_enabled` (default false), `retain_count` (default 0), and
 `suppress_self_hearing` (default true).
 
@@ -134,33 +134,33 @@ Vocal. Vocal also accepts `playback_enabled` (default true),
 
 ### Requirement: Synthesized speech is played through an output device
 
-Vocal SHALL play synthesized audio through the host's default or a
+The vocal module SHALL play synthesized audio through the host's default or a
 configured output device as its primary action. Playback SHALL be the
 default behavior (`playback_enabled` default true). Playback SHALL be
 serialized by a lock so that multiple utterances play in order, and
 SHALL run off the event loop without blocking the cognitive cycle.
 
 If no output device is available or the audio playback extra is not
-installed, Vocal SHALL log a single warning and continue: synthesis and
+installed, the vocal module SHALL log a single warning and continue: synthesis and
 the `vox.synthesized` event SHALL still occur. Absence of playback
 SHALL NOT raise or stop the module.
 
 #### Scenario: A produced utterance is played
 
-- **WHEN** `lingua.external` emits text and Vocal synthesizes it
+- **WHEN** `lingua.external` emits text and the vocal module synthesizes it
 - **THEN** the synthesized clip is played through the output device
 - **AND** the `vox.synthesized` event is still published
 
 #### Scenario: No device degrades gracefully
 
 - **WHEN** no output device / playback extra is available
-- **THEN** Vocal logs one warning and continues
+- **THEN** the vocal module logs one warning and continues
 - **AND** synthesis and the `vox.synthesized` event still happen
 - **AND** no exception propagates
 
 ### Requirement: Rendered audio is not persisted without bound
 
-Vocal SHALL NOT persist synthesized audio indefinitely. By default
+The vocal module SHALL NOT persist synthesized audio indefinitely. By default
 (`sink_enabled` false) no audio file is written — the clip is played
 from memory and released. When the file sink is enabled, retention
 SHALL be bounded: after each write the sink directory SHALL be pruned to
@@ -182,15 +182,15 @@ which synthesized clips accumulate without bound.
 
 ### Requirement: Entity does not ingest its own spoken output when suppression is enabled
 
-Vocal and Audition SHALL support self-hearing suppression, gated by a
+The vocal module and the audition module SHALL support self-hearing suppression, gated by a
 `suppress_self_hearing` configuration flag that SHALL default to true.
-When enabled, Vocal SHALL hold a shared `SpeakingGate` for the duration
+When enabled, the vocal module SHALL hold a shared `SpeakingGate` for the duration
 of each synthesized clip plus `mic_mute_hangover_ms` (default 600).
 Audition SHALL check the gate when a finished capture reaches
 `process_audio`; if the gate is held, the whole capture SHALL be
 dropped and no `audition.transcription`, `audition.emotion`, or
 `audition.perception` event SHALL be published for it. When disabled,
-Vocal never holds the gate and Audition ingestion is unaffected,
+the vocal module never holds the gate and the audition module's ingestion is unaffected,
 leaving the entity full-duplex.
 
 #### Scenario: Self-voice during playback is dropped when suppression is enabled

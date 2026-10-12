@@ -76,7 +76,7 @@ def _http_response(
     status: int, reason: str, *, body: bytes, content_type: str
 ) -> bytes:
     """Encode a minimal HTTP/1.1 response. ``Connection: close`` so the client
-    (httpx from the Dashboard proxy) does not attempt keep-alive against this
+    (httpx from the dashboard proxy) does not attempt keep-alive against this
     single-shot handler."""
     head = (
         f"HTTP/1.1 {status} {reason}\r\n"
@@ -213,7 +213,7 @@ async def start_preview_server(
     """Start the loopback preview server IFF the dev override is set.
 
     Returns the running server, or ``None`` when ``KAINE_PERCEPTION_PREVIEW`` is
-    not ``1`` (the default) — in which case nothing binds and the Dashboard proxy
+    not ``1`` (the default) — in which case nothing binds and the dashboard proxy
     404s, keeping the PiP hidden.
     """
     if not perception_preview.preview_enabled():

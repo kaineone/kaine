@@ -393,7 +393,7 @@ def _rate(n: int, seconds: float) -> float:
 
 
 def _study_with_k2(tmp_path: Path):
-    """Development, branch 0..2, repeat, accumulate 1..2 with distinct rates."""
+    """Developmental phase, branch 0..2, repeat, accumulate 1..2 with distinct rates."""
     study_dir = _make_study_dir(tmp_path, order=["thymos", "mnemos"])
     spec = {
         ("branch", 0): [0.0, 20.0, 40.0],
@@ -422,7 +422,7 @@ def test_three_comparison_families_and_k_from_order(tmp_path: Path):
     _write_steps(study_dir, steps)
     report = _load_report(study_dir)
 
-    # Development is not a viewing.
+    # The developmental phase is not a viewing.
     lines = [(v["line"], v["step"]) for v in report["per_viewing"]]
     assert ("gestation", 0) not in lines
     assert sorted(lines) == sorted(spec)

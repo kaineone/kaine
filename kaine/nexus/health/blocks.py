@@ -110,7 +110,7 @@ def welfare_block(evaluation_logs_path: Path) -> dict[str, Any]:
     """Read-only welfare counters for the entity-care panel.
 
     Numeric only: the four §5.5 gray-zone counts plus blind-sensor and
-    sensor-silent advisory state from the evaluation JSONL rollup (the Dashboard
+    sensor-silent advisory state from the evaluation JSONL rollup (the dashboard
     process holds no live sidecar registry). Never raises; a missing rollup
     yields a ``source: none`` block.
     """
@@ -187,7 +187,7 @@ def cycle_pacing_block(cycle_runtime_path: Path) -> dict[str, Any]:
     ``overrunning`` flag. This is what makes a ``time_scale > 1`` (or any
     configured) overrun *visible* on the dashboard rather than silently
     capped: when the hardware cannot hold the requested speed the achieved
-    rate drops below target, Interoception's ``reduce_rate`` throttles, and the
+    rate drops below target, the interoception module's ``reduce_rate`` throttles, and the
     shortfall shows here. Non-content operational numbers only. Never raises;
     a missing/quiet cycle yields ``state: unknown``.
 
@@ -416,13 +416,13 @@ async def model_server_block(
     """Read-only model-server (language-organ) service status block.
 
     Surfaces the OpenAI-compatible model server (Unsloth Studio / llama.cpp)
-    that serves Language: its state (up/down/not_configured), the configured
+    that serves the language module: its state (up/down/not_configured), the configured
     served alias ([lingua].model_id), the port, and whether that alias is
     actually listed by the server. Mirrors the existing service-health blocks
     — purely a read: it probes ``/v1/models`` (via the shared verify probe),
     never starting/stopping the service.
 
-    Reports ``not_configured`` (neutral) when language is disabled. Never raises:
+    Reports ``not_configured`` (neutral) when the language module is disabled. Never raises:
     an unreachable server reports ``down`` with a reason.
     """
     cfg = model_server_cfg or {}
@@ -520,9 +520,9 @@ def gpu_preflight_block(gpu_preflight_path: Path) -> dict[str, Any]:
 
 
 def mnemos_store_block(health_path: Path, mnemos_enabled: bool) -> dict[str, Any]:
-    """Read-only Episodic memory store health from the shared health file.
+    """Read-only episodic memory module store health from the shared health file.
 
-    Reads ``state/mnemos/store_health.json`` (written by Episodic memory). Never raises;
+    Reads ``state/mnemos/store_health.json`` (written by the episodic memory module). Never raises;
     a missing, unreadable, or non-object file yields state ``"unknown"``.
     Surfaces only non-content operational state: import status, blocked sleep
     count, persist refusals, store size and budget.
@@ -564,9 +564,9 @@ def mnemos_store_block(health_path: Path, mnemos_enabled: bool) -> dict[str, Any
 
 
 def spot_block(spot_control_path: Path, spot_escalation_path: Path) -> dict[str, Any]:
-    """Build the operator-facing Supervisor supervisor status block.
+    """Build the operator-facing supervisor status block.
 
-    Reads the two state files Supervisor writes: the cycle control (frozen+source)
+    Reads the two state files the supervisor writes: the cycle control (frozen+source)
     and the escalation record.  Never raises — a missing or corrupt file
     yields state "ok".
 
@@ -575,9 +575,9 @@ def spot_block(spot_control_path: Path, spot_escalation_path: Path) -> dict[str,
       control.frozen and control.source == "spot"  → "recovery"
       else  → "ok"
 
-    max_attempts: hardcoded default 5 (matches Supervisor's shipped default).
+    max_attempts: hardcoded default 5 (matches the supervisor's shipped default).
     """
-    # max_attempts: Supervisor's shipped default — no runtime config read needed.
+    # max_attempts: the supervisor's shipped default — no runtime config read needed.
     MAX_ATTEMPTS = 5
     try:
         control = read_control(spot_control_path)

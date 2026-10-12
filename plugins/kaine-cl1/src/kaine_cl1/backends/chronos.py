@@ -47,10 +47,10 @@ def _project(feature_vec: Sequence[float], size: int) -> np.ndarray:
 
 
 class WetwareTimingModel:
-    """Drop-in for Sequence's `network=` (the `CfCNetwork.tick` interface).
+    """Drop-in for the sequence module's `network=` (the `CfCNetwork.tick` interface).
 
     The biological substrate replaces the silicon recurrent net; everything
-    downstream in Sequence (prediction head, error, salience) is unchanged.
+    downstream in the sequence module (prediction head, error, salience) is unchanged.
     """
 
     def __init__(

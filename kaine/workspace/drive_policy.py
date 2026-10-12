@@ -55,7 +55,7 @@ from kaine.workspace.volition import (
     Intent,
 )
 
-# The drive-crossing events Affect publishes.
+# The drive-crossing events the affect module publishes.
 THYMOS_DRIVE_SOURCE = "thymos"
 THYMOS_DRIVE_TYPE = "thymos.drive"
 

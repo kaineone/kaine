@@ -37,7 +37,7 @@ async def _new_mnemos(bus: AsyncBus, *, capacity: int = 8, **kwargs) -> Mnemos:
 
 
 class FakeThymos:
-    """Stand-in affect that only counts affective resets."""
+    """Stand-in affect module that only counts affective resets."""
 
     def __init__(self) -> None:
         self.resets = 0
@@ -62,7 +62,7 @@ def _make_hypnos(bus: AsyncBus, tmp_path: Path, mnemos: Mnemos, thymos: FakeThym
 
 
 async def _drain_peer_poll(mnemos: Mnemos, bus: AsyncBus) -> None:
-    """Wait until Episodic memory's peer poll has consumed every sleep event."""
+    """Wait until the episodic memory module's peer poll has consumed every sleep event."""
     stream = mnemos._hypnos_stream
 
     def _parse_id(raw):
@@ -158,7 +158,7 @@ async def test_sleep_replays_consolidated_traces_through_the_bus(bus: AsyncBus, 
 
 @pytest.mark.asyncio
 async def test_sleep_ends_with_the_affective_reset(bus: AsyncBus, tmp_path: Path):
-    """The final phase is affective_reset, and it invokes affect exactly once."""
+    """The final phase is affective_reset, and it invokes the affect module exactly once."""
     mnemos = await _new_mnemos(bus)
     await mnemos.initialize()
     try:

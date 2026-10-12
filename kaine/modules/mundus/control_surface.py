@@ -288,7 +288,7 @@ class EfferenceLoop:
     On each tick the emitted command's **efference copy** is concatenated with
     the proprioceptive feedback and fed to a forward model that predicts the next
     such vector, compares it to what arrives, and corrects online (predict ->
-    compare -> correct; Wolpert et al. 1995). This REUSES Interoception's
+    compare -> correct; Wolpert et al. 1995). This REUSES the interoception module's
     :class:`~kaine.modules.soma.forward.SubstrateForwardModel` (a frozen CfC
     reservoir + online linear readout) — it introduces **no new learner**. The
     forward model is injectable so the closed loop can be exercised without torch
@@ -305,7 +305,7 @@ class EfferenceLoop:
     def forward_model(self) -> Any:
         """The forward model, constructing the default lazily on first use."""
         if self._fm is None:
-            # Reuse Interoception's existing forward model — do NOT add a new learner.
+            # Reuse the interoception module's existing forward model — do NOT add a new learner.
             from kaine.modules.soma.forward import SubstrateForwardModel
 
             self._fm = SubstrateForwardModel(feature_dim=self.FEATURE_DIM)
@@ -348,7 +348,7 @@ class ContinuousMotorSurface:
         # capability flips this on when the stage becomes `embodied` and the
         # embodied world takes over as the sense source. Until then the surface
         # emits the null command regardless of policy — the reciprocal half of
-        # the maturation-handoff contract. (This is on top of Embodiment's two-layer gate
+        # the maturation-handoff contract. (This is on top of the embodiment module's two-layer gate
         # and locus gate, which the forwarding path enforces separately.)
         self._active = False
 
@@ -389,7 +389,7 @@ class ContinuousMotorSurface:
 
         A workspace inhibition zeroes the action (returns the null command), so
         nothing is forwarded while the entity is inhibited — the reciprocal of
-        Action selection returning no intents. The surface is likewise inert (null
+        the action selection module returning no intents. The surface is likewise inert (null
         command) before the maturation handoff (:meth:`on_birth`). Channels frozen by
         the curriculum are forced to zero; freed channels are clamped to range at
         the boundary (the policy is never trusted).

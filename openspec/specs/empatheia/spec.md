@@ -1,12 +1,12 @@
 # social cognition Specification
 
 ## Purpose
-Social cognition is the social-modeling module that maintains a per-agent profile of emotion histograms, behavioral summaries, and interaction history, computes and publishes a monotonic familiarity score, and emits social-prediction-error events as salience signals while skipping model updates on degraded emotion events.
+The social cognition module is the social-modeling module that maintains a per-agent profile of emotion histograms, behavioral summaries, and interaction history, computes and publishes a monotonic familiarity score, and emits social-prediction-error events as salience signals while skipping model updates on degraded emotion events.
 
 ## Requirements
 
 ### Requirement: Per-agent models with familiarity score
-Social cognition SHALL maintain a model per interacting agent (emotion histogram,
+The social cognition module SHALL maintain a model per interacting agent (emotion histogram,
 behavioral summary, reliability, interaction count, first/last seen) and SHALL
 expose a `familiarity()` score in [0,1] that increases monotonically with
 interaction count and model coverage. Agent profiles SHALL persist via a Qdrant-
@@ -22,7 +22,7 @@ backed store (with an in-memory backend for tests).
 - **THEN** the agent model is recovered with its interaction count intact
 
 ### Requirement: Agent profile fork/merge persistence
-Social cognition SHALL implement `serialize()` / `deserialize()` on `AgentStore`, and the lifecycle layer SHALL provide an `EmpatheiaMergeStrategy` (beside `MnemosMergeStrategy` in `kaine.lifecycle.strategies`) that `default_strategies()` registers under `"empatheia"`, so that agent profiles survive the fork/merge cycle. On merge, the strategy MUST reconcile two diverged profile sets: interaction counts are summed, histograms, behavioural summaries and reliability are averaged with interaction count as the weight, `first_seen` takes the earlier and `last_seen` the later value. The merged profiles SHALL be carried in the merged snapshot; restoring that snapshot loads them into the store, which serves them before any Qdrant copy and writes each to Qdrant on its next update.
+The social cognition module SHALL implement `serialize()` / `deserialize()` on `AgentStore`, and the lifecycle layer SHALL provide an `EmpatheiaMergeStrategy` (beside `MnemosMergeStrategy` in `kaine.lifecycle.strategies`) that `default_strategies()` registers under `"empatheia"`, so that agent profiles survive the fork/merge cycle. On merge, the strategy MUST reconcile two diverged profile sets: interaction counts are summed, histograms, behavioural summaries and reliability are averaged with interaction count as the weight, `first_seen` takes the earlier and `last_seen` the later value. The merged profiles SHALL be carried in the merged snapshot; restoring that snapshot loads them into the store, which serves them before any Qdrant copy and writes each to Qdrant on its next update.
 
 #### Scenario: Fork/merge round-trip preserves interaction count
 - **WHEN** an agent profile is updated in a forked instance and the fork is merged
@@ -40,9 +40,9 @@ Social cognition SHALL implement `serialize()` / `deserialize()` on `AgentStore`
   recovered without loss
 
 ### Requirement: Familiarity is published for downstream coupling
-Social cognition SHALL publish an `empatheia.agent_model` event on each update carrying
+The social cognition module SHALL publish an `empatheia.agent_model` event on each update carrying
 the agent id, the familiarity score, reliability, and interaction count, so that
-Affect can modulate affect coupling by familiarity.
+The affect module can modulate affect coupling by familiarity.
 
 #### Scenario: Update publishes familiarity
 - **WHEN** an observation updates an agent model
@@ -50,7 +50,7 @@ Affect can modulate affect coupling by familiarity.
   `familiarity` field
 
 ### Requirement: Social prediction errors as salience signals
-Social cognition SHALL publish an `empatheia.social_error` event when an agent's
+The social cognition module SHALL publish an `empatheia.social_error` event when an agent's
 observed behavior deviates from its model beyond `deviation_threshold`, with
 salience scaled by the magnitude of the deviation. `empatheia.social_error` is a
 **salience-only signal**: it enters the global workspace and raises attention by
@@ -80,12 +80,12 @@ magnitude, timestamp) for accuracy scoring.
   and timestamp in the evaluation log
 
 ### Requirement: Social cognition depends on rename-audition-vox
-Social cognition SHALL consume `audition.emotion` and `audition.transcription` events,
-which exist only after the `rename-audition-vox` change is applied. Social cognition
+The social cognition module SHALL consume `audition.emotion` and `audition.transcription` events,
+which exist only after the `rename-audition-vox` change is applied. The social cognition module
 MUST NOT be enabled in production until `rename-audition-vox` is merged.
 
 #### Scenario: Correct event types post-rename
-- **WHEN** Social cognition subscribes to emotion and transcription events
+- **WHEN** the social cognition module subscribes to emotion and transcription events
 - **THEN** it subscribes to `audition.emotion` and `audition.transcription`
   (not the pre-rename `audio_in.*` event types)
 
@@ -113,16 +113,16 @@ familiarity or interaction counts.
 #### Scenario: degraded emotion event
 
 - **WHEN** an `audition.emotion` event arrives with `"degraded": true`
-- **THEN** Social cognition does not update the agent model
+- **THEN** the social cognition module does not update the agent model
 - **AND** interaction_count is not incremented
 
 #### Scenario: real emotion event
 
 - **WHEN** an `audition.emotion` event arrives without `"degraded": true`
-- **THEN** Social cognition folds the observation into the agent model normally
+- **THEN** the social cognition module folds the observation into the agent model normally
 
 ### Requirement: Heard agents are attributed by channel
-Social cognition SHALL attribute heard emotion and speech to the configured operator label only when they arrive on an operator channel (configurable, by default the live microphone, the microphone and remote audio) or carry no channel. Audio from any other channel SHALL be attributed to a separate agent for that channel (`media:<channel>`), so voices from a film or other media never shape the entity's model of its operator.
+The social cognition module SHALL attribute heard emotion and speech to the configured operator label only when they arrive on an operator channel (configurable, by default the live microphone, the microphone and remote audio) or carry no channel. Audio from any other channel SHALL be attributed to a separate agent for that channel (`media:<channel>`), so voices from a film or other media never shape the entity's model of its operator.
 
 #### Scenario: Film dialogue
 - **WHEN** Audition publishes emotion from the playlist channel
@@ -133,8 +133,8 @@ Social cognition SHALL attribute heard emotion and speech to the configured oper
 - **THEN** it updates the operator's model as before
 
 ### Requirement: Social cognition preserves its own agent profiles
-Social cognition SHALL capture every agent profile it holds (in its store, not only those cached since boot) in preservation, and a revived Social cognition SHALL restore exactly those profiles into its own configured collection, re-embedding them with the running embedder. A failure to read the profiles SHALL fail the preservation.
+The social cognition module SHALL capture every agent profile it holds (in its store, not only those cached since boot) in preservation, and a revived social cognition module SHALL restore exactly those profiles into its own configured collection, re-embedding them with the running embedder. A failure to read the profiles SHALL fail the preservation.
 
 #### Scenario: Profiles not touched since boot
-- **WHEN** Social cognition is preserved holding profiles that were stored before this boot and not read since
+- **WHEN** the social cognition module is preserved holding profiles that were stored before this boot and not read since
 - **THEN** those profiles are in the bundle and are restored on revive

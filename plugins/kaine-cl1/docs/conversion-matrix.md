@@ -49,7 +49,7 @@ wetware task, so "hybrid" is a stable end state, not a failed full conversion.
 ## The ceiling
 
 64 electrodes, one culture. With the strong-tier territory budget
-(Sequence 12 + Interoception 12 + Oscillator 8 = 32), roughly **half the array remains**
+(12 for the sequence module + 12 for the interoception module + 8 for the Oscillator = 32), roughly **half the array remains**
 for one or two hybrid-tier modules at a time. You cannot run all eight
 converted modules on a single culture simultaneously; the broker enforces this.
 

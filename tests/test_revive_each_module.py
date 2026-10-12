@@ -191,7 +191,7 @@ class _FakeAdapter:
         return _Caps()
 
     async def close(self) -> None:
-        """Embodiment closes its adapter on shutdown; the double has nothing to release."""
+        """The embodiment module closes its adapter on shutdown; the double has nothing to release."""
 
 
 def _json_roundtrip(obj: Any) -> Any:
@@ -776,7 +776,7 @@ def _mutate_chronos(m: Chronos, i: int) -> None:
 
 
 def _mutate_topos(m: Topos, i: int) -> None:
-    # Vision serialize() is config/encoder-id only; no mutable snapshot state.
+    # The vision module's serialize() is config/encoder-id only; no mutable snapshot state.
     pass
 
 
@@ -836,7 +836,7 @@ def _mutate_vox(m: Vox, i: int) -> None:
 
 
 def _mutate_praxis(m: Praxis, i: int) -> None:
-    # Effectors serialize() returns the fixed effector set only.
+    # The effectors module's serialize() returns the fixed effector set only.
     pass
 
 
@@ -872,8 +872,8 @@ MUTATORS: dict[str, Any] = {
 def _comparable_state(name: str, state: dict[str, Any]) -> dict[str, Any]:
     """Return a snapshot dict normalised for comparison after revive.
 
-    Sequence merges default cursors, so inject the default that revive adds.
-    Audition/Vocal/World model echo configuration into the snapshot but a revived
+    The sequence module merges default cursors, so inject the default that revive adds.
+    the audition, vocal and world model modules echo configuration into the snapshot but a revived
     instance keeps its current configuration, so drop those keys.
     """
     s = _json_roundtrip(state)
@@ -1002,7 +1002,7 @@ async def test_study_order_revive_chain(
                     want_new["schedule"], abs=1.0
                 )
             elif name == "eidolon":
-                # A fresh Self-model draws a launch name (generate_launch_name), so
+                # A fresh self-model module draws a launch name (generate_launch_name), so
                 # two fresh instances differ only in the self-model's name.
                 got_model = json.loads(got_new.pop("model"))
                 want_model = json.loads(want_new.pop("model"))

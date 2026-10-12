@@ -4,7 +4,7 @@
 Guide a new operator from a fresh clone to a working, per-install configuration without
 hand-editing files: the CAL welfare acknowledgement, a hardware scan and device
 assignment, module and model choices, consented provisioning of dependencies, and the
-Dashboard sign-in token. Choices go to the gitignored operator override only; the shipped
+dashboard sign-in token. Choices go to the gitignored operator override only; the shipped
 config stays all-off, and the wizard never starts the entity.
 
 ## Requirements
@@ -12,7 +12,7 @@ config stays all-off, and the wizard never starts the entity.
 ### Requirement: Operator config-override layer
 The system SHALL provide a shared `load_kaine_config()` that loads the shipped `config/kaine.toml`
 and deep-merges an optional, gitignored `config/kaine.operator.toml` over it, with operator values
-taking precedence (recursive merge of nested tables). The cycle entrypoint and the Dashboard config
+taking precedence (recursive merge of nested tables). The cycle entrypoint and the dashboard config
 readers SHALL use this loader so operator overrides apply uniformly. The shipped `config/kaine.toml`
 SHALL remain unchanged (all modules disabled); operator choices live only in the override file.
 
@@ -205,7 +205,7 @@ The first-run wizard SHALL detect an accelerator/runtime mismatch on the current
 - **THEN** the wizard skips the accelerator/runtime mismatch check entirely, does not query CUDA driver or `torch.cuda` runtime information for the comparison, reports the check as skipped or not applicable, and finishes normally without offering any corrective install.
 
 ### Requirement: Setup provides the Dashboard operator token
-When no Dashboard operator token is configured, `python -m kaine.setup` SHALL
+When no dashboard operator token is configured, `python -m kaine.setup` SHALL
 generate one of at least 32 characters with a cryptographically secure
 generator. It SHALL store the token as `operator_token` in the `[nexus]` table
 of `config/secrets.toml`, mode 600, preserving the rest of the file. It SHALL
@@ -241,7 +241,7 @@ to a host binary on `PATH`.
 - **THEN** detection probes 127.0.0.1:7000
 
 ### Requirement: The wizard offers module presets with a hardware-aware recommendation
-The wizard's module step SHALL offer three choices: the base thesis (exactly the `[modules]` table of `config/profiles/thesis_test.toml`), the full entity (every cognitive module on, the embodiment modules and Recorder off), and a custom per-module selection that starts from the recommended preset. It SHALL recommend the full entity when the host's tier recommendation is tier 2 or 3 without required module residency, and the base thesis otherwise or when no recommendation is available, and SHALL state the reason. The non-interactive mode SHALL apply the recommendation.
+The wizard's module step SHALL offer three choices: the base thesis (exactly the `[modules]` table of `config/profiles/thesis_test.toml`), the full entity (every cognitive module on, the embodiment modules and the recorder module off), and a custom per-module selection that starts from the recommended preset. It SHALL recommend the full entity when the host's tier recommendation is tier 2 or 3 without required module residency, and the base thesis otherwise or when no recommendation is available, and SHALL state the reason. The non-interactive mode SHALL apply the recommendation.
 
 #### Scenario: A capable host is recommended the full entity
 - **WHEN** the tier probe recommends tier 3
@@ -345,18 +345,18 @@ or after 30 minutes without activity, where a running job counts as activity.
 - **THEN** the token is refused
 
 ### Requirement: Browser setup shares the Dashboard brand and styling
-The browser setup SHALL use the same brand guidelines and styling as Dashboard:
-- it serves Dashboard's stylesheet and fonts from the Dashboard static assets rather than from copies;
+The browser setup SHALL use the same brand guidelines and styling as the dashboard:
+- it serves the dashboard's stylesheet and fonts from the dashboard static assets rather than from copies;
 - it uses the same layout and wordmark;
-- it styles any setup-specific component only with Dashboard's design tokens, introducing no new colours or font families.
+- it styles any setup-specific component only with the dashboard's design tokens, introducing no new colours or font families.
 
 #### Scenario: Same stylesheet as Dashboard
 - **WHEN** a setup page is loaded
-- **THEN** the stylesheet it links is byte-identical to the one Dashboard serves
+- **THEN** the stylesheet it links is byte-identical to the one the dashboard serves
 
 #### Scenario: No off-brand styling
 - **WHEN** the setup-specific stylesheet is inspected
-- **THEN** it contains no literal colour values and no font families that Dashboard does not use
+- **THEN** it contains no literal colour values and no font families that the dashboard does not use
 
 ### Requirement: One step model drives both setup front ends
 The terminal wizard and the browser setup SHALL be generated from the same
@@ -384,7 +384,7 @@ harness owns, every operator-presence gate, and
 - **THEN** the operator override contains no `[research]` table written by setup
 
 ### Requirement: Long setup tasks run only on explicit consent, with progress
-Downloads, installs, service bootstraps and starting Dashboard SHALL each start
+Downloads, installs, service bootstraps and starting the dashboard SHALL each start
 only on an explicit operator action for that task. Each SHALL show live
 progress and a plain-language result. A failed task SHALL report what
 happened and what to do next without ending the setup session.
@@ -406,7 +406,7 @@ confirmation, and SHALL start the cycle through the supervised start path. No
 other setup step, job or route SHALL start `kaine.cycle`. The pre-boot check
 SHALL be the same shared preflight the terminal path uses. Spawn SHALL refuse
 while a cycle is already running, and setup SHALL refuse to save configuration
-while one is running. The cycle and Dashboard SHALL run detached from the setup
+while one is running. The cycle and the dashboard SHALL run detached from the setup
 server, so that setup's exit never ends them. The welfare acknowledgement SHALL
 be appended to a local record with its time and text version.
 
@@ -439,7 +439,7 @@ be appended to a local record with its time and text version.
 
 #### Scenario: Setup exit leaves the entity running
 - **WHEN** the setup server exits or times out after a successful spawn
-- **THEN** the cycle and Dashboard processes keep running
+- **THEN** the cycle and the dashboard processes keep running
 
 #### Scenario: Double submit
 

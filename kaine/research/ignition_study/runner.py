@@ -399,7 +399,7 @@ class StudyRunner:
     def _adopt_birth_preservation(
         self, line_dir: Path, modules_set: set[str]
     ) -> dict[str, Any] | None:
-        """A development whose maturation preservation succeeded before the runner
+        """A developmental phase whose maturation preservation succeeded before the runner
         could record it: its record, built from the preservation pair on disk,
         or ``None`` when there is no such preservation."""
         state = line_dir / "state" / "cycle"
@@ -1177,7 +1177,7 @@ def _utc_iso() -> str:
 
 
 def _check_phantasia_manifest(bundle_path: str) -> tuple[str | None, bool | None]:
-    """Return an extra outcome and captured flag for a World model bundle."""
+    """Return an extra outcome and captured flag for a world model bundle."""
     manifest_path = Path(bundle_path) / "manifest.json"
     try:
         text = manifest_path.read_text(encoding="utf-8")

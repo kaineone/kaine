@@ -1,7 +1,7 @@
 ## Why
 
 Paper PR #28 says what sleep downscales (§4 "Episodic memory and sleep", Appendix A.10,
-Table A1, and a new limitation). Each persisted Episodic memory trace carries a
+Table A1, and a new limitation). Each persisted episodic memory trace carries a
 strength $h_i\in(0,1]$, stored at 1. Each sleep replays a few traces of the
 wake just ended, then scales the strength of every other trace by
 $\varrho^{N_{\rm new}/N_{\rm day}}$. Replayed traces keep their strength, a
@@ -63,7 +63,7 @@ The code does not follow it.
   boundary. An old table is rebuilt in one transaction at open. The pin rises
   to `sqlite-vec>=0.1.9,<1`.
 - `entity_time` comes from the entity clock and continues across restarts:
-  at initialize Episodic memory resumes from the newest stamp of the current wake, or
+  at initialize the episodic memory module resumes from the newest stamp of the current wake, or
   the meta's time of the last sleep. `payload["timestamp"]` stays wall-clock,
   because the live memory prober compares it with the organ's context.
 - Migration at initialize is idempotent: a store without the meta gets
@@ -86,7 +86,7 @@ The code does not follow it.
 
 ## Impact
 
-- Episodic memory is held, so the base-thesis form is unaffected: with Episodic memory absent
+- The episodic memory module is held, so the base-thesis form is unaffected: with the episodic memory module absent
   phase 2 is skipped as before.
 - Affected code: `kaine/modules/mnemos/{storage,memory,module,replay}.py`,
   `kaine/modules/hypnos/{phases,module}.py`, `kaine/boot/factories/{mnemos,hypnos}.py`,

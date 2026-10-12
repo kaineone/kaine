@@ -9,8 +9,8 @@ at-rest state files alongside the v1 files, noting which gain application-layer
 encryption and which remain OS-layer operator responsibility.
 
 This test pins that the section exists and mentions each of the four v4 state
-artifacts: the Eidolon self-model, the evaluation-observer JSONL, the Phantasia
-checkpoints, and the Empatheia Qdrant store.
+artifacts: the self-model file, the evaluation-observer JSONL, the world-model
+checkpoints, and the social cognition module's Qdrant store.
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def test_security_md_exists() -> None:
 
 
 def test_security_md_mentions_eidolon_self_model(security_text: str) -> None:
-    """§4 must name the Self-model self-model file."""
+    """§4 must name the self-model file."""
     assert "self_model" in security_text, (
         "SECURITY.md §4 does not mention the Eidolon self-model "
         "(expected substring 'self_model')"
@@ -48,7 +48,7 @@ def test_security_md_mentions_observer_jsonl(security_text: str) -> None:
 
 
 def test_security_md_mentions_phantasia(security_text: str) -> None:
-    """§4 must name the World model world-model checkpoints."""
+    """§4 must name the world-model checkpoints."""
     assert "phantasia" in security_text, (
         "SECURITY.md §4 does not mention the Phantasia checkpoints "
         "(expected substring 'phantasia')"
@@ -56,8 +56,8 @@ def test_security_md_mentions_phantasia(security_text: str) -> None:
 
 
 def test_security_md_mentions_empatheia(security_text: str) -> None:
-    """§4 must name the Social cognition Qdrant store."""
-    assert "empatheia" in security_text, (
-        "SECURITY.md §4 does not mention the Empatheia Qdrant store "
-        "(expected substring 'empatheia')"
+    """§4 must name the social cognition module's Qdrant store."""
+    assert "social cognition" in security_text, (
+        "SECURITY.md §4 does not mention the Social cognition Qdrant store "
+        "(expected substring 'social cognition')"
     )

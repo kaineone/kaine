@@ -209,7 +209,7 @@ def test_resolve_boot_stage_finds_own_bundle_under_configured_out_root(
 ) -> None:
     # This entity was preserved into the configured preservation out_root, and
     # its tree holds none of its own lived artifacts: it has lived, so it must
-    # not be regressed into development.
+    # not be regressed into the developmental phase
     monkeypatch.setattr("kaine.lifecycle.stage.STAGE_PATH", tmp_path / "state" / "lifecycle" / "stage.json")
     me = mint_identity()
     (tmp_path / "state").mkdir()

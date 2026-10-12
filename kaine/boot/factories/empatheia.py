@@ -16,7 +16,7 @@ from kaine.modules.base import BaseModule
 def make_empatheia(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     from kaine.modules.empatheia.module import Empatheia
 
-    # Supervisor-injected shared embedder; never a TOML key, so pop before validation.
+    # supervisor-injected shared embedder; never a TOML key, so pop before validation.
     embedder = section.pop("_embedder", None)
 
     allowed = {

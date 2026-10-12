@@ -96,7 +96,7 @@ async def test_full_stack_unbooted_runs_50_ticks_and_round_trips_snapshot(tmp_pa
 
 @pytest.mark.asyncio
 async def test_full_stack_with_nexus_co_existence(tmp_path):
-    """Cycle + Dashboard on the same fakeredis. Dashboard bridge reads streams
+    """Cycle + the dashboard on the same fakeredis. The dashboard bridge reads streams
     without disrupting the cycle's reads."""
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     from kaine.nexus.bridge import BusBridge
@@ -143,7 +143,7 @@ async def test_full_stack_with_nexus_co_existence(tmp_path):
             result = await cycle.tick()
             assert result.error is False
             await asyncio.sleep(0.01)
-        # Dashboard diagnostics SSE saw at least one event from lingua.out
+        # The dashboard diagnostics SSE saw at least one event from lingua.out
         # (scrubbed of content fields, but the event itself surfaced).
         assert diag_client.queue.qsize() > 0
     finally:

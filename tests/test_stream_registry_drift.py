@@ -85,7 +85,7 @@ def test_effective_memberships_are_golden():
         }
     )
 
-    # Raw archive: full canonical set (Language now publishes aggregate lingua.out).
+    # Raw archive: full canonical set (the language module now publishes aggregate lingua.out).
     golden_raw_archive = frozenset(golden_curated | {"lingua.out", "vox.out"})
 
     # Diagnostics: cycle.out + high-signal module streams + workspace.broadcast.
@@ -126,13 +126,13 @@ def test_registry_invariants():
     names = list(CANONICAL_MODULE_NAMES)
     assert len(names) == len(set(names)), "duplicate module names in registry"
     assert canonical_module_streams() == tuple(module_stream(n) for n in names)
-    # lingua.out IS in the canonical set; Language publishes an aggregate there
+    # lingua.out IS in the canonical set; the language module publishes an aggregate there
     # in addition to the mode-specific lingua.external / lingua.internal streams.
     assert "lingua.out" in canonical_module_streams()
 
 
 def test_diagnostics_streams_are_known():
-    """Every stream the Dashboard diagnostics monitor tails is a canonical stream
+    """Every stream the dashboard diagnostics monitor tails is a canonical stream
     in ``kaine.bus.streams.KNOWN_STREAMS``."""
     from kaine.bus import streams
     from kaine.evaluation.stream_registry import diagnostics_streams

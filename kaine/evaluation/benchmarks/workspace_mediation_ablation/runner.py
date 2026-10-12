@@ -65,7 +65,7 @@ PROCESSORS: tuple[str, ...] = ("soma", "topos")
 
 
 class _NeverAlertDetector:
-    """Interoception anomaly detector that never alerts, so Interoception's published salience is
+    """The interoception module anomaly detector that never alerts, so the interoception module's published salience is
     driven by its prediction error (the information-gain signal) rather than by
     a threshold alarm."""
 
@@ -86,7 +86,7 @@ class MediationConfig:
     n_background: int = 2
     soma_units: int = 16
     topos_units: int = 32
-    # The harness raises Vision's learning rate so a short run shows learning;
+    # The harness raises the vision module's learning rate so a short run shows learning;
     # the live module keeps its own default.
     topos_lr: float = 0.02
 

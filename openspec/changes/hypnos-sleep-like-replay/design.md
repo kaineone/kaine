@@ -8,12 +8,12 @@
 ## Application to KAINE
 
 **Candidates.**
-- The Sequence and Vision forward heads (single linear readouts).
+- The sequence and vision forward heads (single linear readouts).
 - The Audition acoustic and speech-path MLPs.
-- The Interoception CfC readout.
-- The World model RSSM, which is larger and last.
+- The interoception CfC readout.
+- The world model RSSM, which is larger and last.
 
-**Phase.** A Sleep phase after the existing consolidation phases, running only during sleep, with adaptation already suspended. Each learner exposes `replay_consolidate(noise_rng, budget)` through a protocol. Learners without it are skipped.
+**Phase.** A sleep phase after the existing consolidation phases, running only during sleep, with adaptation already suspended. Each learner exposes `replay_consolidate(noise_rng, budget)` through a protocol. Learners without it are skipped.
 
 **Statistics.** Only the per-feature mean and variance that the buffer summaries already persist are used to set noise rates. No raw buffer is needed.
 

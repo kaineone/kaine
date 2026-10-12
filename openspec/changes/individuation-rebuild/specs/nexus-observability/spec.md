@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Entity-care status on the health surface
-The Dashboard health snapshot SHALL include a read-only `entity_care` block reporting the entity's divergence/individuation summary and the CAL care-obligation checklist that applies before decommission. The summary SHALL come from the shared divergence assessment, so it carries the same STALE, INCONCLUSIVE and capture-kind wording as the decommission CLI. The block SHALL be non-content (statuses and static obligation text only) and SHALL NOT expose any destructive control; decommission remains a gated CLI action. The block SHALL be guarded so a missing or unreadable signal yields a safe default rather than an error.
+The dashboard health snapshot SHALL include a read-only `entity_care` block reporting the entity's divergence/individuation summary and the CAL care-obligation checklist that applies before decommission. The summary SHALL come from the shared divergence assessment, so it carries the same STALE, INCONCLUSIVE and capture-kind wording as the decommission CLI. The block SHALL be non-content (statuses and static obligation text only) and SHALL NOT expose any destructive control; decommission remains a gated CLI action. The block SHALL be guarded so a missing or unreadable signal yields a safe default rather than an error.
 
 #### Scenario: Care block present and read-only
 - **WHEN** the diagnostics health snapshot is produced
@@ -18,7 +18,7 @@ The Dashboard health snapshot SHALL include a read-only `entity_care` block repo
 ## ADDED Requirements
 
 ### Requirement: The individuation panel shows only scalars read through the shared reader
-The Dashboard individuation panel SHALL read individuation reports and the ledger only through the shared decrypting reader (`divergence-assessment`), never by reading report files directly. It SHALL show only: the latest outcome, H clipped at 0, p, α_k and the look index k, the reference kind and its date, whether the entity is latched, the last inconclusive reason, the warm-up state, and the inconclusive alert when it is raised. It SHALL NOT show any answer text, seed, embedding or digest. A missing or unreadable source SHALL render a "no data" state without error.
+The dashboard individuation panel SHALL read individuation reports and the ledger only through the shared decrypting reader (`divergence-assessment`), never by reading report files directly. It SHALL show only: the latest outcome, H clipped at 0, p, α_k and the look index k, the reference kind and its date, whether the entity is latched, the last inconclusive reason, the warm-up state, and the inconclusive alert when it is raised. It SHALL NOT show any answer text, seed, embedding or digest. A missing or unreadable source SHALL render a "no data" state without error.
 
 #### Scenario: Encrypted reports render
 - **WHEN** state encryption is enabled and a scored report exists

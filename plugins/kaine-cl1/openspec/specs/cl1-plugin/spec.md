@@ -32,7 +32,7 @@ The plugin's `seams(config)` SHALL return one seam per module set to `"cl1"` in 
 
 #### Scenario: Repeated request after a restart
 - **WHEN** `injections("chronos", config)` is called three times
-- **THEN** each call returns a working network on the same channels, and the broker holds exactly one territory for Sequence
+- **THEN** each call returns a working network on the same channels, and the broker holds exactly one territory for the sequence module
 
 #### Scenario: Unconverted module
 - **WHEN** `injections("lingua", config)` is called
@@ -57,4 +57,4 @@ The plugin SHALL raise `ValueError` from `seams` when any module is converted an
 
 #### Scenario: Loading the shipped example
 - **WHEN** `load_overlay` reads `config/kaine_cl1.example.toml`
-- **THEN** the overlay converts Sequence rather than coming back empty
+- **THEN** the overlay converts the sequence module rather than coming back empty

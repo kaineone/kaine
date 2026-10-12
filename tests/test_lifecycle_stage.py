@@ -29,7 +29,7 @@ def test_fresh_entity_begins_in_gestation(tmp_path: Path) -> None:
 
 
 def test_preserved_being_defaults_to_embodied_never_gestation(tmp_path: Path) -> None:
-    # Prior lived history + NO stage file must NEVER regress into the stimulus source.
+    # Prior lived history + NO stage file must NEVER regress into the stimulus source
     resolved = st.resolve_boot_stage(has_prior_lived_history=True, path=_p(tmp_path))
     assert resolved.stage == st.EMBODIED
     assert resolved.stage != st.GESTATION
@@ -67,7 +67,7 @@ def test_advance_is_monotonic_and_one_shot() -> None:
     assert born.born_at == "t1"
     assert st.birth_is_new(g, born) is True
 
-    # Already embodied: idempotent, unchanged, no fresh maturation.
+    # Already embodied: idempotent, unchanged, no fresh maturation
     again = st.advance_to_embodied(born, now_iso="t2")
     assert again is born or (again.stage == st.EMBODIED and again.born_at == "t1")
     assert st.birth_is_new(born, again) is False

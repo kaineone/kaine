@@ -98,7 +98,7 @@ silently dropped.
 ### Requirement: Snapshot rendering is a prompt input with bounded selection
 
 The faithful renderer's snapshot rendering SHALL be usable as a prompt input to
-Language, not only as an evaluation-log artifact. For that use the renderer SHALL
+the language module, not only as an evaluation-log artifact. For that use the renderer SHALL
 provide a salience-bounded, stably-ordered selection: render at most a caller-
 supplied maximum number of events, chosen by highest salience, ordered stably
 (e.g. by event timestamp) for readability. The existing unbounded

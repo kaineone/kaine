@@ -25,7 +25,7 @@ SHALL run on CPU.
 - **THEN** `phase()` returns the neutral phase and selection is unaffected
 
 ### Requirement: Coherence multiplier on coalition salience
-Workspace SHALL compute the pairwise phase-locking value among the modules
+The workspace SHALL compute the pairwise phase-locking value among the modules
 contributing to a candidate coalition over `plv_window` and SHALL multiply the
 coalition's aggregate salience by a coherence factor bounded to
 `[coherence_floor, coherence_ceiling]`. When `[oscillator].enabled` is false the
@@ -65,7 +65,7 @@ configuration time. The v1 implementation drives oscillators from module
 co-activity (publish rate) as a proxy for the paper's content-relatedness; this
 approximation SHALL be noted as a limitation in the design document alongside a
 v2 sketch (driving LIF from prediction-error magnitude). The self-rhythm oscillator's
-phase, which Interoception reads interoceptively, SHALL be taken from its population rate
+phase, which the interoception module reads interoceptively, SHALL be taken from its population rate
 band-limited to its own physiological band over a window of at least 4 s, not from the
 last sample of an unfiltered short window.
 
@@ -114,7 +114,7 @@ attenuated.
 
 #### Scenario: Disabled equals absent over many cycles
 
-- **WHEN** a disabled-layer Workspace and a layer-absent baseline Workspace are
+- **WHEN** a disabled-layer workspace and a layer-absent baseline workspace are
   driven through many consecutive cycles with the same seed and the same per-cycle
   events and phases
 - **THEN** on every cycle the selected events, their order, the salience scores,
@@ -123,7 +123,7 @@ attenuated.
 
 #### Scenario: Disabled multiplier is a literal no-op
 
-- **WHEN** the disabled-layer Workspace selects from a set of events
+- **WHEN** the disabled-layer workspace selects from a set of events
 - **THEN** the resulting salience scores equal the raw strategy scores (effective
   multiplier exactly 1.0)
 - **AND** no `metadata['coherence']` key is written
@@ -138,7 +138,7 @@ attenuated.
 
 An extreme precision gain SHALL demonstrably change selection. With the coherence
 layer enabled and the precision gain cranked to an EXTREME ceiling (with a low
-floor), Workspace selection SHALL FLIP relative to the salience-only baseline: a desynchronized event with higher raw salience
+floor), workspace selection SHALL FLIP relative to the salience-only baseline: a desynchronized event with higher raw salience
 SHALL be overtaken by a phase-locked event with lower raw salience once the
 extreme coherence gain is applied. This is a strong proof that the enable toggle
 is firmly connected to the selection mechanism, complementing the moderate-gain
@@ -194,14 +194,14 @@ NULL otherwise, with the effect size carried in the verdict's metrics.
 
 #### Scenario: Offline, no entity boot
 - **WHEN** the runner is invoked
-- **THEN** it drives only the cycle engine and Workspace over a scripted in-memory bus
+- **THEN** it drives only the cycle engine and workspace over a scripted in-memory bus
 - **AND** it does NOT boot an entity, attach to live modules, or open a network connection
 
 ### Requirement: Module restarts keep oscillators continuous
-When Supervisor restarts a module, the module SHALL keep the oscillator it had, with its phase history. On the heavy restart path the rebuilt module SHALL receive the same oscillator object its predecessor held, before it is initialized and registered. A restart SHALL NOT replace or rebuild the oscillator of any other module. A plugin-supplied oscillator SHALL therefore be requested once per declared seam, at boot, and never re-requested by a restart.
+When the supervisor restarts a module, the module SHALL keep the oscillator it had, with its phase history. On the heavy restart path the rebuilt module SHALL receive the same oscillator object its predecessor held, before it is initialized and registered. A restart SHALL NOT replace or rebuild the oscillator of any other module. A plugin-supplied oscillator SHALL therefore be requested once per declared seam, at boot, and never re-requested by a restart.
 
 #### Scenario: Heavy restart keeps the module's oscillator
-- **WHEN** a module with an oscillator is rebuilt on Supervisor's heavy restart path
+- **WHEN** a module with an oscillator is rebuilt on the supervisor's heavy restart path
 - **THEN** the rebuilt module holds the same oscillator object as before, and its phase history is intact
 
 #### Scenario: Other modules are untouched

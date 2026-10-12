@@ -2,13 +2,13 @@
 
 The revised paper (predictive-workspace-paper #21, decisions D2 and R4) settles two rules the code does not yet follow.
 
-- **Graded intensity.** Vision, the acoustic path of Audition, and Sequence report one of two intensities: the alert level when the error ratio (error over its running mean) crosses the alert criterion, the baseline level otherwise. So within a tick the competition ranks module identity, not surprise. Interoception and Audition's neutral tone events already grade their intensity by the error ratio. The paper makes that rule uniform: a report that meets its module's alert criterion takes the alert level; any other report takes `I_lo + (I_hi - I_lo) * min(1, ratio / 2)`, reaching the alert level when the error is twice its running mean.
+- **Graded intensity.** The vision module, the acoustic path of the audition module, and the sequence module report one of two intensities: the alert level when the error ratio (error over its running mean) crosses the alert criterion, the baseline level otherwise. So within a tick the competition ranks module identity, not surprise. The interoception module and the audition module's neutral tone events already grade their intensity by the error ratio. The paper makes that rule uniform: a report that meets its module's alert criterion takes the alert level; any other report takes `I_lo + (I_hi - I_lo) * min(1, ratio / 2)`, reaching the alert level when the error is twice its running mean.
 - **Alert-only phasic input.** The access rate's phasic input is the largest intensity among the tick's module reports above a floor of 0.5. With graded intensities Audition's typical report (ratio about 1, intensity about 0.6) sits above the floor, so the rate would almost never rest. The paper counts categorical alerts only: the phasic input is the largest intensity among reports whose payload carries `alert: true`, so with no alert the rate rests at about 3.3 Hz.
 
 ## What Changes
 
-- Vision, Audition (acoustic path) and Sequence (when it has a normalised temporal error) compute non-alert intensity with the graded map above, using the same running ratio their alert criterion uses. The z-score fallback Sequence uses before its first temporal error stays two-level.
-- Every predictive processor's report payload carries a boolean `alert`: Vision and Audition already do; Interoception adds `alert` (a hard-threshold breach); Sequence adds `alert`; Audition's tone events add `alert` (true for a non-neutral tone).
+- The vision module, the audition module (acoustic path) and the sequence module (when it has a normalised temporal error) compute non-alert intensity with the graded map above, using the same running ratio their alert criterion uses. The z-score fallback the sequence module uses before its first temporal error stays two-level.
+- Every predictive processor's report payload carries a boolean `alert`: the vision module and the audition module already do; the interoception module adds `alert` (a hard-threshold breach); the sequence module adds `alert`; the audition module's tone events add `alert` (true for a non-neutral tone).
 - `max_report_salience` in `kaine/cycle/access_rate.py` counts only events whose payload has `alert` true; its docstring and the module docstring say so.
 
 ## Capabilities

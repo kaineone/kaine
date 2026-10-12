@@ -1,12 +1,12 @@
 # workspace Specification
 
 ## Purpose
-This capability defines the workspace selection layer: it accepts a SalienceStrategy protocol, ships a v1 product-form implementation, selects a top-k coalition, and supports executive inhibition and novelty habituation for repeated payloads. Default settings let the cycle run without Affect or goals, errors are tolerated, and placeholder factors are disclosed at runtime.
+This capability defines the workspace selection layer: it accepts a SalienceStrategy protocol, ships a v1 product-form implementation, selects a top-k coalition, and supports executive inhibition and novelty habituation for repeated payloads. Default settings let the cycle run without the affect module or goals, errors are tolerated, and placeholder factors are disclosed at runtime.
 
 ## Requirements
 
 ### Requirement: SalienceStrategy protocol with v1 product-form implementation
-Workspace SHALL accept a salience strategy implementing
+The workspace SHALL accept a salience strategy implementing
 `async score(event, context) -> float`. The shipped v1 strategy
 `RuleBasedSalience` SHALL compute the score as the product of four terms —
 `intensity`, `novelty`, `goal_relevance`, `thymos_modulation` — each in
@@ -78,7 +78,7 @@ The window size SHALL be configurable.
 ### Requirement: Defaults that let the system run without Affect and goals
 `Syneidesis` SHALL accept `GoalScorer` and `ThymosModulator` collaborators
 with static defaults returning 1.0, so the product-form score works before
-Phase 4 lands the real Affect and goal representation. The system SHALL
+Phase 4 lands the real affect module and goal representation. The system SHALL
 produce nonzero salience scores without either module present.
 
 #### Scenario: Default scorer yields nonzero score
@@ -87,7 +87,7 @@ produce nonzero salience scores without either module present.
 - **THEN** the returned score equals 0.48
 
 ### Requirement: Strategy error tolerance
-Workspace SHALL tolerate `SalienceStrategy.score` exceptions by logging a
+The workspace SHALL tolerate `SalienceStrategy.score` exceptions by logging a
 warning, recording that event's score as 0.0, and continuing to score the
 remaining events on the same tick.
 
@@ -126,12 +126,12 @@ this requirement governs disclosure only.
 - **THEN** no warning is emitted
 
 ### Requirement: Drive-relevant sources are declared by the modules
-The goal factor's drive-to-source mapping SHALL be built from what each registered module declares in `relieves_drives`, plus the declared workspace scaffolding sources. It SHALL be injected into the scorer, so the workspace layer never imports a module. Every declared tag SHALL be one of the four Affect drives.
+The goal factor's drive-to-source mapping SHALL be built from what each registered module declares in `relieves_drives`, plus the declared workspace scaffolding sources. It SHALL be injected into the scorer, so the workspace layer never imports a module. Every declared tag SHALL be one of the four affect module's drives.
 
 #### Scenario: A module's declaration drives the mapping
 - **WHEN** a registered module declares `relieves_drives = {"curiosity"}`
 - **THEN** with curiosity dominant, an event from that module is weighted as drive-relevant
 
 #### Scenario: An unknown drive tag is rejected
-- **WHEN** a module declares a tag that is not a Affect drive
+- **WHEN** a module declares a tag that is not an affect module drive
 - **THEN** building the mapping raises an error at boot

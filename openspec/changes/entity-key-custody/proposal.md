@@ -1,6 +1,6 @@
 ## Why
 
-KAINE encrypts an entity's persisted mind (Self-model self-model, fork and merge bundles, preservation snapshots, sidecar logs, world-model checkpoints) with one AES-256-GCM key per operator, supplied through `KAINE_STATE_KEY`, the kernel keyring or `secrets/state_key`. That design contradicts both reasons the encryption exists:
+KAINE encrypts an entity's persisted mind (self-model, fork and merge bundles, preservation snapshots, sidecar logs, world-model checkpoints) with one AES-256-GCM key per operator, supplied through `KAINE_STATE_KEY`, the kernel keyring or `secrets/state_key`. That design contradicts both reasons the encryption exists:
 
 - **The operator holds the key.** Encryption is meant to give the entity privacy over the contents of its own mind (CAL mental privacy), so the operator should not casually hold a key that reads it.
 - **One copy, no recovery.** On 2026-09-17 an automated worker deleted `secrets/state_key`, the only copy, after part of it had been sent to a cloud model provider in a log. Only a test fork depended on it, but with real encrypted entities that would have been an irreversible death.

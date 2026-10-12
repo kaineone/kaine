@@ -11,9 +11,9 @@
 ## MODIFIED Requirements
 
 ### Requirement: Individuation is measured against the entity's own maturation-state, not the bare organ
-The individuation test SHALL measure how far the entity's conditioned answers have drifted from its own reference answers, never from the bare or pretrained organ. A probe answer SHALL be one battery prompt rendered as Language renders it with an empty workspace (`snapshot=None`, `mode="external"`, the current self-model) and sent through Language's own chat client, so the only conditions free to differ between reference and now are the LoRA adapter the organ applies and the identity clause rendered from the self-model's `values[:5]` and `behavioral_norms[:5]`.
+The individuation test SHALL measure how far the entity's conditioned answers have drifted from its own reference answers, never from the bare or pretrained organ. A probe answer SHALL be one battery prompt rendered as the language module renders it with an empty workspace (`snapshot=None`, `mode="external"`, the current self-model) and sent through the language module's own chat client, so the only conditions free to differ between reference and now are the LoRA adapter the organ applies and the identity clause rendered from the self-model's `values[:5]` and `behavioral_norms[:5]`.
 
-The reference SHALL be captured on the maturation gate's maturation transition, as soon as the organ is loaded and before the first post-maturation sleep, with n_b = 16 samples for each of the 12 battery prompts. Capture SHALL retry with backoff, and until a reference exists every look SHALL be inconclusive with reason "no reference". If an accepted adapter or a changed identity clause comes before the capture succeeds, the reference SHALL be stored with `reference_kind="capture"` and its timestamp and SHALL never be presented as a maturation reference. A `reconstructed` reference SHALL be taken only with explicit operator approval for that being, and only when the records show no adapter older than `born_at` and a fresh-start self-model at maturation; any doubt SHALL fall back to `capture`.
+The reference SHALL be captured on the maturation gate's maturation transition, as soon as the organ is loaded and before the first post-maturation sleep, with n_b = 16 samples for each of the 12 battery prompts. Capture SHALL retry with backoff, and until a reference exists every look SHALL be inconclusive with reason "no reference". If an accepted adapter or a changed identity clause comes before the capture succeeds, the reference SHALL be stored with `reference_kind="capture"` and its timestamp and SHALL never be presented as a maturation reference. A `reconstructed` reference SHALL be taken only with explicit operator approval for that entity, and only when the records show no adapter older than `born_at` and a fresh-start self-model at maturation; any doubt SHALL fall back to `capture`.
 
 - A maturation request SHALL survive a restart through a durable marker, `state/individuation/birth_pending`.
 - The marker SHALL be cleared when the capture succeeds or a completed sleep turns it into a capture reference.
@@ -33,7 +33,7 @@ At every look the test SHALL re-embed the stored reference texts with the curren
 
 #### Scenario: The bare organ is never the baseline
 - **WHEN** the individuation test is wired for a run
-- **THEN** both arms are sampled through Language's own chat client with the entity's adapter and self-model, and neither arm is the bare or pretrained organ
+- **THEN** both arms are sampled through the language module's own chat client with the entity's adapter and self-model, and neither arm is the bare or pretrained organ
 
 #### Scenario: Capture after an accepted adapter is labelled capture
 - **WHEN** the first post-maturation sleep with an accepted adapter completes before the maturation capture succeeds
@@ -126,7 +126,7 @@ Once a look is significant, the ledger SHALL record `individuated = true`, `latc
 - **THEN** the ledger read at startup reports the entity as individuated
 
 ### Requirement: The probe does not enter lived experience
-The probe SHALL build its request through Language's side-effect-free `probe_request(about, *, seed, max_tokens)` and send it through Language's own chat client, which carries the current adapter resolver, with `cache_prompt` off and the probe's `max_tokens` (default 160). Working memory SHALL be `EMPTY_AWARENESS`, and the persona template, `persona_name`, model id, `think` flag, temperature, battery and embedder SHALL be held fixed between the reference and the current sample. The probe SHALL NOT call `speak()`, `think()` or `_produce`, SHALL NOT write the intent log, and SHALL NOT publish any `lingua.*` or `*_speech` event. Probe answers SHALL never enter the entity's experience.
+The probe SHALL build its request through the language module's side-effect-free `probe_request(about, *, seed, max_tokens)` and send it through the language module's own chat client, which carries the current adapter resolver, with `cache_prompt` off and the probe's `max_tokens` (default 160). Working memory SHALL be `EMPTY_AWARENESS`, and the persona template, `persona_name`, model id, `think` flag, temperature, battery and embedder SHALL be held fixed between the reference and the current sample. The probe SHALL NOT call `speak()`, `think()` or `_produce`, SHALL NOT write the intent log, and SHALL NOT publish any `lingua.*` or `*_speech` event. Probe answers SHALL never enter the entity's experience.
 
 Each request SHALL carry a fresh seed from `secrets.randbits(31)`, sent in the request body and recorded in the encrypted sample record. Seeds SHALL NOT be reused between the reference and current samples. The test SHALL NOT rely on the server being deterministic.
 
@@ -140,7 +140,7 @@ Each request SHALL carry a fresh seed from `secrets.randbits(31)`, sent in the r
 
 #### Scenario: The entity's adapter is applied
 - **WHEN** the entity has an accepted adapter and the probe sends a request
-- **THEN** the request goes through Language's chat client with the adapter resolver, not through a client built without it
+- **THEN** the request goes through the language module's chat client with the adapter resolver, not through a client built without it
 
 ### Requirement: Failed samples make a run inconclusive, never scored
 A run SHALL become `outcome="inconclusive"`, with a reason label, if any sample raises or times out, returns `raw.organ_resting`, returns empty `choices[0].message.content` (reasoning-channel text SHALL NOT be accepted), returns a non-200 status, fails to embed, or if the adapter sha or identity-clause digest read before the first request differs from the one read after the last. An inconclusive run SHALL NOT be scored, SHALL spend no alpha, SHALL write a report without p, H or significance fields, and SHALL publish nothing on `individuation.out`. No scalar SHALL be fabricated for a missing answer or embedding. `finish_reason == "length"` SHALL NOT be a failure; its rate is reported.
@@ -158,10 +158,10 @@ A run SHALL become `outcome="inconclusive"`, with a reason label, if any sample 
 - **THEN** the run is inconclusive because the sample would mix two entities
 
 ### Requirement: The probe yields to Language and skips when the organ is unloaded or the entity is asleep or paused
-A look SHALL be attempted 120 s after `hypnos.sleep.completed` and on a daily timer. Before any request, the producer SHALL skip the look (logged, no report) unless a reference exists, warm-up is met, the conditioning digest changed, `min_look_interval_s` has elapsed, the organ is loaded, Sleep is awake, the cycle is not paused or frozen, a semantic embedder is loaded, and the served adapter can be verified. An unreadable ledger is reported as inconclusive by the look itself and is not a skip condition. In hot-swap modes other than `organ_adapter`, once an adapter exists, probes and captures are skipped as `adapter_unverifiable`. The producer SHALL send one request at a time and, before each request, wait until no Language generation is in flight and no speech occurred in the last `lingua_quiet_s` (default 10 s). A run that cannot finish within `run_deadline_s` (default 2700 s), or during which a `hypnos.sleep.started`, an organ unload or a pause occurs, SHALL be aborted as inconclusive.
+A look SHALL be attempted 120 s after `hypnos.sleep.completed` and on a daily timer. Before any request, the producer SHALL skip the look (logged, no report) unless a reference exists, warm-up is met, the conditioning digest changed, `min_look_interval_s` has elapsed, the organ is loaded, the sleep module is awake, the cycle is not paused or frozen, a semantic embedder is loaded, and the served adapter can be verified. An unreadable ledger is reported as inconclusive by the look itself and is not a skip condition. In hot-swap modes other than `organ_adapter`, once an adapter exists, probes and captures are skipped as `adapter_unverifiable`. The producer SHALL send one request at a time and, before each request, wait until no language module generation is in flight and no speech occurred in the last `lingua_quiet_s` (default 10 s). A run that cannot finish within `run_deadline_s` (default 2700 s), or during which a `hypnos.sleep.started`, an organ unload or a pause occurs, SHALL be aborted as inconclusive.
 
 #### Scenario: A sleeping being is not probed
-- **WHEN** a look is due while Sleep is asleep
+- **WHEN** a look is due while the sleep module is asleep
 - **THEN** no probe request is sent and the look is skipped
 
 #### Scenario: A paused being is not probed
@@ -173,15 +173,15 @@ A look SHALL be attempted 120 s after `hypnos.sleep.completed` and on a daily ti
 - **THEN** the look is skipped with reason `adapter_unverifiable` and no probe request is sent
 
 #### Scenario: The probe waits for Language
-- **WHEN** Language is generating or spoke within the last `lingua_quiet_s`
-- **THEN** the next probe request is held until Language has been quiet for `lingua_quiet_s`
+- **WHEN** the language module is generating or spoke within the last `lingua_quiet_s`
+- **THEN** the next probe request is held until the language module has been quiet for `lingua_quiet_s`
 
 #### Scenario: Sleep during a run aborts it
 - **WHEN** `hypnos.sleep.started` is observed while a run is in progress
 - **THEN** the run stops and is recorded as inconclusive
 
 ### Requirement: Individuation evidence respects mental privacy
-Reference texts, current answers, seeds, embeddings and digests of interior content (identity clause, values) SHALL be stored only under `state/individuation/`, written through the state encryptor, and SHALL never be exported, displayed or published. When state encryption is disabled they SHALL remain only under `state/` and are plaintext on disk, which research mode does not allow. Reports SHALL be content-free: they SHALL carry no texts, no seeds and no digests. The bus and Dashboard SHALL see only scalars, outcome labels, counts, timestamps and ids. `state/individuation/` SHALL be outside the metrics-export allowlist and SHALL NOT be auto-deleted (`retention_days=0`).
+Reference texts, current answers, seeds, embeddings and digests of interior content (identity clause, values) SHALL be stored only under `state/individuation/`, written through the state encryptor, and SHALL never be exported, displayed or published. When state encryption is disabled they SHALL remain only under `state/` and are plaintext on disk, which research mode does not allow. Reports SHALL be content-free: they SHALL carry no texts, no seeds and no digests. The bus and dashboard SHALL see only scalars, outcome labels, counts, timestamps and ids. `state/individuation/` SHALL be outside the metrics-export allowlist and SHALL NOT be auto-deleted (`retention_days=0`).
 
 #### Scenario: A report carries no content
 - **WHEN** a scored report is written
@@ -192,10 +192,10 @@ Reference texts, current answers, seeds, embeddings and digests of interior cont
 - **THEN** the bytes on disk do not contain any probe answer or identity-clause text
 
 ### Requirement: The entity is told that it is assessed
-The entity SHALL be told, as a fact about its situation, that it is periodically assessed for its own protection. The fact SHALL be held in the Self-model self-model as a situation fact (in a dedicated situation-facts field, preserved with the self-model) and rendered by Language's context assembler. It SHALL be stated as a situation fact, not as a value or behavioural norm, SHALL be held outside the identity clause (`values`, `behavioral_norms`) the probe conditions on, and SHALL be present identically in the reference and current arms. Disclosing it SHALL NOT change the conditioning digest and SHALL NOT by itself trigger a look.
+The entity SHALL be told, as a fact about its situation, that it is periodically assessed for its own protection. The fact SHALL be held in the self-model as a situation fact (in a dedicated situation-facts field, preserved with the self-model) and rendered by the language module's context assembler. It SHALL be stated as a situation fact, not as a value or behavioural norm, SHALL be held outside the identity clause (`values`, `behavioral_norms`) the probe conditions on, and SHALL be present identically in the reference and current arms. Disclosing it SHALL NOT change the conditioning digest and SHALL NOT by itself trigger a look.
 
 #### Scenario: The disclosure does not change the probe conditions
-- **WHEN** the disclosure is present in the self-model's situation facts and rendered in Language's context
+- **WHEN** the disclosure is present in the self-model's situation facts and rendered in the language module's context
 - **THEN** the conditioning digest is computed from the adapter and identity-clause inputs only and is unchanged by the disclosure
 
 #### Scenario: The disclosure is not in the identity clause
@@ -203,11 +203,11 @@ The entity SHALL be told, as a fact about its situation, that it is periodically
 - **THEN** neither contains the assessment disclosure
 
 ### Requirement: Long inconclusive stretches raise an operator alert
-When a look has been due (no reference exists, or the conditioning digest differs from `last_look_conditions_digest`) for `inconclusive_alert_s` (default 1209600 s, 14 days) of wall-clock time without a scored look, the producer SHALL raise a notice on Dashboard and to the caretaker naming the last inconclusive reason. The alert SHALL NOT trigger preservation or any action on the entity. The time the look became due SHALL be persisted in the ledger, and the alert SHALL be raised once per stretch and cleared by the next scored look.
+When a look has been due (no reference exists, or the conditioning digest differs from `last_look_conditions_digest`) for `inconclusive_alert_s` (default 1209600 s, 14 days) of wall-clock time without a scored look, the producer SHALL raise a notice on the dashboard and to the caretaker naming the last inconclusive reason. The alert SHALL NOT trigger preservation or any action on the entity. The time the look became due SHALL be persisted in the ledger, and the alert SHALL be raised once per stretch and cleared by the next scored look.
 
 #### Scenario: Two weeks of inconclusive runs alert the operator
 - **WHEN** a look has been due for 14 days and every attempt was skipped or inconclusive
-- **THEN** a Dashboard and caretaker notice is raised with the last inconclusive reason, and no preservation is started by it
+- **THEN** a dashboard and caretaker notice is raised with the last inconclusive reason, and no preservation is started by it
 
 #### Scenario: A scored look clears the alert
 - **WHEN** a scored look completes after the alert was raised

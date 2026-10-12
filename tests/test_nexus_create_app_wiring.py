@@ -19,7 +19,7 @@ from kaine.nexus.privacy import PrivacyFilter
 
 def test_nexus_main_create_app_keywords_are_accepted():
     """Every keyword passed to create_app() from kaine/nexus/__main__.py must be
-    declared by create_app(), otherwise Dashboard crashes at startup."""
+    declared by create_app(), otherwise the dashboard crashes at startup."""
     main_path = Path(__file__).resolve().parents[1] / "kaine" / "nexus" / "__main__.py"
     source = main_path.read_text(encoding="utf-8")
     tree = ast.parse(source)

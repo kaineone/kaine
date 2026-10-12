@@ -25,7 +25,7 @@ from tests.voice_prompt_support import with_verified_system
 
 @pytest.fixture(autouse=True)
 def _voice_alignment_opt_in(monkeypatch):
-    """Existing sleep tests assume voice-alignment training fires.
+    """Existing sleep module tests assume voice-alignment training fires.
     Two-layer safety gate (config.enabled + env var) is set by default
     so the trainer is actually called; tests that want to exercise the
     skip-on-disabled paths override this fixture explicitly."""
@@ -344,7 +344,7 @@ async def test_concurrent_sleep_rejected(bus: AsyncBus, tmp_path: Path):
 @pytest.mark.asyncio
 async def test_one_phase_failure_does_not_stop_others(bus: AsyncBus, tmp_path: Path):
     class BoomMnemos:
-        """Episodic memory stub where consolidate_now raises; other methods succeed."""
+        """The episodic memory module stub where consolidate_now raises; other methods succeed."""
         async def consolidate_now(self) -> int:
             raise RuntimeError("boom")
 
@@ -416,7 +416,7 @@ async def test_voice_alignment_passes_pairs_to_trainer(bus: AsyncBus, tmp_path: 
 @pytest.mark.asyncio
 async def test_capability_loss_veto(bus: AsyncBus, tmp_path: Path):
     """If the trainer accepts but capability loss exceeds threshold,
-    Sleep vetoes the result and reports it as rejected."""
+    The sleep module vetoes the result and reports it as rejected."""
     class BigLossTrainer:
         async def train(self, pairs, config):
             adapter = config.adapter_output_dir / "would-be-adapter"

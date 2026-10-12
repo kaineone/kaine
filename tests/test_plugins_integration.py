@@ -234,7 +234,7 @@ async def test_build_registry_plugin_fills_chronos_network(caplog, bus):
 
 
 # ---------------------------------------------------------------------------
-# 4.5 + 4.10  Supervisor restarts re-request plugin injections
+# 4.5 + 4.10  the supervisor restarts re-request plugin injections
 # ---------------------------------------------------------------------------
 
 
@@ -439,7 +439,7 @@ async def test_none_injection_fails_closed(module, key, bus):
 
 @pytest.mark.asyncio
 async def test_nous_falsy_injected_engine_held_not_default(monkeypatch, bus):
-    """An injected engine that is falsy is still the engine Planning uses."""
+    """An injected engine that is falsy is still the engine the planning module uses."""
     monkeypatch.setattr("kaine.modules.nous.engine.PymdpEngine", _BoomPymdpEngine)
 
     class FalsyEngine:
@@ -477,7 +477,7 @@ def _spot(registry, config, bus):
 
 @pytest.mark.asyncio
 async def test_spot_nous_heavy_restart_refreshes_engine_keeps_oscillator(monkeypatch, bus):
-    """Two real Supervisor heavy restarts of Planning each request a fresh engine from the
+    """Two real supervisor heavy restarts of the planning module each request a fresh engine from the
     plugin (tasks 4.5 / 4.10), while the plugin oscillator is requested once at
     boot and carried over unchanged (oscillator-continuity-on-restart)."""
     monkeypatch.setattr("kaine.oscillator.snntorch_available", lambda: False)
@@ -522,7 +522,7 @@ async def test_spot_nous_heavy_restart_refreshes_engine_keeps_oscillator(monkeyp
 
 @pytest.mark.asyncio
 async def test_spot_chronos_light_restart_keeps_same_network(bus):
-    """Sequence restarts in place: it keeps its injected network and the plugin
+    """The sequence module restarts in place: it keeps its injected network and the plugin
     is not asked again."""
     network_plugin = _ChronosNetworkPlugin(_FakeNetwork)
     config = {"modules": {"chronos": True}, "plugins": {"enabled": ["chronosnet"]}}

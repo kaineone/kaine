@@ -73,10 +73,10 @@ def make_plugin():
 
 | Seam | Replaces | Interface expected by the module |
 |---|---|---|
-| `chronos.network` | The default [Sequence](09-modules/sequence.md) CfC network | An object with a `units` attribute (hidden width) and a `tick(feature_vec)` method that returns a hidden-state vector. Sequence sizes its forward-prediction head from `units`. |
-| `soma.forward_model` | The default [Interoception](09-modules/interoception.md) forward model | `step(...)`, `prediction_error_to_salience(...)`, a `suspended` property, `adaptation_steps`, `state_dict()`, `load_state_dict(...)`. An optional `context_dim` attribute greater than 0 makes Interoception pass the broadcast context as `context=` and `null_context=` to `step`; without it the call is unchanged and the model reports no `context_gain`. An optional `last_error_defined` attribute, false for a reading the model skipped as non-finite and for the first reading after one, makes Interoception publish a null `prediction_error` for that reading, keep it out of the running mean and report no unexpected error; without it every error counts as defined. The CL1 wetware model sets it. |
-| `nous.engine` | The active-inference engine KAINE builds from `[nous].backend` (`"pymdp"` or `"numpy"`) in [Planning](09-modules/planning.md) | An object satisfying `kaine.modules.nous.engine.ActiveInferenceEngine` (Planning calls `step(...)` and reads `actions`). The `[nous]` complexity envelope is still validated. |
-| `nous.engine_wrapper` | The built engine, indirectly: a wrapper around the active-inference engine KAINE built from `[nous].backend` | A callable `wrap(engine)` that receives the engine KAINE built and returns an `ActiveInferenceEngine`. Use it to add to the default engine without seeing its settings. The wrapper must forward every attribute it does not override to the inner engine: Planning probes optional methods with `getattr` (for example `seed_posterior` after a revive) and goes without them when they are missing. Planning calls `engine.step` via `asyncio.to_thread`, so a wrapper that touches shared state must serialise it. Cannot be combined with `nous.engine`. |
+| `chronos.network` | The default [Sequence](09-modules/sequence.md) CfC network | An object with a `units` attribute (hidden width) and a `tick(feature_vec)` method that returns a hidden-state vector. The sequence module sizes its forward-prediction head from `units`. |
+| `soma.forward_model` | The default [Interoception](09-modules/interoception.md) forward model | `step(...)`, `prediction_error_to_salience(...)`, a `suspended` property, `adaptation_steps`, `state_dict()`, `load_state_dict(...)`. An optional `context_dim` attribute greater than 0 makes the interoception module pass the broadcast context as `context=` and `null_context=` to `step`; without it the call is unchanged and the model reports no `context_gain`. An optional `last_error_defined` attribute, false for a reading the model skipped as non-finite and for the first reading after one, makes the interoception module publish a null `prediction_error` for that reading, keep it out of the running mean and report no unexpected error; without it every error counts as defined. The CL1 wetware model sets it. |
+| `nous.engine` | The active-inference engine KAINE builds from `[nous].backend` (`"pymdp"` or `"numpy"`) in [Planning](09-modules/planning.md) | An object satisfying `kaine.modules.nous.engine.ActiveInferenceEngine` (the planning module calls `step(...)` and reads `actions`). The `[nous]` complexity envelope is still validated. |
+| `nous.engine_wrapper` | The built engine, indirectly: a wrapper around the active-inference engine KAINE built from `[nous].backend` | A callable `wrap(engine)` that receives the engine KAINE built and returns an `ActiveInferenceEngine`. Use it to add to the default engine without seeing its settings. The wrapper must forward every attribute it does not override to the inner engine: the planning module probes optional methods with `getattr` (for example `seed_posterior` after a revive) and goes without them when they are missing. The planning module calls `engine.step` via `asyncio.to_thread`, so a wrapper that touches shared state must serialise it. Cannot be combined with `nous.engine`. |
 | `audition.acoustic_encoder` | The default [Audition](09-modules/audition.md) acoustic encoder | An object satisfying the `AcousticEncoder` protocol: `embedding_dim` (int), `model_id` (str), and `embed(audio_bytes, sample_rate)` returning a list of floats. Requires `general_audition = true` and `[audition].acoustic_encoder` to be unset or `"spectral"`. |
 | `oscillator.<module>` | The default module oscillator | An oscillator object accepted by the module's `attach_oscillator` method. |
 
@@ -86,10 +86,10 @@ If a plugin named in `enabled` is missing, exported by more than one installed d
 
 ## Restart behavior
 
-Supervisor restarts a failing module in one of two ways:
+The supervisor restarts a failing module in one of two ways:
 
-- In place (the default for Sequence and Interoception): the same module object is shut down and re-initialized, so it keeps the injected object it was built with. The plugin is not asked again.
-- Rebuilt (used by modules that hold external resources, such as Planning): the module is constructed afresh through the same path as at boot, so the plugin's `injections` is called again for that module and must return a working, fresh object.
+- In place (the default for the sequence and interoception modules): the same module object is shut down and re-initialized, so it keeps the injected object it was built with. The plugin is not asked again.
+- Rebuilt (used by modules that hold external resources, such as the planning module): the module is constructed afresh through the same path as at boot, so the plugin's `injections` is called again for that module and must return a working, fresh object.
 
 Oscillators are never re-created by a restart: a rebuilt module receives the oscillator its predecessor held (the same object, phase history intact), and every other module keeps its own. A plugin's `make_oscillator` is therefore called once per declared `oscillator.<module>` seam, at boot.
 
@@ -121,9 +121,9 @@ It runs inside the tick on the cycle's event loop, so it must return quickly and
 
 ## State snapshots
 
-Interoception serializes its forward model through `state_dict()` and restores it with `load_state_dict(...)`, so an injected forward model must implement both. If restoring fails, Interoception logs a warning and continues with the un-restored model, so a plugin model should restore what it can or keep a working state when it receives a snapshot taken with a different model.
+The interoception module serializes its forward model through `state_dict()` and restores it with `load_state_dict(...)`, so an injected forward model must implement both. If restoring fails, the interoception module logs a warning and continues with the un-restored model, so a plugin model should restore what it can or keep a working state when it receives a snapshot taken with a different model.
 
-A plugin model with a `reservoir_seed` attribute is a special case. If the snapshot carries `reservoir_seed`, Interoception replaces the injected model with a fresh `SubstrateForwardModel` seeded from the snapshot instead of calling `load_state_dict(...)`. In that case, Sequence calls `load_state(...)` on the injected network and saves `reservoir_seed` when the network exposes one; otherwise Sequence serializes only its prediction head, so an injected network's state is normally the plugin's to keep.
+A plugin model with a `reservoir_seed` attribute is a special case. If the snapshot carries `reservoir_seed`, the interoception module replaces the injected model with a fresh `SubstrateForwardModel` seeded from the snapshot instead of calling `load_state_dict(...)`. In that case, the sequence module calls `load_state(...)` on the injected network and saves `reservoir_seed` when the network exposes one; otherwise the sequence module serializes only its prediction head, so an injected network's state is normally the plugin's to keep.
 
 ## Run manifest records
 
@@ -131,7 +131,7 @@ Boot logs one WARNING line for each filled seam. The run manifest records, for e
 
 ## Plugins in ablation runs
 
-The development harness of the workspace-mediation test constructs Interoception and Vision directly and does not load plugins.
+The development harness of the workspace-mediation test constructs the interoception and vision modules directly and does not load plugins.
 
 ## The CL1 substrate plugin
 
@@ -144,7 +144,7 @@ The plugin keeps a module's identity, bus subscriptions and published events exa
 | Module | Seam | What runs on the substrate |
 |---|---|---|
 | [Sequence](09-modules/sequence.md) | `chronos.network` | The recurrent network whose hidden state feeds Sequence's prediction head. |
-| [Interoception](09-modules/interoception.md) | `soma.forward_model` | The reservoir under Interoception's interoceptive forward model; a small silicon readout still predicts the next metrics vector, so the prediction error keeps its usual units. |
+| [Interoception](09-modules/interoception.md) | `soma.forward_model` | The reservoir under the interoception module's interoceptive forward model; a small silicon readout still predicts the next metrics vector, so the prediction error keeps its usual units. |
 | Any oscillated module | `oscillator.<module>` | The oscillator of the oscillatory coherence layer: each time the module publishes, its own small territory is stimulated in proportion to the event's intensity, and the binding phase is read from that territory's firing. |
 | [Planning](09-modules/planning.md) | `nous.engine_wrapper` | A policy proposal beside KAINE's own active-inference engine, which keeps its beliefs and expected free energy. |
 
@@ -175,7 +175,7 @@ pip install ./plugins/kaine-cl1
 pip install cl-sdk
 ```
 
-The setup wizard (`python -m kaine.setup`) offers this as an optional step, off by default, but skips it when you choose a defaults run: answering yes records the configuration below for whichever of Sequence and Interoception you enabled and prints the two install commands; it never runs them. To configure it by hand instead, add to your KAINE configuration:
+The setup wizard (`python -m kaine.setup`) offers this as an optional step, off by default, but skips it when you choose a defaults run: answering yes records the configuration below for whichever of the sequence and interoception modules you enabled and prints the two install commands; it never runs them. To configure it by hand instead, add to your KAINE configuration:
 
 ```toml
 [plugins]
@@ -224,7 +224,7 @@ Every boot with a converted module logs a warning that the substrate is simulate
 
 ### Planning on the substrate
 
-Planning is off the substrate unless you set `nous = "cl1"`. When it is on, KAINE builds its usual active-inference engine and the plugin wraps it. Each step runs the silicon engine first, then stimulates one group of electrodes per action, harder for actions with lower expected free energy, and reads the tissue's proposed action from whichever group fires most in the window that answers its stimulation. When no group fires, or the top groups tie, the proposal is the silicon engine's choice and the answer counts as a disagreement. Once the substrate follows KAINE's cycle, that answer arrives one Planning step later, so it is scored against the silicon choice it was stimulated with, not the current one. The last two electrodes of the territory carry feedback in the manner of Cortical Labs' DishBrain experiment: a fixed pulse after a proposal that agreed with the silicon engine, and a random amplitude after one that did not.
+The planning module is off the substrate unless you set `nous = "cl1"`. When it is on, KAINE builds its usual active-inference engine and the plugin wraps it. Each step runs the silicon engine first, then stimulates one group of electrodes per action, harder for actions with lower expected free energy, and reads the tissue's proposed action from whichever group fires most in the window that answers its stimulation. When no group fires, or the top groups tie, the proposal is the silicon engine's choice and the answer counts as a disagreement. Once the substrate follows KAINE's cycle, that answer arrives one planning module step later, so it is scored against the silicon choice it was stimulated with, not the current one. The last two electrodes of the territory carry feedback in the manner of Cortical Labs' DishBrain experiment: a fixed pulse after a proposal that agreed with the silicon engine, and a random amplitude after one that did not.
 
 ```toml
 [plugins.cl1.backends]
@@ -237,10 +237,10 @@ nous = 10        # two electrodes per action plus two feedback electrodes
 mode = "shadow"  # or "drive"
 ```
 
-The territory needs two electrodes for each of Planning's actions plus the two feedback electrodes, so 10 for the default four actions; a smaller one fails the boot with a message naming the plugin.
+The territory needs two electrodes for each of the planning module's actions plus the two feedback electrodes, so 10 for the default four actions; a smaller one fails the boot with a message naming the plugin.
 
-- `shadow` (the default) changes nothing about what Planning does. The tissue's proposal is computed and the agreement rate with the silicon engine is logged every 100 proposals.
-- `drive` makes Planning act on the tissue's proposal. Beliefs and expected free energy still come from the silicon engine. Every boot in drive mode logs a warning.
+- `shadow` (the default) changes nothing about what the planning module does. The tissue's proposal is computed and the agreement rate with the silicon engine is logged every 100 proposals.
+- `drive` makes the planning module act on the tissue's proposal. Beliefs and expected free energy still come from the silicon engine. Every boot in drive mode logs a warning.
 
 A step whose silicon inference timed out or failed is passed through untouched, with no stimulation. On the simulator this proves the wiring only: the reference culture responds to stimulation but does not learn, so its proposals follow the encoded preference and nothing more. On a CL1, the feedback pattern is stimulation like any other and belongs in your welfare review.
 
@@ -255,7 +255,7 @@ KAINE calls the plugin once per processing tick. Each call closes one substrate 
 - Accelerated simulator (`accelerated_time = true`): the thread runs one window per tick.
 - Real time (`accelerated_time = false`, the simulator's real-time mode, and the mode real tissue would need): the thread runs the substrate loop continuously and each tick marks a window boundary.
 
-A module's step queues its stimulation for the next window and reads its territory's latest completed window, so the response to a stimulus arrives one tick later. If two steps of the same module queue stimulation before a window starts, the later one wins. An oscillator records the window that answers its own stimulation, which is the response to its module's previous publish, so a module that publishes less often than the cycle ticks still records its own response rather than background firing. Outside KAINE, or before the first tick, each step runs its own window instead, one at a time (Planning steps from a worker thread, the other modules from the event loop). If such a window is still running at the first tick, the switch to one window per tick finishes in the background, so the cycle never waits for it.
+A module's step queues its stimulation for the next window and reads its territory's latest completed window, so the response to a stimulus arrives one tick later. If two steps of the same module queue stimulation before a window starts, the later one wins. An oscillator records the window that answers its own stimulation, which is the response to its module's previous publish, so a module that publishes less often than the cycle ticks still records its own response rather than background firing. Outside KAINE, or before the first tick, each step runs its own window instead, one at a time (the planning module steps from a worker thread, the other modules from the event loop). If such a window is still running at the first tick, the switch to one window per tick finishes in the background, so the cycle never waits for it.
 
 ### Running on a CL1
 
@@ -291,4 +291,4 @@ cd plugins/kaine-cl1
 pytest
 ```
 
-Some tests boot stock KAINE through its plugin loader. Two also need torch (to compare against the silicon models) and the Planning boot tests need KAINE's `reasoning` extra (`pymdp`); those skip where their dependency is absent.
+Some tests boot stock KAINE through its plugin loader. Two also need torch (to compare against the silicon models) and the planning boot tests need KAINE's `reasoning` extra (`pymdp`); those skip where their dependency is absent.

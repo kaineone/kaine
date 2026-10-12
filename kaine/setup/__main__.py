@@ -165,7 +165,7 @@ def _provision_organ(
 ) -> None:
     """Consented, hardware-aware download of the published organ, then launch.
 
-    Fires ONLY when language is enabled ("where appropriate"). Mirrors
+    Fires ONLY when the language module is enabled ("where appropriate"). Mirrors
     :func:`_install_extras` orchestration: show the plan + bytes, run a REAL
     download on explicit consent (never a faked/no-op success), then offer the
     turnkey server bootstrap launch and verify the served alias. On decline it
@@ -299,7 +299,7 @@ def _provision_dependencies(
 
     modules = config.get("modules") or {}
     redis_port = (config.get("redis") or {}).get("port")
-    # Episodic memory and Social cognition share KAINE's Qdrant; episodic memory's port wins if both set.
+    # The episodic memory and social cognition modules share KAINE's Qdrant; the episodic memory module's port wins if both set.
     qdrant_port = None
     for owner in ("mnemos", "empatheia"):
         qdrant_port = ((config.get(owner) or {}).get("qdrant") or {}).get("port")
@@ -674,7 +674,7 @@ def main(
         result.extras, input_fn=_input, out=write, defaults=args.defaults
     )
 
-    # Consented, hardware-aware organ download + turnkey serve (language only).
+    # Consented, hardware-aware organ download + turnkey serve (the language module only).
     _provision_organ(
         merged,
         shipped=shipped,

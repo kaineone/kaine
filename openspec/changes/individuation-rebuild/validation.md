@@ -49,7 +49,7 @@ An entity who never changed would almost certainly be declared individuated by t
 
   Strong drift stays detectable through look 50: cluster π = 0.5 gives 0.985 at look 50. Larger samples help, e.g. (24, 12) gives 0.455 at look 10 for cluster π = 0.25.
 
-  The instrument is therefore a detector of substantial change. The secondary arms (consolidation divergence, Self-model drift, adapters) are still needed alongside it.
+  The instrument is therefore a detector of substantial change. The secondary arms (consolidation divergence, self-model drift, adapters) are still needed alongside it.
 - **The synthetic answers are more dispersed than real ones.** Mean within-prompt cosine is 0.21-0.25, whereas real answers to one question share a topic.
   - A new "cluster" here is a random direction in 384 dimensions, nearly orthogonal to the existing answers, so cluster-drift power is an upper bound. Shift drift is the harder model.
   - The real-organ smoke test (task 10) calibrates the dispersion and sets `effect_min`. Its positive controls are the real power check.

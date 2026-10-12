@@ -263,7 +263,7 @@ async def test_drive_relevance_goal_scorer_results_unchanged():
 
 
 # ---------------------------------------------------------------------------
-# Boot wiring (build_registry and Supervisor's rewire_module both run it)
+# Boot wiring (build_registry and the supervisor's rewire_module both run it)
 # ---------------------------------------------------------------------------
 
 

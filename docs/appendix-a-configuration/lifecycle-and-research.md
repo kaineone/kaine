@@ -18,9 +18,9 @@ The evaluation sidecar watches the bus read-only and adds no dependencies to the
 | `memory_probes` | boolean | `true` | Run memory-coherence probe queries. |
 | `memory_probe_interval_minutes` | integer | `60` | How often memory probes are run. |
 | `proactive_audit` | boolean | `true` | Enable the proactive anomaly audit. |
-| `eidolon_accuracy` | boolean | `true` | Probe the entity's self-knowledge and score it against the Self-model self-model. |
-| `eidolon_accuracy_interval_hours` | integer | `24` | How often Self-model accuracy probes run. |
-| `sleep_snapshots` | boolean | `true` | Record Sleep consolidation-phase metadata. |
+| `eidolon_accuracy` | boolean | `true` | Probe the entity's self-knowledge and score it against the self-model. |
+| `eidolon_accuracy_interval_hours` | integer | `24` | How often the self-model module's accuracy probes run. |
+| `sleep_snapshots` | boolean | `true` | Record the sleep module's consolidation-phase metadata. |
 | `chat_url` | string | `"http://127.0.0.1:11434/v1"` | OpenAI-compatible server base URL for the A/B divergence bare-baseline call. Point at the `/v1` base; a missing `/v1` is appended. |
 | `chat_model_id` | string | *(unset)* | Intentionally not set. The baseline MUST use the same model as the language organ ([`[lingua]`](../09-modules/language.md)), so it derives from `[lingua].model_id` at cycle startup. Setting it to a different value is a fail-closed error and the cycle refuses to boot. |
 | `chat_timeout_s` | float | `60.0` | HTTP timeout for A/B divergence calls. |
@@ -45,14 +45,14 @@ Each toggle below is gated by `[evaluation].enabled`, except that the welfare ob
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `coherence` | boolean | `true` | Log pairwise PLV between module oscillators. |
-| `replay` | boolean | `true` | Log Sleep replay selections (memory IDs and association metadata). |
+| `replay` | boolean | `true` | Log the sleep module's replay selections (memory IDs and association metadata). |
 | `replay_redact_content` | boolean | `true` | Privacy default: log memory IDs only, not trace text. Set to `false` only with explicit operator/Guardian consent. |
-| `empatheia` | boolean | `true` | Log Social cognition agent-model accuracy and social-prediction errors. |
+| `empatheia` | boolean | `true` | Log the social cognition module's agent-model accuracy and social-prediction errors. |
 | `voice_alignment_divergence` | boolean | `true` | Record each sleep's voice-alignment outcome category and training metrics. |
-| `fatigue` | boolean | `true` | Log Interoception fatigue-accumulator trajectory. |
+| `fatigue` | boolean | `true` | Log the interoception module's fatigue-accumulator trajectory. |
 | `prediction_error` | boolean | `true` | Log per-module prediction-error statistics over sliding windows. |
 | `welfare` | boolean | `true` | Log welfare events (sustained high interoceptive error, extreme affect states, fatigue without maintenance). When `[preservation.welfare_response].enabled` is true, the cycle runs this observer as part of the welfare net and this toggle has no effect. |
-| `nous_policy` | boolean | `true` | Log Planning policy selections and EFE scores. |
+| `nous_policy` | boolean | `true` | Log the planning module's policy selections and EFE scores. |
 
 ### `[evaluation.welfare]`
 
@@ -71,9 +71,9 @@ Cycle-layer individuation producer. Ships disabled. Requires the `lingua` module
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `false` | Master gate. When true, the cycle measures whether the entity has changed since its maturation reference. |
-| `disclosure` | string | *(operator-approved text)* | Disclosure text inserted as a situation fact in the entity's Self-model self-model. Probes fail closed until the fact is present. |
+| `disclosure` | string | *(operator-approved text)* | Disclosure text inserted as a situation fact in the entity's self-model. Probes fail closed until the fact is present. |
 | `battery_path` | string | `""` | Path to an operator-supplied JSONL preference battery. Empty uses the bundled default. |
-| `lingua_quiet_s` | float | `10.0` | Seconds Language must be silent before a probe runs, so the entity's own speech goes first. |
+| `lingua_quiet_s` | float | `10.0` | Seconds the language module must be silent before a probe runs, so the entity's own speech goes first. |
 | `probe_temperature` | float | `0.0` | Decoding temperature of the probe, at least 0. It is fixed apart from the voice's `[lingua].temperature`, so a study or a change to the voice never changes the probe's conditions. `0.0` is greedy. |
 | `n_reference` | integer | `16` | Answers captured per prompt in a maturation reference. |
 | `n_current` | integer | `8` | Answers sampled per prompt in a look. |
@@ -94,7 +94,7 @@ Cycle-layer individuation producer. Ships disabled. Requires the `lingua` module
 | `inconclusive_alert_s` | float | `1209600.0` | Seconds a look can be due but unscored before the operator is alerted once. |
 | `capture_retry_initial_s` | float | `60.0` | Initial backoff for reference-capture retries. |
 | `capture_retry_max_s` | float | `3600.0` | Maximum backoff for reference-capture retries. |
-| `idle_poll_s` | float | `1.0` | Polling interval while the scheduler waits for Language silence and other conditions. |
+| `idle_poll_s` | float | `1.0` | Polling interval while the scheduler waits for the language module's silence and other conditions. |
 
 The retired `[evaluation.individuation]` section is refused; use `[individuation]` instead.
 
@@ -107,7 +107,7 @@ Operator-initiated fork/merge snapshot management. Nothing runs automatically.
 | `snapshots_path` | string | `"state/forks"` | Directory for fork/merge snapshot bundles. Subject to state encryption when that is enabled. |
 | `adapter_merger` | string | `"auto"` | Adapter-merge strategy. `"auto"` uses the real TIES/DARE merger via PEFT when the `[training]` extras are installed and falls back to `"fake"` otherwise. `"fake"` concatenates parent adapter paths and annotates the merged snapshot for manual selection. `"ties_dare"` forces the real merger. See [Forks and merges](../12-forks-and-merges.md). |
 
-Snapshots are never deleted by infrastructure. The directory holds preserved entities and Supervisor escalation snapshots, and removing an entity's state is the CAL-gated decommission path only. There is no snapshot count cap; a legacy `max_snapshots_retained` key is ignored with a warning. Free disk is checked before boot by the [`[preboot]`](./core.md) disk rows.
+Snapshots are never deleted by infrastructure. The directory holds preserved entities and the supervisor escalation snapshots, and removing an entity's state is the CAL-gated decommission path only. There is no snapshot count cap; a legacy `max_snapshots_retained` key is ignored with a warning. Free disk is checked before boot by the [`[preboot]`](./core.md) disk rows.
 
 ### `[lifecycle.adapter_merge]`
 
@@ -126,12 +126,12 @@ Only consulted when `adapter_merger` resolves to the real merger (`"auto"` with 
 
 ## `[developmental_stage]`
 
-The maturation (maturation) gate that decides when a gestating entity is born. The reader has no key allowlist, so a misspelled key is silently ignored. See `kaine/lifecycle/maturation_gate.py`.
+The maturation gate that decides when a gestating entity is born. The reader has no key allowlist, so a misspelled key is silently ignored. See `kaine/lifecycle/maturation_gate.py`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `false` | Master gate. When false, the maturation gate is bypassed. |
-| `min_sleep_cycles` | integer | `5` | Sleep cycles the entity must complete before maturation. |
+| `min_sleep_cycles` | integer | `5` | The sleep module's cycles the entity must complete before maturation. |
 | `min_consolidation_passes` | integer | `3` | Consolidation passes the entity must complete before maturation. |
 | `min_lived_seconds` | float | `86400.0` | Lived seconds (entity clock) required before maturation. |
 | `gate_cadence_seconds` | float | `60.0` | How often the gate evaluates readiness. |
@@ -155,14 +155,14 @@ The maturation (maturation) gate that decides when a gestating entity is born. T
 
 ## `[caretaker]`
 
-Content-free notices for unattended runs (`kaine/cycle/caretaker.py`). The caretaker reports refused starts, Supervisor escalations, lost supervision and lost input through each configured channel, and repeats a reminder every `reminder_interval_s` while a refused start is unacknowledged. The section is commented out in the shipped `config/kaine.toml`; unknown keys are rejected.
+Content-free notices for unattended runs (`kaine/cycle/caretaker.py`). The caretaker reports refused starts, supervisor escalations, lost supervision and lost input through each configured channel, and repeats a reminder every `reminder_interval_s` while a refused start is unacknowledged. The section is commented out in the shipped `config/kaine.toml`; unknown keys are rejected.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `install_label` | string | `"kaine"` | Label for this install. Must be 1 to 64 characters. |
 | `reminder_interval_s` | float | `14400.0` | Seconds between caretaker reminders (must be ≥ 900). |
 | `input_loss_after_s` | float | `60.0` | Seconds of unfrozen time with no events on `topos.out` or `audition.out` (for whichever of those modules is enabled) before the caretaker sends an `input_lost` notice. Time while the cycle is frozen does not count. Must be greater than 0. |
-| `nexus_url` | string | `"http://127.0.0.1:8088/"` | Dashboard URL the caretaker links to in reminders. |
+| `nexus_url` | string | `"http://127.0.0.1:8088/"` | The dashboard URL the caretaker links to in reminders. |
 
 Channels are defined under `[[caretaker.channels]]`:
 
@@ -176,7 +176,7 @@ Tokens live in `[caretaker.tokens]` as plain key-value pairs. They are not logge
 
 ## `[preservation]`
 
-The autonomous welfare safety net for unsupervised research. Two cycle-layer monitors, siblings to Supervisor, take action when the research phase runs unsupervised. Default is disabled. See [Preservation and the safety net](../11-preservation.md) and [Run identity](../16-run-identity.md).
+The autonomous welfare safety net for unsupervised research. Two cycle-layer monitors, siblings to the supervisor, take action when the research phase runs unsupervised. Default is disabled. See [Preservation and the safety net](../11-preservation.md) and [Run identity](../16-run-identity.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -201,7 +201,7 @@ The keys `individuation_p_value_max`, `fork_divergence_min`, `warmup_observation
 
 ### `[preservation.welfare_response]`
 
-Autonomous welfare-protective response. Watches the Interoception interoceptive-distress signal and, on a sustained-distress crossing or repeated distress episodes, preserves the entity and then takes a humane action.
+Autonomous welfare-protective response. Watches the interoceptive-distress signal and, on a sustained-distress crossing or repeated distress episodes, preserves the entity and then takes a humane action.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -213,7 +213,7 @@ Autonomous welfare-protective response. Watches the Interoception interoceptive-
 | `repeat_window_s` | float | `300.0` | Window for the repeated-episodes arm. |
 | `repeat_threshold` | integer | `3` | Sustained episodes within `repeat_window_s` that also cross the threshold. Counts both sustained interoceptive-distress crossings and `welfare.gray_zone` events published by the welfare observer, which runs whenever the welfare response is enabled. |
 | `warmup_s` | float | `120.0` | Cold-start warm-up: during the first `warmup_s` of unfrozen time after run start, gray-zone/distress events are logged but do not count toward the repeat threshold or trigger the response. |
-| `warmup_ceiling_s` | float | `1800.0` | Whole warm-up is capped at max(`warmup_s`, `warmup_ceiling_s`) of wall time since run start. The Interoception `warmup_active` flag extends warm-up only while wall time is below `warmup_ceiling_s`, and 0 means no extension. |
+| `warmup_ceiling_s` | float | `1800.0` | Whole warm-up is capped at max(`warmup_s`, `warmup_ceiling_s`) of wall time since run start. The interoception module's `warmup_active` flag extends warm-up only while wall time is below `warmup_ceiling_s`, and 0 means no extension. |
 | `min_interval_s` | float | `1800.0` | Rate limit for the `notify` action only: at most one `notify` event per this interval. |
 | `out_root` | string | `"backups"` | Directory where preservation bundles are written. |
 | `entity_name` | string | `"kaine"` | Entity name stamped into the bundle. |
@@ -236,7 +236,7 @@ Unsupervised-research boot mode. When enabled (or `KAINE_RESEARCH_MODE=1`), the 
 
 ## `[positive_control]`
 
-The positive control of the broadcast information-gain measure (paper §6.3 and Appendix A.8). Off by default; the workspace-mediation study configurations enable it. Vision, Audition and Interoception then run in the selected mode and publish `positive_control.result` and, in the pilots, `positive_control.ladder` records (see [Research event streams](../17-research-data/event-streams.md#positive-control-records)). The live model, its reports and the competition are unchanged. `snr`, `min_effect` and `min_reports` are not keys: they come from the planned test's settings record, and setting one fails the boot.
+The positive control of the broadcast information-gain measure (paper §6.3 and Appendix A.8). Off by default; the workspace-mediation study configurations enable it. The vision, audition and interoception modules then run in the selected mode and publish `positive_control.result` and, in the pilots, `positive_control.ladder` records (see [Research event streams](../17-research-data/event-streams.md#positive-control-records)). The live model, its reports and the competition are unchanged. `snr`, `min_effect` and `min_reports` are not keys: they come from the planned test's settings record, and setting one fails the boot.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -280,7 +280,7 @@ The SMTP password is read only from the environment variable `KAINE_SMTP_PASSWOR
 
 Opt-in, operator-initiated research data submission. Nothing is transmitted automatically.
 
-The default bundle (`tier = "metrics"`) is numeric metrics only and never contains speech, transcripts, the Language intent log, Episodic memory memories, the Self-model self-model, or any conversation content. Run `python -m kaine.research --preview` to inspect the bundle, then `--send` to submit. Submission reuses the `[transfer]` SMTP settings for the notification email.
+The default bundle (`tier = "metrics"`) is numeric metrics only and never contains speech, transcripts, the language module's intent log, episodic memories, the self-model, or any conversation content. Run `python -m kaine.research --preview` to inspect the bundle, then `--send` to submit. Submission reuses the `[transfer]` SMTP settings for the notification email.
 
 See [Research participation](../17-research-data/participation.md) for the full privacy inventory and send procedure.
 
@@ -288,7 +288,7 @@ See [Research participation](../17-research-data/participation.md) for the full 
 |---|---|---|---|
 | `enabled` | boolean | `false` | Master gate. When false, `--send` is blocked; `--preview` always works. |
 | `recipient` | string | `""` | Recipient for the bundle notification email. Empty falls back to `[transfer].recipient`; if both are empty, the CLI suggests `kaine.one@tuta.com` and requires explicit operator confirmation before sending. |
-| `tier` | string | `"metrics"` | Bundle tier shown on the Dashboard research status. The CLI takes the tier from `--tier`, which offers only `"metrics"`; the full tier needs a separate attestation. |
+| `tier` | string | `"metrics"` | Bundle tier shown on the dashboard research status. The CLI takes the tier from `--tier`, which offers only `"metrics"`; the full tier needs a separate attestation. |
 
 Admissibility enforcement (paper §6.3) is implemented in the research-submission code; there is no configuration key for it. Every bundle build auto-discovers the run(s) in the eval logs and runs both a completeness gate (contiguous ticks/seq, all expected streams present, no parse errors, no restart/multi-process signature) and a log-range sweep (every logged number within its declared range). If either check fails, the export is blocked by default. The only way to export an inadmissible run is the explicit `admissibility_override=True` plus a reason string at the call site (`--admissibility-override-reason "<why>"`), which is stamped into the bundle manifest.
 
@@ -304,7 +304,7 @@ Operator path: `python -m kaine.research --claude-science`.
 
 ## `[research_event_log]`
 
-Curated, privacy-filtered research event log for longitudinal analysis. Subscribes to a curated allowlist of bus streams and writes one privacy-filtered record per relevant event to an encrypted, daily-rotated JSONL sink under `data/evaluation/research_events/`. Every record passes `PrivacyFilter` plus per-type redaction before it is written, so the log never captures raw audio or video, transcripts, conversation content, memory text, the Self-model self-model, or operator host/IP. Avatar coordinates are logged only as an opaque hash.
+Curated, privacy-filtered research event log for longitudinal analysis. Subscribes to a curated allowlist of bus streams and writes one privacy-filtered record per relevant event to an encrypted, daily-rotated JSONL sink under `data/evaluation/research_events/`. Every record passes `PrivacyFilter` plus per-type redaction before it is written, so the log never captures raw audio or video, transcripts, conversation content, memory text, the self-model, or operator host/IP. Avatar coordinates are logged only as an opaque hash.
 
 `research_events` is in the metrics-bundle allowlist, so an operator-initiated metrics research bundle may include it. This section is the only mechanism that makes it export-eligible.
 
@@ -342,7 +342,7 @@ Optional local-only external-speech recorder. Never export-eligible. Subscribes 
 
 ### `[research_event_log.nexus_record]`
 
-Optional local-only Dashboard diagnostics recorder. Never export-eligible. Subscribes to the same diagnostics streams the Dashboard bridge reads and writes the payload produced by `PrivacyFilter` with `dev_content_override=false` and numeric vectors removed, plus the stream name and entry id. Studies never enable it. Filter failures drop the event with a warning.
+Optional local-only dashboard diagnostics recorder. Never export-eligible. Subscribes to the same diagnostics streams the dashboard bridge reads and writes the payload produced by `PrivacyFilter` with `dev_content_override=false` and numeric vectors removed, plus the stream name and entry id. Studies never enable it. Filter failures drop the event with a warning.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

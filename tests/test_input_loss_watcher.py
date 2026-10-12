@@ -118,7 +118,7 @@ async def test_rearm_after_fresh_then_loss_again(fake_async_bus, monkeypatch, _w
     await watcher._poll_once(0)
     assert len(calls) == 1
 
-    # A new vision entry is fresh activity: the watcher re-arms.
+    # A new vision module entry is fresh activity: the watcher re-arms.
     monkeypatch.setattr(
         fake_async_bus,
         "latest",

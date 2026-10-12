@@ -52,10 +52,10 @@ from kaine.workspace.volition import VOLITION_FEEDBACK_STREAM
 log = logging.getLogger(__name__)
 HYPNOS_OUT_STREAM = "hypnos.out"
 
-# Map an engine action name → a proposal kind for the Action selection/proposal path.
+# Map an engine action name → a proposal kind for the action selection module's proposal path.
 # `request_think` is epistemic (internal elaboration) → a `think` proposal.
 # `request_speak` → a `speak` proposal. `request_maintenance` → a `rest`
-# proposal realized by Action selection and Sleep. `no_op` produces no proposal.
+# proposal realized by the action selection module and the sleep module. `no_op` produces no proposal.
 _ACTION_TO_PROPOSAL_KIND: dict[str, str] = {
     "request_think": "think",
     "request_speak": "speak",
@@ -134,7 +134,7 @@ class Nous(BaseModule):
             if result.error:
                 # Non-timeout crash: stale priors must NOT be re-published as a
                 # fresh computation. Surface a nous.error diagnostic instead so
-                # downstream (Self-model, Episodic memory, Workspace) see the gap rather
+                # downstream (the self-model module, the episodic memory module, the workspace) see the gap rather
                 # than acting on fabricated belief/policy.
                 await self._publish_error(result)
                 return
@@ -271,8 +271,8 @@ class Nous(BaseModule):
             payload = event.payload
             pid = payload.get("proposal_id")
             if payload.get("reason") == "forwarded":
-                # Rest proposal forwarded to Sleep; never changes _recent_proposals
-                # and never counts as unknown, because Sleep will decide.
+                # Rest proposal forwarded to the sleep module; never changes _recent_proposals
+                # and never counts as unknown, because the sleep module will decide.
                 continue
             action_index = self._recent_proposals.get(pid)
             if action_index is None:
@@ -346,7 +346,7 @@ class Nous(BaseModule):
         priors held by the engine are returned from step() but they represent
         the PREVIOUS successful computation, not a fresh inference from this
         snapshot. Publishing them as if they were fresh would mislead
-        downstream consumers (Self-model, Episodic memory, Workspace).
+        downstream consumers (the self-model module, the episodic memory module, the workspace).
         """
         await self.publish(
             "nous.error",

@@ -1,14 +1,14 @@
 # evaluation-observers Specification
 
 ## Purpose
-The evaluation-observers capability adds read-only observers for the v4 signal family, including oscillatory coherence, replay, Social cognition accuracy, voice-alignment divergence, fatigue history, and Planning policy, with content redaction by default and sliding-window statistics for prediction errors.
+The evaluation-observers capability adds read-only observers for the v4 signal family, including oscillatory coherence, replay, the social cognition module's accuracy, voice-alignment divergence, fatigue history, and the planning module's policy, with content redaction by default and sliding-window statistics for prediction errors.
 
 ## Requirements
 
 ### Requirement: New read-only observers for v4 signals
 The evaluation sidecar SHALL provide read-only observers for oscillatory coherence
 (reading `WorkspaceSnapshot.metadata['coherence']`), replay (memory IDs not text
-by default), Social cognition agent-model accuracy, voice-alignment divergence, and
+by default), the social cognition module's agent-model accuracy, voice-alignment divergence, and
 fatigue history, each writing daily-rotated JSONL. No observer SHALL publish to
 the bus or otherwise inject into the cognitive loop.
 
@@ -36,7 +36,7 @@ full content is logged.
 ### Requirement: Prediction-error observer with sliding-window statistics
 The `prediction_error_observer` SHALL subscribe to `soma.out`, `chronos.out`,
 `topos.out`, `audition.out`, and `phantasia.out`; maintain a sliding-window
-mean/p95/p99 of prediction error; and surface counts on Dashboard diagnostics.
+mean/p95/p99 of prediction error; and surface counts on dashboard diagnostics.
 
 #### Scenario: Prediction error statistics computed over window
 - **WHEN** prediction-error events arrive from any subscribed source
@@ -46,10 +46,10 @@ mean/p95/p99 of prediction error; and surface counts on Dashboard diagnostics.
 The `welfare_observer` SHALL detect and count the following Gray-Zone Events
 (paper welfare-monitoring; four conditions): (a) fatigue threshold crossing
 without subsequent maintenance within a configurable window; (b) sustained
-extreme Affect VAD beyond a configurable duration; (c) replay write-rate
-exceeding the consolidation window; and (d) Interoception interoceptive prediction error
+extreme affect VAD beyond a configurable duration; (c) replay write-rate
+exceeding the consolidation window; and (d) the interoception module's interoceptive prediction error
 sustained at or above a configurable threshold for at least a configurable
-duration. Each event type SHALL surface as a count on Dashboard diagnostics and
+duration. Each event type SHALL surface as a count on dashboard diagnostics and
 SHALL write a record to the sink.
 
 For condition (d): the observer SHALL read the interoceptive prediction-error
@@ -65,7 +65,7 @@ the behavior of conditions (a)–(c).
 - **THEN** the welfare observer increments the unmaintained-fatigue count
 
 #### Scenario: Sustained extreme VAD is flagged
-- **WHEN** Affect VAD remains in an extreme zone beyond the configured duration
+- **WHEN** the affect module's VAD remains in an extreme zone beyond the configured duration
 - **THEN** the welfare observer increments the sustained-extreme-VAD count
 
 #### Scenario: Replay write-rate excess is flagged
@@ -133,7 +133,7 @@ When `confidence` is present, the written record SHALL include
 
 ### Requirement: The self-model accuracy scorer is a fixed-threshold heuristic behaving as specified
 
-The self-model (Self-model) accuracy scorer SHALL behave as a **fixed-threshold
+The self-model accuracy scorer SHALL behave as a **fixed-threshold
 heuristic** — NOT a calibrated instrument: it matches trait keywords against
 currently derived signals and cuts each derived signal at FIXED, hand-chosen
 thresholds that are NOT fitted against a labelled set. It SHALL compute the
@@ -244,7 +244,7 @@ non-recall mechanism distinguishes "memory absent → said so" from "memory abse
 The voice-alignment divergence observer SHALL take the gate outcome (`accepted`, `capability_loss`, `samples_used`, and an outcome category derived from `reason`) from the `voice_alignment` sub-dictionary of `hypnos.sleep.completed`, and the training metrics (`dpo_loss`, `capability_score_before`, `capability_score_after`, `mean_intent_expression_similarity_before`, `mean_intent_expression_similarity_after`) from the top level of the same summary. The outcome SHALL be recorded as one of `accepted`, `no_pairs`, `vetoed_abliteration`, `vetoed_capability` or `failed`, never as the free-text reason, because the observer's records are eligible for the metrics-only research bundle and reasons can carry exception text and local paths. It SHALL write no record for a sleep whose `voice_alignment` phase was skipped by the configuration or operator-approval gate, and SHALL write a record when the phase ran, including when it found no usable pairs.
 
 #### Scenario: A training sleep produces a complete record
-- **WHEN** a sleep ran voice-alignment training and Sleep published its summary
+- **WHEN** a sleep ran voice-alignment training and the sleep module published its summary
 - **THEN** the observer's record carries the DPO loss, the capability scores and the similarity means, together with whether the adapter was accepted and why
 
 #### Scenario: A gated-off sleep produces no record

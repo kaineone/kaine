@@ -50,7 +50,7 @@ class RuleBasedSalience:
     """Product-form salience with arousal contrast.
 
     priority = intensity * novelty * goal;
-    score = affect level factor times the arousal contrast of the priority.
+    score = the affect module's level factor times the arousal contrast of the priority.
 
     Precision is local to each processor, which scores its own prediction error
     against its recent errors, so the workspace applies no per-source weight.

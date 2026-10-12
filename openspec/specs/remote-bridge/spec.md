@@ -14,7 +14,7 @@ Remote video frames SHALL be decoded to in-memory images and passed to
 `Topos.process_frame`; remote audio SHALL flow through the existing
 `LiveMicrophone` VAD/utterance assembly via an injected network stream and
 reach `Audition.process_audio` with `source_label = "remote"`; generated
-speech SHALL be tapped from Vocal via a composed `Player` without disabling
+speech SHALL be tapped from the vocal module via a composed `Player` without disabling
 local playback; transcript events SHALL be forwarded from the
 `lingua.external` and `audition.out` streams. When a shared-secret token is
 configured, connections without it SHALL be rejected.
@@ -35,7 +35,7 @@ configured, connections without it SHALL be rejected.
   `source_label = "remote"` after the existing utterance segmentation
 
 #### Scenario: Generated speech streams to clients
-- **WHEN** Vocal plays a synthesized clip while a `/speech` client is connected
+- **WHEN** the vocal module plays a synthesized clip while a `/speech` client is connected
 - **THEN** the client receives the WAV bytes and local playback still occurs
 
 #### Scenario: Transcript forwarding

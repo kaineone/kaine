@@ -71,7 +71,7 @@ def make_soma(
         eta = kw.pop("self_rhythm_eta", 0.0)
         if isinstance(eta, bool) or not isinstance(eta, (int, float)) or not math.isfinite(float(eta)) or float(eta) < 0.0:
             raise ValueError("[soma].self_rhythm_eta must be a finite number >= 0")
-        # The oscillator integrates at the rate Interoception steps it; a mismatch would
+        # The oscillator integrates at the rate the interoception module steps it; a mismatch would
         # silently change the rhythm's frequency.
         osc = make_self_rhythm_oscillator(
             seed=int(feed_section.get("seed", 0)), step_hz=step_hz, eta=float(eta)
@@ -89,7 +89,7 @@ def make_soma(
 
                 clock, _ = _shared_womb_objects(feed_section)
                 # Start at the usual drive, validated from the readout settings
-                # at boot; the development owner only ever moves it for bounded,
+                # at boot; the developmental phase owner only ever moves it for bounded,
                 # announced probes.
                 readout = GestationReadoutConfig.from_dict(
                     (feed_section.get("womb") or {}).get("readout")

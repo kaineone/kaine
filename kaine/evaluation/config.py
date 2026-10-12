@@ -16,7 +16,7 @@ from kaine.storage import configured_data_root, resolve_under
 class RawArchiveConfinementError(ValueError):
     """Raised when a local-only path is under a metrics-export allowlist root.
 
-    Local-only recorders (raw bus archive, external utterances, Dashboard record)
+    Local-only recorders (raw bus archive, external utterances, dashboard record)
     must never be export-eligible. The metrics bundle builder only ever reads
     from configured export-allowlist roots; a local-only path resolving under
     such a tree would make verbatim content export-eligible. We fail closed
@@ -194,9 +194,9 @@ class ExternalUtterancesConfig:
 
 @dataclass(frozen=True)
 class NexusRecordConfig:
-    """Parameters for the OPTIONAL local-only Dashboard diagnostics recorder.
+    """Parameters for the OPTIONAL local-only dashboard diagnostics recorder.
 
-    Subscribes to the same streams as the Dashboard diagnostics bridge and writes
+    Subscribes to the same streams as the dashboard diagnostics bridge and writes
     one record per event to ``data/nexus_record/``. Each record contains
     exactly the payload produced by ``PrivacyFilter`` with
     ``dev_content_override=false`` (the same filter the bridge applies), plus
@@ -274,7 +274,7 @@ class ResearchEventLogConfig:
     external_utterances:
         Nested config for the OPTIONAL local-only external-utterance recorder.
     nexus_record:
-        Nested config for the OPTIONAL local-only Dashboard diagnostics recorder.
+        Nested config for the OPTIONAL local-only dashboard diagnostics recorder.
     """
 
     enabled: bool = False
@@ -450,7 +450,7 @@ class EvaluationConfig:
     oscillatory_ablation: bool = False
     paths: EvaluationPaths = field(default_factory=EvaluationPaths)
     # Internal — used by ABDivergenceObserver to reach the same OpenAI-compatible
-    # model server Language uses (/v1/chat/completions). `think` mirrors Language's:
+    # model server the language module uses (/v1/chat/completions). `think` mirrors the language module's:
     # thinking models must have CoT suppressed or the bare baseline runs away
     # reasoning and returns empty content — so it DEFAULTS to False here too. The
     # server's `--reasoning-budget 0` flag does not reliably suppress CoT, so
@@ -460,12 +460,12 @@ class EvaluationConfig:
     # equal the language organ's model or the divergence measures a model
     # difference, not the architecture's conditioning. At cycle startup this is
     # DERIVED from [lingua].model_id (see from_mapping's lingua_model_id); the
-    # default below is only a fallback for standalone/no-language reads.
+    # default below is only a fallback for standalone/no-language-module reads.
     chat_model_id: str = "kaineone/Qwen3.5-4B-abliterated-GGUF"
     chat_timeout_s: float = 60.0
     chat_think: Optional[bool] = False
     # Bearer token for a keyed model server (e.g. Unsloth Studio). DERIVED from
-    # the language key at cycle startup so the baseline authenticates to the SAME
+    # the language module's key at cycle startup so the baseline authenticates to the SAME
     # server as the organ; None for a keyless server (llama-server).
     chat_api_key: Optional[str] = None
     # Used by MemoryProbeRunner to decide whether a probe is "out-of-context"
@@ -544,7 +544,7 @@ class EvaluationConfig:
                 if data.get("chat_think", cls.chat_think) is None
                 else bool(data.get("chat_think", cls.chat_think))
             ),
-            # Same server as the organ → same key; derive from language, allow an
+            # Same server as the organ → same key; derive from the language module, allow an
             # explicit override. None for a keyless server.
             chat_api_key=(data.get("chat_api_key") or lingua_api_key),
             llm_context_window_seconds=int(

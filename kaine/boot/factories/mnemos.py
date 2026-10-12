@@ -24,7 +24,7 @@ def make_mnemos(
 ) -> BaseModule:
     from kaine.modules.mnemos.module import Mnemos
 
-    # Supervisor-injected shared embedder; never a TOML key, so pop before validation.
+    # supervisor-injected shared embedder; never a TOML key, so pop before validation.
     embedder = section.pop("_embedder", None)
 
     allowed = {

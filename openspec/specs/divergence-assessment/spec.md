@@ -30,7 +30,7 @@ semantic embedder is unavailable). The metric SHALL contain only aggregate numbe
 The divergence assessment SHALL treat the consolidation divergence metric as a
 graded organ-level divergence input — `divergence_rate` or `divergence_magnitude`
 crossing a configured threshold marks organ-level divergence — alongside the
-individuation permutation test and Self-model drift. The accepted-adapter boolean
+individuation permutation test and the self-model module's drift. The accepted-adapter boolean
 SHALL be retained only as a weaker secondary signal, and the numeric consolidation
 values SHALL appear in the assessment's signals.
 

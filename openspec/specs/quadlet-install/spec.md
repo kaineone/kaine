@@ -10,7 +10,7 @@ The shipped quadlet units SHALL NOT contain a host path to the checkout; host-pa
 
 #### Scenario: Checkout outside the home projects directory
 - **WHEN** the script runs from a checkout at `/srv/kaine`
-- **THEN** the installed cycle and Dashboard units mount `/srv/kaine/config/...` and contain no placeholder
+- **THEN** the installed cycle and dashboard units mount `/srv/kaine/config/...` and contain no placeholder
 
 #### Scenario: Unsafe path refused
 - **WHEN** the checkout path contains a space, `%`, `$`, `:` or a quote

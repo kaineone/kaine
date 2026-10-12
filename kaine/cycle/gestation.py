@@ -353,9 +353,9 @@ def assess_viability(
     ever_replicated: bool,
     cfg: GestationReadoutConfig,
 ) -> dict | None:
-    """Judge whether a development can still reach maturation after a withdrawal.
+    """Judge whether a developmental phase can still reach maturation after a withdrawal.
 
-    Returns None if the development is still viable, otherwise a verdict dict.
+    Returns None if the developmental phase is still viable, otherwise a verdict dict.
     """
     conclusive = [h for h in history if h.get("pull") is not None]
 

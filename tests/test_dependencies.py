@@ -31,7 +31,7 @@ def _sink():
 
 
 def test_implied_external_deps_maps_modules():
-    # Redis is always implied; language→model_server, episodic memory/social cognition→qdrant,
+    # Redis is always implied; language→model_server, the episodic memory and social cognition modules→qdrant,
     # audition→speaches, vocal→chatterbox.
     assert implied_external_deps({}) == ["redis"]
     assert set(implied_external_deps({"lingua": True})) == {"redis", "model_server"}

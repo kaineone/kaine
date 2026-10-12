@@ -351,7 +351,7 @@ class ReviveSession:
 
                 target = _stage_module.STAGE_PATH
 
-            # Development progress travels with the entity (awake time persists across boots). The bundle is authoritative: development files already here are moved aside first.
+            # Developmental progress travels with the entity (awake time persists across boots). The bundle is authoritative: development files already here are moved aside first.
             gestation_dir = resolve(target).parent
             try:
                 _preservation.set_aside_gestation_files(gestation_dir)

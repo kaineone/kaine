@@ -1,6 +1,6 @@
 ## Why
 
-Today every consumer of the substrate (the Sequence and Interoception models on each step, every oscillator on each publish) runs its own window, so substrate time runs faster than cognitive time, a territory records only the windows its own consumer runs, and on a real-time substrate the consumers serialise on one blocking loop (review finding on kaine #197; foundation task 3.3). Real CL1 hardware is not available to this project, but the plugin should be ready for anyone who has access, so the timing has to be right for real time, not only for the accelerated simulator.
+Today every consumer of the substrate (the sequence and interoception modules' models on each step, every oscillator on each publish) runs its own window, so substrate time runs faster than cognitive time, a territory records only the windows its own consumer runs, and on a real-time substrate the consumers serialise on one blocking loop (review finding on kaine #197; foundation task 3.3). Real CL1 hardware is not available to this project, but the plugin should be ready for anyone who has access, so the timing has to be right for real time, not only for the accelerated simulator.
 
 KAINE's `plugin-cycle-hook` change gives plugins the cycle's beat through `on_cycle_tick`. This change uses it.
 

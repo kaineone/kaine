@@ -15,7 +15,7 @@ export KAINE_CYCLE_OPERATOR_PRESENT=1
 python -m kaine.cycle
 ```
 
-Dashboard binds to loopback by default. How to reach it, switch to token mode, and serve it over your tailnet is covered in [Opening Dashboard](../05-dashboard.md).
+The dashboard binds to loopback by default. How to reach it, switch to token mode, and serve it over your tailnet is covered in [opening the dashboard](../05-dashboard.md).
 
 A fresh launch clears any stale freeze left by a previous run, so the entity always starts running.
 
@@ -25,19 +25,19 @@ The launch above is the operator-supervised mode, in which a person watches the 
 
 The diagnostics page has a "cycle control" panel with "freeze cycle" and "resume cycle" buttons. While frozen, the cycle stops ticking but the process stays up. A frozen state is not persisted across restarts; a fresh launch clears any stale freeze and the cycle starts running.
 
-Freeze requests can come from several holders, which stack: `operator`, `spot`, `welfare`, `preserve`, `gestation` and `programme_end`. The dashboard "resume cycle" button releases only `operator` entries. Supervisor and preservation release their own entries. A `welfare`, `gestation` or `programme_end` freeze stays until you override it by name: the panel shows which holders remain and offers an "override … freeze" button that needs a second click to confirm. Each override is recorded, without content, in `state/cycle/override_audit.jsonl`. A fresh launch starts unfrozen.
+Freeze requests can come from several holders, which stack: `operator`, `spot`, `welfare`, `preserve`, `gestation` and `programme_end`. The dashboard "resume cycle" button releases only `operator` entries. The supervisor and preservation release their own entries. A `welfare`, `gestation` or `programme_end` freeze stays until you override it by name: the panel shows which holders remain and offers an "override … freeze" button that needs a second click to confirm. Each override is recorded, without content, in `state/cycle/override_audit.jsonl`. A fresh launch starts unfrozen.
 
 ### Normal stop
 
-Press `Ctrl-C` in the cycle terminal. The cycle stops ticking, each module's `shutdown()` runs in turn (World model, for example, saves its weights), and the bus connection closes.
+Press `Ctrl-C` in the cycle terminal. The cycle stops ticking, each module's `shutdown()` runs in turn (the world model module, for example, saves its weights), and the bus connection closes.
 
-Do not `kill -9` the cycle process during a Sleep sleep. Sleep's sleep is non-interruptible, and when voice alignment is enabled a killed process can leave a partly written adapter. Wait for the sleep to finish, then stop.
+Do not `kill -9` the cycle process during a sleep. Sleep is non-interruptible, and when voice alignment is enabled a killed process can leave a partly written adapter. Wait for the sleep to finish, then stop.
 
 ### The organ sleeps when idle
 
 The model server unloads the organ after `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS` idle seconds in container and Quadlet deployments, or after `[lingua].model_server_sleep_idle_seconds` when KAINE launches the server natively. The default is 600, and `-1` keeps the model loaded. While it sleeps the server holds neither the model nor its KV cache, so once the cycle stops the organ unloads within that timeout with no operator action. The next inference request reloads it, which takes a few seconds. On the reference host, an asleep containerized organ holds about 210 MiB of VRAM (the CUDA context only) against several GB awake; check the release with `nvidia-smi`.
 
-Health polling against `/health`, `/v1/models` and `/props` does not wake the organ. The Dashboard health board and the pre-boot Chat LLM row therefore report it as `up` and `asleep`. The pre-boot Organ content row sends a real completion, which wakes the server. If you override `KAINE_MODEL_SERVER_CMD`, pass `--sleep-idle-seconds` yourself.
+Health polling against `/health`, `/v1/models` and `/props` does not wake the organ. The dashboard health board and the pre-boot Chat LLM row therefore report it as `up` and `asleep`. The pre-boot Organ content row sends a real completion, which wakes the server. If you override `KAINE_MODEL_SERVER_CMD`, pass `--sleep-idle-seconds` yourself.
 
 ### Service containers
 
@@ -66,9 +66,9 @@ The cycle has two rates. The processing rate, `[cycle].processing_rate_hz` (10.0
 You can change the processing rate and the resting access rate at runtime without restarting:
 
 - On the diagnostics page, use the "Cycle rate" control and confirm.
-- Through the API: `POST /diagnostics/cycle/rates {"processing_rate_hz": 10.0}`. The endpoint also accepts `experiential_rate_hz`, and it requires the operator token unless Dashboard runs with open access.
+- Through the API: `POST /diagnostics/cycle/rates {"processing_rate_hz": 10.0}`. The endpoint also accepts `experiential_rate_hz`, and it requires the operator token unless the dashboard runs with open access.
 
-Dashboard publishes a `cycle.set_rates` event on the `cycle.control` stream, and the running cycle applies it. The change is not persisted, so the next start uses the configured values.
+The dashboard publishes a `cycle.set_rates` event on the `cycle.control` stream, and the running cycle applies it. The change is not persisted, so the next start uses the configured values.
 
 ## Enabling a module safely
 
@@ -93,7 +93,7 @@ Module-specific prerequisites:
 | `audition` | `[audio]` extra installed; Speaches up on CPU with `medium.en` |
 | `vox` | Chatterbox up; `predefined_voice_id` set to a valid filename |
 | `topos` | `[internvideo]` extra installed; the pinned InternVideo-Next weights cached locally (DINOv2-small only when the per-frame fallback `encoder_backend = "dinov2"` is selected) |
-| `hypnos` | None. Fatigue-triggered sleep runs in the base-thesis form without Episodic memory; its consolidation phases do work only once Episodic memory and World model are enabled, and the affective reset acts on Affect |
+| `hypnos` | None. Fatigue-triggered sleep runs in the base-thesis form without the episodic memory module; its consolidation phases do work only once the episodic memory and world model modules are enabled, and the affective reset acts on the affect module | |
 | `empatheia` | Qdrant container up |
 | `phantasia` | `[worldmodel]` extra installed for the DreamerV3 backend; the shipped defaults are `backend = "dreamerv3"`, `engine = "jax"`, `training_enabled = true`, `persist_weights = true` |
 | `praxis` | Shell whitelist is empty by default; fill it deliberately before enabling |
@@ -104,35 +104,35 @@ Module-specific prerequisites:
 
 ### Fatigue and sleep
 
-Sleep is triggered by fatigue. Interoception keeps a fatigue accumulator fed by unexpected substrate prediction error, the part of the error beyond a learned band, and the accumulator decays slowly (`[soma].fatigue_decay_per_s`, 0.01). The band follows the expected error over `expected_error_tau_s` (600 entity seconds) and admits `expected_error_band` (2.0) spreads above it. Interoception still reports its raw `prediction_error`, and `soma.report` also carries `unexpected_error`. When the accumulator crosses `[soma].fatigue_maintenance_threshold` (100.0), a `soma.fatigue` event triggers Sleep.
+The sleep module is triggered by fatigue. The interoception module keeps a fatigue accumulator fed by unexpected substrate prediction error, the part of the error beyond a learned band, and the accumulator decays slowly (`[soma].fatigue_decay_per_s`, 0.01). The band follows the expected error over `expected_error_tau_s` (600 entity seconds) and admits `expected_error_band` (2.0) spreads above it. The interoception module still reports its raw `prediction_error`, and `soma.report` also carries `unexpected_error`. When the accumulator crosses `[soma].fatigue_maintenance_threshold` (100.0), a `soma.fatigue` event triggers the sleep module.
 
 Watch the fatigue chart on the diagnostics page. If fatigue grows continuously and no sleep follows, check that:
 
-- Sleep is enabled and initialized.
+- The sleep module is enabled and initialized.
 - `[hypnos.consolidation].fatigue_triggered = true`.
-- Interoception is publishing `soma.fatigue` events (visible in the health board).
+- The interoception module is publishing `soma.fatigue` events (visible in the health board).
 
-`[hypnos].interval_seconds` (3600 by default) is a maximum interval: Sleep also sleeps that often when fatigue never crosses the threshold.
+`[hypnos].interval_seconds` (3600 by default) is a maximum interval: the sleep module also sleeps that often when fatigue never crosses the threshold.
 
 ### Oscillatory coherence
 
-When `[oscillator].enabled = true` and the oscillator extra is installed, the PLV chart shows, for each broadcast, the phase-locking value of the modules competing in it. Workspace then multiplies each candidate's score by a coherence factor for its source module, between `[oscillator].coherence_floor` (0.8) for a desynchronized module and `[oscillator].coherence_ceiling` (1.25) for a phase-locked one.
+When `[oscillator].enabled = true` and the oscillator extra is installed, the PLV chart shows, for each broadcast, the phase-locking value of the modules competing in it. The workspace then multiplies each candidate's score by a coherence factor for its source module, between `[oscillator].coherence_floor` (0.8) for a desynchronized module and `[oscillator].coherence_ceiling` (1.25) for a phase-locked one.
 
 The oscillatory layer ships disabled (`[oscillator].enabled = false`) because its effect has not been characterized, and the planned experiments run without it. Enable it only after the sidecar coherence observer has measured its effect on your deployment.
 
 ### A/B divergence
 
-The A/B divergence observer pairs each external utterance of Language with a second inference from the same model and endpoint under a bare assistant prompt with no workspace content. The divergence is one minus the cosine similarity of the two responses' embeddings. It is a diagnostic of whether the workspace conditions the language organ, and the planned test does not use it.
+The A/B divergence observer pairs each external utterance of the language module with a second inference from the same model and endpoint under a bare assistant prompt with no workspace content. The divergence is one minus the cosine similarity of the two responses' embeddings. It is a diagnostic of whether the workspace conditions the language organ, and the planned test does not use it.
 
 A divergence near zero means the workspace is not conditioning the organ. If it drops unexpectedly:
 
 - Check that the cycle is ticking and modules are broadcasting workspace events.
-- Check that Language's `ContextAssembler` is receiving the coalition from Workspace (look for `lingua.external` events on the diagnostics stream).
+- Check that the language module's `ContextAssembler` is receiving the coalition from the workspace (look for `lingua.external` events on the diagnostics stream);
 - Check the evaluation sidecar is running (`[evaluation].enabled = true`).
 
 ### Forks, merges and the sleep cycle
 
-A fork is a deep copy of an existing stored snapshot. `POST /diagnostics/forks` requires a `parent_id` and duplicates that snapshot without capturing live state. A fork copies World model's encrypted weights when they exist; a restore installs them at that instance's own checkpoint path. Use a fork before any significant configuration change or module enable. Forks are stored under `state/forks/` inside the configured data root.
+A fork is a deep copy of an existing stored snapshot. `POST /diagnostics/forks` requires a `parent_id` and duplicates that snapshot without capturing live state. A fork copies the world model module's encrypted weights when they exist; a restore installs them at that instance's own checkpoint path. Use a fork before any significant configuration change or module enable. Forks are stored under `state/forks/` inside the configured data root.
 
 A merge combines two fork snapshots. It uses real TIES/DARE adapter merging whenever the training extra is installed (`[lifecycle].adapter_merger = "auto"`, the default); set `"ties_dare"` or `"fake"` to override the detection. The fork merge gate uses the shared divergence verdict, which includes the individuation ledger latch. Fork-point references are not built yet, so forks with enough lived time, or with unknown lived time, are preserved instead of merged.
 
@@ -143,6 +143,6 @@ POST /diagnostics/forks   {"parent_id": "<id>", "label": "..."}
 POST /diagnostics/merges  {"snapshot_a_id": "<id>", "snapshot_b_id": "<id>"}
 ```
 
-Optionally add `"world_model_from": "a"|"b"` to choose which parent supplies the World model world model, and the `allow_unmerged_adapters` flag to keep the parents' adapters uncombined when a merge is refused (no real merger, or a merged adapter that failed its capability or abliteration checks). If both snapshots carry a World model world model and you do not pass `world_model_from`, the API returns 409. The dashboard merge form's "world model from" choice sets the same field.
+Optionally add `"world_model_from": "a"|"b"` to choose which parent supplies the world model, and the `allow_unmerged_adapters` flag to keep the parents' adapters uncombined when a merge is refused (no real merger, or a merged adapter that failed its capability or abliteration checks). If both snapshots carry a world model and you do not pass `world_model_from`, the API returns 409. The dashboard merge form's "world model from" choice sets the same field.
 
-Sleep sleep is non-interruptible. The cycle keeps running during a sleep while perception pauses, forward-model adaptation is suspended in the predictive processors, and affect and drives return to baseline (see [Sleep](../10-sleep/README.md)). Do not stop the cycle while a sleep is running.
+Sleep is non-interruptible. The cycle keeps running during a sleep while perception pauses, forward-model adaptation is suspended in the predictive processors, and affect and drives return to baseline (see the [sleep module](../10-sleep/README.md)). Do not stop the cycle while a sleep is running.

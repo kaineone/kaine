@@ -154,15 +154,15 @@ class Vox(BaseModule):
         # Latest cached prosody features (numeric) and arrival timestamp.
         self._latest_prosody: Optional[dict[str, Any]] = None
         self._latest_prosody_ts: float | None = None
-        # Stimulus source/development dormancy.
+        # Stimulus source/developmental phase dormancy.
         self._dormant = False
         self._suppressed_while_dormant = 0
 
     def set_dormant(self, dormant: bool) -> None:
-        """Hold or release Vocal audible output.
+        """Hold or release the vocal module's audible output.
 
         Dormancy is physical, not cognitive: the stimulus source has no air medium.
-        Inner speech (Language) is untouched.
+        Inner speech (the language module) is untouched.
         """
         was_dormant = self._dormant
         self._dormant = bool(dormant)

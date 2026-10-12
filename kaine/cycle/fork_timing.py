@@ -70,7 +70,7 @@ class _VisionRateSink(Protocol):
 def _resolve_vision_sink(vision_rate_sink: Any) -> _VisionRateSink | None:
     """Find an object exposing ``set_vision_sample_hz`` on the given handle.
 
-    The runtime may pass the Vision module, its ``LiveCamera`` directly, or any
+    The runtime may pass the vision module, its ``LiveCamera`` directly, or any
     object with a ``live_camera`` attribute. We probe those in order and return
     the first that exposes the vision-rate knob, or ``None`` when no clean
     runtime seam is reachable (so the caller can honestly record the limitation
@@ -114,13 +114,13 @@ def apply_fork_timing_profile(
         ``set_experiential_rate`` setters apply rate overrides).
     vision_rate_sink:
         Optional handle exposing (or owning) ``set_vision_sample_hz`` — the
-        running Vision module or its ``LiveCamera``. When the running config does
+        running vision module or its ``LiveCamera``. When the running config does
         not expose a vision-rate seam, the ``vision_sample_hz`` override is
         honestly reported as not-applied rather than faked.
 
     Returns
     -------
-    A summary dict for logging / Dashboard. For a profile-less fork it is
+    A summary dict for logging / the dashboard. For a profile-less fork it is
     ``{"applied": False, ...}`` and nothing is mutated.
     """
     if profile is None:
@@ -151,7 +151,7 @@ def apply_fork_timing_profile(
         cycle.set_experiential_rate(profile.experiential_rate_hz)
         summary["experiential_rate_hz"] = profile.experiential_rate_hz
 
-    # 3) Optional perception-rate override through the existing Vision knob
+    # 3) Optional perception-rate override through the existing vision module knob
     #    (Phase 3). If no clean runtime seam is reachable on the running config,
     #    record the limitation honestly rather than pretend it was applied.
     if profile.vision_sample_hz is not None:

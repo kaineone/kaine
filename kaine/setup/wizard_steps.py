@@ -395,7 +395,7 @@ def _vox_backend(ctx: StepContext) -> str:
 
 
 def vox_voice_step() -> Step:
-    # Applies whenever Vocal is on. Only the Chatterbox backend needs a voice id;
+    # Applies whenever the vocal module is on. Only the Chatterbox backend needs a voice id;
     # any other backend asks nothing and says so, as the terminal wizard does.
     def applies(ctx: StepContext) -> bool:
         return bool((ctx.config.get("modules") or {}).get("vox"))

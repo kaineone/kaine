@@ -1,10 +1,10 @@
 # vox-prosodic-mirroring Specification
 
 ## Purpose
-This capability lets Vocal blend a bounded residual of the latest Audition prosody features into the affect-driven TTS parameters, controlled by mirror_strength clamped to a ceiling. It degrades gracefully, decays over time, and can be opted out.
+This capability lets the vocal module blend a bounded residual of the latest audition prosody features into the affect-driven TTS parameters, controlled by mirror_strength clamped to a ceiling. It degrades gracefully, decays over time, and can be opted out.
 ## Requirements
 ### Requirement: Bounded prosodic mirroring on top of affect
-Vocal SHALL blend a bounded residual of the latest `audition.prosody` features
+The vocal module SHALL blend a bounded residual of the latest `audition.prosody` features
 (librosa-derived numeric features: F0 summary, RMS energy, speaking rate)
 into the affect-driven `ChatterboxParams`, controlled by `mirror_strength`
 clamped to `mirror_ceiling`, with the affect-driven parameters remaining
@@ -25,12 +25,12 @@ published by Audition.
 - **THEN** the parameter change does not exceed `mirror_ceiling`
 
 #### Scenario: No parselmouth is used
-- **WHEN** Vocal processes prosodic mirroring for any utterance
+- **WHEN** the vocal module processes prosodic mirroring for any utterance
 - **THEN** no parselmouth function or Praat call is invoked; all prosody
   features come from the `audition.prosody` payload
 
 ### Requirement: Graceful degradation, decay, and opt-out
-Vocal SHALL fall back to affect-only parameters when no `audition.prosody` has been
+The vocal module SHALL fall back to affect-only parameters when no `audition.prosody` has been
 seen or when `[vox.mirroring].enabled` is false, and the mirror residual SHALL
 decay over `decay_s` after the partner stops speaking.
 

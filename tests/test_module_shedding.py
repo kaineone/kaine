@@ -167,7 +167,7 @@ async def test_shed_mid_run_drops_within_one_tick():
         result = await cycle.tick()
         assert result.events_collected >= 2
 
-        # Shed sequence: shutdown its background task + unregister.
+        # Shed the sequence module: shutdown its background task + unregister.
         await modules["chronos"].shutdown()
         registry.unregister("chronos")
         modules.pop("chronos")
@@ -176,7 +176,7 @@ async def test_shed_mid_run_drops_within_one_tick():
         await cycle.tick()
         await asyncio.sleep(0.05)
 
-        # The most recent broadcast that interoception sees should contain only interoception
+        # The most recent broadcast that the interoception module sees should contain only interoception
         # events (cycle reads from active streams now, which excludes
         # chronos.out).
         if modules["soma"].snapshots:

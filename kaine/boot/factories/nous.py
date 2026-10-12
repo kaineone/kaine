@@ -14,7 +14,7 @@ from kaine.bus.client import AsyncBus
 from kaine.modules.base import BaseModule
 
 # Worst-case EFE step product (factors * max_states * actions * horizon) above
-# which Planning's active-inference planning risks overrunning the cycle budget on
+# which the planning module's active-inference planning risks overrunning the cycle budget on
 # the target CPU. The default compact envelope (4*4*4*1 = 64) is far below this.
 _NOUS_COMPLEXITY_THRESHOLD = 4096
 

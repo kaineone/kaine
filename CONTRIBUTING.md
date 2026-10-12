@@ -19,8 +19,8 @@ By contributing you agree that your contributions are licensed under the
 - **Never boot an entity in a PR.** All modules ship disabled
   (`[modules].*  = false`); a guard test enforces the committed config is
   all-off. CI and review assume no entity is ever started.
-- **Safety model is load-bearing.** Do not weaken the action gate (Effectors),
-  executive inhibition (Workspace/Action selection), the autonomous welfare net, or the
+- **Safety model is load-bearing.** Do not weaken the action gate (the effectors module),
+  executive inhibition (the workspace and the action selection module), the autonomous welfare net, or the
   zero-raw-sense-data-persistence invariant. Changes near these get extra
   scrutiny.
 - **No secrets or operator-specific details** in code, docs, commits, or PR

@@ -416,7 +416,7 @@ async def test_content_fields_absent_from_every_record():
 
 @pytest.mark.asyncio
 async def test_soma_unexpected_error_is_recorded():
-    """soma.report's unexpected_error (the error beyond Interoception's learned
+    """soma.report's unexpected_error (the error beyond the interoception module's learned
     expected band, which drives sleep pressure) reaches the research log;
     a non-allowlisted field does not."""
     bus = FakeBus()
@@ -1052,7 +1052,7 @@ def _taxonomy_record(event_type, payload):
 
 
 def test_intent_speak_think_act_survive_taxonomy():
-    # Real Action selection payload shape (kaine/workspace/volition.py).
+    # Real action selection payload shape (kaine/workspace/volition.py).
     for kind, event_type in (
         ("speak", "intent.speak"),
         ("think", "intent.think"),
@@ -1080,7 +1080,7 @@ def test_nous_action_event_types_in_taxonomy():
     ):
         assert _allowed_fields(event_type) is not None, event_type
 
-    # Origin is retained on Action selection intents. Language speech events are content
+    # Origin is retained on the action selection module's intents. The language module's speech events are content
     # and are deliberately not part of the research taxonomy.
     assert "origin" in _allowed_fields("intent.speak")
     assert "origin" in _allowed_fields("intent.think")
@@ -1297,7 +1297,7 @@ def test_topos_report_fields_and_no_scene_change():
 
 
 def test_chronos_report_content_free_allowlist():
-    # Real Sequence payload shape (kaine/modules/chronos/module.py) plus the
+    # Real sequence payload shape (kaine/modules/chronos/module.py) plus the
     # latent fields that must NEVER pass.
     payload = {
         "anomaly_score": 0.42,
@@ -1338,7 +1338,7 @@ def test_audition_prosody_hz_fields():
 
 
 def test_raw_bus_archive_lingua_aggregate():
-    """Language now publishes an aggregate lingua.out stream; the raw archive
+    """The language module now publishes an aggregate lingua.out stream; the raw archive
     follows the canonical module stream set, not the mode-specific split."""
     from kaine.evaluation.observers.raw_bus_archive_consumer import (
         _MODULE_OUT_STREAMS,

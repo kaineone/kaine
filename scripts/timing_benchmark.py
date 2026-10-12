@@ -105,7 +105,7 @@ async def _benchmark_tick(cfg: dict[str, Any], ticks: int) -> dict[str, Any]:
     """Drive CognitiveCycle.tick() for `ticks` ticks; return per-tick stats.
 
     Wires the real modules (as tier1_smoke does) but with the language organ
-    disabled and Action selection removed, so this is cognitive plumbing only — no LLM,
+    disabled and the action selection module removed, so this is cognitive plumbing only — no LLM,
     no effector activation, no outward action.
     """
     out: dict[str, Any] = {"ran": False, "reason": "", "samples_ms": []}
@@ -170,7 +170,7 @@ async def _benchmark_tick(cfg: dict[str, Any], ticks: int) -> dict[str, Any]:
             registry=registry,
             processing_rate_hz=float(cycle_cfg.get("processing_rate_hz", 3.333)),
             experiential_rate_hz=float(cycle_cfg.get("experiential_rate_hz", 3.333)),
-            # NO Action selection: the tick can never select/publish an effector intent.
+            # NO action selection module: the tick can never select/publish an effector intent.
             volition=None,
             collect_phases=coherence is not None,
             entity_clock=registry.entity_clock,
@@ -220,7 +220,7 @@ async def _benchmark_tick(cfg: dict[str, Any], ticks: int) -> dict[str, Any]:
 
 
 async def _benchmark_vision(cfg: dict[str, Any], encodes: int) -> dict[str, Any]:
-    """Time the Vision DINOv2 encode of one seeded frame over `encodes` iters."""
+    """Time the vision module's DINOv2 encode of one seeded frame over `encodes` iters."""
     out: dict[str, Any] = {"ran": False, "reason": "", "samples_ms": []}
 
     topos_cfg = cfg.get("topos") or {}

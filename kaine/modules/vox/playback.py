@@ -153,7 +153,7 @@ def build_player(
     playback_enabled: bool,
     output_device: str | int = "",
 ) -> Player:
-    """Construct the player vocal should use.
+    """Construct the player the vocal module should use.
 
     `playback_enabled=False` → `NullPlayer`. Otherwise a `SoundDevicePlayer`
     (which itself degrades to a no-op if the audio system is unavailable).

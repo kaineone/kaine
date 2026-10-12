@@ -7,7 +7,7 @@ Mid-utterance preemption: a sufficiently surprising coalition redirects the voic
 
 ### Requirement: Cancellable utterance generation
 
-Language SHALL run each `speak` / `think` generation as a cancellable task rather than
+The language module SHALL run each `speak` / `think` generation as a cancellable task rather than
 awaiting it inline, so an in-flight utterance can be aborted. On cancellation the
 unspoken remainder SHALL be discarded and a short, content-free record SHALL note that
 an utterance was preempted; no partial text beyond what was already emitted is retained.
@@ -25,14 +25,14 @@ an utterance was preempted; no partial text beyond what was already emitted is r
 
 ### Requirement: Preemption redirects to the new utterance
 
-Language SHALL, when a `speak` intent marked as an interrupt arrives while a generation is
+The language module SHALL, when a `speak` intent marked as an interrupt arrives while a generation is
 in flight, cancel the current generation and begin the new one (redirect), rather than
 queuing it behind the current utterance or dropping it.
 
 #### Scenario: Interrupt intent redirects mid-utterance
 
 - **WHEN** an interrupt-marked `speak` intent arrives during an in-flight generation
-- **THEN** Language aborts the current generation and starts generating the new intent
+- **THEN** the language module aborts the current generation and starts generating the new intent
 
 ### Requirement: Interrupt threshold above the report threshold
 

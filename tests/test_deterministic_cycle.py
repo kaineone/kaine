@@ -141,7 +141,7 @@ def _scripted_streams() -> dict[str, list[tuple[str, Event]]]:
     """A fixed, reproducible set of module streams with FIXED entry ids.
 
     Includes a user-communication event (audition.transcription) so the default
-    action selection policy emits a speak intent, plus competing events from other
+    the action selection module's policy emits a speak intent, plus competing events from other
     sources at varying salience, including an equal-salience pair to exercise
     the canonical tie-break.
     """
@@ -237,7 +237,7 @@ def _normalize_intent(event: Event) -> dict[str, Any]:
 @pytest.mark.asyncio
 async def test_two_seeded_runs_produce_identical_trajectory():
     """Fresh engine + same seed, twice → identical per-tick selected entries,
-    salience scores, inhibited flags, action selection decisions, and logical
+    salience scores, inhibited flags, the action selection module's decisions, and logical
     timestamps. Wall-clock latency (wall_duration_ms/slip_ms) is excluded
     because it never enters the captured trajectory at all."""
     n_ticks = 6
@@ -263,7 +263,7 @@ async def test_different_seeds_same_scripted_stimulus_documents_seed_independenc
     "different seeds → different trajectories". But the scripted-stimulus harness
     here drives only the REAL `RuleBasedSalience` (novelty + static goal/affect
     scorers) and the REAL rule-based `Volition` — none of which consult the global
-    RNG. The salience scoring, canonical tie-break, inhibition, and action selection
+    RNG. The salience scoring, canonical tie-break, inhibition, and the action selection module's
     policy are all deterministic FUNCTIONS of the input events; the seed feeds
     `set_global_seed` but no scored path samples from it on this fixed stimulus.
 
@@ -343,7 +343,7 @@ async def test_logical_timestamps_equal_base_epoch_plus_tick_times_period():
     assert len(cycle_events) == 5
     for i, ev in enumerate(cycle_events):
         assert ev.timestamp == BASE_EPOCH + timedelta(seconds=i * period_s)
-    # Action selection intents (also engine-published) carry the logical stamp of the
+    # The action selection module's intents (also engine-published) carry the logical stamp of the
     # tick that produced them — a value strictly derived from the tick index.
     for ev in bus.published.get("volition", []):
         delta = ev.timestamp - BASE_EPOCH

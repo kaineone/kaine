@@ -165,7 +165,7 @@ async def test_soma_legacy_forward_model_called_without_timespan(bus: AsyncBus):
             self.calls: list[int] = []
 
         def step(self, feature, *args, **kwargs):
-            # A legacy plugin model takes no timespan: Interoception must not pass one.
+            # A legacy plugin model takes no timespan: the interoception module must not pass one.
             assert not args and not kwargs
             self.calls.append(len(feature))
             return super().step(feature)

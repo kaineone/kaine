@@ -139,7 +139,7 @@ class InMemoryAgentStore:
 class QdrantAgentStore:
     """Qdrant-backed agent profile store.
 
-    Uses the all-MiniLM-L6-v2 embedder (reused from Episodic memory) to store a
+    Uses the all-MiniLM-L6-v2 embedder (reused from the episodic memory module) to store a
     behavioral summary embedding alongside the profile JSON payload.
     This enables future similarity search over known agents.
 

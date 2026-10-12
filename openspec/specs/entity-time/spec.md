@@ -13,7 +13,7 @@ The system SHALL provide one injected `EntityClock` that exposes the entity's
 locus dwell, drive/affect time constants, recall throttling, the cognitive-cycle
 tick pacing) SHALL derive its durations and "now" from that clock rather than
 reading the wall clock directly. Timers that protect *infrastructure* rather than
-model cognition (the Supervisor liveness watchdog, the preservation monitor poll, network
+model cognition (the supervisor liveness watchdog, the preservation monitor poll, network
 request timeouts, the voice-alignment GPU window) SHALL continue to use real
 wall-clock time, and each such site SHALL be explicitly classified as
 infrastructural so it does not dilate with the mind.
@@ -28,7 +28,7 @@ infrastructural so it does not dilate with the mind.
 #### Scenario: Infrastructure timing stays on real time
 
 - **WHEN** the entity's `time_scale` is changed
-- **THEN** the Supervisor watchdog, preservation poll, and request timeouts are unchanged
+- **THEN** the supervisor watchdog, preservation poll, and request timeouts are unchanged
   (a watchdog must not slow down because the mind sped up, nor speed up because it
   slowed)
 
@@ -39,7 +39,7 @@ that scales the `EntityClock` and the cycle pacing together, so one value dilate
 the entire mind. A value of `0` SHALL freeze the entity (reusing the existing
 freeze/suspend path: the subjective clock stops). Values greater than `1.0` SHALL
 be permitted as an **aspirational target**: the cycle SHALL attempt the faster rate
-and, when the hardware cannot sustain it, SHALL throttle via the existing Interoception
+and, when the hardware cannot sustain it, SHALL throttle via the existing interoception module's
 rate-reduction path and SHALL report the shortfall (slip / achieved-vs-target rate)
 rather than silently overrunning.
 
@@ -106,15 +106,15 @@ the scale. The all-off first-boot guard SHALL remain satisfied.
   pre-change behavior
 
 ### Requirement: The remaining cognitive timers run on the entity clock
-Sequence's interval and time-since-interaction measures and Vocal's prosody-mirroring decay SHALL derive their durations and "now" from the shared `EntityClock`. Interoception's cycle-latency sense SHALL compare the tick's subjective duration (its wall duration multiplied by the clock's `time_scale`) with its setpoint. Sites that track real audio or media, bound a real compute or network budget, or stamp records SHALL stay on wall time and SHALL be marked as such in the code.
+The sequence module's interval and time-since-interaction measures and the vocal module's prosody-mirroring decay SHALL derive their durations and "now" from the shared `EntityClock`. The interoception module's cycle-latency sense SHALL compare the tick's subjective duration (its wall duration multiplied by the clock's `time_scale`) with its setpoint. Sites that track real audio or media, bound a real compute or network budget, or stamp records SHALL stay on wall time and SHALL be marked as such in the code.
 
 #### Scenario: Dilation moves every cognitive timer together
 - **WHEN** `time_scale = 0.5` and one wall second passes
-- **THEN** Sequence's interval feature and Vocal's mirroring decay each advance by half a subjective second
+- **THEN** the sequence module's interval feature and the vocal module's mirroring decay each advance by half a subjective second
 
 #### Scenario: A dilated mind does not feel its slow hardware
 - **WHEN** a tick takes 300 ms of wall time at `time_scale = 0.5`
-- **THEN** Interoception's cycle-latency sense receives 150 ms
+- **THEN** the interoception module's cycle-latency sense receives 150 ms
 
 #### Scenario: The default is unchanged
 - **WHEN** `time_scale = 1.0`

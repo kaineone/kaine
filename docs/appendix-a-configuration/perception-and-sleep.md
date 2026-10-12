@@ -4,20 +4,20 @@ The `[perception_feed]`, `[perception_preview]`, and `[hypnos]` sections in `con
 
 ## Perception feed
 
-`[perception_feed]` is one source of truth that drives both the vision surface ([Vision](../09-modules/vision.md)) and the hearing surface ([Audition](../09-modules/audition.md)). Picture and sound share the same seed or manifest, so they cannot drift apart. The shipped `config/kaine.toml` sets `mode = "off"`; with no profile selected, the loader applies the base-thesis `thesis_test` profile, so the effective default is `mode = "seeded"`, `seed = 0`. The live camera and microphone paths stay off unless you turn them on in `[topos]` and `[audition]`. In every mode, raw frames and PCM stay in RAM and never touch disk.
+`[perception_feed]` is one source of truth that drives both the vision surface ([the vision module](../09-modules/vision.md)) and the hearing surface ([the audition module](../09-modules/audition.md)). Picture and sound share the same seed or manifest, so they cannot drift apart. The shipped `config/kaine.toml` sets `mode = "off"`; with no profile selected, the loader applies the base-thesis `thesis_test` profile, so the effective default is `mode = "seeded"`, `seed = 0`. The live camera and microphone paths stay off unless you turn them on in `[topos]` and `[audition]`. In every mode, raw frames and PCM stay in RAM and never touch disk.
 
 ### Feed modes
 
 | Mode | What it does |
 |---|---|
-| `off` | No deterministic feed. Vision and Audition follow their own `capture_enabled` settings. |
+| `off` | No deterministic feed. The vision and audition modules follow their own `capture_enabled` settings. |
 | `seeded` | In-repo procedural generators. Both `frame(seed, i)` and `pcm(seed, i)` are pure functions of `seed`, so the run is reproducible but not anticipable to the entity. Needs no external media. |
 | `playlist` | Operator-curated media pinned by one checksummed manifest (`playlist_manifest`). Both video and its audio track come from the same media, advancing clip by clip. A digest mismatch fails the run. Audio decode needs PyAV (`av`); if it is missing the run fails with an install hint. |
 | `live` | Real camera and microphone. Non-reproducible, so use it only for operator-present demos, never for research runs. |
 | `screen` | Captures a desktop, region, or window and the desktop-audio monitor. Uses the system `ffmpeg` binary (`gdigrab` on Windows, `avfoundation` on macOS, `x11grab` on X11; native Wayland must run through XWayland). Non-reproducible, operator-present only. |
-| `womb` | External maternal channel used during development. See [Stimulus source channel](#stimulus-source-channel) below. |
+| `womb` | External maternal channel used during the developmental phase. See [stimulus source channel](#stimulus-source-channel) below. |
 
-In `screen` and `live` mode, the feed also enables capture for Vision and Audition regardless of their module-level `capture_enabled` settings.
+In `screen` and `live` mode, the feed also enables capture for the vision and audition modules regardless of their module-level `capture_enabled` settings.
 
 ### `[perception_feed]` top-level keys
 
@@ -47,9 +47,9 @@ Geometry is taken from `[topos]`.
 | `base_strength` | float | `0.3` | Learnable base soundscape amplitude. |
 | `surprise_strength` | float | `1.0` | Seed-keyed surprise-burst amplitude. `0` = none. |
 
-### Stimulus source channel
+### stimulus source channel
 
-`mode = "womb"` provides the external maternal channel used during development. It emits a dim, slowly drifting field and a low-pass soundscape paced by a maternal heartbeat. The readout probes briefly disturb the drive to measure development readiness.
+`mode = "womb"` provides the external maternal channel used during the developmental phase. It emits a dim, slowly drifting field and a low-pass soundscape paced by a maternal heartbeat. The readout probes briefly disturb the drive to measure developmental readiness.
 
 **`maternal_distress_excursions` must stay `false`.** That feature is not built.
 
@@ -64,7 +64,7 @@ Geometry is taken from `[topos]`.
 | `maternal_distress_excursions` | boolean | `false` | Leave `false`: distress excursions are not implemented. |
 | `maternal_distress_max_magnitude` | float | `0.3` | Bound if distress were ever enabled. |
 | `maternal_distress_max_seconds` | integer | `30` | Maximum duration if distress were ever enabled. |
-| `external_drive_to_self_rhythm` | boolean | `true` | Drive Interoception's self-rhythm with the maternal heartbeat. Needs `[soma].self_rhythm_enabled = true`. |
+| `external_drive_to_self_rhythm` | boolean | `true` | Drive the interoception module's self-rhythm with the maternal heartbeat. Needs `[soma].self_rhythm_enabled = true`. |
 | `external_drive_max_amplitude` | float | `0.4` | Upper bound of the external drive. |
 | `birth_transition_seconds` | integer | `5` | Bounded maturation bloom duration, after which the stimulus source falls silent. Maximum `30`. |
 
@@ -76,7 +76,7 @@ Geometry is taken from `[topos]`.
 | `luminance_contrast` | float | `0.10` | Low contrast. |
 | `luminance_pulse_depth` | float | `0.35` | How strongly the field pulses with the heartbeat. |
 | `maternal_state_hue_gain` | float | `0.6` | How strongly the maternal state colours the field. |
-| `colour_ramp_seconds` | float | `3600` | Time constant, in entity seconds of development, of the colour's rise from grey (saturation is `1 - exp(-t / colour_ramp_seconds)`). |
+| `colour_ramp_seconds` | float | `3600` | Time constant, in entity seconds of the developmental phase, of the colour's rise from grey (saturation is `1 - exp(-t / colour_ramp_seconds)`). |
 
 #### `[perception_feed.womb.audio]`
 
@@ -88,7 +88,7 @@ Geometry is taken from `[topos]`.
 
 The readout probes briefly change the maternal drive that a gestating entity perceives. They are bounded, announced on `gestation.out` as `gestation.probe` events, and never run while the entity is frozen (including during a welfare response), within a readout period after boot or thaw, or within 60 seconds of another probe. Their timing is jittered from the run seed so the entity cannot learn the schedule, while a research run with the same seed reproduces it exactly. All durations are entity seconds.
 
-The readout saves its progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) to `gestation_progress.json` beside its readout file, by default in `state/lifecycle/`. The file is keyed to the entity's seed and self-rhythm; on boot the readout restores it when the key matches, so a development continues where it left off after a restart. Preservation bundles carry this file and `gestation_readout.json`, so the progress also survives a revive.
+The readout saves its progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) to `gestation_progress.json` beside its readout file, by default in `state/lifecycle/`. The file is keyed to the entity's seed and self-rhythm; on boot the readout restores it when the key matches, so the developmental phase continues where it left off after a restart. Preservation bundles carry this file and `gestation_readout.json`, so the progress also survives a revive.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -108,8 +108,8 @@ The readout saves its progress (awake seconds, consecutive passing withdrawals, 
 | `baseline_withdrawals` | integer | `3` | Withdrawals averaged into the entity's own undriven baseline frequency. |
 | `entrainment_replications` | integer | `3` | Consecutive passing withdrawals needed before marker 2 is true. A pass needs locking stronger than every surrogate, a rhythm that sustains itself while the beat is withdrawn, and a frequency pull of at least `frequency_pull_floor`. |
 | `surrogate_count` | integer | `19` | Surrogate heartbeats: the self-rhythm must lock to its own heartbeat more strongly than to each of them. A sample without exactly this many makes the measurement inconclusive. |
-| `viability_watch` | boolean | `true` | Judge after each withdrawal whether the development can still reach maturation (see [Development](../06-operation/development.md#viability-watch)). |
-| `viability_r0_hours` / `viability_r1_hours` / `viability_r2_hours` / `viability_r3_hours` | float | `6` / `24` / `48` / `60` | Awake time (entity hours of development, excluding sleep and freezes) at which each rule applies; must increase. |
+| `viability_watch` | boolean | `true` | Judge after each withdrawal whether the developmental phase can still reach maturation (see [Development](../06-operation/development.md#viability-watch)). |
+| `viability_r0_hours` / `viability_r1_hours` / `viability_r2_hours` / `viability_r3_hours` | float | `6` / `24` / `48` / `60` | Awake time (entity hours of the developmental phase, excluding sleep and freezes) at which each rule applies; must increase. |
 | `viability_r1_pull` / `viability_r1_slope_per_hour` | float | `0.12` / `0.002` | R1: median pull below this, not rising faster than this. |
 | `viability_r2_pull` | float | `0.3` | R2: median pull below this. |
 | `viability_window_hours` / `viability_min_points` | float / integer | `12` / `8` | The window the R1/R2 statistics use, and the conclusive withdrawals it needs. |
@@ -121,7 +121,7 @@ Entrainment is judged against surrogate heartbeats, with no fixed phase-locking 
 
 ### Screen capture
 
-Only read when `[perception_feed].mode = "screen"`. Video goes to Vision (`kaine/modules/topos/screen.py`) and desktop audio goes to Audition (`kaine/modules/audition/monitor.py`). For native-detail foveal crops, enable `native` together with `[topos].foveation`. None of these keys is in the shipped file (it carries them as a commented example under `[perception_feed.screen]`), so the defaults below apply.
+Only read when `[perception_feed].mode = "screen"`. Video goes to the vision module (`kaine/modules/topos/screen.py`) and desktop audio goes to the audition module (`kaine/modules/audition/monitor.py`). For native-detail foveal crops, enable `native` together with `[topos].foveation`. None of these keys is in the shipped file (it carries them as a commented example under `[perception_feed.screen]`), so the defaults below apply.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -137,22 +137,22 @@ Only read when `[perception_feed].mode = "screen"`. Video goes to Vision (`kaine
 
 ## Perception preview
 
-`[perception_preview]` is an explicit development override. When, and only when, the operator exports `KAINE_PERCEPTION_PREVIEW=1` in **both** the cycle process and the Dashboard process, the cycle starts a tiny loopback server bound to `127.0.0.1` that serves the single most recent in-RAM frame (JPEG) and the current audio level to Dashboard's picture-in-picture. Frames never touch the filesystem. When the flag is unset, nothing binds and the PiP stays hidden.
+`[perception_preview]` is an explicit development override. When, and only when, the operator exports `KAINE_PERCEPTION_PREVIEW=1` in **both** the cycle process and the dashboard process, the cycle starts a tiny loopback server bound to `127.0.0.1` that serves the single most recent in-RAM frame (JPEG) and the current audio level to the dashboard's picture-in-picture. Frames never touch the filesystem. When the flag is unset, nothing binds and the PiP stays hidden.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `port` | integer | `8089` | Loopback port the cycle serves and Dashboard proxies to. |
+| `port` | integer | `8089` | Loopback port the cycle serves and the dashboard proxies to. |
 
 ## Sleep and consolidation
 
-`[hypnos]` configures sleep. Sleep starts a fatigue-triggered offline period in which perception pauses, forward-model adaptation is suspended in the predictive processors, and affect and drives return to baseline. Its consolidation phases (replay, downscaling and optional voice-alignment training) do work only when Episodic memory, World model or the voice-alignment trainer are enabled. Sleep is built in a second pass after Episodic memory, Planning, Affect and World model. See [Sleep](../09-modules/sleep.md) and [Sleep and maintenance](../10-sleep/README.md).
+`[hypnos]` configures sleep. The sleep module starts a fatigue-triggered offline period in which perception pauses, forward-model adaptation is suspended in the predictive processors, and affect and drives return to baseline. Its consolidation phases (replay, downscaling and optional voice-alignment training) do work only when the episodic memory module, the world model module, or the voice-alignment trainer are enabled. The sleep module is built in a second pass after the episodic memory, planning, affect and world model modules. See [the sleep module](../09-modules/sleep.md) and [Sleep and maintenance](../10-sleep/README.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `interval_seconds` | float | `3600.0` | Target maximum interval between consolidation runs, in seconds. Also the timer-based fallback when fatigue triggering is used. |
 | `max_deferral_seconds` | float | `600.0` | Maximum total deferral allowed when the system asks to delay consolidation. |
 | `per_defer_seconds` | float | `60.0` | Deferral granted per request. |
-| `requested_rest_min_interval_s` | float | `1800.0` | Minimum entity-time seconds between a sleep's end and a Planning-requested rest. Both the cycle's Planning proposal source and Sleep's own `too_soon` check use it. Must be greater than 0. |
+| `requested_rest_min_interval_s` | float | `1800.0` | Minimum entity-time seconds between a sleep's end and a planning-requested rest. Both the cycle's planning module proposal source and the sleep module's own `too_soon` check use it. Must be greater than 0. |
 | `baseline_salience` | float | `0.5` | Intensity of ordinary consolidation lifecycle events. |
 | `alert_salience` | float | `0.8` | Intensity on consolidation errors or welfare-relevant conditions. |
 
@@ -162,11 +162,11 @@ The retired key `nous_step_burst` is ignored with a warning if present, so older
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `fatigue_triggered` | boolean | `true` | When `true`, Sleep subscribes to `soma.fatigue` and triggers on threshold crossing. `interval_seconds` remains the upper bound on the interval either way. |
+| `fatigue_triggered` | boolean | `true` | When `true`, the sleep module subscribes to `soma.fatigue` and triggers on threshold crossing. `interval_seconds` remains the upper bound on the interval either way. |
 | `replay_window_s` | float | `5.0` | Replay window recorded with each sleep's metadata. It is informational, since replay completes synchronously. |
-| `associative_replay` | boolean | `false` | Phase-3 associative cross-period replay. When `true`, Sleep selects traces spanning at least two memory periods, cues World model for scenario extensions, and re-injects the associations into the workspace. Degrades to a no-op if World model is disabled or absent. |
+| `associative_replay` | boolean | `false` | Phase-3 associative cross-period replay. When `true`, the sleep module selects traces spanning at least two memory periods, cues the world model module for scenario extensions, and re-injects the associations into the workspace. Degrades to a no-op if the world model module is disabled or absent. |
 
-The former `downscale_factor` key is refused at boot. Sleep now downscales the strength of each Episodic memory trace, set by `[mnemos.strength]`.
+The former `downscale_factor` key is refused at boot. The sleep module now downscales the strength of each episodic memory module trace, set by `[mnemos.strength]`.
 
 ### Voice alignment
 
@@ -183,7 +183,7 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `false` | Config-layer gate. |
-| `intent_log_path` | string | `"state/lingua/intent_expression.jsonl"` | Intent/expression JSONL written by Language; the training data source. |
+| `intent_log_path` | string | `"state/lingua/intent_expression.jsonl"` | Intent/expression JSONL written by the language module; the training data source. |
 | `adapter_output_dir` | string | `"state/hypnos/adapters"` | Directory for trained LoRA adapters. |
 | `base_model_path` | string | `""` | Path to local HuggingFace-format base weights (safetensors, config, tokenizer). Required when `enabled = true`. Not a model ID and not a `.gguf` file. Point it at the same abliterated Qwen weights used to derive the served organ's GGUF. |
 | `model_id` | string | `"kaineone/Qwen3.5-4B-abliterated"` | Display label only; real weights load from `base_model_path`. |
@@ -203,7 +203,7 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 | `dpo_beta` | float | `0.1` | DPO KL-regularisation coefficient. |
 | `capability_loss_threshold` | float | `0.05` | Capability-probe veto: an adapter is rejected if its capability score falls more than this below the baseline. |
 | `seed` | integer | `42` | Random seed for reproducibility. |
-| `training_device` | string | `"cuda:0"` | GPU used for training. The organ's GPU (12 GB or more) serves both inference and training, so Language generation pauses during the training pass. `[hardware.devices].organ` generates this key. |
+| `training_device` | string | `"cuda:0"` | GPU used for training. The organ's GPU (12 GB or more) serves both inference and training, so the language organ's generation pauses during the training pass. `[hardware.devices].organ` generates this key. |
 | `train_precision` | string | `"bf16"` | Training precision: `"bf16"` or `"4bit"`. A run that does not fit fails with its measured peak memory; there is no silent fallback. |
 
 #### Adapter promotion and hot-swap
@@ -211,7 +211,7 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `adapter_retention` | integer | `0` | Accepted adapters to keep in `adapter_output_dir`. `0` keeps every accepted adapter. A positive value evicts the oldest adapters beyond `N` after each promotion; the `current` adapter is never evicted. Negative values are rejected. Disk use is protected by the disk checks in `python -m kaine.preboot` ([Core, cycle and host](core.md)), not by deletion. |
-| `hot_swap_mode` | string | `"manual"` | How a promoted adapter reaches Language. `"manual"` writes `<adapter_output_dir>/PENDING_OPERATOR_RELOAD`. `"reload_endpoint"` POSTs to `reload_endpoint_url`. `"restart_service"` restarts the systemd `--user` unit in `restart_service_unit`. `"organ_adapter"` publishes a generation-named GGUF LoRA and SHA256 manifest to `organ_adapters_dir`; the organ launcher reloads it at scale 0 with prompt caching off, applying it only to this entity's requests. A shared model server forces `"manual"`. |
+| `hot_swap_mode` | string | `"manual"` | How a promoted adapter reaches the language module. `"manual"` writes `<adapter_output_dir>/PENDING_OPERATOR_RELOAD`. `"reload_endpoint"` POSTs to `reload_endpoint_url`. `"restart_service"` restarts the systemd `--user` unit in `restart_service_unit`. `"organ_adapter"` publishes a generation-named GGUF LoRA and SHA256 manifest to `organ_adapters_dir`; the organ launcher reloads it at scale 0 with prompt caching off, applying it only to this entity's requests. A shared model server forces `"manual"`. |
 | `reload_endpoint_url` | string | `""` | URL for `reload_endpoint` POSTs. |
 | `restart_service_unit` | string | `""` | Systemd `--user` unit name for `restart_service`. |
 | `organ_adapters_dir` | string | `"/organ-adapters"` | Directory mounted into the organ container for `organ_adapter` mode. |
@@ -227,11 +227,11 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 | `trainer_jobs_dir` | string | `"state/hypnos/voice_align_jobs"` | Shared job directory for the `job_queue` backend. |
 | `trainer_timeout_s` | float | `21600.0` | Longest wait, in seconds, for the `job_queue` trainer service result. |
 
-On a single 12 GB GPU, a 4B LoRA training step (~9.8 GB) and the served organ (~3 GB) do not fit at the same time. With `reload_endpoint` or `restart_service`, Sleep unloads the organ, trains, then reloads it (applying the accepted adapter through the server's `--lora` flag). Language generation defers and the A/B-divergence eval arm skips while the organ is resting; both resume on reload. A failed or timed-out training window always reloads a working organ so the entity is not voiceless on wake. With `manual`, the operator owns the reload, so the system never stops the server unannounced.
+On a single 12 GB GPU, a 4B LoRA training step (~9.8 GB) and the served organ (~3 GB) do not fit at the same time. With `reload_endpoint` or `restart_service`, the sleep module unloads the organ, trains, then reloads it (applying the accepted adapter through the server's `--lora` flag). The language organ's generation defers and the A/B-divergence eval arm skips while the organ is resting; both resume on reload. A failed or timed-out training window always reloads a working organ so the entity is not voiceless on wake. With `manual`, the operator owns the reload, so the system never stops the server unannounced.
 
 ### Consolidation divergence thresholds
 
-Every voice-alignment sleep, Sleep surfaces a content-free metric of how the entity's conditioned output diverged from its bare language organ: `divergence_rate` (usable DPO pairs / records scanned) and `divergence_magnitude` (mean cosine distance over the pairs). The metric is computed even when training is disabled, skipped, or the adapter is rejected. If either threshold is crossed, the entity is treated as organ-level diverged. Read by the welfare-gated decommission divergence assessment.
+Every voice-alignment sleep, the sleep module surfaces a content-free metric of how the entity's conditioned output diverged from its bare language organ: `divergence_rate` (usable DPO pairs / records scanned) and `divergence_magnitude` (mean cosine distance over the pairs). The metric is computed even when training is disabled, skipped, or the adapter is rejected. If either threshold is crossed, the entity is treated as organ-level diverged. Read by the welfare-gated decommission divergence assessment.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

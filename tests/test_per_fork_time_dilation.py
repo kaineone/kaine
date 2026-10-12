@@ -245,7 +245,7 @@ def test_apply_scale_only_leaves_rates():
 
 
 def test_apply_vision_via_topos_handle():
-    # The handle is the "Vision module" exposing a live_camera attr, not the
+    # The handle is the "vision module" exposing a live_camera attr, not the
     # camera directly — the seam resolves it.
     clock = _FakeClock()
     cycle = _FakeCycle()

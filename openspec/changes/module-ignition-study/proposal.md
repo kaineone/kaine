@@ -6,14 +6,14 @@ The base thesis says the mind is the workspace's competition and broadcast among
 
 The operator's protocol, 2026-09-28:
 1. **Gestation.** Spawn one base-thesis entity and let it gestate in the local stimulus source until it is born.
-2. **The seed.** At the moment it graduates development, preserve it. That snapshot is the seed.
+2. **The seed.** At the moment it graduates the developmental phase, preserve it. That snapshot is the seed.
 3. **Branch runs.** Revive the seed once per module set, one run at a time, each with one more module in a logical order. Show it the four films after a pleasant transition from the stimulus source, recording everything.
    - Every branch run starts from the same seed and sees the same media, so the runs show how the entity diverges with each new faculty.
 4. **Accumulating line.** One being gains the next module after each viewing and rewatches the same films, building familiarity.
 5. **Noise reference.** A repeat of the base run from the seed shows how much two identical runs differ.
 6. **Analysis and write-up.** Compare the recorded data. Look for evidence of workspace ignition or sentient behaviour. Report it truthfully and in full in a new version of the paper and poster, whether or not it shows what was hoped for.
 
-The first version of this change (2026-09-26) forked a main line and a familiarity-control line from the development. This revision replaces that line structure with the operator's protocol. The prerequisite changes it tracked are done, and it keeps them.
+The first version of this change (2026-09-26) forked a main line and a familiarity-control line from the developmental phase. This revision replaces that line structure with the operator's protocol. The prerequisite changes it tracked are done, and it keeps them.
 
 ## What changes
 
@@ -25,10 +25,10 @@ The first version of this change (2026-09-26) forked a main line and a familiari
 
   One checksummed playlist manifest, about 243 minutes.
 - **Base set.** The operator's base-thesis configuration:
-  - the base: Interoception, Sequence, Vision, Audition and Language, with Workspace and Action selection;
-  - Affect and Sleep.
-- **Module order.** Episodic memory, World model, Planning, Self-model, Social cognition, Vocal, Effectors, Perceptual locus, Embodiment, up to all sixteen modules.
-- **The seed.** One development in the local stimulus source under the default gate. Maturation is automatic when the gate's conditions hold; no operator acknowledgement delays it.
+  - the base: the interoception, sequence, vision, audition and language modules, with the workspace and the action selection module;
+  - the affect and sleep modules.
+- **Module order.** episodic memory, world model, planning, self-model, social cognition, vocal modules, up to all sixteen modules.
+- **The seed.** One developmental phase in the local stimulus source under the default gate. Maturation is automatic when the gate's conditions hold; no operator acknowledgement delays it.
   - The entity is preserved once the maturation bloom has completed. That preservation is the seed.
   - The stimulus source's time at maturation is recorded, so the transition renders the field the entity last perceived.
 - **Lines.** Each line has its own working directory and memory collections. Every step starts on an empty bus database.
@@ -41,11 +41,11 @@ The first version of this change (2026-09-26) forked a main line and a familiari
   3. Preservation and a stop at the programme's end.
   4. A recorded step manifest.
 - **Recording** (change `run-recording`). Every run persists:
-  - everything Dashboard displays, after the same privacy filter Dashboard applies;
+  - everything the dashboard displays, after the same privacy filter the dashboard applies;
   - the research event log;
   - the workspace trajectory;
   - the film-aligned ignition log;
-  - Language's external utterances.
+  - the language module's external utterances.
 
   Inner speech is never recorded.
 - **Hosting.** The study runner runs inside the cycle image as a compose service, so every cycle reaches the bus, the organ and the models the way the containerized cycle does. The study directory lives on a durable volume.

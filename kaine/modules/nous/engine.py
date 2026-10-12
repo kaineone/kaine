@@ -127,7 +127,7 @@ def normalised_entropy(dist: Sequence[float]) -> float:
 
 @runtime_checkable
 class ActiveInferenceEngine(Protocol):
-    """The seam Planning drives each broadcast.
+    """The seam the planning module drives each broadcast.
 
     Implementations MUST be safe to call from an async module (they may block
     briefly; the pymdp impl bounds itself with a timeout). ``step`` returns an
@@ -144,7 +144,7 @@ class ActiveInferenceEngine(Protocol):
 
 
 class _EngineBase(ABC, ActiveInferenceEngine):
-    """Backend-agnostic Planning engine logic.
+    """Backend-agnostic planning module engine logic.
 
     Concrete backends implement the abstract hooks for constructing an agent,
     running one inference/planning cycle, converting posterior/prior objects to
@@ -381,7 +381,7 @@ class _EngineBase(ABC, ActiveInferenceEngine):
         return self._with_pB_B(agent, pB, B)
 
     def _cap_perceptual_transitions(self, agent: Any) -> Any:
-        """Bound the evidence Planning holds in perceptual transition counts.
+        """Bound the evidence the planning module holds in perceptual transition counts.
 
         Rescaling any column whose concentration exceeds
         ``transition_max_concentration`` keeps the Dirichlet posterior sensitive
@@ -839,7 +839,7 @@ class PymdpEngine(_EngineBase):
 
         Model-agnostic: the observation is index 0 in every modality of *this*
         engine's model (compilation keys on shape and dtype, not value), so it
-        never assumes Planning's default factor layout; benchmark and task models
+        never assumes the planning module's default factor layout; benchmark and task models
         have their own. Pure: every helper returns new values, the results are
         discarded, and no engine attribute is assigned, so a warmed engine
         behaves exactly like an unwarmed one apart from the compile caches.

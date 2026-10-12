@@ -1,12 +1,12 @@
 # nous-active-inference Specification
 
 ## Purpose
-Planning is KAINE's deliberative reasoning module. It performs active inference over a compact discrete generative model: it updates beliefs about hidden states from each workspace broadcast, learns how its own actions change those states, and selects actions by expected free energy. This capability defines the engine contract (the pymdp engine, and a NumPy engine that computes the same thing), bounded planning, the belief and policy events, how intents leave Planning, and how its learned model persists across preservation.
+The planning module is KAINE's deliberative reasoning module. It performs active inference over a compact discrete generative model: it updates beliefs about hidden states from each workspace broadcast, learns how its own actions change those states, and selects actions by expected free energy. This capability defines the engine contract (the pymdp engine, and a NumPy engine that computes the same thing), bounded planning, the belief and policy events, how intents leave the planning module, and how its learned model persists across preservation.
 
 ## Requirements
 
 ### Requirement: pymdp 1.0 (JAX) active-inference engine
-Planning SHALL perform belief updating and policy selection via expected-free-energy
+The planning module SHALL perform belief updating and policy selection via expected-free-energy
 minimization using **pymdp 1.0 (JAX)** over a discrete generative model derived
 from workspace content. The engine SHALL be reachable behind an
 `ActiveInferenceEngine` protocol so a `FakeEngine` can substitute in tests, and a
@@ -26,16 +26,16 @@ the JAX backend is available without a CUDA installation.
 #### Scenario: Build needs no NAR binary
 - **WHEN** the unit suite runs without `external/OpenNARS-for-Applications`
   present
-- **THEN** the Planning tests pass using the `FakeEngine`
+- **THEN** the planning module tests pass using the `FakeEngine`
 
 ### Requirement: Explicit v1 action space
-Planning SHALL define an explicit discrete action space for v1:
+The planning module SHALL define an explicit discrete action space for v1:
 `{no_op, request_think, request_speak, request_maintenance}`. Epistemic actions
-(`request_think`) are information-seeking intents that Planning can select without
-Effectors whitelisting them, because they remain internal to the cognitive loop. The
+(`request_think`) are information-seeking intents that the planning module can select without
+the effectors module whitelisting them, because they remain internal to the cognitive loop. The
 B-matrix (state-transition) SHALL be indexed over this four-element action space.
 EFE policy selection MUST have at least this action space to evaluate policies
-over; the absence of a Effectors whitelist is therefore NOT a blocker for v1.
+over; the absence of an effectors module whitelist is therefore NOT a blocker for v1.
 
 #### Scenario: Action space covers epistemic and communicative actions
 - **WHEN** the engine initialises its generative model
@@ -44,7 +44,7 @@ over; the absence of a Effectors whitelist is therefore NOT a blocker for v1.
 #### Scenario: Epistemic actions do not require Effectors whitelist
 - **WHEN** the engine selects `request_think`
 - **THEN** the resulting `intent.act` is handled within the cognitive loop without
-  requiring a Effectors whitelist entry
+  requiring an effectors module whitelist entry
 
 ### Requirement: EFE planning is bounded
 EFE planning MUST NOT run unbounded in the 300 ms cognitive-cycle budget. Three
@@ -77,15 +77,15 @@ guards SHALL be in place before the engine is enabled in production:
 - **THEN** `make_nous` raises a `ConfigurationError` at startup
 
 ### Requirement: Preserved belief contract plus policy output
-Planning SHALL continue to publish `nous.belief` events with the existing payload
+The planning module SHALL continue to publish `nous.belief` events with the existing payload
 shape (`statement`, `kind`, `frequency`, `confidence`) so existing consumers are
 unaffected, with semantics redefined (statement = dominant latent-factor label,
-frequency = posterior expectation, confidence = posterior certainty). Planning SHALL
+frequency = posterior expectation, confidence = posterior certainty). The planning module SHALL
 additionally publish `nous.policy` events carrying the selected policy and its
 expected free energy.
 
 #### Scenario: Belief event keeps its shape
-- **WHEN** Planning publishes a belief
+- **WHEN** the planning module publishes a belief
 - **THEN** the `nous.belief` payload contains `statement`, `kind`, `frequency`,
   and `confidence`
 
@@ -94,15 +94,15 @@ expected free energy.
 - **THEN** a `nous.policy` event is published containing `expected_free_energy`
 
 ### Requirement: Epistemic actions ride the intent path
-Planning SHALL NOT invoke effectors and SHALL NOT publish intents. For a chosen `request_think`, `request_speak` or `request_maintenance` it SHALL publish a content-free `nous.proposal` event (`proposal_id`, `action`, `kind` ∈ {think, speak, rest}, `step`, `preference`) whose salience rises with the chosen action's preference. `no_op` SHALL publish nothing. Only Action selection turns a proposal into an intent, and only after the proposal has become conscious in a non-inhibited broadcast, so that Workspace inhibition, Action selection's guards and Effectors whitelists remain in control of all outward action.
+The planning module SHALL NOT invoke the effectors module and SHALL NOT publish intents. For a chosen `request_think`, `request_speak` or `request_maintenance` it SHALL publish a content-free `nous.proposal` event (`proposal_id`, `action`, `kind` ∈ {think, speak, rest}, `step`, `preference`) whose salience rises with the chosen action's preference. `no_op` SHALL publish nothing. Only the action selection module turns a proposal into an intent, and only after the proposal has become conscious in a non-inhibited broadcast, so that workspace inhibition, the action selection module's guards and the effectors module's whitelists remain in control of all outward action.
 
 #### Scenario: Action becomes a proposal, not an intent or a call
 - **WHEN** the engine selects `request_think`
-- **THEN** Planning publishes a `nous.proposal` with `kind` `think`, and publishes no `intent.*` event and makes no effector call
+- **THEN** the planning module publishes a `nous.proposal` with `kind` `think`, and publishes no `intent.*` event and makes no effector call
 
 #### Scenario: Action becomes an intent, not a direct call
 - **WHEN** the engine selects an information-seeking action and its proposal becomes conscious in a non-inhibited broadcast
-- **THEN** Action selection, not Planning, publishes the corresponding intent, and Planning makes no direct effector call
+- **THEN** the action selection module, not the planning module, publishes the corresponding intent, and the planning module makes no direct effector call
 
 #### Scenario: No-op proposes nothing
 - **WHEN** the engine selects `no_op`
@@ -125,13 +125,13 @@ coalition or appear in evaluation logs.
 
 ### Requirement: Inference crash is distinguished from a genuine no_op
 
-Planning SHALL distinguish a non-timeout inference crash from a genuine reasoned
+The planning module SHALL distinguish a non-timeout inference crash from a genuine reasoned
 no_op. `EngineResult` SHALL carry `error: bool` and `error_reason: str` fields.
 On a non-timeout exception `PymdpEngine.step()` SHALL set `error=True` and log
 at `ERROR` level; `timed_out` and `error` SHALL be mutually exclusive — timeouts
 are a planned degradation, crashes are unexpected failures.
 
-When `result.error` is set, Planning SHALL publish a `nous.error` diagnostic event
+When `result.error` is set, the planning module SHALL publish a `nous.error` diagnostic event
 (with `error_reason`, `elapsed_ms`, `num_factors`, `num_actions` in the payload)
 and SHALL NOT publish `nous.belief` or `nous.policy` for that cycle — stale
 priors held in the engine buffer are NOT a fresh computation and MUST NOT be
@@ -144,13 +144,13 @@ trigger `nous.timeout` and publish belief/policy from the last posterior.
 - **WHEN** the EFE inference thread raises a non-timeout exception
 - **THEN** the engine returns an `EngineResult` with `error=True` and a
   non-empty `error_reason`
-- **AND** Planning publishes `nous.error` with the reason in the payload
-- **AND** Planning does NOT publish `nous.belief` or `nous.policy` for that cycle
+- **AND** the planning module publishes `nous.error` with the reason in the payload
+- **AND** the planning module does NOT publish `nous.belief` or `nous.policy` for that cycle
 
 #### Scenario: Timeout still publishes belief and policy
 - **WHEN** EFE planning exceeds `efe_timeout_ms`
 - **THEN** the engine returns `timed_out=True` and `error=False`
-- **AND** Planning publishes `nous.timeout`, `nous.belief`, and `nous.policy`
+- **AND** the planning module publishes `nous.timeout`, `nous.belief`, and `nous.policy`
 - **AND** `nous.error` is NOT published
 
 #### Scenario: Crash after a good cycle does not re-broadcast stale belief
@@ -159,10 +159,10 @@ trigger `nous.timeout` and publish belief/policy from the last posterior.
 - **AND** one `nous.error` event is published for cycle N+1
 
 ### Requirement: The restored posterior reaches the engine
-When Planning is restored from a snapshot, the preserved posterior SHALL become both the module's last posterior and its inference engine's fallback posterior, so a degraded step after a revive (a planning timeout or crash) reports the preserved belief rather than the uniform prior. A posterior whose shape does not match the model's factors SHALL be ignored with a warning.
+When the planning module is restored from a snapshot, the preserved posterior SHALL become both the module's last posterior and its inference engine's fallback posterior, so a degraded step after a revive (a planning timeout or crash) reports the preserved belief rather than the uniform prior. A posterior whose shape does not match the model's factors SHALL be ignored with a warning.
 
 #### Scenario: A degraded first step after revive
-- **WHEN** Planning is restored with a posterior and its first planning step times out
+- **WHEN** the planning module is restored with a posterior and its first planning step times out
 - **THEN** the step reports the restored posterior
 
 #### Scenario: A mismatched posterior
@@ -170,28 +170,28 @@ When Planning is restored from a snapshot, the preserved posterior SHALL become 
 - **THEN** the engine's fallback is left as it was and a warning is logged
 
 ### Requirement: Per-action expected free energy is correct at any planning horizon
-Planning SHALL report, for each action, the lowest expected free energy among the policies whose first action is that action, SHALL choose the first action of the policy with the lowest expected free energy, and SHALL publish the configured planning horizon with its policy event.
+The planning module SHALL report, for each action, the lowest expected free energy among the policies whose first action is that action, SHALL choose the first action of the policy with the lowest expected free energy, and SHALL publish the configured planning horizon with its policy event.
 
 #### Scenario: A two-step horizon
-- **WHEN** Planning plans with a horizon of 2
+- **WHEN** the planning module plans with a horizon of 2
 - **THEN** each action's reported EFE is the best EFE of the two-step policies beginning with it, and the published horizon is 2
 
 ### Requirement: Planning's actions have consequences it learns
-Planning's generative model SHALL let every perceptual factor's transitions depend on the action taken, SHALL begin with the same broad, uncertain prior belief about every action's consequences, and SHALL learn those consequences from its own experience by updating its transition beliefs after each step with the action it took and the states it inferred before and after. No action's effect SHALL be written into the model.
+The planning module's generative model SHALL let every perceptual factor's transitions depend on the action taken, SHALL begin with the same broad, uncertain prior belief about every action's consequences, and SHALL learn those consequences from its own experience by updating its transition beliefs after each step with the action it took and the states it inferred before and after. No action's effect SHALL be written into the model.
 
 #### Scenario: A consequence is learned
 - **WHEN** one action reliably precedes a rise in salience over repeated steps
-- **THEN** Planning's transition belief for that action concentrates on the rising transition
+- **THEN** the planning module's transition belief for that action concentrates on the rising transition
 
 ### Requirement: Uncertainty about its own actions drives exploration
-Planning's expected free energy SHALL include the information to be gained about its actions' consequences, so that actions whose effects it is less sure of are worth trying, and its choices SHALL NOT collapse to a single action while its model of those consequences is uncertain.
+The planning module's expected free energy SHALL include the information to be gained about its actions' consequences, so that actions whose effects it is less sure of are worth trying, and its choices SHALL NOT collapse to a single action while its model of those consequences is uncertain.
 
 #### Scenario: A new being samples its actions
 - **WHEN** an entity with an unlearned model of its actions steps through ordinary observations
 - **THEN** it chooses more than one action
 
 ### Requirement: Belief carries over and the learned model is preserved
-Each step's prior SHALL be the previous posterior propagated through the learned transitions under the action taken. Planning's learned transition beliefs and carried belief SHALL be part of its serialized state, and revive SHALL restore them; a snapshot without them SHALL start from the prior and say so in the log.
+Each step's prior SHALL be the previous posterior propagated through the learned transitions under the action taken. The planning module's learned transition beliefs and carried belief SHALL be part of its serialized state, and revive SHALL restore them; a snapshot without them SHALL start from the prior and say so in the log.
 
 #### Scenario: Revive keeps the entity's sense of agency
 - **WHEN** an entity is preserved and revived
@@ -201,7 +201,7 @@ Each step's prior SHALL be the previous posterior propagated through the learned
 KAINE SHALL provide a NumPy active-inference engine, selected by `[nous].backend = "numpy"`, that reproduces the pymdp engine's state inference, per-policy expected free energy (utility, state information gain, and parameter information gain for learning models), policy enumeration, transition learning, prior propagation and learned-state format for KAINE's generative models, and that needs neither JAX nor pymdp. Its agreement with the pymdp engine SHALL be verified against golden fixtures recorded from the pymdp engine, on every host. A learned state saved by either engine SHALL load into the other.
 
 #### Scenario: A host without JAX
-- **WHEN** Planning runs with `backend = "numpy"` where JAX cannot be imported
+- **WHEN** the planning module runs with `backend = "numpy"` where JAX cannot be imported
 - **THEN** it infers, plans, learns and publishes as it does with the pymdp engine, and the extras check does not require the `reasoning` extra
 
 #### Scenario: The same decisions
@@ -213,12 +213,12 @@ KAINE SHALL provide a NumPy active-inference engine, selected by `[nous].backend
 - **THEN** its learned model and carried belief load, and its next decision matches the one the pymdp engine would make
 
 ### Requirement: Planning learns from the action actually taken
-Before each engine step Planning SHALL record, as the action taken, the action of its most recent proposal if Action selection reported it realized, and `no_op` otherwise, including when no outcome has arrived. Outcomes that arrive after the step they concern SHALL be counted and not applied.
+Before each engine step the planning module SHALL record, as the action taken, the action of its most recent proposal if the action selection module reported it realized, and `no_op` otherwise, including when no outcome has arrived. Outcomes that arrive after the step they concern SHALL be counted and not applied.
 
 #### Scenario: A declined proposal is learned as no-op
-- **WHEN** Action selection reports a `think` proposal declined because the snapshot was inhibited
-- **THEN** the next Planning step learns from `no_op` as the taken action
+- **WHEN** the action selection module reports a `think` proposal declined because the snapshot was inhibited
+- **THEN** the next planning module step learns from `no_op` as the taken action
 
 #### Scenario: A realized proposal is learned as taken
-- **WHEN** Action selection reports a `speak` proposal realized
-- **THEN** the next Planning step learns from `request_speak` as the taken action
+- **WHEN** the action selection module reports a `speak` proposal realized
+- **THEN** the next planning module step learns from `request_speak` as the taken action

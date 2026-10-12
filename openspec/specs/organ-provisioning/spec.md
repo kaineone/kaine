@@ -32,7 +32,7 @@ SHALL be a real operation reporting real success or failure — never a faked or
 
 #### Scenario: Language enabled and consent given
 
-- **WHEN** language is enabled and the operator consents to the download
+- **WHEN** the language module is enabled and the operator consents to the download
 - **THEN** a real download of the published weights runs and reports its actual
   success or failure
 
@@ -43,7 +43,7 @@ SHALL be a real operation reporting real success or failure — never a faked or
 
 #### Scenario: Organ not needed
 
-- **WHEN** the install does not enable language
+- **WHEN** the install does not enable the language module
 - **THEN** no organ-download step is offered
 
 ### Requirement: Organ acquisition is hardware-aware
@@ -72,7 +72,7 @@ base model. A serve-only host SHALL NOT download the safetensors.
 
 #### Scenario: Serve-only host
 
-- **WHEN** language is enabled and voice-alignment Stage-2 training is disabled
+- **WHEN** the language module is enabled and voice-alignment Stage-2 training is disabled
 - **THEN** only the GGUF is downloaded
 
 #### Scenario: Training-enabled host
@@ -96,7 +96,7 @@ guidance and fail.
 
 #### Scenario: Turnkey launch on consent
 
-- **WHEN** language is enabled, the organ is downloaded, and the operator consents to
+- **WHEN** the language module is enabled, the organ is downloaded, and the operator consents to
   start the server
 - **THEN** the bootstrap launches the server against the GGUF under the configured
   alias and the organ becomes reachable without a manual server start

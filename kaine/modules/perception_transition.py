@@ -207,7 +207,7 @@ def render_birth_field(
     The stimulus source generator's own pure function (``WombProceduralSource.frame_at``
     at ``birth_progress = 1.0``: bright, pulse-free, full colour) at frame index
     ``floor(womb_t_at_birth * frame_rate_hz)``, with the recorded seed and the
-    entity's lived development time.
+    entity's lived developmental time.
     """
     from kaine.modules.topos.feed import (
         WombClock,

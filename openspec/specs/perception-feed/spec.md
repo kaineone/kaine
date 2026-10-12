@@ -1,18 +1,18 @@
 # perception-feed Specification
 
 ## Purpose
-This capability governs the perception feed around sleep and programme boundaries: Sleep restores the locus that was active before sleep without keeping sensory content, the programme pauses while the entity cannot perceive, and the end of a programme preserves and stops the entity. A viewing after maturation begins with the stimulus-source-to-world transition.
+This capability governs the perception feed around sleep and programme boundaries: the sleep module restores the locus that was active before sleep without keeping sensory content, the programme pauses while the entity cannot perceive, and the end of a programme preserves and stops the entity. A viewing after maturation begins with the stimulus-source-to-world transition.
 
 ## Requirements
 
 ### Requirement: Perceptual locus restore after sleep
 
-Sleep sleep SHALL restore the entity's desired locus to the value that was active immediately before sleep, not a hardcoded value. Only locus flags are persisted — never any sensory content.
+The sleep module SHALL restore the entity's desired locus to the value that was active immediately before sleep, not a hardcoded value. Only locus flags are persisted — never any sensory content.
 
 #### Scenario: Restore returns to pre-sleep locus
 
 - **GIVEN** the desired locus is `virtual` (selected at boot via `select_virtual_feed()`)
-- **WHEN** Sleep sleep starts (locus written `off`) and later sleep completes
+- **WHEN** the sleep module starts (locus written `off`) and later sleep completes
 - **THEN** the desired locus is restored to `virtual`, and the playlist/virtual feed continues rather than going permanently dark
 
 #### Scenario: Restore after pre-sleep physical locus
@@ -40,14 +40,14 @@ Sleep sleep SHALL restore the entity's desired locus to the value that was activ
 - **THEN** they contain only locus flags and operational metadata — no frames, audio bytes, or transcribed text
 
 ### Requirement: The programme waits while the entity cannot perceive
-The playlist clock SHALL be paused by holder, so overlapping pauses (a Sleep replay window and a cycle freeze) keep it paused until every holder has released it, and elapsed programme time SHALL exclude every paused span. While the cycle is frozen, by any freeze holder, the playlist clock SHALL be held paused, so the programme resumes where the entity left it and no part of it is skipped.
+The playlist clock SHALL be paused by holder, so overlapping pauses (a sleep replay window and a cycle freeze) keep it paused until every holder has released it, and elapsed programme time SHALL exclude every paused span. While the cycle is frozen, by any freeze holder, the playlist clock SHALL be held paused, so the programme resumes where the entity left it and no part of it is skipped.
 
 #### Scenario: A freeze does not skip the film
 - **WHEN** the entity is frozen for 60 s at 10 min into a film and then thawed
 - **THEN** the programme resumes at 10 min, not 11 min
 
 #### Scenario: Overlapping pauses
-- **WHEN** a freeze begins during a Sleep replay window and the replay window ends first
+- **WHEN** a freeze begins during a sleep replay window and the replay window ends first
 - **THEN** the clock stays paused until the freeze ends
 
 ### Requirement: The end of a programme preserves and stops the entity
@@ -72,7 +72,7 @@ When `[perception_feed].transition_seconds` is above zero, the mode is `playlist
 
 The crossfade SHALL be a deterministic function of the stimulus source seed, the stimulus source parameters, `womb_t_at_birth`, the entity's lived time and the fade curve. No transition frame or sample SHALL be written to storage.
 
-The crossfade SHALL advance only while it is perceived: not while another holder (such as `freeze` or `hypnos`) pauses the playlist clock, not while the cycle is frozen, and not while the primary surface is unwanted in the desired perception state. The video surface SHALL start the crossfade whenever Vision is present; the audio surface SHALL start it only when it is the only surface.
+The crossfade SHALL advance only while it is perceived: not while another holder (such as `freeze` or `hypnos`) pauses the playlist clock, not while the cycle is frozen, and not while the primary surface is unwanted in the desired perception state. The video surface SHALL start the crossfade whenever the vision module is present; the audio surface SHALL start it only when it is the only surface.
 
 The playlist clock SHALL be paused under the holder `transition` before either surface reads it. The holder SHALL be released exactly once, when the perceived crossfade reaches `transition_seconds`, even when no surface is reading, so programme time zero is the end of the transition.
 

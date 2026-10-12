@@ -788,7 +788,7 @@ def test_real_config_path_loads_and_stops_at_consent(capsys, tmp_path):
     out, err = capsys.readouterr()
     assert code == 2
     assert "refusing to load models without consent" in err
-    # The plan was printed, so the config really loaded: thesis_test enables Language.
+    # The plan was printed, so the config really loaded: thesis_test enables the language module.
     assert "lingua (" in out
     assert not (tmp_path / "c.json").exists()
 

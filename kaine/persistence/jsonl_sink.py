@@ -218,7 +218,7 @@ class AsyncJsonlSink:
         return self._current_path
 
     def _enforce_retention(self) -> None:
-        # ``retention_days <= 0`` is the explicit "no-purge" signal: the Supervisor
+        # ``retention_days <= 0`` is the explicit "no-purge" signal: the supervisor
         # incident log (kaine/cycle/incident_log.py) constructs this sink with
         # ``retention_days=0`` so research history is NEVER auto-deleted. Do not
         # remove this short-circuit without auditing that contract.

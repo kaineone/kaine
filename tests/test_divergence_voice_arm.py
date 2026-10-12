@@ -266,7 +266,7 @@ def test_unparseable_intent_line_counts_as_spoken(tmp_path):
 
 
 def test_live_log_read_before_corpus_rotation(tmp_path, monkeypatch):
-    """Sleep rotates the live log the moment it is opened. The records then
+    """The sleep module rotates the live log the moment it is opened. The records then
     sit only in the corpus, so a corpus listed before the read would miss
     them and the entity would read as silent."""
     root = _state(tmp_path)

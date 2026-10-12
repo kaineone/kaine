@@ -50,10 +50,10 @@
 
 - [x] 4.1 Rate / population encoders clamp+validate to SDK limits at construction,
       via `RateEncoder`, `PopulationEncoder`; `test_encoder_never_exceeds_limits`.
-      (Temporal encoder lands with Sequence, which needs it.)
+      (The temporal encoder lands with the sequence module, which needs it.)
 - [x] 4.2 Decoders: `FiringRateDecoder` (per-channel scalar) and `SurpriseDecoder`
       (Lempel-Ziv disorder vs rolling baseline → [0,1]). Functional-connectivity
-      decoder deferred to the module that first needs it (Social cognition/Planning).
+      decoder deferred to the module that first needs it (the social cognition and planning modules).
 - [x] 4.3 Property tests: encoder safety, LZ orders disorder, surprise rises for
       disordered vs quiet responses, pure and on live sim spikes
       (`test_surprise_*`).
@@ -63,18 +63,18 @@
 - [x] 5.1 Downstream injection seam implemented and tested against real `kaine`
       (the full multi-module registry is the remaining part):
       `kaine_cl1/boot.py:wetware_injection(module, broker, territory)` returns the
-      `(constructor_kwarg, injected_object)` for a converted module (Sequence →
+      `(constructor_kwarg, injected_object)` for a converted module (the sequence module →
       `("network", WetwareTimingModel)`), shared broker + session. The full
       multi-module `build_wetware_registry` over an `OverlayConfig` generalises
-      this once Interoception/Oscillator/Planning land.
+      this once the interoception, Oscillator and planning modules land.
       Done as a kaine plugin (change `kaine-plugin-package`): kaine's own
-      `build_registry` constructs Sequence with the plugin's network
+      `build_registry` constructs the sequence module with the plugin's network
       (`tests/test_kaine_boot.py`); further modules add rows to `WETWARE_BACKENDS`.
 - [x] 5.2 For any module lacking an injection seam, open an upstream PR adding a
       **vendor-neutral** seam (silicon default unchanged); until merged, use a
       pinned subclass override in this repo; never edit the kaine dependency.
       Done upstream by kaine's `module-plugins` change (#172), which added the
-      vendor-neutral seams this package uses, including Interoception's `forward_model`;
+      vendor-neutral seams this package uses, including the interoception module's `forward_model`;
       no subclass overrides were needed.
 - [x] 5.3 Preserve KAINE's boot gating (operator-supervised / verified safety
       net); the overlay must not loosen it. A plugin can only fill KAINE's
@@ -86,7 +86,7 @@
 
 - [x] 6.1 `openspec validate wetware-substrate-foundation --strict` passes.
 - [x] 6.2 Real-KAINE integration proven for the reference conversion: stock
-      Sequence with the injected wetware network publishes the same `chronos.out`
+      sequence with the injected wetware network publishes the same `chronos.out`
       contract as silicon (`tests/test_chronos_integration.py`). The zero-converted
       inertness check lands with the full `build_wetware_registry`.
 - [x] 6.3 Reproduction + findings documented, in `docs/foundation-results.md`.

@@ -87,7 +87,7 @@ class RegulationDetector:
     def sustain_elapsed_s(self, now: Optional[float] = None) -> float:
         """Seconds the current stress episode has been sustained (0 if none).
 
-        Exposed so the Interoception warm-up can record how long an advisory would have
+        Exposed so the interoception module's warm-up can record how long an advisory would have
         been sustaining when it withholds it (the ``sustain_elapsed_s`` field on
         ``soma.regulation.withheld``), without re-parsing the advisory reason.
         """
@@ -177,7 +177,7 @@ class RegulationDetector:
         return None
 
     def reset(self) -> None:
-        """Reset the detector state (e.g. after Sleep maintenance)."""
+        """Reset the detector state (e.g. after the sleep module's maintenance)."""
         self._stress_start = None
         self._windows_expired = 0
         self._last_emitted_window = -1

@@ -3,13 +3,13 @@
 ## Steps and lines
 
 - **Step order:**
-  1. seed (development);
+  1. seed (developmental phase);
   2. branch 0;
   3. repeat;
   4. then, for k = 1…9, branch k followed by accumulate k.
 
   One start at a time.
-- **The seed.** A development run with staging on, the local stimulus source and automatic maturation (`require_operator_ack_for_birth = false`).
+- **The seed.** A developmental phase run with staging on, the local stimulus source and automatic maturation (`require_operator_ack_for_birth = false`).
   - When `runtime.json` reports the embodied stage, the runner waits until the maturation bloom has completed (the stimulus source reports born), then requests a preservation with stop.
   - That preservation is the seed, S. The stage file in S carries the stimulus source's time at maturation.
 - **Branch k.** Revive S with the base set plus `order[:k]`.
@@ -36,8 +36,8 @@
   - the research event log (content-free);
   - the workspace trajectory (content-scrubbed);
   - the film-aligned ignition log;
-  - a record of every stream Dashboard displays, after the same privacy filter Dashboard applies;
-  - Language's external utterances (local only, never export-eligible).
+  - a record of every stream the dashboard displays, after the same privacy filter the dashboard applies;
+  - the language module's external utterances (local only, never export-eligible).
 - **Inner speech** (`lingua.internal`, `internal_speech`) is never recorded. See `run-recording`.
 - **Raw sense data is never persisted.** The raw bus archive stays off.
 
@@ -57,5 +57,5 @@
 - **One being per condition.** Every comparison is n = 1, and the noise floor comes from one repeat. Differences smaller than the repeat's are not evidence of anything.
 - **Branch k adds modules in a fixed order.** Its effect is the k-th module's effect given the modules before it, not in isolation.
 - **The accumulate line mixes familiarity with module history.** No line rewatches without gaining modules.
-- **Faculties without an input channel on this host are expected nulls:** Effectors without effectors, Perception without locus requests, and Embodiment without an approved body.
-- **Vocal needs a speech backend** that fits beside Vision, so the study uses the CPU backend.
+- **Faculties without an input channel on this host are expected nulls:** the effectors module without effectors, Perception without locus requests, and the embodiment module without an approved body.
+- **the vocal module needs a speech backend** that fits beside the vision module, so the study uses the CPU backend.

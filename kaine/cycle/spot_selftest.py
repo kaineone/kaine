@@ -81,7 +81,7 @@ class _Probe(BaseModule):
 
 
 class _NullBus:
-    """Bus double that satisfies Supervisor's publish calls without sending."""
+    """Bus double that satisfies the supervisor's publish calls without sending."""
 
     async def publish(self, event: Any = None) -> str:
         return "0-0"

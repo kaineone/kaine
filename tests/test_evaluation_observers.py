@@ -622,11 +622,11 @@ async def test_memory_probe_logs_out_of_context(tmp_path):
 #
 # These exercise the REAL retrieval path. A unique fabricated marker the bare LLM
 # provably cannot know is planted into a REAL MnemosCore (InMemoryStorage), and a
-# cognitive client that actually recalls from that Episodic memory derives its answer from
-# the retrieved text. The advantage is proven to be RETRIEVAL — empty the Episodic memory
+# cognitive client that actually recalls from that episodic memory module derives its answer from
+# the retrieved text. The advantage is proven to be RETRIEVAL — empty the episodic memory module
 # and the same client can no longer repeat the marker. The boundary
 # (kaine.evaluation imports no kaine.modules.*) is preserved because the real
-# Episodic memory is built HERE in the test and the client is duck-typed against the
+# The episodic memory module is built HERE in the test and the client is duck-typed against the
 # CognitiveQueryClient protocol.
 
 # A nonsense marker no pretrained LLM could know — the ground truth.
@@ -649,7 +649,7 @@ def _real_mnemos():
 
 
 class RetrievalCognitiveClient:
-    """A cognitive client whose answer is DERIVED from what Episodic memory returns.
+    """A cognitive client whose answer is DERIVED from what the episodic memory module returns.
 
     It recalls from the injected MnemosCore and echoes the retrieved text as its
     answer. If recall is empty it emits NON_RECALL_MARKER rather than confabulate.
@@ -708,7 +708,7 @@ async def test_memory_probe_positive_control_retrieves_planted_fact(tmp_path):
 
 @pytest.mark.asyncio
 async def test_memory_probe_advantage_is_retrieval_not_hardcoded(tmp_path):
-    """The SAME client against an EMPTY Episodic memory cannot repeat the marker.
+    """The SAME client against an EMPTY episodic memory module cannot repeat the marker.
 
     This is the load-bearing proof that the positive control's advantage is
     produced by RETRIEVAL, not by the fixture hard-coding the answer: the only

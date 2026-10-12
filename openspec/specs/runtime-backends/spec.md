@@ -30,8 +30,8 @@ another tier's dependencies.
 
 #### Scenario: Edge backend is functionally substitutable
 
-- **WHEN** Language's backend is set to the llama.cpp/GGUF engine
-- **THEN** Language emits the same speech and evaluation events as under Ollama
+- **WHEN** the language module's backend is set to the llama.cpp/GGUF engine
+- **THEN** the language module emits the same speech and evaluation events as under Ollama
 - **AND** the A/B-divergence baseline still uses the same model as the organ
 
 #### Scenario: Unselected backend imports nothing
@@ -59,10 +59,10 @@ A capability removed this way SHALL be reported, not silent.
 - **AND** the cognitive cycle boots and runs without that module
 
 ### Requirement: Language's HTTP backend is named for its protocol
-Language's default backend SHALL be named `"openai"`, for the OpenAI-compatible HTTP server that serves the organ. The name `"ollama"` SHALL remain accepted as an alias that builds the same client. The in-process `llama_cpp` backend SHALL fall back to `"openai"`. The shipped tier profiles SHALL select `"openai"`.
+The language module's default backend SHALL be named `"openai"`, for the OpenAI-compatible HTTP server that serves the organ. The name `"ollama"` SHALL remain accepted as an alias that builds the same client. The in-process `llama_cpp` backend SHALL fall back to `"openai"`. The shipped tier profiles SHALL select `"openai"`.
 
 #### Scenario: Both names build the same client
-- **WHEN** Language's backend is `"openai"`, `"ollama"`, or unset
+- **WHEN** the language module's backend is `"openai"`, `"ollama"`, or unset
 - **THEN** the registry builds the OpenAI-compatible HTTP client
 
 #### Scenario: The shipped profiles use the canonical name

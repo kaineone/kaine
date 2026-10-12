@@ -600,7 +600,7 @@ async def test_perception_event_is_content_free(bus: AsyncBus):
 @pytest.mark.asyncio
 async def test_perception_stamps_playlist_item_provenance(bus: AsyncBus):
     """When a playlist item is heard, audition.perception carries the SAME
-    content-free item keys Vision stamps (basename + manifest order), so picture
+    content-free item keys the vision module stamps (basename + manifest order), so picture
     and sound are legibly on the same item off the bus (playlist-realtime-av-sync
     task 3.2/3.3)."""
     from kaine.modules.audition.feed import PlaylistPosition

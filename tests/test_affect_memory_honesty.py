@@ -332,7 +332,7 @@ def _emotion_event(
 
 @pytest.mark.asyncio
 async def test_empatheia_skips_degraded_emotion_fold(bus: AsyncBus):
-    """Social cognition must not fold interaction when emotion event is degraded."""
+    """The social cognition module must not fold interaction when emotion event is degraded."""
     store = InMemoryAgentStore()
     emp = Empatheia(bus, store=store)
     await emp.initialize()
@@ -351,7 +351,7 @@ async def test_empatheia_skips_degraded_emotion_fold(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_empatheia_folds_real_emotion_event(bus: AsyncBus):
-    """Social cognition must still fold a non-degraded emotion event."""
+    """The social cognition module must still fold a non-degraded emotion event."""
     store = InMemoryAgentStore()
     emp = Empatheia(bus, store=store)
     await emp.initialize()

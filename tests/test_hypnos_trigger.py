@@ -90,9 +90,9 @@ def _make_hypnos(bus: AsyncBus, tmp_path: Path, **kwargs) -> Hypnos:
 
 @pytest.mark.asyncio
 async def test_soma_fatigue_triggers_maintenance(bus: AsyncBus, tmp_path: Path):
-    """When soma.fatigue with crossed=true is published, Sleep triggers sleep."""
+    """When soma.fatigue with crossed=true is published, the sleep module triggers sleep."""
     hypnos = _make_hypnos(bus, tmp_path, fatigue_triggered=True)
-    # Initialise (seeds interoception cursor and starts consumer loop)
+    # Initialise (seeds the interoception module's cursor and starts consumer loop)
     await hypnos.initialize()
 
     sleep_fired = asyncio.Event()

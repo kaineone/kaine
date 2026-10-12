@@ -46,7 +46,7 @@ FORBIDDEN_CONTENT_KEYS = frozenset(
 
 
 def test_vox_synthesized_origin_nous_is_nous_initiated():
-    """Vocal copies Language's origin, so a Planning utterance is attributed by it."""
+    """The vocal module copies the language module's origin, so a planning module utterance is attributed by it."""
     intents = [
         {"stream": "volition.out", "type": "intent.speak", "payload": {"kind": "speak", "entry_id": "e1"}},
     ]
@@ -240,7 +240,7 @@ def test_drive_triggered_realized_action():
 
 
 def test_base_thesis_input_triggered_zero():
-    # Conversation surface off, transcription off, embodiment off: no external
+    # Conversation surface off, transcription off, embodiment module off: no external
     # input types can appear in any coalition, so input_triggered == 0 —
     # the invariant holds every sleep.
     broadcasts = [
@@ -440,7 +440,7 @@ def test_pipeline_wires_audit_every_sleep():
     # Merged into the completed metadata so it rides hypnos.sleep.completed
     # into the sleep_snapshots JSONL.
     assert 'summary["ignition_audit"]' in src
-    # Boundary (2.5): sleep never imports kaine.evaluation.
+    # Boundary (2.5): the sleep module never imports kaine.evaluation.
     assert "import kaine.evaluation" not in src
     assert "from kaine.evaluation" not in src
 

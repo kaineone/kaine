@@ -197,7 +197,7 @@ def test_build_registry_womb_mode_shares_one_clock_and_selects_virtual(
     monkeypatch, tmp_path
 ):
     """The real boot path: stimulus source mode installs ONE shared stimulus source clock (offset by
-    the lived development time) that Vision and Audition both receive, and binds
+    the lived developmental time) that the vision and audition modules both receive, and binds
     the senses to the virtual locus."""
     import asyncio
 

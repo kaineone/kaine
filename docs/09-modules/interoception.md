@@ -1,6 +1,6 @@
 # Interoception
 
-Interoception is KAINE's interoception. The compute host stands in for the body: Interoception reads its CPU, memory, GPU, and cycle-latency metrics, predicts the next reading from a frozen reservoir and the broadcast context, and reports the prediction error to the workspace. It also reports wellness, accumulates fatigue (the sleep pressure that triggers Sleep), and issues regulation advisories. This page covers the forward model, the intensity and alert rule, the events, sleep, persistence, configuration, and the self-rhythm. Read it if you are deciding whether to enable Interoception or debugging its predictions.
+The interoception module is KAINE's interoception. The compute host stands in for the body: the interoception module reads its CPU, memory, GPU, and cycle-latency metrics, predicts the next reading from a frozen reservoir and the broadcast context, and reports the prediction error to the workspace. It also reports wellness, accumulates fatigue (the sleep pressure that triggers the sleep module), and issues regulation advisories. This page covers the forward model, the intensity and alert rule, the events, sleep, persistence, configuration, and the self-rhythm. Read it if you are deciding whether to enable the interoception module or debugging its predictions.
 
 ## Status
 
@@ -10,7 +10,7 @@ The base module needs no optional extras. GPU metrics use `pynvml` on hosts with
 
 ## What Interoception does
 
-Interoception is the architecture's analog of interoception, the sense of the body's physiological condition, and of the allostatic-interoceptive network that anticipates and regulates the body's needs. On each reading, every `read_interval_s` entity seconds, Interoception:
+The interoception module is the architecture's analog of interoception, the sense of the body's physiological condition, and of the allostatic-interoceptive network that anticipates and regulates the body's needs. On each reading, every `read_interval_s` entity seconds, the interoception module:
 
 1. Reads the host metrics and computes wellness and the set of metrics strictly above their hard thresholds (`[soma.thresholds]`).
 2. Builds an 8-component feature vector, steps the forward model, and measures the prediction error.
@@ -26,13 +26,13 @@ feature vector → CfC reservoir (frozen, seeded, forward_model_units hidden uni
 [h ‖ broadcast context] → linear readout (online) → predicted next feature vector
 ```
 
-The reservoir is a closed-form continuous-time network (Hasani et al. 2022), the same pattern Sequence uses (`kaine/modules/chronos/network.py`). Its weights are generated in NumPy from a reservoir seed, identically for both backends, and never trained; the two backends compute the same step and agree to 1e-5. Only the linear readout learns, from the hidden state and the 24-component broadcast context together with a bias. The readout's context weights start at zero.
+The reservoir is a closed-form continuous-time network (Hasani et al. 2022), the same pattern the sequence module uses (`kaine/modules/chronos/network.py`). Its weights are generated in NumPy from a reservoir seed, identically for both backends, and never trained; the two backends compute the same step and agree to 1e-5. Only the linear readout learns, from the hidden state and the 24-component broadcast context together with a bias. The readout's context weights start at zero.
 
-At each reading Interoception:
+At each reading the interoception module:
 
 1. Scores the prediction made at the previous reading against the current feature vector. The error is the L2 distance, 0 on the first reading.
 2. Takes one stochastic-gradient step (learning rate 1e-3) on the readout, from the same hidden state and context the prediction was made from, unless sleep has suspended adaptation or the loss or a gradient is not finite.
-3. Advances the reservoir on the current vector and predicts the next one from the new hidden state and the context Interoception holds now.
+3. Advances the reservoir on the current vector and predicts the next one from the new hidden state and the context the interoception module holds now.
 
 Each step passes the reservoir the time that actually elapsed: the timespan is the entity seconds since the previous reading divided by `read_interval_s`, clipped to `[0, 10]`, and 1.0 on the first reading. At a steady cadence it stays at 1.0; a delayed reading lengthens it, and the cell's time gates integrate over the longer interval. A non-finite feature vector skips the whole step, so one bad sensor read cannot corrupt the hidden state.
 
@@ -42,11 +42,11 @@ A plugin can replace the forward model through the `forward_model` seam in `kain
 
 ### Broadcast context
 
-Interoception reads the workspace broadcast stream (`on_workspace`). When a broadcast arrives that is not inhibited, Interoception keeps the coalition members whose scores reach the access threshold recorded in the broadcast's metadata (`access_threshold`); if at least one does, they become its new context, timestamped on the entity clock. An inhibited broadcast, or one in which no member reaches the threshold, leaves the context unchanged, and before the first accessed broadcast the readout receives zeros in the context slots. The context is the 24-component featurization of the accessed members weighted by their reported intensities (`kaine/modules/context.py`; [Vision](vision.md#broadcast-context) lists the components). It records which modules' reports gained access and how strongly, and carries no payloads.
+The interoception module reads the workspace broadcast stream (`on_workspace`). When a broadcast arrives that is not inhibited, the interoception module keeps the coalition members whose scores reach the access threshold recorded in the broadcast's metadata (`access_threshold`); if at least one does, they become its new context, timestamped on the entity clock. An inhibited broadcast, or one in which no member reaches the threshold, leaves the context unchanged, and before the first accessed broadcast the readout receives zeros in the context slots. The context is the 24-component featurization of the accessed members weighted by their reported intensities (`kaine/modules/context.py`; [the vision module](vision.md#broadcast-context) lists the components). It records which modules' reports gained access and how strongly, and carries no payloads.
 
 ### Cross-module information gain
 
-Alongside each prediction, the readout also predicts from a null context. Interoception's null context keeps two shares of the per-source and per-type components, Interoception's own and the language organ's, and replaces every other source's share, and the count and intensity statistics, with their means over the contexts Interoception has adopted since boot. The language organ's share is kept because its load on the host would otherwise let that share predict Interoception's input. Each `soma.report` carries
+Alongside each prediction, the readout also predicts from a null context. The interoception module's null context keeps two shares of the per-source and per-type components, the interoception module's own and the language organ's, and replaces every other source's share, and the count and intensity statistics, with their means over the contexts the interoception module has adopted since boot. The language organ's share is kept because its load on the host would otherwise let that share predict the interoception module's input. Each `soma.report` carries
 
 ```text
 context_gain = (null-context error − error) / running mean error
@@ -62,11 +62,11 @@ A `soma.report` is an alert when at least one host metric is strictly above its 
 baseline_salience + (alert_salience − baseline_salience) × min(1, ratio / 2)
 ```
 
-The payload's `alert` is true exactly on an alert, and `alerts` lists the metrics that crossed. `soma.fatigue` and `soma.regulation` are published at `alert_salience` and carry no `alert` flag, so they do not raise the access rate, whose phasic input counts only events marked `alert`. Affect reads alert reports directly from `soma.out` and raises arousal by a fixed step on each one.
+The payload's `alert` is true exactly on an alert, and `alerts` lists the metrics that crossed. `soma.fatigue` and `soma.regulation` are published at `alert_salience` and carry no `alert` flag, so they do not raise the access rate, whose phasic input counts only events marked `alert`. The affect module reads alert reports directly from `soma.out` and raises arousal by a fixed step on each one.
 
 ## Unexpected error, fatigue, and regulation
 
-Interoception learns, per channel, the expected absolute prediction error and its spread as exponential averages with time constant `expected_error_tau_s` entity seconds. The unexpected error is the L2 norm of each channel's absolute error beyond `expected + expected_error_band × spread`, with the band taken before this reading's update. A forward model without per-channel residuals counts as one channel whose residual is its scalar error. A reading without a defined error (skipped as non-finite, or the first after a skip) has an unexpected error of 0 and leaves the estimates unchanged, whichever forward model is in use. The unexpected error drives fatigue and regulation; it does not enter the intensity.
+The interoception module learns, per channel, the expected absolute prediction error and its spread as exponential averages with time constant `expected_error_tau_s` entity seconds. The unexpected error is the L2 norm of each channel's absolute error beyond `expected + expected_error_band × spread`, with the band taken before this reading's update. A forward model without per-channel residuals counts as one channel whose residual is its scalar error. A reading without a defined error (skipped as non-finite, or the first after a skip) has an unexpected error of 0 and leaves the estimates unchanged, whichever forward model is in use. The unexpected error drives fatigue and regulation; it does not enter the intensity.
 
 `FatigueAccumulator` integrates the unexpected error over entity time with continuous decay:
 
@@ -74,21 +74,21 @@ Interoception learns, per channel, the expected absolute prediction error and it
 F(t+dt) = max(0, F(t) + e·dt − decay·dt)
 ```
 
-During a hard-threshold breach the raw prediction error is the input `e` instead. When `F` crosses `fatigue_maintenance_threshold`, Interoception publishes `soma.fatigue`, which Sleep watches. It fires once per crossing and re-arms when fatigue falls below the threshold.
+During a hard-threshold breach the raw prediction error is the input `e` instead. When `F` crosses `fatigue_maintenance_threshold`, the interoception module publishes `soma.fatigue`, which the sleep module watches. It fires once per crossing and re-arms when fatigue falls below the threshold.
 
-`RegulationDetector` tracks how long the same error (unexpected error, or raw error during a breach) stays at or above `regulation_threshold`. Each completed `regulation_sustain_window_s` emits one escalating `soma.regulation` advisory: `reduce_rate` (severity 1), then `shed_module` (severity 2), then `request_maintenance` (severity 3). The episode resets as soon as the error falls below the threshold. Interoception never acts on its own advisories; the cognitive cycle and Sleep decide what to do.
+`RegulationDetector` tracks how long the same error (unexpected error, or raw error during a breach) stays at or above `regulation_threshold`. Each completed `regulation_sustain_window_s` emits one escalating `soma.regulation` advisory: `reduce_rate` (severity 1), then `shed_module` (severity 2), then `request_maintenance` (severity 3). The episode resets as soon as the error falls below the threshold. The interoception module never acts on its own advisories; the cognitive cycle and the sleep module decide what to do.
 
 ## Developmental warm-up
 
-A newly booted or forked readout has not yet learned the host's baseline, so its early errors would otherwise trigger false advisories and inflate fatigue. While `warmup_active` is true, Interoception withholds `soma.regulation` advisories (publishing `soma.regulation.withheld` instead) and reduces fatigue's input by the warming baseline, the mean of the accumulator's own recent inputs before this reading. A spike above the recent level still builds fatigue. The raw prediction error in `soma.report`, its intensity, and any hard-threshold breach are never gated; a breach overrides the warm-up on the action path.
+A newly booted or forked readout has not yet learned the host's baseline, so its early errors would otherwise trigger false advisories and inflate fatigue. While `warmup_active` is true, the interoception module withholds `soma.regulation` advisories (publishing `soma.regulation.withheld` instead) and reduces fatigue's input by the warming baseline, the mean of the accumulator's own recent inputs before this reading. A spike above the recent level still builds fatigue. The raw prediction error in `soma.report`, its intensity, and any hard-threshold breach are never gated; a breach overrides the warm-up on the action path.
 
-Warm-up ends once the readout has taken `regulation_warmup_min_samples` learning steps and `regulation_warmup_min_seconds` of entity time have passed since Interoception's first reading. If `regulation_warmup_require_error_stabilized` is true, the variance of recent prediction errors must also fall below `regulation_warmup_stable_variance`. Once ended, warm-up does not return. Its state is per boot and per fork and is not serialized.
+Warm-up ends once the readout has taken `regulation_warmup_min_samples` learning steps and `regulation_warmup_min_seconds` of entity time have passed since the interoception module's first reading. If `regulation_warmup_require_error_stabilized` is true, the variance of recent prediction errors must also fall below `regulation_warmup_stable_variance`. Once ended, warm-up does not return. Its state is per boot and per fork and is not serialized.
 
 ## Inputs
 
 | Source | Mechanism | Purpose |
 |---|---|---|
-| Host | `SystemMetricsReader` (`psutil`, optional `pynvml`) on Interoception's own timer | The metrics |
+| Host | `SystemMetricsReader` (`psutil`, optional `pynvml`) on the interoception module's own timer | The metrics |
 | `cycle.out` | `cycle.tick` | Reads `wall_duration_ms` for a rolling cycle-latency average, scaled to entity time |
 | Workspace broadcast | `on_workspace(snapshot)` | Adopts accessed broadcasts as the readout's context |
 | `hypnos.out` | `hypnos.sleep.started` | Suspends readout learning and expected-error learning; fatigue decays three times faster |
@@ -107,15 +107,15 @@ All events are published to the `soma.out` stream.
 | `soma.warmup.completed` | `samples_seen`, `lived_seconds` | `baseline_salience` |
 | `soma.regulation.withheld` | `would_be_action`, `prediction_error`, `sustain_elapsed_s`, `severity`, `reason: "warmup"` | `baseline_salience` |
 
-`context_age_s` is the entity seconds since Interoception received the broadcast it holds as context, or `null` before the first accessed broadcast. `lived_seconds` is the entity time since Interoception's first reading in this boot. The cognitive cycle consumes only `soma.regulation`; `soma.regulation.withheld` is a record and changes nothing.
+`context_age_s` is the entity seconds since the interoception module received the broadcast it holds as context, or `null` before the first accessed broadcast. `lived_seconds` is the entity time since the interoception module's first reading in this boot. The cognitive cycle consumes only `soma.regulation`; `soma.regulation.withheld` is a record and changes nothing.
 
 ### Wellness
 
-`compute_wellness()` maps each present metric to `[0, 1]`, with 1 healthy (for example `1 - cpu_percent/100`), and takes a weighted mean with the `[soma.weights]` weights. A metric that fails to read is omitted and the weights are spread over those present. Affect shifts valence by the wellness Interoception reports.
+`compute_wellness()` maps each present metric to `[0, 1]`, with 1 healthy (for example `1 - cpu_percent/100`), and takes a weighted mean with the `[soma.weights]` weights. A metric that fails to read is omitted and the weights are spread over those present. The affect module shifts valence by the wellness the interoception module reports.
 
 ## Sleep
 
-Interoception keeps reading and reporting during sleep. From `hypnos.sleep.started` to `hypnos.sleep.completed` the readout takes no learning steps, the expected-error statistics do not update, and the fatigue accumulator decays three times faster. `hypnos.sleep.completed` resets fatigue to zero and clears the regulation detector.
+The interoception module keeps reading and reporting during sleep. From `hypnos.sleep.started` to `hypnos.sleep.completed` the readout takes no learning steps, the expected-error statistics do not update, and the fatigue accumulator decays three times faster. `hypnos.sleep.completed` resets fatigue to zero and clears the regulation detector.
 
 ## Persistence
 
@@ -129,7 +129,7 @@ Interoception keeps reading and reporting during sleep. From `hypnos.sleep.start
 - `cycle_cursor` and `read_interval_s`;
 - `self_rhythm`, when the self-rhythm runs.
 
-On restore, Interoception rebuilds the reservoir from `reservoir_seed`, so a preserved entity keeps its reservoir. A snapshot without a seed starts a new reservoir and logs that it is new. A readout saved before the context input existed (its weight matrix as wide as the hidden state) is accepted and padded with zero context weights, so it predicts exactly as before until those weights learn. Any other shape mismatch is rejected with a warning and Interoception keeps a fresh readout. A snapshot without `feature_layout` restores as layout 1, in which slot 7 stays 0.0, so a preserved entity keeps the input its readout learned on.
+On restore, the interoception module rebuilds the reservoir from `reservoir_seed`, so a preserved entity keeps its reservoir. A snapshot without a seed starts a new reservoir and logs that it is new. A readout saved before the context input existed (its weight matrix as wide as the hidden state) is accepted and padded with zero context weights, so it predicts exactly as before until those weights learn. Any other shape mismatch is rejected with a warning and the interoception module keeps a fresh readout. A snapshot without `feature_layout` restores as layout 1, in which slot 7 stays 0.0, so a preserved entity keeps the input its readout learned on.
 
 The reservoir's hidden state, the held context, and the running statistics behind the null context are runtime state: they start empty after revival and are never persisted. Metric values are never written to disk.
 
@@ -198,9 +198,9 @@ graph TD
 
 With `self_rhythm_enabled = true`, a fourth loop steps an oscillator at `self_rhythm_step_hz`, and its phase and amplitude fill feature slots 4 to 6.
 
-The rhythm comes from a mean-field population with excitatory recurrence and fast, activity-dependent synaptic depression, the mechanism modeled for spontaneous rhythms in developing networks (Tabak et al. 2000), to which the architecture adds adaptive recovery. It runs at about 0.8 to 0.9 Hz, of the same order as human fetal breathing movements (about 44 per minute; Natale et al. 1988). Sixteen leaky integrate-and-fire units are driven by the population activity, and Interoception's phase and amplitude come from that activity, band-limited over the last 8 s.
+The rhythm comes from a mean-field population with excitatory recurrence and fast, activity-dependent synaptic depression, the mechanism modeled for spontaneous rhythms in developing networks (Tabak et al. 2000), to which the architecture adds adaptive recovery. It runs at about 0.8 to 0.9 Hz, of the same order as human fetal breathing movements (about 44 per minute; Natale et al. 1988). Sixteen leaky integrate-and-fire units are driven by the population activity, and the interoception module's phase and amplitude come from that activity, band-limited over the last 8 s.
 
-In `womb` perception-feed mode, the simulated maternal heartbeat from `MaternalDriveProvider` enters through a weak, bounded input that cannot capture the rhythm unaided. The rhythm's period adapts slowly to its input at rate `self_rhythm_eta` (as in adaptive-frequency oscillators; Righetti, Buchli and Ijspeert 2006), so any shift toward the beat has to come from exposure. Nothing in the model sets a target frequency. See [Development](../06-operation/development.md#how-entrainment-is-measured) for how entrainment is measured.
+In `womb` perception-feed mode, the simulated maternal heartbeat from `MaternalDriveProvider` enters through a weak, bounded input that cannot capture the rhythm unaided. The rhythm's period adapts slowly to its input at rate `self_rhythm_eta` (as in adaptive-frequency oscillators; Righetti, Buchli and Ijspeert 2006), so any shift toward the beat has to come from exposure. Nothing in the model sets a target frequency. See [the developmental phase](../06-operation/development.md#how-entrainment-is-measured) for how entrainment is measured.
 
 A saved self-rhythm state from an earlier oscillator version, or one whose structural parameters differ, is ignored on restore and the rhythm starts fresh.
 
@@ -213,13 +213,13 @@ Add to your local `config/kaine.toml` (do not commit):
 soma = true
 ```
 
-Interoception needs no external service. GPU metrics appear when `pynvml` is installed. To change fatigue pressure, lower `fatigue_maintenance_threshold` or raise `fatigue_decay_per_s`.
+The interoception module needs no external service. GPU metrics appear when `pynvml` is installed. To change fatigue pressure, lower `fatigue_maintenance_threshold` or raise `fatigue_decay_per_s`.
 
 ## Key files
 
 | File | Role |
 |---|---|
-| `kaine/modules/soma/module.py` | `Soma` class: reading loop, intensity and alert rule, context adoption, warm-up, Sleep loop, serialization |
+| `kaine/modules/soma/module.py` | `Soma` class: reading loop, intensity and alert rule, context adoption, warm-up, the sleep module loop, serialization |
 | `kaine/modules/soma/forward.py` | `SubstrateForwardModel` with its context input, `metrics_to_feature_vector()` |
 | `kaine/modules/context.py` | `BroadcastContext`: context featurization, adoption, null context |
 | `kaine/modules/soma/reader.py` | `SystemMetricsReader`: `psutil` and `pynvml` |

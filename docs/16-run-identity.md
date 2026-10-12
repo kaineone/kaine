@@ -27,7 +27,7 @@ A cycle run needs a stable identity before its data can be trusted. This page ex
 
 ## Record stamping
 
-When a run context is set, every record written through `AsyncJsonlSink` carries the run's `run_id` and a per-sink monotonic `seq` starting from 0. One central edit covers the research event log, every sidecar observer, the raw archive and the Supervisor incident log. Stamping uses a shallow copy, so the caller's dict is never mutated. When no run context is set (the unit-test and library default), records are written unchanged, with neither `run_id` nor `seq` added.
+When a run context is set, every record written through `AsyncJsonlSink` carries the run's `run_id` and a per-sink monotonic `seq` starting from 0. One central edit covers the research event log, every sidecar observer, the raw archive and the supervisor incident log. Stamping uses a shallow copy, so the caller's dict is never mutated. When no run context is set (the unit-test and library default), records are written unchanged, with neither `run_id` nor `seq` added.
 
 The per-sink `seq` lets completeness gating detect a silent drop within any single stream, complementing tick-index gaps across the cycle.
 
@@ -48,7 +48,7 @@ Beyond the global seed, deterministic mode closes two residual sources of run-to
 - Logical event clock. The engine stamps every event it publishes from a single seam, `CognitiveCycle._now()`. In normal mode this is the injectable `wall_clock` (real UTC by default). In deterministic mode it is a logical clock: tick *k*'s events are stamped `BASE_EPOCH + k * target_tick_period`, where `BASE_EPOCH` is the fixed constant `1970-01-01T00:00:00Z` and the target tick period is the inverse of the processing rate. Logical timestamps are identical across runs. The logical clock is distinct from the engine's monotonic `clock`, which still measures real elapsed time for slip/latency.
 - Canonical within-tick event ordering. Before scoring and selection, each tick's gathered events are sorted by a total deterministic key `(source, type, entry_id)`. This pins the selection tie-break input so it does not depend on async-gather or stream-declaration incidentals. The ordering is applied unconditionally: production and deterministic runs share one ordering rule, so the ablation comparison isolates the layer alone. Because the selection score sort is stable and the common case is already ordered, this is a no-op for normal runs.
 
-What is guaranteed: tick by tick, the same coalitions (entry ids, sources, types, scores), the same inhibition decisions, the same action selection outputs, and the same logical event timestamps.
+What is guaranteed: tick by tick, the same coalitions (entry ids, sources, types, scores), the same inhibition decisions, the same action selection module outputs, and the same logical event timestamps.
 
 What is not guaranteed: wall-clock latency. `wall_duration_ms` and `slip_ms` are physical measurements of the host, inherently variable, and excluded from the reproducibility guarantee. They are still recorded, and two runs are not required to match on them.
 
@@ -109,9 +109,9 @@ The ranges are taken from the producing modules and the research event taxonomy.
 | `salience` | `[0, 1]` | bus schema |
 | `prediction_error` | `[0, ∞)` | clamped `max(0.0, e)` at the interoception producer |
 | coherence PLV (per pair) | `[0, 1]` | phase-locking value |
-| `valence` | `[-1, 1]` | affect affect state |
-| `arousal` | `[0, 1]` | affect affect state |
-| `dominance` | `[-1, 1]` | affect affect state |
+| `valence` | `[-1, 1]` | affect state |
+| `arousal` | `[0, 1]` | affect state |
+| `dominance` | `[-1, 1]` | affect state |
 | `confidence` (planning) | `[0, 1]` | `1 - normalised_entropy`, clamped |
 | drive `value` | `[0, 1]` | affect drives |
 | `familiarity_scalar` | `[0, 1]` | social cognition |

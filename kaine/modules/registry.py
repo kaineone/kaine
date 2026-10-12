@@ -30,7 +30,7 @@ class ModuleRegistry:
         self._modules: dict[str, BaseModule] = {}
         self.entity_clock: Optional[EntityClock] = None
         # The loaded module plugins (kaine.plugins.LoadedPlugins) for this boot,
-        # kept here so Supervisor's restart path re-applies the same substitutions.
+        # kept here so the supervisor's restart path re-applies the same substitutions.
         # Typed Any: cognitive modules never import the plugin loader.
         self.plugins: Any = None
 
@@ -45,7 +45,7 @@ class ModuleRegistry:
         return self._modules.pop(name)
 
     def replace(self, name: str, module: BaseModule) -> None:
-        """Swap a registered module in place (used by Supervisor's heavy restart).
+        """Swap a registered module in place (used by the supervisor's heavy restart).
 
         The slot must already exist and the new module's ``name`` must match,
         so the registry never silently changes a module's identity.
@@ -75,11 +75,11 @@ class ModuleRegistry:
 
 
 def shutdown_order(modules: Iterable[BaseModule]) -> list[BaseModule]:
-    """Return *modules* in shutdown order: Sleep first, the rest as given.
+    """Return *modules* in shutdown order: the sleep module first, the rest as given.
 
-    Sleep's shutdown ends a sleep still in flight with the affective reset and
+    The sleep module's shutdown ends a sleep still in flight with the affective reset and
     an aborted hypnos.sleep.completed. Shutting it down first keeps the modules
-    that sleep calls (Episodic memory, Affect, World model) up while it does.
+    that the sleep module calls (the episodic memory module, the affect module, the world model module) up while it does.
     """
     modules = list(modules)
     return [m for m in modules if m.name == "hypnos"] + [

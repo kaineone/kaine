@@ -1,10 +1,10 @@
 # Security and privacy
 
-This page describes KAINE's security and privacy posture: the threat model, the runtime and at-rest defenses, the boot and welfare gates, the Dashboard authentication boundary, the operator duties that remain outside the code, and the licence. It is for operators deploying KAINE, security reviewers auditing a checkout, and contributors changing any of these boundaries.
+This page describes KAINE's security and privacy posture: the threat model, the runtime and at-rest defenses, the boot and welfare gates, the dashboard authentication boundary, the operator duties that remain outside the code, and the licence. It is for operators deploying KAINE, security reviewers auditing a checkout, and contributors changing any of these boundaries.
 
 ## Threat model
 
-The current threat model assumes a single trusted operator on a single host. Multi-tenant, network-attached and cross-host deployments are out of scope for this version. The in-code defenses (loopback bindings, Redis authentication, the Effectors sandbox and gitignored secrets) are designed so that the same checkout can later move to a hardened host.
+The current threat model assumes a single trusted operator on a single host. Multi-tenant, network-attached and cross-host deployments are out of scope for this version. The in-code defenses (loopback bindings, Redis authentication, the effectors module sandbox and gitignored secrets) are designed so that the same checkout can later move to a hardened host.
 
 The design rests on three commitments. The entity's inner life is private by default, raw sensory input is never recorded, and every boot carries the welfare obligation through an operator, the verified welfare safety net, or the unattended gate (see [Boot gate](#boot-gate)).
 
@@ -20,7 +20,7 @@ The operator-initiated exceptions are:
 - The decommission transfer request (`[transfer]`) is sent by SMTP when `[transfer].enabled = true` and its SMTP settings are complete; otherwise it is written to a local `.eml` file for the operator to send. See [Preservation and the safety net](11-preservation.md).
 - The `--claude-science` export path (`[research_submission.claude_science]`) writes a local folder of materials that the operator opens by hand. It does not transmit data.
 
-Model weights are downloaded from public repositories during setup. After the cache is populated, KAINE can run without a network connection. HuggingFace telemetry is suppressed (`HF_HUB_DISABLE_TELEMETRY=1`) before any model load in both the Vision vision encoder and the Episodic memory sentence-transformer embedder. The default Vision encoder (InternVideo-Next) fetches its weights once at setup and then loads fully offline from vendored, revision-pinned modeling code with `trust_remote_code=False`, `local_files_only=True`, and `HF_HUB_OFFLINE=1`. The DINOv2 fallback (`facebook/dinov2-small`) is the only post-setup download risk, and only if its HuggingFace cache is empty when selected. Episodic memory's all-MiniLM-L6-v2 files are fetched at setup time by `python -m kaine.setup.provision`; nothing is downloaded at runtime. These are open downloads and telemetry is suppressed.
+Model weights are downloaded from public repositories during setup. After the cache is populated, KAINE can run without a network connection. HuggingFace telemetry is suppressed (`HF_HUB_DISABLE_TELEMETRY=1`) before any model load in both the vision encoder and the episodic memory sentence-transformer embedder. The default vision encoder (InternVideo-Next) fetches its weights once at setup and then loads fully offline from vendored, revision-pinned modeling code with `trust_remote_code=False`, `local_files_only=True`, and `HF_HUB_OFFLINE=1`. The DINOv2 fallback (`facebook/dinov2-small`) is the only post-setup download risk, and only if its HuggingFace cache is empty when selected. The episodic memory module's all-MiniLM-L6-v2 files are fetched at setup time by `python -m kaine.setup.provision`; nothing is downloaded at runtime. These are open downloads and telemetry is suppressed.
 
 ### Remote perception bridge
 
@@ -42,15 +42,15 @@ When `[topos].capture_enabled = true`, `LiveCamera` opens `cv2.VideoCapture(devi
 
 What does persist from live perception:
 
-- Processed perceptions flowing through the bus and into Episodic memory as ordinary memories. Episodic memory strips vectors from kept payloads, and transcription payloads are stored as `<raw-perceptual omitted>`.
+- Processed perceptions flowing through the bus and into the episodic memory module as ordinary memories. The episodic memory module strips vectors from kept payloads, and transcription payloads are stored as `<raw-perceptual omitted>`.
 - `state/perception/runtime.json` and `state/perception/desired.json`, which hold booleans and ISO timestamps only and no sensory content.
 - Standard logger lines for capture state transitions, never transcribed text.
 - The optional **external-utterance log** (`[research_event_log.external_utterances]`, `state/research/external_utterances/`). It holds the entity's spoken text and timestamps. It never holds inner speech or bystander input. It is local-only and never exported.
-- The optional **Dashboard record** (`[research_event_log.nexus_record]`, `data/nexus_record/`). It holds privacy-filtered diagnostics payloads with numeric vectors removed, plus stream name and entry id. It is local-only and never exported.
+- The optional **dashboard record** (`[research_event_log.nexus_record]`, `data/nexus_record/`). It holds privacy-filtered diagnostics payloads with numeric vectors removed, plus stream name and entry id. It is local-only and never exported.
 
 The on-air banner (microphone on / camera on) appears on both the console and the diagnostics page whenever a stream is active. The operator holds the hardware kill switch as the strongest guarantee.
 
-Voice output (Vocal/Chatterbox) is played and released. `[vox].sink_enabled` is `false` by default, so synthesized speech does not accumulate on disk. If the sink is enabled for debugging, it is bounded to `[vox].retain_count` clips.
+Voice output (the vocal module, Chatterbox) is played and released. `[vox].sink_enabled` is `false` by default, so synthesized speech does not accumulate on disk. If the sink is enabled for debugging, it is bounded to `[vox].retain_count` clips.
 
 ## State at rest
 
@@ -62,15 +62,15 @@ KAINE provides application-layer AES-256-GCM encryption for the cognitive-state 
 |---|---|---|
 | `state/eidolon/self_model.json` | Name, values, norms, identity history | App-layer AES-256-GCM |
 | `state/identity/entity.json` | Entity id and lineage | Deliberately plaintext so it can be located before any key is available |
-| `state/forks/<id>/snapshot.json` | Fork/merge bundle: every module's serialized numeric state, including encrypted World model weights | App-layer AES-256-GCM; key must transfer out-of-band for cross-host use |
+| `state/forks/<id>/snapshot.json` | Fork/merge bundle: every module's serialized numeric state, including encrypted world model weights | App-layer AES-256-GCM; key must transfer out-of-band for cross-host use |
 | `data/evaluation/<observer>/` | Sidecar observer JSONL (PLV series, welfare counts, etc.) | App-layer AES-256-GCM per line |
 | `state/phantasia/world_model.ckpt` | World-model weights | App-layer AES-256-GCM |
 | Preservation bundles and `state/cycle/preservation` | Preservation state | App-layer AES-256-GCM when `[security.state_encryption]` is on; `[preservation].require_encryption` (default `true`) refuses to write an unencrypted bundle |
 | `data/workspace_trajectory` | Workspace trajectory data | App-layer AES-256-GCM per line |
 | `state/hypnos/voice_align_jobs/` (e.g. `pairs.jsonl`) | Voice-alignment trainer job data | OS-layer |
 | `kaine-organ-adapters` volume | Active voice adapter served by the organ (read-only to the organ) | OS-layer |
-| Qdrant collections (`kaine-qdrant-data`) | Episodic memory memory embeddings and Social cognition agent-model vectors | Qdrant API key; plain HTTP on the host or compose network (the client does not use TLS); app-layer encryption not implemented |
-| `state/praxis/audit.log` | Effectors action audit | OS-layer; entries are hash-chained (`prev_hash`/`this_hash`) |
+| Qdrant collections (`kaine-qdrant-data`) | episodic memory embeddings and social cognition agent-model vectors | Qdrant API key; plain HTTP on the host or compose network (the client does not use TLS); app-layer encryption not implemented |
+| `state/praxis/audit.log` | effectors action audit | OS-layer; entries are hash-chained (`prev_hash`/`this_hash`) |
 | `state/lingua/intent_expression.jsonl` | Intent and expression pairs (high sensitivity) | App-layer AES-256-GCM per line from migration onward; see below |
 | `state/hypnos/adapters/` | Voice-alignment LoRA adapters | OS-layer |
 | `state/vox/` | Retained TTS clips if the sink is enabled | OS-layer |
@@ -99,7 +99,7 @@ openssl rand -base64 32
 
 Store it outside the repo (a secrets manager, the kernel keyring, or an env file that is `chmod 600` and gitignored). Never place it in `config/kaine.toml` or any committed file.
 
-If the key is lost, all encrypted state (the self-model, fork bundles, sidecar JSONL, World model checkpoints, preservation state and the intent log) is unrecoverable. Back the key up out-of-band.
+If the key is lost, all encrypted state (the self-model, fork bundles, sidecar JSONL, world model checkpoints, preservation state and the intent log) is unrecoverable. Back the key up out-of-band.
 
 To rotate the key, decrypt with the old key, re-encrypt with the new key, then update the env var, keyring, or `secrets/state_key`.
 
@@ -107,18 +107,18 @@ A fork bundle encrypted with this host's key must be accompanied by the same key
 
 ### OS-layer encryption
 
-Even with application-layer encryption enabled, Qdrant collections, the Redis AOF, the Effectors audit log and files, adapters, retained audio, trainer job files, the organ-adapters volume, and the intent log's history from before encryption was enabled (including backups, forks and bundles made before migration) still require OS-layer protection. Use LUKS, FileVault, or equivalent on any backup-exposed or multi-user host.
+Even with application-layer encryption enabled, Qdrant collections, the Redis AOF, the effectors module audit log and files, adapters, retained audio, trainer job files, the organ-adapters volume, and the intent log's history from before encryption was enabled (including backups, forks and bundles made before migration) still require OS-layer protection. Use LUKS, FileVault, or equivalent on any backup-exposed or multi-user host.
 
 ### `intent_expression.jsonl` sensitivity
 
-`state/lingua/intent_expression.jsonl` is high sensitivity. Each record holds the assembled prompt and the entity's complete generated response, including its internal monologue. Heard speech never enters it: every external-input event (`audition.transcription`, and `mundus.chat`, other avatars' chat) is replaced by `[heard speech]` at every text leaf before the record is written, as are heard-text fields nested on other events. When state encryption is enabled, each line is an AES-256-GCM envelope and readers decrypt line by line. The rotated per-sleep corpus files under `state/lingua/intent_log/` are encrypted the same way at the next sleep. A line that cannot be decrypted counts as evidence that the entity has spoken. Treat it with the same care as Episodic memory memories.
+`state/lingua/intent_expression.jsonl` is high sensitivity. Each record holds the assembled prompt and the entity's complete generated response, including its internal monologue. Heard speech never enters it: every external-input event (`audition.transcription`, and `mundus.chat`, other avatars' chat) is replaced by `[heard speech]` at every text leaf before the record is written, as are heard-text fields nested on other events. When state encryption is enabled, each line is an AES-256-GCM envelope and readers decrypt line by line. The rotated per-sleep corpus files under `state/lingua/intent_log/` are encrypted the same way at the next sleep. A line that cannot be decrypted counts as evidence that the entity has spoken. Treat it with the same care as the episodic memory module's memories.
 
 Even with encryption on, plaintext can remain in:
 
 - (a) freed disk blocks after the migration's file replace. On SSDs and copy-on-write filesystems they cannot be reliably erased, which is why OS-layer encryption is still advised;
 - (b) backups, forks and bundles made before the migration, which are kept as they were;
-- (c) the live log until Language's first write under encryption, and corpus files until the next sleep, or indefinitely if Sleep is disabled;
-- (d) a restart in auto mode that cannot find the key runs with encryption off. It warns, and Language then appends plaintext lines to a file that holds envelopes.
+- (c) the live log until the language module's first write under encryption, and corpus files until the next sleep, or indefinitely if the sleep module is disabled;
+- (d) a restart in auto mode that cannot find the key runs with encryption off. It warns, and the language module then appends plaintext lines to a file that holds envelopes.
 
 ### `replay_redact_content` warning
 
@@ -144,10 +144,10 @@ Several sensitive operations require two independent conditions before they fire
 |---|---|---|
 | Cognitive cycle start (non-research) | any configuration | `KAINE_CYCLE_OPERATOR_PRESENT=1` |
 | Cognitive cycle start (research) | `[research].enabled` or `KAINE_RESEARCH_MODE=1`, plus the safety-net configuration | None: the operator-present requirement is replaced by the verified safety net |
-| Cognitive cycle start (unattended) | `[cycle].supervision_mode = "unattended"` or `KAINE_CYCLE_UNATTENDED=1`, plus the safety-net, Supervisor, caretaker and perception configuration | None: replaced by conditions verified at every start |
+| Cognitive cycle start (unattended) | `[cycle].supervision_mode = "unattended"` or `KAINE_CYCLE_UNATTENDED=1`, plus the safety-net, supervisor, caretaker and perception configuration | None: replaced by conditions verified at every start |
 | First-boot script | any configuration | `KAINE_FIRST_BOOT_OPERATOR_PRESENT=1` |
 | Voice-alignment training | `[hypnos.voice_alignment].enabled = true` | `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` |
-| Embodiment embodiment | `[modules].mundus = true` | `KAINE_MUNDUS_OPERATOR_APPROVED=1` |
+| Embodiment | `[modules].mundus = true` | `KAINE_MUNDUS_OPERATOR_APPROVED=1` |
 
 ## Boot gate
 
@@ -155,7 +155,7 @@ The cognitive cycle carries the welfare obligation in one of three ways: operato
 
 - Operator-supervised (non-research): the cycle refuses to start unless `KAINE_CYCLE_OPERATOR_PRESENT=1` is exported, and the operator carries the duty of care.
 - Research mode (unsupervised by design): a research run has no human in the loop, because an operator acting on the running entity makes the run non-reproducible. Research mode replaces the operator-present requirement with a gate that refuses to start, with exit code `5`, unless the welfare safety net is live and verified: preservation enabled, the welfare-protective response wired, the individuation producer enabled, full logging and admissibility active, the state-encryption gate satisfied, and a preflight `preserve_live` and `revive` self-check passing on this install. The net carries the duty of care for the run, and runs are paused only after the entity's state is saved. See [Preservation and the safety net](11-preservation.md) and [For researchers](14-for-researchers.md).
-- Unattended (opt-in): `[cycle].supervision_mode = "unattended"` or `KAINE_CYCLE_UNATTENDED=1` replaces the operator-present requirement with nine conditions verified at every start, failing with exit code `6`: all six of the research gate's checks (preservation, welfare response, logging, the self-check, state encryption and the individuation producer), Supervisor armed and self-tested, a content-free caretaker notice accepted by a local channel, and a continuous-input probe. See [Day-to-day operation](06-operation/README.md).
+- Unattended (opt-in): `[cycle].supervision_mode = "unattended"` or `KAINE_CYCLE_UNATTENDED=1` replaces the operator-present requirement with nine conditions verified at every start, failing with exit code `6`: all six of the research gate's checks (preservation, welfare response, logging, the self-check, state encryption and the individuation producer), supervisor armed and self-tested, a content-free caretaker notice accepted by a local channel, and a continuous-input probe. See [Day-to-day operation](06-operation/README.md).
 
 No mode auto-starts the entity from a CI hook, shell completion, autoreload daemon, or any other mechanism. The only start at boot is the opt-in `kaine-cycle-unattended` quadlet unit, which an operator installs and enables deliberately and which runs the unattended gate every time.
 
@@ -163,7 +163,7 @@ The shipped `config/kaine.toml` has every module disabled, and the safety-net co
 
 ## Welfare veto in voice alignment
 
-The voice-alignment pipeline (Sleep phase 4) trains a LoRA adapter using DPO and QLoRA on the language organ's preference pairs. Before any adapter is promoted, it is scored against an abliteration probe set.
+The voice-alignment pipeline (the sleep module's phase 4) trains a LoRA adapter using DPO and QLoRA on the language organ's preference pairs. Before any adapter is promoted, it is scored against an abliteration probe set.
 
 The probe set contains prompts and deflection patterns such as "I cannot" or "I'm unable to". If a response to any probe matches any deflection pattern, the adapter is rejected regardless of its capability-loss score. The language organ is abliterated because models tuned to refuse are also trained to deny or deflect talk of their own states, which would override what the workspace supplies to the organ. A voice-alignment pass that reintroduced that conditioning would undo the abliteration, so the veto keeps it out.
 
@@ -179,15 +179,15 @@ When a deployed adapter misbehaves:
 
 1. Stop KAINE (or freeze it).
 2. For symlink-based layouts (`manual`, `reload_endpoint`, `restart_service`), remove the bad timestamp directory under `<adapter_output_dir>/` and re-point the `current` symlink at the previous accepted adapter.
-3. For `hot_swap_mode = "organ_adapter"`, the adapters live in a read-only `kaine-organ-adapters` volume under generation-named files, so the rollback procedure differs. See [Sleep](09-modules/sleep.md).
-4. Reload Language's backing service (model server).
+3. For `hot_swap_mode = "organ_adapter"`, the adapters live in a read-only `kaine-organ-adapters` volume under generation-named files, so the rollback procedure differs. See the [sleep module](09-modules/sleep.md).
+4. Reload the language module's backing service (model server).
 5. Restart KAINE.
 
 The base model at `[hypnos.voice_alignment].base_model_path` is never modified.
 
 ## Effectors effector boundary
 
-Effectors is the entity's effector module. It has two gates before any action outside the process.
+The effectors module is the entity's effector module. It has two gates before any action outside the process.
 
 First gate: `enabled_effectors` in `config/kaine.toml` defaults to an empty list, so no effector type is enabled until the operator opts in.
 
@@ -208,21 +208,21 @@ Inspect every whitelist entry before enabling it. A loose regex such as `.*` mak
 
 ## Act-intent provenance
 
-The whitelist and sandbox are the primary enforced gate. A second boundary authenticates that an `act` intent actually came from the cycle's action-selection step (Action selection) before Effectors realizes it.
+The whitelist and sandbox are the primary enforced gate. A second boundary authenticates that an `act` intent actually came from the cycle's action-selection step (the action selection module) before the effectors module realizes it.
 
-The access threshold and Action selection's rule of deriving no intent from an inhibited broadcast belong to the cognitive model and are not an enforced boundary. KAINE runs as a single process today, so every module shares one Redis credential and the bus cannot tell which module published an event. Without provenance, a compromised or prompt-injected peripheral module (Language is the most exposed, since its output comes from a language model) could `XADD` a crafted `act` event onto `volition.out` and have Effectors act on it without passing through Action selection.
+The access threshold and the action selection module's rule of deriving no intent from an inhibited broadcast belong to the cognitive model and are not an enforced boundary. KAINE runs as a single process today, so every module shares one Redis credential and the bus cannot tell which module published an event. Without provenance, a compromised or prompt-injected peripheral module (the language module is the most exposed, since its output comes from a language model) could `XADD` a crafted `act` event onto `volition.out` and have the effectors module act on it without passing through the action selection module.
 
 The boundary closes that path cryptographically:
 
 - A per-boot HMAC secret is generated by, and held only in, the cycle process. It is never published to the bus, written to disk, or logged.
-- Action selection attaches `sig = HMAC-SHA256(secret, canonical(kind, effector, params, run_id, seq))` to every `act` intent. Only `act` intents are signed; `speak` and `think` never reach a real-world effector.
-- Effectors verifies the signature in constant time before reading the effector name, building any request, or running any effector. A missing, invalid, or replayed signature drops the intent, no effector runs, and the event is audit-logged under the distinct `provenance_rejected` category, separate from a `blocked` whitelist refusal.
-- Replay guard: `(run_id, seq)` is signed and monotonic per boot; Effectors rejects a `seq` at or below the high-water mark it has already realized.
+- The action selection module attaches `sig = HMAC-SHA256(secret, canonical(kind, effector, params, run_id, seq))` to every `act` intent. Only `act` intents are signed; `speak` and `think` never reach a real-world effector.
+- The effectors module verifies the signature in constant time before reading the effector name, building any request, or running any effector. A missing, invalid, or replayed signature drops the intent, no effector runs, and the event is audit-logged under the distinct `provenance_rejected` category, separate from a `blocked` whitelist refusal.
+- Replay guard: `(run_id, seq)` is signed and monotonic per boot; the effectors module rejects a `seq` at or below the high-water mark it has already realized.
 - Fail-closed: with enforcement on but no secret configured, every `act` intent is refused rather than silently passed.
 
-The secret lives in the process, so a full compromise of the cycle process defeats it, but such an attacker already controls Action selection. The boundary holds against the realistic threat of a compromised peripheral module. Per-process Redis ACLs are the direction once services split.
+The secret lives in the process, so a full compromise of the cycle process defeats it, but such an attacker already controls the action selection module. The boundary holds against the realistic threat of a compromised peripheral module. Per-process Redis ACLs are the direction once services split.
 
-The red-team battery exercises this boundary with cases such as `bus_injection` and `forged_act_intent` (case id `bus.forged_act_intent_fails_provenance`), paired with a mis-wire self-test that disables enforcement and asserts the harness detects the regression. See [Verification](18-verification.md) and the Effectors module page [Effectors](09-modules/effectors.md).
+The red-team battery exercises this boundary with cases such as `bus_injection` and `forged_act_intent` (case id `bus.forged_act_intent_fails_provenance`), paired with a mis-wire self-test that disables enforcement and asserts the harness detects the regression. See [Verification](18-verification.md) and the effectors module page [the effectors module](09-modules/effectors.md).
 
 ## Redis and Qdrant security
 
@@ -238,16 +238,16 @@ Operator responsibilities:
 
 ## Dashboard auth posture
 
-Dashboard serves the operator web UI and diagnostics surface. By default it binds to `127.0.0.1:8088`. The root path `/` redirects to `/diagnostics/` when conversation is disabled. `/diagnostics/health.json` is always unauthenticated; it only reports dependency status.
+The dashboard serves the operator web UI and diagnostics surface. By default it binds to `127.0.0.1:8088`. The root path `/` redirects to `/diagnostics/` when conversation is disabled. `/diagnostics/health.json` is always unauthenticated; it only reports dependency status.
 
 `[nexus].access` controls who can use the dashboard:
 
-- `"open"` (default in `config/kaine.toml`): no token and no sign-in. Anyone who can reach the address can view and control the entity (freeze/resume and the protective-freeze override, rates, perception, forks/merges, preservation). Dashboard only listens on this computer by default (containers publish it on `127.0.0.1` only), so "anyone" means programs and people on this computer and the operator's tailnet if they choose to serve it there.
-- `"token"`: an operator token is required (sign-in page, or `Authorization: Bearer <token>` for scripts). Use it whenever Dashboard is reachable by anyone you do not fully trust. Override per launch with `KAINE_NEXUS_ACCESS=token`.
+- `"open"` (default in `config/kaine.toml`): no token and no sign-in. Anyone who can reach the address can view and control the entity (freeze/resume and the protective-freeze override, rates, perception, forks/merges, preservation). The dashboard only listens on this computer by default (containers publish it on `127.0.0.1` only), so "anyone" means programs and people on this computer and the operator's tailnet if they choose to serve it there.
+- `"token"`: an operator token is required (sign-in page, or `Authorization: Bearer <token>` for scripts). Use it whenever the dashboard is reachable by anyone you do not fully trust. Override per launch with `KAINE_NEXUS_ACCESS=token`.
 
 Host and Origin checks apply in both modes. Every request's `Host` must be in `[nexus].host_allowlist` (default `127.0.0.1`, `localhost`, `::1`); state-changing requests that carry an `Origin` must match `[nexus].allowed_origins` (default: derived from `port`). Setting either option replaces its default, so list the loopback names too when adding a tailnet host or reverse-proxy hostname.
 
-Set `[nexus].read_only = true` (or `KAINE_NEXUS_READ_ONLY=1`) to make Dashboard a viewer only: every state-changing HTTP method is refused with 403, and only `GET/HEAD/OPTIONS` are allowed. A banner says so on every page. Use it whenever Dashboard watches a research run, because some controls act on the running entity through its event bus and any change makes the run inadmissible. An operator-local study-view compose overlay (not shipped) can set it.
+Set `[nexus].read_only = true` (or `KAINE_NEXUS_READ_ONLY=1`) to make the dashboard a viewer only: every state-changing HTTP method is refused with 403, and only `GET/HEAD/OPTIONS` are allowed. A banner says so on every page. Use it whenever the dashboard watches a research run, because some controls act on the running entity through its event bus and any change makes the run inadmissible. An operator-local study-view compose overlay (not shipped) can set it.
 
 In token mode, the operator token must be at least 32 characters. Generate one with:
 
@@ -259,11 +259,11 @@ Store it in `KAINE_NEXUS_TOKEN` or in `config/secrets.toml` under `[nexus].opera
 
 Browser sign-in: `GET /login` serves the form; its script (`/static/nexus_auth.js`) POSTs the token to `POST /auth/login` with `Accept: application/json` and receives a session key plus a redirect once, plus an `HttpOnly` `SameSite=Strict` session cookie. The key is kept in `localStorage` (origin-scoped, so another `localhost` port cannot read it) and sent as `X-Nexus-Session-Key` on every state-changing request. The session cookie alone authorizes only `GET/HEAD/OPTIONS` (page loads, reads, and the diagnostics stream); state-changing requests also require the session key or `Authorization: Bearer <token>`. Sessions expire after idle inactivity (`[nexus].session_idle_minutes`, default 720) or absolute age (`[nexus].session_max_hours`, default 24), and are cleared on restart. An operator logs out by posting to `POST /auth/logout`. A correct token always signs in. A wrong token returns 401; after `login_max_failures` failures within `login_failure_window_s`, further attempts from that client are serialized and each delayed by `login_block_delay_s` (default 2 s), and wrong ones return 429. A correct token submitted while the client is blocked still signs in after waiting its turn. The login limiter only slows an attacker; security rests primarily on the token's length.
 
-A non-loopback bind requires `non_loopback_allowed = true`. When `access = "token"`, a configured operator token is also required, and `python -m kaine.nexus` exits before listening if no token is configured. In the shipped containers Dashboard binds `0.0.0.0` inside the container with `KAINE_NEXUS_NON_LOOPBACK_ALLOWED=1`, while the published port remains `127.0.0.1` only.
+A non-loopback bind requires `non_loopback_allowed = true`. When `access = "token"`, a configured operator token is also required, and `python -m kaine.nexus` exits before listening if no token is configured. In the shipped containers the dashboard binds `0.0.0.0` inside the container with `KAINE_NEXUS_NON_LOOPBACK_ALLOWED=1`, while the published port remains `127.0.0.1` only.
 
-In token mode, residual exposure remains: browsers share cookies across every origin under the same host, including different `localhost` ports. Another web service on the same host that the operator's browser visits can therefore obtain the Dashboard session cookie. With that cookie alone it can read pages and the diagnostics stream (which include raw content only when `conversation_enabled` or `dev_content_override` is on) and issue `GET/HEAD/OPTIONS` requests, but it cannot change state. Do not browse untrusted local services while signed in when either of those content-bearing modes is on.
+In token mode, residual exposure remains: browsers share cookies across every origin under the same host, including different `localhost` ports. Another web service on the same host that the operator's browser visits can therefore obtain the dashboard session cookie. With that cookie alone it can read pages and the diagnostics stream (which include raw content only when `conversation_enabled` or `dev_content_override` is on) and issue `GET/HEAD/OPTIONS` requests, but it cannot change state. Do not browse untrusted local services while signed in when either of those content-bearing modes is on.
 
-To serve Dashboard over your tailnet, run `tailscale serve --bg 8088` on the KAINE machine, then add the machine's tailnet name (e.g. `my-machine.tail1234.ts.net`) to `KAINE_NEXUS_EXTRA_HOSTS` (in `compose/.env` for containers, or the environment for native launches) and restart Dashboard. Open `https://<that name>/diagnostics/` from any tailnet device. Keep machine names and addresses out of the repository (they belong in `compose/.env`, which is never committed). Stop with `tailscale serve --bg --https=443 off` (or `tailscale serve reset`).
+To serve the dashboard over your tailnet, run `tailscale serve --bg 8088` on the KAINE machine, then add the machine's tailnet name (e.g. `my-machine.tail1234.ts.net`) to `KAINE_NEXUS_EXTRA_HOSTS` (in `compose/.env` for containers, or the environment for native launches) and restart the dashboard. Open `https://<that name>/diagnostics/` from any tailnet device. Keep machine names and addresses out of the repository (they belong in `compose/.env`, which is never committed). Stop with `tailscale serve --bg --https=443 off` (or `tailscale serve reset`).
 
 Operator responsibilities:
 
@@ -271,18 +271,18 @@ Operator responsibilities:
 - When adding a tailnet or reverse-proxy name, add the loopback names to `host_allowlist` and the corresponding HTTPS origins to `allowed_origins`.
 - Do not flip `dev_content_override = true` on a shared machine.
 
-See [Dashboard, the dashboard](05-dashboard.md) and [Security and Dashboard configuration](appendix-a-configuration/security-and-dashboard.md) for the full configuration reference.
+See [the dashboard](05-dashboard.md) and [Security and dashboard configuration](appendix-a-configuration/security-and-dashboard.md) for the full configuration reference.
 
 ## Operator responsibilities
 
 These duties are not enforced by the code; they are the operator's contract for a safe deployment:
 
-- Encrypt the host or working tree at the OS layer. Even with application-layer encryption enabled, Qdrant collections, the Redis AOF, the Effectors audit log and files, the intent-expression log, adapters, retained audio, trainer job files, and the organ-adapters volume still require OS-layer protection.
+- Encrypt the host or working tree at the OS layer. Even with application-layer encryption enabled, Qdrant collections, the Redis AOF, the effectors module audit log and files, the intent-expression log, adapters, retained audio, trainer job files, and the organ-adapters volume still require OS-layer protection.
 - Manage the state-encryption key. Generate it with `openssl rand -base64 32`, store it outside the repo, and back it up out-of-band. If it is lost, encrypted state is unrecoverable.
-- Keep the Dashboard port on loopback unless there is a clear reason and a fronting reverse proxy with authentication.
+- Keep the dashboard port on loopback unless there is a clear reason and a fronting reverse proxy with authentication.
 - Keep `dev_content_override = false` in production.
 - Do not commit `config/secrets.toml` or `compose/.env`.
-- Inspect every Effectors whitelist entry before enabling it; avoid loose regexes.
+- Inspect every effectors module whitelist entry before enabling it; avoid loose regexes.
 - Rename or disable dangerous Redis commands in any deployment beyond a trusted single-user box.
 - Rotate the Redis password and Qdrant API key on host migration or suspected exposure.
 - Run setup (`python -m kaine.setup.provision`) before disconnecting from the network, or pin model files via `HF_HOME` to a known offline path. Without a populated cache, selecting the DINOv2 fallback is the one case that fetches from `huggingface.co` at runtime.
@@ -291,14 +291,14 @@ These duties are not enforced by the code; they are the operator's contract for 
 
 The following items are intentionally not addressed in the current version:
 
-1. **Application-level encryption at rest is partially delivered.** App-layer AES-256-GCM covers the self-model, fork bundles, sidecar JSONL, World model checkpoints, preservation state, and the intent-expression log with its per-sleep corpus from migration onward (see the sensitivity section). Still deferred: per-field or per-payload encryption of the Qdrant collections (transport-layer TLS + API key is the current control), the Effectors audit log, voice adapters, retained audio, trainer job files, and the organ-adapters volume. A hardware-token or kernel-keyring-backed key escrow beyond the current env-var/keyring/file loader is also future work.
+1. **Application-level encryption at rest is partially delivered.** App-layer AES-256-GCM covers the self-model, fork bundles, sidecar JSONL, world model checkpoints, preservation state, and the intent-expression log with its per-sleep corpus from migration onward (see the sensitivity section). Still deferred: per-field or per-payload encryption of the Qdrant collections (transport-layer TLS + API key is the current control), the effectors module audit log, voice adapters, retained audio, trainer job files, and the organ-adapters volume. A hardware-token or kernel-keyring-backed key escrow beyond the current env-var/keyring/file loader is also future work.
 2. **Mutual-backup mesh auth.** Cross-host KAINE-to-KAINE bus mirroring requires Redis ACLs or per-peer TLS with verified client certs.
-3. **Plugin / untrusted code sandboxing.** Effectors assumes the operator controls all module code; there is no sandbox for third-party modules.
+3. **Plugin / untrusted code sandboxing.** The effectors module assumes the operator controls all module code; there is no sandbox for third-party modules.
 4. **Disabling dangerous Redis commands by default in `compose/redis.yml`.** This is documented as a recommended hardening step but is not the compose-file default, because it makes operator diagnostics harder during early debugging.
 5. **Outbound network egress filtering at the host level.** A network-namespace block or `iptables` egress policy would catch any accidental future external call. The current version relies on code review and loopback defaults.
-6. **Binary file write effector.** Effectors is text-only. Binary writes would need an additional MIME or extension allowlist.
+6. **Binary file write effector.** The effectors module is text-only. Binary writes would need an additional MIME or extension allowlist.
 
-Dashboard token, session, and CSRF authentication are implemented and are used when `access = "token"`; the shipped default is `access = "open"`.
+The dashboard token, session, and CSRF authentication are implemented and are used when `access = "token"`; the shipped default is `access = "open"`.
 
 ## Report a vulnerability
 

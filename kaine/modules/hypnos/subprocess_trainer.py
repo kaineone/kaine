@@ -79,7 +79,7 @@ DEFAULT_TIMEOUT_S = 6 * 60 * 60
 
 class SubprocessTrainerError(RuntimeError):
     """Raised when the trainer fails to produce a valid, verifiable adapter.
-    Surfaced to Sleep as a trainer error — never swallowed into a fake success.
+    Surfaced to the sleep module as a trainer error — never swallowed into a fake success.
     """
 
 

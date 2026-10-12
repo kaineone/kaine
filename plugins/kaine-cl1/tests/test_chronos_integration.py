@@ -121,5 +121,5 @@ async def test_event_schema_matches_silicon():
     wet = await _run_wetware_chronos(ticks=3)
     sil = await _run_silicon_chronos(ticks=3)
     assert {e.type for e in wet} == {e.type for e in sil} == {"chronos.report"}
-    # The wetware backend does not change Sequence's published event contract.
+    # The wetware backend does not change the sequence module's published event contract.
     assert set(wet[0].payload.keys()) == set(sil[0].payload.keys())

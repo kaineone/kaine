@@ -574,7 +574,7 @@ def test_runtime_state_carries_run_identity_and_mode(tmp_path, monkeypatch):
 
 
 def test_metrics_snapshot_surfaces_new_fields(tmp_path):
-    """dashboard metrics_snapshot surfaces run identity + mode + deterministic."""
+    """The dashboard's metrics_snapshot surfaces run identity + mode + deterministic."""
     from kaine.nexus.__main__ import make_metrics_snapshot
 
     runtime = tmp_path / "runtime.json"

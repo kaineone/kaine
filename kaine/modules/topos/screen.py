@@ -237,7 +237,7 @@ def _read_exact(stream: Any, n: int) -> bytes | None:
 
 
 class ScreenCaptureSource:
-    """A Vision ``_VideoSource`` backed by a system-ffmpeg screen/window capture.
+    """A vision module ``_VideoSource`` backed by a system-ffmpeg screen/window capture.
 
     ``open()`` spawns ffmpeg scaling the capture to ``(width, height)`` and
     emitting raw ``bgr24`` frames; ``read()`` returns the next frame as a
@@ -271,7 +271,7 @@ class ScreenCaptureSource:
 
     def command(self) -> list[str]:
         """The full ffmpeg command: the OS input spec, emitted as raw bgr24 on
-        stdout. Scaled to Vision geometry unless native passthrough is set."""
+        stdout. Scaled to the vision module's geometry unless native passthrough is set."""
         scale_args = (
             [] if self._native else ["-vf", f"scale={self._width}:{self._height}"]
         )

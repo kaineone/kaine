@@ -96,7 +96,7 @@ def make_topos(
         kwargs["encoder_weights_dir"] = section["encoder_local_dir"]
     # InternVideo-Next clip seam knobs (topos-temporal-video-encoder). clip_len
     # and clip_resolution/pooling configure the clip encoder; clip_stride is the
-    # Vision-level strided-clip cadence.
+    # vision-module-level strided-clip cadence.
     if "clip_len" in section:
         kwargs["encoder_clip_len"] = int(section["clip_len"])
     if "clip_resolution" in section:
@@ -145,7 +145,7 @@ def make_topos(
             kwargs[k] = section[k]
     kwargs["capture_enabled"] = bool(section.get("capture_enabled", False))
 
-    # Attention-driven foveation (topos-foveation). Off by default → Vision runs
+    # Attention-driven foveation (topos-foveation). Off by default → the vision module runs
     # the single whole-frame encode. When on, each frame yields a spatial saliency
     # map, one arousal-sized fovea, and a peripheral + foveal encode. The grab is
     # native by default — for screen mode set capture_width/height to the panel

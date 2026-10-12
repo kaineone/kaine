@@ -8,7 +8,7 @@ Batch offload lets latency-tolerant workloads such as voice-alignment training, 
 ### Requirement: Detached batch jobs are offloadable behind a self-contained descriptor
 
 Latency-tolerant batch workloads SHALL be expressible as self-contained job
-descriptors — covering Sleep voice-alignment QLoRA/DPO training,
+descriptors — covering the sleep module's voice-alignment QLoRA/DPO training,
 self-abliteration, deep memory consolidation, and offline evaluation — each
 carrying the job kind, its inputs, and the expected verifiable output artifact (e.g. a LoRA adapter directory, a
 modified model, a consolidated-memory delta, or an evaluation report). Such a job
@@ -24,7 +24,7 @@ volunteer/BOINC-style worker) without the live cognitive loop being involved.
 ### Requirement: Off-host artifacts pass a trusted-side verification gate before promotion
 
 An artifact produced off-host SHALL pass a trusted-side re-verification — at
-minimum the existing Sleep capability-loss veto plus an independent evaluation
+minimum the existing sleep module's capability-loss veto plus an independent evaluation
 run on trusted hardware — BEFORE it is promoted into the live entity. Volunteer
 redundancy/quorum SHALL NOT substitute for this gate, because it does not verify
 a non-deterministic training step and is vulnerable to Sybil attack. Runners

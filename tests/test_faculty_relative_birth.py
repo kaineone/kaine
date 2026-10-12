@@ -140,7 +140,7 @@ def _make_bus(
 
 
 def _make_base_registry() -> Any:
-    """A registry with no Sleep, World model or Embodiment — base-thesis-like."""
+    """A registry with no sleep, world model or embodiment modules — base-thesis-like."""
     registry = MagicMock()
     registry.__contains__.return_value = False
     registry.get.return_value = None
@@ -148,7 +148,7 @@ def _make_base_registry() -> Any:
 
 
 def _make_mundus_only_registry() -> Any:
-    """A registry that contains Embodiment but no Sleep or Phantasia."""
+    """A registry that contains embodiment but no sleep or Phantasia."""
     registry = MagicMock()
     mundus = MagicMock()
     mundus.enabled_by_config = True
@@ -193,7 +193,7 @@ def _make_clock(now: float = 0.0) -> Any:
 
 
 def _fresh_gestation_state(tmp_path: Path) -> lifecycle_stage.StageState:
-    """Build a fresh development state without mutating the global STAGE_PATH."""
+    """Build a fresh developmental state without mutating the global STAGE_PATH."""
     p = tmp_path / "stage.json"
     return lifecycle_stage.resolve_boot_stage(has_prior_lived_history=False, path=p)
 
@@ -302,7 +302,7 @@ def test_decide_birth_without_mundus_births_into_perceptual_world() -> None:
     ready = _make_ready()
     decision = decide_birth(
         readiness=ready,
-        embodiment_ready=False,  # ignored when Embodiment is absent
+        embodiment_ready=False,  # ignored when the embodiment module is absent
         faculties=Faculties(mundus=False),
     )
     assert decision.action == ACTION_BIRTH
@@ -381,7 +381,7 @@ async def test_base_thesis_births_into_perceptual_world(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A registry without Sleep/World model/Embodiment maturations into the perceptual
+    """A registry without the sleep, world model and embodiment modules matures into the perceptual
     world without ever probing Mundus."""
     readout = {
         "endogenous_self_sustain": True,
@@ -439,7 +439,7 @@ async def test_base_thesis_births_into_perceptual_world(
 async def test_mundus_present_but_unreachable_holds_awaiting_embodiment(
     tmp_path: Path,
 ) -> None:
-    """When Embodiment is present but unreachable, a ready entity holds in the stimulus source
+    """When the embodiment module is present but unreachable, a ready entity holds in the stimulus source
     and emits stage.birth.ready with reason awaiting_embodiment."""
     readout = {
         "endogenous_self_sustain": True,

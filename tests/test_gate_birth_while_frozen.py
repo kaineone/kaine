@@ -136,7 +136,7 @@ def _make_registry(
     phantasia = MagicMock()
     phantasia.successful_training_passes = consolidation_passes
     mundus = MagicMock()
-    # Public Embodiment API the gate uses (operator approval itself is read from
+    # Public embodiment module API the gate uses (operator approval itself is read from
     # KAINE_MUNDUS_OPERATOR_APPROVED; tests that need it set the variable).
     mundus.enabled_by_config = mundus_enabled
     mundus.probe_available = AsyncMock(
@@ -147,7 +147,7 @@ def _make_registry(
     vox = MagicMock()
     vox.set_dormant = MagicMock()
 
-    # Sleep is present so the gate applies the sleep and consolidation floors.
+    # The sleep module is present so the gate applies the sleep and consolidation floors.
     modules = {"hypnos": MagicMock(), "phantasia": phantasia, "mundus": mundus, "vox": vox}
 
     def _get(name: str):
@@ -165,7 +165,7 @@ def _make_clock(now: float = 0.0) -> Any:
 
 
 def _fresh_gestation_state(tmp_path: Path) -> lifecycle_stage.StageState:
-    """Build a fresh development state without mutating the global STAGE_PATH."""
+    """Build a fresh developmental phase state without mutating the global STAGE_PATH."""
     p = tmp_path / "stage.json"
     return lifecycle_stage.resolve_boot_stage(has_prior_lived_history=False, path=p)
 

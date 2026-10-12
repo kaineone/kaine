@@ -2,21 +2,21 @@
 
 ### Requirement: Sequence runs its forward model on the substrate
 
-When `[backends].chronos = "cl1"`, Sequence's timing forward model SHALL be realised
+When `[backends].chronos = "cl1"`, the sequence module's timing forward model SHALL be realised
 on a substrate channel territory instead of the silicon CfC network, injected
-behind Sequence's existing forward-model client interface. Sequence's `name`, bus
+behind the sequence module's existing forward-model client interface. The sequence module's `name`, bus
 subscriptions, and `chronos.out` event shapes SHALL be unchanged.
 
 #### Scenario: Backend selection preserves the event contract
 
-- **WHEN** Sequence runs with `[backends].chronos = "cl1"`
+- **WHEN** the sequence module runs with `[backends].chronos = "cl1"`
 - **THEN** its `chronos.out` events have the same schema as under the silicon CfC
-- **AND** Sequence subscribes to and drives the cognitive cycle exactly as before
+- **AND** the sequence module subscribes to and drives the cognitive cycle exactly as before
 
 #### Scenario: Silicon remains the default
 
 - **WHEN** `[backends].chronos` is absent or `"silicon"`
-- **THEN** Sequence loads its upstream CfC network unchanged
+- **THEN** the sequence module loads its upstream CfC network unchanged
 
 ### Requirement: Timing prediction error reflects temporal structure
 

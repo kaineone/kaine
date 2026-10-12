@@ -77,7 +77,7 @@ class OutputBoundaryViolation(RuntimeError):
 
 
 #: Path fragments (case-insensitive) that must never appear in a work-unit's
-#: staged inputs or returned outputs. Raw sensory streams (vision/audition frames),
+#: staged inputs or returned outputs. Raw sensory streams (the vision and audition modules' frames),
 #: the private voice adapters, and operator configuration are all trusted-host
 #: only.
 _FORBIDDEN_OUTPUT_FRAGMENTS: tuple[str, ...] = (

@@ -1,10 +1,10 @@
 # eidolon-self-inference Specification
 
 ## Purpose
-Self-model's `SelfInferenceEngine` populates the self-model fields from observed cognitive signals, deriving the personality baseline from Affect VAD statistics and the capability map from the Effectors whitelist and Planning outcomes, with an operator-seeded fallback on first boot and no recording of raw speech.
+The self-model module's `SelfInferenceEngine` populates the self-model fields from observed cognitive signals, deriving the personality baseline from the affect module's VAD statistics and the capability map from the effectors module's whitelist and the planning module's outcomes, with an operator-seeded fallback on first boot and no recording of raw speech.
 ## Requirements
 ### Requirement: Self-model fields populated from observation
-Self-model's `SelfInferenceEngine` SHALL populate `behavioral_norms`,
+The self-model module's `SelfInferenceEngine` SHALL populate `behavioral_norms`,
 `personality_baseline`, `values`, and `capability_map` in `self_model.json` from
 observed signals: `lingua.out` (internal-speech patterns), `thymos.report` and
 `thymos.drive` (VAD trajectories and drive crossings), and `nous.policy` (EFE
@@ -23,22 +23,22 @@ than be populated with speculative data when observations are insufficient
 
 ### Requirement: Personality baseline from VAD statistics
 The `SelfInferenceEngine` SHALL derive `personality_baseline` from rolling mean and
-variance of Affect valence, arousal, and dominance over `vad_window_cycles`
+variance of the affect module's valence, arousal, and dominance over `vad_window_cycles`
 maintenance cycles. The statistics SHALL be updated atomically on each maintenance
 cycle end.
 
 #### Scenario: VAD statistics update on maintenance cycle
-- **WHEN** a Sleep maintenance cycle completes
+- **WHEN** a sleep module maintenance cycle completes
 - **THEN** `personality_baseline` reflects the rolling VAD mean and variance over
   the configured window
 
 ### Requirement: Capability map from Effectors whitelist and Planning outcomes
-The `capability_map` SHALL be built from the Effectors effector whitelist (what the
-entity can execute) combined with Planning EFE outcome history (what it has
+The `capability_map` SHALL be built from the effectors module's effector whitelist (what the
+entity can execute) combined with the planning module's EFE outcome history (what it has
 successfully done). It SHALL be updated on maintenance cycle end.
 
 #### Scenario: Capability map reflects whitelist
-- **WHEN** the Effectors effector whitelist has at least one enabled entry
+- **WHEN** the effectors module's effector whitelist has at least one enabled entry
 - **THEN** `capability_map` contains the corresponding capability entries
 
 ### Requirement: Operator-seeded first-boot fallback

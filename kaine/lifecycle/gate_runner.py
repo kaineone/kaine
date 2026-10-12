@@ -203,7 +203,7 @@ class MaturationGateRunner:
             )
 
     async def _count_new_sleeps(self) -> None:
-        """Count sleep sleep completions from the bus, idempotently.
+        """Count sleep completions from the bus, idempotently.
 
         A fresh cursor is anchored at the stream tail on the first tick.
         Thereafter we scan forward from the persisted cursor, counting each
@@ -540,7 +540,7 @@ class MaturationGateRunner:
 
         # Start embodiment before the stage file is written, so the locus source
         # is actually available when the entity becomes embodied.
-        # Vocal is activated before Embodiment so the voice is available at maturation.
+        # The vocal module is activated before the embodiment module so the voice is available at maturation.
         if "vox" in self._registry:
             vox = self._registry.get("vox")
             if hasattr(vox, "set_dormant"):
@@ -587,7 +587,7 @@ class MaturationGateRunner:
             log.warning("could not clear birth acknowledgement files after birth: %s", exc)
         self._birth_request = None
 
-        # Unlock the development locus lock. The unlock is attributed to development,
+        # Unlock the developmental phase locus lock. The unlock is attributed to the developmental phase,
         # not the operator; the locus stays virtual while the handoff continues.
         try:
             write_desired_locus("virtual", locked=False, locked_by="gestation")

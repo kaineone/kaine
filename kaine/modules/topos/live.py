@@ -155,12 +155,12 @@ def _bgr_to_pil_rgb(frame: Any) -> Any:
 
 
 class LiveCamera:
-    """Eyes-only camera stream. Constructed by Vision when
+    """Eyes-only camera stream. Constructed by the vision module when
     [topos].capture_enabled is true. Lifecycle owned by the parent.
 
     `sink` is `Topos.process_frame`. The camera hands frames to it and
     never touches the result. Static-scene throttling happens inside
-    Vision via change-detection + habituation; nothing here.
+    the vision module via change-detection + habituation; nothing here.
     """
 
     def __init__(
@@ -173,7 +173,7 @@ class LiveCamera:
         on_state_change: OnStateChange | None = None,
         source_factory: Callable[..., _VideoSource] | None = None,
         bgr_to_rgb: Callable[[Any], Any] | None = None,
-        # Shared subjective clock (injected by Vision at boot). The capture
+        # Shared subjective clock (injected by the vision module at boot). The capture
         # interval is the entity's perception SAMPLING rhythm, so it runs in
         # subjective time — at time_scale != 1.0 the eyes sample at the dilated
         # rate, coherent with the rest of the mind. The desired-state poll
@@ -208,7 +208,7 @@ class LiveCamera:
         """Content-free provenance of the item the underlying source is
         presenting, or ``None``. Only the playlist source exposes this (via the
         shared ``PlaylistClock``); the real camera and seeded feeds return
-        ``None``. Read by Vision to stamp the playing item onto ``topos.report``
+        ``None``. Read by the vision module to stamp the playing item onto ``topos.report``
         so the media is legible off the bus rather than inferred from file
         descriptors."""
         return getattr(self._source, "current_item", None)

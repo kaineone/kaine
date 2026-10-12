@@ -39,7 +39,7 @@ class OverlayConfig:
     hardware_acknowledgement: str = ""
     #: The operator's institutional approval or protocol reference for a hardware target.
     ethics_reference: str = ""
-    #: Planning hybrid mode ([nous] table): "shadow" logs the substrate's proposals only,
+    #: The planning module's hybrid mode ([nous] table): "shadow" logs the substrate's proposals only,
     #: "drive" acts on them.
     nous_mode: str = "shadow"
 

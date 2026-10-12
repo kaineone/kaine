@@ -357,7 +357,7 @@ def load_internvideo_next(
         use_safetensors=True,
     )
 
-    # Frozen contract (unchanged from DINOv2): eval + no grad; Vision never trains it.
+    # Frozen contract (unchanged from DINOv2): eval + no grad; the vision module never trains it.
     model.eval()
     for p in model.parameters():
         p.requires_grad_(False)

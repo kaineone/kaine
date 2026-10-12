@@ -378,7 +378,7 @@ def tree_digest(state_root: Path | str, artifacts: list[Path]) -> str:
     root = resolve(state_root)
     lines: list[str] = []
     # A top-level artifact that is a symlink is followed: operators relocate a
-    # entity's data (for example to bulk storage) by linking it, and the data is
+    # an entity's data (for example to bulk storage) by linking it, and the data is
     # still this entity's own. Symlinks inside a directory artifact are skipped so
     # the walk cannot loop or leave the artifact.
     for artifact in artifacts:

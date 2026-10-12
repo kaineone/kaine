@@ -13,13 +13,13 @@ raw imagery SHALL be written to disk.
 
 #### Scenario: Foveated report shape
 
-- **WHEN** Vision publishes a report with foveation enabled
+- **WHEN** the vision module publishes a report with foveation enabled
 - **THEN** the payload carries a `peripheral` latent, a `foveal` latent, and the
   normalized fovea location and size, and carries no pixel data
 
 #### Scenario: Non-foveated report unchanged
 
-- **WHEN** Vision publishes a report with foveation disabled
+- **WHEN** the vision module publishes a report with foveation disabled
 - **THEN** the payload carries the single whole-frame latent exactly as before this
   change
 

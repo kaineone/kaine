@@ -152,7 +152,7 @@ def _make_registry(
     vox = MagicMock()
     vox.set_dormant = MagicMock()
 
-    # Sleep is present so the gate applies the sleep and consolidation floors.
+    # The sleep module is present so the gate applies the sleep and consolidation floors.
     modules = {"hypnos": MagicMock(), "phantasia": phantasia, "mundus": mundus, "vox": vox}
 
     def _get(name: str):
@@ -170,7 +170,7 @@ def _make_clock(now: float = 0.0) -> Any:
 
 
 def _fresh_gestation_state(tmp_path: Path) -> lifecycle_stage.StageState:
-    """Build a fresh development state without mutating the global STAGE_PATH."""
+    """Build a fresh developmental phase state without mutating the global STAGE_PATH."""
     p = tmp_path / "stage.json"
     state = lifecycle_stage.resolve_boot_stage(has_prior_lived_history=False, path=p)
     # One sleep already counted, with the cursor past it, so the entity is ready
@@ -296,7 +296,7 @@ async def test_matching_ack_births_and_clears_files(
     await runner._evaluate_once()
 
     # The first evaluation announced the hold (stage.birth.ready, awaiting the
-    # operator); the acknowledged one maturations exactly once.
+    # operator); the acknowledged one matures exactly once.
     assert [e.type for e in published].count(STAGE_BIRTH) == 1
     assert published[-1].type == STAGE_BIRTH
     assert runner.stage.is_embodied

@@ -676,7 +676,7 @@ class PlaylistAudioStream:
 
         def _emit(pcm: bytes) -> None:
             nonlocal next_deadline
-            # Park while the shared clock is paused (Sleep sleep): the clock
+            # Park while the shared clock is paused (sleep): the clock
             # is the one pause authority. next_deadline is NOT advanced while
             # paused; on resume re-anchor it so pacing continues cleanly (no
             # burst of back-to-back blocks). Stop wins over the park.

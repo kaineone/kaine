@@ -310,7 +310,7 @@ def test_transformers_min_major_is_5():
 def _base_answers(*, want_trainer: str) -> list[str]:
     """Answers up to and including the trainer-step yes/no.
 
-    Enables only interoception (no language/vocal/audition prompts), accepts devices.
+    Enables only the interoception module (no language, vocal and audition modules' prompts), accepts devices.
     """
     answers = [ACK_PHRASE, "", "", "y", "c"]  # ack, accept device assignments, custom preset
     for m in MODULE_ORDER:

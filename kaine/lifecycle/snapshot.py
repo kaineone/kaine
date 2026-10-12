@@ -16,7 +16,7 @@ from typing import Any
 
 # A snapshot id is a server-generated 16-hex UUID prefix (a fork/root id) or a
 # `<hex>+<hex>` pair (a merge parent id). This is the ONE source of truth shared
-# by the Dashboard request boundary and the path-builder below — any id that fails it
+# by the dashboard request boundary and the path-builder below — any id that fails it
 # is definitionally not one this system minted, so it is treated as an attack.
 _SNAPSHOT_ID_RE = re.compile(r"^[0-9a-f]{16}(\+[0-9a-f]{16})?$")
 
@@ -91,9 +91,9 @@ def snapshot_dir(root: Path, snapshot_id: str) -> Path:
     """Resolve ``<root>/<snapshot_id>``, refusing any id whose resolved path
     escapes ``root``.
 
-    Defense in depth behind the Dashboard id validator: even if a caller reaches
+    Defense in depth behind the dashboard id validator: even if a caller reaches
     this builder with an unvalidated id, an absolute or ``..``-bearing id cannot
-    produce a path outside the snapshot root. Mirrors the Effectors sandbox
+    produce a path outside the snapshot root. Mirrors the effectors sandbox
     containment check (``effectors._resolve_sandbox_path``) — note
     ``Path(root) / "/abs"`` discards ``root`` and ``..`` climbs out, so the
     resolved candidate MUST be re-confirmed to live under the resolved root.

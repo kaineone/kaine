@@ -12,7 +12,7 @@
 - [ ] 2.2 Gate: surprise correlates with the silicon RSSM surprise on held-out
       sequences above a stated threshold.
 
-## 3. Action selection / action-selection (default-off)
+## 3. Action selection (default-off)
 
 - [ ] 3.1 `WetwareActionSelector` closed loop: encode state → stim, decode action
       → intent, in `kaine_cl1/backends/volition.py`.
@@ -21,7 +21,7 @@
 - [ ] 3.3 Any decoded action still passes through KAINE's unchanged two-layer
       safety gate before it can become an outward act.
 
-## 4. Affect affect read-out (default-off, review-gated)
+## 4. Affect read-out (default-off, review-gated)
 
 - [ ] 4.1 `WetwareAffect` reading valence/arousal from population dynamics, in
       `kaine_cl1/backends/thymos.py`.

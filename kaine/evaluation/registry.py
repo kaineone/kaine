@@ -89,7 +89,7 @@ class SidecarRegistry:
         self._sinks: list[AsyncJsonlSink] = []
         self._observers: list[Any] = []
         self._started = False
-        # Sidecar observers exposed for Dashboard diagnostics.
+        # Sidecar observers exposed for dashboard diagnostics.
         self._prediction_error_observer: PredictionErrorObserver | None = None
         # Welfare gray-zone producer. May be supplied externally (e.g. by the
         # cycle-layer welfare response) so the producer runs even when
@@ -245,7 +245,7 @@ class SidecarRegistry:
                 ExternalUtteranceLog(self._bus, sink, rcfg.external_utterances)
             )
         if rcfg.nexus_record.enabled:
-            # LOCAL-ONLY: exact Dashboard-diagnostics display after privacy filter.
+            # LOCAL-ONLY: exact dashboard-diagnostics display after privacy filter.
             sink = self._make_sink_at(
                 rcfg.nexus_record.log_dir,
                 "nexus_record",
@@ -344,7 +344,7 @@ class SidecarRegistry:
         if obs_cfg.replay:
             sink = self._make_sink("replay", "replay")
             # ReplayObserver is a composite of two StreamSubscriberObservers
-            # (episodic memory + world model).  Register the inner observers so the
+            # (the episodic memory module + the world model module).  Register the inner observers so the
             # registry lifecycle (start/stop, _task checks) works uniformly.
             replay_wrapper = ReplayObserver(
                 self._bus, sink, redact_content=obs_cfg.replay_redact_content

@@ -547,7 +547,7 @@ async def test_readout_persists_topos_baseline(owner_factory, tmp_path: Path):
     # Initialise cursor.
     await owner.step()
 
-    # Publish three Vision reports in the first readout period.
+    # Publish three vision module reports in the first readout period.
     for err in [1.0, 1.1, 0.9]:
         event = Event(
             source="topos",

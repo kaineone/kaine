@@ -33,7 +33,7 @@ class AffectStateProvider:
     """Last-known affect + drive snapshot, refreshed from ``thymos.state``.
 
     Before the first ``thymos.state`` is observed the provider reports the
-    Affect baseline (``DimensionalState()``) and empty drives, so a real factor
+    affect module baseline (``DimensionalState()``) and empty drives, so a real factor
     reads a well-defined neutral value rather than raising.
     """
 
@@ -67,7 +67,7 @@ class AffectStateProvider:
                 }
 
     def dimensional_state(self) -> DimensionalState:
-        """Current affect state, for the Affect factor (:class:`StateModulator`)."""
+        """Current affect state, for the affect module factor (:class:`StateModulator`)."""
         return self._state
 
     def drive_values(self) -> dict[str, float]:

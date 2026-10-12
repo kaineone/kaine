@@ -41,7 +41,7 @@ _RECALL_SEARCH_CAP: int = 4096
 
 
 def _write_health_file(path: Path, data: dict[str, Any]) -> None:
-    """Write Episodic memory health JSON atomically; failures are logged, not raised."""
+    """Write the episodic memory module's health JSON atomically; failures are logged, not raised."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
@@ -54,7 +54,7 @@ def _write_health_file(path: Path, data: dict[str, Any]) -> None:
         log.warning("mnemos: failed to write health file %s", path, exc_info=True)
 
 
-# Episodic memory owns these payload keys (paper A.10); a caller's payload cannot set them.
+# The episodic memory module owns these payload keys (paper A.10); a caller's payload cannot set them.
 _RESERVED_PAYLOAD_KEYS: frozenset[str] = frozenset({"log_base", "born_sleep", "entity_time", "size_bytes"})
 
 
@@ -826,7 +826,7 @@ class MnemosCore:
     async def export_state(self) -> dict[str, Any]:
         """Capture the whole memory store: short-term buffer + persisted points.
 
-        Used by Episodic memory preservation. The persisted side delegates to the
+        Used by the episodic memory module's preservation. The persisted side delegates to the
         storage backend's ``export`` (which FAILS LOUDLY on an unreachable
         Qdrant). The short-term buffer is in-process working memory; it is
         captured here as ``StoredMemory`` fields so a revived entity resumes
@@ -1124,7 +1124,7 @@ async def recover_interrupted_import(
     budget_bytes: int | None = None,
     health_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Operator recovery for an interrupted Episodic memory preservation import.
+    """Operator recovery for an interrupted episodic memory module preservation import.
 
     Re-scans the persisted store and clears the import_pending flag so
     ordinary sleeps can resume. The store is kept as it stands; imported

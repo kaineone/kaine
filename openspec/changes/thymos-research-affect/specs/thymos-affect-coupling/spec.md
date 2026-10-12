@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Appraisal-routed perceived emotion
-A detected speaker emotion (`audition.emotion`) SHALL be folded into Affect's
+A detected speaker emotion (`audition.emotion`) SHALL be folded into the affect module's
 own Scherer appraisal as a perceptual input, weighted by `familiarity` from the
 latest `empatheia.agent_model`, and SHALL NOT be written directly to the
 dimensional (valence/arousal/dominance) state. The entity's own appraisal, together with its goal significance, coping, and
@@ -15,7 +15,7 @@ shift toward the speaker's state.
 
 #### Scenario: Perceived emotion is appraised, not imposed
 - **WHEN** an `audition.emotion` event reports a strongly positive-valence emotion while coupling is enabled
-- **THEN** Affect's appraised intrinsic_pleasantness rises and valence relaxes upward toward the target that check sets
+- **THEN** the affect module's appraised intrinsic_pleasantness rises and valence relaxes upward toward the target that check sets
 - **AND** no code path moves the dimensional state toward a fixed VAD target for that emotion
 
 #### Scenario: Higher familiarity appraises others' emotion as more significant

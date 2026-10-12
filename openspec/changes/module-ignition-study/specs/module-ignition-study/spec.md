@@ -19,7 +19,7 @@ The runner SHALL record for every step its line, step, module set, start bundle,
 - **AND** it never repeats a completed step
 
 ### Requirement: Lines never share the entity's state
-Each branch step, the repeat and the accumulate line SHALL each run from their own working directory, with their own memory collections and their own Social cognition collection. Every step SHALL start on an empty bus database that belongs to the study. The runner SHALL flush only the study's own database numbers, and SHALL refuse a plan whose database numbers include the operator's.
+Each branch step, the repeat and the accumulate line SHALL each run from their own working directory, with their own memory collections and their own social cognition module collection. Every step SHALL start on an empty bus database that belongs to the study. The runner SHALL flush only the study's own database numbers, and SHALL refuse a plan whose database numbers include the operator's.
 
 #### Scenario: Two lines
 - **WHEN** branch 1 and accumulate 1 have each run a viewing
@@ -44,7 +44,7 @@ It SHALL compare branch k against branch 0, branch 0 against the repeat, and acc
 - expected nulls for faculties without an input channel.
 
 #### Scenario: Paused time does not dilute the rate
-- **WHEN** a viewing includes a Sleep replay window during which the programme was paused
+- **WHEN** a viewing includes a sleep module replay window during which the programme was paused
 - **THEN** the broadcast rate is computed over unpaused programme time only
 
 #### Scenario: A comparison without enough overlap
@@ -54,7 +54,7 @@ It SHALL compare branch k against branch 0, branch 0 against the repeat, and acc
 ## ADDED Requirements
 
 ### Requirement: The seed is the entity at the moment it is born
-The study SHALL gestate one being in the local stimulus source with automatic maturation. It SHALL preserve that being once the maturation transition has completed, and SHALL use that preservation as the start of every branch step and of the repeat. The seed SHALL record the stimulus source's time at maturation.
+The study SHALL gestate one entity in the local stimulus source with automatic maturation. It SHALL preserve that entity once the maturation transition has completed, and SHALL use that preservation as the start of every branch step and of the repeat. The seed SHALL record the stimulus source's time at maturation.
 
 #### Scenario: Maturation needs no operator
 - **WHEN** the seed's maturation gate passes

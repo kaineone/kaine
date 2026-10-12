@@ -101,7 +101,7 @@ async def test_cues_phantasia_and_reinjects():
         enabled=True, mnemos=mnemos, phantasia=phantasia, reinject=_reinject
     )
     assert result.success is True
-    # World model cued once per cross-period seed (2 seeds).
+    # world model cued once per cross-period seed (2 seeds).
     assert phantasia.seeds == ["st:0", "ep:0"]
     # 2 seeds x 2 scenarios each = 4 consumed + re-injected.
     assert result.metadata["scenarios_consumed"] == 4
@@ -116,7 +116,7 @@ async def test_phantasia_absent_is_noop_cue():
     assert result.success is True
     assert "no-op" in result.metadata["phantasia_cue"]
     assert result.metadata["scenarios_consumed"] == 0
-    # Cross-period selection still happened even with World model absent.
+    # Cross-period selection still happened even with the world model module absent.
     assert result.metadata["distinct_periods"] >= 2
 
 

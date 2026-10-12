@@ -10,7 +10,7 @@ First boot is operator-supervised by default. The shipped `config/kaine.toml` tu
 
 Read the operator-responsibility items in [Security and privacy](../13-security-and-privacy.md) before proceeding.
 
-The shipped `config/kaine.toml` has `[security.state_encryption] enabled = true`. If no encryption key is present, the cycle refuses to boot. The shipped `[nexus].access` is `"open"`, so anyone who can reach Dashboard can view and control the entity without signing in; setting `access = "token"` restores the operator token and session sign-in. You can override the access mode at runtime with `KAINE_NEXUS_ACCESS`. Decide whether those defaults are appropriate for your deployment.
+The shipped `config/kaine.toml` has `[security.state_encryption] enabled = true`. If no encryption key is present, the cycle refuses to boot. The shipped `[nexus].access` is `"open"`, so anyone who can reach the dashboard can view and control the entity without signing in; setting `access = "token"` restores the operator token and session sign-in. You can override the access mode at runtime with `KAINE_NEXUS_ACCESS`. Decide whether those defaults are appropriate for your deployment.
 
 ### Verify preconditions
 
@@ -37,7 +37,7 @@ KAINE_CYCLE_OPERATOR_PRESENT=1 KAINE_PROFILE=thesis_test python -m kaine.cycle
 # or: KAINE_CYCLE_OPERATOR_PRESENT=1 python -m kaine.cycle --profile thesis_test
 ```
 
-`thesis_test` turns on seven modules: Interoception (interoception), Sequence (temporal prediction), Vision (foveated vision), Audition (raw sound as prediction error, speech-to-text off), Affect (the affective core), Sleep (fatigue-triggered sleep, voice alignment off), and Language (the output-only language organ with a self-initiated voice). It turns every other module off, including Effectors, Vocal, Self-model, Episodic memory, Planning, Social cognition, World model, Perceptual locus, Embodiment, and Recorder. It also sets `[perception_feed]` to `mode = "seeded"` with `seed = 0`, `[topos].foveation = true`, `[chronos].forward_prediction = true`, `[audition].transcription_enabled = false`, `[audition].general_audition = true`, and `[volition].policy = "self_initiated_report"` with `drive_initiative = false` and `sig_expiry_s = 300.0`. Every other value (organ model, rates, encryption, speech-to-text model, World model backend and the rest) comes from the shipped `config/kaine.toml`.
+`thesis_test` turns on seven modules: the interoception module (interoception), the sequence module (temporal prediction), the vision module (foveated vision), the audition module (raw sound as prediction error, speech-to-text off), the affect module (the affective core), the sleep module (fatigue-triggered sleep, voice alignment off), and the language module (the output-only language organ with a self-initiated voice). It turns every other module off, including the effectors, vocal, self-model, episodic memory, planning, social cognition, world model, perceptual locus, embodiment and recorder modules. It also sets `[perception_feed]` to `mode = "seeded"` with `seed = 0`, `[topos].foveation = true`, `[chronos].forward_prediction = true`, `[audition].transcription_enabled = false`, `[audition].general_audition = true`, and `[volition].policy = "self_initiated_report"` with `drive_initiative = false` and `sig_expiry_s = 300.0`. Every other value (organ model, rates, encryption, speech-to-text model, world model backend and the rest) comes from the shipped `config/kaine.toml`.
 
 For the full overlay, see `config/profiles/thesis_test.toml`. For how profile resolution works, see [Configuration](../appendix-a-configuration/README.md).
 
@@ -64,7 +64,7 @@ mundus     = false  # held module (embodiment)
 echo       = false  # test infrastructure; off by default
 ```
 
-The project keeps the held modules off until the base-thesis test has a result, and Effectors has no effector on first boot. An operator who wants to explore a held module can enable it individually (see [Day-to-day operation](../06-operation/README.md)), as a deliberate departure from the project default.
+The project keeps the held modules off until the base-thesis test has a result, and the effectors module has no effector on first boot. An operator who wants to explore a held module can enable it individually (see [Day-to-day operation](../06-operation/README.md)), as a deliberate departure from the project default.
 
 > Your per-install choices, including the profile, live in `config/kaine.operator.toml` and your launch environment, and they are never committed.
 
@@ -78,9 +78,9 @@ python -m kaine.nexus
 
 The dashboard starts on `http://127.0.0.1:8088/diagnostics/`. With the cycle not yet up, the page reports `cycle_status: not running`.
 
-The shipped `[nexus].access` is `"open"`, so no sign-in is needed. You can override the access mode with `KAINE_NEXUS_ACCESS` (`open` or `token`), make the dashboard read-only with `KAINE_NEXUS_READ_ONLY=1`, or add Tailscale hostnames with `KAINE_NEXUS_EXTRA_HOSTS`. To require an operator token or to serve Dashboard over your tailnet, see [Opening Dashboard](../05-dashboard.md).
+The shipped `[nexus].access` is `"open"`, so no sign-in is needed. You can override the access mode with `KAINE_NEXUS_ACCESS` (`open` or `token`), make the dashboard read-only with `KAINE_NEXUS_READ_ONLY=1`, or add Tailscale hostnames with `KAINE_NEXUS_EXTRA_HOSTS`. To require an operator token or to serve the dashboard over your tailnet, see [opening the dashboard](../05-dashboard.md).
 
-If no Redis password is configured yet, Dashboard exits with a message naming `bash scripts/redis-bootstrap.sh` instead of starting.
+If no Redis password is configured yet, the dashboard exits with a message naming `bash scripts/redis-bootstrap.sh` instead of starting.
 
 ### Start the cycle
 
@@ -98,14 +98,14 @@ The entrypoint:
 3. Builds the module registry from `[modules]` toggles.
 4. Installs the state encryptor, and refuses to boot if encryption is enabled but no key is found.
 5. Calls `module.initialize()` on every enabled module.
-6. Writes `state/cycle/runtime.json` for Dashboard.
+6. Writes `state/cycle/runtime.json` for the dashboard.
 7. Begins ticking at `[cycle].processing_rate_hz` (default `10.0` Hz, 100 ms per tick).
 
 In the operator-supervised path, the cycle refuses to start unless `KAINE_CYCLE_OPERATOR_PRESENT=1` is set. The preflight script `scripts/first-boot.sh` reads its own signal, `KAINE_FIRST_BOOT_OPERATOR_PRESENT`; the running cycle reads `KAINE_CYCLE_OPERATOR_PRESENT`. There are two other boot paths. An unsupervised research run starts only when its research gate verifies, among other conditions, that preservation, the welfare response, full logging and a preserve-and-revive round trip work on this install (see [For researchers](../14-for-researchers.md)). An opt-in unattended start must pass nine conditions at every boot and exits with code `6` when one fails.
 
 If the organ returns no content, the cycle refuses boot and exits with code `9` unless `KAINE_ALLOW_MUTE_ORGAN=1` is set.
 
-`Ctrl-C` shuts the cycle and every module down cleanly. Do not `kill -9` the process during a Sleep phase; partial voice-alignment adapter writes are unsafe.
+`Ctrl-C` shuts the cycle and every module down cleanly. Do not `kill -9` the process during a sleep phase; partial voice-alignment adapter writes are unsafe.
 
 ### Watch the first ticks
 
@@ -118,7 +118,7 @@ Open `http://127.0.0.1:8088/diagnostics/` and confirm:
 
 ### Take a snapshot
 
-After the first session, and before enabling a held module or Effectors, consider taking a snapshot. Snapshots are created from inside the cycle process with `ForkManager.snapshot(registry, label=...)`; see [Forks and merges](../12-forks-and-merges.md) for the workflow.
+After the first session, and before enabling a held module or the effectors module, consider taking a snapshot. Snapshots are created from inside the cycle process with `ForkManager.snapshot(registry, label=...)`; see [Forks and merges](../12-forks-and-merges.md) for the workflow.
 
 ## Enabling a module after first boot
 
@@ -129,8 +129,8 @@ See [Day-to-day operation](../06-operation/README.md). Each additional module is
 - It calls no cloud service at runtime. All inference and cognitive processing is local, and model weights are downloaded once during setup.
 - It does not record raw audio or video to disk. Live perception streams pass through processing in memory and are released. See [Security and privacy](../13-security-and-privacy.md#raw-perception-never-touches-disk).
 - It does not start itself unless you opt in. Every launch needs the operator-present signal (`KAINE_CYCLE_OPERATOR_PRESENT=1`), a passing research gate in an unsupervised research run, or an opt-in unattended start that passes nine conditions at every boot, and the cycle refuses to boot if none holds. See [For researchers](../14-for-researchers.md).
-- It does not act unless Effectors is enabled and the operator has explicitly added shell or file-write whitelist entries.
+- It does not act unless the effectors module is enabled and the operator has explicitly added shell or file-write whitelist entries.
 
 ## Roadmap and hardware portability
 
-Longer-term directions, among them a distributed substrate, lighter hardware tiers and RISC-V, are covered in the [Roadmap](../appendix-d-roadmap.md) and [Hardware](../03-hardware/README.md) chapters. Some of the portability work is already built: `sherpa-onnx` speech for Audition and Vocal, NumPy engines for Planning and World model, and containerized voice-alignment training.
+Longer-term directions, among them a distributed substrate, lighter hardware tiers and RISC-V, are covered in the [Roadmap](../appendix-d-roadmap.md) and [Hardware](../03-hardware/README.md) chapters. Some of the portability work is already built: `sherpa-onnx` speech for the audition and vocal modules, NumPy engines for the planning and world model modules, and containerized voice-alignment training.

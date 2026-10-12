@@ -134,7 +134,7 @@ def voice_alignment_thresholds_from_config(
 
 
 def adapter_dir_for(config: dict | None, state_root: Path) -> Path:
-    """Return the configured Sleep adapter output directory, or the default.
+    """Return the configured sleep module's adapter output directory, or the default.
 
     Reads ``[hypnos.voice_alignment].adapter_output_dir``. If the key is
     missing, empty, or equal to the canonical default ``state/hypnos/adapters``,
@@ -176,8 +176,8 @@ def voice_paths_for(config: dict | None, state_root: Path) -> VoicePaths:
     ``[hypnos.voice_alignment].intent_log_path``. A missing or empty value, or
     the canonical default ``state/lingua/intent_expression.jsonl``, maps to the
     default under ``state_root``; any other value is resolved to an absolute
-    path. The returned ``intent_logs`` are de-duplicated, with the Language path
-    first. ``measures_latest`` is the Sleep intent-log's sibling
+    path. The returned ``intent_logs`` are de-duplicated, with the language module's path
+    first. ``measures_latest`` is the sleep module's intent-log's sibling
     ``voice_measures_latest.json``. Pure and fail-closed: any error returns the
     default paths flagged as unreadable.
     """
@@ -225,7 +225,7 @@ class DivergenceAssessment:
     """Result of :func:`assess_divergence`.
 
     ``signals`` carries the individual evidence used for the verdict so the
-    decommission manifest and the Dashboard panel can show *why* (non-content:
+    decommission manifest and the dashboard panel can show *why* (non-content:
     booleans, counts, a p-value — never any cognitive text).
     """
 
@@ -235,7 +235,7 @@ class DivergenceAssessment:
 
 
 def _read_self_model(self_model_path: Path) -> dict[str, Any] | None:
-    """Read + (transparently) decrypt the Self-model self-model JSON, or None.
+    """Read + (transparently) decrypt the self-model JSON, or None.
 
     We parse the raw JSON dict (after passing it through the active state
     encryptor's ``maybe_decrypt``) rather than through ``SelfModelDocument.from_json``,
@@ -266,7 +266,7 @@ def _read_self_model(self_model_path: Path) -> dict[str, Any] | None:
 
 
 def _read_consolidation_divergence(path: Path) -> dict[str, Any] | None:
-    """Read the latest consolidation-divergence metric Sleep persisted, or None.
+    """Read the latest consolidation-divergence metric the sleep module persisted, or None.
 
     Pure + guarded — any error (missing file, bad JSON, decrypt failure) yields
     None rather than raising, so a fresh entity (no sleep yet) simply has no
@@ -462,7 +462,7 @@ def _has_spoken(intent_logs: tuple[Path, ...]) -> bool:
     """
     for live in intent_logs:
         try:
-            # Read the live log BEFORE listing its corpus. Sleep may rotate the
+            # Read the live log BEFORE listing its corpus. The sleep module may rotate the
             # live log into intent_log/ at any moment; a corpus listed first
             # would miss a file rotated in while the live log was being read.
             if _file_shows_speech(live):
@@ -485,7 +485,7 @@ def _has_spoken(intent_logs: tuple[Path, ...]) -> bool:
 
 
 def _read_voice_measures_latest(measures_latest: Path) -> dict[str, Any] | None:
-    """Read the latest voice measures record Sleep persisted, or None.
+    """Read the latest voice measures record the sleep module persisted, or None.
 
     Pure and guarded; missing / unreadable / malformed records return None so
     the protective arm treats a spoken-but-unmeasured being as diverged.
@@ -570,7 +570,7 @@ def assess_divergence(
     latest = ind.get("latest")
 
     # --- Primary (organ-level): consolidation divergence ------------------
-    # The cheap, continuous companion to the permutation test: Sleep surfaces
+    # The cheap, continuous companion to the permutation test: the sleep module surfaces
     # the breadth (rate) and depth (magnitude) of how the entity's conditioned
     # output diverges from its bare language organ, every sleep.
     consolidation = _read_consolidation_divergence(

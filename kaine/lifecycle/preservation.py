@@ -100,7 +100,7 @@ async def _capture_module_state(module: Any) -> dict[str, Any]:
     """Capture one module's full preservation state.
 
     Starts from the synchronous ``serialize()`` and, when the module exposes the
-    async ``export_preservation_state`` hook (Episodic memory), merges its richer capture
+    async ``export_preservation_state`` hook (the episodic memory module), merges its richer capture
     in. Any failure propagates (fail-loud) — a module that cannot be captured
     aborts the whole preservation.
     """
@@ -124,7 +124,7 @@ async def _capture_module_state(module: Any) -> dict[str, Any]:
     return state
 
 
-# Development files that travel with the entity. The viability verdict is not one:
+# Developmental phase files that travel with the entity. The viability verdict is not one:
 # it already rides inside the progress file.
 BUNDLED_GESTATION_FILES = ("gestation_progress.json", "gestation_readout.json")
 GESTATION_STATE_FILES = BUNDLED_GESTATION_FILES + ("gestation_viability.json",)
@@ -152,8 +152,8 @@ async def preserve_live(
 
     Steps:
       1. Capture every module's state (serialize + async preservation exports).
-         Episodic memory carries its full memory store; a failure here raises.
-      2. Flush World model learned weights to the checkpoint (when persistence is
+         The episodic memory module carries its full memory store; a failure here raises.
+      2. Flush the world model module's learned weights to the checkpoint (when persistence is
          on) and record honestly whether the world model was captured.
       3. Save a real fork snapshot of the captured states (encrypted at rest).
       4. Write a self-contained, encrypted preservation bundle (snapshot copy +
@@ -215,7 +215,7 @@ async def preserve_live(
     for module in modules:
         module_states[module.name] = await _capture_module_state(module)
 
-    # --- 2. Flush World model learned weights + honest capture record -----
+    # --- 2. Flush the world model module's learned weights + honest capture record -----
     world_model_captured = False
     phantasia_checkpoint: Path | None = None
     for module in modules:
@@ -232,7 +232,7 @@ async def preserve_live(
                     phantasia_checkpoint = Path(ckpt)
 
     # --- 3. Save a real fork snapshot of the live registry --------------
-    # Voice adapters: prefer a module-exposed accessor (Sleep), else fall back
+    # Voice adapters: prefer a module-exposed accessor (the sleep module), else fall back
     # to whatever the captured state recorded. Adapter *files* live on disk under
     # state/sleep/adapters and are copied by the decommission/transfer bundle;
     # the snapshot records their paths so revive knows the individual has them.
@@ -280,7 +280,7 @@ async def preserve_live(
     # --- 4. Write the encrypted, self-contained bundle ------------------
     # The bundle is made structurally consistent with the decommission backup:
     # all entity-interior content (the snapshot — which holds the WHOLE
-    # individual incl. memories — plus world model learned weights) is tarred and,
+    # individual incl. memories — plus the world model module's learned weights) is tarred and,
     # when state encryption is enabled, the tar is encrypted via StateEncryptor;
     # the plaintext originals are removed on success. Only the NON-sensitive
     # manifest stays loose. The shipped configuration enables encryption (and
@@ -316,7 +316,7 @@ async def preserve_live(
         _chmod_quietly(bundle_dir / "snapshot.json", 0o600)
         inventory.append(f"snapshot.json (preservation snapshot {snap.id})")
 
-        # World model learned-weight checkpoint (only when actually captured).
+        # The world model module's learned-weight checkpoint (only when actually captured).
         if phantasia_checkpoint is not None and phantasia_checkpoint.is_file():
             (bundle_dir / "phantasia").mkdir(mode=0o700, exist_ok=True)
             _chmod_quietly(bundle_dir / "phantasia", 0o700)
@@ -341,14 +341,14 @@ async def preserve_live(
                 )
 
         # Developmental stage: when present, copy it into the bundle so revive
-        # can restore development/embodied state before stage resolution runs.
+        # can restore developmental-phase/embodied state before stage resolution runs.
         stage_source_path = stage_path
         if stage_source_path is not None and stage_source_path.is_file():
             shutil.copy2(stage_source_path, bundle_dir / "stage.json")
             _chmod_quietly(bundle_dir / "stage.json", 0o600)
             inventory.append("stage.json (developmental stage)")
 
-        # Development progress and readout: awake time persists with the entity.
+        # Developmental progress and readout: awake time persists with the entity.
         if stage_source_path is not None:
             gestation_copied = False
             for name in BUNDLED_GESTATION_FILES:
@@ -568,7 +568,7 @@ async def revive(bundle: Path, registry: Any) -> ForkSnapshot:
     for name, state in snap.modules.items():
         module = by_name[name]
         # A module that declares a captured-state key routes revive through its
-        # async importer (e.g. Episodic memory -> "memory_state", Social cognition -> "profiles").
+        # async importer (e.g. the episodic memory module -> "memory_state", the social cognition module -> "profiles").
         importer = getattr(module, "import_preservation_state", None)
         key = getattr(module, "preservation_state_key", None)
         if key and key in state and callable(importer):
@@ -581,7 +581,7 @@ async def revive(bundle: Path, registry: Any) -> ForkSnapshot:
                 ) from exc
             continue
 
-        # World model learned weights: restore from the bundled checkpoint blob.
+        # The world model module's learned weights: restore from the bundled checkpoint blob.
         wm_record = state.get("world_model_capture")
         if (
             wm_record
@@ -757,7 +757,7 @@ def _extract_stage_from_bundle(bundle: Path) -> bytes | None:
 
 
 def set_aside_gestation_files(dest_dir: Path) -> list[Path]:
-    """Move any development state files in ``dest_dir`` aside (renamed, never deleted) so a revived being never inherits another entity's progress, readout baselines or verdict; return the new paths."""
+    """Move any developmental phase state files in ``dest_dir`` aside (renamed, never deleted) so a revived entity never inherits another entity's progress, readout baselines or verdict; return the new paths."""
     import uuid
 
     moved: list[Path] = []
@@ -773,7 +773,7 @@ def set_aside_gestation_files(dest_dir: Path) -> list[Path]:
 
 
 def extract_bundle_gestation(bundle: Path, dest_dir: Path) -> list[str]:
-    """Restore the bundled development files into ``dest_dir``; return the names restored.
+    """Restore the bundled developmental phase files into ``dest_dir``; return the names restored.
 
     Opens the bundle tar as :func:`_extract_stage_from_bundle` does. A legacy
     loose layout or a bundle without a ``gestation/`` member restores nothing.

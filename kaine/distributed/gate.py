@@ -55,7 +55,7 @@ class CapabilityVerifier(Protocol):
 
     Returns ``passed=False`` when the artifact degrades the base model's
     capabilities beyond the configured threshold (or re-introduces refusal
-    conditioning, for an abliteration artifact) — the same veto Sleep applies
+    conditioning, for an abliteration artifact) — the same veto the sleep module applies
     to its own in-house training, re-run on trusted hardware.
     """
 

@@ -2,9 +2,9 @@
 
 KAINE's goal is that the same mind runs on hardware from refurbished phones and single-board computers up to multi-GPU servers, at lower speed on weak hardware but with all modules present. `docs/07-deployment/README.md` says the mind "can inhabit hardware ranging from a retired phone to a datacenter" and that Tier 0 needs no torch. An audit of the code on 2026-09-22 found that this is not true today:
 
-- **Six modules have no backend without torch or JAX.** They are Interoception and Sequence (CfC networks), Episodic memory, Social cognition and Sleep (each builds its own MiniLM embedder) and Planning and World model (JAX). Torch, transformers, sentence-transformers, ncps and pynvml are base dependencies, so `pip install` fails outright on 32-bit ARM and Termux.
-- **Tier 0 switches off five modules and still needs torch.** It disables Vision, Audition, Vocal, Social cognition and World model, contradicting both "no torch" and "profiles only bound backends".
-- **Slow hardware silently changes the dynamics.** When a cycle overruns, the next tick starts at once, so on slow hardware the entity simply gets fewer ticks per subjective second. `EntityClock` time dilation could preserve the dynamics, but only `time_scale` set by hand does that: no profile sets it, nothing adjusts it from measured slip, and several modules (Sequence, Planning, Language and others) read the wall clock directly.
+- **Six modules have no backend without torch or JAX.** They are the interoception and sequence modules (CfC networks), the episodic memory, social cognition and sleep modules (each builds its own MiniLM embedder) and the planning and world model modules (JAX). Torch, transformers, sentence-transformers, ncps and pynvml are base dependencies, so `pip install` fails outright on 32-bit ARM and Termux.
+- **Tier 0 switches off five modules and still needs torch.** It disables the vision, audition, vocal, social cognition and world model modules, contradicting both "no torch" and "profiles only bound backends".
+- **Slow hardware silently changes the dynamics.** When a cycle overruns, the next tick starts at once, so on slow hardware the entity simply gets fewer ticks per subjective second. `EntityClock` time dilation could preserve the dynamics, but only `time_scale` set by hand does that: no profile sets it, nothing adjusts it from measured slip, and several modules (the sequence, planning and language modules and others) read the wall clock directly.
 - **The tier recommender and the install:**
   - The recommender ignores memory on accelerator hosts, and nothing calls it from the installer or wizard (`host-fit-provisioning` covers this).
   - The installer assumes an existing checkout and installs no services or models.
@@ -27,13 +27,13 @@ This change is the program of record; each phase lands as its own change once it
   - A `curl | sh` bootstrap for x86_64 and aarch64 Linux that fetches a release, installs system packages and Python 3.12, installs the extras for the enabled modules, downloads models, and launches the wizard.
   - The wizard applies a tier profile and `time_scale` on operator confirmation.
 - **Phase 2 — torch-free core and faithful slowness.**
-  - NumPy CfC implementations for Interoception and Sequence, verified against the torch path.
-  - One shared ONNX (or static model2vec) embedder for Episodic memory, Social cognition and Sleep.
+  - NumPy CfC implementations for the interoception and sequence modules, verified against the torch path.
+  - One shared ONNX (or static model2vec) embedder for the episodic memory, social cognition and sleep modules.
   - sherpa-onnx speech backends (streaming zipformer or Moonshine for input; Kokoro, Piper or KittenTTS for output).
   - A `time_scale` controller driven by measured slip, and EntityClock injection into every module, so weak hardware slows subjective time instead of distorting it.
-- **Phase 3 — JAX-free reasoning and phones.** NumPy active inference for Planning, a small NumPy world model for World model, ONNX vision, a Termux package, and remote-embedder and CfC offload so a Pi Zero 2 W can serve as a thin client.
+- **Phase 3 — JAX-free reasoning and phones.** NumPy active inference for the planning module, a small NumPy world model for the world model module, ONNX vision, a Termux package, and remote-embedder and CfC offload so a Pi Zero 2 W can serve as a thin client.
 - **Phase 4 — the high end and residency.** Module residency and model swapping for 8 GB unified hosts (the existing `module-residency-and-speech-tiers` proposal), arm64 container images, and multi-node/SLURM placement.
-- **GUI installer.** After Phase 1: a browser-based setup served by Dashboard that drives the same wizard.
+- **GUI installer.** After Phase 1: a browser-based setup served by the dashboard that drives the same wizard.
 - **Model ladder.** Each tier maps to a vetted model per function, with one abliterated Qwen3.5 family across tiers (2B to 397B-A17B). The research table, sources and licence red flags are in `design.md`, including avoiding the NVIDIA Open Model License streaming speech models, which terminate on guardrail removal. The original ARMv6 Pi Zero is supported only as a sensor or remote-perception peripheral.
 
 ## Capabilities

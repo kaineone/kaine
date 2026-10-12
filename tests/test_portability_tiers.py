@@ -707,7 +707,7 @@ async def test_null_emotion_classifier_is_disabled_but_transcribes():
 
 
 # --------------------------------------------------------------------------
-# 2.3 Episodic memory sqlite-vec backend selection (behind the storage interface)
+# 2.3 the episodic memory module's sqlite-vec backend selection (behind the storage interface)
 # --------------------------------------------------------------------------
 
 
@@ -747,7 +747,7 @@ def _bus():
 
 
 def test_lingua_default_backend_builds_http_client_unchanged():
-    """No backend key → Language constructs its own OpenAIChatClient, as today."""
+    """No backend key → the language module constructs its own OpenAIChatClient, as today."""
     from kaine.boot import make_lingua
     from kaine.modules.lingua.client import OpenAIChatClient
 
@@ -773,7 +773,7 @@ def test_lingua_llama_cpp_backend_degrades_to_http_when_dep_absent():
 
 
 # --------------------------------------------------------------------------
-# 1.4 Backend-load failures surface on the Dashboard health surface
+# 1.4 Backend-load failures surface on the dashboard health surface
 # --------------------------------------------------------------------------
 
 

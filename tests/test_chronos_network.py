@@ -80,7 +80,7 @@ def test_input_size_mismatch_rejected(backend):
 def test_force_cuda_ignored_chronos_stays_on_cpu(backend, monkeypatch):
     monkeypatch.setenv("KAINE_FORCE_DEVICE", "cuda")
     net = _net(backend=backend, input_size=24, units=32, seed=0)
-    # Sequence pins to cpu regardless of the env override
+    # The sequence module pins to cpu regardless of the env override
     assert net.device == "cpu"
 
 

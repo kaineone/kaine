@@ -32,7 +32,7 @@ differ.
    — likely (a) first, (b) as a later phase.
 3. **Arousal → auditory window** — arousal narrows or widens the auditory
    attentional window, a distinct affective→perceptual coupling (not the
-   Workspace salience-selection window). Default sign and mapping are a tuning
+   the workspace's salience-selection window). Default sign and mapping are a tuning
    parameter, not an asserted result — as with the fovea size. **Decision:**
    arousal-driven, sign tunable.
 4. **Speech gating** — keep an explicit voice-activity / speech detector to gate
@@ -56,7 +56,7 @@ differ.
   self-heard capture so the entity never perceives its own voice as external
   input.
 - **Architecture boundary.** The arousal value reaches Audition through an
-  injected provider seam (like the affect / vision-arousal seams); Audition does
+  injected provider seam (like the vision and affect modules' arousal seams); the audition module does
   not import the workspace.
 
 ## Phasing
@@ -68,7 +68,7 @@ differ.
   attention schema for sound (a predicted next attended stream).
 - **Phase 3** — spatial auditory localization (a content-free direction), and the
   embodiment tie-in (shared "gaze/attention direction" with vision, per the
-  foveation Embodiment note).
+  foveation embodiment module note).
 
 ## Amendment (2026-10-05): encoder selection, persistence and the self-supervised encoders
 
@@ -96,7 +96,7 @@ The buffer summary stays a statistical descriptor. No raw audio or raw embedding
 
 ### Sleep
 
-Audition gains the same `hypnos.out` consumer Vision has. It sets `suspended` on both forward models while asleep. Inference continues and only adaptation pauses.
+The audition module gains the same `hypnos.out` consumer the vision module has. It sets `suspended` on both forward models while asleep. Inference continues and only adaptation pauses.
 
 ### Self-supervised encoders
 
@@ -108,7 +108,7 @@ Audition gains the same `hypnos.out` consumer Vision has. It sets `suspended` on
 
 **Pooling.** Each encoder's frame tokens are mean-pooled to one 768-dimension embedding per hop.
 
-**Normalisation.** The bake-off decides whether to L2-normalise. The Vision precedent is not to; the spectral encoder does today.
+**Normalisation.** The bake-off decides whether to L2-normalise. The vision module's precedent is not to; the spectral encoder does today.
 
 **Energy channel.** RMS level in dBFS, computed on the same window, is published on `audition.perception` as `energy_dbfs`. It is a scalar, not a vector, so the privacy filter is unaffected.
 
@@ -125,7 +125,7 @@ Audition gains the same `hypnos.out` consumer Vision has. It sets `suspended` on
 
 ### Bake-off
 
-`scripts/bench_audition_encoders.py` runs offline. It never boots an entity and never touches entity data. It replays the seeded, playlist and stimulus source feeds through each encoder and Audition's own salience path, and reports:
+`scripts/bench_audition_encoders.py` runs offline. It never boots an entity and never touches entity data. It replays the seeded, playlist and stimulus source feeds through each encoder and the audition module's own salience path, and reports:
 1. how well the normalised error separates true acoustic events (onsets, scene changes, the seeded surprises) from steady state, as ROC AUC against the feed's event marks;
 2. false alerts per minute under stationary noise;
 3. CPU and GPU latency per hop;

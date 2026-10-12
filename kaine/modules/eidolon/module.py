@@ -172,7 +172,7 @@ class Eidolon(BaseModule):
             )
         )
         # Publish an initial self-model snapshot to eidolon.out so a bus-mediated
-        # consumer (a split-host Language) can seed its persona at boot rather than
+        # consumer (a split-host language module) can seed its persona at boot rather than
         # waiting for the first sleep-driven update. On a fresh start the model is
         # empty, so this seeds the same minimal persona as the single-host default.
         try:
@@ -458,7 +458,7 @@ class Eidolon(BaseModule):
                                 self._model
                             )
                             # Publish updated self-model to eidolon.out so
-                            # Dashboard diagnostics and sidecar can read the fields.
+                            # the dashboard diagnostics and sidecar can read the fields.
                             await self._publish_self_model()
                 else:
                     await asyncio.sleep(0.05)
@@ -488,10 +488,10 @@ class Eidolon(BaseModule):
         """Publish the populated self-model fields to eidolon.out.
 
         This is the bus-mediated self-model snapshot other trusted-host modules
-        (notably Language's persona seeding) consume in place of an in-process
-        Self-model reference, so the language organ can run in a separate process /
+        (notably the language module's persona seeding) consume in place of an in-process
+        self-model module reference, so the language organ can run in a separate process /
         host over the shared bus (``distributed-deployment``). ``name`` is
-        included so a split Language seeds the same persona as the single-host
+        included so a split language module seeds the same persona as the single-host
         default.
         """
         m = self._model

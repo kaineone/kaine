@@ -119,9 +119,9 @@ class RegulationThresholds:
 @dataclass(frozen=True)
 class MaturationConfig:
     """The ``[developmental_stage]`` config block. Ships ``enabled = false``
-    (ship-inert, matching the Supervisor/Embodiment convention): a false value runs the
+    (ship-inert, matching the supervisor and embodiment module convention): a false value runs the
     entity un-staged exactly as today. Defaults are conservative — a real
-    development takes many sleep cycles and substantial lived time."""
+    developmental phase takes many sleep cycles and substantial lived time."""
 
     enabled: bool = False
     min_sleep_cycles: int = 5
@@ -289,8 +289,8 @@ def _evaluate_c2(
     faculties: Faculties = Faculties(),
 ) -> ConditionResult:
     """C2 — sleep and consolidation evidence, required only when the matching
-    faculties are present. Sleep is required iff Sleep is present;
-    consolidation is required iff both Sleep and World model are present.
+    faculties are present. The sleep module is required iff the sleep module is present;
+    consolidation is required iff both the sleep module and the world model module are present.
     Fail-closed on a missing required signal; the detail always names what was
     required. When neither sleep nor consolidation is required, C2 is met as
     not applicable."""
@@ -372,16 +372,16 @@ def evaluate_readiness(
     )
 
 
-# --- Embodiment-availability guard + maturation decision ------------------------
+# --- embodiment-availability guard + maturation decision ------------------------
 
 
 def embodiment_available(
     *, mundus_enabled: bool, operator_approved: bool, reachable: bool
 ) -> bool:
-    """Whether the entity can actually be born into an embodied world: Embodiment's
+    """Whether the entity can actually be born into an embodied world: the embodiment module's
     existing two-layer gate (``[mundus].enabled`` config layer AND
     ``KAINE_MUNDUS_OPERATOR_APPROVED=1`` operator layer) AND reachability. This
-    is READ as a precondition; the gate never flips Embodiment on."""
+    is READ as a precondition; the gate never flips the embodiment module on."""
     return bool(mundus_enabled) and bool(operator_approved) and bool(reachable)
 
 
@@ -414,10 +414,10 @@ def decide_birth(
     """Combine developmental readiness with the embodiment-availability guard.
 
     - not developmentally ready               -> keep gestating (report unmet Cn);
-    - with Embodiment: ready but embodiment unavailable -> HOLD in the stimulus source, loud
+    - with the embodiment module: ready but embodiment unavailable -> HOLD in the stimulus source, loud
       repeated ``stage.birth.ready{awaiting_embodiment}`` (never born into an
       absent world, never a silent stall);
-    - without Embodiment: ready skips the embodiment guard and maturations into the
+    - without the embodiment module: ready skips the embodiment guard and matures into the
       perceptual world (``born_into_perceptual_world``);
     - ready ^ available but an operator ack is required and absent (supervised
       shakedown) -> HOLD awaiting the ack;

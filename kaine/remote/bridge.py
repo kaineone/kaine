@@ -62,14 +62,14 @@ log = logging.getLogger(__name__)
 
 LINGUA_EXTERNAL_STREAM = "lingua.external"
 AUDITION_STREAM = "audition.out"
-# Affect publishes via BaseModule.publish (source="thymos"), so both the
+# The affect module publishes via BaseModule.publish (source="thymos"), so both the
 # `thymos.state` heartbeat and the `thymos.emotion` change events land on the
 # single `thymos.out` stream. Both carry dimensional affect nested under the
 # payload `"state"` key ({valence, arousal, dominance}) and a discrete label
 # under `"emotion"`. The /affect channel tails this stream read-only.
 THYMOS_STREAM = "thymos.out"
 THYMOS_AFFECT_TYPES = ("thymos.state", "thymos.emotion")
-# Coalesce affect forwarding to at most ~10/s (keep-latest) so a chatty affect
+# Coalesce affect forwarding to at most ~10/s (keep-latest) so a chatty affect module
 # can't flood mood-ring clients. Lines arriving sooner than this are dropped.
 AFFECT_MIN_INTERVAL_S = 0.1
 
@@ -101,7 +101,7 @@ class RemoteBridgeConfig:
     # Optional shared-secret. When non-empty, clients must present it as a
     # `?token=` query parameter (or `Authorization: Bearer`) at handshake.
     token: str = ""
-    # Latest-wins ceiling for remote frames handed to Vision.
+    # Latest-wins ceiling for remote frames handed to the vision module.
     video_max_fps: float = 4.0
     # Remote PCM format (int16 mono). Mirrors LiveMicConfig defaults.
     audio_sample_rate: int = 16000
@@ -207,7 +207,7 @@ class NetworkAudioStream:
 
 
 class SpeechTapPlayer:
-    """Vocal `Player` that broadcasts each synthesized clip to /speech clients.
+    """The vocal module `Player` that broadcasts each synthesized clip to /speech clients.
 
     Composed via ``Vox.add_playback_tap`` — the local player still runs.
     Per-client bounded queues; when a slow client falls behind, the oldest
@@ -737,7 +737,7 @@ class RemoteBridge:
         Tails ``thymos.out`` (both the ``thymos.state`` heartbeat and the
         ``thymos.emotion`` change events) and fans out compact JSON to mood-ring
         subscribers. Read-only: this loop never writes to the bus or disk.
-        Coalesced to <=~10/s so a chatty affect can't flood clients."""
+        Coalesced to <=~10/s so a chatty affect module can't flood clients."""
         try:
             latest = await self._bus.client.xrevrange(THYMOS_STREAM, count=1)
         except Exception:
@@ -795,7 +795,7 @@ class RemoteBridge:
             "arousal": float(arousal),
             "ts": ts,
         }
-        # Forward the discrete emotion label only when affect actually provides
+        # Forward the discrete emotion label only when the affect module actually provides
         # one (it does on both event types via the "emotion" key).
         label = payload.get("emotion")
         if isinstance(label, str) and label:

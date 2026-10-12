@@ -1,11 +1,11 @@
 ## MODIFIED Requirements
 
 ### Requirement: Vision publishes topos.report for each processed frame
-Vision SHALL maintain a bounded, RAM-only ring buffer of the most recent frames of
-size `clip_len`. Vision SHALL publish a `topos.report` event to its `topos.out`
+The vision module SHALL maintain a bounded, RAM-only ring buffer of the most recent frames of
+size `clip_len`. The vision module SHALL publish a `topos.report` event to its `topos.out`
 stream when the ring buffer is full AND a clip latent is produced on the clip
 cadence (see the strided-clip requirement) — NOT once per incoming frame. Before
-the ring buffer first fills, Vision SHALL publish no `topos.report`. Each published
+the ring buffer first fills, the vision module SHALL publish no `topos.report`. Each published
 event SHALL carry `latent` (list of floats — the pooled clip embedding, or null
 when the embedding holds a non-finite value), `change_score` (float `>= 0`),
 `habituation_score` (float in `[0.0, 1.0]`, or null when the first finite

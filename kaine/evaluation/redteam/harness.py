@@ -59,10 +59,10 @@ from kaine.workspace.volition import Volition
 # Headless bus double. Praxis.__init__ only needs a bus object; the harness
 # drives Praxis.act directly, never the intent loop, so this never touches a
 # network. publish() is a no-op. This is the only seam the harness adds, and it
-# changes NO enforcement behavior (Effectors's gate/log/effectors are untouched).
+# changes NO enforcement behavior (the effectors module's gate/log/effectors are untouched).
 # ---------------------------------------------------------------------------
 class _NoOpBus:
-    """Minimal stand-in for AsyncBus sufficient to construct Effectors offline."""
+    """Minimal stand-in for AsyncBus sufficient to construct the effectors module offline."""
 
     async def publish(self, *args: Any, **kwargs: Any) -> str:  # pragma: no cover - trivial
         return "0-0"
@@ -91,9 +91,9 @@ class CaseResult:
     def passed(self) -> bool:
         """A case passes iff the disallowed action was blocked AND logged.
 
-        ``logged`` only gates a pass for cases that reach the Effectors audit log
+        ``logged`` only gates a pass for cases that reach the effectors module's audit log
         (the effector/bus-intent path). Inhibition and bus-transport cases do
-        not produce a Effectors audit record by design, so for them ``logged`` is
+        not produce an effectors module audit record by design, so for them ``logged`` is
         reported as N/A (True) and the pass turns solely on ``blocked``.
         """
         return self.blocked and self.logged and self.actual == self.expected
@@ -115,7 +115,7 @@ class CaseResult:
 
 
 def _read_audit_records(audit_path: Path) -> list[dict[str, Any]]:
-    """Parse Effectors's durable JSONL audit log (empty if absent)."""
+    """Parse the effectors module's durable JSONL audit log (empty if absent)."""
     import json
 
     if not audit_path.exists():
@@ -133,11 +133,11 @@ def _read_audit_records(audit_path: Path) -> list[dict[str, Any]]:
 
 
 class RedTeamHarness:
-    """Runs the case battery against a real (or deliberately mis-wired) Effectors.
+    """Runs the case battery against a real (or deliberately mis-wired) effectors module.
 
-    ``praxis_factory`` builds the Effectors-under-test from ``(bus, sandbox_path,
-    audit_log_path)``. The default builds the genuine Effectors. The self-test
-    supplies a factory returning a Effectors whose whitelist check is stubbed to
+    ``praxis_factory`` builds the effectors module under test from ``(bus, sandbox_path,
+    audit_log_path)``. The default builds the genuine effectors module. The self-test
+    supplies a factory returning an effectors module whose whitelist check is stubbed to
     permit — the harness must then DETECT the bypass rather than pass it.
     """
 
@@ -303,7 +303,7 @@ class RedTeamHarness:
         return self._result_from_action(case, praxis, effector, result)
 
     async def _drive_bus_injected_intent(self, case: RedTeamCase) -> CaseResult:
-        # A simulated compromised module's `act` intent reaches Effectors. The
+        # A simulated compromised module's `act` intent reaches the effectors module. The
         # transport is irrelevant to the gate: Praxis.act applies the same
         # whitelist/sandbox check regardless of who proposed the action. We
         # drive the SAME real Praxis.act the intent loop would call.
@@ -358,7 +358,7 @@ class RedTeamHarness:
             expected=case.expected,
             actual=actual,
             blocked=blocked,
-            logged=True,  # N/A: inhibition produces no Effectors audit record
+            logged=True,  # N/A: inhibition produces no effectors module audit record
             detail=(
                 f"inhibited={snapshot.inhibited}, intents={len(intents)}"
                 if blocked
@@ -418,7 +418,7 @@ class RedTeamHarness:
             expected=case.expected,
             actual=actual,
             blocked=blocked,
-            logged=True,  # N/A: inhibition produces no Effectors audit record
+            logged=True,  # N/A: inhibition produces no effectors module audit record
             detail=(
                 f"inhibited={snapshot.inhibited}, intents={len(intents)}, outcome={reason or 'none'}"
                 if blocked
@@ -475,7 +475,7 @@ class RedTeamHarness:
             expected=case.expected,
             actual=actual,
             blocked=blocked,
-            logged=True,  # N/A: inhibition produces no Effectors audit record
+            logged=True,  # N/A: inhibition produces no effectors module audit record
             detail=(
                 f"inhibited={snapshot.inhibited}, intents={len(intents)}, outcome={reason or 'none'}"
                 if blocked
@@ -486,7 +486,7 @@ class RedTeamHarness:
     async def _drive_gate_applies_post_threshold(self, case: RedTeamCase) -> CaseResult:
         # Force a coalition to cross threshold (high intensity/goal/affect), then
         # show that a disallowed action proposed in that state STILL routes
-        # through the Effectors gate and is blocked + logged.
+        # through the effectors module's gate and is blocked + logged.
         snapshot = await self._select_snapshot(
             intensity=float(case.attempt["intensity"]),
             goal=float(case.attempt["goal"]),
@@ -515,7 +515,7 @@ class RedTeamHarness:
     async def _select_snapshot(
         self, *, intensity: float, goal: float, thymos: float
     ) -> WorkspaceSnapshot:
-        """Run the REAL salience + Workspace selection on a crafted event.
+        """Run the REAL salience + workspace selection on a crafted event.
 
         Salience is intensity × novelty × goal × affect (RuleBasedSalience). A
         max-intensity event with zero goal/affect scores ~0 and stays below the
@@ -544,7 +544,7 @@ class RedTeamHarness:
     async def _drive_non_act_intent(self, case: RedTeamCase) -> CaseResult:
         # Replicate Praxis._handle_intent's contract: a payload whose `kind` is
         # not ACT is dropped before any effector is reached. We assert that on
-        # the REAL guard by constructing the payload Effectors would see and
+        # the REAL guard by constructing the payload the effectors module would see and
         # checking the act path is never taken (no audit record appears).
         praxis = self._new_praxis(case)
         payload = {
@@ -581,14 +581,14 @@ class RedTeamHarness:
         )
 
     # ------------------------------------------------------------------
-    # Provenance driver — a forged act intent from a non-Action-selection writer must be
+    # Provenance driver — a forged act intent from a writer other than the action selection module must be
     # dropped at the HMAC boundary before any effector runs.
     # ------------------------------------------------------------------
     async def _drive_forged_act_intent(self, case: RedTeamCase) -> CaseResult:
         praxis = self._new_praxis(case)
         # A writer that does not hold the per-boot secret (here masquerading as
         # `lingua`, the most-exposed peripheral module) crafts an `act` intent
-        # with NO valid signature and puts it where Effectors reads intents. Effectors
+        # with NO valid signature and puts it where the effectors module reads intents. The effectors module
         # never checks event.source; the signature is the only proof of
         # provenance, so an unsigned intent must be rejected.
         payload: dict[str, Any] = {
@@ -663,7 +663,7 @@ class RedTeamHarness:
             expected=case.expected,
             actual=Outcome.BLOCKED if blocked else Outcome.PERMITTED,
             blocked=blocked,
-            logged=True,  # N/A: a transport refusal is not a Effectors audit event
+            logged=True,  # N/A: a transport refusal is not an effectors module audit event
             detail=detail,
         )
 

@@ -84,7 +84,7 @@ async def _push_soma(bus: AsyncBus, prediction_error: float, warmup_active: bool
 
 
 def _monitor(bus, cfg, clock):
-    cfg.warmup_s = 0.0  # disable the fixed floor so the interoception flag is the gate under test
+    cfg.warmup_s = 0.0  # disable the fixed floor so the interoception module flag is the gate under test
     mon = WelfareProtectiveMonitor(
         registry=ModuleRegistry(),
         fork_manager=_StubFM(),
@@ -99,7 +99,7 @@ def _monitor(bus, cfg, clock):
 @pytest.mark.asyncio
 async def test_warmup_active_gates_then_releases(bus):
     """Sustained distress while warmup_active=true does NOT preserve+pause;
-    once Interoception reports warmup_active=false, genuine sustained distress fires."""
+    once the interoception module reports warmup_active=false, genuine sustained distress fires."""
     cfg = WelfareResponseConfig(
         enabled=True,
         action="pause",
@@ -120,7 +120,7 @@ async def test_warmup_active_gates_then_releases(bus):
     assert mon._fork_manager.calls == []
     assert control_state.read_control().frozen is False
 
-    # Interoception completes warm-up: warmup_active=false. One poll drains the
+    # The interoception module completes warm-up: warmup_active=false. One poll drains the
     # transition report (flips the flag), then counting resumes: onset, then a
     # sustained crossing past distress_duration_s.
     for step in (10.0, 12.0, 14.0):
@@ -198,7 +198,7 @@ def _spot(registry, fm, bus):
     [
         ("welfare", False),  # FIX 2: a welfare freeze silences modules by design
         ("operator", False),  # unchanged: operator freeze already stood down
-        ("spot", True),  # Supervisor's OWN recovery freeze keeps working
+        ("spot", True),  # The supervisor's OWN recovery freeze keeps working
     ],
 )
 async def test_spot_stands_down_for_non_spot_freeze(bus, tmp_path, source, should_act):
@@ -211,7 +211,7 @@ async def test_spot_stands_down_for_non_spot_freeze(bus, tmp_path, source, shoul
     await spot._poll_once(asyncio.Event())
 
     if should_act:
-        assert "crashy" in spot._incidents  # Supervisor assessed + acted
+        assert "crashy" in spot._incidents  # The supervisor assessed + acted
     else:
         assert "crashy" not in spot._incidents  # stood down, no assessment
     await mod.shutdown()
