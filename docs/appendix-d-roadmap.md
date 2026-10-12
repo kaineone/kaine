@@ -48,6 +48,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | sleep-pauses-feed | 3/3 (100%) | Sleep pauses the perceptual feed for its whole duration. |
 | familiarity-and-reply-window | 4/4 (100%) | Familiarity reaches the affect module's coupling; the language module accepts the reply-window key. |
 | access-wording-in-code | 2/2 (100%) | Code comments use the paper's access terms. |
+| third-party-font-notices | 4/4 (100%) | The vendored dashboard fonts ship their copyright notices and licence text, and the third-party notices name the fonts on disk. |
 | context-age-from-publication | 4/4 (100%) | Context age is entity time since the broadcast's publication. |
 | research-log-access-fields | 4/4 (100%) | The research log carries the access and context fields the planned test reads. |
 | awake-time-excludes-sleep | 4/4 (100%) | Awake time excludes sleep as well as freezes. |
@@ -98,6 +99,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 72 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 73 active changes, 268 archived changes and 104 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

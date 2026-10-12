@@ -1,7 +1,7 @@
 # Vendored web fonts
 
 Served locally from `/static/fonts` — no runtime download and no external font
-CDN, which is what `no-cloud-runtime` requires. `tests/test_nexus_routers.py`
+CDN, which is what `no-cloud-runtime` requires. `tests/test_dashboard_routers.py`
 asserts that every woff2 referenced by `style.css` exists here and that the three
 brand families are present.
 
@@ -13,9 +13,14 @@ The Kaine brand type system:
 | **Inter** | UI and body | Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter) |
 | **JetBrains Mono** | metadata and data | Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono) |
 
-All three are licensed under the **SIL Open Font License, Version 1.1**. The
-license text is in `OFL.txt`, and each font also carries it in its own name
-table.
+All three are licensed under the **SIL Open Font License, Version 1.1**. Each
+family's licence file sits next to its fonts: `OFL-Inter.txt`,
+`OFL-JetBrainsMono.txt` and `OFL-ZenDots.txt`, each a byte copy of the
+upstream file with that family's copyright notice and the full licence text.
+The font files themselves carry their copyright line in the name table; only
+Zen Dots also carries the licence description there, because the Fontsource
+subsets of Inter and JetBrains Mono drop it. The licence files are therefore
+what meets the OFL notice condition for those two.
 
 Inter and JetBrains Mono come from Fontsource (latin subset). Zen Dots is subset
 to latin locally — a Modified Version under the OFL. Zen Dots declares no
