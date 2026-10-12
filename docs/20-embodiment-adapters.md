@@ -16,7 +16,7 @@ A body is a small adapter that:
  entity ◀──mundus.* events──  Embodiment core  ◀──────── feed() yields FeedFrame ───  YOUR ADAPTER ◀── body
 ```
 
-The core reads the descriptor instead of hardcoding any platform's tables, so adding a body never touches the core. You add one file under [`kaine/modules/embodiment/adapters/`](../kaine/modules/mundus/adapters/), register it in [`kaine/boot/factories/embodiment.py`](../kaine/boot/factories/embodiment.py), and select it in [`config/kaine.toml`](../config/kaine.toml).
+The core reads the descriptor instead of hardcoding any platform's tables, so adding a body never touches the core. You add one file under [`kaine/modules/embodiment/adapters/`](../kaine/modules/embodiment/adapters/), register it in [`kaine/boot/factories/embodiment.py`](../kaine/boot/factories/embodiment.py), and select it in [`config/kaine.toml`](../config/kaine.toml).
 
 The shipped reference body is the transport-free stub in [`kaine/modules/embodiment/adapters/stub.py`](../kaine/modules/embodiment/adapters/stub.py). It pins the whole protocol, including the continuous-control path, with no socket and no external dependency. Use it as a template and as a conformance-test baseline. A virtual-world (Paracosmic) adapter is planned behind the same contract; only the old Kosmos connector design was archived as superseded. The only adapter that ships today is `stub`.
 

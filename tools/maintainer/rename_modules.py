@@ -1204,10 +1204,10 @@ def _repo_top_prefixes(table) -> tuple[str, ...]:
     return tuple(f"{d}/" for d in dirs)
 
 
-def _link_target(rel_path: str, T: str, table) -> str | None:
-    """Resolve a markdown link target to a repo-relative path if it ends in .md."""
+def _link_target(rel_path: str, T: str, table, *, in_link: bool = False) -> str | None:
+    """Resolve a markdown link target to a repo-relative path if it names a .md file, or a directory (ends in /) when ``in_link`` says the term is a Markdown link target."""
     target = T.rsplit("#", 1)[0]
-    if not target.endswith(".md"):
+    if not (target.endswith(".md") or (in_link and target.endswith("/"))):
         return None
     top_dirs = set(getattr(table, "REPO_TOP_DIRS", ()))
     parts = target.split("/")
@@ -1220,6 +1220,14 @@ def _link_target(rel_path: str, T: str, table) -> str | None:
     if resolved.startswith(".."):
         return None
     return resolved
+
+
+def _in_markdown_link_target(text: str, start: int) -> bool:
+    """True when the term containing ``start`` directly follows ``](``, the start of a Markdown link target."""
+    pos = start
+    while pos > 0 and _is_token_char(text[pos - 1]):
+        pos -= 1
+    return text[pos - 2:pos] == "]("
 
 
 def _in_pip_extra(text: str, start: int, end: int) -> bool:
@@ -1503,7 +1511,7 @@ def _assign_scope(
                 top_dirs = getattr(table, "REPO_TOP_DIRS", ())
                 if not any(T.startswith(d + "/") for d in top_dirs):
                     return "prose"
-    target = _link_target(rel_path, T, table)
+    target = _link_target(rel_path, T, table, in_link=_in_markdown_link_target(text, start))
     if target is not None:
         return _path_move_scope(target)
     if T.startswith("docs/"):
