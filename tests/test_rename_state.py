@@ -154,9 +154,8 @@ def _interrupt_migrate(root: Path, monkeypatch, stop_at: int = 2):
 
     monkeypatch.setattr(rename_state, "_run_step", wrapper)
     try:
-        rename_state.migrate(root)
-    except KeyboardInterrupt:
-        pass
+        with pytest.raises(KeyboardInterrupt):
+            rename_state.migrate(root)
     finally:
         monkeypatch.setattr(rename_state, "_run_step", original)
 

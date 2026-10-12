@@ -44,10 +44,19 @@ class RenameResult:
 
 
 class QdrantAliases(Protocol):
-    def collections(self) -> list[str]: ...
-    def aliases(self) -> dict[str, str]: ...
-    def create_alias(self, alias: str, collection: str) -> None: ...
-    def delete_alias(self, alias: str) -> None: ...
+    """Protocol for managing Qdrant collection aliases."""
+
+    def collections(self) -> list[str]:
+        """Names of the existing collections."""
+
+    def aliases(self) -> dict[str, str]:
+        """Map of alias name to the collection it points at."""
+
+    def create_alias(self, alias: str, collection: str) -> None:
+        """Point ``alias`` at ``collection``."""
+
+    def delete_alias(self, alias: str) -> None:
+        """Remove ``alias``."""
 
 
 class QdrantClientAliases:
