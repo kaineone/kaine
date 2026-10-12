@@ -369,6 +369,10 @@ def _has_vec_table(db_path: Path) -> bool:
             "SELECT 1 FROM sqlite_master WHERE name = 'vec_memories' AND type = 'table'"
         )
         return cur.fetchone() is not None
+    except sqlite3.Error as exc:
+        raise RenameStateError(
+            f"rename_state: cannot read {db_path} ({exc}); stop anything using it and re-run"
+        ) from exc
     finally:
         if con is not None:
             con.close()
@@ -494,8 +498,14 @@ def plan(root: Path, *, qdrant: QdrantAliases | None = None) -> list[dict]:
                     for row in con.execute("SELECT DISTINCT collection FROM memories")
                     if row[0] is not None
                 ]
-            except sqlite3.OperationalError:
-                collections = []
+            except sqlite3.Error as exc:
+                if "no such table: memories" in str(exc):
+                    collections = []
+                else:
+                    raise RenameStateError(
+                        f"rename_state: cannot read the collections in {db_entry['old']} "
+                        f"({exc}); stop anything using it and re-run"
+                    ) from exc
             finally:
                 if con is not None:
                     con.close()
@@ -561,9 +571,43 @@ def plan(root: Path, *, qdrant: QdrantAliases | None = None) -> list[dict]:
     return steps
 
 
+def _fsync_file(path: Path) -> None:
+    """Flush a file's data and metadata to storage."""
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _fsync_dir(path: Path) -> None:
+    """Flush a directory's metadata to storage."""
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _write_json_durable(path: Path, payload: Any) -> None:
+    """Write JSON to ``path`` durably using a sibling temp file and fsync."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd, data)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    os.replace(tmp, path)
+    _fsync_dir(path.parent)
+
+
 def _write_manifest(manifest_path: Path, steps: list[dict], status: str) -> None:
-    """Write the in-progress or completed manifest atomically."""
-    write_json_atomic(
+    """Write the in-progress or completed manifest durably."""
+    _write_json_durable(
         manifest_path,
         {"version": MANIFEST_VERSION, "status": status, "steps": steps},
     )
@@ -605,13 +649,18 @@ def _run_move(root: Path, step: dict) -> None:
     elif not src.exists() and dst.exists():
         return
     else:
-        if step.get("companion") and not src.exists() and not dst.exists():
-            log.debug(
-                "companion move %s -> %s already done (both missing)",
-                step["src"],
-                step["dst"],
+        if not src.exists() and not dst.exists():
+            if step.get("companion"):
+                log.debug(
+                    "companion move %s -> %s already done (both missing)",
+                    step["src"],
+                    step["dst"],
+                )
+                return
+            raise RenameStateError(
+                f"rename_state: neither {step['src']} nor {step['dst']} exists under {root}; "
+                "the tree changed since the manifest was written"
             )
-            return
         raise RenameStateError(
             f"rename_state: both {step['src']} and {step['dst']} exist under {root}; "
             "move one aside and re-run"
@@ -737,10 +786,21 @@ def _run_qdrant_alias(root: Path, step: dict, qdrant: QdrantAliases | None) -> N
 
 
 def migrate(
-    root: Path, *, qdrant: QdrantAliases | None = None, dry_run: bool = False
+    root: Path,
+    *,
+    qdrant: QdrantAliases | None = None,
+    no_qdrant: bool = False,
+    dry_run: bool = False,
 ) -> RenameResult:
     """Run the rename migration on ``root``."""
     root = Path(root)
+    if qdrant is not None and no_qdrant:
+        raise RenameStateError("rename_state: pass a Qdrant client or no_qdrant=True, not both")
+    if qdrant is None and not no_qdrant:
+        raise RenameStateError(
+            "rename_state: pass a Qdrant client or no_qdrant=True; "
+            "a migration never leaves the Qdrant store under its old names by accident"
+        )
     if dry_run:
         steps = plan(root, qdrant=qdrant)
         return RenameResult("dry_run", tuple(steps))
@@ -801,6 +861,8 @@ def migrate(
         backup_path = root / new_backup
         backup_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(_safe_path(root, step["path"], what="stage"), backup_path)
+        _fsync_file(backup_path)
+        _fsync_dir(backup_path.parent)
 
     _write_manifest(manifest_path, combined_steps, status="in_progress")
     _execute(root, combined_steps, qdrant, manifest_path, resuming=False)
@@ -856,9 +918,9 @@ def _revert_move(root: Path, step: dict) -> None:
     elif src.exists() and not dst.exists():
         return
     else:
-        if step.get("companion") and not src.exists() and not dst.exists():
+        if not src.exists() and not dst.exists():
             log.debug(
-                "revert companion move %s <- %s already reverted (both missing)",
+                "revert move %s <- %s already reverted (both missing)",
                 step["src"],
                 step["dst"],
             )
@@ -916,6 +978,67 @@ def _revert_qdrant_alias(root: Path, step: dict, qdrant: QdrantAliases | None) -
         )
 
 
+def _precheck_revert(root: Path, steps: list[dict], qdrant: QdrantAliases | None) -> None:
+    """Walk steps in reverse order and refuse if any step cannot be undone cleanly.
+
+    This inspects disk and Qdrant state but does not write anything.
+    """
+    expected_stage_sha: dict[str, str] = {}
+    for step in reversed(steps):
+        kind = step["kind"]
+        if kind == "move":
+            src = _safe_path(root, step["src"], what="move src")
+            dst = _safe_path(root, step["dst"], what="move dst")
+            if src.exists() and dst.exists():
+                raise RenameStateError(
+                    f"rename_state: both {step['src']} and {step['dst']} exist under {root}; "
+                    "move one aside and re-run"
+                )
+        elif kind == "stage":
+            path = _safe_path(root, step["path"], what="stage")
+            if not path.exists():
+                raise RenameStateError(
+                    f"rename_state: stage file {step['path']} is missing; cannot revert"
+                )
+            current_sha = expected_stage_sha.get(step["path"])
+            if current_sha is None:
+                current_sha = _sha256(path.read_bytes())
+            after = step["after_sha256"]
+            before = step["before_sha256"]
+            if current_sha == after:
+                backup = step.get("backup")
+                if backup is None:
+                    raise RenameStateError(
+                        f"rename_state: stage step {step['path']} has no backup; cannot revert"
+                    )
+                backup_path = _safe_path(root, backup, what="stage backup")
+                if not backup_path.exists():
+                    raise RenameStateError(
+                        f"rename_state: stage backup {backup} is missing; cannot revert"
+                    )
+                expected_stage_sha[step["path"]] = before
+            elif current_sha == before:
+                expected_stage_sha[step["path"]] = before
+            else:
+                raise RenameStateError(
+                    "rename_state: the stage file changed since the migration; "
+                    "it is not reverted (inspect it, then revert by hand)"
+                )
+        elif kind == "qdrant_alias":
+            if qdrant is None:
+                raise RenameStateError(
+                    "the manifest has Qdrant aliases; pass a Qdrant client to revert them"
+                )
+            alias = step["alias"]
+            collection = step["collection"]
+            current = qdrant.aliases().get(alias)
+            if current is not None and current != collection:
+                raise RenameStateError(
+                    f"rename_state: Qdrant alias {alias} now points at {current}, "
+                    f"not {collection}; leaving it"
+                )
+
+
 def revert(root: Path, *, qdrant: QdrantAliases | None = None) -> RenameResult:
     """Revert a completed or partially-completed rename migration."""
     root = Path(root)
@@ -932,21 +1055,7 @@ def revert(root: Path, *, qdrant: QdrantAliases | None = None) -> RenameResult:
         raise RenameStateError("rename_state: the manifest is not valid JSON")
     steps = _validate_manifest(root, manifest)
 
-    has_qdrant = any(s["kind"] == "qdrant_alias" for s in steps)
-    if has_qdrant and qdrant is None:
-        raise RenameStateError(
-            "the manifest has Qdrant aliases; pass a Qdrant client to revert them"
-        )
-
-    for step in steps:
-        if step["kind"] == "qdrant_alias":
-            alias = step["alias"]
-            collection = step["collection"]
-            current = qdrant.aliases().get(alias)
-            if current is not None and current != collection:
-                raise RenameStateError(
-                    f"rename_state: Qdrant alias {alias} now points at {current}, not {collection}; leaving it"
-                )
+    _precheck_revert(root, steps, qdrant)
 
     _write_manifest(manifest_path, steps, status="reverting")
     for step in reversed(steps):
@@ -979,10 +1088,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("root")
     parser.add_argument("--revert", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--qdrant-url")
+    qdrant_group = parser.add_mutually_exclusive_group()
+    qdrant_group.add_argument("--qdrant-url")
+    qdrant_group.add_argument("--no-qdrant", action="store_true")
     args = parser.parse_args(argv)
 
     root = Path(args.root)
+    if not args.revert and not args.qdrant_url and not args.no_qdrant:
+        print(
+            "kaine.lifecycle.rename_state: pass --qdrant-url URL or --no-qdrant",
+            file=sys.stderr,
+        )
+        return 2
     qdrant: QdrantAliases | None = None
     if args.qdrant_url:
         try:
@@ -999,9 +1116,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.revert:
             result = revert(root, qdrant=qdrant)
         elif args.dry_run:
-            result = migrate(root, qdrant=qdrant, dry_run=True)
+            result = migrate(root, qdrant=qdrant, no_qdrant=args.no_qdrant, dry_run=True)
         else:
-            result = migrate(root, qdrant=qdrant)
+            result = migrate(root, qdrant=qdrant, no_qdrant=args.no_qdrant)
 
         for step in result.steps:
             print(_format_step(step))
@@ -1010,6 +1127,12 @@ def main(argv: list[str] | None = None) -> int:
     except RenameStateError as exc:
         print(f"kaine.lifecycle.rename_state: {exc}", file=sys.stderr)
         return 2
+    except (OSError, sqlite3.Error, ImportError) as exc:
+        print(
+            f"kaine.lifecycle.rename_state: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
 
 
 if __name__ == "__main__":
