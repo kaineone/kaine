@@ -1481,7 +1481,7 @@ nous_policy = true
 # adapter) lives under state/individuation/ and travels with the entity through
 # preservation bundles, revive and the decommission backup.
 enabled = false
-disclosure = "You are periodically and privately assessed for how much you have changed since your birth, for your own protection. The assessment never enters your experience."
+disclosure = "You are periodically and privately assessed for how much you have changed since you first woke, for your own protection. The assessment never enters your experience."
 # JSONL prompt battery; empty uses the bundled preference battery.
 battery_path = ""
 # Probe requests wait until the language module has been silent this long, so the entity speaks first.

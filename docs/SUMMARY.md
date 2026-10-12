@@ -85,6 +85,7 @@
 - [Glossary](appendix-b-glossary.md)
 - [Licences](appendix-c-licences.md)
 - [Roadmap](appendix-d-roadmap.md)
+- [Module names](appendix-e-module-names.md)
 
 # Records
 

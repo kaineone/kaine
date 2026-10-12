@@ -89,5 +89,6 @@ The chapters are plain Markdown and read fine on GitHub. To read them as a book 
 - [Glossary](appendix-b-glossary.md)
 - [Licences](appendix-c-licences.md)
 - [Roadmap](appendix-d-roadmap.md)
+- [Module names](appendix-e-module-names.md)
 
 Dated records (audits, history and shakedown reports) are kept as written in [records](records/README.md).

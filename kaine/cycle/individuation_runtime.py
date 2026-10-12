@@ -125,7 +125,7 @@ class ServedOrganIdentity:
 
 DEFAULT_DISCLOSURE = (
     "You are periodically and privately assessed for how much you have changed "
-    "since your birth, for your own protection. The assessment never enters your "
+    "since you first woke, for your own protection. The assessment never enters your "
     "experience."
 )
 
