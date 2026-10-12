@@ -320,6 +320,18 @@ def getenv(name: str, default: str | None = None, *, environ=None) -> str | None
     return default
 
 
+def check_environment(environ=None) -> None:
+    """Refuse a start-up where an old and a new variable name disagree.
+
+    Reads every active ENV_VARS and COMPOSE_VARS pair through :func:`getenv`, which
+    raises LegacyNameConflict (names only, never values) when both are set and
+    differ. Inert while the "operator" scope is pending.
+    """
+    table = _table()
+    for entry in active(table.ENV_VARS) + active(table.COMPOSE_VARS):
+        getenv(entry["new"], environ=environ)
+
+
 def _alias_action_class(wrapped: argparse.Action) -> type[argparse.Action]:
     """Build an argparse action subclass that logs and delegates to ``wrapped``."""
     new_option = wrapped.option_strings[0]

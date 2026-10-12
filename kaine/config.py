@@ -33,6 +33,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from kaine import legacy_aliases
 from kaine.storage import normalize_storage_paths
 
 # Canonical paths (relative to the working directory, as the rest of the
@@ -530,6 +531,14 @@ def require_known_keys(
         )
 
 
+def _normalize_layer(layer: dict[str, Any], source: Path | str) -> dict[str, Any]:
+    """Map deprecated table, key and value names in one parsed layer (task 5.1)."""
+    try:
+        return legacy_aliases.normalize_config_layer(layer, str(source))
+    except legacy_aliases.LegacyNameConflict as exc:
+        raise ProfileError(str(exc)) from exc
+
+
 def _load_merged_config(
     path: str | os.PathLike[str] = SHIPPED_CONFIG_PATH,
     operator_path: str | os.PathLike[str] = OPERATOR_CONFIG_PATH,
@@ -550,7 +559,7 @@ def _load_merged_config(
     if not shipped_path.exists():
         raise FileNotFoundError(f"config/kaine.toml not found at {shipped_path}")
     with shipped_path.open("rb") as fh:
-        merged = tomllib.load(fh)
+        merged = _normalize_layer(tomllib.load(fh), shipped_path)
 
     # Layer 2: the selected module profile.
     if profile:
@@ -560,11 +569,15 @@ def _load_merged_config(
                 f"profile {profile!r} selected but {prof_path} does not exist"
             )
         with prof_path.open("rb") as fh:
-            merged = deep_merge(merged, tomllib.load(fh))
+            profile_layer = _normalize_layer(tomllib.load(fh), prof_path)
+        merged = deep_merge(merged, profile_layer)
 
     # Layer 3: the deployment tier overlay (between profile and operator).
     if tier:
-        tier_raw = _require_tier_profile(tier, profiles_dir=profiles_dir)
+        tier_path = profile_path(tier, profiles_dir=profiles_dir)
+        tier_raw = _normalize_layer(
+            _require_tier_profile(tier, profiles_dir=profiles_dir), tier_path
+        )
         if tier != profile:
             if "modules" in tier_raw:
                 raise ProfileError(
@@ -595,7 +608,7 @@ def _load_merged_config(
                 exc,
             )
         else:
-            merged = deep_merge(merged, override)
+            merged = deep_merge(merged, _normalize_layer(override, op_path))
 
     # Layer 5: the selected study overlay (applied last, after operator).
     if study:
@@ -605,7 +618,7 @@ def _load_merged_config(
                 f"study {study!r} selected but {study_cfg_path} does not exist"
             )
         with study_cfg_path.open("rb") as fh:
-            study_raw = tomllib.load(fh)
+            study_raw = _normalize_layer(tomllib.load(fh), study_cfg_path)
         extra = sorted(set(study_raw) - STUDY_ALLOWED_TABLES)
         if extra:
             raise ProfileError(

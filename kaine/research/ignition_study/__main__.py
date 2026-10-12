@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from kaine import legacy_aliases
 from kaine.config import load_kaine_config
 from kaine.defaults import DEFAULT_REDIS_PORT
 from kaine.research.ignition_study import analysis
@@ -159,14 +160,7 @@ def _cmd_analyse(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    try:
-        install_data_root(load_kaine_config())
-    except Exception as exc:
-        # Without a config the study/setup still runs with paths relative to
-        # the working directory, exactly as before a data root existed.
-        print(f"kaine: could not load config; no data root installed ({exc})", file=sys.stderr)
-
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m kaine.research.ignition_study"
     )
@@ -227,6 +221,23 @@ def main(argv: list[str] | None = None) -> int:
         help="analyse completed ignition viewings and write the report",
     )
     analyse_p.add_argument("--study-dir", required=True)
+
+    legacy_aliases.add_cli_aliases(init_p)
+    legacy_aliases.add_cli_aliases(run_p)
+    legacy_aliases.add_cli_aliases(status_p)
+    legacy_aliases.add_cli_aliases(analyse_p)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        install_data_root(load_kaine_config())
+    except Exception as exc:
+        # Without a config the study/setup still runs with paths relative to
+        # the working directory, exactly as before a data root existed.
+        print(f"kaine: could not load config; no data root installed ({exc})", file=sys.stderr)
+
+    parser = _build_parser()
 
     args = parser.parse_args(argv)
     if args.command == "init":

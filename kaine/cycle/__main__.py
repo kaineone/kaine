@@ -3015,6 +3015,16 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"Refusing to boot KAINE cycle: could not load config: {exc}\n")
         return 1
 
+    # An old and a new environment variable name that disagree stop the boot
+    # (names only are reported, never values).
+    from kaine import legacy_aliases
+
+    try:
+        legacy_aliases.check_environment()
+    except legacy_aliases.LegacyNameConflict as exc:
+        sys.stderr.write(f"kaine.cycle: configuration error: {exc}\n")
+        return 1
+
     try:
         _apply_log_level(config)
     except ValueError as exc:
