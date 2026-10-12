@@ -1,0 +1,6 @@
+{
+  "args": ["--apply", "--scope", "identifiers", "--only", "mnemos"],
+  "expect_exit": 0,
+  "moves": [["kaine/nexus/templates/_mnemos_store.html", "kaine/nexus/templates/_episodic_memory_store.html"]],
+  "report_contains": ["## moves (1)", "files=1", "replacements=1"]
+}

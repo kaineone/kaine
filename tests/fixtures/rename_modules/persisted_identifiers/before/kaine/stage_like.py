@@ -11,3 +11,7 @@ class State:
 
 def read(data: dict, hypnos_stream: str) -> State:
     return State(hypnos_cursor=data.get("hypnos_cursor"))
+
+
+def cursor(state: State) -> str | None:
+    return state.hypnos_cursor
