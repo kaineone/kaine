@@ -178,7 +178,7 @@ def _build_parser() -> argparse.ArgumentParser:
     init_p.add_argument("--order", nargs="+", default=_default_order())
     init_p.add_argument("--programme-manifest", required=True)
     init_p.add_argument("--redis-base-url", default=f"redis://127.0.0.1:{DEFAULT_REDIS_PORT}")
-    init_p.add_argument("--db-gestation", type=int, default=10)
+    init_p.add_argument("--db-gestation", dest="db_development", type=int, default=10)
     init_p.add_argument("--db-branch", type=int, default=11)
     init_p.add_argument("--db-repeat", type=int, default=12)
     init_p.add_argument("--db-accumulate", type=int, default=13)
@@ -189,6 +189,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     init_p.add_argument(
         "--gestation-budget-seconds",
+        dest="development_budget_seconds",
         type=float,
         default=DEFAULT_DEVELOPMENT_BUDGET_SECONDS,
     )

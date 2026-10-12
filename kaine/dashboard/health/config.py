@@ -379,8 +379,8 @@ def load_health_prober(
         preservation_incident_path=preservation_incident_path,
         cycle_runtime_path=resolve(_defaults["cycle_runtime_path"]),
         runs_manifest_root=resolve(_defaults["runs_manifest_root"]),
-        supervisor_control_path=resolve(_defaults["spot_control_path"]),
-        supervisor_escalation_path=resolve(_defaults["spot_escalation_path"]),
+        supervisor_control_path=resolve(_defaults["supervisor_control_path"]),
+        supervisor_escalation_path=resolve(_defaults["supervisor_escalation_path"]),
         gpu_preflight_path=resolve(_defaults["gpu_preflight_path"]),
         episodic_memory_store_health_path=resolve(_defaults["episodic_memory_store_health_path"]),
     )

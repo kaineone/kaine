@@ -55,7 +55,7 @@ def test_base_html_includes_caretaker_banner():
 def test_base_html_loads_caretaker_script():
     text = BASE.read_text(encoding="utf-8")
     assert re.search(
-        r'<script[^>]*(?:nexus_caretaker\.js[^>]*defer|defer[^>]*nexus_caretaker\.js)',
+        r'<script[^>]*(?:dashboard_caretaker\.js[^>]*defer|defer[^>]*dashboard_caretaker\.js)',
         text,
         re.DOTALL,
     )

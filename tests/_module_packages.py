@@ -18,11 +18,18 @@ _MODULES_DIR = Path(__file__).resolve().parents[1] / "kaine" / "modules"
 def identifier_for_key(key: str) -> str:
     """The package and identifier name of the module with this key.
 
-    The new key when that module's package has already moved under it, else the key.
+    The new key when that module has already moved under it, else the key.
+    Accepts both package directories and single-file modules.
     """
     new = legacy_names.MODULES.get(key, {}).get("new_key", key)
-    # __init__.py distinguishes real packages from stale dirs that only hold __pycache__.
-    if new != key and (_MODULES_DIR / new / "__init__.py").is_file() and not (_MODULES_DIR / key / "__init__.py").is_file():
+    # __init__.py distinguishes real packages from stale dirs; .py covers single-file modules.
+    if new != key and (
+        (_MODULES_DIR / new / "__init__.py").is_file()
+        or (_MODULES_DIR / f"{new}.py").is_file()
+    ) and not (
+        (_MODULES_DIR / key / "__init__.py").is_file()
+        or (_MODULES_DIR / f"{key}.py").is_file()
+    ):
         return new
     return key
 

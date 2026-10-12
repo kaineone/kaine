@@ -191,7 +191,7 @@ def test_embodiment_available_requires_all_three_layers() -> None:
     assert mg.embodiment_available(
         embodiment_enabled=True, operator_approved=True, reachable=True
     ) is True
-    for missing in ("mundus_enabled", "operator_approved", "reachable"):
+    for missing in ("embodiment_enabled", "operator_approved", "reachable"):
         kw = dict(embodiment_enabled=True, operator_approved=True, reachable=True)
         kw[missing] = False
         assert mg.embodiment_available(**kw) is False

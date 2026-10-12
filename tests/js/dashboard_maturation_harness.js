@@ -3,7 +3,7 @@ const path = require("path");
 const vm = require("vm");
 
 const ROOT = path.resolve(__dirname, "..", "..");
-const SOURCE_PATH = path.join(ROOT, "kaine", "nexus", "static", "dashboard_maturation.js");
+const SOURCE_PATH = path.join(ROOT, "kaine", "dashboard", "static", "dashboard_maturation.js");
 const source = fs.readFileSync(SOURCE_PATH, "utf8");
 
 const REQUEST_ID = "abcdef0123456789abcdef0123456789";

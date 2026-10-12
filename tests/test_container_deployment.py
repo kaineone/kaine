@@ -30,6 +30,12 @@ from pathlib import Path
 import pytest
 import yaml
 
+from kaine import legacy_names
+
+_DASHBOARD_COMMAND_MODULE = next(
+    e["old"] for e in legacy_names.PACKAGING if e["kind"] == "module_shim" and e["old"].count(".") == 1
+)
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _COMPOSE = _REPO_ROOT / "compose" / "kaine.yml"
 _DOCKERFILE = _REPO_ROOT / "Dockerfile"
@@ -226,7 +232,7 @@ def test_dashboard_and_cycle_share_image_different_command():
     # Both build from the same Dockerfile (via the shared x-kaine-image anchor).
     assert dashboard["build"]["dockerfile"] == "Dockerfile"
     assert cycle["build"]["dockerfile"] == "Dockerfile"
-    assert dashboard["command"] == ["python", "-m", "kaine.dashboard"]
+    assert dashboard["command"] == ["python", "-m", _DASHBOARD_COMMAND_MODULE]
     assert cycle["command"] == ["python", "-m", "kaine.cycle"]
 
 

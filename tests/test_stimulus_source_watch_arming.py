@@ -175,7 +175,7 @@ def test_boot_holds_for_the_stimulus_source_before_any_module_exists() -> None:
     from tests._boot_sequence import first_index
 
     bus_created = first_index("AsyncBus")
-    hold = first_index("hold_until_womb_ready")
+    hold = first_index("hold_until_stimulus_source_ready")
     pin = first_index("write_desired_locus")
     registry = first_index("build_registry")
     init = first_index("initialize")

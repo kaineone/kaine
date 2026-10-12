@@ -349,7 +349,7 @@ def _runner(study_dir: Path, script: Path, *, flush_log: list[str] | None = None
         "control_command": [sys.executable, str(script), "control"],
         "poll_seconds": 0.05,
         "preserve_wait_seconds": 2.0,
-        "birth_bloom_margin_seconds": 0.0,
+        "maturation_bloom_margin_seconds": 0.0,
         "flush_db": lambda url: flush_log.append(url),
     }
     defaults.update(kwargs)

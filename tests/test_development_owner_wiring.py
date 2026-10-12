@@ -89,7 +89,7 @@ async def test_started_and_publishes_a_readiness_readout(tmp_path, monkeypatch) 
     reg = _Registry({"soma": _Interoception()}, now=lambda: clock["t"])
     bus = _Bus()
     stop = asyncio.Event()
-    feed = _feed(stimulus_source={"readout": {"readout_period_seconds": 0.05, "sample_hz": 100.0}})
+    feed = _feed(**{"womb": {"readout": {"readout_period_seconds": 0.05, "sample_hz": 100.0}}})
     task = _start_development_owner(
         {"perception_feed": feed}, bus, reg, stop, is_paused=lambda: False
     )

@@ -500,14 +500,14 @@ def test_stimulus_source_is_cpu_only_and_torch_free() -> None:
 
     code = (
         "import sys\n"
-        "from kaine.modules.vision.feed import WombClock, WombProceduralSource, WombSchedule\n"
-        "from kaine.modules.audition.feed import WombAudioSchedule, WombProceduralAudioStream\n"
-        "from kaine.modules.stimulus_source_signal import WombParams\n"
-        "c = WombClock(lived_offset_seconds=0.0)\n"
-        "v = WombProceduralSource(WombSchedule(width=32, height=24), params=WombParams(),"
+        "from kaine.modules.vision.feed import StimulusSourceClock, StimulusSourceProceduralSource, StimulusSourceSchedule\n"
+        "from kaine.modules.audition.feed import StimulusSourceAudioSchedule, StimulusSourceProceduralAudioStream\n"
+        "from kaine.modules.stimulus_source_signal import StimulusSourceParams\n"
+        "c = StimulusSourceClock(lived_offset_seconds=0.0)\n"
+        "v = StimulusSourceProceduralSource(StimulusSourceSchedule(width=32, height=24), params=StimulusSourceParams(),"
         " clock=c, lived_seconds=lambda: 0.0)\n"
         "v.frame_at(0)\n"
-        "a = WombProceduralAudioStream(WombAudioSchedule(), params=WombParams(), clock=c,"
+        "a = StimulusSourceProceduralAudioStream(StimulusSourceAudioSchedule(), params=StimulusSourceParams(), clock=c,"
         " callback=lambda b: None)\n"
         "a.pcm_at(0)\n"
         "bad = [m for m in ('torch', 'jax', 'cv2', 'cupy') if m in sys.modules]\n"
@@ -543,7 +543,7 @@ def test_no_entity_state_feeds_the_stimulus_source() -> None:
         for node in ast.walk(tree)
         if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("kaine")
     }
-    assert kaine_imports <= {"kaine.config", "kaine.modules.perception_prng"}
+    assert kaine_imports <= {"kaine.config", "kaine.legacy_aliases", "kaine.modules.perception_prng"}
 
 
 def test_video_read_marks_delivery() -> None:

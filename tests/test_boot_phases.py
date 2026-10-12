@@ -20,7 +20,7 @@ EXPECTED_PHASE_ORDER = [
     "_phase_run_identity",
     "_phase_gates",
     "_phase_bus",
-    "_phase_womb_hold",
+    "_phase_stimulus_source_hold",
     "_phase_registry",
     "_phase_maturation_gate",
     "_phase_workspace",
@@ -33,13 +33,13 @@ EXPECTED_PHASE_ORDER = [
     "_phase_preview",
     "_phase_remote_bridge",
     "_phase_signals",
-    "_phase_spot",
+    "_phase_supervisor",
     "_phase_safety_net",
     "_phase_launch",
-    "_phase_birth",
-    "_phase_womb_watch",
+    "_phase_maturation",
+    "_phase_stimulus_source_watch",
     "_phase_caretaker",
-    "_phase_gestation",
+    "_phase_development",
     "_phase_watchers",
 ]
 
@@ -50,7 +50,7 @@ EXPECTED_RETURNS = {
     "_phase_run_identity": {"PLANNED_TEST_REFUSED_EXIT"},
     "_phase_gates": {"4", "ORGAN_GATE_REFUSED_EXIT"},
     "_phase_bus": {"WELFARE_PRODUCER_REFUSED_EXIT"},
-    "_phase_womb_hold": {"0"},
+    "_phase_stimulus_source_hold": {"0"},
     "_phase_registry": {"refused"},
 }
 

@@ -107,7 +107,7 @@ def _runner(
         "control_command": [sys.executable, str(script), "control"],
         "poll_seconds": 0.01,
         "preserve_wait_seconds": 2.0,
-        "birth_bloom_margin_seconds": 0.0,
+        "maturation_bloom_margin_seconds": 0.0,
         "flush_db": lambda url: None,
     }
     if wall_clock is not None:

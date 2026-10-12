@@ -194,7 +194,7 @@ def make_core(tmp_path: Path, **kwargs: object) -> tuple[IndividuationCore, Indi
         "conditions": lambda: CONDITIONS,
         "conditioning_inputs": FakeConditioning(),
         "born_at": lambda: "2026-01-01T00:00:00+00:00",
-        "birth_adapter_file": lambda: None,
+        "maturation_adapter_file": lambda: None,
         "report_sink": FakeSink(),
         "publish": FakePublish(),
         "abort_reason": FakeAbort(),

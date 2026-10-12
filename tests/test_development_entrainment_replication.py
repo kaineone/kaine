@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from kaine.cycle import gestation
+from kaine.cycle import development
 
 
 class FakeClock:
@@ -31,7 +31,7 @@ class FakeDrive:
         self.scale = 0.0
 
 
-def _config(**overrides: Any) -> gestation.DevelopmentReadoutConfig:
+def _config(**overrides: Any) -> development.DevelopmentReadoutConfig:
     sample_hz = float(overrides.get("sample_hz", 10.0))
     band_high = min(2.0, 0.4 * sample_hz)
     band_low = min(0.3, band_high / 4.0)
@@ -57,13 +57,13 @@ def _config(**overrides: Any) -> gestation.DevelopmentReadoutConfig:
         "surrogate_count": 1.0,
     }
     defaults.update(overrides)
-    return gestation.DevelopmentReadoutConfig.from_dict(defaults)
+    return development.DevelopmentReadoutConfig.from_dict(defaults)
 
 
-def _owner(tmp_path: Path, **cfg_overrides: Any) -> gestation.DevelopmentOwner:
+def _owner(tmp_path: Path, **cfg_overrides: Any) -> development.DevelopmentOwner:
     clock = FakeClock(0.0)
     config = _config(**cfg_overrides)
-    owner = gestation.DevelopmentOwner(
+    owner = development.DevelopmentOwner(
         bus=None,
         interoception=FakeInteroception(),
         drive=FakeDrive(),
@@ -80,7 +80,7 @@ def _owner(tmp_path: Path, **cfg_overrides: Any) -> gestation.DevelopmentOwner:
     return owner
 
 
-def _prefill_samples(owner: gestation.DevelopmentOwner) -> None:
+def _prefill_samples(owner: development.DevelopmentOwner) -> None:
     # idle 0..10 s, then withdrawal 10..15 s at sample_hz.
     dt = 1.0 / owner._config.sample_hz
     stop = int(15.0 * owner._config.sample_hz)
@@ -91,15 +91,15 @@ def _prefill_samples(owner: gestation.DevelopmentOwner) -> None:
 
 
 def _patch_outcome(monkeypatch: pytest.MonkeyPatch, outcome: tuple[float | None, float | None] | None) -> None:
-    monkeypatch.setattr(gestation, "self_sustains", lambda _driven, _withdrawn: True)
-    monkeypatch.setattr(gestation, "withdrawn_frequency", lambda *_a, **_k: 1.17)
-    monkeypatch.setattr(gestation, "beat_frequency", lambda *_a, **_k: 1.17)
-    monkeypatch.setattr(gestation, "frequency_pull", lambda *_a, **_k: 0.9)
+    monkeypatch.setattr(development, "self_sustains", lambda _driven, _withdrawn: True)
+    monkeypatch.setattr(development, "withdrawn_frequency", lambda *_a, **_k: 1.17)
+    monkeypatch.setattr(development, "beat_frequency", lambda *_a, **_k: 1.17)
+    monkeypatch.setattr(development, "frequency_pull", lambda *_a, **_k: 0.9)
 
     if outcome is None:
-        monkeypatch.setattr(gestation, "entrainment_plv", lambda *_a, **_k: (None, None))
+        monkeypatch.setattr(development, "entrainment_plv", lambda *_a, **_k: (None, None))
     else:
-        monkeypatch.setattr(gestation, "entrainment_plv", lambda *_a, **_k: outcome)
+        monkeypatch.setattr(development, "entrainment_plv", lambda *_a, **_k: outcome)
 
 
 @pytest.mark.asyncio
