@@ -146,7 +146,7 @@ def test_all_conditions_required() -> None:
 # --- maturation decision + availability guard ------------------------------------
 
 
-def test_not_ready_keeps_gestating() -> None:
+def test_not_ready_keeps_developing() -> None:
     cfg = _cfg()
     r = mg.evaluate_readiness(
         readiness_readout=None,
@@ -156,7 +156,7 @@ def test_not_ready_keeps_gestating() -> None:
         config=cfg,
     )
     d = mg.decide_maturation(readiness=r, embodiment_ready=True)
-    assert d.action == mg.ACTION_GESTATING and d.should_maturation is False
+    assert d.action == mg.ACTION_DEVELOPING and d.should_maturation is False
 
 
 def test_ready_but_embodiment_unavailable_holds_in_stimulus_source() -> None:

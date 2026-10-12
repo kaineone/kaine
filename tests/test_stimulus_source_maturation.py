@@ -422,7 +422,7 @@ def test_boot_clock_marked_born_when_stage_embodied(
     assert feed["_shared_womb_clock"].born()
 
 
-def test_boot_clock_not_born_when_stage_gestating(
+def test_boot_clock_not_born_when_stage_developing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     path = tmp_path / "stage.json"

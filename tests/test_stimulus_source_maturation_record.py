@@ -78,11 +78,11 @@ def test_stage_state_bad_maturation_bloom_ends_at_coerces_to_none():
         assert state.birth_bloom_ends_at is None
 
 
-def test_record_maturation_stimulus_source_refuses_gestating_state():
-    gestating = lifecycle_stage.StageState(stage=lifecycle_stage.DEVELOPMENT)
+def test_record_maturation_stimulus_source_refuses_developing_state():
+    developing = lifecycle_stage.StageState(stage=lifecycle_stage.DEVELOPMENT)
     with pytest.raises(ValueError):
         lifecycle_stage.record_maturation_stimulus_source(
-            gestating,
+            developing,
             womb_t_at_birth=1.0,
             womb_seed=0,
             womb_params_digest="a" * 64,

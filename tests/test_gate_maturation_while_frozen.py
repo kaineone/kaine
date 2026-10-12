@@ -211,7 +211,7 @@ async def test_maturation_deferred_while_frozen_then_maturations_when_unfrozen(
     await runner._evaluate_once()
     await runner._evaluate_once()
 
-    assert runner.stage.is_gestating
+    assert runner.stage.is_developing
     assert not any(e.type == STAGE_MATURATION for e in published)
     assert len(published) == 0
 
@@ -271,6 +271,6 @@ async def test_maturation_deferred_when_is_paused_raises(
     await runner._evaluate_once()
     await runner._evaluate_once()
 
-    assert runner.stage.is_gestating
+    assert runner.stage.is_developing
     assert not any(e.type == STAGE_MATURATION for e in published)
     assert len(published) == 0

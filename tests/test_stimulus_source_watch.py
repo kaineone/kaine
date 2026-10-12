@@ -83,7 +83,7 @@ async def watcher(tmp_path, recorder):
         config={},
         bus=None,
         publish=recorder.publish,
-        is_gestating=lambda: True,
+        is_developing=lambda: True,
         notify=recorder.notify,
         live_check=live_check,
         control_path=control_path,
@@ -382,7 +382,7 @@ async def test_watcher_repush_after_operator_unfreeze(watcher):
 
 
 @pytest.mark.asyncio
-async def test_watcher_stops_gestating_pops_freeze(watcher):
+async def test_watcher_stops_developing_pops_freeze(watcher):
     w, clock, live_check, recorder = watcher
     clock.t = 10.0
     live_check.results.extend(
@@ -397,7 +397,7 @@ async def test_watcher_stops_gestating_pops_freeze(watcher):
     await w.step()
     assert w.stimulus_source_lost
 
-    w._is_gestating = lambda: False
+    w._is_developing = lambda: False
     await w.step()
     assert not w.stimulus_source_lost
     control = read_control(w._control_path)

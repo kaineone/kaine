@@ -344,7 +344,7 @@ def test_resolve_boot_stage_does_not_write_file(
     stage, staging_enabled, is_fresh = _resolve_boot_stage(
         {"developmental_stage": {"enabled": True}}, identity=mint_identity()
     )
-    assert stage.is_gestating
+    assert stage.is_developing
     assert staging_enabled is True
     assert is_fresh is True
     assert not (tmp_path / "stage.json").exists()

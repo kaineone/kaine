@@ -234,7 +234,7 @@ class IndividuationRuntime:
         bus: Any,
         notify: Callable[[str], Awaitable[Any]] | None,
         ensure_fact: Callable[[str], Awaitable[bool]],
-        is_gestating: Callable[[], bool],
+        is_developing: Callable[[], bool],
         sleeping: Callable[[], bool] | None,
     ) -> None:
         self.config = config
@@ -244,7 +244,7 @@ class IndividuationRuntime:
         self.bus = bus
         self.notify = notify
         self.ensure_fact = ensure_fact
-        self.is_gestating = is_gestating
+        self.is_developing = is_developing
         self.sleeping = sleeping
 
     async def publish_divergence(self, payload: dict) -> None:
@@ -310,11 +310,11 @@ class IndividuationRuntime:
         except IndividuationStoreError as exc:
             log.error("individuation reference adoption failed: %s", exc)
 
-        gestating = True
+        developing = True
         try:
-            gestating = self.is_gestating()
+            developing = self.is_developing()
         except Exception:
-            gestating = True
+            developing = True
 
         if self.scheduler._capture_kind is None:
             if self.paths.reference.exists():
@@ -325,7 +325,7 @@ class IndividuationRuntime:
             elif self.paths.maturation_pending.exists():
                 log.info("individuation resuming pending birth capture")
                 self.scheduler.request_capture("birth")
-            elif not gestating:
+            elif not developing:
                 self.scheduler.request_capture("capture")
 
     async def run(self, stop_event: asyncio.Event) -> None:
@@ -412,7 +412,7 @@ def build_runtime(
     organ_unloaded: Callable[[], bool],
     sleeping: Callable[[], bool] | None,
     born_at: Callable[[], str | None],
-    is_gestating: Callable[[], bool],
+    is_developing: Callable[[], bool],
     bus: Any,
     notify: Callable[[str], Awaitable[Any]] | None,
     served_identity: "ServedOrganIdentity | None" = None,
@@ -444,7 +444,7 @@ def build_runtime(
         bus=bus,
         notify=notify,
         ensure_fact=ensure_fact,
-        is_gestating=is_gestating,
+        is_developing=is_developing,
         sleeping=sleeping,
     )
 

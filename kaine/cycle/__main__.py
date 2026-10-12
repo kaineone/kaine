@@ -304,7 +304,7 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
         organ_unloaded=organ_unloaded,
         sleeping=sleep.is_sleeping if sleep is not None else None,
         born_at=lambda: gate_runner.stage.born_at,
-        is_gestating=lambda: bool(staging_enabled and gate_runner.stage.is_gestating),
+        is_developing=lambda: bool(staging_enabled and gate_runner.stage.is_developing),
         bus=bus,
         notify=caretaker.send_event if caretaker is not None else None,
         served_identity=served_identity,
@@ -1023,7 +1023,7 @@ def _resolve_boot_stage(
     resolved = lifecycle_stage.resolve_boot_stage(has_prior_lived_history=prior)
     # The gate runner persists the resolved stage on its first tick so the
     # developmental clock is anchored and evidence is owned by one writer.
-    fresh = resolved.is_gestating
+    fresh = resolved.is_developing
     return resolved, True, fresh
 
 
@@ -1713,7 +1713,7 @@ async def _phase_stimulus_source_hold(ctx: BootContext) -> int | None:
     # never spawned without a stimulus source that is ready. Hold here, before any module
     # initializes, reporting stage.gestation.no_stimulus on every failed check.
     ctx.stimulus_source_ready = False
-    if ctx.staging_enabled and ctx.stage_state.is_gestating:
+    if ctx.staging_enabled and ctx.stage_state.is_developing:
         from kaine.cycle.stimulus_source_watch import hold_until_stimulus_source_ready
 
         hold_stop = asyncio.Event()
@@ -1778,7 +1778,7 @@ async def _phase_registry(ctx: BootContext) -> int | None:
 
     # Developmental phase: keep effectors dormant until maturation. The gate_runner will
     # call activate() at maturation before unlocking the locus.
-    if ctx.staging_enabled and ctx.stage_state.is_gestating:
+    if ctx.staging_enabled and ctx.stage_state.is_developing:
         _hold_effectors_for_development(ctx.registry)
 
     for module in list(ctx.registry.all_modules()):
@@ -2431,7 +2431,7 @@ async def _phase_maturation(ctx: BootContext) -> int | None:
         ctx.gate_runner.set_maturation_hook(_maturation_hook)
     ctx.gate_task = (
         asyncio.create_task(ctx.gate_runner.run(ctx.stop_event), name="cycle.maturation_gate")
-        if ctx.staging_enabled and ctx.stage_state.is_gestating
+        if ctx.staging_enabled and ctx.stage_state.is_developing
         else None
     )
     ctx.individuation_task = (
@@ -2449,7 +2449,7 @@ async def _phase_stimulus_source_watch(ctx: BootContext) -> int | None:
     # Stimulus source loss (maturation-gate-liveness 2.2): freeze a gestating entity under
     # its own holder when the stimulus source stops, and release it when the stimulus source returns.
     ctx.stimulus_source_watch_task = None
-    if ctx.staging_enabled and ctx.stage_state.is_gestating:
+    if ctx.staging_enabled and ctx.stage_state.is_developing:
         from kaine.cycle.stimulus_source_watch import StimulusSourceLossWatcher
 
         ctx.stimulus_source_watch_task = asyncio.create_task(
@@ -2457,7 +2457,7 @@ async def _phase_stimulus_source_watch(ctx: BootContext) -> int | None:
                 ctx.kaine_config,
                 ctx.bus,
                 publish=ctx._publish_lifecycle,
-                is_gestating=lambda: ctx.gate_runner.stage.is_gestating,
+                is_developing=lambda: ctx.gate_runner.stage.is_developing,
                 notify=ctx.caretaker.send_event if ctx.caretaker is not None else None,
                 check_seconds=ctx.ds_config.stimulus_source_check_seconds,
                 loss_after_seconds=ctx.ds_config.stimulus_source_loss_after_seconds,
@@ -2514,7 +2514,7 @@ async def _phase_development(ctx: BootContext) -> int | None:
     # Sleep stops the readout's awake time and aborts a running probe, like a freeze.
     # The readiness readout (local-womb-feed phase 3): measures, never imposes.
     ctx.development_task = None
-    if ctx.staging_enabled and ctx.stage_state.is_gestating:
+    if ctx.staging_enabled and ctx.stage_state.is_developing:
         ctx.development_task = _start_development_owner(
             ctx.kaine_config,
             ctx.bus,

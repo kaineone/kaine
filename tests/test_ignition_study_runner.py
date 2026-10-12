@@ -1199,7 +1199,7 @@ def test_failed_timeout_preservation_records_a_critical_step(
     ]
 
 
-GESTATING_SCRIPT = textwrap.dedent(
+DEVELOPING_SCRIPT = textwrap.dedent(
     '''\
     import sys
     import time
@@ -1225,8 +1225,8 @@ def test_an_earlier_childs_runtime_never_triggers_the_maturation_preservation(
     import subprocess
 
     study_dir = _create_study(tmp_path, viewings=1, development_budget_seconds=3600.0)
-    gestating = tmp_path / "gestating.py"
-    gestating.write_text(GESTATING_SCRIPT)
+    developing = tmp_path / "developing.py"
+    developing.write_text(DEVELOPING_SCRIPT)
     release = tmp_path / "release"
     control_log = tmp_path / "control_calls.txt"
     control = [
@@ -1290,8 +1290,8 @@ def test_an_earlier_childs_runtime_never_triggers_the_maturation_preservation(
         with pytest.raises(StudyHalted) as exc_info:
             _runner(
                 study_dir,
-                gestating,
-                cycle_command=[sys.executable, str(gestating), str(release)],
+                developing,
+                cycle_command=[sys.executable, str(developing), str(release)],
                 control_command=control,
                 popen=popen,
                 cycle_alive=lambda pid: False,

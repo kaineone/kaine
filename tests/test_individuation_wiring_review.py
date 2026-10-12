@@ -73,17 +73,17 @@ def test_runtime_adapter_rule_does_not_hash(tmp_path: Path, monkeypatch):
 
 
 async def test_maturation_marker_survives_restart(tmp_path: Path):
-    runtime = build(tmp_path, is_gestating=lambda: False)
+    runtime = build(tmp_path, is_developing=lambda: False)
     runtime.on_maturation()
     assert runtime.paths.maturation_pending.exists()
 
-    runtime2 = build(tmp_path, is_gestating=lambda: False)
+    runtime2 = build(tmp_path, is_developing=lambda: False)
     await runtime2.start()
     assert runtime2.scheduler._capture_kind == "birth"
 
 
 def test_sleep_clears_maturation_marker(tmp_path: Path):
-    runtime = build(tmp_path, is_gestating=lambda: False)
+    runtime = build(tmp_path, is_developing=lambda: False)
     runtime.on_maturation()
     assert runtime.paths.maturation_pending.exists()
     assert runtime.scheduler._capture_kind == "birth"
@@ -102,14 +102,14 @@ async def test_existing_reference_removes_stale_marker(tmp_path: Path):
     paths.maturation_pending.write_text("1", encoding="utf-8")
     assert paths.maturation_pending.exists()
 
-    runtime2 = build(tmp_path, is_gestating=lambda: False)
+    runtime2 = build(tmp_path, is_developing=lambda: False)
     await runtime2.start()
     assert not runtime2.paths.maturation_pending.exists()
     assert runtime2.scheduler._capture_kind is None
 
 
 async def test_start_does_not_override_pending_maturation(tmp_path: Path):
-    runtime = build(tmp_path, is_gestating=lambda: False)
+    runtime = build(tmp_path, is_developing=lambda: False)
     runtime.on_maturation()
     await runtime.start()
     assert runtime.scheduler._capture_kind == "birth"
@@ -118,7 +118,7 @@ async def test_start_does_not_override_pending_maturation(tmp_path: Path):
 
 async def test_start_keeps_a_pending_maturation_request_without_a_marker(tmp_path: Path):
     # As when writing the marker failed: the in-memory request still wins.
-    runtime = build(tmp_path, is_gestating=lambda: False)
+    runtime = build(tmp_path, is_developing=lambda: False)
     runtime.scheduler.request_capture("birth")
     assert not runtime.paths.maturation_pending.exists()
     await runtime.start()

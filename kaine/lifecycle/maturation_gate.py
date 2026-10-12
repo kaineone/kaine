@@ -62,7 +62,7 @@ STAGE_MATURATION_READY = "stage.birth.ready"
 STAGE_MATURATION = "stage.birth"
 
 # Maturation-decision actions.
-ACTION_GESTATING = "gestating"
+ACTION_DEVELOPING = "gestating"
 ACTION_HOLD_AWAITING_EMBODIMENT = "hold_awaiting_embodiment"
 ACTION_HOLD_AWAITING_ACK = "hold_awaiting_ack"
 ACTION_MATURATION = "birth"
@@ -425,7 +425,7 @@ def decide_maturation(
     """
     if not readiness.ready:
         return MaturationDecision(
-            ACTION_GESTATING, "unmet: " + ",".join(readiness.unmet), readiness
+            ACTION_DEVELOPING, "unmet: " + ",".join(readiness.unmet), readiness
         )
     if faculties.embodiment and not embodiment_ready:
         return MaturationDecision(

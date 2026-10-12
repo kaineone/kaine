@@ -73,7 +73,7 @@ def test_operator_lock_denial_unchanged() -> None:
     assert reason == "locus locked by operator"
 
 
-def test_self_switch_refused_while_gestating() -> None:
+def test_self_switch_refused_while_developing() -> None:
     # The load-bearing behaviour: while the stimulus source lock is held the entity cannot
     # leave the stimulus source, regardless of dwell/policy.
     allowed, _ = _switch("gestation")

@@ -234,7 +234,7 @@ async def test_first_evaluation_holds_writes_request(
 
     await runner._evaluate_once()
 
-    assert runner.stage.is_gestating
+    assert runner.stage.is_developing
     assert not any(e.type == STAGE_MATURATION for e in published)
     request_path = tmp_path / "birth_request.json"
     assert request_path.exists()
@@ -267,7 +267,7 @@ async def test_wrong_ack_does_not_maturation(
 
     await runner._evaluate_once()
 
-    assert runner.stage.is_gestating
+    assert runner.stage.is_developing
     assert not any(e.type == STAGE_MATURATION for e in published)
     assert read_request(tmp_path / "birth_request.json").request_id == request_id
 
@@ -337,7 +337,7 @@ async def test_old_request_ack_pair_does_not_maturation(
 
     await runner._evaluate_once()
 
-    assert runner.stage.is_gestating
+    assert runner.stage.is_developing
     assert not any(e.type == STAGE_MATURATION for e in published)
     assert runner.status["awaiting_ack"] is True
     new_id = runner.status["request_id"]
@@ -370,7 +370,7 @@ async def test_readiness_lost_clears_request(
 
     await runner._evaluate_once()
 
-    assert runner.stage.is_gestating
+    assert runner.stage.is_developing
     assert not any(e.type == STAGE_MATURATION for e in published)
     assert not request_path.exists()
     assert runner.status["awaiting_ack"] is False

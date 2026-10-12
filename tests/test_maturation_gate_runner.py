@@ -180,7 +180,7 @@ def _fresh_development_state(tmp_path: Path) -> lifecycle_stage.StageState:
 
 
 @pytest.mark.asyncio
-async def test_no_stimulus_when_gestating_without_stimulus_source_feed(tmp_path: Path) -> None:
+async def test_no_stimulus_when_developing_without_stimulus_source_feed(tmp_path: Path) -> None:
     published: list[Event] = []
     bus = _make_bus(published=published)
     state = _fresh_development_state(tmp_path)
@@ -203,7 +203,7 @@ async def test_no_stimulus_when_gestating_without_stimulus_source_feed(tmp_path:
 
 
 @pytest.mark.asyncio
-async def test_gate_keeps_gestating_when_conditions_unmet(tmp_path: Path) -> None:
+async def test_gate_keeps_developing_when_conditions_unmet(tmp_path: Path) -> None:
     published: list[Event] = []
     bus = _make_bus(published=published, readout={"endogenous_self_sustain": True}, sleep_count=1)
     state = _fresh_development_state(tmp_path)
@@ -227,7 +227,7 @@ async def test_gate_keeps_gestating_when_conditions_unmet(tmp_path: Path) -> Non
     await runner._evaluate_once()
 
     assert not published
-    assert runner.stage.is_gestating
+    assert runner.stage.is_developing
 
 
 @pytest.mark.asyncio
@@ -266,7 +266,7 @@ async def test_gate_holds_awaiting_embodiment_when_ready_but_embodiment_unavaila
     assert len(published) == 1
     assert published[0].type == STAGE_MATURATION_READY
     assert published[0].payload["reason"] == "awaiting_embodiment"
-    assert runner.stage.is_gestating
+    assert runner.stage.is_developing
 
 
 @pytest.mark.asyncio
@@ -456,7 +456,7 @@ async def test_maturation_calls_embodiment_activate_before_stage_file_and_unlock
     # was written as embodied.
     assert embodiment.activate_calls
     at_activation = embodiment.activate_calls[0]
-    assert at_activation is None or at_activation.is_gestating
+    assert at_activation is None or at_activation.is_developing
     persisted = lifecycle_stage.read_stage(tmp_path / "stage.json")
     assert persisted is not None
     assert persisted.is_embodied
@@ -514,11 +514,11 @@ async def test_maturation_deferred_when_embodiment_activate_fails(
     assert len(published) == 1
     assert published[0].type == STAGE_MATURATION_READY
     assert published[0].payload["reason"] == "awaiting_embodiment"
-    assert runner.stage.is_gestating
+    assert runner.stage.is_developing
 
     persisted = lifecycle_stage.read_stage(tmp_path / "stage.json")
     assert persisted is not None
-    assert persisted.is_gestating
+    assert persisted.is_developing
 
     # Locus should stay locked and attributed to the developmental phase
     desired = read_desired(desired_path)

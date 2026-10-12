@@ -361,7 +361,7 @@ class MaturationGateRunner:
                 ),
             }
 
-        if not self._staging_enabled or not self._stage.is_gestating:
+        if not self._staging_enabled or not self._stage.is_developing:
             _set_status()
             return
 
@@ -619,7 +619,7 @@ class MaturationGateRunner:
     async def run(self, stop_event: asyncio.Event) -> None:
         """Run the gate loop until ``stop_event`` is set."""
         self._stop_event = stop_event
-        if not self._staging_enabled or not self._stage.is_gestating:
+        if not self._staging_enabled or not self._stage.is_developing:
             return
 
         cadence = max(1.0, float(self._config.gate_cadence_seconds))

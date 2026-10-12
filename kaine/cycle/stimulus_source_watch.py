@@ -117,7 +117,7 @@ class StimulusSourceLossWatcher:
         bus: Any,
         *,
         publish: Callable[[str, dict[str, Any], float], Awaitable[None]],
-        is_gestating: Callable[[], bool],
+        is_developing: Callable[[], bool],
         notify: Callable[[str], Awaitable[Any]] | None = None,
         live_check: Callable[..., Awaitable[StimulusSourceLiveness]] = check_stimulus_source_live,
         control_path: Path | None = None,
@@ -134,7 +134,7 @@ class StimulusSourceLossWatcher:
         self._config = config
         self._bus = bus
         self._publish = publish
-        self._is_gestating = is_gestating
+        self._is_developing = is_developing
         self._notify = notify
         self._live_check = live_check
         self._control_path = control_path
@@ -190,7 +190,7 @@ class StimulusSourceLossWatcher:
 
     async def step(self) -> None:
         """Perform a single stimulus-source-liveness check and update freeze state."""
-        if not self._is_gestating():
+        if not self._is_developing():
             if self._lost:
                 try:
                     pop_freeze(self._control_path, source=DEVELOPMENT_FREEZE_SOURCE)

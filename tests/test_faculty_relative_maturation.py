@@ -419,7 +419,7 @@ async def test_base_thesis_maturations_into_perceptual_world(
     await runner._evaluate_once()
 
     assert runner.stage.is_embodied
-    assert not runner.stage.is_gestating
+    assert not runner.stage.is_developing
     assert len(published) == 1
     assert published[0].type == "stage.birth"
     assert published[0].payload["world"] == "perceptual"
@@ -471,7 +471,7 @@ async def test_embodiment_present_but_unreachable_holds_awaiting_embodiment(
 
     await runner._evaluate_once()
 
-    assert runner.stage.is_gestating
+    assert runner.stage.is_developing
     assert not runner.stage.is_embodied
     assert len(published) == 1
     assert published[0].type == "stage.birth.ready"

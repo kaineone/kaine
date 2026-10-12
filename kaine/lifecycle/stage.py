@@ -247,7 +247,7 @@ class StageState:
     birth_bloom_ends_at: str | None = None
 
     @property
-    def is_gestating(self) -> bool:
+    def is_developing(self) -> bool:
         return self.stage == DEVELOPMENT
 
     @property
@@ -362,7 +362,7 @@ def advance_to_embodied(state: StageState, *, now_iso: str | None = None) -> Sta
 def maturation_is_new(before: StageState, after: StageState) -> bool:
     """True iff ``after`` represents a fresh gestation->embodied transition of
     ``before`` — the one-shot guard the maturation event/handoff keys off."""
-    return before.is_gestating and after.is_embodied
+    return before.is_developing and after.is_embodied
 
 
 def record_maturation_stimulus_source(
