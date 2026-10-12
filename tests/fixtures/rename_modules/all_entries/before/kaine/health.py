@@ -6,5 +6,12 @@ def nous_health_probe() -> str:
     return "nous"
 
 
-__all__ = ["nous_health_probe"]
-__all__ += ["nous_health_probe"]
+def other_probe() -> str:
+    return "other"
+
+
+__all__ = [
+    "other_probe",
+    "nous_health_probe",
+]
+__all__ += ("other_probe", "nous_health_probe")

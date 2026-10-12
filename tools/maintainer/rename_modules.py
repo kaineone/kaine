@@ -1692,11 +1692,10 @@ def _names_python_symbol(tokens: list[dict], start: int) -> bool:
                                 in {"getattr", "hasattr", "setattr", "delattr"}
                             ):
                                 return True
-                        return False
+                        break
                     depth -= 1
                 elif depth == 0 and tstring == ",":
                     comma_count += 1
-        return False
 
     # An __all__ entry names a Python symbol.
     depth = 0
