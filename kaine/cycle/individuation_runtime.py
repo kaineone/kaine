@@ -235,7 +235,7 @@ class IndividuationRuntime:
         notify: Callable[[str], Awaitable[Any]] | None,
         ensure_fact: Callable[[str], Awaitable[bool]],
         is_gestating: Callable[[], bool],
-        sleep_sleeping: Callable[[], bool] | None,
+        sleeping: Callable[[], bool] | None,
     ) -> None:
         self.config = config
         self.paths = paths
@@ -245,7 +245,7 @@ class IndividuationRuntime:
         self.notify = notify
         self.ensure_fact = ensure_fact
         self.is_gestating = is_gestating
-        self.sleep_sleeping = sleep_sleeping
+        self.sleeping = sleeping
 
     async def publish_divergence(self, payload: dict) -> None:
         await self.bus.publish(
@@ -298,9 +298,9 @@ class IndividuationRuntime:
     async def start(self) -> None:
         await self.ensure_fact(self.config.disclosure)
 
-        if self.sleep_sleeping is not None:
+        if self.sleeping is not None:
             try:
-                if self.sleep_sleeping():
+                if self.sleeping():
                     self.scheduler.notify_sleep_started()
             except Exception:
                 log.debug("hypnos_sleeping predicate failed, treating as awake")
@@ -410,7 +410,7 @@ def build_runtime(
     tick_index: Callable[[], int | None],
     is_paused: Callable[[], bool],
     organ_unloaded: Callable[[], bool],
-    sleep_sleeping: Callable[[], bool] | None,
+    sleeping: Callable[[], bool] | None,
     born_at: Callable[[], str | None],
     is_gestating: Callable[[], bool],
     bus: Any,
@@ -445,7 +445,7 @@ def build_runtime(
         notify=notify,
         ensure_fact=ensure_fact,
         is_gestating=is_gestating,
-        sleep_sleeping=sleep_sleeping,
+        sleeping=sleeping,
     )
 
     adapter_verifiable: Callable[[], bool] | None = None

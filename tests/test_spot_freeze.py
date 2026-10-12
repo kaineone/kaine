@@ -202,7 +202,7 @@ async def test_gestation_only_freeze_hung_module_spot_ignores(bus, tmp_path, mon
     registry.register(mod)
     fm = ForkManager(tmp_path / "forks")
     spot = _spot(registry, fm, bus)
-    monkeypatch.setattr(spot, "_sleep_sleeping", lambda: False)
+    monkeypatch.setattr(spot, "_sleeping", lambda: False)
 
     control_state.freeze(reason="gestation hold", source="gestation")
     pre_stack = tuple(control_state.read_control().stack)
@@ -279,7 +279,7 @@ async def test_hung_module_is_really_hung_without_a_freeze(bus, tmp_path, monkey
     registry = ModuleRegistry()
     registry.register(mod)
     spot = _spot(registry, ForkManager(tmp_path / "forks"), bus)
-    monkeypatch.setattr(spot, "_sleep_sleeping", lambda: False)
+    monkeypatch.setattr(spot, "_sleeping", lambda: False)
 
     assert spot.assess(mod).state == "hung"
     await spot._poll_once(asyncio.Event())
@@ -301,7 +301,7 @@ async def test_hung_module_ignored_while_spot_entry_sits_on_gestation(
     registry = ModuleRegistry()
     registry.register(mod)
     spot = _spot(registry, ForkManager(tmp_path / "forks"), bus)
-    monkeypatch.setattr(spot, "_sleep_sleeping", lambda: False)
+    monkeypatch.setattr(spot, "_sleeping", lambda: False)
 
     control_state.push_freeze(reason="womb lost", source="gestation")
     control_state.push_freeze(reason="spot: other crashed", source="spot")

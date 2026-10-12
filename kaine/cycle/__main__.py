@@ -302,7 +302,7 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
         tick_index=lambda: cycle.tick_index,
         is_paused=lambda: cycle.is_paused,
         organ_unloaded=organ_unloaded,
-        sleep_sleeping=sleep.is_sleeping if sleep is not None else None,
+        sleeping=sleep.is_sleeping if sleep is not None else None,
         born_at=lambda: gate_runner.stage.born_at,
         is_gestating=lambda: bool(staging_enabled and gate_runner.stage.is_gestating),
         bus=bus,
@@ -424,7 +424,7 @@ def _memory_source_factory(registry):
         return None
     episodic_memory = registry.get("mnemos")
 
-    class _EpisodicMemoryMemorySource:
+    class _EpisodicMemorySource:
         async def sample_old_memory(self, *, older_than_seconds: float):
             import time
 
@@ -449,7 +449,7 @@ def _memory_source_factory(registry):
                 **oldest.payload,
             }
 
-    return _EpisodicMemoryMemorySource()
+    return _EpisodicMemorySource()
 
 
 def _cognitive_query_client_factory(registry, eval_cfg):

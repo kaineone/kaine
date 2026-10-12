@@ -644,6 +644,9 @@ KEY_OVERRIDES = (
     ("spot-supervisor", "supervisor"),
     # The locus page and capability name would otherwise become a stutter.
     ("perception-locus", "perceptual-locus"),
+    # Identifiers that would otherwise stutter after the rename.
+    ("hypnos_sleeping", "sleeping"),
+    ("MnemosMemorySource", "EpisodicMemorySource"),
 )
 
 PHRASES = (

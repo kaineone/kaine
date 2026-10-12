@@ -1,0 +1,1 @@
+Verifies that old names embedded after a lowercase letter in CamelCase identifiers are matched, while English words that merely start with an old name are left unchanged. The report counts exactly two replacements in a single file.
