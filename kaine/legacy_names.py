@@ -668,6 +668,13 @@ PATH_OVERRIDES = {
     # the dotted import path kaine.modules.phantasia.world_model, so the file that
     # holds WorldModelBackend moves to backend.py to match it.
     "kaine/modules/phantasia/world_model.py": "kaine/modules/world_model/backend.py",
+
+    # Test files whose old name already said "sleep" or "world_model" would otherwise
+    # stutter (test_sleep_sleep_pause.py).
+    "tests/test_hypnos_sleep_cancellation.py": "tests/test_sleep_cancellation.py",
+    "tests/test_hypnos_sleep_pause.py": "tests/test_sleep_pause.py",
+    "tests/test_hypnos_sleep_replay_window.py": "tests/test_sleep_replay_window.py",
+    "tests/test_phantasia_world_model.py": "tests/test_world_model_backend.py",
     # Keys ending in "/" are directory prefixes.
     "openspec/specs/spot-supervisor/": "openspec/specs/supervisor/",
     "docs/08-cognitive-cycle/perception-locus.md": "docs/08-cognitive-cycle/perceptual-locus.md",
