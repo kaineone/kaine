@@ -636,6 +636,10 @@ RESOLUTIONS = [
 KEY_OVERRIDES = (
     ("eidolon.self_model", "self_model.document"),
     ("phantasia.world_model", "world_model.backend"),
+    # kaine/workspace/syneidesis.py moves to kaine/workspace/core.py (PATH_OVERRIDES),
+    # so its dotted import path and its path in text follow the same name.
+    ("workspace.syneidesis", "workspace.core"),
+    ("workspace/syneidesis", "workspace/core"),
     ("fork_being", "fork_entity"),
     ("PerceptionLocus", "PerceptualLocus"),
     ("perception.locus.", "perceptual_locus."),
