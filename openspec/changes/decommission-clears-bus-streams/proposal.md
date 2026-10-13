@@ -16,8 +16,11 @@ the bus after the operator was told it was deleted.
   cleared either way.
 - It deletes those streams by exact name, in the dry-run report and in the real
   run.
-- A test with an in-memory Redis checks that every listed stream is deleted and
-  that an unrelated key is left alone.
+- A test with an in-memory Redis checks that every listed stream is deleted, that
+  only streams that existed are reported, and that an unrelated key and a stream
+  whose name merely starts with a listed name are left alone. Decommission may not
+  import the evaluation registry, so a test checks that the list covers every
+  stream that registry names as produced.
 
 ## Capabilities
 
