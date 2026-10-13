@@ -237,11 +237,11 @@ def test_setup_main_imports_without_web_extras(monkeypatch) -> None:
     # install without the dashboard extra. Re-importing also mutates parent-package
     # attributes, so record those before clearing the cache so monkeypatch
     # restores everything and nothing leaks into later tests on the same worker.
-    import kaine.setup
+    setup_pkg = importlib.import_module("kaine.setup")
 
     for name in ("__main__", "web"):
-        if hasattr(kaine.setup, name):
-            monkeypatch.setattr(kaine.setup, name, getattr(kaine.setup, name))
+        if hasattr(setup_pkg, name):
+            monkeypatch.setattr(setup_pkg, name, getattr(setup_pkg, name))
 
     web_pkg = sys.modules.get("kaine.setup.web")
     if web_pkg is not None:
