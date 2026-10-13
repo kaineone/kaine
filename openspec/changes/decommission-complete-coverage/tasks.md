@@ -7,7 +7,7 @@
 
 - [ ] 1.1 One location registry with each location's decision, resolved through the configuration and the rename table.
 - [ ] 1.2 Backup completeness: the sqlite-vec store, stage and developmental files, effector files and notifications, voice outcomes and measures, the consolidation record, every snapshot of this entity, merged adapters, the active organ adapter, the raw bus archive and external utterances; a Qdrant export failure is fatal.
-- [ ] 1.3 Deletion completeness and scope: identity-filtered fork snapshots, identity, stage, developmental and operational files, content-bearing research records, the organ-adapters and trainer-jobs volumes.
+- [ ] 1.3 Deletion completeness and scope: identity-filtered fork snapshots, identity, stage, developmental and operational files, content-bearing research records, the organ-adapters and trainer-jobs volumes (after cancelling this entity's running voice-alignment job), the sqlite-vec write-ahead files, a fresh Redis snapshot when snapshots are on.
 
 ## 2. Stores and records
 
@@ -16,5 +16,6 @@
 
 ## 3. Docs and tests
 
-- [ ] 3.1 docs/11-preservation.md and docs/13-security-and-privacy.md state what decommission removes, keeps and backs up; the CLI prints the same split before confirmation.
-- [ ] 3.2 A seeded tree test: every DELETE location gone, every RETAIN location untouched, every BACKUP location in the bundle, another entity's fork kept, a refusing store fails with nothing deleted.
+- [ ] 3.1 docs/11-preservation.md, docs/13-security-and-privacy.md and docs/17-research-data state what decommission removes, keeps and backs up; the CLI prints the same split before confirmation.
+- [ ] 3.2 A seeded tree test: every DELETE location gone, every RETAIN location untouched, every BACKUP location in the bundle, another entity's fork and adapters kept, a refusing Qdrant or Redis fails with nothing deleted, replay records with redaction off and on, the sqlite-vec write-ahead files gone.
+- [ ] 3.3 A log test: a seeded utterance never reaches `state/logs/`.

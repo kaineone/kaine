@@ -84,22 +84,23 @@ Decisions:
 | `state/lingua/utterance_outcomes.jsonl`, `voice_measures*.json(l)` | voice outcomes and measures | deleted, **not backed up** | BACKUP + DELETE | part of the developing voice (CAL 4.2(b)) |
 | `state/hypnos/adapters/` | learned voice adapters | backed up, deleted | BACKUP + DELETE | unchanged |
 | `state/hypnos/consolidation_divergence.json` | consolidation record | **kept** | BACKUP + DELETE | a consolidation record is cognitive state by definition |
-| `state/hypnos/organ_window.json` | organ residency window | kept | DELETE | operational state a later entity would inherit |
+| `state/hypnos/organ_window.json` | which organs were loaded when (GPU residency) | kept | DELETE | scheduling state of the host's memory, not something the entity learned; a later entity would inherit it |
 | `state/phantasia/` (checkpoint and sidecar) | world-model weights | backed up, deleted | BACKUP + DELETE | unchanged |
 | `state/mnemos/mnemos.db` (sqlite-vec, the default store on tiers 0 and 1) | **the episodic memory** | **neither** | BACKUP + DELETE | memories are cognitive state; today the whole memory survives on two tiers |
-| `state/mnemos/store_health.json` | store health | kept | DELETE | this entity's store metadata |
+| `state/mnemos/mnemos.db-wal`, `mnemos.db-shm` | uncheckpointed memory pages | neither | BACKUP + DELETE (checkpoint into the database before the backup, then delete all three) | the write-ahead log can hold memory content the main file does not yet have |
+| `state/mnemos/store_health.json` | store state markers (for example an interrupted import) | kept | DELETE | not a health metric but a marker the next store would act on |
 | `state/individuation/` | maturation reference, ledger, reports, maturation adapter | backed up (fatal), deleted | BACKUP + DELETE | unchanged |
 | `state/forks/<id>/` snapshots of **this** entity | full module state | latest backed up; whole dir deleted | BACKUP + DELETE, this entity's only | all of the entity's snapshots are its state; the backup carries them, not only the latest |
 | `state/forks/<id>/` of **other** entities and preserved forks | another individual | **deleted** (whole dir) | RETAIN | a preserved or individuated fork is a separate entity (CAL 4.6); deleting it here breaches docs/12-forks-and-merges.md |
-| `state/forks/merged_adapters/` | merged voice adapters | deleted, not backed up | BACKUP + DELETE (this entity's) | learned voice |
+| `state/forks/merged_adapters/` | merged voice adapters | deleted, not backed up | BACKUP + DELETE (this entity's) | learned voice; a merged snapshot lists its adapter paths, so an adapter belongs to the entity whose snapshots list it, and one no snapshot of another entity lists is this entity's |
 | `state/lifecycle/stage.json` and `gestation_*.json`, `birth_request.json`, `birth_ack.json` | developmental stage and progress | **kept** | BACKUP + DELETE | developmental state is in preservation bundles already; left behind, a new boot would inherit the stage |
-| `state/identity/entity.json` | entity id and lineage | read into the manifest, **kept** | DELETE (id kept in the backup manifest and the audit record) | left behind, the next entity in this state root would reuse the decommissioned id |
+| `state/identity/entity.json` | entity id and lineage | read into the manifest, **kept** | BACKUP + DELETE (the whole file goes into the backup; the id is also in the audit record) | lineage is part of who the entity is; left behind, the next entity in this state root would reuse the decommissioned id |
 | `state/perception/` | locus runtime and desire | deleted | DELETE | operational; unchanged |
 | `state/praxis/files/` | files the entity wrote | **kept** | BACKUP + DELETE | the entity's own output and learned behaviour |
 | `state/praxis/notifications.log` | notifications the entity sent | **kept** | BACKUP + DELETE | entity-written content |
 | `state/praxis/audit.log` | hash-chained action audit, no content | kept | RETAIN | accountability record of what the entity did; required to audit its actions after the fact |
 | `state/vox/*.wav` | the entity's speech audio (bounded) | **kept** | DELETE | rendered output, not state; private content |
-| `state/hypnos/voice_align_jobs/` (`kaine-trainer-jobs` volume) | training pairs (plaintext utterances) while a job runs, metadata after | **kept** | DELETE | transient training data with private content; the trained adapters are backed up |
+| `state/hypnos/voice_align_jobs/` (`kaine-trainer-jobs` volume) | training pairs (plaintext utterances) while a job runs, metadata after | **kept** | DELETE (after any running job for this entity is cancelled) | transient training data with private content; the trained adapters are backed up |
 | `state/hypnos/voice_alignment_audit.jsonl` | adapter verdicts, no content | kept | RETAIN | welfare and audit record of voice changes |
 
 ### Cycle and welfare records (state/cycle, state/preservation)
@@ -140,9 +141,10 @@ Decisions:
 | Qdrant `kaine_meta` stamp and strength points of this entity | store metadata | deleted | DELETE | unchanged, now authenticated |
 | Redis streams on the configured database (old and new names) | recent bus traffic | cleared if reachable, no auth (fixed in `decommission-clears-bus-streams`) | DELETE | private content; authenticated, exact names, streams only |
 | Redis append-only file | history of every stream write | kept | DELETE (rewrite after the deletion) | deleted entries otherwise stay on disk; `BGREWRITEAOF` (in `decommission-clears-bus-streams`) |
+| Redis snapshot file (RDB), when an operator turns snapshots on | a point-in-time copy of every stream | kept | DELETE (a fresh `BGSAVE` after the deletion replaces it) | the shipped compose, quadlet and native setups run with snapshots off; if they are on, the old snapshot holds the deleted streams |
 | Other Redis databases (ignition-study lines), `kaine:study:owner` | other study entities | kept | RETAIN | separate entities with their own state roots |
-| `kaine-organ-adapters` volume (`active-N.gguf`, `active.json`) | the entity's active voice adapter | **kept** | BACKUP + DELETE | learned voice; left behind, the next entity would speak with it |
-| `state/logs/` (cycle and dashboard stdout) | operational logs | kept | RETAIN | health data; logs carry no content by policy (to be verified by the implementation's test) |
+| `kaine-organ-adapters` volume (`active-N.gguf`, `active.json`) | the entity's active voice adapter | **kept** | BACKUP + DELETE | learned voice; left behind, the next entity would speak with it. A deployment's volume set serves one entity (study lines use their own), so the whole set is this entity's |
+| `state/logs/` (cycle and dashboard stdout) | operational logs | kept | RETAIN | health data, on one condition: the cycle and the dashboard log no bus payloads and no utterance text. The implementation adds a test that runs the cycle against a seeded utterance and asserts the text never reaches these logs; if the condition cannot be held, the decision becomes DELETE |
 | `state/model-server/`, `state/residency/`, `state/models/` | host and model metadata | kept | RETAIN | not entity data |
 
 ### Backups and preservation bundles
@@ -170,7 +172,11 @@ Decisions:
 5. **Content-bearing research records are deleted, metrics stay.** The test is
    whether a record holds the entity's content. Metrics, welfare flags and run
    metadata stay; verbatim text, audio and files go (after backup when they are
-   cognitive state).
+   cognitive state). docs/17-research-data promises that research records are
+   never deleted automatically. Decommission is not automatic: it is an attended,
+   confirmed operator act. Still, the promise as written reads as covering it, so
+   the implementation amends that page to say decommission removes the
+   content-bearing records after the backup and keeps the metrics.
 6. **Rendered speech audio is deleted without a backup.** It is output, not state,
    and its retention is already bounded.
 
@@ -198,19 +204,31 @@ Decisions:
 - **Credentials.** Qdrant and Redis are reached with the cycle's credentials
   (`load_bus_config()`, the Qdrant key from the environment or the secrets file).
   An unreachable or refusing store fails the run before anything is deleted.
-- **Audit record.** Each run appends one content-free record (what was removed,
-  kept and backed up, when, the outcome and the backup path) to
-  `state/audit/decommission.jsonl`, which is kept. `decommission-clears-bus-streams`
-  starts this record.
+- **Audit record.** Each run that reaches the deletion step appends one
+  content-free record (what was removed, kept and backed up, when, the outcome and
+  the backup path) to `state/audit/decommission.jsonl`, which is kept. A run that
+  stops before deleting anything (a refused confirmation, an unreachable store)
+  prints why and writes no record, because nothing changed.
+  `decommission-clears-bus-streams` starts this record.
+- **Running work.** Decommission already refuses while the cycle runs. It also
+  cancels any voice-alignment job of this entity and waits for it to stop before
+  clearing the trainer-jobs volume.
 - **Docs.**
   - docs/11-preservation.md and docs/13-security-and-privacy.md list what
     decommission removes and what it keeps, and why.
+  - docs/17-research-data says decommission removes the content-bearing research
+    records after the backup and keeps the metrics.
   - The CLI prints the same split before the typed confirmation.
 - **Tests.**
   - A seeded state, data and volume tree checks that every DELETE location is gone,
     every RETAIN location is untouched, and every BACKUP location is in the bundle.
   - Another entity's fork survives.
-  - A store that refuses authentication fails the run with nothing deleted.
+  - A store that refuses authentication fails the run with nothing deleted, for
+    Qdrant and for Redis.
+  - The replay records are checked with `replay_redact_content` both off (content
+    records deleted, metrics kept) and on (everything kept).
+  - The sqlite-vec write-ahead log and shared-memory files are gone afterwards.
+  - Another entity's adapters (in a separate volume set) survive.
 
 ## Open question outside the data inventory
 
