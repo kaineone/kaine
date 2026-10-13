@@ -314,6 +314,8 @@ def _write_location_split(out, qcfg, *, state_root, data_dir, fork_root, backup=
     out.write("  kept by design:\n")
     for loc in groups[RETAIN]:
         out.write(f"    - {loc.key}: {loc.reason}\n")
+        for note in loc.notes:
+            out.write(f"      note: {note}\n")
     if not groups[RETAIN]:
         out.write("    (none)\n")
     out.write("  also deleted: this entity's bus streams\n")
@@ -542,7 +544,21 @@ def main(
     # --- Qdrant preflight -------------------------------------------------
     # Runs before the backup, so a Qdrant that should be there and does not
     # answer stops the run with nothing copied and nothing deleted.
-    if qdrant_in_use(qcfg):
+    if args.qdrant_absent and (
+        qdrant_in_use(qcfg) or qdrant_endpoint_configured(qcfg)
+    ):
+        problem = _qdrant_problem(qcfg)
+        if problem is None:
+            out.write(
+                f"FAILED: Qdrant answered at {qdrant_endpoint_label(qcfg)}; run again without --qdrant-absent. Nothing was backed up or deleted.\n"
+            )
+            return 8
+        if qdrant_in_use(qcfg):
+            out.write(
+                f"FAILED: cannot reach or authenticate to Qdrant ({problem}); nothing was deleted\n"
+            )
+            return 8
+    elif qdrant_in_use(qcfg):
         problem = _qdrant_problem(qcfg)
         if problem is not None:
             out.write(
@@ -763,26 +779,15 @@ def main(
             )
             return 8
 
-        if qdrant_in_use(qcfg):
-            qclient = None
-            try:
-                qclient = _qdrant_client(qcfg)
-                if qclient is None:
-                    raise Exception("qdrant client unavailable")
-                qclient.get_collections()
-            except Exception as exc:
+        if qdrant_in_use(qcfg) or (
+            qdrant_endpoint_configured(qcfg) and not args.qdrant_absent
+        ):
+            problem = _qdrant_problem(qcfg)
+            if problem is not None:
                 out.write(
-                    f"FAILED: cannot reach or authenticate to Qdrant ({type(exc).__name__}); nothing was deleted\n"
+                    f"FAILED: Qdrant did not answer at {qdrant_endpoint_label(qcfg)} just before deletion ({problem}); nothing was deleted\n"
                 )
                 return 8
-            finally:
-                if qclient is not None:
-                    try:
-                        qclient.close()
-                    except Exception:
-                        # Closing the preflight client is best effort; the
-                        # outcome above already decided the run.
-                        pass
 
         voice_locs = entity_locations(
             qcfg,
@@ -793,23 +798,24 @@ def main(
         )
         still_training: list[str] = []
         cancelled_names: list[str] = []
-        jobs_paths: list[Path] = []
+        jobs_groups: dict[Path, list[str]] = {}
         seen_jobs: set[str] = set()
         for loc in voice_locs:
-            if loc.key in ("sleep.trainer_workdir", "sleep.voice_align_jobs"):
+            if loc.key == "sleep.voice_jobs.own":
                 for path in loc.existing():
                     real = os.path.realpath(path)
                     if real not in seen_jobs:
                         seen_jobs.add(real)
-                        jobs_paths.append(path)
-        for vp in jobs_paths:
+                        jobs_groups.setdefault(path.parent, []).append(path.name)
+        for parent, names in jobs_groups.items():
+            only = set(names)
             if args.trainer_stopped:
-                c, s = cancel_voice_alignment_jobs(vp, wait_s=0.0)
+                c, s = cancel_voice_alignment_jobs(parent, only=only, wait_s=0.0)
             else:
-                c, s = cancel_voice_alignment_jobs(vp)
+                c, s = cancel_voice_alignment_jobs(parent, only=only)
             cancelled_names.extend(c)
             for name in s:
-                still_training.append(str(vp / name))
+                still_training.append(str(parent / name))
         for name in cancelled_names:
             out.write(f"  cancelled voice-alignment job: {name}\n")
         if still_training:
@@ -855,6 +861,10 @@ def main(
             out.write(f"  deleted location: {key}\n")
         for key in result.retained_locations:
             out.write(f"  kept by design: {key}\n")
+        if result.attribution_notes:
+            out.write("  notes:\n")
+            for note in result.attribution_notes:
+                out.write(f"    - {note}\n")
         if result.rdb_snapshot is not None:
             out.write(f"  redis snapshot: {result.rdb_snapshot}\n")
         if result.errors:
@@ -875,6 +885,14 @@ def main(
             ],
             "deleted_locations": result.deleted_locations,
             "retained_locations": result.retained_locations,
+            "shared_volume_kept": [
+                str(Path(p).relative_to(state_root))
+                if Path(p).is_relative_to(state_root)
+                else str(p)
+                for p in result.shared_kept
+            ],
+            "shared_volume_reason": "kept: shared volume, not attributable to this entity",
+            "attribution_notes": result.attribution_notes,
             "dropped_collections": result.dropped_collections,
             "cleared_streams": result.cleared_redis_streams,
             "skipped_non_streams": result.skipped_non_streams,

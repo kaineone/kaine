@@ -4,6 +4,7 @@
 """End-to-end decommission with a hand-written path inventory and a real password-protected Redis."""
 
 import asyncio
+import hashlib
 import importlib
 import io
 import json
@@ -228,8 +229,8 @@ def build_entity(tmp_path, port):
         "state/language/intent_expression.jsonl",
         "state/lingua/utterance_outcomes.jsonl",
         "state/language/voice_measures.jsonl",
-        "state/hypnos/adapters/a1/adapter.bin",
-        "state/sleep/adapters/a2/adapter.bin",
+        "state/hypnos/adapters/a1/adapter.gguf",
+        "state/sleep/adapters/a2/adapter.gguf",
         "state/hypnos/consolidation_divergence.json",
         "state/sleep/consolidation_divergence.json",
         "state/phantasia/world_model.ckpt",
@@ -245,9 +246,6 @@ def build_entity(tmp_path, port):
         "state/effectors/files/note2.txt",
         "state/praxis/notifications.log",
         "state/effectors/notifications.log",
-        "state/hypnos/voice_align_jobs/job1/pairs.jsonl",
-        "state/sleep/voice_align_jobs/job2/pairs.jsonl",
-        "organ/active/adapter.gguf",
         "state/research/raw_bus_archive/2026-10-13.jsonl",
         "state/research/external_utterances/2026-10-13.jsonl",
     ]
@@ -290,6 +288,43 @@ def build_entity(tmp_path, port):
         _write(rel, "delete")
     for rel in keep_paths:
         _write(rel, "keep")
+
+    own_bytes = seeded["state/hypnos/adapters/a1/adapter.gguf"][1]
+    own_sha = hashlib.sha256(own_bytes).hexdigest()
+
+    def _put(rel, data, fate):
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        seeded[rel] = (fate, data)
+
+    _put("organ/active-2.gguf", own_bytes, "backup")
+    _put(
+        "organ/active.json",
+        json.dumps(
+            {"file": "active-2.gguf", "sha256": own_sha, "generation": 2, "adapter_id": "a1"}
+        ).encode(),
+        "backup",
+    )
+    _put("organ/active-1.gguf", b"KEEP study line adapter", "keep")
+    _put("organ/generation", b"2", "keep")
+
+    _put(
+        "state/hypnos/voice_align_jobs/job1/job.json",
+        json.dumps(
+            {"adapter_output_dir": str((state_root / "hypnos" / "adapters").resolve())}
+        ).encode(),
+        "backup",
+    )
+    _put("state/hypnos/voice_align_jobs/job1/pairs.jsonl", b"SECRET job1 pairs", "backup")
+    _put("state/sleep/voice_align_jobs/job2/out/x/adapter.gguf", own_bytes, "backup")
+    _put("state/sleep/voice_align_jobs/job2/pairs.jsonl", b"SECRET job2 pairs", "backup")
+    _put(
+        "state/hypnos/voice_align_jobs/study1/job.json",
+        json.dumps({"adapter_output_dir": "out"}).encode(),
+        "keep",
+    )
+    _put("state/hypnos/voice_align_jobs/study1/pairs.jsonl", b"KEEP study pairs", "keep")
 
     runtime_path = state_root / "cycle" / "runtime.json"
     runtime_path.parent.mkdir(parents=True, exist_ok=True)
@@ -454,7 +489,6 @@ def test_full_decommission_covers_every_location(requirepass_redis, tmp_path, mo
     ):
         directory = tmp_path / rel
         assert directory.is_dir(), directory
-        assert list(directory.iterdir()) == [], directory
 
     for db_rel in roots.dbs:
         db_path = tmp_path / db_rel
@@ -512,6 +546,10 @@ def test_full_decommission_covers_every_location(requirepass_redis, tmp_path, mo
     audit_text = audit_path.read_text(encoding="utf-8")
     assert "SECRET" not in audit_text
     assert "Kaine Nova" not in audit_text
+
+    assert "hypnos/voice_align_jobs/study1" in record["shared_volume_kept"]
+    assert any(e.endswith("organ/active-1.gguf") for e in record["shared_volume_kept"])
+    assert record["shared_volume_reason"] == "kept: shared volume, not attributable to this entity"
 
     combined_output = out.getvalue() + err.getvalue()
     assert "CAL Article 4.2(a)" in combined_output

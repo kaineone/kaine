@@ -104,6 +104,8 @@ class DeleteResult:
     rdb_snapshot: str | None = None
     deleted_locations: list[str] = field(default_factory=list)
     retained_locations: list[str] = field(default_factory=list)
+    shared_kept: list[str] = field(default_factory=list)
+    attribution_notes: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -1060,72 +1062,7 @@ def delete_entity_state(
         entity_id=entity_id,
     )
 
-    # --- On-disk locations ------------------------------------------------
-    protected = {
-        Path("/").resolve(),
-        Path.home().resolve(),
-        state_root.resolve(),
-        data_root.resolve(),
-        data_root.parent.resolve(),
-        fork_root.resolve(),
-    }
-    roots, refused_roots = delete_roots(
-        qdrant_cfg, state_root=state_root, data_root=data_root, fork_root=fork_root
-    )
-    for path, reason in refused_roots:
-        result.errors.append(f"refused allow-list entry {path}: {reason}")
-    # Resolve every location before anything is removed: one location can sit
-    # inside another (the language outcomes live in the language directory),
-    # and an inner location removed with its parent still counts as deleted.
-    present = {loc.key: loc.existing() for loc in locations}
-    for loc in locations:
-        if loc.decision not in (DELETE, BACKUP_DELETE):
-            if loc.decision == RETAIN and present[loc.key]:
-                result.retained_locations.append(loc.key)
-            continue
-
-        for path in present[loc.key]:
-            if not dry_run and not path.exists() and not path.is_symlink():
-                # Already removed together with an enclosing location.
-                if loc.key not in result.deleted_locations:
-                    result.deleted_locations.append(loc.key)
-                continue
-            if not within_delete_roots(path, roots):
-                result.errors.append(
-                    f"refused to delete {path}: outside the state, data and fork roots"
-                )
-                continue
-            if path.resolve() in protected:
-                result.errors.append(f"refused to delete {path}: protected root")
-                continue
-            if dry_run:
-                result.would_remove_paths.append(str(path))
-                if loc.key not in result.deleted_locations:
-                    result.deleted_locations.append(loc.key)
-                continue
-            try:
-                if path.is_symlink():
-                    path.unlink()
-                    result.removed_paths.append(str(path))
-                elif loc.contents_only and path.is_dir():
-                    for child in path.iterdir():
-                        # A symlink is removed as a link; its target is never
-                        # walked, wherever it points.
-                        if child.is_dir() and not child.is_symlink():
-                            shutil.rmtree(child)
-                        else:
-                            child.unlink()
-                        result.removed_paths.append(str(child))
-                elif path.is_dir():
-                    shutil.rmtree(path)
-                    result.removed_paths.append(str(path))
-                else:
-                    path.unlink()
-                    result.removed_paths.append(str(path))
-                if loc.key not in result.deleted_locations:
-                    result.deleted_locations.append(loc.key)
-            except Exception as exc:
-                result.errors.append(f"remove {path}: {type(exc).__name__}: {exc}")
+    errors_before_remote = len(result.errors)
 
     # --- Qdrant collections (only when this deployment uses Qdrant) ---------
     if qdrant_in_use(qdrant_cfg) or qdrant_endpoint_configured(qdrant_cfg):
@@ -1239,6 +1176,93 @@ def delete_entity_state(
     result.redis_failed = clear.failed
     result.aof_rewrite = clear.aof_rewrite
     result.rdb_snapshot = clear.rdb_snapshot
+
+    remote_failed = (len(result.errors) > errors_before_remote) or (
+        bus_client is not None and bool(result.redis_failed)
+    )
+    skip_disk_deletion = remote_failed and not dry_run
+    if skip_disk_deletion:
+        result.errors.append(
+            "local state kept because a remote store (Qdrant or Redis) failed; "
+            "it is the handle for running decommission again once that is fixed"
+        )
+
+    # --- On-disk locations ------------------------------------------------
+    protected = {
+        Path("/").resolve(),
+        Path.home().resolve(),
+        state_root.resolve(),
+        data_root.resolve(),
+        data_root.parent.resolve(),
+        fork_root.resolve(),
+    }
+    roots, refused_roots = delete_roots(
+        qdrant_cfg, state_root=state_root, data_root=data_root, fork_root=fork_root
+    )
+    for path, reason in refused_roots:
+        result.errors.append(f"refused allow-list entry {path}: {reason}")
+    # Resolve every location before anything is removed: one location can sit
+    # inside another (the language outcomes live in the language directory),
+    # and an inner location removed with its parent still counts as deleted.
+    present = {loc.key: loc.existing() for loc in locations}
+    for loc in locations:
+        if loc.decision == RETAIN and present[loc.key]:
+            result.retained_locations.append(loc.key)
+            if loc.key.endswith(".shared"):
+                result.shared_kept.extend(str(p) for p in present[loc.key])
+        for note in loc.notes:
+            if note not in result.attribution_notes:
+                result.attribution_notes.append(note)
+        if loc.decision not in (DELETE, BACKUP_DELETE):
+            continue
+
+        for path in present[loc.key]:
+            if not dry_run and not path.exists() and not path.is_symlink():
+                # Already removed together with an enclosing location.
+                if not skip_disk_deletion:
+                    if loc.key not in result.deleted_locations:
+                        result.deleted_locations.append(loc.key)
+                continue
+            if not within_delete_roots(path, roots):
+                if not skip_disk_deletion:
+                    result.errors.append(
+                        f"refused to delete {path}: outside the state, data and fork roots"
+                    )
+                continue
+            if path.resolve() in protected:
+                if not skip_disk_deletion:
+                    result.errors.append(f"refused to delete {path}: protected root")
+                continue
+            if dry_run:
+                result.would_remove_paths.append(str(path))
+                if loc.key not in result.deleted_locations:
+                    result.deleted_locations.append(loc.key)
+                continue
+            if skip_disk_deletion:
+                continue
+            try:
+                if path.is_symlink():
+                    path.unlink()
+                    result.removed_paths.append(str(path))
+                elif loc.contents_only and path.is_dir():
+                    for child in path.iterdir():
+                        # A symlink is removed as a link; its target is never
+                        # walked, wherever it points.
+                        if child.is_dir() and not child.is_symlink():
+                            shutil.rmtree(child)
+                        else:
+                            child.unlink()
+                        result.removed_paths.append(str(child))
+                elif path.is_dir():
+                    shutil.rmtree(path)
+                    result.removed_paths.append(str(path))
+                else:
+                    path.unlink()
+                    result.removed_paths.append(str(path))
+                if loc.key not in result.deleted_locations:
+                    result.deleted_locations.append(loc.key)
+            except Exception as exc:
+                result.errors.append(f"remove {path}: {type(exc).__name__}: {exc}")
 
     return result
 

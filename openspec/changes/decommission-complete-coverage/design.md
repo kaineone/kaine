@@ -100,7 +100,7 @@ Decisions:
 | `state/praxis/notifications.log` | notifications the entity sent | **kept** | BACKUP + DELETE | entity-written content |
 | `state/praxis/audit.log` | hash-chained action audit, no content | kept | RETAIN | accountability record of what the entity did; required to audit its actions after the fact |
 | `state/vox/*.wav` | the entity's speech audio (bounded) | **kept** | DELETE | rendered output, not state; private content |
-| `state/hypnos/voice_align_jobs/` (`kaine-trainer-jobs` volume) | training pairs (plaintext utterances) while a job runs, metadata after | **kept** | DELETE (after any running job for this entity is cancelled) | transient training data with private content; the trained adapters are backed up |
+| `state/hypnos/voice_align_jobs/` (`kaine-trainer-jobs` volume) | training pairs (plaintext utterances) while a job runs, metadata after | **kept** | BACKUP + DELETE for this entity's jobs only (after its running jobs are cancelled); other entries KEPT | the volume is shared with the study runner (`/trainer-jobs`); a job is this entity's when its `job.json` names this entity's adapter store or it holds one of this entity's adapters |
 | `state/hypnos/voice_alignment_audit.jsonl` | adapter verdicts, no content | kept | RETAIN | welfare and audit record of voice changes |
 
 ### Cycle and welfare records (state/cycle, state/preservation)
@@ -143,7 +143,7 @@ Decisions:
 | Redis append-only file | history of every stream write | kept | DELETE (rewrite after the deletion) | deleted entries otherwise stay on disk; `BGREWRITEAOF` (in `decommission-clears-bus-streams`) |
 | Redis snapshot file (RDB), when an operator turns snapshots on | a point-in-time copy of every stream | kept | DELETE (a fresh `BGSAVE` after the deletion replaces it) | the shipped compose, quadlet and native setups run with snapshots off; if they are on, the old snapshot holds the deleted streams |
 | Other Redis databases (ignition-study lines), `kaine:study:owner` | other study entities | kept | RETAIN | separate entities with their own state roots |
-| `kaine-organ-adapters` volume (`active-N.gguf`, `active.json`) | the entity's active voice adapter | **kept** | BACKUP + DELETE | learned voice; left behind, the next entity would speak with it. A deployment's volume set serves one entity (study lines use their own), so the whole set is this entity's |
+| `kaine-organ-adapters` volume (`active-N.gguf`, `active.json`) | the entity's active voice adapter | **kept** | BACKUP + DELETE for this entity's files only; other entries KEPT | learned voice; left behind, the next entity would speak with it. The volume is shared: the compose study runner mounts the same volume, so a file is this entity's only when its checksum matches an adapter in this entity's adapter store (CAL Article 4.6) |
 | `state/logs/` (cycle and dashboard stdout) | operational logs | kept | RETAIN | health data, on one condition: the cycle and the dashboard log no bus payloads and no utterance text. The implementation adds a test that runs the cycle against a seeded utterance and asserts the text never reaches these logs; if the condition cannot be held, the decision becomes DELETE |
 | `state/model-server/`, `state/residency/`, `state/models/` | host and model metadata | kept | RETAIN | not entity data |
 
@@ -207,7 +207,8 @@ The owner reviewed this design and decided:
 - **Deletion.**
   - Fork snapshots are filtered by the entity's identity.
   - The identity, stage, developmental and operational files are deleted.
-  - The organ-adapters and trainer-jobs volumes are cleared for this entity.
+  - In the organ-adapters and trainer-jobs volumes, only entries attributable to
+    this entity are deleted; the rest is kept and listed.
 - **Credentials.** Qdrant and Redis are reached with the cycle's credentials
   (`load_bus_config()`, the Qdrant key from the environment or the secrets file).
   An unreachable or refusing store fails the run before anything is deleted.
@@ -294,6 +295,17 @@ The implementation review settled these points:
   incomplete.
 - The manifest and the location split report what Qdrant actually held:
   collections backed up, none found, or not checked.
+- Shared volumes are scoped by ownership (see the two volume rows above). What
+  cannot be attributed is kept and listed in the split and the audit record;
+  when nothing can be attributed, everything is kept and the run says so. The
+  structural fix, adapters and jobs under an `<entity_id>/` subdirectory, is the
+  separate `per-entity-shared-volumes` change.
+- Deletion handles Qdrant, then Redis, then the local files; a remote failure
+  keeps the local state as the handle for a re-run. The CLI re-probes Qdrant
+  just before deletion whenever it is in use or configured without
+  `--qdrant-absent`, and refuses `--qdrant-absent` when Qdrant answers.
+- `/trainer-jobs` is exempt from the top-level allow-list refusal by exact
+  path, like `/organ-adapters`.
 - Known limit: a subprocess trainer that outlives the cycle is not detected,
   but the CANCELLED marker stops any promotion.
 - Known limit: merged adapters are attributed only against this fork root, so

@@ -37,9 +37,12 @@ def test_every_inventoried_location_has_a_decision(tmp_path):
         "episodic_memory.sqlite",
         "identity",
         "research.raw_bus_archive",
-        "organ_adapters",
+        "organ_adapters.own",
+        "organ_adapters.shared",
         "cycle.incidents",
         "evaluation.welfare",
+        "sleep.voice_jobs.own",
+        "sleep.voice_jobs.shared",
         "forks.own",
         "forks.others",
     ):

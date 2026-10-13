@@ -254,12 +254,16 @@ def test_failed_qdrant_export_fails_the_backup(tmp_path, monkeypatch):
     assert any("qdrant" in e.lower() for e in result.errors)
 
 
-def test_contents_only_volume_keeps_its_directory(tmp_path):
-    """A contents-only location backs up its children but leaves the directory."""
+def test_shared_organ_volume_keeps_other_entities_files(tmp_path):
+    """A shared organ directory only deletes files attributable to this entity."""
     state_root = tmp_path / "state"
+    adapter_store = state_root / "hypnos" / "adapters" / "a1"
+    adapter_store.mkdir(parents=True, exist_ok=True)
+    (adapter_store / "adapter.gguf").write_bytes(b"OWN-ADAPTER")
     organ = tmp_path / "organ"
     organ.mkdir(parents=True, exist_ok=True)
-    (organ / "active-1.gguf").write_bytes(b"m")
+    (organ / "active-1.gguf").write_bytes(b"OWN-ADAPTER")
+    (organ / "active-0.gguf").write_bytes(b"STUDY-ADAPTER")
     (organ / "active.json").write_text("{}", encoding="utf-8")
 
     result = capture_backup(
@@ -276,9 +280,10 @@ def test_contents_only_volume_keeps_its_directory(tmp_path):
     )
     assert result.ok
     bdir = result.backup_path
-    # A location outside the state, data and fork roots is stored under its own name.
-    assert (bdir / "locations" / "organ_adapters" / "organ" / "active-1.gguf").is_file()
-    assert (bdir / "locations" / "organ_adapters" / "organ" / "active.json").is_file()
+    # The entity's own organ file is backed up; the other entity's is not.
+    assert (bdir / "locations" / "organ_adapters.own" / "active-1.gguf").read_bytes() == b"OWN-ADAPTER"
+    bundle_bytes = [p.read_bytes() for p in bdir.rglob("*") if p.is_file()]
+    assert b"STUDY-ADAPTER" not in bundle_bytes
 
     delete_entity_state(
         state_root=state_root,
@@ -288,7 +293,8 @@ def test_contents_only_volume_keeps_its_directory(tmp_path):
         },
     )
     assert not (organ / "active-1.gguf").exists()
-    assert not (organ / "active.json").exists()
+    assert (organ / "active-0.gguf").exists()
+    assert (organ / "active.json").exists()
     assert organ.is_dir()
 
 

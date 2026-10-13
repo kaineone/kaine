@@ -70,7 +70,7 @@ def test_delete_removes_only_intended_paths(tmp_path):
     _seed(state_root)
     result = delete_entity_state(
         state_root=state_root,
-        qdrant_cfg={"mnemos": {"qdrant": {"host": "127.0.0.1", "port": 59999}}},
+        qdrant_cfg=_NO_QDRANT,
         dry_run=False,
     )
     # Intended subtrees gone.

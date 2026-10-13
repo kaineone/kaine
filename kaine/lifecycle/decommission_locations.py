@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import sqlite3
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -20,6 +22,156 @@ DELETE = "delete"
 RETAIN = "retain"
 
 
+def _sha256(path: Path) -> str | None:
+    h = hashlib.sha256()
+    try:
+        with path.open("rb") as f:
+            while True:
+                block = f.read(1024 * 1024)
+                if not block:
+                    break
+                h.update(block)
+    except OSError:
+        return None
+    return h.hexdigest()
+
+
+def adapter_checksums(store_dirs: tuple[Path, ...]) -> set[str]:
+    checksums: set[str] = set()
+    for store_dir in store_dirs:
+        if not store_dir.exists():
+            continue
+        for candidate in store_dir.rglob("adapter.gguf"):
+            if candidate.is_symlink() or not candidate.is_file():
+                continue
+            digest = _sha256(candidate)
+            if digest is not None:
+                checksums.add(digest)
+    return checksums
+
+
+def _current_adapter_checksum(
+    store_dirs: tuple[Path, ...],
+) -> tuple[str, str] | None:
+    for store_dir in store_dirs:
+        if not store_dir.is_dir():
+            continue
+        current_link = store_dir / "current"
+        if not current_link.exists():
+            continue
+        resolved = current_link.resolve()
+        if not resolved.is_dir():
+            continue
+        adapter_file = resolved / "adapter.gguf"
+        if adapter_file.is_symlink() or not adapter_file.is_file():
+            continue
+        digest = _sha256(adapter_file)
+        if digest is not None:
+            return resolved.name, digest
+    return None
+
+
+def attribute_organ_volume(
+    volume: Path,
+    own: set[str],
+    current: tuple[str, str] | None = None,
+) -> tuple[list[Path], list[Path], list[str]]:
+    own_paths: list[Path] = []
+    shared_paths: list[Path] = []
+    notes: list[str] = []
+    if not volume.exists():
+        return own_paths, shared_paths, notes
+
+    found_current = False
+    for entry in sorted(volume.iterdir(), key=lambda p: p.name):
+        if entry.is_symlink() or not entry.is_file():
+            shared_paths.append(entry)
+            continue
+        if re.fullmatch(r"active-\d+\.gguf", entry.name):
+            digest = _sha256(entry)
+            if digest in own:
+                own_paths.append(entry)
+                if current is not None and digest == current[1]:
+                    found_current = True
+            else:
+                shared_paths.append(entry)
+        elif entry.name == "active.json":
+            try:
+                with entry.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                data = None
+            if isinstance(data, dict) and data.get("sha256") in own:
+                own_paths.append(entry)
+            else:
+                shared_paths.append(entry)
+        else:
+            shared_paths.append(entry)
+
+    if not own_paths and shared_paths:
+        notes.append(
+            f"nothing in {volume} could be attributed to this entity from its records; everything there is kept"
+        )
+    if current is not None and volume.exists() and not found_current:
+        notes.append(
+            f"this entity's current adapter {current[0]} is not in {volume}"
+        )
+    return own_paths, shared_paths, notes
+
+
+def attribute_job_dirs(
+    jobs_dir: Path,
+    own: set[str],
+    store_dirs: tuple[Path, ...],
+) -> tuple[list[Path], list[Path], list[str]]:
+    own_paths: list[Path] = []
+    shared_paths: list[Path] = []
+    notes: list[str] = []
+    if not jobs_dir.exists():
+        return own_paths, shared_paths, notes
+
+    resolved_stores = {d.resolve() for d in store_dirs if d.exists()}
+    for entry in sorted(jobs_dir.iterdir(), key=lambda p: p.name):
+        if entry.is_symlink() or not entry.is_dir():
+            shared_paths.append(entry)
+            continue
+
+        attributed = False
+        job_json = entry / "job.json"
+        if job_json.is_file():
+            try:
+                with job_json.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                data = None
+            if isinstance(data, dict):
+                output_dir = data.get("adapter_output_dir")
+                if isinstance(output_dir, str):
+                    output_path = Path(output_dir).resolve()
+                    if output_path in resolved_stores:
+                        attributed = True
+
+        if not attributed:
+            for adapter_file in entry.rglob("adapter.gguf"):
+                if adapter_file.is_symlink() or not adapter_file.is_file():
+                    continue
+                digest = _sha256(adapter_file)
+                if digest in own:
+                    attributed = True
+                    break
+
+        if attributed:
+            own_paths.append(entry)
+        else:
+            shared_paths.append(entry)
+
+    if not own_paths and shared_paths:
+        notes.append(
+            f"nothing in {jobs_dir} could be attributed to this entity from its records; everything there is kept"
+        )
+    return own_paths, shared_paths, notes
+
+
 @dataclass(frozen=True)
 class Location:
     """A single on-disk place an entity's data may live, plus the decommission decision."""
@@ -30,6 +182,7 @@ class Location:
     reason: str
     bundle_dir: str | None = None
     contents_only: bool = False
+    notes: tuple[str, ...] = ()
 
     def existing(self) -> list[Path]:
         """Return the candidate paths that currently exist, in order, without duplicates."""
@@ -224,6 +377,9 @@ def entity_locations(
             bundle_dir="locations/sleep.adapters",
         )
     )
+    store_dirs = tuple(locations[-1].paths)
+    own_checksums = adapter_checksums(store_dirs)
+    current = _current_adapter_checksum(store_dirs)
 
     # 5. sleep consolidation divergence
     locations.append(
@@ -375,22 +531,10 @@ def entity_locations(
         )
     )
 
-    # 16. sleep voice alignment trainer workdir
+    # 16-17. sleep voice alignment jobs
     trainer_workdir_paths = resolve(
         _cfg(config, "hypnos.voice_alignment.trainer_workdir", "state/hypnos/voice_align_jobs")
     )
-    locations.append(
-        Location(
-            "sleep.trainer_workdir",
-            BACKUP_DELETE,
-            trainer_workdir_paths,
-            "voice-alignment training pairs (pairs.jsonl holds private content)",
-            bundle_dir="locations/sleep.trainer_workdir",
-            contents_only=True,
-        )
-    )
-
-    # 17. sleep voice alignment jobs (omitted when it shares a directory with the workdir)
     job_paths = resolve(
         _cfg(
             config,
@@ -398,33 +542,76 @@ def entity_locations(
             "state/hypnos/voice_align_jobs",
         )
     )
-    if job_paths != trainer_workdir_paths:
-        locations.append(
-            Location(
-                "sleep.voice_align_jobs",
-                BACKUP_DELETE,
-                job_paths,
-                "voice-alignment jobs (training pairs hold private content)",
-                bundle_dir="locations/sleep.voice_align_jobs",
-                contents_only=True,
-            )
-        )
+    seen_job_dirs: set[Path] = set()
+    job_dirs: list[Path] = []
+    for candidate in (*trainer_workdir_paths, *job_paths):
+        if candidate not in seen_job_dirs:
+            seen_job_dirs.add(candidate)
+            job_dirs.append(candidate)
 
-    # 18. organ adapters
+    own_job_paths: list[Path] = []
+    shared_job_paths: list[Path] = []
+    job_notes: list[str] = []
+    for jobs_dir in job_dirs:
+        if not jobs_dir.exists():
+            continue
+        own_j, shared_j, notes_j = attribute_job_dirs(jobs_dir, own_checksums, store_dirs)
+        own_job_paths.extend(own_j)
+        shared_job_paths.extend(shared_j)
+        job_notes.extend(notes_j)
+
     locations.append(
         Location(
-            "organ_adapters",
+            "sleep.voice_jobs.own",
             BACKUP_DELETE,
-            resolve(
-                _cfg(
-                    config,
-                    "hypnos.voice_alignment.organ_adapters_dir",
-                    "/organ-adapters",
-                )
-            ),
-            "the active voice adapter (learned voice)",
-            bundle_dir="locations/organ_adapters",
-            contents_only=True,
+            tuple(own_job_paths),
+            "this entity's voice-alignment jobs (training pairs hold private content), matched by their recorded adapter path or checksum",
+            bundle_dir="locations/sleep.voice_jobs.own",
+        )
+    )
+    locations.append(
+        Location(
+            "sleep.voice_jobs.shared",
+            RETAIN,
+            tuple(shared_job_paths),
+            "kept: shared volume, not attributable to this entity",
+            notes=tuple(job_notes),
+        )
+    )
+
+    # 18. organ adapters
+    organ_paths = resolve(
+        _cfg(
+            config,
+            "hypnos.voice_alignment.organ_adapters_dir",
+            "/organ-adapters",
+        )
+    )
+    own_organ_paths: list[Path] = []
+    shared_organ_paths: list[Path] = []
+    organ_notes: list[str] = []
+    for organ_dir in organ_paths:
+        own_o, shared_o, notes_o = attribute_organ_volume(organ_dir, own_checksums, current)
+        own_organ_paths.extend(own_o)
+        shared_organ_paths.extend(shared_o)
+        organ_notes.extend(notes_o)
+
+    locations.append(
+        Location(
+            "organ_adapters.own",
+            BACKUP_DELETE,
+            tuple(own_organ_paths),
+            "this entity's adapter in the shared organ-adapters volume, matched by checksum",
+            bundle_dir="locations/organ_adapters.own",
+        )
+    )
+    locations.append(
+        Location(
+            "organ_adapters.shared",
+            RETAIN,
+            tuple(shared_organ_paths),
+            "kept: shared volume, not attributable to this entity",
+            notes=tuple(organ_notes),
         )
     )
 
@@ -889,12 +1076,17 @@ def checkpoint_sqlite(db_path: Path) -> str | None:
 def cancel_voice_alignment_jobs(
     jobs_dir: Path,
     *,
+    only: Collection[str] | None = None,
     wait_s: float = 60.0,
     poll_s: float = 1.0,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> tuple[list[str], list[str]]:
-    """Cancel pending voice-alignment jobs and wait briefly for claimed jobs to finish."""
+    """Cancel pending voice-alignment jobs and wait briefly for claimed jobs to finish.
+
+    If *only* is provided, only job directories whose names are in *only* are
+    considered.
+    """
     cancelled: list[str] = []
     still_running: list[str] = []
     if not jobs_dir.exists():
@@ -904,6 +1096,9 @@ def cancel_voice_alignment_jobs(
         [child for child in jobs_dir.iterdir() if child.is_dir() and not child.is_symlink()],
         key=lambda c: c.name,
     )
+    if only is not None:
+        allowed = set(only)
+        children = [child for child in children if child.name in allowed]
     deadline: float | None = None
 
     for child in children:
@@ -949,6 +1144,7 @@ def delete_roots(
     protected_roots = (resolved_state, resolved_data, resolved_fork)
     home = Path.home().resolve()
     organ_default = Path("/organ-adapters")
+    trainer_jobs_default = Path("/trainer-jobs")
 
     def add(path: Path) -> None:
         resolved = path.resolve()
@@ -960,7 +1156,7 @@ def delete_roots(
         resolved = path.resolve()
         if resolved == Path("/"):
             return "the filesystem root"
-        if resolved == organ_default:
+        if resolved == organ_default or resolved == trainer_jobs_default:
             return None
         if resolved.parent == Path("/"):
             return "a top-level directory"

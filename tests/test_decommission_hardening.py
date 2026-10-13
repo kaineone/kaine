@@ -2,6 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import base64
+import json
 import os
 import shutil
 from pathlib import Path
@@ -355,7 +356,7 @@ def test_qdrant_probed_before_any_copy(tmp_path, monkeypatch):
 
 
 def test_trainer_workdir_is_backed_up_then_deleted(tmp_path):
-    """Voice alignment training directories are backed up and then emptied but kept as roots."""
+    """Own voice alignment jobs are backed up and deleted; shared jobs are kept."""
     config = {
         **_NO_QDRANT,
         "hypnos": {
@@ -366,8 +367,12 @@ def test_trainer_workdir_is_backed_up_then_deleted(tmp_path):
         },
     }
     state_root = tmp_path / "state"
+    adapter_store = state_root / "hypnos" / "adapters"
+    adapter_store.mkdir(parents=True)
     _seed(state_root, "train_work/job1/pairs.jsonl", "SECRET pairs")
+    _seed(state_root, "train_work/job1/job.json", json.dumps({"adapter_output_dir": str(adapter_store.resolve())}))
     _seed(state_root, "train_jobs/job2/spec.json", "{}")
+    _seed(state_root, "train_jobs/job2/job.json", json.dumps({"adapter_output_dir": "/app/studies/s1/state/hypnos/adapters"}))
     assessment = DivergenceAssessment(diverged=False, signals={}, summary="x")
     backup = decommission.capture_backup(
         state_root=state_root,
@@ -396,7 +401,8 @@ def test_trainer_workdir_is_backed_up_then_deleted(tmp_path):
     assert (state_root / "train_work").exists()
     assert (state_root / "train_jobs").exists()
     assert not (state_root / "train_work" / "job1").exists()
-    assert not (state_root / "train_jobs" / "job2").exists()
+    assert (state_root / "train_jobs" / "job2").exists()
+    assert (state_root / "train_jobs" / "job2" / "spec.json").exists()
 
 
 def test_merged_adapters_follow_configured_output_dir(tmp_path):
@@ -443,12 +449,16 @@ def test_delete_refuses_paths_outside_the_roots(tmp_path):
 
     organ = tmp_path / "organ"
     organ.mkdir(parents=True)
+    state_root2 = tmp_path / "state2"
+    adapter_store2 = state_root2 / "hypnos" / "adapters" / "a1"
+    adapter_store2.mkdir(parents=True)
+    (adapter_store2 / "adapter.gguf").write_bytes(b"OWN-ADAPTER")
+    (organ / "active-1.gguf").write_bytes(b"OWN-ADAPTER")
     (organ / "organ.bin").write_text("y", encoding="utf-8")
     config2 = {
         **_NO_QDRANT,
         "hypnos": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
     }
-    state_root2 = tmp_path / "state2"
     _seed(state_root2, "eidolon/self_model.json")
     result2 = decommission.delete_entity_state(
         state_root=state_root2,
@@ -459,11 +469,12 @@ def test_delete_refuses_paths_outside_the_roots(tmp_path):
     )
     assert result2.errors == []
     assert organ.exists()
-    assert not list(organ.iterdir())
+    assert not (organ / "active-1.gguf").exists()
+    assert (organ / "organ.bin").exists()
 
 
-def test_symlink_in_contents_only_dir_is_unlinked_not_followed(tmp_path):
-    """A directory symlink inside a contents-only location is removed as a link; its target survives."""
+def test_symlink_in_shared_jobs_dir_is_kept_and_not_followed(tmp_path):
+    """A directory symlink in a shared voice-jobs volume is kept and not followed."""
     outside = tmp_path / "shared" / "docs"
     outside.mkdir(parents=True)
     (outside / "keep.txt").write_text("KEEP", encoding="utf-8")
@@ -478,7 +489,7 @@ def test_symlink_in_contents_only_dir_is_unlinked_not_followed(tmp_path):
         dry_run=False,
     )
     assert result.errors == []
-    assert not (jobs / "escape").exists() and not (jobs / "escape").is_symlink()
+    assert (jobs / "escape").is_symlink()
     assert (outside / "keep.txt").read_text(encoding="utf-8") == "KEEP"
 
 
@@ -715,6 +726,17 @@ def test_allow_list_refuses_dangerous_entries(tmp_path):
     )
     assert refused == ()
 
+    config = {
+        "hypnos": {"voice_alignment": {"trainer_jobs_dir": "/trainer-jobs"}}
+    }
+    roots, refused = delete_roots(
+        config,
+        state_root=state_root,
+        data_root=data_root,
+        fork_root=fork_root,
+    )
+    assert refused == ()
+
     for path in ("/organ-adapters2", "/organ"):
         config = {"hypnos": {"voice_alignment": {"organ_adapters_dir": path}}}
         roots, refused = delete_roots(
@@ -727,6 +749,18 @@ def test_allow_list_refuses_dangerous_entries(tmp_path):
         refused_path, reason = refused[0]
         assert str(refused_path) == path
         assert reason == "a top-level directory"
+
+    config = {"hypnos": {"voice_alignment": {"trainer_jobs_dir": "/trainer-jobs2"}}}
+    roots, refused = delete_roots(
+        config,
+        state_root=state_root,
+        data_root=data_root,
+        fork_root=fork_root,
+    )
+    assert len(refused) == 1
+    refused_path, reason = refused[0]
+    assert str(refused_path) == "/trainer-jobs2"
+    assert reason == "a top-level directory"
 
     qdrant_cfg = {
         **_NO_QDRANT,
@@ -819,3 +853,198 @@ def test_backup_reports_probed_qdrant_collections(tmp_path, monkeypatch):
         backup=absent_backup,
     )
     assert "Qdrant: skipped" in out2.getvalue()
+
+
+def _store_adapter(state_root, name, data):
+    """Write an adapter.gguf into this entity's adapter store and return its SHA-256."""
+    import hashlib
+    path = state_root / "hypnos" / "adapters" / name / "adapter.gguf"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return hashlib.sha256(data).hexdigest()
+
+
+def test_shared_volumes_scoped_by_ownership(tmp_path):
+    """Own organ and job entries are backed up and deleted; shared entries are kept."""
+    state_root = tmp_path / "state"
+    sha = _store_adapter(state_root, "a1", b"OWN-ADAPTER")
+    organ = tmp_path / "organ"
+    organ.mkdir(parents=True, exist_ok=True)
+    (organ / "active-2.gguf").write_bytes(b"OWN-ADAPTER")
+    (organ / "active.json").write_text(
+        json.dumps({"file": "active-2.gguf", "sha256": sha, "generation": 2, "adapter_id": "a1"}),
+        encoding="utf-8",
+    )
+    (organ / "active-1.gguf").write_bytes(b"STUDY-ADAPTER")
+    (organ / "generation").write_text("2", encoding="utf-8")
+
+    jobs = state_root / "hypnos" / "voice_align_jobs"
+    own_job = jobs / "own_job"
+    own_job.mkdir(parents=True)
+    (own_job / "job.json").write_text(
+        json.dumps({"adapter_output_dir": str((state_root / "hypnos" / "adapters").resolve())}),
+        encoding="utf-8",
+    )
+    (own_job / "pairs.jsonl").write_text("SECRET own pairs", encoding="utf-8")
+
+    study_job = jobs / "study_job"
+    study_job.mkdir(parents=True)
+    (study_job / "job.json").write_text(
+        json.dumps({"adapter_output_dir": "out"}),
+        encoding="utf-8",
+    )
+    (study_job / "pairs.jsonl").write_text("STUDY pairs", encoding="utf-8")
+    (study_job / "out" / "x").mkdir(parents=True)
+    (study_job / "out" / "x" / "adapter.gguf").write_bytes(b"STUDY-OUT")
+
+    config = {
+        **_NO_QDRANT,
+        "hypnos": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
+    }
+    assessment = DivergenceAssessment(diverged=False, signals={}, summary="x")
+    result = decommission.capture_backup(
+        state_root=state_root,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        qdrant_cfg=config,
+        out_root=tmp_path / "backups",
+        entity_name="Kaine Nova",
+        assessment=assessment,
+    )
+    assert result.ok, result.errors
+    backup_path = result.backup_path
+    bundle_texts = {
+        p.read_text(errors="replace")
+        for p in backup_path.rglob("*")
+        if p.is_file()
+    }
+    assert "OWN-ADAPTER" in bundle_texts
+    assert "SECRET own pairs" in bundle_texts
+    assert "STUDY-ADAPTER" not in bundle_texts
+    assert "STUDY pairs" not in bundle_texts
+    assert "STUDY-OUT" not in bundle_texts
+
+    result = decommission.delete_entity_state(
+        state_root=state_root,
+        qdrant_cfg=config,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        dry_run=False,
+    )
+    assert result.errors == []
+    assert not (organ / "active-2.gguf").exists()
+    assert not (organ / "active.json").exists()
+    assert not own_job.exists()
+    assert (organ / "active-1.gguf").exists()
+    assert (organ / "generation").exists()
+    assert study_job.exists()
+    assert (study_job / "pairs.jsonl").read_text(encoding="utf-8") == "STUDY pairs"
+    assert str(organ / "active-1.gguf") in result.shared_kept
+    assert str(jobs / "study_job") in result.shared_kept
+
+
+def test_no_records_keeps_shared_volumes_whole(tmp_path):
+    """When no adapter records exist, shared volumes are kept whole."""
+    state_root = tmp_path / "state"
+    organ = tmp_path / "organ"
+    organ.mkdir(parents=True, exist_ok=True)
+    (organ / "active-1.gguf").write_bytes(b"STUDY-ADAPTER")
+    (organ / "active.json").write_text(json.dumps({"sha256": "abc"}), encoding="utf-8")
+
+    jobs = state_root / "hypnos" / "voice_align_jobs"
+    job_a = jobs / "job_a"
+    job_a.mkdir(parents=True)
+    (job_a / "job.json").write_text(json.dumps({"adapter_output_dir": "out"}), encoding="utf-8")
+    (job_a / "pairs.jsonl").write_text("STUDY pairs", encoding="utf-8")
+
+    config = {
+        **_NO_QDRANT,
+        "hypnos": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
+    }
+    result = decommission.delete_entity_state(
+        state_root=state_root,
+        qdrant_cfg=config,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        dry_run=False,
+    )
+    assert result.errors == []
+    assert (organ / "active-1.gguf").exists()
+    assert (organ / "active.json").exists()
+    assert job_a.exists()
+    assert (job_a / "pairs.jsonl").read_text(encoding="utf-8") == "STUDY pairs"
+    organ_note = next(
+        (n for n in result.attribution_notes if str(organ) in n and "nothing in" in n and "could be attributed" in n),
+        "",
+    )
+    jobs_note = next(
+        (n for n in result.attribution_notes if str(jobs) in n and "nothing in" in n and "could be attributed" in n),
+        "",
+    )
+    assert organ_note
+    assert jobs_note
+
+
+def test_module_on_with_absent_flag_still_exports_and_drops(tmp_path, monkeypatch):
+    """--qdrant-absent still exports and drops Qdrant collections when the module is on."""
+    config = {
+        "modules": {"mnemos": True},
+        "mnemos": {"backend": "qdrant", "qdrant": {"host": "127.0.0.1", "port": 1}},
+    }
+    names = decommission._episodic_memory_collection_names(config)
+    fake = _FakeQdrant(names[:2])
+    monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: fake)
+
+    state_root = tmp_path / "state"
+    (state_root / "eidolon").mkdir(parents=True)
+    (state_root / "eidolon" / "self_model.json").write_text(json.dumps({}), encoding="utf-8")
+
+    result = decommission.capture_backup(
+        state_root=state_root,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        qdrant_cfg=config,
+        out_root=tmp_path / "backups",
+        entity_name="Kaine Nova",
+        qdrant_absent=True,
+        assessment=DivergenceAssessment(diverged=False, signals={}, summary="x"),
+    )
+    assert result.ok
+    assert result.qdrant_status == "exported"
+    backup_path = result.backup_path
+    for name in names[:2]:
+        assert (backup_path / "qdrant" / f"{name}.jsonl").exists()
+
+    result = decommission.delete_entity_state(
+        state_root=state_root,
+        qdrant_cfg=config,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        qdrant_absent=True,
+        dry_run=False,
+    )
+    assert set(fake.dropped) == set(names[:2])
+
+
+def test_remote_failure_keeps_local_state(tmp_path, monkeypatch):
+    """A failing remote store keeps all local state."""
+    config = {
+        "modules": {"mnemos": True},
+        "mnemos": {"backend": "qdrant", "qdrant": {"host": "127.0.0.1", "port": 1}},
+    }
+    monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: None)
+
+    state_root = tmp_path / "state"
+    (state_root / "eidolon").mkdir(parents=True)
+    (state_root / "eidolon" / "self_model.json").write_text(json.dumps({}), encoding="utf-8")
+
+    result = decommission.delete_entity_state(
+        state_root=state_root,
+        qdrant_cfg=config,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        dry_run=False,
+    )
+    assert (state_root / "eidolon" / "self_model.json").exists()
+    assert result.incomplete
+    assert any("local state kept because a remote store" in err for err in result.errors)
