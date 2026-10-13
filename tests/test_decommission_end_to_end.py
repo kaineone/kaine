@@ -298,14 +298,17 @@ def build_entity(tmp_path, port):
         path.write_bytes(data)
         seeded[rel] = (fate, data)
 
-    _put("organ/active-2.gguf", own_bytes, "backup")
+    # The live adapter named by active.json is backed up but kept: a forked
+    # line may be using an identical copy. An older matched file is deleted.
+    _put("organ/active-2.gguf", own_bytes, "backup_keep")
     _put(
         "organ/active.json",
         json.dumps(
             {"file": "active-2.gguf", "sha256": own_sha, "generation": 2, "adapter_id": "a1"}
         ).encode(),
-        "backup",
+        "backup_keep",
     )
+    _put("organ/active-0.gguf", seeded["state/sleep/adapters/a2/adapter.gguf"][1], "backup")
     _put("organ/active-1.gguf", b"KEEP study line adapter", "keep")
     _put("organ/generation", b"2", "keep")
 
@@ -478,6 +481,10 @@ def test_full_decommission_covers_every_location(requirepass_redis, tmp_path, mo
         elif fate == "delete":
             assert not path.exists(), path
             assert content not in bundle_bytes, rel
+        elif fate == "backup_keep":
+            assert path.exists(), path
+            assert path.read_bytes() == content, path
+            assert content in bundle_bytes, rel
         else:
             assert path.exists(), path
             assert path.read_bytes() == content, path

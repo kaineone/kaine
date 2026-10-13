@@ -306,10 +306,17 @@ The implementation review settled these points:
   `--qdrant-absent`, and refuses `--qdrant-absent` when Qdrant answers.
 - `/trainer-jobs` is exempt from the top-level allow-list refusal by exact
   path, like `/organ-adapters`.
-- Known limit: organ files are attributed by checksum, so a byte-identical copy
-  of this entity's adapter activated by another entity (a forked study line) is
-  attributed to this entity. Jobs are attributed by the adapter they produced,
-  not the one they started from (`previous_adapter/`).
+- Live organ adapter (rule while attribution is by checksum, until
+  per-entity-shared-volumes): study lines are seeded from the saved entity, so
+  a forked line commonly runs a byte-identical copy of this entity's adapter.
+  The file named by the volume-root `active.json`, and `active.json` itself,
+  are backed up but KEPT (decision BACKUP + RETAIN, location
+  `organ_adapters.live`), with the reason "live adapter on a shared volume; a
+  forked line may be using an identical copy; per-entity layout (#500)
+  resolves this". Older checksum-matched `active-N.gguf` files are backed up,
+  then deleted. Jobs are attributed by the store path in `job.json` or the
+  adapter they produced, not the one they started from (`previous_adapter/`);
+  a study line's job output is promoted into the study line's own store.
 - Known limit: a subprocess trainer that outlives the cycle is not detected,
   but the CANCELLED marker stops any promotion.
 - Known limit: merged adapters are attributed only against this fork root, so

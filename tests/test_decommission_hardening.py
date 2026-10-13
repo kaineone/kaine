@@ -931,8 +931,9 @@ def test_shared_volumes_scoped_by_ownership(tmp_path):
         dry_run=False,
     )
     assert result.errors == []
-    assert not (organ / "active-2.gguf").exists()
-    assert not (organ / "active.json").exists()
+    # The live adapter named by active.json is backed up but kept.
+    assert (organ / "active-2.gguf").read_bytes() == b"OWN-ADAPTER"
+    assert (organ / "active.json").exists()
     assert not own_job.exists()
     assert (organ / "active-1.gguf").exists()
     assert (organ / "generation").exists()
@@ -1071,3 +1072,72 @@ def test_job_started_from_this_entitys_adapter_is_not_claimed(tmp_path):
     assert own == [ran_here]
     assert shared == [forked]
 
+
+def test_live_organ_adapter_is_backed_up_but_kept(tmp_path):
+    state_root = tmp_path / "state"
+    sha_new = _store_adapter(state_root, "a2", b"OWN-NEW")
+    _store_adapter(state_root, "a1", b"OWN-OLD")
+
+    organ = tmp_path / "organ"
+    organ.mkdir(parents=True, exist_ok=True)
+    active_new = organ / "active-2.gguf"
+    active_old = organ / "active-1.gguf"
+    active_json = organ / "active.json"
+    active_new.write_bytes(b"OWN-NEW")
+    active_old.write_bytes(b"OWN-OLD")
+    active_json.write_text(
+        json.dumps(
+            {
+                "file": "active-2.gguf",
+                "sha256": sha_new,
+                "generation": 2,
+                "adapter_id": "a2",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = {
+        **_NO_QDRANT,
+        "hypnos": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
+    }
+
+    out_root = tmp_path / "backups"
+    backup = decommission.capture_backup(
+        state_root=state_root,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        qdrant_cfg=config,
+        out_root=out_root,
+        entity_name="Live",
+        assessment=DivergenceAssessment(diverged=False, signals={}, summary="x"),
+    )
+    assert backup is not None
+
+    found = set()
+    for path in out_root.rglob("*"):
+        if not path.is_file():
+            continue
+        data = path.read_bytes()
+        if b"OWN-NEW" in data:
+            found.add("new")
+        if b"OWN-OLD" in data:
+            found.add("old")
+        if b"active-2.gguf" in data:
+            found.add("active_json")
+    assert {"new", "old", "active_json"} <= found
+
+    result = decommission.delete_entity_state(
+        state_root=state_root,
+        qdrant_cfg=config,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        dry_run=False,
+    )
+    assert result.errors == []
+    assert active_new.read_bytes() == b"OWN-NEW"
+    assert active_json.exists()
+    assert json.loads(active_json.read_text())["file"] == "active-2.gguf"
+    assert not active_old.exists()
+    assert "organ_adapters.live" in result.retained_locations
+    assert str(active_new) in result.live_kept

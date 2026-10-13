@@ -44,6 +44,7 @@ from kaine import legacy_aliases, legacy_names
 from kaine.bus.config import load_secrets_doc
 from kaine.lifecycle.decommission_locations import (
     BACKUP_DELETE,
+    BACKUP_RETAIN,
     DELETE,
     RETAIN,
     checkpoint_sqlite,
@@ -105,6 +106,7 @@ class DeleteResult:
     deleted_locations: list[str] = field(default_factory=list)
     retained_locations: list[str] = field(default_factory=list)
     shared_kept: list[str] = field(default_factory=list)
+    live_kept: list[str] = field(default_factory=list)
     attribution_notes: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
@@ -720,7 +722,7 @@ def capture_backup(
 
     # --- 6. Backup every location marked for backup+delete -------------
     for loc in locations:
-        if loc.decision != BACKUP_DELETE or loc.bundle_dir is None:
+        if loc.decision not in (BACKUP_DELETE, BACKUP_RETAIN) or loc.bundle_dir is None:
             continue
         # Checkpoint SQLite stores before copying so the backup is internally
         # consistent and can be opened without the -wal file.
@@ -1206,10 +1208,12 @@ def delete_entity_state(
     # and an inner location removed with its parent still counts as deleted.
     present = {loc.key: loc.existing() for loc in locations}
     for loc in locations:
-        if loc.decision == RETAIN and present[loc.key]:
+        if loc.decision in (RETAIN, BACKUP_RETAIN) and present[loc.key]:
             result.retained_locations.append(loc.key)
             if loc.key.endswith(".shared"):
                 result.shared_kept.extend(str(p) for p in present[loc.key])
+            if loc.key.endswith(".live"):
+                result.live_kept.extend(str(p) for p in present[loc.key])
         for note in loc.notes:
             if note not in result.attribution_notes:
                 result.attribution_notes.append(note)

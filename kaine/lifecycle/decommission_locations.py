@@ -20,6 +20,7 @@ from kaine.lifecycle.identity import IdentityError, read_identity_sidecar
 BACKUP_DELETE = "backup+delete"
 DELETE = "delete"
 RETAIN = "retain"
+BACKUP_RETAIN = "backup+retain"
 
 
 def _sha256(path: Path) -> str | None:
@@ -602,6 +603,23 @@ def entity_locations(
         shared_organ_paths.extend(shared_o)
         organ_notes.extend(notes_o)
 
+    live_organ_paths: list[Path] = []
+    live_organ_set: set[Path] = set()
+    own_organ_set = set(own_organ_paths)
+    for p in own_organ_paths:
+        if p.name == "active.json":
+            live_organ_paths.append(p)
+            live_organ_set.add(p)
+            try:
+                meta = json.loads(p.read_text(encoding="utf-8"))
+                linked = p.parent / meta.get("file", "")
+                if linked in own_organ_set and linked not in live_organ_set:
+                    live_organ_paths.append(linked)
+                    live_organ_set.add(linked)
+            except Exception:
+                pass
+    own_organ_paths = [p for p in own_organ_paths if p not in live_organ_set]
+
     locations.append(
         Location(
             "organ_adapters.own",
@@ -609,6 +627,15 @@ def entity_locations(
             tuple(own_organ_paths),
             "this entity's adapter in the shared organ-adapters volume, matched by checksum",
             bundle_dir="locations/organ_adapters.own",
+        )
+    )
+    locations.append(
+        Location(
+            "organ_adapters.live",
+            BACKUP_RETAIN,
+            tuple(live_organ_paths),
+            "live adapter on a shared volume; a forked line may be using an identical copy; per-entity layout (#500) resolves this",
+            bundle_dir="locations/organ_adapters.live",
         )
     )
     locations.append(

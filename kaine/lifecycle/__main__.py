@@ -64,6 +64,7 @@ from kaine.lifecycle.decommission import (
 )
 from kaine.lifecycle.decommission_locations import (
     BACKUP_DELETE,
+    BACKUP_RETAIN,
     DELETE,
     RETAIN,
     cancel_voice_alignment_jobs,
@@ -299,7 +300,10 @@ def _write_location_split(out, qcfg, *, state_root, data_dir, fork_root, backup=
     ]
     groups = {BACKUP_DELETE: [], DELETE: [], RETAIN: []}
     for loc in locs:
-        groups[loc.decision].append(loc)
+        if loc.decision == BACKUP_RETAIN:
+            groups[RETAIN].append(loc)
+        else:
+            groups[loc.decision].append(loc)
     out.write("\nWhat decommission does with this entity's data:\n")
     out.write("  backed up, then deleted:\n")
     for loc in groups[BACKUP_DELETE]:
@@ -313,7 +317,10 @@ def _write_location_split(out, qcfg, *, state_root, data_dir, fork_root, backup=
         out.write("    (none)\n")
     out.write("  kept by design:\n")
     for loc in groups[RETAIN]:
-        out.write(f"    - {loc.key}: {loc.reason}\n")
+        if loc.decision == BACKUP_RETAIN:
+            out.write(f"    - {loc.key} (backed up): {loc.reason}\n")
+        else:
+            out.write(f"    - {loc.key}: {loc.reason}\n")
         for note in loc.notes:
             out.write(f"      note: {note}\n")
     if not groups[RETAIN]:
@@ -892,6 +899,13 @@ def main(
                 for p in result.shared_kept
             ],
             "shared_volume_reason": "kept: shared volume, not attributable to this entity",
+            "live_adapter_kept": [
+                str(Path(p).relative_to(state_root))
+                if Path(p).is_relative_to(state_root)
+                else str(p)
+                for p in result.live_kept
+            ],
+            "live_adapter_reason": "live adapter on a shared volume; a forked line may be using an identical copy; per-entity layout (#500) resolves this",
             "attribution_notes": result.attribution_notes,
             "dropped_collections": result.dropped_collections,
             "cleared_streams": result.cleared_redis_streams,

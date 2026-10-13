@@ -49,7 +49,7 @@ def test_every_inventoried_location_has_a_decision(tmp_path):
         assert expected in keys, expected
     assert len(keys) == len(set(keys))
     for loc in locations:
-        assert loc.decision in (dl.BACKUP_DELETE, dl.DELETE, dl.RETAIN)
+        assert loc.decision in (dl.BACKUP_DELETE, dl.BACKUP_RETAIN, dl.DELETE, dl.RETAIN)
         if loc.decision == dl.BACKUP_DELETE:
             if loc.key == "individuation":
                 assert loc.bundle_dir is None, loc.key
