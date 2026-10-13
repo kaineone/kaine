@@ -185,6 +185,7 @@ def test_bundle_members_map_under_the_real_table(monkeypatch, tmp_path: Path):
     )
     members = preservation._read_bundle_members(bundle_dir)
     assert members[f"{legacy_aliases.map_module_key('phantasia')}/wm.ckpt"] == b"w"
+    assert "phantasia/wm.ckpt" not in members
     assert preservation.extract_bundle_development(bundle_dir, tmp_path / "dest") == [
         "gestation_progress.json"
     ]

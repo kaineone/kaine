@@ -924,12 +924,6 @@ RESOLUTIONS = [
         "why": "check key built from the operator-facing condition label",
     },
     {
-        "name": "perception",
-        "action": "keep",
-        "pattern": r"PERCEPTION_FEED_SOURCE\s*=\s*\"perception\"",
-        "why": "the perception feed's own event source, not the locus module",
-    },
-    {
         "name": "nexus",
         "action": "keep",
         "pattern": r"X-Nexus-Session-Key",
