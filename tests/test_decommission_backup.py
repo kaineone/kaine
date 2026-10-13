@@ -55,7 +55,7 @@ def test_capture_backup_copies_artifacts_and_manifest(tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=fork_root,
-        qdrant_cfg={},  # no qdrant → instructions written
+        qdrant_cfg={},
         out_root=out_root,
         entity_name="Kaine Nova",
         assessment=_assessment(),
@@ -67,7 +67,7 @@ def test_capture_backup_copies_artifacts_and_manifest(tmp_path):
     assert (bdir / "intent_expression.jsonl").is_file()
     assert (bdir / "adapters" / "voice.bin").is_file()
     assert (bdir / "snapshot.json").is_file()
-    assert (bdir / "QDRANT_BACKUP_INSTRUCTIONS.txt").is_file()
+    assert not (bdir / "QDRANT_BACKUP_INSTRUCTIONS.txt").exists()
 
     manifest = json.loads((bdir / "manifest.json").read_text())
     assert manifest["entity_name"] == "Kaine Nova"
@@ -78,6 +78,8 @@ def test_capture_backup_copies_artifacts_and_manifest(tmp_path):
     assert "continuity_note" not in manifest
     assert "self_model.json" in manifest["inventory"]
     assert "restore_notes" in manifest
+    assert manifest["qdrant"] == "not used"
+    assert isinstance(manifest["locations"], list)
     # S3: the sensitive inner-life rides in separate sidecars. Encryption is
     # disabled here (no key), so they are honest plaintext sidecars.
     assess = json.loads((bdir / "assessment.json").read_text())
@@ -87,7 +89,7 @@ def test_capture_backup_copies_artifacts_and_manifest(tmp_path):
     assert cont["continuity_note"] == "wants to persist"
 
 
-def test_capture_backup_qdrant_unreachable_writes_instructions(tmp_path):
+def test_capture_backup_fails_when_qdrant_unreachable(tmp_path):
     state_root = tmp_path / "state"
     _seed_state(state_root)
     result = capture_backup(
@@ -98,8 +100,9 @@ def test_capture_backup_qdrant_unreachable_writes_instructions(tmp_path):
         entity_name="Kaine Nova",
         assessment=_assessment(),
     )
-    assert result.ok  # never crashes on unreachable qdrant
-    assert (result.backup_path / "QDRANT_BACKUP_INSTRUCTIONS.txt").is_file()
+    assert not result.ok
+    assert any("qdrant" in e.lower() for e in result.errors)
+    assert not (result.backup_path / "QDRANT_BACKUP_INSTRUCTIONS.txt").exists()
 
 
 def test_capture_backup_encrypts_when_enabled(tmp_path, monkeypatch):

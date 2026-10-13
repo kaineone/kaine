@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -20,10 +21,15 @@ HAS_QDRANT = importlib.util.find_spec("qdrant_client") is not None
 
 
 def _seed(state_root: Path) -> None:
-    for path in ("eidolon/f.json", "lingua/f.json", "perception/f.json", "forks/f.json"):
+    for path in ("eidolon/f.json", "lingua/f.json", "perception/f.json"):
         p = state_root / path
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("{}", encoding="utf-8")
+    fork_snap = state_root / "forks" / "s1"
+    fork_snap.mkdir(parents=True, exist_ok=True)
+    (fork_snap / "snapshot.json").write_text(
+        json.dumps({"id": "s1", "metadata": {}}), encoding="utf-8"
+    )
     (state_root / "hypnos" / "adapters").mkdir(parents=True, exist_ok=True)
     (state_root / "hypnos" / "adapters" / "a.bin").write_bytes(b"w")
     (state_root / "cycle").mkdir(parents=True, exist_ok=True)
@@ -47,6 +53,7 @@ def test_dry_run_removes_nothing(tmp_path):
     # Everything still on disk.
     assert (state_root / "eidolon" / "f.json").exists()
     assert (state_root / "hypnos" / "adapters" / "a.bin").exists()
+    assert (state_root / "forks" / "s1").exists()
     # The would-remove report lists the intended subtrees.
     joined = " ".join(result.would_remove_paths)
     assert str(state_root / "eidolon") in joined and "forks" in joined and "adapters" in joined
@@ -64,7 +71,8 @@ def test_delete_removes_only_intended_paths(tmp_path):
     assert not (state_root / "eidolon").exists()
     assert not (state_root / "lingua").exists()
     assert not (state_root / "perception").exists()
-    assert not (state_root / "forks").exists()
+    assert not (state_root / "forks" / "s1").exists()
+    assert (state_root / "forks").is_dir()
     assert not (state_root / "hypnos" / "adapters").exists()
     assert not (state_root / "cycle" / "runtime.json").exists()
     # Operator file preserved.
