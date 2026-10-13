@@ -906,13 +906,22 @@ def delete_entity_state(
         data_root.parent.resolve(),
         fork_root.resolve(),
     }
+    # Resolve every location before anything is removed: one location can sit
+    # inside another (the language outcomes live in the language directory),
+    # and an inner location removed with its parent still counts as deleted.
+    present = {loc.key: loc.existing() for loc in locations}
     for loc in locations:
         if loc.decision not in (DELETE, BACKUP_DELETE):
-            if loc.decision == RETAIN and loc.existing():
+            if loc.decision == RETAIN and present[loc.key]:
                 result.retained_locations.append(loc.key)
             continue
 
-        for path in loc.existing():
+        for path in present[loc.key]:
+            if not dry_run and not path.exists() and not path.is_symlink():
+                # Already removed together with an enclosing location.
+                if loc.key not in result.deleted_locations:
+                    result.deleted_locations.append(loc.key)
+                continue
             if path.resolve() in protected:
                 result.errors.append(f"refused to delete {path}: protected root")
                 continue
