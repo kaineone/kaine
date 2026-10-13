@@ -39,7 +39,7 @@ def test_dry_run_removes_nothing(tmp_path):
     state_root = tmp_path / "state"
     _seed(state_root)
     result = delete_entity_state(
-        state_root=state_root, qdrant_cfg={}, redis_cfg=None, dry_run=True
+        state_root=state_root, qdrant_cfg={}, dry_run=True
     )
     assert result.dry_run is True
     assert result.removed_paths == []
@@ -57,7 +57,6 @@ def test_delete_removes_only_intended_paths(tmp_path):
     result = delete_entity_state(
         state_root=state_root,
         qdrant_cfg={"mnemos": {"qdrant": {"host": "127.0.0.1", "port": 59999}}},
-        redis_cfg=None,
         dry_run=False,
     )
     # Intended subtrees gone.
@@ -77,7 +76,7 @@ def test_delete_removes_only_intended_paths(tmp_path):
 def test_delete_handles_missing_state(tmp_path):
     state_root = tmp_path / "state"  # never created
     result = delete_entity_state(
-        state_root=state_root, qdrant_cfg={}, redis_cfg=None, dry_run=False
+        state_root=state_root, qdrant_cfg={}, dry_run=False
     )
     # No on-disk removals, no crash.
     assert result.removed_paths == []
@@ -136,7 +135,6 @@ def test_decommission_deletes_stamp_point(tmp_path, monkeypatch):
                 }
             }
         },
-        redis_cfg=None,
         dry_run=False,
     )
     expected_key = stamp_key("mnemos_")
@@ -185,7 +183,6 @@ def test_decommission_keeps_strength_meta_when_a_drop_fails(tmp_path, monkeypatc
                 }
             }
         },
-        redis_cfg=None,
         dry_run=False,
     )
     stamp = stamp_key("mnemos_")

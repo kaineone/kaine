@@ -43,18 +43,11 @@ def test_stream_list_covers_registry_and_both_names():
     assert f"{new}_feedback.out" in names, f"missing modern stream {new}_feedback.out"
 
 
-def test_decommission_clears_streams_with_fakeredis(monkeypatch):
-    """Only the exact seeded streams are removed and reported, leaving neighbours alone."""
+def test_decommission_clears_streams_with_fakeredis():
+    """Only exact seeded streams are removed and reported; non-stream keys and neighbours stay."""
     fakeredis = pytest.importorskip("fakeredis")
 
-    server = fakeredis.FakeServer()
-
-    def _fake_redis(**kwargs):
-        return fakeredis.FakeRedis(server=server)
-
-    monkeypatch.setattr("redis.Redis", _fake_redis)
-
-    client = fakeredis.FakeRedis(server=server)
+    client = fakeredis.FakeRedis()
     seeded = [
         "thymos.out",
         "affect.out",
@@ -66,18 +59,69 @@ def test_decommission_clears_streams_with_fakeredis(monkeypatch):
         client.xadd(name, {"data": "1"})
 
     client.xadd("affect.out.backup", {"data": "2"})
+    client.set("lingua.internal", "keep")
     client.set("operator:note", "keep")
 
-    cleared, errors = decommission._clear_redis_streams(
-        {"host": "x", "port": 1, "db": 0},
+    result = decommission.clear_entity_streams(
+        client,
         decommission._entity_redis_streams(None),
+        dry_run=False,
     )
 
-    assert errors == []
-    assert sorted(cleared) == sorted(seeded)
+    assert result.failed is None
+    assert sorted(result.cleared) == sorted(seeded)
 
     for name in seeded:
         assert client.exists(name) == 0, f"{name!r} still exists"
 
     assert client.exists("affect.out.backup") == 1
+    assert client.get("lingua.internal") == b"keep"
     assert client.get("operator:note") == b"keep"
+    assert "lingua.internal (string)" in result.skipped_non_streams
+
+
+def test_dry_run_lists_only_existing_streams():
+    """Dry run reports existing streams without deleting anything."""
+    fakeredis = pytest.importorskip("fakeredis")
+
+    client = fakeredis.FakeRedis()
+    existing = ["thymos.out", "affect.out"]
+    for name in existing:
+        client.xadd(name, {"data": "1"})
+
+    client.set("operator:note", "keep")
+
+    result = decommission.clear_entity_streams(
+        client,
+        decommission._entity_redis_streams(None),
+        dry_run=True,
+    )
+
+    assert result.failed is None
+    assert sorted(result.would_clear) == sorted(existing)
+    assert result.cleared == []
+
+    for name in existing:
+        assert client.exists(name) == 1, f"{name!r} was deleted during dry run"
+
+    assert client.exists("operator:note") == 1
+
+
+def test_unreachable_bus_is_a_failure():
+    """A bus that cannot be reached is reported as a failure with no streams cleared."""
+    class UnreachableClient:
+        def ping(self):
+            raise ConnectionError("connection refused")
+
+        def close(self):
+            pass
+
+    result = decommission.clear_entity_streams(
+        UnreachableClient(),
+        decommission._entity_redis_streams(None),
+        dry_run=False,
+    )
+
+    assert result.failed is not None
+    assert result.failed.startswith("cannot reach or authenticate")
+    assert result.cleared == []

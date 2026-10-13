@@ -83,6 +83,9 @@ class DeleteResult:
     would_remove_paths: list[str] = field(default_factory=list)
     dropped_collections: list[str] = field(default_factory=list)
     cleared_redis_streams: list[str] = field(default_factory=list)
+    skipped_non_streams: list[str] = field(default_factory=list)
+    redis_failed: str | None = None
+    aof_rewrite: str | None = None
     errors: list[str] = field(default_factory=list)
 
 
@@ -719,7 +722,7 @@ def delete_entity_state(
     *,
     state_root: Path,
     qdrant_cfg: dict[str, Any] | None,
-    redis_cfg: dict[str, Any] | None = None,
+    bus_client: Any = None,
     dry_run: bool = False,
 ) -> DeleteResult:
     """Remove the entity's on-disk state, Qdrant collections, and Redis streams.
@@ -727,6 +730,9 @@ def delete_entity_state(
     Only ever operates under ``state_root``. With ``dry_run=True`` nothing is
     removed; the result reports what *would* be removed. Each step is guarded so
     a failure on one target does not abort the others.
+
+    ``bus_client`` is a connected, authenticated Redis client for the stream
+    step; it is not used for on-disk or Qdrant cleanup.
     """
     state_root = resolve(state_root)
     result = DeleteResult(dry_run=dry_run)
@@ -845,24 +851,46 @@ def delete_entity_state(
             result.errors.append("qdrant unreachable; collections not dropped")
 
     # --- Redis entity streams (best-effort) ----------------------------
-    streams = _entity_redis_streams(redis_cfg)
-    if dry_run:
-        result.cleared_redis_streams = list(streams)  # would-clear
-    elif streams:
-        cleared, redis_errs = _clear_redis_streams(redis_cfg, streams)
-        result.cleared_redis_streams = cleared
-        result.errors.extend(redis_errs)
+    streams = _entity_redis_streams(None)
+    clear = clear_entity_streams(bus_client, streams, dry_run=dry_run)
+    result.cleared_redis_streams = clear.would_clear if dry_run else clear.cleared
+    result.skipped_non_streams = clear.skipped_non_streams
+    result.redis_failed = clear.failed
+    result.aof_rewrite = clear.aof_rewrite
 
     return result
+
+
+DECOMMISSION_AUDIT_RELPATH = Path("audit") / "decommission.jsonl"
+
+
+def write_decommission_audit(state_root: Path, record: dict[str, Any]) -> Path:
+    """Append one decommission record under ``state_root``; names and counts only, never content."""
+    audit_dir = state_root / DECOMMISSION_AUDIT_RELPATH.parent
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(audit_dir, 0o700)
+    except Exception:
+        log.debug("write_decommission_audit: could not chmod audit directory", exc_info=True)
+
+    path = audit_dir / DECOMMISSION_AUDIT_RELPATH.name
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, sort_keys=True))
+        fh.write("\n")
+    try:
+        os.chmod(path, 0o600)
+    except Exception:
+        log.debug("write_decommission_audit: could not chmod audit file", exc_info=True)
+
+    return path
 
 
 def _entity_redis_streams(redis_cfg: dict[str, Any] | None) -> list[str]:
     """Return the exact Redis stream keys that carry entity traffic.
 
-    Decommissioning deletes the entity's bus streams by their real names
-    rather than by a broad pattern.  The returned names are passed to
-    ``SCAN MATCH``; because none of them contain glob characters, each
-    pattern matches a single exact stream key.
+    Decommissioning deletes the entity's bus streams by exact name, checking
+    the key type with ``TYPE`` before calling ``UNLINK``. No ``SCAN`` or
+    ``KEYS`` is used.
 
     The list includes:
 
@@ -923,48 +951,100 @@ def _entity_redis_streams(redis_cfg: dict[str, Any] | None) -> list[str]:
     return sorted(expanded)
 
 
-def _clear_redis_streams(
-    redis_cfg: dict[str, Any] | None, patterns: list[str]
-) -> tuple[list[str], list[str]]:
-    cleared: list[str] = []
-    errors: list[str] = []
-    cfg = redis_cfg or {}
-    host = str(cfg.get("host", "127.0.0.1"))
-    port = int(cfg.get("port", 6379))
-    db = int(cfg.get("db", 0))
-    password = cfg.get("password") or None
-    try:
-        import redis
+@dataclass
+class StreamClearResult:
+    """Outcome of :func:`clear_entity_streams`."""
 
-        client = redis.Redis(
-            host=host,
-            port=port,
-            db=db,
-            password=password,
-            socket_connect_timeout=2.0,
-            socket_timeout=2.0,
-        )
-        for pattern in patterns:
-            try:
-                for key in client.scan_iter(match=pattern, count=200):
-                    try:
-                        client.delete(key)
-                        name = key.decode() if isinstance(key, bytes) else str(key)
-                        cleared.append(name)
-                    except Exception as exc:
-                        errors.append(f"delete redis key: {exc}")
-            except Exception as exc:
-                errors.append(f"scan redis {pattern!r}: {exc}")
-        try:
-            client.close()
-        except Exception:
-            # Best-effort: scan/delete above already recorded their own
-            # outcomes; a failure to close the connection doesn't change
-            # what was (or wasn't) cleared.
-            log.debug("_clear_redis_streams: redis client close failed", exc_info=True)
+    cleared: list[str] = field(default_factory=list)
+    would_clear: list[str] = field(default_factory=list)
+    skipped_non_streams: list[str] = field(default_factory=list)
+    failed: str | None = None
+    aof_rewrite: str | None = None
+
+
+def clear_entity_streams(client: Any, names: list[str], *, dry_run: bool) -> StreamClearResult:
+    """Clear the named Redis streams safely.
+
+    ``client`` must be an authenticated Redis client (for example from
+    ``kaine.bus.config.load_bus_config``). Each key is checked with ``TYPE``
+    before deletion; keys that are not streams are reported but never deleted.
+    After a real deletion, an AOF rewrite is requested when append-only mode
+    is enabled.
+    """
+    result = StreamClearResult()
+    if client is None:
+        result.failed = "no bus connection; streams not checked"
+        return result
+
+    try:
+        client.ping()
     except Exception as exc:
-        errors.append(f"redis unreachable; streams not cleared ({type(exc).__name__})")
-    return cleared, errors
+        result.failed = (
+            f"cannot reach or authenticate to the bus ({type(exc).__name__}); nothing was deleted"
+        )
+        return result
+
+    for name in names:
+        try:
+            raw_type = client.type(name)
+            key_type = raw_type.decode() if isinstance(raw_type, bytes) else str(raw_type)
+        except Exception as exc:
+            result.failed = f"bus error on {name} ({type(exc).__name__})"
+            return result
+
+        if key_type == "none":
+            continue
+
+        if key_type != "stream":
+            result.skipped_non_streams.append(f"{name} ({key_type})")
+            continue
+
+        if dry_run:
+            result.would_clear.append(name)
+        else:
+            try:
+                client.unlink(name)
+            except Exception as exc:
+                result.failed = f"bus error on {name} ({type(exc).__name__})"
+                return result
+            result.cleared.append(name)
+
+    if not dry_run and result.cleared:
+        try:
+            raw_cfg = client.config_get("appendonly")
+            cfg = (
+                {k.decode() if isinstance(k, bytes) else k: v for k, v in raw_cfg.items()}
+                if isinstance(raw_cfg, dict)
+                else {}
+            )
+            appendonly = str(cfg.get("appendonly", "")).lower()
+        except Exception as exc:
+            result.aof_rewrite = (
+                f"unknown ({type(exc).__name__}): rewrite the append-only file manually"
+            )
+        else:
+            if appendonly == "yes":
+                try:
+                    client.bgrewriteaof()
+                except Exception as exc:
+                    try:
+                        from redis.exceptions import ResponseError
+                    except Exception:
+                        ResponseError = None  # type: ignore[assignment,misc]
+                    if (
+                        ResponseError is not None
+                        and isinstance(exc, ResponseError)
+                        and "already in progress" in str(exc)
+                    ):
+                        result.aof_rewrite = "already in progress"
+                    else:
+                        result.aof_rewrite = f"failed ({type(exc).__name__})"
+                else:
+                    result.aof_rewrite = "started"
+            else:
+                result.aof_rewrite = "not needed (append-only file off)"
+
+    return result
 
 
 # ---------------------------------------------------------------------------
