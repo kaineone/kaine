@@ -183,21 +183,6 @@ def normalize_config_layer(layer: dict, source: str) -> dict:
 
     result = copy.deepcopy(layer)
 
-    # Dotted table moves.
-    for entry in dotted:
-        old_segments = _split_path(entry["old"])
-        new_segments = _split_path(entry["new"])
-        if not _path_exists(result, old_segments):
-            continue
-        if _path_exists(result, new_segments):
-            raise LegacyNameConflict(
-                f"config: {source} sets both [{entry['old']}] and [{entry['new']}]"
-            )
-        value = _path_get(result, old_segments)
-        _path_set(result, new_segments, value)
-        _path_delete_and_clean(result, old_segments)
-        changes.append(f"[{entry['old']}] -> [{entry['new']}]")
-
     # Single-segment table moves.
     for entry in single:
         old_key = entry["old"]
@@ -223,6 +208,21 @@ def normalize_config_layer(layer: dict, source: str) -> dict:
                 )
             modules_dict[new_key] = modules_dict.pop(old_key)
             changes.append(f"[modules].{old_key} -> [modules].{new_key}")
+
+    # Dotted table moves.
+    for entry in dotted:
+        old_segments = _split_path(entry["old"])
+        new_segments = _split_path(entry["new"])
+        if not _path_exists(result, old_segments):
+            continue
+        if _path_exists(result, new_segments):
+            raise LegacyNameConflict(
+                f"config: {source} sets both [{entry['old']}] and [{entry['new']}]"
+            )
+        value = _path_get(result, old_segments)
+        _path_set(result, new_segments, value)
+        _path_delete_and_clean(result, old_segments)
+        changes.append(f"[{entry['old']}] -> [{entry['new']}]")
 
     # Key aliases at any depth.
     for table_path, table_value in list(_walk_tables(result)):

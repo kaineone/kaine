@@ -1,0 +1,97 @@
+# Thesis-test configuration — the base-thesis form of the entity.
+#
+# Apply deliberately:  KAINE_PROFILE=thesis_test python -m kaine.cycle
+#               or:    python -m kaine.cycle --profile thesis_test
+#
+# NOT A DEPLOYMENT TIER. This is the honest, falsifiable base-thesis form of the
+# system (Baars global workspace + predictive processing): several DIVERSE
+# predictive processors compete for a shared workspace; the winning coalition is
+# broadcast back and becomes the context they predict against next; the language
+# organ is demoted to an OUTPUT-ONLY voice; and no input path lets a transcript
+# reach the model (so it is not a chatbot). Everything is by GATING — every other
+# module and the STT code remain built, just switched off, until the base thesis
+# is proven or disproven.
+#
+# Enabling modules here does NOT mature an entity: the cycle still refuses to boot
+# without KAINE_CYCLE_OPERATOR_PRESENT=1 (or the research safety net).
+
+[modules]
+# The diverse predictive processors the thesis needs: two internal (interoception,
+# time) and two externally grounded (foveated vision, raw sound). The workspace
+# and the action selection module (action) are always-on scaffolding. The language module is the voice.
+soma = true
+chronos = true
+topos = true
+audition = true
+lingua = true
+# Affect/arousal — the global gain: arousal sets the gain and contrast of the competition and
+# is itself moved by perceptual surprise. Part of the minimal base-thesis machinery
+# (without it the workspace shows no interest or arousal in stimuli), NOT one of the
+# richer faculties deferred with the rest.
+thymos = true
+# Sleep: fatigue-triggered rest is part of the base thesis (operator decision of
+# 2026-09-08). Consolidation, the affective reset and the stimulus playlist's
+# sleep pause all hang off it. Voice alignment stays off ([hypnos.voice_alignment]).
+hypnos = true
+# Richer faculties — gated OFF until a positive base result (never deleted).
+echo = false
+nous = false
+mnemos = false
+eidolon = false
+praxis = false
+vox = false
+empatheia = false
+phantasia = false
+perception = false
+mundus = false
+
+[perception_feed]
+# Out-of-the-box default: the seeded procedural audio-visual feed, so a fresh
+# install runs with NO media to supply. This is a thin demonstrator — enough to
+# exercise the perceptual processors, but synthetic.
+#
+# The REPRODUCIBLE PERCEPTUAL RUN uses a fixed REFERENCE STIMULUS CORPUS instead:
+# real video-with-audio, decoded directly (no screen-capture, no display/audio
+# passthrough), pinned by a per-item sha256 manifest so reproducibility is by
+# media identity — anyone with the same publicly-archived set (e.g. an archive.org
+# item), played in the same order, reproduces the stimulus. To use it, set the
+# media-specific manifest in your local config/kaine.operator.toml (not this
+# committed profile), built with tools/build_playlist_manifest.py:
+#   [perception_feed]
+#   mode = "playlist"
+#   playlist_manifest = "/path/to/your/reference-corpus.manifest.toml"
+mode = "seeded"
+seed = 0
+
+[topos]
+# Attention-driven foveation ON: the arousal-sized fovea IS the precision-weighted
+# attention the thesis names — perception enters as foveated prediction error.
+foveation = true
+
+[audition]
+# STT-ectomy: audio enters ONLY as prediction error, never as a transcript. The
+# entity hears the sound of speech; it does not read it. The STT code is preserved,
+# just bypassed — closing the chatbot confound in the ablation.
+transcription_enabled = false
+# Acoustic perception path ON: every window is encoded and scored by change +
+# forward-model prediction error → audition.perception competes in the workspace.
+general_audition = true
+
+[volition]
+# Self-initiated voice: speech comes from the entity's OWN precision-weighted
+# surprise (a report threshold above the access threshold, novelty- and
+# refractory-gated), never from a user utterance. No chatbot trigger.
+policy = "self_initiated_report"
+drive_initiative = false
+# Novelty-signature expiry: the coarse (source, type) signature otherwise
+# suppresses same-signature reports forever — on a stable stimulus (one film
+# playing for ~90 min) the top coalition rarely changes signature, and external
+# speech would trend to zero over a multi-day run. Five minutes keeps the
+# no-chatter novelty gate while letting genuinely new surprise about the same
+# source report again.
+sig_expiry_s = 300.0
+
+[chronos]
+# The sequence module predicts the next broadcast and publishes temporal prediction errors.
+# The shipped kaine.toml keeps the forward head off.
+forward_prediction = true

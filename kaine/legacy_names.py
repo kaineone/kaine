@@ -900,7 +900,6 @@ RESOLUTIONS = [
 
 KEY_OVERRIDES = (
     ("eidolon.self_model", "self_model.document"),
-    ("phantasia.world_model", "world_model.backend"),
     # kaine/workspace/syneidesis.py moves to kaine/workspace/core.py (PATH_OVERRIDES),
     # so its dotted import path and its path in text follow the same name.
     ("workspace.syneidesis", "workspace.core"),
@@ -936,9 +935,8 @@ PHRASES = (
 PATH_OVERRIDES = {
     "kaine/workspace/syneidesis.py": "kaine/workspace/core.py",
 
-    # The key override "phantasia.world_model" -> "world_model.backend" also renames
-    # the dotted import path kaine.modules.phantasia.world_model, so the file that
-    # holds WorldModelBackend moves to backend.py to match it.
+    # The phantasia world_model module moved to kaine/modules/world_model/backend.py
+    # in an earlier step, so its dotted import path and its path in text are updated.
     "kaine/modules/phantasia/world_model.py": "kaine/modules/world_model/backend.py",
 
     # Test files whose old name already said "sleep", "world_model", "effectors" or
@@ -1060,6 +1058,8 @@ EXCLUDED_GLOBS = (
     # Stored field names stay byte-identical for good.
     "kaine/lifecycle/stored_field_names.py",
     "tests/fixtures/rename_modules/",
+    # The pre-rename shipped configuration is preserved here for the sweep test.
+    "tests/fixtures/legacy_config/",
     # These tests exercise the compatibility readers with the old names as literals,
     # so the codemod must never rewrite them.
     "tests/test_legacy_aliases.py",
@@ -1227,7 +1227,6 @@ GUARD_NAMES = tuple(
 CONFIG_TABLES = tuple(
     {"old": k, "new": e["new_key"], "scope": "keys"} for k, e in MODULES.items()
 ) + (
-    {"old": "phantasia.world_model", "new": "world_model.backend", "scope": "keys"},
     {"old": "perception_feed.womb", "new": "perception_feed.stimulus_source", "scope": "keys"},
     {"old": "research_event_log.nexus_record", "new": "research_event_log.dashboard_record", "scope": "keys"},
 )
@@ -1252,6 +1251,7 @@ CONFIG_KEYS = (
     {"old": "volition_stream", "new": "action_selection_stream", "scope": "keys"},
     {"old": "nous_step_burst", "new": "planning_step_burst", "scope": "keys"},
     {"old": "nexus_url", "new": "dashboard_url", "scope": "keys"},
+    {"old": "eidolon_accuracy_interval_hours", "new": "self_model_accuracy_interval_hours", "scope": "keys"},
 )
 
 # Module keys used as keys inside other tables (for example [evaluation.observers] or a plugin's backend table).
@@ -1314,7 +1314,12 @@ PLUGIN_SEAMS = tuple(
 STREAM_NAMES = tuple(
     {"old": f"{k}.out", "new": f"{e['new_key']}.out", "scope": "keys"}
     for k, e in MODULES.items()
+) + tuple(
+    {"old": f"{k}.out", "new": f"{e['new_key']}.out", "scope": "keys"}
+    for k, e in DEVELOPMENTAL.items()
 ) + (
+    {"old": "lingua.external", "new": "language.external", "scope": "keys"},
+    {"old": "lingua.internal", "new": "language.internal", "scope": "keys"},
     {"old": "eidolon.self_model", "new": "self_model.document", "scope": "keys"},
     {"old": "volition_feedback.out", "new": "action_selection_feedback.out", "scope": "keys"},
     {"old": "intent.perception.switch", "new": "intent.perceptual_locus.switch", "scope": "keys"},
