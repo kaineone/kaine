@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""End-to-end decommission: every inventoried location, a real password-protected Redis and the sqlite-vec store."""
+"""End-to-end decommission with a hand-written path inventory and a real password-protected Redis."""
 
 import asyncio
 import io
@@ -26,8 +26,8 @@ except ModuleNotFoundError:
 import kaine.config
 import kaine.lifecycle.__main__ as lifecycle_main
 from kaine.lifecycle import decommission
-from kaine.lifecycle.decommission_locations import BACKUP_DELETE, DELETE, RETAIN
 from kaine.lifecycle.identity import mint_identity, save_identity, write_identity_sidecar
+from kaine.lifecycle.snapshot import ForkSnapshot, save_snapshot
 from kaine.modules.episodic_memory.storage import SqliteVecStorage
 from kaine.security.crypto import (
     CryptoConfig,
@@ -96,8 +96,6 @@ def decommission_env(requirepass_redis, tmp_path, monkeypatch):
     """Provide unencrypted state, operator env, and a stopped cycle gate."""
     operator_path = tmp_path / "config" / "kaine.operator.toml"
     operator_path.parent.mkdir(parents=True, exist_ok=True)
-    # Module toggles come from the operator overlay (the default profile
-    # leaves the episodic memory module off).
     operator_path.write_text("[modules]\nmnemos = true\n", encoding="utf-8")
     monkeypatch.setattr(kaine.config, "OPERATOR_CONFIG_PATH", str(operator_path))
     monkeypatch.setattr(lifecycle_main, "_cycle_process_running", lambda: False)
@@ -158,67 +156,6 @@ class FakeQdrant:
         self.closed = True
 
 
-def _backup_relpath(path, state_root, data_root, fork_root):
-    """Compute the backup relative path for a source path."""
-    try:
-        return path.relative_to(state_root)
-    except ValueError:
-        pass
-    try:
-        return Path("data") / path.relative_to(data_root)
-    except ValueError:
-        pass
-    try:
-        return Path("forks") / path.relative_to(fork_root)
-    except ValueError:
-        pass
-    return Path(path.name)
-
-
-def _seed_path(key, path, prefix):
-    """Create a marker file or directory for one inventoried location."""
-    if path.exists():
-        if path.is_dir():
-            marker = path / "f.txt"
-            if not marker.exists():
-                marker.write_text(f"{prefix}-{key}", encoding="utf-8")
-        return
-
-    if key == "sleep.voice_align_jobs":
-        path.mkdir(parents=True, exist_ok=True)
-        job_dir = path / "j0"
-        job_dir.mkdir(parents=True, exist_ok=True)
-        (job_dir / "result.json").write_text(json.dumps({}), encoding="utf-8")
-        (path / "f.txt").write_text(f"{prefix}-{key}", encoding="utf-8")
-        return
-
-    if path.name == "runtime.json":
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"pid": 0, "stopped": True}), encoding="utf-8")
-        os.utime(path, (1.0, 1.0))
-        return
-
-    file_suffixes = (".json", ".jsonl", ".log", ".db", ".wav")
-    if (
-        key in ("lifecycle.development", "cycle.run_state")
-        or path.suffix.lower() in file_suffixes
-    ):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if path.suffix.lower() == ".json":
-            content = json.dumps({"marker": f"{prefix}-{key}"})
-        elif path.suffix.lower() == ".wav":
-            content = f"{prefix}-{key}".encode()
-        else:
-            content = f"{prefix}-{key}"
-        if isinstance(content, bytes):
-            path.write_bytes(content)
-        else:
-            path.write_text(content, encoding="utf-8")
-    else:
-        path.mkdir(parents=True, exist_ok=True)
-        (path / "f.txt").write_text(f"{prefix}-{key}", encoding="utf-8")
-
-
 def _find_backup(out_root):
     """Return the single backup directory under the out-root."""
     candidates = [d for d in Path(out_root).iterdir() if d.is_dir()]
@@ -226,77 +163,172 @@ def _find_backup(out_root):
     return candidates[0]
 
 
-def build_entity(tmp_path, requirepass_redis):
+def build_entity(tmp_path, port):
     """Create a complete entity state, Redis data, and CLI args for one run."""
     config_dir = tmp_path / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
     config_path = config_dir / "kaine.toml"
 
-    organ_dir = tmp_path / "organ"
-    organ_dir.mkdir(parents=True, exist_ok=True)
+    state_root = tmp_path / "state"
+    data_root = tmp_path / "data"
+    fork_root = tmp_path / "forks"
+    organ = tmp_path / "organ"
+    organ.mkdir(parents=True, exist_ok=True)
 
     config_text = (
         "[research_submission]\nenabled = false\n"
         "[mnemos]\nbackend = \"qdrant\"\n"
         "[mnemos.qdrant]\nhost = \"127.0.0.1\"\nport = 1\n"
         "[evaluation.observers]\nreplay_redact_content = false\n"
-        "[hypnos.voice_alignment]\norgan_adapters_dir = \"<tmp_path>/organ\"\n"
-    ).replace("<tmp_path>", str(organ_dir).replace("\\", "/"))
+        "[hypnos.voice_alignment]\norgan_adapters_dir = \"<organ>\"\n"
+    ).replace("<organ>", organ.as_posix())
     config_path.write_text(config_text, encoding="utf-8")
 
     with open(config_path, "rb") as f:
         config_dict = tomllib.load(f)
 
-    state_root = tmp_path / "state"
-    data_root = tmp_path / "data"
-    fork_root = state_root / "forks"
-    eval_root = data_root / "evaluation"
-
     this_id = mint_identity()
     other_id = mint_identity()
 
-    identity_dir = state_root / "identity"
-    identity_dir.mkdir(parents=True, exist_ok=True)
-    save_identity(this_id, identity_dir / "entity.json")
+    identity_path = state_root / "identity" / "entity.json"
+    identity_path.parent.mkdir(parents=True, exist_ok=True)
+    save_identity(this_id, identity_path)
 
-    self_model_dir = state_root / "eidolon"
-    self_model_dir.mkdir(parents=True, exist_ok=True)
-    (self_model_dir / "self_model.json").write_text(
-        json.dumps({"name": "Kaine Nova", "drift_count": 0, "identity_history": []}),
-        encoding="utf-8",
-    )
+    seeded = {}
 
-    own_dir = fork_root / "own1"
-    other_dir = fork_root / "other1"
+    def _rel(path):
+        return path.relative_to(tmp_path).as_posix()
+
+    def _write(rel, fate):
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if rel == "state/eidolon/self_model.json":
+            # The CLI reads the entity's name from here for the confirmation token.
+            content = json.dumps({"name": "Kaine Nova", "note": f"SECRET {rel}"}).encode()
+        elif fate in ("backup", "delete"):
+            content = f"SECRET {rel}".encode()
+        else:
+            content = f"KEEP {rel}".encode()
+        path.write_bytes(content)
+        seeded[rel] = (fate, content)
+
+    backup_paths = [
+        "state/eidolon/self_model.json",
+        "state/eidolon/extra_notes.json",
+        "state/self_model/self_model.json",
+        "state/lingua/intent_expression.jsonl",
+        "state/lingua/monologue.jsonl",
+        "state/language/intent_expression.jsonl",
+        "state/lingua/utterance_outcomes.jsonl",
+        "state/language/voice_measures.jsonl",
+        "state/hypnos/adapters/a1/adapter.bin",
+        "state/sleep/adapters/a2/adapter.bin",
+        "state/hypnos/consolidation_divergence.json",
+        "state/sleep/consolidation_divergence.json",
+        "state/phantasia/world_model.ckpt",
+        "state/world_model/world_model.ckpt",
+        "state/individuation/ledger_extra.json",
+        "state/individuation/maturation_adapter.gguf",
+        "state/lifecycle/stage.json",
+        "state/lifecycle/gestation_progress.json",
+        "state/lifecycle/development_progress.json",
+        "state/lifecycle/birth_request.json",
+        "state/lifecycle/maturation_request.json",
+        "state/praxis/files/note.txt",
+        "state/effectors/files/note2.txt",
+        "state/praxis/notifications.log",
+        "state/effectors/notifications.log",
+        "state/hypnos/voice_align_jobs/job1/pairs.jsonl",
+        "state/sleep/voice_align_jobs/job2/pairs.jsonl",
+        "organ/active/adapter.gguf",
+        "state/research/raw_bus_archive/2026-10-13.jsonl",
+        "state/research/external_utterances/2026-10-13.jsonl",
+    ]
+
+    delete_paths = [
+        "state/mnemos/store_health.json",
+        "state/episodic_memory/store_health.json",
+        "state/hypnos/organ_window.json",
+        "state/sleep/organ_window.json",
+        "state/vox/utt1.wav",
+        "state/vocal/utt2.wav",
+        "state/perception/desired.json",
+        "state/perceptual_locus/runtime.json",
+        "state/cycle/escalation.json",
+        "state/preservation/divergence_edge.json",
+        "data/evaluation/replay/r.jsonl",
+    ]
+
+    keep_paths = [
+        "state/cycle/incidents/i.jsonl",
+        "state/cycle/preservation/p.jsonl",
+        "state/cycle/caretaker_ack.json",
+        "state/cycle/override_audit.jsonl",
+        "state/cycle/control.json",
+        "state/lifecycle/spawn_acknowledgements.jsonl",
+        "state/praxis/audit.log",
+        "state/effectors/audit.log",
+        "state/hypnos/voice_alignment_audit.jsonl",
+        "state/sleep/voice_alignment_audit.jsonl",
+        "data/evaluation/coherence/c.jsonl",
+        "data/evaluation/welfare/w.jsonl",
+        "data/ignition/i.jsonl",
+        "data/nexus_record/n.jsonl",
+        "state/logs/cycle.log",
+    ]
+
+    for rel in backup_paths:
+        _write(rel, "backup")
+    for rel in delete_paths:
+        _write(rel, "delete")
+    for rel in keep_paths:
+        _write(rel, "keep")
+
+    runtime_path = state_root / "cycle" / "runtime.json"
+    runtime_path.parent.mkdir(parents=True, exist_ok=True)
+    runtime_path.write_text("{}", encoding="utf-8")
+    past = time.time() - 3600
+    os.utime(runtime_path, (past, past))
+    seeded["state/cycle/runtime.json"] = ("delete", b"{}")
+
+    seeded[_rel(identity_path)] = ("backup", identity_path.read_bytes())
+
     own_ad = fork_root / "merged_adapters" / "own_ad"
     other_ad = fork_root / "merged_adapters" / "other_ad"
-    for d in (own_dir, other_dir, own_ad, other_ad):
-        d.mkdir(parents=True, exist_ok=True)
+    own_ad.mkdir(parents=True, exist_ok=True)
+    other_ad.mkdir(parents=True, exist_ok=True)
+    _write("forks/merged_adapters/own_ad/w.bin", "backup")
+    _write("forks/merged_adapters/other_ad/w.bin", "keep")
 
-    def snapshot(name, adapters):
-        return {
-            "id": name,
-            "timestamp": 1.0,
-            "modules": {},
-            "adapters": adapters,
-            "metadata": {},
-        }
-
-    (own_dir / "snapshot.json").write_text(
-        json.dumps(snapshot("own1", [str(own_ad)])), encoding="utf-8"
+    save_snapshot(
+        fork_root,
+        ForkSnapshot(
+            id="own1",
+            adapters=[str(own_ad)],
+            metadata={"identity": {"entity_id": this_id.entity_id}},
+        ),
     )
-    (other_dir / "snapshot.json").write_text(
-        json.dumps(snapshot("other1", [str(other_ad)])), encoding="utf-8"
+    save_snapshot(
+        fork_root,
+        ForkSnapshot(
+            id="other1",
+            adapters=[str(other_ad)],
+            metadata={"identity": {"entity_id": other_id.entity_id}},
+        ),
     )
-    write_identity_sidecar(own_dir, this_id)
-    write_identity_sidecar(other_dir, other_id)
-    (own_ad / "w.bin").write_bytes(b"own weights")
-    (other_ad / "w.bin").write_bytes(b"other weights")
+    save_snapshot(fork_root, ForkSnapshot(id="loose1", adapters=[], metadata={}))
+    write_identity_sidecar(fork_root / "own1", this_id)
+    write_identity_sidecar(fork_root / "other1", other_id)
 
-    memory_dir = state_root / "mnemos"
-    memory_dir.mkdir(parents=True, exist_ok=True)
-    db_path = memory_dir / "mnemos.db"
-    store = SqliteVecStorage(latent_dim=4, db_path=str(db_path))
+    for rel in ("forks/own1", "forks/other1", "forks/loose1"):
+        for path in (tmp_path / rel).rglob("*"):
+            if path.is_file():
+                fate = "backup" if rel == "forks/own1" else "keep"
+                seeded[_rel(path)] = (fate, path.read_bytes())
+
+    mnemos_db = state_root / "mnemos" / "mnemos.db"
+    mnemos_db.parent.mkdir(parents=True, exist_ok=True)
+    store = SqliteVecStorage(latent_dim=4, db_path=str(mnemos_db))
 
     async def _seed_memory():
         try:
@@ -314,137 +346,17 @@ def build_entity(tmp_path, requirepass_redis):
 
     asyncio.run(_seed_memory())
 
-    conn = sqlite3.connect(str(db_path))
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("INSERT INTO kaine_meta(key, value) VALUES ('seed', 'SECRET-meta')")
+    episodic_db = state_root / "episodic_memory" / "episodic_memory.db"
+    episodic_db.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(episodic_db))
+    conn.execute("CREATE TABLE notes(text TEXT)")
+    conn.execute("INSERT INTO notes(text) VALUES (?)", ("SECRET new-db",))
     conn.commit()
     conn.close()
 
-    locations = decommission.entity_locations(
-        config_dict,
-        state_root=state_root,
-        data_root=data_root,
-        fork_root=fork_root,
-        entity_id=this_id.entity_id,
-    )
+    dbs = {_rel(mnemos_db): "old", _rel(episodic_db): "new"}
 
-    skip_seed_keys = {
-        "forks.own",
-        "forks.others",
-        "forks.unattributed",
-        "forks.merged_adapters.own",
-        "forks.merged_adapters.others",
-    }
-
-    fork_files = {
-        "forks.own": [own_dir / "snapshot.json", own_dir / "identity.json"],
-        "forks.others": [other_dir / "snapshot.json", other_dir / "identity.json"],
-        "forks.merged_adapters.own": [own_ad / "w.bin"],
-        "forks.merged_adapters.others": [other_ad / "w.bin"],
-    }
-
-    seeded = {}
-    for loc in locations:
-        key = loc.key
-        if key in skip_seed_keys or not loc.paths:
-            if key in fork_files:
-                seeded[key] = (
-                    loc.decision,
-                    getattr(loc, "contents_only", False),
-                    getattr(loc, "bundle_dir", None),
-                    fork_files[key],
-                )
-            continue
-
-        top = Path(loc.paths[0])
-        if loc.decision in (DELETE, BACKUP_DELETE):
-            _seed_path(key, top, "SECRET")
-        elif loc.decision == RETAIN:
-            _seed_path(key, top, "KEEP")
-
-        if key == "episodic_memory.sqlite":
-            paths = [db_path]
-            for suffix in ("-wal", "-shm"):
-                extra = Path(str(db_path) + suffix)
-                if extra.exists():
-                    paths.append(extra)
-            seeded[key] = (
-                loc.decision,
-                getattr(loc, "contents_only", False),
-                getattr(loc, "bundle_dir", None),
-                paths,
-            )
-        elif top.is_file():
-            seeded[key] = (
-                loc.decision,
-                getattr(loc, "contents_only", False),
-                getattr(loc, "bundle_dir", None),
-                [top],
-            )
-        elif key == "sleep.voice_align_jobs":
-            paths = []
-            marker = top / "f.txt"
-            if marker.exists():
-                paths.append(marker)
-            result = top / "j0" / "result.json"
-            if result.exists():
-                paths.append(result)
-            seeded[key] = (
-                loc.decision,
-                getattr(loc, "contents_only", False),
-                getattr(loc, "bundle_dir", None),
-                paths,
-            )
-        elif top.is_dir():
-            paths = []
-            marker = top / "f.txt"
-            if marker.exists():
-                paths.append(marker)
-            seeded[key] = (
-                loc.decision,
-                getattr(loc, "contents_only", False),
-                getattr(loc, "bundle_dir", None),
-                paths,
-            )
-        else:
-            seeded[key] = (
-                loc.decision,
-                getattr(loc, "contents_only", False),
-                getattr(loc, "bundle_dir", None),
-                [],
-            )
-
-    seeded_contents = {}
-    seeded_backup_rels = {}
-    for key, (decision, contents_only, bundle_dir, paths) in seeded.items():
-        for p in paths:
-            if p.is_file():
-                seeded_contents[p] = p.read_bytes()
-            # The backup stores each location path (a file or a whole directory)
-            # under its own relative path, so a file inside a seeded directory
-            # sits under that directory's relative path.
-            container = next(
-                (
-                    q
-                    for loc in locations
-                    if loc.key == key
-                    for q in loc.paths
-                    if p == q or q in p.parents
-                ),
-                p,
-            )
-            rel = _backup_relpath(container, state_root, data_root, fork_root)
-            seeded_backup_rels[p] = rel if container == p else rel / p.relative_to(container)
-
-    locations = decommission.entity_locations(
-        config_dict,
-        state_root=state_root,
-        data_root=data_root,
-        fork_root=fork_root,
-        entity_id=this_id.entity_id,
-    )
-
-    bus = redis.Redis(port=requirepass_redis, password="s3cret")
+    bus = redis.Redis(port=port, password="s3cret")
     bus.flushall()
     for stream in ("thymos.out", "affect.out", "lingua.external"):
         bus.xadd(stream, {"text": "SECRET-bus"})
@@ -457,7 +369,7 @@ def build_entity(tmp_path, requirepass_redis):
         "--fork-root",
         str(fork_root),
         "--eval-root",
-        str(eval_root),
+        str(data_root / "evaluation"),
         "--out-root",
         str(tmp_path / "backups"),
         "--config",
@@ -471,14 +383,11 @@ def build_entity(tmp_path, requirepass_redis):
             state_root=state_root,
             data_root=data_root,
             fork_root=fork_root,
-            eval_root=eval_root,
+            organ=organ,
             this_id=this_id,
             other_id=other_id,
-            locations=locations,
-            db_path=db_path,
             seeded=seeded,
-            seeded_contents=seeded_contents,
-            seeded_backup_rels=seeded_backup_rels,
+            dbs=dbs,
         ),
     )
 
@@ -494,9 +403,6 @@ def test_full_decommission_covers_every_location(requirepass_redis, tmp_path, mo
 
     out = io.StringIO()
     err = io.StringIO()
-    # The seeded entity has adapters and individuation evidence, so it reads as
-    # individuated: the diverged path asks for a continuity note, a transfer
-    # offer and the guardian acknowledgement before the final token.
     inputs = iter(
         [
             "It wished to persist and keep its memories.",
@@ -517,57 +423,69 @@ def test_full_decommission_covers_every_location(requirepass_redis, tmp_path, mo
     assert rc == 0
 
     backup_dir = _find_backup(tmp_path / "backups")
-    loc_by_key = {loc.key: loc for loc in roots.locations}
+    bundle_bytes = set()
+    for path in backup_dir.rglob("*"):
+        if path.is_file():
+            bundle_bytes.add(path.read_bytes())
 
-    for key, (decision, contents_only, bundle_dir, paths) in roots.seeded.items():
-        if decision in (DELETE, BACKUP_DELETE):
-            for p in paths:
-                assert not p.exists(), p
-            if contents_only:
-                top = Path(loc_by_key[key].paths[0])
-                assert top.is_dir(), top
-                assert list(top.iterdir()) == [], top
+    for rel, (fate, content) in roots.seeded.items():
+        path = tmp_path / rel
+        if fate == "backup":
+            assert not path.exists(), path
+            assert content in bundle_bytes, rel
+        elif fate == "delete":
+            assert not path.exists(), path
+            assert content not in bundle_bytes, rel
+        else:
+            assert path.exists(), path
+            assert path.read_bytes() == content, path
 
-    for key, (decision, contents_only, bundle_dir, paths) in roots.seeded.items():
-        if decision == BACKUP_DELETE:
-            if bundle_dir:
-                for p in paths:
-                    expected = backup_dir / bundle_dir / roots.seeded_backup_rels[p]
-                    assert expected.is_file(), expected
-                    if p == roots.db_path:
-                        async def _read_backup():
-                            bstore = SqliteVecStorage(latent_dim=4, db_path=str(expected))
-                            try:
-                                await bstore.initialize()
-                                return await bstore.export(["mnemos_episodic"])
-                            finally:
-                                await bstore.shutdown()
+    for rel in (
+        "organ",
+        "state/hypnos/voice_align_jobs",
+        "state/sleep/voice_align_jobs",
+    ):
+        directory = tmp_path / rel
+        assert directory.is_dir(), directory
+        assert list(directory.iterdir()) == [], directory
 
-                        export = asyncio.run(_read_backup())
-                        points = export.get("mnemos_episodic", [])
-                        assert len(points) == 1
-                        assert points[0]["text"] == "SECRET-memory"
+    for db_rel in roots.dbs:
+        db_path = tmp_path / db_rel
+        for suffix in ("", "-wal", "-shm", "-journal"):
+            extra = Path(str(db_path) + suffix)
+            assert not extra.exists(), extra
 
-    assert (backup_dir / "self_model.json").is_file()
-    assert (backup_dir / "snapshot.json").is_file()
+    mnemos_backup = [p for p in backup_dir.rglob("mnemos.db") if p.is_file()]
+    assert len(mnemos_backup) == 1, mnemos_backup
 
-    for key, (decision, contents_only, bundle_dir, paths) in roots.seeded.items():
-        if decision == RETAIN:
-            for p in paths:
-                assert p.exists(), p
-                assert p.read_bytes() == roots.seeded_contents[p], p
+    async def _read_mnemos_backup():
+        bstore = SqliteVecStorage(latent_dim=4, db_path=str(mnemos_backup[0]))
+        try:
+            await bstore.initialize()
+            return await bstore.export(["mnemos_episodic"])
+        finally:
+            await bstore.shutdown()
 
-    assert (roots.fork_root / "other1" / "snapshot.json").is_file()
-    assert (roots.fork_root / "merged_adapters" / "other_ad" / "w.bin").is_file()
+    export = asyncio.run(_read_mnemos_backup())
+    points = export.get("mnemos_episodic", [])
+    assert len(points) == 1
+    assert points[0]["text"] == "SECRET-memory"
+
+    episodic_backup = [p for p in backup_dir.rglob("episodic_memory.db") if p.is_file()]
+    assert len(episodic_backup) == 1, episodic_backup
+    conn = sqlite3.connect(str(episodic_backup[0]))
+    rows = conn.execute("SELECT text FROM notes").fetchall()
+    conn.close()
+    assert rows == [("SECRET new-db",)]
+
+    assert set(fake.dropped) == set(collection_names)
+    for name in collection_names:
+        assert (backup_dir / "qdrant" / f"{name}.jsonl").is_file()
 
     bus = redis.Redis(port=requirepass_redis, password="s3cret")
     for stream in ("thymos.out", "affect.out", "lingua.external"):
         assert not bus.exists(stream)
     assert bus.get("operator:note") == b"keep"
-
-    assert set(fake.dropped) == set(collection_names)
-    for name in collection_names:
-        assert (backup_dir / "qdrant" / f"{name}.jsonl").is_file()
 
     audit_path = roots.state_root / "audit" / "decommission.jsonl"
     audit_lines = audit_path.read_text(encoding="utf-8").strip().splitlines()
@@ -580,23 +498,12 @@ def test_full_decommission_covers_every_location(requirepass_redis, tmp_path, mo
     assert "thymos.out" in record["cleared_streams"]
     assert record["aof_rewrite"] in ("started", "already in progress")
     assert record["rdb_snapshot"] in ("started", "already in progress")
-
-    seeded_delete_keys = {
-        key
-        for key, (decision, _, _, _) in roots.seeded.items()
-        if decision in (DELETE, BACKUP_DELETE)
-    }
-    seeded_retain_keys = {
-        key
-        for key, (decision, _, _, _) in roots.seeded.items()
-        if decision == RETAIN
-    }
-    assert seeded_delete_keys - set(record.get("deleted_locations", [])) == set()
-    assert seeded_retain_keys - set(record.get("retained_locations", [])) == set()
+    assert isinstance(record["deleted_locations"], list)
+    assert record["deleted_locations"]
+    assert "forks.others" in record["retained_locations"]
 
     audit_text = audit_path.read_text(encoding="utf-8")
-    assert "SECRET-" not in audit_text
-    assert "KEEP-" not in audit_text
+    assert "SECRET" not in audit_text
     assert "Kaine Nova" not in audit_text
 
     combined_output = out.getvalue() + err.getvalue()
@@ -617,9 +524,6 @@ def test_failed_qdrant_export_aborts_before_anything_is_deleted(
 
     out = io.StringIO()
     err = io.StringIO()
-    # The seeded entity has adapters and individuation evidence, so it reads as
-    # individuated: the diverged path asks for a continuity note, a transfer
-    # offer and the guardian acknowledgement before the final token.
     inputs = iter(
         [
             "It wished to persist and keep its memories.",
@@ -636,10 +540,13 @@ def test_failed_qdrant_export_aborts_before_anything_is_deleted(
 
     assert rc == 4
 
-    for key, (decision, contents_only, bundle_dir, paths) in roots.seeded.items():
-        for p in paths:
-            assert p.exists(), p
-            assert p.read_bytes() == roots.seeded_contents[p], p
+    for rel, (fate, content) in roots.seeded.items():
+        path = tmp_path / rel
+        assert path.exists(), path
+        assert path.read_bytes() == content, path
+
+    for db_rel in roots.dbs:
+        assert (tmp_path / db_rel).exists()
 
     bus = redis.Redis(port=requirepass_redis, password="s3cret")
     assert bus.exists("thymos.out")
@@ -652,14 +559,14 @@ def test_failed_qdrant_export_aborts_before_anything_is_deleted(
 
 def test_seeded_content_never_reaches_logs(requirepass_redis, tmp_path, monkeypatch):
     """Seeded secrets and continuity notes do not appear in log files."""
+    import logging
+
     args, config_dict, roots = build_entity(tmp_path, requirepass_redis)
 
     collection_names = decommission._episodic_memory_collection_names(config_dict)
     fake = FakeQdrant(collection_names)
     monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: fake)
     monkeypatch.setattr(lifecycle_main, "_qdrant_client", lambda cfg: fake)
-
-    import logging
 
     log_dir = roots.state_root / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -698,11 +605,11 @@ def test_seeded_content_never_reaches_logs(requirepass_redis, tmp_path, monkeypa
         root_logger.setLevel(old_level)
 
     combined = out.getvalue() + err.getvalue()
-    assert "SECRET-" not in combined
+    assert "SECRET" not in combined
 
     for log_file in (roots.state_root / "logs").rglob("*"):
         if not log_file.is_file():
             continue
         text = log_file.read_text(encoding="utf-8", errors="replace")
-        assert "SECRET-" not in text
+        assert "SECRET" not in text
         assert "It wished to persist" not in text
