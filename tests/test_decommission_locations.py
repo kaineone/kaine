@@ -1,13 +1,17 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
+import base64
 import json
+import os
 import sqlite3
 import uuid
 from pathlib import Path
 
 from kaine.lifecycle import decommission_locations as dl
 from kaine.lifecycle import identity as identity_mod
+from kaine.lifecycle.snapshot import ForkSnapshot, save_snapshot
+from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
 SIDECAR_NAME = getattr(identity_mod, "SIDECAR_NAME", "identity.json")
 
@@ -44,7 +48,7 @@ def test_every_inventoried_location_has_a_decision(tmp_path):
     for loc in locations:
         assert loc.decision in (dl.BACKUP_DELETE, dl.DELETE, dl.RETAIN)
         if loc.decision == dl.BACKUP_DELETE:
-            if loc.key in ("self_model", "language", "sleep.adapters", "world_model", "individuation"):
+            if loc.key == "individuation":
                 assert loc.bundle_dir is None, loc.key
             else:
                 assert loc.bundle_dir == f"locations/{loc.key}", loc.key
@@ -156,9 +160,9 @@ def test_snapshot_attribution(tmp_path):
     assert [p.name for p in unattributed] == ["d"]
 
     own2, others2, unattributed2 = dl.attribute_snapshots(fork_root, None)
-    assert [p.name for p in own2] == ["d"]
-    assert [p.name for p in others2] == ["a", "b", "c"]
-    assert unattributed2 == []
+    assert own2 == []
+    assert others2 == []
+    assert set(p.name for p in unattributed2) == {"a", "b", "c", "d"}
 
 
 def test_malformed_sidecar_is_unattributed(tmp_path):
@@ -175,6 +179,72 @@ def test_malformed_sidecar_is_unattributed(tmp_path):
     own, others, unattributed = dl.attribute_snapshots(snap_dir.parent, entity_id=None)
     assert snap_dir in unattributed
     assert not own and not others
+
+
+def test_encrypted_snapshots_are_attributed_and_their_adapters_kept(tmp_path, monkeypatch):
+    """Encrypted fork snapshots are still attributed and keep referenced adapters."""
+    fork_root = tmp_path / "forks"
+    merged_dir = fork_root / "merged_adapters"
+    e1 = _make_id()
+    e2 = _make_id()
+    this_adapter = merged_dir / "this_adapter"
+    other_adapter = merged_dir / "other_adapter"
+    this_adapter.mkdir(parents=True)
+    other_adapter.mkdir(parents=True)
+
+    try:
+        monkeypatch.setenv(
+            "KAINE_STATE_KEY", base64.b64encode(os.urandom(32)).decode("ascii")
+        )
+        set_state_encryptor(StateEncryptor(CryptoConfig(enabled=True)))
+        save_snapshot(
+            fork_root,
+            ForkSnapshot(
+                id="snap-this",
+                adapters=[str(this_adapter)],
+                metadata={"identity": {"entity_id": e1}},
+            ),
+        )
+        save_snapshot(
+            fork_root,
+            ForkSnapshot(
+                id="snap-other",
+                adapters=[str(other_adapter)],
+                metadata={"identity": {"entity_id": e2}},
+            ),
+        )
+
+        # The snapshots really are encrypted on disk, so plain JSON parsing fails.
+        assert not (fork_root / "snap-this" / "snapshot.json").read_bytes().lstrip().startswith(b"{")
+
+        own, others, unattributed = dl.attribute_snapshots(fork_root, e1)
+        assert [p.name for p in own] == ["snap-this"]
+        assert [p.name for p in others] == ["snap-other"]
+        assert unattributed == []
+
+        own_adapters, kept_adapters = dl.attribute_merged_adapters(
+            fork_root, own, others + unattributed
+        )
+        assert own_adapters == [this_adapter]
+        assert kept_adapters == [other_adapter]
+    finally:
+        set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
+
+
+def test_unreadable_kept_snapshot_keeps_all_merged_adapters(tmp_path):
+    """A kept snapshot with an unreadable snapshot.json keeps every merged adapter."""
+    fork_root = tmp_path / "forks"
+    merged_dir = fork_root / "merged_adapters"
+    children = [merged_dir / f"adapter{i}" for i in range(3)]
+    for child in children:
+        child.mkdir(parents=True)
+    snap_dir = fork_root / "kept"
+    snap_dir.mkdir(parents=True)
+    (snap_dir / "snapshot.json").write_text("not valid json")
+
+    own_adapters, kept_adapters = dl.attribute_merged_adapters(fork_root, [], [snap_dir])
+    assert own_adapters == []
+    assert set(c.name for c in kept_adapters) == {c.name for c in children}
 
 
 def test_merged_adapter_attribution(tmp_path):

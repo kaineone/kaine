@@ -489,8 +489,8 @@ def test_decommission_backup_includes_world_model_checkpoint(tmp_path: Path, mon
         assessment=DivergenceAssessment(diverged=False, signals={}, summary="t"),
     )
     assert result.ok
-    assert "phantasia/" in result.inventory
-    copied = result.backup_path / "phantasia" / "world_model.ckpt"
+    assert "locations/world_model/ (world_model)" in result.inventory
+    copied = result.backup_path / "locations" / "world_model" / "phantasia" / "world_model.ckpt"
     assert copied.read_bytes() == b"weights"
     manifest = json.loads((result.backup_path / "manifest.json").read_text())
     assert "state/phantasia/" in manifest["restore_notes"]

@@ -123,7 +123,7 @@ def entity_locations(
                 directory=True,
             ),
             "self-understanding and identity history (cognitive state)",
-            bundle_dir=None,
+            bundle_dir="locations/self_model",
         )
     )
 
@@ -137,7 +137,7 @@ def entity_locations(
                 directory=True,
             ),
             "the language module's intent log and monologue (cognitive state)",
-            bundle_dir=None,
+            bundle_dir="locations/language",
         )
     )
 
@@ -176,7 +176,7 @@ def entity_locations(
                 )
             ),
             "learned voice adapters",
-            bundle_dir=None,
+            bundle_dir="locations/sleep.adapters",
         )
     )
 
@@ -211,7 +211,7 @@ def entity_locations(
                 directory=True,
             ),
             "learned world-model weights",
-            bundle_dir=None,
+            bundle_dir="locations/world_model",
         )
     )
 
@@ -656,10 +656,32 @@ def entity_locations(
     return locations
 
 
+def read_snapshot_json(snap_dir: Path) -> dict[str, Any] | None:
+    """Return the parsed snapshot.json of a snapshot directory, decrypting it when needed, or None if it cannot be read."""
+    from kaine.security.crypto import get_state_encryptor
+
+    try:
+        data = get_state_encryptor().maybe_decrypt(
+            (snap_dir / "snapshot.json").read_bytes()
+        )
+        if not isinstance(data, bytes):
+            return None
+        raw = json.loads(data.decode("utf-8"))
+    except Exception:
+        return None
+    if isinstance(raw, dict):
+        return raw
+    return None
+
+
 def attribute_snapshots(
     fork_root: Path, entity_id: str | None
 ) -> tuple[list[Path], list[Path], list[Path]]:
-    """Attribute fork snapshot directories to this entity, others, or neither."""
+    """Attribute fork snapshot directories to this entity, others, or neither.
+
+    If entity_id is None, every snapshot is treated as unattributed (kept)
+    because without an identity nothing can be attributed to this entity.
+    """
     own: list[Path] = []
     others: list[Path] = []
     unattributed: list[Path] = []
@@ -688,10 +710,7 @@ def attribute_snapshots(
         if sidecar is not None:
             snapshot_id = sidecar[0]
         else:
-            try:
-                raw = json.loads((child / "snapshot.json").read_text())
-            except (OSError, json.JSONDecodeError):
-                raw = None
+            raw = read_snapshot_json(child)
             if isinstance(raw, dict):
                 metadata = raw.get("metadata")
                 if isinstance(metadata, dict):
@@ -702,17 +721,14 @@ def attribute_snapshots(
                             snapshot_id = value
 
         if entity_id is None:
-            if snapshot_id is None:
-                own.append(child)
-            else:
-                others.append(child)
+            unattributed.append(child)
+            continue
+        if snapshot_id == entity_id:
+            own.append(child)
+        elif snapshot_id is None:
+            unattributed.append(child)
         else:
-            if snapshot_id == entity_id:
-                own.append(child)
-            elif snapshot_id is None:
-                unattributed.append(child)
-            else:
-                others.append(child)
+            others.append(child)
 
     return own, others, unattributed
 
@@ -720,7 +736,11 @@ def attribute_snapshots(
 def attribute_merged_adapters(
     fork_root: Path, own: list[Path], kept: list[Path]
 ) -> tuple[list[Path], list[Path]]:
-    """Partition merged adapter directories by whether any kept snapshot references them."""
+    """Partition merged adapter directories by whether any kept snapshot references them.
+
+    If a kept snapshot cannot be read or its adapter list is malformed, every
+    merged adapter is kept because its references cannot be determined.
+    """
     own_adapters: list[Path] = []
     kept_adapters: list[Path] = []
     merged_dir = fork_root / "merged_adapters"
@@ -735,16 +755,14 @@ def attribute_merged_adapters(
     children.sort(key=lambda c: c.name)
     referenced_by_kept: set[Path] = set()
 
-    def record_references(snap_dir: Path, is_kept: bool) -> None:
-        try:
-            raw = json.loads((snap_dir / "snapshot.json").read_text())
-        except (OSError, json.JSONDecodeError):
-            return
-        if not isinstance(raw, dict):
-            return
-        adapters = raw.get("adapters")
+    def record_references(snap_dir: Path) -> bool:
+        raw = read_snapshot_json(snap_dir)
+        if raw is None:
+            return False
+        # A snapshot without an "adapters" key lists none (ForkSnapshot's default).
+        adapters = raw.get("adapters", [])
         if not isinstance(adapters, list):
-            return
+            return False
         for adapter in adapters:
             if not isinstance(adapter, str):
                 continue
@@ -757,13 +775,12 @@ def attribute_merged_adapters(
                 if adapter_path == child_resolved or adapter_path.is_relative_to(
                     child_resolved
                 ):
-                    if is_kept:
-                        referenced_by_kept.add(child)
+                    referenced_by_kept.add(child)
+        return True
 
-    for snap_dir in own:
-        record_references(snap_dir, is_kept=False)
     for snap_dir in kept:
-        record_references(snap_dir, is_kept=True)
+        if not record_references(snap_dir):
+            return ([], children[:])
 
     for child in children:
         if child in referenced_by_kept:

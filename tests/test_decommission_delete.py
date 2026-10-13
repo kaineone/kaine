@@ -59,7 +59,10 @@ def test_dry_run_removes_nothing(tmp_path):
     assert (state_root / "forks" / "s1").exists()
     # The would-remove report lists the intended subtrees.
     joined = " ".join(result.would_remove_paths)
-    assert str(state_root / "eidolon") in joined and "forks" in joined and "adapters" in joined
+    # Without an identity no fork snapshot is attributed to this entity, so
+    # forks/s1 is kept and does not appear here.
+    assert str(state_root / "eidolon") in joined and "adapters" in joined
+    assert "forks" not in joined
 
 
 def test_delete_removes_only_intended_paths(tmp_path):
@@ -74,7 +77,7 @@ def test_delete_removes_only_intended_paths(tmp_path):
     assert not (state_root / "eidolon").exists()
     assert not (state_root / "lingua").exists()
     assert not (state_root / "perception").exists()
-    assert not (state_root / "forks" / "s1").exists()
+    assert (state_root / "forks" / "s1").exists()  # no identity -> cannot attribute
     assert (state_root / "forks").is_dir()
     assert not (state_root / "hypnos" / "adapters").exists()
     assert not (state_root / "cycle" / "runtime.json").exists()

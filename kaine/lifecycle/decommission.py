@@ -48,6 +48,7 @@ from kaine.lifecycle.decommission_locations import (
     RETAIN,
     checkpoint_sqlite,
     entity_locations,
+    read_snapshot_json,
 )
 from kaine.lifecycle.divergence import DivergenceAssessment
 from kaine.lifecycle.identity import IdentityError, load_identity
@@ -442,7 +443,11 @@ def capture_backup(
             shutil.copy2(self_model_src, bundle_dir / "self_model.json")
             inventory.append("self_model.json")
         except Exception as exc:
-            errors.append(f"copy self_model.json: {exc}")
+            return BackupResult(
+                ok=False,
+                backup_path=bundle_dir,
+                errors=[f"copy self_model.json: {exc}"],
+            )
 
     # --- 2. Language intent expression log --------------------------------
     intent_src = state_root / "lingua" / "intent_expression.jsonl"
@@ -451,7 +456,11 @@ def capture_backup(
             shutil.copy2(intent_src, bundle_dir / "intent_expression.jsonl")
             inventory.append("intent_expression.jsonl")
         except Exception as exc:
-            errors.append(f"copy intent_expression.jsonl: {exc}")
+            return BackupResult(
+                ok=False,
+                backup_path=bundle_dir,
+                errors=[f"copy intent_expression.jsonl: {exc}"],
+            )
 
     # --- 2b. Rotated intent log corpus ----------------------------------
     intent_corpus_src = state_root / "lingua" / "intent_log"
@@ -462,31 +471,15 @@ def capture_backup(
             )
             inventory.append("intent_log/")
         except Exception as exc:
-            errors.append(f"copy intent_log/: {exc}")
-
-    # --- 3. Sleep voice adapters ---------------------------------------
-    adapters_src = state_root / "hypnos" / "adapters"
-    if adapters_src.is_dir():
-        try:
-            shutil.copytree(adapters_src, bundle_dir / "adapters", dirs_exist_ok=True)
-            inventory.append("adapters/")
-        except Exception as exc:
-            errors.append(f"copy adapters/: {exc}")
-
-    # --- 4. World-model weight checkpoints ---------------------
-    # Learned-from-experience RSSM weights (opt-in persist_weights). The whole
-    # directory is copied so custom checkpoint filenames are covered. These
-    # are transferable cognitive state per CAL 4.2(b) — learned weights, never
-    # raw sense data (the trajectory buffer is never written to disk).
-    world_model_src = state_root / "phantasia"
-    if world_model_src.is_dir() and any(world_model_src.iterdir()):
-        try:
-            shutil.copytree(
-                world_model_src, bundle_dir / "phantasia", dirs_exist_ok=True
+            return BackupResult(
+                ok=False,
+                backup_path=bundle_dir,
+                errors=[f"copy intent_log/: {exc}"],
             )
-            inventory.append("phantasia/")
-        except Exception as exc:
-            errors.append(f"copy phantasia/: {exc}")
+
+    # Sleep voice adapters are copied by the generic "sleep.adapters" location step.
+
+    # World-model checkpoints are copied by the generic "world_model" location step.
 
     # --- 4a. Individuation evidence ---------------------------------------
     # Maturation reference, ledger, reports and stored maturation adapter. This evidence
@@ -518,18 +511,14 @@ def capture_backup(
         for snap_dir in own_location.existing():
             if not snap_dir.is_dir():
                 continue
-            src = snap_dir / "snapshot.json"
-            if not src.is_file():
+            snap_data = read_snapshot_json(snap_dir)
+            if snap_data is None:
                 continue
-            try:
-                snap_data = json.loads(src.read_text(encoding="utf-8"))
-                ts = snap_data.get("timestamp")
-                if ts is None:
-                    continue
-                if best_ts is None or ts >= best_ts:
-                    best_ts, latest_snapshot_id = ts, snap_dir.name
-            except Exception:
+            ts = snap_data.get("timestamp")
+            if ts is None:
                 continue
+            if best_ts is None or ts >= best_ts:
+                best_ts, latest_snapshot_id = ts, snap_dir.name
         if latest_snapshot_id is not None:
             src = fork_root / latest_snapshot_id / "snapshot.json"
             if src.is_file():
@@ -666,17 +655,17 @@ def capture_backup(
         ],
         "restore_notes": (
             "This bundle preserves the entity's transferable cognitive state per "
-            "CAL Article 4.2(b). To restore on another host: place self_model.json "
-            "under state/eidolon/, intent_expression.jsonl under state/lingua/, "
-            "adapters/ under state/hypnos/adapters/, phantasia/ (world-model "
-            "weight checkpoints) under state/phantasia/, snapshot.json under "
-            "state/forks/<id>/, and re-import the qdrant/*.jsonl exports (or restore "
-            "the kaine-qdrant-data volume per QDRANT_BACKUP_INSTRUCTIONS.txt) before "
-            "booting. Sensitive entity inner-life (continuity.json, assessment.json) "
-            "is kept out of this manifest; with state encryption enabled it rides "
-            "inside bundle.tar.enc — decrypt with the operator's KAINE_STATE_KEY first."
-            " Other locations are under locations/<key>/ with paths relative to the "
-            "state root, the data root (data/) or the fork root (forks/)."
+            "CAL Article 4.2(b). The complete state is under locations/<key>/, with paths "
+            "relative to the state root, the data root (data/) or the fork root (forks/): "
+            "to restore on another host, copy each back to the same place (for example "
+            "locations/world_model/phantasia/ to state/phantasia/ and "
+            "locations/sleep.adapters/hypnos/adapters/ to state/hypnos/adapters/), "
+            "restore individuation/ to state/individuation/, and re-import the "
+            "qdrant/*.jsonl exports before booting. self_model.json, intent_expression.jsonl "
+            "and snapshot.json at the top level are convenience copies of the same state. "
+            "Sensitive entity inner-life (continuity.json, assessment.json) is kept out "
+            "of this manifest; with state encryption enabled it rides inside bundle.tar.enc, "
+            "so decrypt it with the operator's KAINE_STATE_KEY first."
         ),
     }
     if identity_entry is not None:
