@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import time
 
 import httpx
@@ -28,8 +29,9 @@ from kaine.dashboard.config import DashboardConfig
 
 def test_module_docstring_names_the_session_header():
     """The auth module docstring names the session header."""
-    import kaine.dashboard.auth as auth_mod
-    assert f"``{auth_mod.SESSION_KEY_HEADER}``" in auth_mod.__doc__
+    auth_mod_doc = importlib.import_module("kaine.dashboard.auth").__doc__
+    assert f"``{SESSION_KEY_HEADER}``" in auth_mod_doc
+
 
 TOKEN = "s3cret-operator-token"
 HTML_ACCEPT = {"Accept": "text/html"}
