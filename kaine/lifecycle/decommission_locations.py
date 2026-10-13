@@ -1,0 +1,828 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
+from __future__ import annotations
+
+import json
+import sqlite3
+import time
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from kaine.legacy_aliases import name_forms
+from kaine.lifecycle.identity import IdentityError, read_identity_sidecar
+
+BACKUP_DELETE = "backup+delete"
+DELETE = "delete"
+RETAIN = "retain"
+
+
+@dataclass(frozen=True)
+class Location:
+    """A single on-disk place an entity's data may live, plus the decommission decision."""
+
+    key: str
+    decision: str
+    paths: tuple[Path, ...]
+    reason: str
+    bundle_dir: str | None = None
+    contents_only: bool = False
+
+    def existing(self) -> list[Path]:
+        """Return the candidate paths that currently exist, in order, without duplicates."""
+        seen: set[Path] = set()
+        found: list[Path] = []
+        for path in self.paths:
+            if path in seen:
+                continue
+            if path.is_file() or path.is_dir() or path.is_symlink():
+                found.append(path)
+                seen.add(path)
+        return found
+
+
+def _rebase(value: str, *, state_root: Path, data_root: Path) -> Path:
+    """Resolve a configured path string against the runtime state and data roots."""
+    expanded = Path(value).expanduser()
+    if expanded.is_absolute():
+        return expanded
+    text = str(value)
+    if text.startswith("state/"):
+        return state_root / Path(text[len("state/") :])
+    if text.startswith("data/"):
+        return data_root / Path(text[len("data/") :])
+    return data_root.parent / Path(text)
+
+
+def _module_forms(path: Path, state_root: Path) -> tuple[Path, ...]:
+    """Return the path under every known form of its first module segment."""
+    try:
+        relative = path.relative_to(state_root)
+    except ValueError:
+        return (path,)
+    parts = relative.parts
+    if not parts:
+        return (path,)
+    segment = parts[0]
+    rest = parts[1:]
+    forms = name_forms(segment)
+    result: list[Path] = []
+    for form in forms:
+        candidate = state_root / form
+        for part in rest:
+            candidate = candidate / part
+        result.append(candidate)
+    return tuple(result)
+
+
+def _cfg(config: Mapping[str, Any] | None, dotted: str, default: Any) -> Any:
+    """Read a dotted configuration key, returning ``default`` when any segment is missing."""
+    if config is None:
+        return default
+    current: Any = config
+    for part in dotted.split("."):
+        if not isinstance(current, Mapping) or part not in current:
+            return default
+        current = current[part]
+    return current
+
+
+def entity_locations(
+    config: Mapping[str, Any] | None,
+    *,
+    state_root: Path,
+    data_root: Path,
+    fork_root: Path,
+    entity_id: str | None,
+) -> list[Location]:
+    """Build and return every on-disk location for an entity with its decommission decision."""
+    locations: list[Location] = []
+
+    def resolve(value: str, *, directory: bool = False, forms: bool = True) -> tuple[Path, ...]:
+        path = _rebase(value, state_root=state_root, data_root=data_root)
+        if directory:
+            path = path.parent
+        if forms:
+            return _module_forms(path, state_root)
+        return (path,)
+
+    def files_in(
+        base_dirs: tuple[Path, ...], filenames: tuple[str, ...]
+    ) -> tuple[Path, ...]:
+        return tuple(base_dir / name for base_dir in base_dirs for name in filenames)
+
+    # 1. self model
+    locations.append(
+        Location(
+            "self_model",
+            BACKUP_DELETE,
+            resolve(
+                _cfg(config, "eidolon.persistence_path", "state/eidolon/self_model.json"),
+                directory=True,
+            ),
+            "self-understanding and identity history (cognitive state)",
+            bundle_dir=None,
+        )
+    )
+
+    # 2. language intent log
+    locations.append(
+        Location(
+            "language",
+            BACKUP_DELETE,
+            resolve(
+                _cfg(config, "lingua.intent_log_path", "state/lingua/intent_expression.jsonl"),
+                directory=True,
+            ),
+            "the language module's intent log and monologue (cognitive state)",
+            bundle_dir=None,
+        )
+    )
+
+    # 3. language outcomes
+    language_dir = resolve(
+        _cfg(config, "lingua.intent_log_path", "state/lingua/intent_expression.jsonl"),
+        directory=True,
+    )
+    locations.append(
+        Location(
+            "language.outcomes",
+            BACKUP_DELETE,
+            files_in(
+                language_dir,
+                (
+                    "utterance_outcomes.jsonl",
+                    "voice_measures.jsonl",
+                    "voice_measures_latest.json",
+                ),
+            ),
+            "voice outcomes and measures (part of the developing voice)",
+            bundle_dir="locations/language.outcomes",
+        )
+    )
+
+    # 4. sleep adapters
+    locations.append(
+        Location(
+            "sleep.adapters",
+            BACKUP_DELETE,
+            resolve(
+                _cfg(
+                    config,
+                    "hypnos.voice_alignment.adapter_output_dir",
+                    "state/hypnos/adapters",
+                )
+            ),
+            "learned voice adapters",
+            bundle_dir=None,
+        )
+    )
+
+    # 5. sleep consolidation divergence
+    locations.append(
+        Location(
+            "sleep.consolidation_divergence",
+            BACKUP_DELETE,
+            resolve("state/hypnos/consolidation_divergence.json"),
+            "a consolidation record (cognitive state)",
+            bundle_dir="locations/sleep.consolidation_divergence",
+        )
+    )
+
+    # 6. sleep organ window
+    locations.append(
+        Location(
+            "sleep.organ_window",
+            DELETE,
+            resolve("state/hypnos/organ_window.json"),
+            "host residency schedule a later entity would inherit",
+        )
+    )
+
+    # 7. world model
+    locations.append(
+        Location(
+            "world_model",
+            BACKUP_DELETE,
+            resolve(
+                _cfg(config, "phantasia.checkpoint_path", "state/phantasia/world_model.ckpt"),
+                directory=True,
+            ),
+            "learned world-model weights",
+            bundle_dir=None,
+        )
+    )
+
+    # 8. episodic memory sqlite
+    db_bases = resolve(
+        _cfg(config, "mnemos.db_path", "state/mnemos/mnemos.db")
+    )
+    sqlite_paths: list[Path] = []
+    for db_path in db_bases:
+        sqlite_paths.append(db_path)
+        sqlite_paths.append(db_path.parent / (db_path.name + "-wal"))
+        sqlite_paths.append(db_path.parent / (db_path.name + "-shm"))
+    locations.append(
+        Location(
+            "episodic_memory.sqlite",
+            BACKUP_DELETE,
+            tuple(sqlite_paths),
+            "the episodic memory (sqlite-vec store and its write-ahead files)",
+            bundle_dir="locations/episodic_memory.sqlite",
+        )
+    )
+
+    # 9. episodic memory store health
+    locations.append(
+        Location(
+            "episodic_memory.store_health",
+            DELETE,
+            resolve("state/mnemos/store_health.json"),
+            "a store marker the next store would act on",
+        )
+    )
+
+    # 10. individuation
+    locations.append(
+        Location(
+            "individuation",
+            BACKUP_DELETE,
+            resolve("state/individuation"),
+            "individuation evidence",
+            bundle_dir=None,
+        )
+    )
+
+    # 11. lifecycle development
+    locations.append(
+        Location(
+            "lifecycle.development",
+            BACKUP_DELETE,
+            files_in(
+                resolve("state/lifecycle"),
+                (
+                    "stage.json",
+                    "birth_request.json",
+                    "birth_ack.json",
+                    "birth_pending",
+                    "gestation_readout.json",
+                    "gestation_progress.json",
+                    "gestation_viability.json",
+                ),
+            ),
+            "developmental stage and progress a later entity would inherit",
+            bundle_dir="locations/lifecycle.development",
+        )
+    )
+
+    # 12. identity
+    locations.append(
+        Location(
+            "identity",
+            BACKUP_DELETE,
+            resolve("state/identity/entity.json"),
+            "entity id and lineage",
+            bundle_dir="locations/identity",
+        )
+    )
+
+    # 13. effector files
+    locations.append(
+        Location(
+            "effectors.files",
+            BACKUP_DELETE,
+            resolve(
+                _cfg(config, "praxis.sandbox_path", "state/praxis/files")
+            ),
+            "files the entity wrote",
+            bundle_dir="locations/effectors.files",
+        )
+    )
+
+    # 14. effector notifications
+    locations.append(
+        Location(
+            "effectors.notifications",
+            BACKUP_DELETE,
+            resolve(
+                _cfg(
+                    config,
+                    "praxis.notification_fallback_log",
+                    "state/praxis/notifications.log",
+                )
+            ),
+            "notifications the entity sent",
+            bundle_dir="locations/effectors.notifications",
+        )
+    )
+
+    # 15. vocal audio
+    locations.append(
+        Location(
+            "vocal.audio",
+            DELETE,
+            resolve(_cfg(config, "vox.sink_path", "state/vox")),
+            "rendered speech audio (output, not state)",
+        )
+    )
+
+    # 16. sleep voice alignment jobs
+    locations.append(
+        Location(
+            "sleep.voice_align_jobs",
+            DELETE,
+            resolve(
+                _cfg(
+                    config,
+                    "hypnos.voice_alignment.trainer_jobs_dir",
+                    "state/hypnos/voice_align_jobs",
+                )
+            ),
+            "transient training pairs with private content",
+            contents_only=True,
+        )
+    )
+
+    # 17. organ adapters
+    locations.append(
+        Location(
+            "organ_adapters",
+            BACKUP_DELETE,
+            resolve(
+                _cfg(
+                    config,
+                    "hypnos.voice_alignment.organ_adapters_dir",
+                    "/organ-adapters",
+                )
+            ),
+            "the active voice adapter (learned voice)",
+            bundle_dir="locations/organ_adapters",
+            contents_only=True,
+        )
+    )
+
+    # 18. research raw bus archive
+    locations.append(
+        Location(
+            "research.raw_bus_archive",
+            BACKUP_DELETE,
+            resolve(
+                _cfg(
+                    config,
+                    "research_event_log.raw_archive.archive_dir",
+                    "state/research/raw_bus_archive",
+                )
+            ),
+            "verbatim bus traffic (private content)",
+            bundle_dir="locations/research.raw_bus_archive",
+        )
+    )
+
+    # 19. research external utterances
+    locations.append(
+        Location(
+            "research.external_utterances",
+            BACKUP_DELETE,
+            resolve(
+                _cfg(
+                    config,
+                    "research_event_log.external_utterances.log_dir",
+                    "state/research/external_utterances",
+                )
+            ),
+            "what the entity said outward",
+            bundle_dir="locations/research.external_utterances",
+        )
+    )
+
+    # 20. evaluation replay
+    eval_logs = _rebase(
+        _cfg(config, "evaluation.paths.evaluation_logs", "data/evaluation"),
+        state_root=state_root,
+        data_root=data_root,
+    )
+    replay_paths = (eval_logs / "replay",)
+    if _cfg(config, "evaluation.observers.replay_redact_content", True):
+        locations.append(
+            Location(
+                "evaluation.replay",
+                RETAIN,
+                replay_paths,
+                "redacted replay metrics",
+            )
+        )
+    else:
+        locations.append(
+            Location(
+                "evaluation.replay",
+                DELETE,
+                replay_paths,
+                "replay records holding memory text",
+            )
+        )
+
+    # 21. dashboard record
+    nexus_log_dir = _rebase(
+        _cfg(
+            config,
+            "research_event_log.nexus_record.log_dir",
+            "data/nexus_record",
+        ),
+        state_root=state_root,
+        data_root=data_root,
+    )
+    nexus_paths = (nexus_log_dir,)
+    if _cfg(config, "nexus.dev_content_override", False):
+        locations.append(
+            Location(
+                "dashboard.record",
+                DELETE,
+                nexus_paths,
+                "dashboard record written with content",
+            )
+        )
+    else:
+        locations.append(
+            Location(
+                "dashboard.record",
+                RETAIN,
+                nexus_paths,
+                "privacy-filtered dashboard record",
+            )
+        )
+
+    # 22. perception
+    locations.append(
+        Location(
+            "perception",
+            DELETE,
+            resolve("state/perception"),
+            "locus runtime state",
+        )
+    )
+
+    # 23. cycle run state
+    locations.append(
+        Location(
+            "cycle.run_state",
+            DELETE,
+            files_in(
+                resolve("state/cycle"),
+                (
+                    "runtime.json",
+                    "escalation.json",
+                    "gpu_preflight.json",
+                    "preserve_request.json",
+                    "preserve_result.json",
+                ),
+            ),
+            "run state a later entity would read",
+        )
+    )
+
+    # 24. preservation divergence edge
+    locations.append(
+        Location(
+            "preservation.divergence_edge",
+            DELETE,
+            resolve("state/preservation/divergence_edge.json"),
+            "monitor edge state",
+        )
+    )
+
+    # 25. fork snapshots
+    own_snaps, other_snaps, unattributed_snaps = attribute_snapshots(fork_root, entity_id)
+    locations.append(
+        Location(
+            "forks.own",
+            BACKUP_DELETE,
+            tuple(own_snaps),
+            "this entity's fork snapshots",
+            bundle_dir="locations/forks.own",
+        )
+    )
+    locations.append(
+        Location(
+            "forks.others",
+            RETAIN,
+            tuple(other_snaps),
+            "another entity's snapshots (CAL 4.6)",
+        )
+    )
+    locations.append(
+        Location(
+            "forks.unattributed",
+            RETAIN,
+            tuple(unattributed_snaps),
+            "snapshots that cannot be attributed to this entity are kept",
+        )
+    )
+
+    # 26. fork merged adapters
+    own_adapters, kept_adapters = attribute_merged_adapters(
+        fork_root, own_snaps, other_snaps + unattributed_snaps
+    )
+    locations.append(
+        Location(
+            "forks.merged_adapters.own",
+            BACKUP_DELETE,
+            tuple(own_adapters),
+            "merged voice adapters of this entity",
+            bundle_dir="locations/forks.merged_adapters.own",
+        )
+    )
+    locations.append(
+        Location(
+            "forks.merged_adapters.others",
+            RETAIN,
+            tuple(kept_adapters),
+            "merged adapters another entity's snapshots list",
+        )
+    )
+
+    # 27. retain-only entries
+    locations.append(
+        Location(
+            "cycle.incidents",
+            RETAIN,
+            resolve("state/cycle/incidents"),
+            "welfare and safety record (CAL 4.7)",
+        )
+    )
+    locations.append(
+        Location(
+            "cycle.preservation_log",
+            RETAIN,
+            resolve("state/cycle/preservation"),
+            "welfare action log (CAL 4.7)",
+        )
+    )
+    locations.append(
+        Location(
+            "cycle.caretaker",
+            RETAIN,
+            files_in(
+                resolve("state/cycle"),
+                ("caretaker", "caretaker_start.json", "caretaker_ack.json"),
+            ),
+            "care-obligation audit",
+        )
+    )
+    locations.append(
+        Location(
+            "cycle.override_audit",
+            RETAIN,
+            resolve("state/cycle/override_audit.jsonl"),
+            "operator audit",
+        )
+    )
+    locations.append(
+        Location(
+            "cycle.control",
+            RETAIN,
+            resolve("state/cycle/control.json"),
+            "operator file",
+        )
+    )
+    locations.append(
+        Location(
+            "lifecycle.spawn_acknowledgements",
+            RETAIN,
+            resolve("state/lifecycle/spawn_acknowledgements.jsonl"),
+            "operator audit",
+        )
+    )
+    locations.append(
+        Location(
+            "effectors.audit",
+            RETAIN,
+            resolve(
+                _cfg(config, "praxis.audit_log_path", "state/praxis/audit.log")
+            ),
+            "record of the entity's actions, no content",
+        )
+    )
+    locations.append(
+        Location(
+            "sleep.voice_alignment_audit",
+            RETAIN,
+            resolve("state/hypnos/voice_alignment_audit.jsonl"),
+            "audit of voice changes",
+        )
+    )
+    locations.append(
+        Location(
+            "evaluation.metrics",
+            RETAIN,
+            (eval_logs,),
+            "content-free research metrics",
+        )
+    )
+    locations.append(
+        Location(
+            "evaluation.welfare",
+            RETAIN,
+            (eval_logs / "welfare",),
+            "welfare events (CAL 4.7)",
+        )
+    )
+    locations.append(
+        Location(
+            "ignition",
+            RETAIN,
+            (_rebase("data/ignition", state_root=state_root, data_root=data_root),),
+            "research log the operator deletes by hand",
+        )
+    )
+    locations.append(
+        Location(
+            "logs",
+            RETAIN,
+            resolve("state/logs"),
+            "operational logs without content",
+        )
+    )
+    locations.append(
+        Location(
+            "decommission.audit",
+            RETAIN,
+            resolve("state/audit"),
+            "decommission audit record",
+        )
+    )
+
+    return locations
+
+
+def attribute_snapshots(
+    fork_root: Path, entity_id: str | None
+) -> tuple[list[Path], list[Path], list[Path]]:
+    """Attribute fork snapshot directories to this entity, others, or neither."""
+    own: list[Path] = []
+    others: list[Path] = []
+    unattributed: list[Path] = []
+    if not fork_root.exists():
+        return own, others, unattributed
+
+    candidates = [
+        child
+        for child in fork_root.iterdir()
+        if child.is_dir()
+        and not child.is_symlink()
+        and child.name != "merged_adapters"
+        and (child / "snapshot.json").exists()
+    ]
+    candidates.sort(key=lambda c: c.name)
+
+    for child in candidates:
+        snapshot_id: str | None = None
+        sidecar = None
+        try:
+            sidecar = read_identity_sidecar(child)
+        except IdentityError:
+            unattributed.append(child)
+            continue
+
+        if sidecar is not None:
+            snapshot_id = sidecar[0]
+        else:
+            try:
+                raw = json.loads((child / "snapshot.json").read_text())
+            except (OSError, json.JSONDecodeError):
+                raw = None
+            if isinstance(raw, dict):
+                metadata = raw.get("metadata")
+                if isinstance(metadata, dict):
+                    identity = metadata.get("identity")
+                    if isinstance(identity, dict):
+                        value = identity.get("entity_id")
+                        if isinstance(value, str):
+                            snapshot_id = value
+
+        if entity_id is None:
+            if snapshot_id is None:
+                own.append(child)
+            else:
+                others.append(child)
+        else:
+            if snapshot_id == entity_id:
+                own.append(child)
+            elif snapshot_id is None:
+                unattributed.append(child)
+            else:
+                others.append(child)
+
+    return own, others, unattributed
+
+
+def attribute_merged_adapters(
+    fork_root: Path, own: list[Path], kept: list[Path]
+) -> tuple[list[Path], list[Path]]:
+    """Partition merged adapter directories by whether any kept snapshot references them."""
+    own_adapters: list[Path] = []
+    kept_adapters: list[Path] = []
+    merged_dir = fork_root / "merged_adapters"
+    if not merged_dir.exists():
+        return own_adapters, kept_adapters
+
+    children = [
+        child
+        for child in merged_dir.iterdir()
+        if child.is_dir() and not child.is_symlink()
+    ]
+    children.sort(key=lambda c: c.name)
+    referenced_by_kept: set[Path] = set()
+
+    def record_references(snap_dir: Path, is_kept: bool) -> None:
+        try:
+            raw = json.loads((snap_dir / "snapshot.json").read_text())
+        except (OSError, json.JSONDecodeError):
+            return
+        if not isinstance(raw, dict):
+            return
+        adapters = raw.get("adapters")
+        if not isinstance(adapters, list):
+            return
+        for adapter in adapters:
+            if not isinstance(adapter, str):
+                continue
+            adapter_path = Path(adapter)
+            if not adapter_path.is_absolute():
+                adapter_path = fork_root / adapter_path
+            adapter_path = adapter_path.resolve()
+            for child in children:
+                child_resolved = child.resolve()
+                if adapter_path == child_resolved or adapter_path.is_relative_to(
+                    child_resolved
+                ):
+                    if is_kept:
+                        referenced_by_kept.add(child)
+
+    for snap_dir in own:
+        record_references(snap_dir, is_kept=False)
+    for snap_dir in kept:
+        record_references(snap_dir, is_kept=True)
+
+    for child in children:
+        if child in referenced_by_kept:
+            kept_adapters.append(child)
+        else:
+            own_adapters.append(child)
+
+    return own_adapters, kept_adapters
+
+
+def checkpoint_sqlite(db_path: Path) -> str | None:
+    """Run a WAL checkpoint on a sqlite database, returning an error string on failure."""
+    if not db_path.exists():
+        return None
+    try:
+        conn = sqlite3.connect(str(db_path))
+        try:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        finally:
+            conn.close()
+    except Exception as exc:
+        return f"checkpoint {db_path.name}: {type(exc).__name__}"
+    return None
+
+
+def cancel_voice_alignment_jobs(
+    jobs_dir: Path,
+    *,
+    wait_s: float = 60.0,
+    poll_s: float = 1.0,
+    sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> tuple[list[str], list[str]]:
+    """Cancel pending voice-alignment jobs and wait briefly for active ones to finish."""
+    cancelled: list[str] = []
+    still_running: list[str] = []
+    if not jobs_dir.exists():
+        return cancelled, still_running
+
+    children = sorted(
+        [child for child in jobs_dir.iterdir() if child.is_dir() and not child.is_symlink()],
+        key=lambda c: c.name,
+    )
+    deadline: float | None = None
+
+    for child in children:
+        result_file = child / "result.json"
+        cancelled_file = child / "CANCELLED"
+        if result_file.exists() or cancelled_file.exists():
+            continue
+        cancelled_file.write_text("")
+        cancelled.append(child.name)
+        if (child / "CLAIMED").exists():
+            if deadline is None:
+                deadline = monotonic() + wait_s
+            while not result_file.exists():
+                if monotonic() >= deadline:
+                    still_running.append(child.name)
+                    break
+                sleep(poll_s)
+
+    return cancelled, still_running
