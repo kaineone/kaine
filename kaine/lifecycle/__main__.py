@@ -27,6 +27,9 @@ Exit codes
 6  configuration error (missing/unreadable/unparsable config, malformed shape,
    or state-encryption posture could not be installed)
 7  no entity state found at the resolved state root (nothing backed up or deleted)
+8  the bus could not be reached or authenticated (nothing was deleted), or a
+   stream could not be deleted (the audit record names what was removed);
+   a missing or malformed bus configuration is a configuration error (6)
 """
 from __future__ import annotations
 
@@ -45,6 +48,7 @@ from kaine.lifecycle.decommission import (
     capture_backup,
     delete_entity_state,
     update_manifest_continuity_note,
+    write_decommission_audit,
 )
 from kaine.lifecycle.divergence import assess_divergence
 from kaine.lifecycle.liveness import cycle_process_running as _cycle_process_running
@@ -438,21 +442,44 @@ def main(
     # --- Dry-run: preview only, no prompts, no deletion ----------------
     if args.dry_run:
         out.write(_NOTICE_DIVERGED if assessment.diverged else _NOTICE_NOT_DIVERGED)
-        result = delete_entity_state(
-            state_root=state_root,
-            qdrant_cfg=config,
-            redis_cfg=(config.get("redis") or {}),
-            dry_run=True,
-        )
-        out.write("\n[dry-run] Would remove:\n")
-        for p in result.would_remove_paths:
-            out.write(f"  - {p}\n")
-        for c in result.dropped_collections:
-            out.write(f"  - qdrant collection: {c}\n")
-        for s in result.cleared_redis_streams:
-            out.write(f"  - redis streams matching: {s}\n")
-        out.write(f"\nDry-run complete. Nothing deleted. Backup at {backup.backup_path}\n")
-        return 0
+        try:
+            bus_client = _open_bus_client()
+        except BusConfigError as exc:
+            err.write(
+                f"decommission: configuration error: bus configuration: {exc}\n"
+            )
+            return 6
+        except Exception as exc:
+            out.write(
+                f"FAILED: cannot load the bus configuration ({type(exc).__name__}); nothing was deleted\n"
+            )
+            return 8
+        try:
+            result = delete_entity_state(
+                state_root=state_root,
+                qdrant_cfg=config,
+                bus_client=bus_client,
+                dry_run=True,
+            )
+            out.write("\n[dry-run] Would remove:\n")
+            for p in result.would_remove_paths:
+                out.write(f"  - {p}\n")
+            for c in result.dropped_collections:
+                out.write(f"  - qdrant collection: {c}\n")
+            for s in result.cleared_redis_streams:
+                out.write(f"  - redis stream: {s}\n")
+            for s in result.skipped_non_streams:
+                out.write(f"  - not a stream, kept: {s}\n")
+            if result.redis_failed:
+                out.write(f"FAILED: {result.redis_failed}\n")
+                return 8
+            out.write(f"\nDry-run complete. Nothing deleted. Backup at {backup.backup_path}\n")
+            return 0
+        finally:
+            try:
+                bus_client.close()
+            except Exception:
+                pass
 
     # --- Branch on divergence ------------------------------------------
     if assessment.diverged:
@@ -551,26 +578,103 @@ def main(
         return 5 if assessment.diverged else 0
 
     # --- Delete --------------------------------------------------------
-    result = delete_entity_state(
-        state_root=state_root,
-        qdrant_cfg=config,
-        redis_cfg=(config.get("redis") or {}),
-        dry_run=False,
-    )
-    out.write("\nEntity state deleted.\n")
-    for p in result.removed_paths:
-        out.write(f"  removed: {p}\n")
-    for c in result.dropped_collections:
-        out.write(f"  dropped collection: {c}\n")
-    if result.errors:
-        out.write("  (non-fatal notes:)\n")
-        for e in result.errors:
-            out.write(f"    - {e}\n")
-    out.write(
-        f"\nThe transferable backup remains at:\n    {backup.backup_path}\n"
-        "Keep it safe and transfer it per CAL Article 4.2.\n"
-    )
-    return 0
+    try:
+        bus_client = _open_bus_client()
+    except BusConfigError as exc:
+        err.write(
+            f"decommission: configuration error: bus configuration: {exc}\n"
+        )
+        return 6
+    except Exception as exc:
+        out.write(
+            f"FAILED: cannot load the bus configuration ({type(exc).__name__}); nothing was deleted\n"
+        )
+        return 8
+
+    try:
+        try:
+            bus_client.ping()
+        except Exception as exc:
+            out.write(
+                f"FAILED: cannot reach or authenticate to the bus ({type(exc).__name__}); nothing was deleted\n"
+            )
+            return 8
+
+        result = delete_entity_state(
+            state_root=state_root,
+            qdrant_cfg=config,
+            bus_client=bus_client,
+            dry_run=False,
+        )
+
+        if result.redis_failed:
+            out.write("\nEntity state deletion INCOMPLETE.\n")
+        else:
+            out.write("\nEntity state deleted.\n")
+
+        for p in result.removed_paths:
+            out.write(f"  removed: {p}\n")
+        for c in result.dropped_collections:
+            out.write(f"  dropped collection: {c}\n")
+        for s in result.cleared_redis_streams:
+            out.write(f"  cleared stream: {s}\n")
+        for s in result.skipped_non_streams:
+            out.write(f"  not a stream, kept: {s}\n")
+        if result.aof_rewrite is not None:
+            out.write(f"  append-only file rewrite: {result.aof_rewrite}\n")
+        if result.errors:
+            out.write("  (non-fatal notes:)\n")
+            for e in result.errors:
+                out.write(f"    - {e}\n")
+
+        import datetime
+
+        record = {
+            "at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "outcome": "failed" if result.redis_failed else "deleted",
+            "removed_paths": [
+                str(Path(p).relative_to(state_root))
+                if Path(p).is_relative_to(state_root)
+                else str(p)
+                for p in result.removed_paths
+            ],
+            "dropped_collections": result.dropped_collections,
+            "cleared_streams": result.cleared_redis_streams,
+            "skipped_non_streams": result.skipped_non_streams,
+            "aof_rewrite": result.aof_rewrite,
+            "errors": result.errors + ([result.redis_failed] if result.redis_failed else []),
+            "backup_path": str(backup.backup_path),
+        }
+        audit_path = write_decommission_audit(state_root, record)
+        out.write(f"  audit record: {audit_path}\n")
+
+        if result.redis_failed:
+            out.write(f"FAILED: {result.redis_failed}\n")
+            out.write(
+                f"\nThe transferable backup remains at:\n    {backup.backup_path}\n"
+                "Keep it safe and transfer it per CAL Article 4.2.\n"
+            )
+            return 8
+
+        out.write(
+            f"\nThe transferable backup remains at:\n    {backup.backup_path}\n"
+            "Keep it safe and transfer it per CAL Article 4.2.\n"
+        )
+        return 0
+    finally:
+        try:
+            bus_client.close()
+        except Exception:
+            pass
+
+
+def _open_bus_client() -> Any:
+    """A Redis client for the KAINE bus, authenticated from the bus configuration."""
+    import redis
+
+    from kaine.bus.config import load_bus_config
+    bus_cfg = load_bus_config()
+    return redis.Redis.from_url(bus_cfg.url, socket_connect_timeout=2.0, socket_timeout=5.0)
 
 
 if __name__ == "__main__":

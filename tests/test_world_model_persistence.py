@@ -497,7 +497,7 @@ def test_decommission_backup_includes_world_model_checkpoint(tmp_path: Path, mon
 
     # Deletion removes the world model subtree (after backup).
     deletion = delete_entity_state(
-        state_root=state_root, qdrant_cfg=None, redis_cfg=None, dry_run=False
+        state_root=state_root, qdrant_cfg=None, dry_run=False
     )
     assert str(state_root / "phantasia") in deletion.removed_paths
     assert not (state_root / "phantasia").exists()
