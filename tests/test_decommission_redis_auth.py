@@ -3,6 +3,7 @@
 
 """Decommission against a real redis-server that requires a password."""
 
+import os
 import shutil
 import socket
 import subprocess
@@ -19,6 +20,8 @@ from kaine.lifecycle import decommission
 def requirepass_redis(tmp_path_factory):
     """Start a real Redis server with requirepass and appendonly enabled."""
     if shutil.which("redis-server") is None:
+        if os.environ.get("KAINE_REQUIRE_REDIS_SERVER") == "1":
+            pytest.fail("redis-server not found on PATH; KAINE_REQUIRE_REDIS_SERVER=1 requires it")
         pytest.skip("redis-server not found on PATH")
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

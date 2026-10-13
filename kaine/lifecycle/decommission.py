@@ -13,7 +13,7 @@ This module implements the two destructive primitives the decommission CLI
   episodic memory and social cognition modules' collections) plus a ``manifest.json`` recording the
   divergence assessment, the continuity note, the file inventory, and restore
   notes. The bundle is encrypted with the existing state encryptor when state
-  encryption is enabled. This satisfies CAL 4.2(b) ("saving the Entity's
+  encryption is enabled. This satisfies CAL Article 4.2(b) ("saving the Entity's
   complete Cognitive State in a format that allows it to be restarted
   elsewhere"). Backup is **blocking**: a failure must abort decommission.
 
@@ -793,7 +793,7 @@ def capture_backup(
                         # This artifact's content is now also inside
                         # bundle.tar.enc, but leaving the plaintext copy
                         # behind after we report "encrypted" would violate
-                        # CAL 4.3 (no lingering plaintext entity content).
+                        # CAL Article 4.3 (no lingering plaintext entity content).
                         # Surface it as a backup error so the operator sees it.
                         log.warning(
                             "could not remove plaintext artifact %s after "

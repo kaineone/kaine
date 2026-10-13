@@ -579,7 +579,7 @@ def entity_locations(
             "forks.others",
             RETAIN,
             tuple(other_snaps),
-            "another entity's snapshots (CAL 4.6)",
+            "another entity's snapshots (CAL Article 4.6)",
         )
     )
     locations.append(
@@ -619,7 +619,7 @@ def entity_locations(
             "cycle.incidents",
             RETAIN,
             resolve("state/cycle/incidents"),
-            "welfare and safety record (CAL 4.7)",
+            "welfare and safety record (CAL Article 4.7)",
         )
     )
     locations.append(
@@ -627,7 +627,7 @@ def entity_locations(
             "cycle.preservation_log",
             RETAIN,
             resolve("state/cycle/preservation"),
-            "welfare action log (CAL 4.7)",
+            "welfare action log (CAL Article 4.7)",
         )
     )
     locations.append(
@@ -696,7 +696,7 @@ def entity_locations(
             "evaluation.welfare",
             RETAIN,
             (eval_logs / "welfare",),
-            "welfare events (CAL 4.7)",
+            "welfare events (CAL Article 4.7)",
         )
     )
     locations.append(

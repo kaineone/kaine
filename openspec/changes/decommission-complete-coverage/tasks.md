@@ -13,10 +13,23 @@
 
 - [x] 2.1 Qdrant reached with the cycle's credentials; an unreachable or refusing store fails before anything is deleted.
 - [x] 2.2 The audit record lists every location by decision.
-- [x] 2.3 The CAL 4.2(a) written-notice reminder (with the CAL 7.0 interim note) before the confirmation on every path; warn only; noted in the audit record.
+- [x] 2.3 The CAL Article 4.2(a) written-notice reminder (with the CAL Article 7.0 interim note) before the confirmation on every path; warn only; noted in the audit record.
 
 ## 3. Docs and tests
 
 - [x] 3.1 docs/11-preservation.md and docs/13-security-and-privacy.md state what decommission removes, keeps and backs up, and docs/17-research-data names decommission as the one exception to "never deleted automatically"; the CLI prints the same split before confirmation.
 - [x] 3.2 A seeded tree test: every DELETE location gone, every RETAIN location untouched, every BACKUP location in the bundle, another entity's fork and adapters kept, a refusing Qdrant or Redis fails with nothing deleted, replay records with redaction off and on, the sqlite-vec write-ahead files gone.
 - [x] 3.3 A log test: a seeded utterance never reaches `state/logs/`.
+
+## 4. Review fixes
+
+- [x] 4.1 Qdrant counts only for an enabled module the tier supports; tested with the real tier-0 profile.
+- [x] 4.2 Old and new names from the rename table for paths and Qdrant collections; tested with old- and new-named trees.
+- [x] 4.3 A claimed, unfinished voice-alignment job blocks deletion on every run.
+- [x] 4.4 Incomplete deletion reports INCOMPLETE, audit outcome `incomplete`, exit 8.
+- [x] 4.5 Qdrant probed before copying; failed backups purge plaintext or restrict permissions.
+- [x] 4.6 The end-to-end test seeds an independent list of real paths; the log test drives the language and vocal emit paths.
+- [x] 4.7 `[lifecycle].snapshots_path`, `[lifecycle.adapter_merge].output_dir` and `[hypnos.voice_alignment].trainer_workdir` honoured.
+- [x] 4.8 Deletion refuses paths outside the roots and the configured allow-list.
+- [x] 4.9 Licence sections cited as "CAL Article".
+- [x] 4.10 CI runs the Redis end-to-end and authentication tests against a real redis-server.

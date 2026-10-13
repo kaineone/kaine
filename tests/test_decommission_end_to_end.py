@@ -36,13 +36,19 @@ from kaine.security.crypto import (
     set_state_encryptor,
 )
 
-pytest.importorskip("sqlite_vec")
+if os.environ.get("KAINE_REQUIRE_REDIS_SERVER") == "1":
+    # CI installs the memory-edge extra; a missing sqlite_vec there is an error, not a skip.
+    import sqlite_vec  # noqa: F401
+else:
+    pytest.importorskip("sqlite_vec")
 
 
 @pytest.fixture(scope="module")
 def requirepass_redis(tmp_path_factory):
     """Start a real Redis server with requirepass and appendonly enabled."""
     if shutil.which("redis-server") is None:
+        if os.environ.get("KAINE_REQUIRE_REDIS_SERVER") == "1":
+            pytest.fail("redis-server not found on PATH; KAINE_REQUIRE_REDIS_SERVER=1 requires it")
         pytest.skip("redis-server not found on PATH")
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

@@ -220,7 +220,7 @@ def test_non_diverged_ack_path_deletes(tmp_path, monkeypatch):
 
 
 def test_guardian_notice_shown_on_every_path(tmp_path, monkeypatch):
-    """The CAL 4.2(a) reminder is printed before the first prompt and in a dry run, and the audit notes it."""
+    """The CAL Article 4.2(a) reminder is printed before the first prompt and in a dry run, and the audit notes it."""
     monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
     _seed_state(tmp_path / "state")
     out = io.StringIO()

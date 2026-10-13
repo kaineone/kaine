@@ -354,7 +354,7 @@ def main(
 
     parser = argparse.ArgumentParser(
         prog="python -m kaine.lifecycle",
-        description="Welfare-gated entity decommission (CAL 4.2/4.3).",
+        description="Welfare-gated entity decommission (CAL Articles 4.2 and 4.3).",
     )
     parser.add_argument("--state-root", default="state", type=Path)
     parser.add_argument("--fork-root", default=None, type=Path)
@@ -603,7 +603,7 @@ def main(
             "\nOffer to email the guardians a request to safekeep this backup until\n"
             "a new guardian can run the entity? The email contains ONLY the request,\n"
             "the situation, and the LOCAL backup path — never any entity data\n"
-            "(CAL 4.3). [y/N]: "
+            "(CAL Article 4.3). [y/N]: "
         ).strip().lower()
         if offer in ("y", "yes"):
             transfer_cfg = config.get("transfer") or {}
@@ -635,13 +635,13 @@ def main(
         else:
             out.write(
                 "\nNo transfer request sent. You remain responsible for the backup "
-                f"at {backup.backup_path} until you transfer it (CAL 4.2).\n"
+                f"at {backup.backup_path} until you transfer it (CAL Article 4.2).\n"
             )
 
         # Explicit guardian-transfer acknowledgement.
         ack = input_fn(
             "\nType 'I have preserved and will arrange safekeeping for this entity'\n"
-            "to acknowledge the CAL 4.2 transfer duty (anything else aborts):\n> "
+            "to acknowledge the CAL Article 4.2 transfer duty (anything else aborts):\n> "
         ).strip()
         if ack != "I have preserved and will arrange safekeeping for this entity":
             out.write(
