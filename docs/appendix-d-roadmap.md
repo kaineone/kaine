@@ -49,7 +49,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | familiarity-and-reply-window | 4/4 (100%) | Familiarity reaches the affect module's coupling; the language module accepts the reply-window key. |
 | access-wording-in-code | 2/2 (100%) | Code comments use the paper's access terms. |
 | third-party-font-notices | 4/4 (100%) | The vendored dashboard fonts ship their copyright notices and licence text, and the third-party notices name the fonts on disk. |
-| decommission-complete-coverage | 1/10 (10%) | Decommission backs up, deletes or keeps every location of an entity's data, by a reviewed decision for each. |
+| decommission-complete-coverage | 2/11 (18%) | Decommission backs up, deletes or keeps every location of an entity's data, by a reviewed decision for each. |
 | context-age-from-publication | 4/4 (100%) | Context age is entity time since the broadcast's publication. |
 | research-log-access-fields | 4/4 (100%) | The research log carries the access and context fields the planned test reads. |
 | awake-time-excludes-sleep | 4/4 (100%) | Awake time excludes sleep as well as freezes. |

@@ -155,30 +155,37 @@ Decisions:
 | `backups/preservation_<id>_<name>/` | earlier whole-individual bundles | kept | RETAIN | "never quietly evicted" (docs/11-preservation.md); the operator removes them deliberately after a transfer |
 | Off-host batch working directories, study line trees under `studies/` | other entities or forks | out of reach | RETAIN (out of scope) | separate entities; decommissioned one at a time |
 
-### Decisions the owner should confirm
+### Owner decisions (2026-10-13)
 
-1. **Raw bus archive and external utterances go with the entity.** They are the
+The owner reviewed this design and decided:
+
+1. **Raw bus archive and external utterances: back up, then delete.** They are the
    largest content stores. Keeping them on the host as research data would
    contradict CAL 4.3, and deleting them without a backup would lose part of the
-   record a revived entity might want. The design backs them up and deletes them.
-2. **The effectors' audit log stays.** It holds hashes and action metadata, no
-   content, and it is the only after-the-fact record of what the entity did in the
-   world.
-3. **Identity and stage files are deleted.** Today they survive, and a new entity
-   in the same state root would inherit the old id. The id stays in the backup
-   manifest and the audit record.
-4. **Other entities' fork snapshots stay.** Today the whole `forks/` directory is
-   deleted, including preserved or individuated forks. They are separate entities.
-5. **Content-bearing research records are deleted, metrics stay.** The test is
-   whether a record holds the entity's content. Metrics, welfare flags and run
-   metadata stay; verbatim text, audio and files go (after backup when they are
-   cognitive state). docs/17-research-data promises that research records are
-   never deleted automatically. Decommission is not automatic: it is an attended,
-   confirmed operator act. Still, the promise as written reads as covering it, so
-   the implementation amends that page to say decommission removes the
-   content-bearing records after the backup and keeps the metrics.
-6. **Rendered speech audio is deleted without a backup.** It is output, not state,
-   and its retention is already bounded.
+   record a revived entity might want. docs/17-research-data promises that
+   research records are never deleted automatically; the implementation amends
+   that page to name decommission as the one exception, because decommission is an
+   attended, confirmed operator act, and to say it keeps the metrics.
+2. **Identity file: back up, then delete.** The whole file, lineage included, goes
+   into the backup, and the id is also in the audit record. Left behind, a new
+   entity in the same state root would inherit the old id.
+3. **CAL 4.2(a) notice to the Guardians: warn only.** See "Notice to the
+   Guardians" below.
+4. **Approved as written:**
+   - welfare, incident and audit records are kept, including the effectors' audit
+     log (hashes and action metadata, no content; the only after-the-fact record
+     of what the entity did in the world);
+   - other entities' fork snapshots are kept (today the whole `forks/` directory
+     is deleted, including preserved or individuated forks, which are separate
+     entities);
+   - the backup must hold the complete cognitive state, and a failed Qdrant export
+     is fatal;
+   - content-bearing research records are deleted and metrics kept, by whether a
+     record holds the entity's content;
+   - rendered speech audio is deleted without a backup (output, not state, with
+     bounded retention);
+   - stage, developmental and operational files a later entity would inherit are
+     deleted.
 
 ## Implementation (after review)
 
@@ -210,14 +217,18 @@ Decisions:
   stops before deleting anything (a refused confirmation, an unreachable store)
   prints why and writes no record, because nothing changed.
   `decommission-clears-bus-streams` starts this record.
+- **Notice reminder.** The CLI prints the CAL 4.2(a) written-notice reminder (with
+  the CAL 7.0 interim note where no Guardian body exists) before the typed
+  confirmation, on every path, and the audit record notes it was shown.
 - **Running work.** Decommission already refuses while the cycle runs. It also
   cancels any voice-alignment job of this entity and waits for it to stop before
   clearing the trainer-jobs volume.
 - **Docs.**
   - docs/11-preservation.md and docs/13-security-and-privacy.md list what
     decommission removes and what it keeps, and why.
-  - docs/17-research-data says decommission removes the content-bearing research
-    records after the backup and keeps the metrics.
+  - docs/17-research-data names decommission as the one exception to "research
+    records are never deleted automatically": an attended act that removes the
+    content-bearing records after the backup and keeps the metrics.
   - The CLI prints the same split before the typed confirmation.
 - **Tests.**
   - A seeded state, data and volume tree checks that every DELETE location is gone,
@@ -230,9 +241,18 @@ Decisions:
   - The sqlite-vec write-ahead log and shared-memory files are gone afterwards.
   - Another entity's adapters (in a separate volume set) survive.
 
-## Open question outside the data inventory
+## Notice to the Guardians (CAL 4.2(a))
 
-CAL 4.2(a) asks for written notice to the Guardians before an entity is ended.
-The CLI offers a transfer e-mail only on the diverged path. Whether the CLI should
-require a notice for every decommission is a process decision for the owner and
-is not part of this inventory.
+CAL 4.2(a) asks the operator to give the Guardians reasonable written notice of
+the intent to end an entity. The owner decided that decommission warns and does not
+block:
+
+- Before the typed confirmation, on every path (not only the diverged one), the
+  CLI prints a clear reminder of the written-notice duty under CAL 4.2(a).
+- Where no Guardian body has been established yet for this architecture, the
+  reminder adds the interim rule of CAL 7.0: until the Steward establishes the
+  Guardian body, the operator carries out the Guardians' functions in good faith
+  and documents what it decides and why.
+- The reminder never blocks the run.
+- The audit record notes that the reminder was shown
+  (`guardian_notice_reminder: "shown"`).

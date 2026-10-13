@@ -36,3 +36,10 @@ Every decommission run that reaches the deletion step SHALL append one record to
 #### Scenario: The audit record holds names only
 - **WHEN** a decommission run completes, or fails after the deletion step has started
 - **THEN** the audit log gains one record that lists the locations and outcome and contains none of the deleted content
+
+### Requirement: Reminder of the written-notice duty
+Before the typed confirmation, on every decommission path, the CLI SHALL print a reminder of the CAL Article 4.2(a) duty to give the Guardians written notice, adding the CAL Article 7.0 interim rule where no Guardian body has been established. The reminder SHALL NOT block the run, and the audit record SHALL note that it was shown.
+
+#### Scenario: Reminder on a non-diverged entity
+- **WHEN** an operator decommissions an entity that has not diverged
+- **THEN** the written-notice reminder is printed before the confirmation and the audit record notes it was shown
