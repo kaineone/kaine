@@ -332,9 +332,9 @@ def build_entity(tmp_path, port):
                 fate = "backup" if rel == "forks/own1" else "keep"
                 seeded[_rel(path)] = (fate, path.read_bytes())
 
-    mnemos_db = state_root / "mnemos" / "mnemos.db"
-    mnemos_db.parent.mkdir(parents=True, exist_ok=True)
-    store = SqliteVecStorage(latent_dim=4, db_path=str(mnemos_db))
+    old_name_db = state_root / "mnemos" / "mnemos.db"
+    old_name_db.parent.mkdir(parents=True, exist_ok=True)
+    store = SqliteVecStorage(latent_dim=4, db_path=str(old_name_db))
 
     async def _seed_memory():
         try:
@@ -360,7 +360,7 @@ def build_entity(tmp_path, port):
     conn.commit()
     conn.close()
 
-    dbs = {_rel(mnemos_db): "old", _rel(episodic_db): "new"}
+    dbs = {_rel(old_name_db): "old", _rel(episodic_db): "new"}
 
     bus = redis.Redis(port=port, password="s3cret")
     bus.flushall()
@@ -461,18 +461,18 @@ def test_full_decommission_covers_every_location(requirepass_redis, tmp_path, mo
             extra = Path(str(db_path) + suffix)
             assert not extra.exists(), extra
 
-    mnemos_backup = [p for p in backup_dir.rglob("mnemos.db") if p.is_file()]
-    assert len(mnemos_backup) == 1, mnemos_backup
+    old_name_backup = [p for p in backup_dir.rglob("mnemos.db") if p.is_file()]
+    assert len(old_name_backup) == 1, old_name_backup
 
-    async def _read_mnemos_backup():
-        bstore = SqliteVecStorage(latent_dim=4, db_path=str(mnemos_backup[0]))
+    async def _read_old_name_backup():
+        bstore = SqliteVecStorage(latent_dim=4, db_path=str(old_name_backup[0]))
         try:
             await bstore.initialize()
             return await bstore.export(["mnemos_episodic"])
         finally:
             await bstore.shutdown()
 
-    export = asyncio.run(_read_mnemos_backup())
+    export = asyncio.run(_read_old_name_backup())
     points = export.get("mnemos_episodic", [])
     assert len(points) == 1
     assert points[0]["text"] == "SECRET-memory"
