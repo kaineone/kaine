@@ -871,3 +871,33 @@ def test_incomplete_deletion_exits_8_and_is_audited(tmp_path, monkeypatch):
     assert len(lines) == 1
     record = json.loads(lines[0])
     assert record["outcome"] == "incomplete"
+
+
+def test_module_off_unreachable_qdrant_exits_8_unchecked(tmp_path, monkeypatch):
+    """CLI exits 8 with an incomplete audit when Qdrant cannot be checked."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    monkeypatch.setattr("kaine.lifecycle.decommission._qdrant_client", lambda cfg: None)
+    _seed_state(tmp_path / "state")
+    out = io.StringIO()
+    answers = [
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ]
+    rc = main(
+        _args(tmp_path, extra_config='[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n'),
+        input_fn=_scripted_input(answers),
+        out=out,
+        err=io.StringIO(),
+    )
+    assert rc == 8, out.getvalue()
+    text = out.getvalue()
+    assert "Qdrant could not be checked" in text
+    assert "INCOMPLETE" in text
+    assert not (tmp_path / "state" / "eidolon").exists()
+    audit_path = tmp_path / "state" / "audit" / "decommission.jsonl"
+    assert audit_path.exists()
+    lines = audit_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["qdrant_unchecked"] is True
+    assert record["outcome"] == "incomplete"

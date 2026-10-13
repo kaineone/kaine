@@ -43,7 +43,7 @@ def _seed(state_root, rel, content=None):
 
 
 def test_tier0_profile_uses_no_qdrant(tmp_path, monkeypatch):
-    """Tier 0 disables Qdrant so backup and delete complete without contacting it."""
+    """Tier 0 with no Qdrant endpoint never contacts Qdrant and finishes cleanly."""
     op = tmp_path / "op.toml"
     op.write_text("[modules]\nmnemos = true\nempatheia = true\n", encoding="utf-8")
     config = load_runtime_config(
@@ -51,8 +51,11 @@ def test_tier0_profile_uses_no_qdrant(tmp_path, monkeypatch):
         op,
         env={"KAINE_TIER": "tier0"},
     )
+    config["mnemos"].pop("qdrant", None)
+    config["empatheia"].pop("qdrant", None)
     assert config["tier"]["name"] == "tier0"
     assert decommission.qdrant_in_use(config) is False
+    assert decommission.qdrant_endpoint_configured(config) is False
 
     def _no_qdrant(*args, **kwargs):
         raise AssertionError("Qdrant must not be contacted at tier 0")
@@ -477,3 +480,179 @@ def test_symlink_in_contents_only_dir_is_unlinked_not_followed(tmp_path):
     assert result.errors == []
     assert not (jobs / "escape").exists() and not (jobs / "escape").is_symlink()
     assert (outside / "keep.txt").read_text(encoding="utf-8") == "KEEP"
+
+
+class _NS:
+    """Tiny attribute holder used instead of SimpleNamespace."""
+
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+class _FakeQdrant:
+    """In-memory Qdrant stand-in that records deletions and can fail export."""
+
+    def __init__(self, collection_names):
+        self.collections = {
+            name: [
+                _NS(
+                    id="p1", payload={"text": "SECRET-qdrant"}, vector=[0.1, 0.2, 0.3, 0.4]
+                )
+            ]
+            for name in collection_names
+        }
+        self.dropped = []
+        self.deleted_calls = []
+        self.fail_scroll = False
+        self.closed = False
+
+    def get_collections(self):
+        """Return the list of in-memory collection names."""
+        return _NS(
+            collections=[_NS(name=n) for n in self.collections.keys()]
+        )
+
+    def scroll(self, *, collection_name, limit=None, offset=None, with_payload=True, with_vectors=True):
+        """Return every point in the requested collection."""
+        if self.fail_scroll:
+            raise RuntimeError("export failed")
+        return (self.collections.get(collection_name, []), None)
+
+    def delete_collection(self, collection_name):
+        """Drop a collection and record the name."""
+        if collection_name in self.collections:
+            self.dropped.append(collection_name)
+            del self.collections[collection_name]
+
+    def delete(self, *, collection_name, points_selector):
+        """Record a point deletion request."""
+        self.deleted_calls.append((collection_name, points_selector))
+
+    def close(self):
+        """No-op close for the fake."""
+        self.closed = True
+
+
+def test_tier0_with_shipped_endpoint_and_reachable_qdrant_is_clean(tmp_path, monkeypatch):
+    """Tier 0 keeps shipped endpoints but does not use Qdrant."""
+    op = tmp_path / "op.toml"
+    op.write_text("[modules]\nmnemos = true\nempatheia = true\n", encoding="utf-8")
+    config = load_runtime_config(
+        PROJECT_ROOT / "config" / "kaine.toml",
+        op,
+        env={"KAINE_TIER": "tier0"},
+    )
+    assert config["tier"]["name"] == "tier0"
+    assert decommission.qdrant_in_use(config) is False
+    assert decommission.qdrant_endpoint_configured(config) is True
+
+    fake = _FakeQdrant([])
+    monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: fake)
+    state_root = tmp_path / "state"
+    _seed(state_root, "eidolon/self_model.json")
+    assessment = DivergenceAssessment(diverged=False, signals={}, summary="x")
+    backup = decommission.capture_backup(
+        state_root=state_root,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        qdrant_cfg=config,
+        out_root=tmp_path / "backups",
+        entity_name="TierZeroShipped",
+        assessment=assessment,
+    )
+    assert backup.ok
+    assert backup.qdrant_unchecked is False
+    result = decommission.delete_entity_state(
+        state_root=state_root,
+        qdrant_cfg=config,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        dry_run=False,
+    )
+    assert result.dropped_collections == []
+    assert result.errors == []
+
+
+def test_module_off_collections_are_backed_up_then_dropped(tmp_path, monkeypatch):
+    """Disabled module exports reachable Qdrant collections then drops them."""
+    config = {"mnemos": {"backend": "qdrant", "qdrant": {"host": "127.0.0.1", "port": 1}}}
+    assert decommission.qdrant_in_use(config) is False
+    assert decommission.qdrant_endpoint_configured(config) is True
+
+    names = decommission._episodic_memory_collection_names(config)
+    fake = _FakeQdrant(names[:2])
+    monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: fake)
+    state_root = tmp_path / "state"
+    _seed(state_root, "eidolon/self_model.json")
+    assessment = DivergenceAssessment(diverged=False, signals={}, summary="x")
+    backup = decommission.capture_backup(
+        state_root=state_root,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        qdrant_cfg=config,
+        out_root=tmp_path / "backups",
+        entity_name="ModuleOff",
+        assessment=assessment,
+    )
+    assert backup.ok
+    assert backup.qdrant_unchecked is False
+    for name in names[:2]:
+        bundle = backup.backup_path / "qdrant" / f"{name}.jsonl"
+        assert bundle.is_file()
+        assert "SECRET-qdrant" in bundle.read_text(encoding="utf-8")
+    result = decommission.delete_entity_state(
+        state_root=state_root,
+        qdrant_cfg=config,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        dry_run=False,
+        qdrant_unchecked_in_backup=False,
+    )
+    assert set(fake.dropped) == set(names[:2])
+    assert result.errors == []
+
+
+def test_module_off_unreachable_qdrant_is_left_untouched(tmp_path, monkeypatch):
+    """Disabled module with unreachable Qdrant is flagged incomplete and untouched."""
+    config = {"mnemos": {"backend": "qdrant", "qdrant": {"host": "127.0.0.1", "port": 1}}}
+    assert decommission.qdrant_in_use(config) is False
+    assert decommission.qdrant_endpoint_configured(config) is True
+
+    monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: None)
+    state_root = tmp_path / "state"
+    _seed(state_root, "eidolon/self_model.json")
+    assessment = DivergenceAssessment(diverged=False, signals={}, summary="x")
+    backup = decommission.capture_backup(
+        state_root=state_root,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        qdrant_cfg=config,
+        out_root=tmp_path / "backups",
+        entity_name="ModuleOffUnreachable",
+        assessment=assessment,
+    )
+    assert backup.ok
+    assert backup.qdrant_unchecked is True
+
+    class _TouchyQdrant:
+        def get_collections(self, *args, **kwargs):
+            raise AssertionError("Qdrant must not be contacted when unchecked")
+
+        def delete_collection(self, *args, **kwargs):
+            raise AssertionError("Qdrant must not be contacted when unchecked")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: _TouchyQdrant())
+    result = decommission.delete_entity_state(
+        state_root=state_root,
+        qdrant_cfg=config,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        dry_run=False,
+        qdrant_unchecked_in_backup=True,
+    )
+    assert result.qdrant_unchecked is True
+    assert result.incomplete is True
+    assert any("not checked" in err for err in result.errors)

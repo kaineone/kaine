@@ -53,6 +53,7 @@ from kaine.lifecycle.decommission import (
     _qdrant_client,
     capture_backup,
     delete_entity_state,
+    qdrant_endpoint_configured,
     qdrant_in_use,
     update_manifest_continuity_note,
     write_decommission_audit,
@@ -293,7 +294,7 @@ def _write_location_split(out, qcfg, *, state_root, data_dir, fork_root) -> None
     if not groups[RETAIN]:
         out.write("    (none)\n")
     out.write("  also deleted: this entity's bus streams\n")
-    if qdrant_in_use(qcfg):
+    if qdrant_in_use(qcfg) or qdrant_endpoint_configured(qcfg):
         out.write("  also exported, then deleted: the episodic memory collections in Qdrant\n")
 
 
@@ -527,6 +528,13 @@ def main(
         out.write("  (non-fatal notes:)\n")
         for e in backup.errors:
             out.write(f"    - {e}\n")
+    if backup.qdrant_unchecked:
+        out.write(
+            "\nQdrant could not be checked: the memory module is off and Qdrant did not\n"
+            "answer, so this entity's memories there (if any) are neither backed up nor\n"
+            "deleted. Start Qdrant and run decommission again; this run will end as\n"
+            "INCOMPLETE.\n"
+        )
 
     # --- Dry-run: preview only, no prompts, no deletion ----------------
     if args.dry_run:
@@ -761,6 +769,7 @@ def main(
             qdrant_cfg=qcfg,
             bus_client=bus_client,
             dry_run=False,
+            qdrant_unchecked_in_backup=backup.qdrant_unchecked,
         )
 
         if result.incomplete:
@@ -788,6 +797,11 @@ def main(
             out.write("  errors (the entity is not fully deleted):\n")
             for e in result.errors:
                 out.write(f"    - {e}\n")
+        if result.qdrant_unchecked:
+            out.write(
+                "  Qdrant could not be checked; this entity's memories there may remain.\n"
+                "  Start Qdrant and run decommission again.\n"
+            )
 
         import datetime
 
@@ -809,6 +823,7 @@ def main(
             "rdb_snapshot": result.rdb_snapshot,
             "aof_rewrite": result.aof_rewrite,
             "errors": result.errors + ([result.redis_failed] if result.redis_failed else []),
+            "qdrant_unchecked": result.qdrant_unchecked,
             "guardian_notice_reminder": "shown",
             "backup_path": str(backup.backup_path),
         }

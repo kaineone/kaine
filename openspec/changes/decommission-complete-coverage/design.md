@@ -248,7 +248,11 @@ The implementation review settled these points:
 - **Qdrant in use.** A memory module counts only when it is enabled in
   `[modules]`, not listed in `[tier].unsupported_modules`, and set to the
   Qdrant backend (absent `backend` means Qdrant). Backup, preflight and
-  deletion share the rule, so a tier-0 deployment never contacts Qdrant.
+  deletion share the rule. With the module switched off, Qdrant is still
+  checked whenever an endpoint is configured for a module the tier supports:
+  existing collections are backed up, then dropped; an unreachable Qdrant
+  leaves them untouched, records `qdrant_unchecked` and ends the run
+  INCOMPLETE (exit 8). No endpoint at all means Qdrant is never contacted.
 - **Renamed names.** Paths take their old and new forms from
   `legacy_names.STATE_PATHS` (for example `mnemos/mnemos.db` and
   `episodic_memory/episodic_memory.db`, with `-wal`, `-shm` and `-journal`;
