@@ -259,6 +259,12 @@ def validate_table(table) -> None:
         raise TableError("PERSISTED_EXACT must be a dict")
     _require_str_dict(persisted_exact, "PERSISTED_EXACT")
 
+    operator_exact = getattr(table, "OPERATOR_EXACT", ())
+    if not isinstance(operator_exact, tuple) or not all(
+        isinstance(x, str) for x in operator_exact
+    ):
+        raise TableError("OPERATOR_EXACT must be a tuple of strings")
+
     for attr_name in (
         "REPO_TOP_DIRS",
         "UI_GLOBS",
@@ -651,12 +657,28 @@ def _python_contexts(text: str) -> list[tuple[int, int, str]]:
 
     fstring_depth = 0
     fstring_base: str | None = None
-    for tok in token_infos:
+    fstring_middle = getattr(tokenize, "FSTRING_MIDDLE", None)
+    for idx, tok in enumerate(token_infos):
         ttype = tok["type"]
         start, end = tok["start"], tok["end"]
         if ttype == fstring_start:
-            contains_space = " " in tok["string"]
-            fstring_base = "py_text" if contains_space else "py_string"
+            if fstring_depth == 0:
+                contains_space = False
+                nested = 1
+                for inner in token_infos[idx + 1 :]:
+                    if inner["type"] == fstring_start:
+                        nested += 1
+                    elif inner["type"] == fstring_end:
+                        nested -= 1
+                        if nested == 0:
+                            break
+                    elif (
+                        inner["type"] == fstring_middle
+                        and nested == 1
+                        and " " in inner["string"]
+                    ):
+                        contains_space = True
+                fstring_base = "py_text" if contains_space else "py_string"
             intervals.append((start, end, fstring_base))
             fstring_depth += 1
             continue
@@ -1416,6 +1438,35 @@ def _statement_uses_file(tokens: list[dict], start: int) -> bool:
     return False
 
 
+def _ui_wire_name(text: str, start: int, end: int) -> bool:
+    """True when a UI-file match is a bus wire name: a dotted name in quotes, or a source comparison."""
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", end)
+    if line_end == -1:
+        line_end = len(text)
+    line = text[line_start:line_end]
+    match_start = start - line_start
+    match_end = end - line_start
+    for quote in ('"', "'", "`"):
+        open_quote = -1
+        for pos in range(match_start - 1, -1, -1):
+            if line[pos] == quote:
+                open_quote = pos
+                break
+        if open_quote == -1:
+            continue
+        close_quote = line.find(quote, match_end)
+        if close_quote == -1:
+            continue
+        literal = line[open_quote + 1 : close_quote]
+        if re.fullmatch(r"[A-Za-z_]+(?:\.[A-Za-z_*]+)+", literal):
+            return True
+        before = line[:open_quote]
+        if re.search(r"source\s*[!=]==?\s*$", before):
+            return True
+    return False
+
+
 def _assign_scope(
     rel_path: str,
     ctx: str | None,
@@ -1441,6 +1492,13 @@ def _assign_scope(
             persisted = getattr(table, "PERSISTED_EXACT", {})
             if full_content in persisted:
                 return "persisted"
+            operator_exact = getattr(table, "OPERATOR_EXACT", ())
+            if full_content in operator_exact:
+                return "operator"
+            event_types = getattr(table, "EVENT_TYPES", ())
+            for event_type in event_types:
+                if full_content == event_type["old"]:
+                    return "keys"
         if ctx in {"py_string", "py_text"} and _names_python_symbol(tokens, start):
             return "identifiers"
         if ctx.startswith("py"):
@@ -1486,6 +1544,8 @@ def _assign_scope(
     ui_globs = getattr(table, "UI_GLOBS", ())
     if any(fnmatch.fnmatch(rel_path, g) for g in ui_globs):
         if ctx != "comment":
+            if _ui_wire_name(text, start, end):
+                return "keys"
             return "operator"
     if os.path.basename(rel_path) == "pyproject.toml":
         if toml_table == "project.optional-dependencies" and ctx == "toml_key":
@@ -1494,6 +1554,14 @@ def _assign_scope(
     if _in_pip_extra(text, start, end):
         return "operator"
 
+    if ctx in {"py_string", "py_text"}:
+        content = _enclosing_string_content(text, start, ctx, tokens)
+        if (
+            text[start - 1 : start] == "-"
+            or text[end : end + 1] == "-"
+            or (content is not None and '="' in content)
+        ):
+            return "operator"
     if ctx in {"py_text", "toml_text"} and _is_dotted_python_path(T):
         return "identifiers"
     if ctx == "py_text" and any(
@@ -1501,6 +1569,27 @@ def _assign_scope(
     ):
         return _path_move_scope(T)
     if ctx in {"py_text", "toml_text"}:
+        w_start, w_end = _expand_word(text, start, end)
+        if (
+            (
+                text[start - 1 : start] == "["
+                and text[start].islower()
+            )
+            or "." in T
+            or (
+                text[end : end + 1] == ":"
+                and text[end + 1 : end + 2].isalnum()
+            )
+            or (
+                text[start].islower()
+                and re.match(r"[ \t]*=(?!=)", text[w_end:])
+                and (
+                    text[w_start - 1 : w_start] in {'"', "'", "\n"}
+                    or text[w_start - 2 : w_start] == "\\n"
+                )
+            )
+        ):
+            return "keys"
         return "operator"
 
     if ctx in {"md_prose", "comment", "docstring", "toml_comment"}:
@@ -1525,6 +1614,13 @@ def _assign_scope(
         return "persisted"
     if ctx == "py_name":
         return "identifiers"
+    if ctx == "toml_key":
+        operator_exact = getattr(table, "OPERATOR_EXACT", ())
+        if T in operator_exact:
+            return "operator"
+        persisted = getattr(table, "PERSISTED_EXACT", {})
+        if T in persisted:
+            return "persisted"
     for prefix in ("kaine.", "tests."):
         if T.startswith(prefix):
             return "identifiers"
@@ -1999,6 +2095,10 @@ def _resolve_non_guarded(
 ) -> tuple[bool, str]:
     """Return (rename, rule) for a non-guarded name."""
     if ctx in {"shell", "other"}:
+        if any(
+            fnmatch.fnmatch(rel_path, g) for g in getattr(table, "UI_GLOBS", ())
+        ) and _ui_wire_name(text, start, end):
+            return (True, "unlisted")
         if _in_pip_extra(text, start, end):
             return (True, "unlisted")
         env_vars = _env_var_set(table)
@@ -2113,7 +2213,7 @@ def _replacement_for(
             return forms["kebab"]
         if shape == "camel_lower":
             return forms["lower_camel"]
-        if not code_like and _is_prose_like(ctx) and shape == "bare":
+        if not code_like and scope != "keys" and _is_prose_like(ctx) and shape == "bare":
             if forms["prose"][0].isupper():
                 return forms["prose"][0].lower() + forms["prose"][1:]
             return forms["prose"]
@@ -2125,14 +2225,14 @@ def _replacement_for(
         return forms["upper"]
 
     if matched[0].isupper():
-        if not code_like and _is_prose_like(ctx) and shape == "bare":
+        if not code_like and scope != "keys" and _is_prose_like(ctx) and shape == "bare":
             prose = forms["prose"]
             if prose and prose[0].islower():
                 return prose[0].upper() + prose[1:]
             return prose
         return forms["class"]
 
-    if not code_like and _is_prose_like(ctx) and shape == "bare":
+    if not code_like and scope != "keys" and _is_prose_like(ctx) and shape == "bare":
         return forms["prose"]
     return forms["key"]
 
@@ -2364,11 +2464,28 @@ def _apply_persisted_exact(
     regex, group_map = _name_regex(table)
     persisted = getattr(table, "PERSISTED_EXACT", {})
     for start, end, ctx in intervals:
-        if ctx not in {"py_string", "py_text", "toml_string", "toml_text"}:
+        if ctx not in {
+            "py_string",
+            "py_text",
+            "toml_string",
+            "toml_text",
+            "toml_key",
+        }:
             continue
         if _blocked(start, end, blocked):
             continue
-        content = _string_content_at(text, start, end, ctx)
+        raw = text[start:end]
+        if ctx == "toml_key":
+            stripped = raw.strip()
+            if (
+                (stripped.startswith('"') and stripped.endswith('"'))
+                or (stripped.startswith("'") and stripped.endswith("'"))
+            ):
+                content = _strip_quotes(stripped)
+            else:
+                content = stripped
+        else:
+            content = _string_content_at(text, start, end, ctx)
         if content is None:
             continue
         if content not in persisted:
@@ -2377,7 +2494,6 @@ def _apply_persisted_exact(
         if only is not None and attr not in only:
             continue
         value = persisted[content]
-        raw = text[start:end]
         if content not in raw:
             continue
         new_raw = raw.replace(content, value, 1)

@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from kaine.bus.streams import DEVELOPMENT_SOURCE
 from kaine.cycle.__main__ import _start_development_owner
 from kaine.modules.vision.feed import StimulusSourceClock
 
@@ -99,4 +100,4 @@ async def test_started_and_publishes_a_readiness_readout(tmp_path, monkeypatch) 
         await asyncio.sleep(0.01)
     stop.set()
     await asyncio.wait_for(task, timeout=2.0)
-    assert any(e.type == "gestation.readiness" and e.source == "gestation" for e in bus.events)
+    assert any(e.type == "gestation.readiness" and e.source == DEVELOPMENT_SOURCE for e in bus.events)

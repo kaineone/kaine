@@ -8,6 +8,7 @@ import asyncio
 
 import pytest
 
+from kaine.bus.streams import DEVELOPMENT_SOURCE
 from kaine.cycle.__main__ import _start_stimulus_source_presence
 from kaine.modules.vision.feed import StimulusSourceClock
 
@@ -39,6 +40,6 @@ async def test_stimulus_source_clock_starts_a_publisher_that_announces_deliverie
     stop.set()
     await asyncio.wait_for(task, timeout=2.0)
     assert published
-    assert published[0].source == "gestation"
+    assert published[0].source == DEVELOPMENT_SOURCE
     assert published[0].type == "gestation.womb"
     assert published[0].payload == {"provider": "local", "frame_index": 7}

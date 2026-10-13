@@ -19,6 +19,7 @@ import pytest
 
 from kaine.bus.client import _encode_event
 from kaine.bus.schema import Event
+from kaine.bus.streams import DEVELOPMENT_SOURCE
 from kaine.cycle.__main__ import _resolve_boot_stage
 from kaine.entity_clock import EntityClock
 from kaine.lifecycle.gate_runner import MaturationGateRunner
@@ -249,7 +250,7 @@ async def test_stimulus_source_readiness_readout_trustworthiness(
         "gestation.out",
         _encode_event(
             Event(
-                source="gestation",
+                source=DEVELOPMENT_SOURCE,
                 type="womb.heartbeat",
                 payload={"readout": {"x": 1}},
                 salience=0.5,
@@ -267,7 +268,7 @@ async def test_stimulus_source_readiness_readout_trustworthiness(
         "gestation.out",
         _encode_event(
             Event(
-                source="gestation",
+                source=DEVELOPMENT_SOURCE,
                 type="gestation.readiness",
                 payload={"readout": {"x": 1}},
                 salience=0.5,
@@ -301,7 +302,7 @@ async def test_stimulus_source_readiness_readout_trustworthiness(
         "gestation.out",
         _encode_event(
             Event(
-                source="gestation",
+                source=DEVELOPMENT_SOURCE,
                 type="gestation.readiness",
                 payload={"readout": {"x": 1}},
                 salience=0.5,
@@ -320,7 +321,7 @@ async def test_stimulus_source_readiness_readout_trustworthiness(
         "gestation.out",
         _encode_event(
             Event(
-                source="gestation",
+                source=DEVELOPMENT_SOURCE,
                 type="gestation.readiness",
                 payload={"readout": {"x": 1}},
                 salience=0.5,

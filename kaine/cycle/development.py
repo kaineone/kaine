@@ -46,6 +46,7 @@ import numpy as np
 import scipy.signal
 
 from kaine.bus.schema import Event
+from kaine.bus.streams import DEVELOPMENT_SOURCE
 from kaine.modules.perception_prng import keyed_u64, unit_float
 from kaine.storage import resolve
 
@@ -53,7 +54,7 @@ log = logging.getLogger(__name__)
 
 READINESS_TYPE = "gestation.readiness"
 PROBE_TYPE = "gestation.probe"
-SOURCE = "gestation"
+SOURCE = DEVELOPMENT_SOURCE
 WITHDRAWAL_MAX_SECONDS = 30.0
 PERTURBATION_MAX_SECONDS = 10.0
 

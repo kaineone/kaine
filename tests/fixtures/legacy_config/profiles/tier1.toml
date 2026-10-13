@@ -1,0 +1,55 @@
+# Tier 1 — embodied CPU agent (openspec deployment-tiers)
+#
+# Host class: 4–8 GB-class single-board computer, or a retired 8 GB flagship
+# smartphone under a userland like Termux. The interoception and sequence modules run a NumPy CfC
+# network, and the episodic memory, social cognition and sleep modules run their shared memory embedder in NumPy;
+# there is no accelerator, so heavy models run on the edge runtimes at CPU pace:
+# a 1–2B GGUF LLM at chat pace, periodic (not streaming) vision, NumPy embeddings.
+#
+# INERT + VOICE-FREE by contract (see tier0.toml header): backends + device/
+# cycle-rate hints only; no module is enabled and no private voice is embedded.
+# Layers between the shipped defaults and your local config/kaine.operator.toml,
+# which still wins.
+#
+# Apply deliberately:  KAINE_TIER=tier1 python -m kaine.cycle
+#               or:    record [deployment].tier = "tier1" via the wizard
+#               or:    set it in config/kaine.operator.toml
+
+[tier]
+name = "tier1"
+unsupported_modules = [
+    # none: speech runs on sherpa-onnx below Tier 2
+]
+oscillator_supported = true
+
+[lingua]
+backend = "llama_cpp"   # 1–2B GGUF at chat pace
+
+[mnemos]
+backend = "sqlite_vec"  # in-process vector store
+
+[topos]
+# Vision is periodic, not streaming, at this tier. Pin the encoder to the CPU;
+# the workstation default targets a discrete GPU (cuda:1).
+device = "cpu"
+
+[audition]
+# Vocal emotion (emotion2vec+/funasr) is a Tier-2-only faculty — no clean edge
+# port — so it is explicitly DISABLED here (empty model id → Null classifier).
+# Vocal affect is absent (reported so); when transcription is enabled it runs through sherpa-onnx.
+emotion_model_id = ""
+emotion_device = "cpu"
+# Local speech recognition via sherpa-onnx (Tier 1 default; replaces Speaches).
+backend = "sherpa_onnx"
+
+[nous]
+# NumPy-only active inference backend (no JAX/pymdp dependency).
+backend = "numpy"
+
+[phantasia]
+# NumPy engine for the DreamerV3 world model (no JAX dependency).
+engine = "numpy"
+
+[vox]
+# Local speech synthesis via sherpa-onnx (Tier 1 default; replaces Chatterbox).
+backend = "sherpa_onnx"

@@ -21,6 +21,8 @@ from kaine.setup.footprint import (
     main,
 )
 
+_LANGUAGE = "lingua"
+
 
 def _raise_file_not_found(*args: Any, **kwargs: Any) -> Path:
     raise FileNotFoundError()
@@ -772,7 +774,7 @@ def test_local_service_gpu_unknown_not_recorded(capsys, tmp_path, monkeypatch):
     assert (
         "not measured: its GPU memory could not be read" in out
     )
-    assert "Uncalibrated components: lingua" in out
+    assert f"Uncalibrated components: {_LANGUAGE}" in out
     assert not cat.exists()
 
 

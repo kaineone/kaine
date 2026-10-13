@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from kaine.bus.schema import Event
+from kaine.bus.streams import DEVELOPMENT_SOURCE
 from kaine.lifecycle import stage as lifecycle_stage
 from kaine.lifecycle.lived_time import LivedTimeAccumulator
 from kaine.lifecycle.maturation_gate import (
@@ -235,6 +236,29 @@ class MaturationGateRunner:
         except Exception:
             log.warning("maturation gate: failed to count hypnos sleeps", exc_info=True)
 
+    def _blocked_reason(self) -> str | None:
+        """Why the gate may not count sleeps or evaluate now; None when it may.
+
+        The tick and the final count at shutdown share this check, so the final
+        count never counts what a tick would have skipped.
+        """
+        if not self._staging_enabled or not self._stage.is_developing:
+            return "not_developing"
+        if self._boot_ms is None:
+            return "boot_not_anchored"
+        if not self._stimulus_source_feed_configured:
+            return "no_stimulus_source_feed"
+        return None
+
+    async def _final_sleep_count(self) -> None:
+        """Count sleep completions once more before stopping, so none are lost across a restart."""
+        if self._blocked_reason() is not None:
+            return
+        before = self._stage
+        await self._count_new_sleeps()
+        if self._stage != before:
+            self._persist_if_changed(before)
+
     def _accumulate_lived_time(self) -> None:
         """Add subjective elapsed time since the last tick.
 
@@ -275,7 +299,7 @@ class MaturationGateRunner:
                 self._stimulus_source_stream, start=str(start_ms), end="+"
             )
             for entry_id, event in reversed(entries):
-                if event.type != self._stimulus_source_type or event.source != "gestation":
+                if event.type != self._stimulus_source_type or event.source != DEVELOPMENT_SOURCE:
                     continue
                 if isinstance(event.payload, dict):
                     readout = event.payload.get("readout")
@@ -368,11 +392,8 @@ class MaturationGateRunner:
         before = self._stage
 
         await self._begin_boot()
-        if self._boot_ms is None:
-            _set_status()
-            return
-
-        if not self._stimulus_source_feed_configured:
+        blocked = self._blocked_reason()
+        if blocked == "no_stimulus_source_feed":
             # Loud, repeated warning: never a silent senseless hold.
             log.warning("stage.gestation.no_stimulus: gestation active but no womb feed configured")
             await self._publish(
@@ -380,6 +401,9 @@ class MaturationGateRunner:
                 development_no_stimulus_payload(),
                 salience=0.7,
             )
+            _set_status()
+            return
+        if blocked is not None:
             _set_status()
             return
 
@@ -634,6 +658,8 @@ class MaturationGateRunner:
                 # Expected: cadence elapsed, evaluate again.
                 continue
 
+        await self._final_sleep_count()
+
     async def shutdown(self) -> None:
         if self._task is not None and not self._task.done():
             self._task.cancel()
@@ -641,4 +667,7 @@ class MaturationGateRunner:
                 await self._task
             except asyncio.CancelledError:
                 # Expected: we just cancelled the task.
+                await self._final_sleep_count()
                 return
+
+        await self._final_sleep_count()

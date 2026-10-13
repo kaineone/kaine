@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import kaine.config
+from kaine import legacy_aliases
 from kaine.setup.accel_mismatch import MismatchVerdict, evaluate_mismatch
 
 # The required CAL welfare acknowledgement phrase (mirrors kaine.lifecycle).
@@ -73,6 +74,7 @@ def base_thesis_modules(profiles_dir: Path | None = None) -> dict[str, bool]:
         raise FileNotFoundError(f"base-thesis profile not found: {path}")
     with path.open("rb") as fh:
         data = tomllib.load(fh)
+        data = legacy_aliases.normalize_config_layer(data, str(path))
     table = data.get("modules")
     if not isinstance(table, dict):
         raise FileNotFoundError(f"base-thesis profile has no [modules] table: {path}")

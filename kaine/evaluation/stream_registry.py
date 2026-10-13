@@ -31,6 +31,7 @@ a candidate stream.
 from __future__ import annotations
 
 from kaine.bus.schema import module_stream
+from kaine.bus.streams import PERCEPTION_FEED_STREAM
 
 #: Every cognitive module that publishes a stream. Order is stable.
 CANONICAL_MODULE_NAMES: tuple[str, ...] = (
@@ -88,8 +89,11 @@ def canonical_module_streams() -> tuple[str, ...]:
 
 
 def _all_produced_streams() -> tuple[str, ...]:
-    """Canonical module streams plus additional produced streams."""
-    return canonical_module_streams() + _ADDITIONAL_PRODUCED_STREAMS
+    """Canonical module streams, additional produced streams and the perception feed's stream."""
+    extras = list(_ADDITIONAL_PRODUCED_STREAMS)
+    canonical = canonical_module_streams()
+    extras.append(PERCEPTION_FEED_STREAM)
+    return canonical + tuple(extras)
 
 
 def curated_module_streams() -> tuple[str, ...]:

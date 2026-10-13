@@ -12,11 +12,14 @@ import kaine.lifecycle.maturation_gate as _maturation_gate
 import kaine.lifecycle.preservation as _preservation
 import kaine.memory_kinds as _memory_kinds
 import kaine.modules.self_model.module as _self_model_module
+import kaine.modules.world_model.backend as _wm_backend
+import kaine.modules.world_model.encoder as _wm_encoder
 import kaine.organ_window_state as _organ_window_state
 import kaine.perception_state as _perception_state
+import kaine.research.ignition_study.runner as _study_runner
 from kaine import legacy_names
 from kaine.lifecycle import stage as _stage
-from kaine.lifecycle.individuation_store import IndividuationPaths
+from kaine.lifecycle.individuation_store import REFERENCE_KINDS, IndividuationPaths
 from kaine.modules.effectors.module import Effectors
 from kaine.modules.episodic_memory.memory import EpisodicMemoryCore, recover_interrupted_import
 from kaine.modules.episodic_memory.module import EpisodicMemory
@@ -229,3 +232,41 @@ def test_gate_action_values_pinned():
     """Maturation gate action values keep their old text in this step."""
     assert _maturation_gate.ACTION_DEVELOPING == "gestating"
     assert _maturation_gate.ACTION_MATURATION == "birth"
+
+
+def _stored_tag(old: str) -> str:
+    """Return the stored tag for *old*, using the old or new spelling."""
+    for entry in legacy_names.STORED_TAGS:
+        if entry["old"] == old:
+            return entry["new"] if PERSISTED_DONE else entry["old"]
+    raise AssertionError(f"no STORED_TAGS entry for {old}")
+
+
+def test_world_model_checkpoint_format_pinned():
+    """A world-model checkpoint saved before the rename must still load: its header keeps its stored text."""
+    assert _wm_backend._CHECKPOINT_FORMAT == _stored_tag("kaine-phantasia-rssm-npz-v1")
+
+
+def test_world_model_encoder_version_pinned():
+    """The encoder version tag keeps its stored spelling until the persisted step."""
+    assert _wm_encoder.VERSION == _stored_tag("phantasia-encoder-v1")
+
+
+def test_maturation_reference_kind_pinned():
+    """The maturation reference kind stays in stored form until persisted."""
+    assert _stored_tag("birth") in REFERENCE_KINDS
+
+
+def test_study_stored_strings_pinned():
+    """The study runner's preservation reason and unviable outcome are written to disk and keep their stored text."""
+    src = inspect.getsource(_study_runner)
+    assert f'req.reason != "{_stored_tag("birth")}"' in src
+    assert f'outcome = "{_stored_tag("failed:gestation_unviable")}"' in src
+
+
+def test_every_stored_tag_is_persisted_exact():
+    """Every stored-tag rename must also appear in PERSISTED_EXACT with the same new spelling."""
+    for entry in legacy_names.STORED_TAGS:
+        old, new = entry["old"], entry["new"]
+        assert old in legacy_names.PERSISTED_EXACT, old
+        assert legacy_names.PERSISTED_EXACT[old] == new, (old, new)

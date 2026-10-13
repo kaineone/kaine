@@ -234,8 +234,23 @@ def test_encryption_step_decline_keeps_existing_enabled_true() -> None:
 
 def test_setup_main_imports_without_web_extras(monkeypatch) -> None:
     # A None entry in sys.modules makes the import raise ImportError, as on an
-    # install without the dashboard extra. monkeypatch restores every entry after
-    # the test, so nothing leaks into later tests on the same worker.
+    # install without the dashboard extra. Re-importing also mutates parent-package
+    # attributes, so record those before clearing the cache so monkeypatch
+    # restores everything and nothing leaks into later tests on the same worker.
+    setup_pkg = importlib.import_module("kaine.setup")
+
+    for name in ("__main__", "web"):
+        if hasattr(setup_pkg, name):
+            monkeypatch.setattr(setup_pkg, name, getattr(setup_pkg, name))
+
+    web_pkg = sys.modules.get("kaine.setup.web")
+    if web_pkg is not None:
+        for key in list(sys.modules):
+            if key.startswith("kaine.setup.web.") and key.rsplit(".", 1)[0] == "kaine.setup.web":
+                attr = key.rsplit(".", 1)[1]
+                if hasattr(web_pkg, attr):
+                    monkeypatch.setattr(web_pkg, attr, getattr(web_pkg, attr))
+
     for name in ("fastapi", "uvicorn"):
         monkeypatch.setitem(sys.modules, name, None)
     for key in list(sys.modules):

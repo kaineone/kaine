@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from kaine import legacy_aliases
 from kaine.boot import known_module_names
 from kaine.defaults import DEFAULT_MIN_FREE_GB
 
@@ -290,4 +291,4 @@ def load_plan(study_dir: Path | str) -> dict[str, Any]:
     path = Path(study_dir) / PLAN_FILE
     if not path.exists():
         raise FileNotFoundError(f"No study plan found at {path}")
-    return json.loads(path.read_text())
+    return legacy_aliases.map_study_plan(json.loads(path.read_text()))

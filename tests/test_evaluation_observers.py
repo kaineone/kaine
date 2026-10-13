@@ -812,7 +812,8 @@ def test_parse_claims_extracts_keywords():
 
 @pytest.mark.asyncio
 async def test_self_model_accuracy_runs_once_and_logs(tmp_path):
-    sink = AsyncJsonlSink(tmp_path, name="eidolon_accuracy", flush_interval_s=0.05)
+    name = "eidolon_accuracy"
+    sink = AsyncJsonlSink(tmp_path, name=name, flush_interval_s=0.05)
     runner = SelfModelAccuracyRunner(
         sink,
         cognitive_client=FakeCognitive("I'm curious"),
@@ -823,7 +824,7 @@ async def test_self_model_accuracy_runs_once_and_logs(tmp_path):
     entry = await runner.run_once()
     await sink.stop()
     assert "curious" in entry["claims"]
-    files = list(tmp_path.glob("eidolon_accuracy-*.jsonl"))
+    files = list(tmp_path.glob(f"{name}-*.jsonl"))
     assert files
 
 

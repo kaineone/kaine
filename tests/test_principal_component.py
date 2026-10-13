@@ -130,10 +130,11 @@ def test_write_load_round_trip(tmp_path: Path) -> None:
 
 
 def test_principal_component_path() -> None:
+    processor = "topos"
     with pytest.raises(PrincipalComponentError):
-        principal_component_path(Path("x"), "../x", "topos")
+        principal_component_path(Path("x"), "../x", processor)
     with pytest.raises(PrincipalComponentError):
-        principal_component_path(Path("x"), "a/b", "topos")
-    assert principal_component_path(Path("x"), "run1", "topos") == Path(
-        "x/run1/principal_component_topos.json"
+        principal_component_path(Path("x"), "a/b", processor)
+    assert principal_component_path(Path("x"), "run1", processor) == Path(
+        f"x/run1/principal_component_{processor}.json"
     )

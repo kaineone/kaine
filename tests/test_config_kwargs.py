@@ -104,9 +104,13 @@ def test_old_config_key_reaches_renamed_params_field():
 
 
 def test_params_validation_names_the_config_key():
+    e = next(e for e in legacy_names.CONFIG_KEYS if e["new"] == "maturation_transition_seconds")
+    config_key = e["new"] if legacy_names.SCOPE_STATUS.get("keys") == "done" else e["old"]
+    other = e["old"] if config_key == e["new"] else e["new"]
+
     from kaine.modules.stimulus_source_signal import StimulusSourceParams
 
     with pytest.raises(ValueError) as exc:
-        StimulusSourceParams.from_sections({"birth_transition_seconds": 99.0}, None, None)
-    assert "birth_transition_seconds" in str(exc.value)
-    assert "maturation_transition_seconds" not in str(exc.value)
+        StimulusSourceParams.from_sections({config_key: 99.0}, None, None)
+    assert config_key in str(exc.value)
+    assert other not in str(exc.value)

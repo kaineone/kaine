@@ -33,6 +33,7 @@ from fastapi.responses import (
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
+from kaine import legacy_aliases
 from kaine.config import (
     OPERATOR_CONFIG_PATH,
     SHIPPED_CONFIG_PATH,
@@ -211,7 +212,7 @@ def _load_shipped(path: Path) -> dict[str, Any]:
 def _load_existing(path: Path) -> dict[str, Any]:
     try:
         with path.open("rb") as fh:
-            return tomllib.load(fh)
+            return legacy_aliases.normalize_config_layer(tomllib.load(fh), str(path))
     except FileNotFoundError:
         return {}
     except Exception as exc:

@@ -15,6 +15,9 @@ from kaine.modules.registry import ModuleRegistry
 from kaine.storage import resolve
 from kaine.workspace.strategies import build_drive_sources, dominant_drive
 
+#: Label of the affect salience factor in downgrade reports.
+AFFECT_FACTOR_LABEL = "thymos_modulation"
+
 log = logging.getLogger(__name__)
 
 
@@ -165,7 +168,7 @@ def make_salience_factors(
     # A factor is a deliberate downgrade when it is static but ships real.
     downgraded_factors: list[str] = []
     if affect_factor == "static" and _SALIENCE_AFFECT_FACTOR_DEFAULT != "static":
-        downgraded_factors.append("thymos_modulation (set to static)")
+        downgraded_factors.append(f"{AFFECT_FACTOR_LABEL} (set to static)")
     if goal_factor == "static" and _SALIENCE_GOAL_FACTOR_DEFAULT != "static":
         downgraded_factors.append("goal_relevance (set to static)")
 

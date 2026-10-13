@@ -1,0 +1,1 @@
+This case checks that, in the keys scope, references to tables, keys and streams inside messages and f-strings move with keys, bare words in sentences stay for the operator step, kebab-case names and HTML attribute values in Python strings stay for the operator step, and dashboard JavaScript wire names move with keys while element ids stay.

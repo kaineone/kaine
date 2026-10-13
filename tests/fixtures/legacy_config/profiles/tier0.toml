@@ -1,0 +1,43 @@
+# Tier 0 — edge / sensor node (openspec deployment-tiers)
+#
+# Host class: ~512 MB-class single-board computer or a retired low-RAM phone.
+# Role: symbolic reasoning + episodic memory + perception satellite, optionally
+# feeding a higher tier over the bus. The torch-free engines available are
+# llama.cpp, sqlite-vec, the NumPy CfC, the NumPy embedder, the NumPy planning
+# engine and sherpa-onnx speech; speech is not enabled at Tier 0 for memory.
+# The interoception module, the sequence module and the episodic memory, social cognition and sleep modules' memory embedder run on NumPy.
+#
+# This overlay is INERT and VOICE-FREE by contract (openspec: "Tier files
+# preserve the safety invariants"): it selects runtime backends and device/
+# cycle-rate hints, but it NEVER enables a module and embeds NO private
+# predefined voice. Enabling modules and selecting a voice remain local
+# operator actions, exactly as for config/kaine.toml. It layers BETWEEN the
+# shipped defaults and your config/kaine.operator.toml, which still wins.
+#
+# Apply deliberately:  KAINE_TIER=tier0 python -m kaine.cycle
+#               or:    record [deployment].tier = "tier0" via the wizard
+#               or:    set it in config/kaine.operator.toml
+
+[tier]
+name = "tier0"
+unsupported_modules = [
+    "topos",        # no vision runtime on a ~512 MB host
+    "audition",     # no STT/emotion at Tier 0
+    "vox",          # no TTS at Tier 0
+    "empatheia",
+    "phantasia",
+]
+oscillator_supported = false  # the oscillatory layer is too heavy for an edge host
+
+[lingua]
+# In-process sub-1B GGUF (slow) — no Ollama/torch server. A >=2B LLM does NOT
+# fit a 512 MB host; this is a symbolic-reasoning node, not a conversational one.
+backend = "llama_cpp"
+
+[mnemos]
+# In-process vector store — no Qdrant server, near-zero idle footprint.
+backend = "sqlite_vec"
+
+[nous]
+# Pure-NumPy active inference; no JAX/pymdp at this tier.
+backend = "numpy"

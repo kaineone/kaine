@@ -173,8 +173,8 @@ def test_plan_termux():
     assert "pkg" in plan.system_packages
     assert "apt" not in plan.system_packages
     runs_text = " ".join(plan.runs)
-    assert "soma" in runs_text
-    assert "chronos" in runs_text
+    assert "soma (NumPy CfC)" in runs_text
+    assert "chronos (NumPy CfC)" in runs_text
     assert "nous" in runs_text
     assert "phantasia" in runs_text
     assert "audition" in runs_text

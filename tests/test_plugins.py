@@ -364,7 +364,7 @@ def test_manifest_entry_lists_metadata_and_sorted_seams():
         "p1": {
             "distribution": "dist-one",
             "version": "1.2.3",
-            "seams": ["chronos.network", "soma.forward_model"],
+            "seams": sorted(["chronos.network", "soma.forward_model"]),
             "observes_cycle": False,
         },
         "p2": {

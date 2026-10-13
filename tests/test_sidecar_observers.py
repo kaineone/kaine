@@ -1038,7 +1038,8 @@ async def test_welfare_observer_interoceptive_defaults_preserve_abc():
 async def test_planning_policy_observer_logs_efe_and_action(tmp_path):
     """task 5.1 — nous.policy event → JSONL with EFE, horizon, policy."""
     bus = FakeBus()
-    sink = AsyncJsonlSink(tmp_path, name="nous_policy", flush_interval_s=0.05)
+    name = "nous_policy"
+    sink = AsyncJsonlSink(tmp_path, name=name, flush_interval_s=0.05)
     obs = PlanningPolicyObserver(bus, sink)
     bus.push(
         "nous.out",
@@ -1051,7 +1052,7 @@ async def test_planning_policy_observer_logs_efe_and_action(tmp_path):
     await sink.start()
     await _run_observer(obs, bus)
     await sink.stop()
-    files = list(tmp_path.glob("nous_policy-*.jsonl"))
+    files = list(tmp_path.glob(f"{name}-*.jsonl"))
     assert files
     line = json.loads(files[0].read_text().splitlines()[0])
     assert line["expected_free_energy"] == pytest.approx(-2.35)

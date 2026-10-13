@@ -54,7 +54,16 @@ VOCAL_STREAM = module_stream("vox")
 # --- Cycle-layer and lifecycle producers -----------------------------------
 
 #: The stimulus source rhythm, readiness readouts and presence, written during the developmental phase.
-DEVELOPMENT_STREAM = module_stream("gestation")
+DEVELOPMENT_STREAM = "gestation.out"
+#: The developmental owner's bus source. It is derived from the stream so the two
+#: always agree; the stored stage value of the same spelling is a different name.
+DEVELOPMENT_SOURCE = DEVELOPMENT_STREAM.removesuffix(".out")
+
+#: The perception feed's own bus source and stream (stimulus-source-to-world
+#: transition outcomes). It is distinct from the perceptual locus module's stream,
+#: so each has its own cap and the rename never folds one onto the other.
+PERCEPTION_FEED_SOURCE = "perception_feed"
+PERCEPTION_FEED_STREAM = module_stream(PERCEPTION_FEED_SOURCE)
 #: Individuation divergence verdicts (kaine.cycle.individuation_runtime).
 INDIVIDUATION_STREAM = module_stream("individuation")
 #: Developmental-stage transitions (kaine.lifecycle.maturation_gate).
@@ -97,6 +106,7 @@ KNOWN_STREAMS: frozenset[str] = MODULE_STREAMS | frozenset(
         LANGUAGE_EXTERNAL_STREAM,
         LANGUAGE_INTERNAL_STREAM,
         DEVELOPMENT_STREAM,
+        PERCEPTION_FEED_STREAM,
         INDIVIDUATION_STREAM,
         LIFECYCLE_STREAM,
         PRESERVATION_STREAM,
@@ -113,6 +123,9 @@ __all__ = [
     "SELF_MODEL_STREAM",
     "SOCIAL_COGNITION_STREAM",
     "DEVELOPMENT_STREAM",
+    "DEVELOPMENT_SOURCE",
+    "PERCEPTION_FEED_SOURCE",
+    "PERCEPTION_FEED_STREAM",
     "SLEEP_STREAM",
     "INDIVIDUATION_STREAM",
     "KNOWN_STREAMS",

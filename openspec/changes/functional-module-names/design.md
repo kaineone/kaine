@@ -642,6 +642,192 @@ are the ones the sections above leave open; each follows from those sections.
   bundle is checked by its manifest only, and an encrypted fork snapshot is
   skipped, unless `KAINE_STATE_KEY` is set.
 
+### Keys step, split in two (PR 6a and 6b)
+
+The keys step changes wire names, so it lands in two PRs. **6a** prepares: every
+reader it adds acts only once the keys scope is done, and the fast suite's outcomes
+match main's test by test. Its runtime changes are deliberate and few: the
+perception feed publishes on its own stream (the only bus name 6a changes), the
+maturation gate counts sleeps once more when it stops (under the same preconditions
+as a tick, so it never counts what a tick would have skipped), the individuation
+refusal names the config key `[modules].lingua`, and merging snapshots prefers an
+artifact directory already under the current name. **6b** runs the codemod, moves
+the files, marks the keys scope done and so turns the readers on.
+
+What 6a decides, from a keys-scope dry run on main (72 moves, about 10.5k
+replacements in about 900 files):
+
+- **Config keys.** `CONFIG_KEYS` now lists every config key the keys run renames
+  (twelve more compound keys such as `soma_stream`, `lingua_quiet_s`,
+  `salience_thymos_factor`, `nexus_url`), every module key used as a key inside
+  another table (`[evaluation.observers].empatheia`, a plugin's backend and
+  territory tables; the guarded names rename only in `[modules]`), and every
+  stream name used as a key (`[bus.per_stream_maxlen]`). `research_event_log.nexus_record`
+  joins the table moves. The normalizer also maps stream names used as values or
+  list items and the tier's `unsupported_modules` list. The bus configuration, the
+  study overlay, the setup page and wizard and the base-thesis profile reader read
+  their TOML raw; each now normalizes every layer, so an operator file with old
+  names merges under the new ones and a layer that sets both names is refused.
+- **Strings inside stored files stay.** A keys-scope string that is a key or value
+  inside a file on disk (records, reports, the development readout, run
+  manifests, study plans, job files, sidecar directory names) joins
+  `PERSISTED_EXACT`, so the keys run leaves it and the persisted step decides it
+  with read-maps: the affect, sleep, social-cognition and planning record fields,
+  the self-model drift signals, the workspace-mediation benchmark fields, the
+  world-model cue, model revisions in run manifests, the stimulus-source readout
+  and reasons, the supervisor escalation reason, the forked job kind,
+  `gestation_budget_seconds`, and three sidecar directory names. The codemod now
+  also treats a TOML key equal to such a name as persisted.
+- **Strings the UI reads move with the UI.** Template context variables, the
+  dashboard's health block key, the runtime keys the supervisor banner reads and
+  the session cookie name go to the new `OPERATOR_EXACT` list, so they change with
+  the dashboard strings in PR 7 and the template never reads a missing key.
+- **Names that reach disk through code.** Decommission and the public metrics
+  bundle's deny list handle every form of a module-named state directory
+  (`legacy_aliases.name_forms`), because those directories keep their names until
+  PR 8 while the literals change in 6b. Snapshot artifact directories are found
+  under any form of the module's name, and a merge maps them to one module. The
+  preservation bundle names its world-model member once, so the directory and
+  the tar member cannot drift apart. Study plans map their module lists on read,
+  and `study.json` is never rewritten, so its hash holds. The control file's freeze
+  sources, the self-model's drift-episode source counts and restored per-stream
+  cursors read old names.
+- **Plugins.** A plugin that declares one seam under its old and its new name is
+  refused instead of merged.
+- **Queue and collisions.** Every queued perception, echo and spot match in the
+  keys scope is decided by a rule: perception renames only as the locus module key
+  in module lists and maps (the feed keeps its own source, which also means the
+  feed's few transition events, all at salience zero, stop counting as the locus
+  module's drive source); echo renames only as the recorder module key; two
+  supervisor selftest messages name the config table and rename with it. A probe
+  that renames every queued match changes nothing more in the keys scope; the 128
+  matches still queued belong to the UI step. Of the 39 collisions, the six test
+  files that exercise the readers with old names as literals are excluded from the
+  codemod, and the other 26 are accepted after a check (in each the new key
+  already has another role in that file and never meets the renamed key in one
+  mapping).
+- **Stream cursors.** The only stream position that survives a restart in a
+  state file is the stage file's `hypnos_cursor`; module snapshots also carry
+  cursors (embodiment, interoception, self-model, and the sequence module's
+  per-stream map). Redis stream ids are time-ordered and the rename needs a
+  restart, so a cursor recorded against `hypnos.out` and used on `sleep.out` reads
+  exactly the entries written after the restart: no replay and no skip, and the
+  sleep count and the maturation gate see every new sleep once. A stream-keyed
+  cursor map is remapped on restore, keeping the value already under the new name.
+  There are no consumer groups and no other Redis keys holding state.
+- **Redis persistence.** Compose, quadlet and the native scripts run Redis with AOF
+  (`appendonly yes`, `appendfsync everysec`) and no RDB, with `maxmemory`
+  (4 GB by default) and `noeviction`. After 6b the old streams stay as orphans at
+  their caps, and the "Bus budget" preboot row counts only configured streams, so
+  the caps alone would let real memory reach twice the budget, where `noeviction`
+  turns a full Redis into failed writes. So 6b ships a one-time cleanup: a command
+  that lists the old-named module streams and deletes them only when asked, and a
+  preboot warning while any remain. Nothing reads those streams after the flip.
+- **Config digest.** `compute_config_digest` hashes the resolved configuration,
+  so the same settings hash differently once the keys are renamed. 6b records
+  `"config_key_scheme": 2` in run manifests (absent means 1), so a comparison
+  across the rename is explicitly different rather than silently different.
+
+### Keys step: review fixes and the flipped-tree proof (PR 6a)
+
+A review ran the 6b codemod over the 6a table in a scratch tree and found that
+boot, revive and the dashboard broke. 6a now carries these decisions, and a
+scratch flip (keys marked done, keys codemod applied, nothing else) passes the
+fast suite, the slow lane, a full-registry dry boot, an old-bundle revive, a
+checkpoint load and the dashboard smoke.
+
+- **World-model sub-table.** `[phantasia.world_model]` stays a sub-table named
+  `world_model` under the moved table, `[world_model.world_model]`; renaming it to
+  `backend` collided with the `[phantasia].backend` key and made invalid TOML.
+  The normalizer applies single-segment table moves before dotted ones. A copy of
+  the pre-rename shipped config, profiles and studies sits in
+  `tests/fixtures/legacy_config/`, and a sweep test checks that every layer
+  normalizes without conflict and that every config key the codemod renames has a
+  mapping.
+- **Stored tags.** Strings written to disk keep their spelling until the persisted
+  step: the world-model checkpoint header `kaine-phantasia-rssm-npz-v1`, the encoder
+  version `phantasia-encoder-v1`, the reference, capture and gate kind `birth`, the
+  preservation reason `birth`, the study outcome `failed:gestation_unviable`, and the
+  episodic-memory collection names built from the stored `mnemos_` prefix. They are
+  in `PERSISTED_EXACT`, the tags also in a `STORED_TAGS` table, and a test pins each
+  against the table. The `thymos_state` record field stays with its writers, so its
+  read-map moves to the persisted step.
+- **Bundle members.** The preservation writer and every reader name the world-model
+  and development members through one helper that maps them, so a bundle written
+  before 6b and one written after it compare equal on both sides.
+- **The developmental owner's bus identity moves with keys.** Its source is derived
+  from its stream literal (`DEVELOPMENT_SOURCE`), so source and stream rename
+  together while the stored stage value, the freeze source, the locus lock holder
+  and the study line of the same spelling stay. An external body adapter must
+  publish its presence under the new stream and source after 6b; 6b reads presence
+  from both streams until the alias release and logs a one-line deprecation when
+  the old one is used.
+- **The perception feed gets its own stream now.** Until 6a the locus module and the
+  perception feed both wrote `perception.out`, so the rename map's `perception.out ->
+  perceptual_locus.out` was ambiguous: a cap for the feed would fold onto the locus
+  stream, setting both caps would conflict, and a cleanup of old names would offer
+  to delete a live stream. The feed now publishes under its own source and stream,
+  `perception_feed` and `perception_feed.out` (`PERCEPTION_FEED_SOURCE`,
+  `PERCEPTION_FEED_STREAM`); the rename leaves names starting `perception_feed`
+  alone, so `perception.out` belongs to the locus module alone. The feed's stream is
+  an additional produced stream with its own cap in `[bus.per_stream_maxlen]`. No
+  read alias is needed: no reader selects the feed's events by stream name (the
+  research event log subscribes to the produced set live and keys on the event type
+  `perception.transition`), and nothing replays the feed's history. The feed's
+  transition events, all at salience zero, stop counting as the locus module's drive
+  source; that change is accepted.
+- **Text rules.** An f-string is classified like a plain string, by whether its
+  literal text holds a space. Inside such text a config table, key, stream or event
+  reference (`[vox].x`, `topos.encoder`, `soma:soma.report`, a TOML key at the start
+  of a line) moves with keys and takes the key form, while a bare word in a
+  sentence and a capitalized display label stay for the operator step. Kebab-case
+  names in Python strings (container and volume names, element ids, header names)
+  and HTML attributes inside Python strings are operator-facing. Bus event types
+  that look like file names (`spot.log`) are listed in `EVENT_TYPES` and move with
+  keys.
+- **Dashboard wire names (review item 6).** The two sides agree in every state. The
+  session-key header, the login element ids and the other UI strings stay old on
+  both sides until the operator step (PR 7). The bus sources and event types the
+  dashboard script matches (`msg.source === "thymos"`, `"soma.report"`,
+  `"nexus.snapshot"`, `"hypnos.sleep.started"`, `"spot.log"`) move with Python in
+  6b: in a dashboard script or test harness a quoted dotted wire name, or a quoted
+  name compared with a message source, belongs to the keys scope. The dashboard
+  smoke checks that the script sends the header the server checks, that the login
+  page has the ids the script reads, and that every wire name the script matches
+  is one the Python side names.
+- **Sleeps at shutdown.** The maturation gate counts sleeps once more when it stops,
+  so a sleep completed after the last tick is not lost when the stream is renamed at
+  the next start.
+- **The 6b cleanup command.** Its candidates come from
+  `legacy_aliases.orphaned_stream_names(live)`: every old name in the stream map
+  (module output streams, the developmental and language streams, `STREAM_NAMES`)
+  minus every stream a producer writes now, and nothing at all while keys are
+  pending. A test runs the codemod over the real stream modules and checks that no
+  stream written after the flip is a candidate (it caught the shared
+  `perception.out`). The command shows each candidate's length and memory use,
+  deletes nothing by default, and deletes only with an explicit confirmation.
+- **History continuity (built in 6b).** Two readers replay history, and an empty new
+  stream is the wrong test for both, because the new stream receives events right
+  after the restart:
+  - The language module's `sleep_index` backfill looks for the last sleep event. It
+    reads the new sleep stream; when no sleep event is found there, it reads the old
+    stream (`hypnos.out`) for one, then continues on the new stream.
+  - The dashboard's conversation history reads the old stream (`lingua.external`)
+    and then the new one (`language.external`), merged in id order (ids are
+    time-ordered across both), for as long as the old stream exists, that is until
+    the cleanup command removes it.
+  A helper returns a stream's old name from the table, so each reader names its
+  fallback in one place.
+- **Rolling back across the flip is unsupported.** After 6b runs, a release from
+  before 6b would read the new names in config files, streams, bundles and run
+  records as unknown. The supported path is forward only; an operator who must go
+  back restores the backup taken before upgrading.
+- **Two UI names stay until the operator step.** The session-key header
+  `X-Nexus-Session-Key` (code, docstrings and the browser script) and the browser
+  storage key `nexus.preservation.events` are operator/UI names. Keep rules hold
+  them through the keys step so the server, its documentation and the browser keep
+  agreeing; PR 7 renames them with the other UI strings.
+
 ### PR sequence
 
 Each PR runs the codemod (or adds infrastructure), passes
