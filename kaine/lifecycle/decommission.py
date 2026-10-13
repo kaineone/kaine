@@ -857,12 +857,70 @@ def delete_entity_state(
 
 
 def _entity_redis_streams(redis_cfg: dict[str, Any] | None) -> list[str]:
-    """The bus stream keys that carry entity traffic.
+    """Return the exact Redis stream keys that carry entity traffic.
 
-    We clear by pattern at delete time rather than enumerate every type; this
-    list seeds the dry-run report.
+    Decommissioning deletes the entity's bus streams by their real names
+    rather than by a broad pattern.  The returned names are passed to
+    ``SCAN MATCH``; because none of them contain glob characters, each
+    pattern matches a single exact stream key.
+
+    The list includes:
+
+    * every stream in ``kaine.bus.streams.KNOWN_STREAMS``;
+    * the module stream produced by ``module_stream("positive_control")``
+      from ``kaine.bus.schema`` (imported inside this function next to
+      ``KNOWN_STREAMS`` to avoid import cycles);
+    * ``cycle.control``;
+    * for every stream name ``<head>.<rest>`` returned above, every renamed
+      form of ``<head>`` using both ``kaine.legacy_names.MODULES`` and
+      ``kaine.legacy_names.DEVELOPMENTAL``.  A form is the head itself, the
+      ``new_key`` of the dict entry when the head is an old name, and every
+      old name whose ``new_key`` equals the head.  This ensures that streams
+      written before or after a module rename are both cleared.
     """
-    return ["kaine:*"]
+    from kaine import legacy_names
+    from kaine.bus.schema import module_stream
+    from kaine.bus.streams import KNOWN_STREAMS
+
+    names: set[str] = set(KNOWN_STREAMS)
+    names.add(module_stream("positive_control"))
+
+    names.add("cycle.control")
+
+    rename_maps = (legacy_names.MODULES, legacy_names.DEVELOPMENTAL)
+
+    def _head_forms(head: str) -> set[str]:
+        forms: set[str] = {head}
+        for mapping in rename_maps:
+            aliases: dict[str, set[str]] = {key: set() for key in mapping}
+            for old_key, entry in mapping.items():
+                new_key = entry.get("new_key")
+                if not new_key:
+                    continue
+                aliases.setdefault(new_key, set())
+                aliases[old_key].add(new_key)
+                aliases[new_key].add(old_key)
+
+            for key, alts in aliases.items():
+                if head == key:
+                    forms.update(alts)
+                prefix = f"{key}_"
+                if head.startswith(prefix):
+                    suffix = head[len(prefix):]
+                    for alt in alts:
+                        forms.add(f"{alt}_{suffix}")
+        return forms
+
+    expanded: set[str] = set()
+    for name in names:
+        if "." in name:
+            head, rest = name.split(".", 1)
+            for form in _head_forms(head):
+                expanded.add(f"{form}.{rest}")
+        else:
+            expanded.add(name)
+
+    return sorted(expanded)
 
 
 def _clear_redis_streams(
