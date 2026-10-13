@@ -656,3 +656,130 @@ def test_module_off_unreachable_qdrant_is_left_untouched(tmp_path, monkeypatch):
     assert result.qdrant_unchecked is True
     assert result.incomplete is True
     assert any("not checked" in err for err in result.errors)
+
+
+def test_allow_list_refuses_dangerous_entries(tmp_path):
+    """Dangerous allow-list directories are refused and reported."""
+    from kaine.lifecycle.decommission import delete_entity_state
+    from kaine.lifecycle.decommission_locations import delete_roots
+
+    state_root = tmp_path / "state"
+    data_root = tmp_path / "data"
+    fork_root = tmp_path / "forks"
+
+    cases = [
+        ("/", "the filesystem root"),
+        ("/etc", "a top-level directory"),
+        (str(Path.home()), "the home directory or an ancestor of it"),
+        (str(tmp_path), "an ancestor of the state, data or fork root"),
+    ]
+
+    for path, expected_reason in cases:
+        config = {"hypnos": {"voice_alignment": {"trainer_workdir": path}}}
+        roots, refused = delete_roots(
+            config,
+            state_root=state_root,
+            data_root=data_root,
+            fork_root=fork_root,
+        )
+        assert len(refused) == 1
+        refused_path, reason = refused[0]
+        assert str(refused_path) == path
+        assert reason == expected_reason
+
+    roots, refused = delete_roots(
+        {},
+        state_root=state_root,
+        data_root=data_root,
+        fork_root=fork_root,
+    )
+    assert refused == ()
+
+    qdrant_cfg = {
+        **_NO_QDRANT,
+        "hypnos": {"voice_alignment": {"trainer_workdir": str(tmp_path)}},
+    }
+    result = delete_entity_state(
+        state_root=state_root,
+        data_root=data_root,
+        fork_root=fork_root,
+        qdrant_cfg=qdrant_cfg,
+        dry_run=False,
+    )
+    assert result.incomplete is True
+    assert any("refused allow-list entry" in err for err in result.errors)
+    assert tmp_path.exists()
+
+
+def test_backup_reports_probed_qdrant_collections(tmp_path, monkeypatch):
+    """Backups report Qdrant collections, and output reflects checked and unchecked states."""
+    import io
+    import json
+
+    from kaine.lifecycle.__main__ import _write_location_split
+
+    config = {
+        "mnemos": {
+            "backend": "qdrant",
+            "qdrant": {"host": "127.0.0.1", "port": 1},
+        }
+    }
+    names = decommission._episodic_memory_collection_names(config)
+    fake = _FakeQdrant(names[:2])
+    monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: fake)
+
+    state_root = tmp_path / "state"
+    _seed(state_root, "eidolon/self_model.json", content="{}")
+
+    backup = decommission.capture_backup(
+        qdrant_cfg=config,
+        state_root=state_root,
+        data_root=tmp_path / "data",
+        fork_root=tmp_path / "forks",
+        out_root=tmp_path / "backups",
+        entity_name="Probed",
+        assessment=DivergenceAssessment(diverged=False, signals={}, summary="x"),
+    )
+    assert backup.ok is True
+    assert sorted(backup.qdrant_collections) == sorted(names[:2])
+
+    manifest_path = backup.backup_path / "manifest.json"
+    assert manifest_path.exists()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest.get("qdrant_collections") == backup.qdrant_collections
+
+    out = io.StringIO()
+    _write_location_split(
+        out,
+        config,
+        state_root=state_root,
+        data_dir=tmp_path / "data",
+        fork_root=tmp_path / "forks",
+        backup=backup,
+    )
+    out_text = out.getvalue()
+    assert "Qdrant collections" in out_text
+    assert names[0] in out_text
+
+    monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: None)
+    unchecked_backup = decommission.capture_backup(
+        qdrant_cfg=config,
+        state_root=state_root,
+        data_root=tmp_path / "data",
+        fork_root=tmp_path / "forks",
+        out_root=tmp_path / "backups_unchecked",
+        entity_name="Unchecked",
+        assessment=DivergenceAssessment(diverged=False, signals={}, summary="x"),
+    )
+    assert unchecked_backup.qdrant_unchecked is True
+
+    out2 = io.StringIO()
+    _write_location_split(
+        out2,
+        config,
+        state_root=state_root,
+        data_dir=tmp_path / "data",
+        fork_root=tmp_path / "forks",
+        backup=unchecked_backup,
+    )
+    assert "could not be checked" in out2.getvalue()

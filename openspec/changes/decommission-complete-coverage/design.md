@@ -278,6 +278,24 @@ The implementation review settled these points:
   through the language and vocal modules' emit paths; none of it reaches
   `state/logs/`.
 
+### Further review changes and known limits
+
+- `--trainer-stopped` lets a run proceed past a claimed job whose trainer has
+  crashed; the job directories are backed up (the job directory is now
+  BACKUP + DELETE as well as the trainer work directory) and the audit record
+  notes `trainer_stopped_asserted`.
+- The containment allow-list refuses `/`, top-level directories (except the
+  shipped `/organ-adapters` mount), the home directory and its ancestors, and
+  ancestors of the state, data and fork roots; a refusal makes the run
+  incomplete.
+- The manifest and the location split report what Qdrant actually held:
+  collections backed up, none found, or not checked.
+- Known limit: a subprocess trainer that outlives the cycle is not detected,
+  but the CANCELLED marker stops any promotion.
+- Known limit: merged adapters are attributed only against this fork root, so
+  a merged-adapter output directory must not be shared between deployments
+  with different fork roots.
+
 ## Notice to the Guardians (CAL Article 4.2(a))
 
 CAL Article 4.2(a) asks the operator to give the Guardians reasonable written notice of

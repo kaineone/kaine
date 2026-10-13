@@ -402,9 +402,10 @@ def entity_locations(
         locations.append(
             Location(
                 "sleep.voice_align_jobs",
-                DELETE,
+                BACKUP_DELETE,
                 job_paths,
-                "transient training pairs with private content",
+                "voice-alignment jobs (training pairs hold private content)",
+                bundle_dir="locations/sleep.voice_align_jobs",
                 contents_only=True,
             )
         )
@@ -931,10 +932,23 @@ def delete_roots(
     state_root: Path,
     data_root: Path,
     fork_root: Path,
-) -> tuple[Path, ...]:
-    """Every root a decommission deletion may touch: the state, data and fork roots, plus the configured directories that may live elsewhere."""
+) -> tuple[tuple[Path, ...], tuple[tuple[Path, str], ...]]:
+    """Every root a decommission deletion may touch.
+
+    Returns a pair: the allowed roots (state, data and fork roots plus the
+    configured directories that may live elsewhere), and a tuple of refused
+    configured extra entries with reasons.
+    """
     roots: list[Path] = []
     seen: set[Path] = set()
+    refused: list[tuple[Path, str]] = []
+
+    resolved_state = state_root.resolve()
+    resolved_data = data_root.resolve()
+    resolved_fork = fork_root.resolve()
+    protected_roots = (resolved_state, resolved_data, resolved_fork)
+    home = Path.home().resolve()
+    organ_default = Path("/organ-adapters")
 
     def add(path: Path) -> None:
         resolved = path.resolve()
@@ -942,39 +956,70 @@ def delete_roots(
             seen.add(resolved)
             roots.append(resolved)
 
+    def check_extra(path: Path) -> str | None:
+        resolved = path.resolve()
+        if resolved == Path("/"):
+            return "the filesystem root"
+        if resolved == organ_default:
+            return None
+        if resolved.parent == Path("/"):
+            return "a top-level directory"
+        if resolved == home or resolved in home.parents:
+            return "the home directory or an ancestor of it"
+        for root in protected_roots:
+            if resolved in root.parents:
+                return "an ancestor of the state, data or fork root"
+        return None
+
     add(state_root)
     add(data_root)
     add(fork_root)
 
     merged_dir_value = _cfg(config, "lifecycle.adapter_merge.output_dir", None)
     if merged_dir_value is None:
-        add(fork_root / "merged_adapters")
+        merged_path = fork_root / "merged_adapters"
     else:
-        add(_rebase(merged_dir_value, state_root=state_root, data_root=data_root))
+        merged_path = _rebase(merged_dir_value, state_root=state_root, data_root=data_root)
+    reason = check_extra(merged_path)
+    if reason:
+        refused.append((merged_path.resolve(), reason))
+    else:
+        add(merged_path)
 
-    add(
-        _rebase(
-            _cfg(config, "hypnos.voice_alignment.organ_adapters_dir", "/organ-adapters"),
-            state_root=state_root,
-            data_root=data_root,
-        )
+    organ_path = _rebase(
+        _cfg(config, "hypnos.voice_alignment.organ_adapters_dir", "/organ-adapters"),
+        state_root=state_root,
+        data_root=data_root,
     )
-    add(
-        _rebase(
-            _cfg(config, "hypnos.voice_alignment.trainer_workdir", "state/hypnos/voice_align_jobs"),
-            state_root=state_root,
-            data_root=data_root,
-        )
-    )
-    add(
-        _rebase(
-            _cfg(config, "hypnos.voice_alignment.trainer_jobs_dir", "state/hypnos/voice_align_jobs"),
-            state_root=state_root,
-            data_root=data_root,
-        )
-    )
+    reason = check_extra(organ_path)
+    if reason:
+        refused.append((organ_path.resolve(), reason))
+    else:
+        add(organ_path)
 
-    return tuple(roots)
+    trainer_workdir_path = _rebase(
+        _cfg(config, "hypnos.voice_alignment.trainer_workdir", "state/hypnos/voice_align_jobs"),
+        state_root=state_root,
+        data_root=data_root,
+    )
+    reason = check_extra(trainer_workdir_path)
+    if reason:
+        refused.append((trainer_workdir_path.resolve(), reason))
+    else:
+        add(trainer_workdir_path)
+
+    trainer_jobs_path = _rebase(
+        _cfg(config, "hypnos.voice_alignment.trainer_jobs_dir", "state/hypnos/voice_align_jobs"),
+        state_root=state_root,
+        data_root=data_root,
+    )
+    reason = check_extra(trainer_jobs_path)
+    if reason:
+        refused.append((trainer_jobs_path.resolve(), reason))
+    else:
+        add(trainer_jobs_path)
+
+    return tuple(roots), tuple(refused)
 
 
 def within_delete_roots(path: Path, roots: tuple[Path, ...]) -> bool:

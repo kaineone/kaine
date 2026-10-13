@@ -50,6 +50,7 @@ from typing import Any, Callable
 from kaine.bus.errors import BusConfigError
 from kaine.lifecycle.decommission import (
     _STATE_SUBTREES,
+    _episodic_memory_collection_names,
     _qdrant_client,
     capture_backup,
     delete_entity_state,
@@ -262,7 +263,7 @@ def _entity_id(state_root: Path) -> str | None:
         return None
 
 
-def _write_location_split(out, qcfg, *, state_root, data_dir, fork_root) -> None:
+def _write_location_split(out, qcfg, *, state_root, data_dir, fork_root, backup=None) -> None:
     locs = [
         loc
         for loc in entity_locations(
@@ -294,8 +295,12 @@ def _write_location_split(out, qcfg, *, state_root, data_dir, fork_root) -> None
     if not groups[RETAIN]:
         out.write("    (none)\n")
     out.write("  also deleted: this entity's bus streams\n")
-    if qdrant_in_use(qcfg) or qdrant_endpoint_configured(qcfg):
-        out.write("  also exported, then deleted: the episodic memory collections in Qdrant\n")
+    if backup is not None and backup.qdrant_unchecked:
+        out.write("  Qdrant: could not be checked (the memory module is off and Qdrant did not answer)\n")
+    elif backup is not None and backup.qdrant_collections:
+        out.write("  also backed up, then deleted: Qdrant collections " + ", ".join(backup.qdrant_collections) + "\n")
+    elif qdrant_in_use(qcfg) or qdrant_endpoint_configured(qcfg):
+        out.write("  Qdrant: checked; no collections of this entity found\n")
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +371,11 @@ def main(
         "--dry-run",
         action="store_true",
         help="Assess + back up + show what would be deleted; never delete.",
+    )
+    parser.add_argument(
+        "--trainer-stopped",
+        action="store_true",
+        help="Assert that no voice-alignment trainer is running: claimed jobs without a result do not block deletion. Recorded in the audit record.",
     )
     args = parser.parse_args(argv)
 
@@ -531,9 +541,11 @@ def main(
     if backup.qdrant_unchecked:
         out.write(
             "\nQdrant could not be checked: the memory module is off and Qdrant did not\n"
-            "answer, so this entity's memories there (if any) are neither backed up nor\n"
-            "deleted. Start Qdrant and run decommission again; this run will end as\n"
-            "INCOMPLETE.\n"
+            "answer, so this entity's memories there (if any) are not backed up. To have\n"
+            "them backed up and deleted, stop now (do not type the confirmation token),\n"
+            "start Qdrant and run decommission again. If you continue, Qdrant is left\n"
+            "untouched and the run ends INCOMPLETE; once the local state is gone, a later\n"
+            "run cannot find these memories.\n"
         )
 
     # --- Dry-run: preview only, no prompts, no deletion ----------------
@@ -585,7 +597,7 @@ def main(
             except Exception:
                 pass
 
-    _write_location_split(out, qcfg, state_root=state_root, data_dir=data_dir, fork_root=fork_root)
+    _write_location_split(out, qcfg, state_root=state_root, data_dir=data_dir, fork_root=fork_root, backup=backup)
     out.write("\n" + _NOTICE_GUARDIANS)
 
     # --- Branch on divergence ------------------------------------------
@@ -747,18 +759,26 @@ def main(
                         seen_jobs.add(real)
                         jobs_paths.append(path)
         for vp in jobs_paths:
-            c, s = cancel_voice_alignment_jobs(vp)
+            if args.trainer_stopped:
+                c, s = cancel_voice_alignment_jobs(vp, wait_s=0.0)
+            else:
+                c, s = cancel_voice_alignment_jobs(vp)
             cancelled_names.extend(c)
-            still_training.extend(s)
+            for name in s:
+                still_training.append(str(vp / name))
         for name in cancelled_names:
             out.write(f"  cancelled voice-alignment job: {name}\n")
         if still_training:
-            err.write(
-                "Refusing to delete: a voice-alignment job is still training "
-                f"({', '.join(still_training)}). Stop the trainer and run again. "
-                "Nothing was deleted.\n"
-            )
-            return 3
+            if args.trainer_stopped:
+                for path in still_training:
+                    out.write(f"  trainer asserted stopped; claimed job not waited for: {path}\n")
+            else:
+                err.write(
+                    "Refusing to delete: a voice-alignment job is still training:\n"
+                    + "".join(f"  {path}\n" for path in still_training)
+                    + "If the trainer has crashed and is not running, run again with --trainer-stopped. Nothing was deleted.\n"
+                )
+                return 3
 
         entity_id = _entity_id(state_root)
 
@@ -799,8 +819,9 @@ def main(
                 out.write(f"    - {e}\n")
         if result.qdrant_unchecked:
             out.write(
-                "  Qdrant could not be checked; this entity's memories there may remain.\n"
-                "  Start Qdrant and run decommission again.\n"
+                "  Qdrant could not be checked; this entity's memories may remain in these collections if they exist: "
+                + ", ".join(_episodic_memory_collection_names(qcfg))
+                + ".\n"
             )
 
         import datetime
@@ -824,6 +845,7 @@ def main(
             "aof_rewrite": result.aof_rewrite,
             "errors": result.errors + ([result.redis_failed] if result.redis_failed else []),
             "qdrant_unchecked": result.qdrant_unchecked,
+            "trainer_stopped_asserted": bool(args.trainer_stopped),
             "guardian_notice_reminder": "shown",
             "backup_path": str(backup.backup_path),
         }

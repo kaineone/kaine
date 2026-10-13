@@ -879,15 +879,49 @@ def test_module_off_unreachable_qdrant_exits_8_unchecked(tmp_path, monkeypatch):
     monkeypatch.setattr("kaine.lifecycle.decommission._qdrant_client", lambda cfg: None)
     _seed_state(tmp_path / "state")
     out = io.StringIO()
+    err = io.StringIO()
     answers = [
         "I acknowledge the CAL welfare terms",
         "Kaine Nova",
     ]
+
+    class _Touchy:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get_collections(self):
+            raise AssertionError("Qdrant must not be touched after an unchecked backup")
+
+        def delete_collection(self, collection_name):
+            raise AssertionError("Qdrant must not be touched after an unchecked backup")
+
+        def delete(self, *args, **kwargs):
+            raise AssertionError("Qdrant must not be touched after an unchecked backup")
+
+        def close(self):
+            pass
+
+    it = iter(answers)
+    first = True
+
+    def _guarded_input(prompt=""):
+        nonlocal first
+        if first:
+            first = False
+            monkeypatch.setattr(
+                "kaine.lifecycle.decommission._qdrant_client",
+                lambda cfg: _Touchy(),
+            )
+        return next(it)
+
     rc = main(
         _args(tmp_path, extra_config='[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n'),
-        input_fn=_scripted_input(answers),
+        input_fn=_guarded_input,
         out=out,
-        err=io.StringIO(),
+        err=err,
     )
     assert rc == 8, out.getvalue()
     text = out.getvalue()
@@ -901,3 +935,84 @@ def test_module_off_unreachable_qdrant_exits_8_unchecked(tmp_path, monkeypatch):
     record = json.loads(lines[0])
     assert record["qdrant_unchecked"] is True
     assert record["outcome"] == "incomplete"
+    # The deletion skipped Qdrant because the backup could not check it; it
+    # never probed the (touchy) client, which would have left a probe error.
+    assert any("not checked during the backup" in e for e in record["errors"])
+    assert not any("probe failed" in e for e in record["errors"])
+
+
+def test_stuck_job_names_directory_and_trainer_stopped_proceeds(tmp_path, monkeypatch):
+    """A stuck claimed job is reported; --trainer-stopped lets deletion proceed."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    jobs_dir = tmp_path / "state" / "jobs"
+    job = jobs_dir / "job7"
+    job.mkdir(parents=True)
+    (job / "CLAIMED").write_text("")
+    (job / "pairs.jsonl").write_text("SECRET pairs\n")
+
+    from kaine.lifecycle.decommission_locations import cancel_voice_alignment_jobs as _real_cancel
+
+    def _fast_cancel(*args, **kwargs):
+        return _real_cancel(*args, wait_s=0.0, poll_s=0.0)
+
+    monkeypatch.setattr("kaine.lifecycle.__main__.cancel_voice_alignment_jobs", _fast_cancel)
+
+    extra_config = (
+        f'[hypnos.voice_alignment]\n'
+        f'trainer_jobs_dir = "{jobs_dir.as_posix()}"\n'
+        f'trainer_workdir = "{(tmp_path / "state" / "work").as_posix()}"\n'
+    )
+    args = _args(tmp_path, extra_config=extra_config)
+    answers = [
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ]
+
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = main(args, input_fn=_scripted_input(answers), out=out, err=err)
+    assert rc == 3, f"{out.getvalue()}\n{err.getvalue()}"
+    err_text = err.getvalue()
+    assert str(job) in err_text
+    assert "--trainer-stopped" in err_text
+    assert (tmp_path / "state" / "eidolon").exists()
+
+    out2 = io.StringIO()
+    err2 = io.StringIO()
+    rc2 = main(
+        [a if a != str(tmp_path / "backups") else str(tmp_path / "backups2") for a in args]
+        + ["--trainer-stopped"],
+        input_fn=_scripted_input(answers),
+        out=out2,
+        err=err2,
+    )
+    assert rc2 == 0, f"{out2.getvalue()}\n{err2.getvalue()}"
+    assert "claimed job not waited for" in out2.getvalue()
+
+    audit_path = tmp_path / "state" / "audit" / "decommission.jsonl"
+    assert audit_path.exists()
+    lines = audit_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record.get("trainer_stopped_asserted") is True
+
+    # The second run's own backup holds the stuck job's directory.
+    backup_root = tmp_path / "backups2"
+    assert backup_root.exists()
+    found = False
+    for entity_dir in backup_root.iterdir():
+        if not entity_dir.is_dir():
+            continue
+        for path in entity_dir.rglob("*"):
+            if path.is_file():
+                try:
+                    text = path.read_text(encoding="utf-8")
+                except UnicodeDecodeError:
+                    continue
+                if "SECRET pairs" in text:
+                    found = True
+                    break
+        if found:
+            break
+    assert found

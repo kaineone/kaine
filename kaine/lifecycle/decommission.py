@@ -86,6 +86,7 @@ class BackupResult:
     # the id of the snapshot taken of the live modules so revive can locate it.
     live_snapshot_id: str | None = None
     qdrant_unchecked: bool = False
+    qdrant_collections: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -704,6 +705,7 @@ def capture_backup(
 
     # --- 7. Qdrant export -----------------------------------------------
     qdrant_status = "exported"
+    qdrant_collections: list[str] = []
     if not qdrant_in_use(qdrant_cfg) and not qdrant_endpoint_configured(qdrant_cfg):
         inventory.append("qdrant: not used by this deployment")
         qdrant_status = "not used"
@@ -722,6 +724,7 @@ def capture_backup(
             collections = [
                 c for c in _episodic_memory_collection_names(qdrant_cfg) if c in existing_collections
             ]
+            qdrant_collections = collections
             qdrant_dir = bundle_dir / "qdrant"
             qdrant_written, qdrant_errors = _export_qdrant(client, collections, qdrant_dir)
             if qdrant_errors:
@@ -775,6 +778,7 @@ def capture_backup(
         "diverged": assessment.diverged,
         "inventory": inventory,
         "qdrant": qdrant_status,
+        "qdrant_collections": qdrant_collections,
         "locations": [
             {"key": loc.key, "decision": loc.decision, "present": bool(loc.existing())}
             for loc in locations
@@ -910,6 +914,7 @@ def capture_backup(
         inventory=inventory,
         errors=errors,
         qdrant_unchecked=qdrant_unchecked,
+        qdrant_collections=qdrant_collections,
     )
 
 
@@ -1016,9 +1021,11 @@ def delete_entity_state(
         data_root.parent.resolve(),
         fork_root.resolve(),
     }
-    roots = delete_roots(
+    roots, refused_roots = delete_roots(
         qdrant_cfg, state_root=state_root, data_root=data_root, fork_root=fork_root
     )
+    for path, reason in refused_roots:
+        result.errors.append(f"refused allow-list entry {path}: {reason}")
     # Resolve every location before anything is removed: one location can sit
     # inside another (the language outcomes live in the language directory),
     # and an inner location removed with its parent still counts as deleted.
