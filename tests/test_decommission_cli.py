@@ -132,12 +132,12 @@ def _hermetic_bus_client(monkeypatch):
     )
 
 
-def _args(tmp_path, *, dry_run=False, eval_root=None):
+def _args(tmp_path, *, dry_run=False, eval_root=None, extra_config=""):
     cfg_dir = tmp_path / "config"
     cfg_dir.mkdir(parents=True, exist_ok=True)
     cfg_path = cfg_dir / "kaine.toml"
     cfg_path.write_text(
-        "# minimal config\n[research_submission]\nenabled = false\n",
+        "# minimal config\n[research_submission]\nenabled = false\n" + extra_config,
         encoding="utf-8",
     )
     a = [
@@ -210,6 +210,135 @@ def test_non_diverged_ack_path_deletes(tmp_path, monkeypatch):
     text = audit_path.read_text(encoding="utf-8")
     assert '{"x":1}' not in text
     assert "Kaine Nova" not in text
+
+
+def test_guardian_notice_shown_on_every_path(tmp_path, monkeypatch):
+    """The CAL 4.2(a) reminder is printed before the first prompt and in a dry run, and the audit notes it."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    out = io.StringIO()
+    answers = iter([
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ])
+
+    def _input(prompt=""):
+        # Mark each prompt in the output so the test can see what was shown before it.
+        out.write("<<PROMPT>>")
+        return next(answers, "")
+
+    rc = main(
+        _args(tmp_path),
+        input_fn=_input,
+        out=out,
+        err=io.StringIO(),
+    )
+    assert rc == 0, out.getvalue()
+    text = out.getvalue()
+    notice_idx = text.find("CAL Article 4.2(a)")
+    final_idx = text.find("<<PROMPT>>")
+    assert notice_idx != -1
+    assert final_idx != -1
+    assert notice_idx < final_idx
+    assert "Article 7.0" in text
+
+    audit_path = tmp_path / "state" / "audit" / "decommission.jsonl"
+    record = json.loads(audit_path.read_text(encoding="utf-8").strip().splitlines()[0])
+    assert record["guardian_notice_reminder"] == "shown"
+
+    dry_root = tmp_path / "dry"
+    _seed_state(dry_root / "state")
+    out2 = io.StringIO()
+    rc2 = main(
+        _args(dry_root, dry_run=True),
+        input_fn=_scripted_input([]),
+        out=out2,
+        err=io.StringIO(),
+    )
+    assert rc2 == 0, out2.getvalue()
+    assert "CAL Article 4.2(a)" in out2.getvalue()
+    assert "Article 7.0" in out2.getvalue()
+
+
+def test_running_voice_alignment_job_refuses(tmp_path, monkeypatch):
+    """A voice-alignment job still training stops decommission before anything is deleted."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+
+    monkeypatch.setattr(
+        "kaine.lifecycle.__main__.cancel_voice_alignment_jobs",
+        lambda path: (["j1"], ["j1"]),
+    )
+
+    out = io.StringIO()
+    err = io.StringIO()
+    answers = [
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ]
+    rc = main(
+        _args(
+            tmp_path,
+            extra_config=f'[hypnos.voice_alignment]\ntrainer_jobs_dir = "{jobs_dir}"\n',
+        ),
+        input_fn=_scripted_input(answers),
+        out=out,
+        err=err,
+    )
+    assert rc == 3, out.getvalue() + err.getvalue()
+    assert (tmp_path / "state" / "eidolon").exists()
+    assert "voice-alignment job is still training" in err.getvalue()
+
+
+def test_qdrant_unreachable_fails_before_deletion(tmp_path, monkeypatch):
+    """Qdrant that cannot be reached at deletion time fails the run with nothing deleted."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+
+    class FailingQdrant:
+        def get_collections(self):
+            raise RuntimeError("connection refused")
+
+        def close(self):
+            pass
+
+    class WorkingQdrant:
+        def get_collections(self):
+            return SimpleNamespace(collections=[])
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        "kaine.lifecycle.__main__._qdrant_client",
+        lambda cfg: FailingQdrant(),
+    )
+    monkeypatch.setattr(
+        "kaine.lifecycle.decommission._qdrant_client",
+        lambda cfg: WorkingQdrant(),
+    )
+
+    out = io.StringIO()
+    err = io.StringIO()
+    answers = [
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ]
+    rc = main(
+        _args(
+            tmp_path,
+            extra_config='[mnemos]\nbackend = "qdrant"\n[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
+        ),
+        input_fn=_scripted_input(answers),
+        out=out,
+        err=err,
+    )
+    assert rc == 8, out.getvalue() + err.getvalue()
+    assert "Qdrant" in out.getvalue()
+    assert (tmp_path / "state" / "eidolon").exists()
 
 
 def test_bus_auth_failure_deletes_nothing(tmp_path, monkeypatch):
