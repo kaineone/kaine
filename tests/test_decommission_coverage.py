@@ -8,11 +8,11 @@ import pytest
 
 from kaine.lifecycle import decommission
 from kaine.lifecycle.decommission import (
+    _qdrant_api_key,
     capture_backup,
     clear_entity_streams,
     delete_entity_state,
     qdrant_in_use,
-    with_qdrant_api_key,
 )
 from kaine.lifecycle.divergence import DivergenceAssessment
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
@@ -173,8 +173,8 @@ def test_other_entity_fork_is_kept(tmp_path):
     assert other.exists()
 
 
-def test_qdrant_in_use_and_key_folding(tmp_path):
-    """qdrant_in_use detects the backend and with_qdrant_api_key folds keys."""
+def test_qdrant_in_use_and_api_key_resolution(tmp_path):
+    """qdrant_in_use detects the backend and _qdrant_api_key resolves keys."""
     assert qdrant_in_use({"mnemos": {"backend": "qdrant"}}) is True
     # Social cognition still defaults to Qdrant when only [mnemos] moves off it.
     assert qdrant_in_use({"mnemos": {"backend": "sqlite_vec"}}) is True
@@ -188,17 +188,16 @@ def test_qdrant_in_use_and_key_folding(tmp_path):
         is False
     )
 
-    original = {"mnemos": {"qdrant": {}}, "empatheia": {"qdrant": {}}}
-    cfg = with_qdrant_api_key(original, env={"KAINE_QDRANT_API_KEY": "k"})
-    assert cfg["mnemos"]["qdrant"]["api_key"] == "k"
-    assert cfg["empatheia"]["qdrant"]["api_key"] == "k"
-    assert "api_key" not in original["mnemos"]["qdrant"]
-    assert "api_key" not in original["empatheia"]["qdrant"]
+    conn_key = {"api_key": "conn", "host": "h", "port": 1}
+    assert _qdrant_api_key(conn_key, env={"KAINE_QDRANT_API_KEY": "env"}) == "conn"
 
-    explicit = {"mnemos": {"qdrant": {"api_key": "keep"}}}
-    assert with_qdrant_api_key(explicit, env={"KAINE_QDRANT_API_KEY": "k"})["mnemos"]["qdrant"]["api_key"] == "keep"
+    assert _qdrant_api_key({"host": "h"}, env={"KAINE_QDRANT_API_KEY": "env"}) == "env"
 
-    assert with_qdrant_api_key({}, secrets_path=tmp_path / "nope.json") == {}
+    assert _qdrant_api_key({"host": "h"}, env={}, secrets_path=tmp_path / "nope.toml") is None
+
+    secrets = tmp_path / "secrets.toml"
+    secrets.write_text('[qdrant]\napi_key = "fromfile"\n')
+    assert _qdrant_api_key({"host": "h"}, env={}, secrets_path=secrets) == "fromfile"
 
 
 def test_failed_qdrant_export_fails_the_backup(tmp_path, monkeypatch):

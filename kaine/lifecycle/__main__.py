@@ -52,7 +52,6 @@ from kaine.lifecycle.decommission import (
     delete_entity_state,
     qdrant_in_use,
     update_manifest_continuity_note,
-    with_qdrant_api_key,
     write_decommission_audit,
 )
 from kaine.lifecycle.decommission_locations import (
@@ -389,7 +388,7 @@ def main(
     )
 
     data_dir = eval_root.parent
-    qcfg = with_qdrant_api_key(config)
+    qcfg = config
 
     # --- Gate 2: cycle not running -------------------------------------
     live_runtime = _cycle_appears_running(runtime_path)

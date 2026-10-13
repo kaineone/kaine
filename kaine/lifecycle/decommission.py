@@ -238,7 +238,7 @@ def _qdrant_client(qdrant_cfg: dict[str, Any] | None):
     conn = (cfg.get("mnemos") or {}).get("qdrant") or cfg.get("connection") or cfg
     host = str(conn.get("host", "127.0.0.1"))
     port = int(conn.get("port", 6533))
-    api_key = conn.get("api_key") or None
+    api_key = _qdrant_api_key(conn)
     try:
         from qdrant_client import QdrantClient
 
@@ -317,36 +317,29 @@ def qdrant_in_use(config: Mapping[str, Any] | None) -> bool:
     return False
 
 
-def with_qdrant_api_key(
-    config: Mapping[str, Any] | None,
+def _qdrant_api_key(
+    conn: Mapping[str, Any],
     *,
     env: Mapping[str, str] | None = None,
     secrets_path: Path | None = None,
-) -> dict[str, Any]:
-    """Return a deep copy of *config* with Qdrant API keys folded in.
+) -> str | None:
+    """The Qdrant API key the cycle uses: the connection's own api_key, else KAINE_QDRANT_API_KEY, else [qdrant].api_key in the secrets file."""
+    value = conn.get("api_key")
+    if isinstance(value, str) and value:
+        return value
 
-    Keys are filled from ``env["KAINE_QDRANT_API_KEY"]`` or the secrets doc,
-    only when the section already has a ``qdrant`` sub-table and no ``api_key``.
-    Empty values are never injected.
-    """
-    import copy
+    env = env if env is not None else os.environ
+    value = env.get("KAINE_QDRANT_API_KEY")
+    if isinstance(value, str) and value:
+        return value
 
-    result: dict[str, Any] = copy.deepcopy(config) if config is not None else {}
-    env = os.environ if env is None else env
-    key: str | None = env.get("KAINE_QDRANT_API_KEY")
-    if key is None:
-        key = load_secrets_doc(secrets_path).get("qdrant", {}).get("api_key")
-    if not key:
-        return result
-    for section_name in ("mnemos", "empatheia"):
-        section = result.get(section_name)
-        if not isinstance(section, dict):
-            continue
-        qdrant_cfg = section.get("qdrant")
-        if not isinstance(qdrant_cfg, dict) or qdrant_cfg.get("api_key"):
-            continue
-        qdrant_cfg["api_key"] = key
-    return result
+    try:
+        value = load_secrets_doc(secrets_path).get("qdrant", {}).get("api_key")
+    except Exception:
+        return None
+    if isinstance(value, str) and value:
+        return value
+    return None
 
 
 def _bundle_relpath(
@@ -424,9 +417,7 @@ def capture_backup(
             errors=[f"could not create backup dir: {type(exc).__name__}: {exc}"],
         )
 
-    # Fold in Qdrant authentication so the backup can reach the same server
-    # the running cycle uses.
-    qdrant_cfg = with_qdrant_api_key(qdrant_cfg)
+    # The Qdrant client reads its API key itself, so the key never enters the configuration.
     entity_id = identity.entity_id if identity is not None else None
     locations = entity_locations(
         qdrant_cfg,
@@ -879,8 +870,7 @@ def delete_entity_state(
         result.errors.append(f"load identity for deletion: {exc}")
         entity_id = "unknown-entity"
 
-    # Fold in Qdrant authentication and enumerate every on-disk location.
-    qdrant_cfg = with_qdrant_api_key(qdrant_cfg)
+    # Enumerate every on-disk location.
     locations = entity_locations(
         qdrant_cfg,
         state_root=state_root,
