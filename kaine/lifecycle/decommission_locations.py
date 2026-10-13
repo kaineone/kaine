@@ -424,7 +424,7 @@ def entity_locations(
         )
 
     # 21. dashboard record
-    nexus_log_dir = _rebase(
+    dashboard_log_dir = _rebase(
         _cfg(
             config,
             "research_event_log.nexus_record.log_dir",
@@ -433,13 +433,13 @@ def entity_locations(
         state_root=state_root,
         data_root=data_root,
     )
-    nexus_paths = (nexus_log_dir,)
+    dashboard_paths = (dashboard_log_dir,)
     if _cfg(config, "nexus.dev_content_override", False):
         locations.append(
             Location(
                 "dashboard.record",
                 DELETE,
-                nexus_paths,
+                dashboard_paths,
                 "dashboard record written with content",
             )
         )
@@ -448,7 +448,7 @@ def entity_locations(
             Location(
                 "dashboard.record",
                 RETAIN,
-                nexus_paths,
+                dashboard_paths,
                 "privacy-filtered dashboard record",
             )
         )

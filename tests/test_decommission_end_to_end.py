@@ -286,9 +286,9 @@ def build_entity(tmp_path, requirepass_redis):
     (own_ad / "w.bin").write_bytes(b"own weights")
     (other_ad / "w.bin").write_bytes(b"other weights")
 
-    mnemos_dir = state_root / "mnemos"
-    mnemos_dir.mkdir(parents=True, exist_ok=True)
-    db_path = mnemos_dir / "mnemos.db"
+    memory_dir = state_root / "mnemos"
+    memory_dir.mkdir(parents=True, exist_ok=True)
+    db_path = memory_dir / "mnemos.db"
     store = SqliteVecStorage(latent_dim=4, db_path=str(db_path))
 
     async def _seed_memory():
