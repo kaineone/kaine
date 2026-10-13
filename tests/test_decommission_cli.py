@@ -835,3 +835,39 @@ def test_location_split_printed_before_confirmation(tmp_path, monkeypatch):
     assert "- self_model:" in text
     assert "- language:" in text
     assert "kept by design:" in text
+
+
+def test_incomplete_deletion_exits_8_and_is_audited(tmp_path, monkeypatch):
+    """A permission error during deletion exits 8 and writes an incomplete outcome to the audit log."""
+    import shutil
+
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    out = io.StringIO()
+    answers = [
+        "I acknowledge the CAL welfare terms",  # ack
+        "Kaine Nova",  # confirmation token (entity name)
+    ]
+    real_rmtree = shutil.rmtree
+
+    def guarded_rmtree(path, *args, **kwargs):
+        if Path(path).name == "eidolon":
+            raise PermissionError(path)
+        return real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr("kaine.lifecycle.decommission.shutil.rmtree", guarded_rmtree)
+    rc = main(
+        _args(tmp_path),
+        input_fn=_scripted_input(answers),
+        out=out,
+        err=io.StringIO(),
+    )
+    assert rc == 8, out.getvalue()
+    assert "INCOMPLETE" in out.getvalue()
+    assert (tmp_path / "state" / "eidolon").exists()
+    audit_path = tmp_path / "state" / "audit" / "decommission.jsonl"
+    assert audit_path.exists()
+    lines = audit_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["outcome"] == "incomplete"
