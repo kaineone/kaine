@@ -781,7 +781,6 @@ def test_allow_list_refuses_dangerous_entries(tmp_path):
 def test_backup_reports_probed_qdrant_collections(tmp_path, monkeypatch):
     """Backups report Qdrant collections, and output reflects checked and unchecked states."""
     import io
-    import json
 
     from kaine.lifecycle.__main__ import _write_location_split
 
@@ -1024,6 +1023,7 @@ def test_module_on_with_absent_flag_still_exports_and_drops(tmp_path, monkeypatc
         dry_run=False,
     )
     assert set(fake.dropped) == set(names[:2])
+    assert result.errors == []
 
 
 def test_remote_failure_keeps_local_state(tmp_path, monkeypatch):

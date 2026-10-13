@@ -1088,7 +1088,6 @@ def test_qdrant_failing_before_deletion_keeps_local_state(tmp_path, monkeypatch)
     """If Qdrant fails the final probe, local state is kept and the CLI exits 8."""
     import io
 
-    import kaine.lifecycle.__main__ as main_mod
 
     monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
     _seed_state(tmp_path / "state")
@@ -1108,7 +1107,7 @@ def test_qdrant_failing_before_deletion_keeps_local_state(tmp_path, monkeypatch)
         def close(self):
             pass
 
-    monkeypatch.setattr(main_mod, "_qdrant_client", lambda cfg: Reachable())
+    monkeypatch.setattr("kaine.lifecycle.__main__._qdrant_client", lambda cfg: Reachable())
     monkeypatch.setattr("kaine.lifecycle.decommission._qdrant_client", lambda cfg: Reachable())
 
     out = io.StringIO()
@@ -1123,7 +1122,7 @@ def test_qdrant_failing_before_deletion_keeps_local_state(tmp_path, monkeypatch)
         nonlocal call_count
         call_count += 1
         if call_count == 2:
-            monkeypatch.setattr(main_mod, "_qdrant_client", lambda cfg: None)
+            monkeypatch.setattr("kaine.lifecycle.__main__._qdrant_client", lambda cfg: None)
         return next(answers)
 
     rc = main(
@@ -1149,7 +1148,6 @@ def test_qdrant_absent_refused_when_qdrant_answers(tmp_path, monkeypatch):
     import io
     from pathlib import Path
 
-    import kaine.lifecycle.__main__ as main_mod
 
     monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
     _seed_state(tmp_path / "state")
@@ -1172,7 +1170,7 @@ def test_qdrant_absent_refused_when_qdrant_answers(tmp_path, monkeypatch):
         def close(self):
             pass
 
-    monkeypatch.setattr(main_mod, "_qdrant_client", lambda cfg: Reachable())
+    monkeypatch.setattr("kaine.lifecycle.__main__._qdrant_client", lambda cfg: Reachable())
     monkeypatch.setattr("kaine.lifecycle.decommission._qdrant_client", lambda cfg: Reachable())
 
     out = io.StringIO()
