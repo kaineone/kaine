@@ -450,7 +450,7 @@ class ForkManager:
         } if b_root.is_dir() else {}
         sources: dict[str, str] = {}
         for name in sorted(a_paths.keys() | b_paths.keys()):
-            if name == "phantasia" and a_has and b_has:
+            if name == legacy_aliases.map_module_key("phantasia") and a_has and b_has:
                 chosen = "a" if world_model_from == "a" else "b"
                 src = a_ph_dir if chosen == "a" else b_ph_dir
             elif name in a_paths:
