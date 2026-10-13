@@ -1141,3 +1141,29 @@ def test_live_organ_adapter_is_backed_up_but_kept(tmp_path):
     assert not active_old.exists()
     assert "organ_adapters.live" in result.retained_locations
     assert str(active_new) in result.live_kept
+
+
+def test_cancel_only_leaves_other_entities_jobs_alone(tmp_path):
+    jobs = tmp_path / "jobs"
+    own = jobs / "own"
+    other_pending = jobs / "other_pending"
+    other_claimed = jobs / "other_claimed"
+    own.mkdir(parents=True)
+    other_pending.mkdir(parents=True)
+    other_claimed.mkdir(parents=True)
+    (other_claimed / "CLAIMED").write_text("")
+    slept = []
+    cancelled, running = cancel_voice_alignment_jobs(
+        jobs,
+        only={"own"},
+        wait_s=5.0,
+        poll_s=1.0,
+        sleep=slept.append,
+        monotonic=lambda: float(sum(slept)),
+    )
+    assert cancelled == ["own"]
+    assert running == []
+    assert (own / "CANCELLED").exists()
+    assert not (other_pending / "CANCELLED").exists()
+    assert not (other_claimed / "CANCELLED").exists()
+    assert slept == []

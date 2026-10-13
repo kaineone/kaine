@@ -22,7 +22,8 @@ Exit codes
 0  success (state deleted, or a dry-run completed)
 2  operator-present env gate not set
 3  the cycle appears to be running (stop the entity first), or a
-   voice-alignment job is still training
+   voice-alignment job is still training, or a voice-alignment job is
+   pending and cannot be attributed (pass --keep-unattributed-jobs to keep it)
 4  backup failed (nothing was deleted)
 5  operator declined a required continuity / transfer step (diverged path)
 6  configuration error (missing/unreadable/unparsable config, malformed shape,
@@ -409,6 +410,11 @@ def main(
         help="Assert that no voice-alignment trainer is running: claimed jobs without a result do not block deletion. Recorded in the audit record.",
     )
     parser.add_argument(
+        "--keep-unattributed-jobs",
+        action="store_true",
+        help="Proceed although pending voice-alignment jobs cannot be attributed; keep them. Recorded in the audit record.",
+    )
+    parser.add_argument(
         "--qdrant-absent",
         action="store_true",
         help="Assert that this host has no Qdrant server: with the memory modules off, skip Qdrant entirely. Recorded in the audit record. Has no effect when a memory module that uses Qdrant is on.",
@@ -548,6 +554,41 @@ def main(
     )
     out.write(f"\n{assessment.summary}\n")
 
+    # --- Unattributed pending voice-alignment jobs gate --------------------
+    # Job-queue jobs record no owner, so this entity's own pending jobs can
+    # look unattributable. Kept, they would be trained after the entity is
+    # gone, so refuse before anything is backed up or deleted.
+    pending: list[Path] = []
+    for loc in entity_locations(
+        qcfg,
+        state_root=state_root,
+        data_root=data_dir,
+        fork_root=fork_root,
+        entity_id=_entity_id(state_root),
+    ):
+        if loc.key != "sleep.voice_jobs.shared":
+            continue
+        for p in loc.existing():
+            if (
+                p.is_dir()
+                and not p.is_symlink()
+                and ((p / "READY").exists() or (p / "CLAIMED").exists())
+                and not (p / "result.json").exists()
+            ):
+                pending.append(p)
+    if pending and not args.keep_unattributed_jobs:
+        err.write(
+            "Refusing to decommission: these voice-alignment jobs are pending "
+            "and cannot be attributed to this entity or another:\n"
+        )
+        for p in pending:
+            err.write(f"  {p}\n")
+        err.write(
+            "Let the jobs finish or stop the trainer, then run again, or pass "
+            "--keep-unattributed-jobs to keep them. Nothing was backed up or deleted.\n"
+        )
+        return 3
+
     # --- Qdrant preflight -------------------------------------------------
     # Runs before the backup, so a Qdrant that should be there and does not
     # answer stops the run with nothing copied and nothing deleted.
@@ -613,6 +654,29 @@ def main(
         out.write("  (non-fatal notes:)\n")
         for e in backup.errors:
             out.write(f"    - {e}\n")
+
+    earlier_qdrant_export_backup = None
+    audit_log_path = state_root / "audit" / "decommission.jsonl"
+    try:
+        with audit_log_path.open("r", encoding="utf-8") as _audit_f:
+            _lines = _audit_f.readlines()
+        if _lines:
+            _last = json.loads(_lines[-1])
+            if (
+                _last.get("outcome") == "incomplete"
+                and _last.get("dropped_collections")
+                and _last.get("backup_path")
+            ):
+                earlier_qdrant_export_backup = _last["backup_path"]
+                out.write(
+                    "\nAn earlier run already dropped this entity's Qdrant "
+                    f"collections; their export is in that run's backup: "
+                    f"{earlier_qdrant_export_backup}\n"
+                )
+    except Exception:
+        # A missing or unreadable earlier audit record only means there is
+        # no earlier export to point to.
+        pass
 
     # --- Dry-run: preview only, no prompts, no deletion ----------------
     if args.dry_run:
@@ -915,6 +979,14 @@ def main(
             "errors": result.errors + ([result.redis_failed] if result.redis_failed else []),
             "qdrant_absent_asserted": bool(args.qdrant_absent),
             "trainer_stopped_asserted": bool(args.trainer_stopped),
+            "keep_unattributed_jobs_asserted": bool(args.keep_unattributed_jobs),
+            "unattributed_jobs_kept": [
+                str(Path(p).relative_to(state_root))
+                if Path(p).is_relative_to(state_root)
+                else str(p)
+                for p in pending
+            ],
+            "earlier_qdrant_export_backup": earlier_qdrant_export_backup,
             "guardian_notice_reminder": "shown",
             "backup_path": str(backup.backup_path),
         }

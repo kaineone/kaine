@@ -306,6 +306,11 @@ The implementation review settled these points:
   `--qdrant-absent`, and refuses `--qdrant-absent` when Qdrant answers.
 - `/trainer-jobs` is exempt from the top-level allow-list refusal by exact
   path, like `/organ-adapters`.
+- Pending jobs that cannot be attributed (job-queue jobs record no owner) stop
+  the run with exit 3 before any backup or deletion, because a kept pending
+  job of this entity would be trained after the entity is gone.
+  `--keep-unattributed-jobs` proceeds and keeps them, recorded in the audit.
+  Finished unattributable jobs stay kept and listed.
 - Live organ adapter (rule while attribution is by checksum, until
   per-entity-shared-volumes): study lines are seeded from the saved entity, so
   a forked line commonly runs a byte-identical copy of this entity's adapter.
