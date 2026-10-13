@@ -251,12 +251,163 @@ async def test_final_sleep_count_catches_sleeps_after_the_last_tick(tmp_path: Pa
         runner._stage, hypnos_cursor="2-0", sleep_count=0
     )
 
+    await runner._begin_boot()
     await runner._final_sleep_count()
 
     assert runner._stage.sleep_count == 2
     assert runner._stage.hypnos_cursor == "4-0"
     stage_file = lifecycle_stage.STAGE_PATH
     assert json.loads(stage_file.read_text())["sleep_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_final_sleep_count_skips_without_stimulus_feed(tmp_path: Path) -> None:
+    """Final count ignores sleeps when no stimulus source feed is configured."""
+    bus = _make_bus(sleep_count=4)
+    state = _fresh_development_state(tmp_path)
+    runner = MaturationGateRunner(
+        bus=bus,
+        config=MaturationConfig(enabled=True, gate_cadence_seconds=0.01),
+        registry=_make_registry(),
+        entity_clock=_make_clock(0.0),
+        stage_state=state,
+        staging_enabled=True,
+        stimulus_source_feed_configured=False,
+    )
+    runner._stage = dataclasses.replace(
+        runner._stage, hypnos_cursor="2-0", sleep_count=0
+    )
+    await runner._begin_boot()
+
+    await runner._final_sleep_count()
+
+    assert runner._stage.sleep_count == 0
+    assert runner._stage.hypnos_cursor == "2-0"
+
+
+@pytest.mark.asyncio
+async def test_final_sleep_count_skips_before_boot_is_anchored(tmp_path: Path) -> None:
+    """Final count ignores sleeps until boot is anchored."""
+    bus = _make_bus(sleep_count=4)
+    state = _fresh_development_state(tmp_path)
+    runner = MaturationGateRunner(
+        bus=bus,
+        config=MaturationConfig(enabled=True, gate_cadence_seconds=0.01),
+        registry=_make_registry(),
+        entity_clock=_make_clock(0.0),
+        stage_state=state,
+        staging_enabled=True,
+        stimulus_source_feed_configured=True,
+    )
+    runner._stage = dataclasses.replace(
+        runner._stage, hypnos_cursor="2-0", sleep_count=0
+    )
+
+    await runner._final_sleep_count()
+
+    assert runner._stage.sleep_count == 0
+    assert runner._stage.hypnos_cursor == "2-0"
+
+
+@pytest.mark.asyncio
+async def test_final_sleep_count_skips_when_not_developing(tmp_path: Path) -> None:
+    """Final count ignores sleeps when the stage is not developing."""
+    bus = _make_bus(sleep_count=4)
+    state = _fresh_development_state(tmp_path)
+    runner = MaturationGateRunner(
+        bus=bus,
+        config=MaturationConfig(enabled=True, gate_cadence_seconds=0.01),
+        registry=_make_registry(),
+        entity_clock=_make_clock(0.0),
+        stage_state=state,
+        staging_enabled=True,
+        stimulus_source_feed_configured=True,
+    )
+    runner._stage = dataclasses.replace(
+        runner._stage,
+        stage=lifecycle_stage.EMBODIED,
+        hypnos_cursor="2-0",
+        sleep_count=0,
+    )
+    await runner._begin_boot()
+
+    await runner._final_sleep_count()
+
+    assert runner._stage.sleep_count == 0
+    assert runner._stage.hypnos_cursor == "2-0"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "stimulus_configured,boot_raises,stage",
+    [
+        (False, False, lifecycle_stage.DEVELOPMENT),
+        (True, True, lifecycle_stage.DEVELOPMENT),
+        (True, False, lifecycle_stage.EMBODIED),
+    ],
+)
+async def test_final_count_never_counts_what_a_tick_skipped(
+    tmp_path: Path,
+    stimulus_configured: bool,
+    boot_raises: bool,
+    stage: str,
+) -> None:
+    """A tick and the final count agree on whether a sleep cycle counts."""
+    bus = _make_bus(sleep_count=4)
+    if boot_raises:
+        bus.server_time_ms = AsyncMock(side_effect=RuntimeError("down"))
+    state = _fresh_development_state(tmp_path)
+    runner = MaturationGateRunner(
+        bus=bus,
+        config=MaturationConfig(enabled=True, gate_cadence_seconds=0.01),
+        registry=_make_registry(),
+        entity_clock=_make_clock(0.0),
+        stage_state=state,
+        staging_enabled=True,
+        stimulus_source_feed_configured=stimulus_configured,
+    )
+    runner._stage = dataclasses.replace(
+        runner._stage,
+        stage=stage,
+        hypnos_cursor="2-0",
+        sleep_count=0,
+    )
+
+    await runner._evaluate_once()
+    await runner._final_sleep_count()
+
+    assert runner._stage.sleep_count == 0
+    assert runner._stage.hypnos_cursor == "2-0"
+
+
+@pytest.mark.asyncio
+async def test_shutdown_cancel_path_runs_the_final_count(tmp_path: Path) -> None:
+    """Cancelling the run loop still runs the final sleep count before returning."""
+    bus = _make_bus(sleep_count=4)
+    state = _fresh_development_state(tmp_path)
+    runner = MaturationGateRunner(
+        bus=bus,
+        config=MaturationConfig(enabled=True, gate_cadence_seconds=3600.0),
+        registry=_make_registry(),
+        entity_clock=_make_clock(0.0),
+        stage_state=state,
+        staging_enabled=True,
+        stimulus_source_feed_configured=True,
+    )
+    await runner._begin_boot()
+    runner._stage = dataclasses.replace(
+        runner._stage, hypnos_cursor="2-0", sleep_count=0
+    )
+
+    runner._task = asyncio.create_task(runner.run(asyncio.Event()))
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    runner._stage = dataclasses.replace(
+        runner._stage, hypnos_cursor="2-0", sleep_count=0
+    )
+    await runner.shutdown()
+
+    assert runner._stage.sleep_count == 2
 
 
 @pytest.mark.asyncio

@@ -60,9 +60,9 @@ DEVELOPMENT_STREAM = "gestation.out"
 DEVELOPMENT_SOURCE = DEVELOPMENT_STREAM.removesuffix(".out")
 
 #: The perception feed's own bus source and stream (stimulus-source-to-world
-#: transition outcomes). Before the keys step this is also the perceptual locus
-#: module's stream; after it the two differ.
-PERCEPTION_FEED_SOURCE = "perception"
+#: transition outcomes). It is distinct from the perceptual locus module's stream,
+#: so each has its own cap and the rename never folds one onto the other.
+PERCEPTION_FEED_SOURCE = "perception_feed"
 PERCEPTION_FEED_STREAM = module_stream(PERCEPTION_FEED_SOURCE)
 #: Individuation divergence verdicts (kaine.cycle.individuation_runtime).
 INDIVIDUATION_STREAM = module_stream("individuation")

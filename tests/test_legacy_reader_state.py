@@ -3,7 +3,9 @@
 
 """Stored state written under old module names restores under the new ones once the keys step is done; each test fails if its call site loses the mapping."""
 
+import io
 import json
+import tarfile
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -13,6 +15,7 @@ import pytest
 from kaine import legacy_aliases, legacy_names
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
+from kaine.lifecycle import preservation
 from kaine.lifecycle.manager import ForkManager
 from kaine.lifecycle.snapshot import artifacts_dir
 from kaine.modules.registry import ModuleRegistry
@@ -127,8 +130,9 @@ async def test_merge_maps_old_artifact_directory_names(
     assert (merged_dir / "wm.bin").read_bytes() == b"b"
 
 
+@pytest.mark.parametrize("old_name", ["thymos", "chronos"])
 def test_merge_prefers_artifacts_under_the_current_name(
-    monkeypatch, tmp_path: Path
+    monkeypatch, tmp_path: Path, old_name: str
 ):
     """A directory already under the current module key wins over an old-named one."""
     _keys_done(monkeypatch)
@@ -136,8 +140,8 @@ def test_merge_prefers_artifacts_under_the_current_name(
     snap_a = fm.snapshot(ModuleRegistry())
     snap_b = fm.snapshot(ModuleRegistry())
 
-    new_name = legacy_aliases.map_module_key("thymos")
-    old_dir = artifacts_dir(fm.root, snap_a.id, "thymos")
+    new_name = legacy_aliases.map_module_key(old_name)
+    old_dir = artifacts_dir(fm.root, snap_a.id, old_name)
     new_dir = artifacts_dir(fm.root, snap_a.id, new_name)
     old_dir.mkdir(parents=True, exist_ok=True)
     new_dir.mkdir(parents=True, exist_ok=True)
@@ -148,6 +152,42 @@ def test_merge_prefers_artifacts_under_the_current_name(
     assert merged.metadata["artifact_sources"] == {new_name: "a"}
     merged_dir = artifacts_dir(fm.root, merged.id, new_name)
     assert (merged_dir / "artifact.bin").read_bytes() == b"new"
+
+
+def _plain_bundle(path: Path, members: dict[str, bytes]) -> Path:
+    """Write an uncompressed tar with ``members`` at ``path``."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(path, "w") as tf:
+        for name, data in members.items():
+            info = tarfile.TarInfo(name=name)
+            info.size = len(data)
+            tf.addfile(info, io.BytesIO(data))
+    return path
+
+
+def test_bundle_members_map_under_the_real_table(monkeypatch, tmp_path: Path):
+    """Bundle members are read under current module keys once keys are done."""
+    _keys_done(monkeypatch)
+    assert (
+        preservation._member_dir(preservation.WORLD_MODEL_MEMBER)
+        == legacy_aliases.map_module_key("phantasia")
+    )
+    assert preservation._member_dir(preservation.DEVELOPMENT_MEMBER) == "development"
+
+    bundle_dir = tmp_path / "b"
+    _plain_bundle(
+        bundle_dir / "bundle.tar",
+        {
+            "snapshot.json": json.dumps({"id": "s", "modules": {}}).encode(),
+            "phantasia/wm.ckpt": b"w",
+            "gestation/gestation_progress.json": b"{}",
+        },
+    )
+    members = preservation._read_bundle_members(bundle_dir)
+    assert members[f"{legacy_aliases.map_module_key('phantasia')}/wm.ckpt"] == b"w"
+    assert preservation.extract_bundle_development(bundle_dir, tmp_path / "dest") == [
+        "gestation_progress.json"
+    ]
 
 
 def test_viewing_analysis_maps_old_member_sources(monkeypatch, tmp_path: Path):

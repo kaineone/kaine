@@ -644,13 +644,15 @@ are the ones the sections above leave open; each follows from those sections.
 
 ### Keys step, split in two (PR 6a and 6b)
 
-The keys step changes wire names, so it lands in two PRs. **6a** prepares and
-changes no name on disk or on the bus: every reader it adds acts only once the keys
-scope is done, and the fast suite's outcomes match main's test by test. Its only
-runtime changes are deliberate: the maturation gate counts sleeps once more when
-it stops, the individuation refusal names the config key `[modules].lingua`, and
-merging snapshots prefers an artifact directory already under the current name. **6b** runs the codemod,
-moves the files, marks the keys scope done and so turns the readers on.
+The keys step changes wire names, so it lands in two PRs. **6a** prepares: every
+reader it adds acts only once the keys scope is done, and the fast suite's outcomes
+match main's test by test. Its runtime changes are deliberate and few: the
+perception feed publishes on its own stream (the only bus name 6a changes), the
+maturation gate counts sleeps once more when it stops (under the same preconditions
+as a tick, so it never counts what a tick would have skipped), the individuation
+refusal names the config key `[modules].lingua`, and merging snapshots prefers an
+artifact directory already under the current name. **6b** runs the codemod, moves
+the files, marks the keys scope done and so turns the readers on.
 
 What 6a decides, from a keys-scope dry run on main (72 moves, about 10.5k
 replacements in about 900 files):
@@ -760,12 +762,20 @@ checkpoint load and the dashboard smoke.
   publish its presence under the new stream and source after 6b; 6b reads presence
   from both streams until the alias release and logs a one-line deprecation when
   the old one is used.
-- **The perception feed keeps its stream.** The feed publishes under its own source
-  (`PERCEPTION_FEED_SOURCE`), which stays `perception`, while the locus module moves
-  to `perceptual_locus`. The feed's stream becomes an additional produced stream
-  once the two differ, and 6b gives it a configured cap in `[bus.per_stream_maxlen]`.
-  The feed's transition events, all at salience zero, stop counting as the locus
-  module's drive source; that change is accepted.
+- **The perception feed gets its own stream now.** Until 6a the locus module and the
+  perception feed both wrote `perception.out`, so the rename map's `perception.out ->
+  perceptual_locus.out` was ambiguous: a cap for the feed would fold onto the locus
+  stream, setting both caps would conflict, and a cleanup of old names would offer
+  to delete a live stream. The feed now publishes under its own source and stream,
+  `perception_feed` and `perception_feed.out` (`PERCEPTION_FEED_SOURCE`,
+  `PERCEPTION_FEED_STREAM`); the rename leaves names starting `perception_feed`
+  alone, so `perception.out` belongs to the locus module alone. The feed's stream is
+  an additional produced stream with its own cap in `[bus.per_stream_maxlen]`. No
+  read alias is needed: no reader selects the feed's events by stream name (the
+  research event log subscribes to the produced set live and keys on the event type
+  `perception.transition`), and nothing replays the feed's history. The feed's
+  transition events, all at salience zero, stop counting as the locus module's drive
+  source; that change is accepted.
 - **Text rules.** An f-string is classified like a plain string, by whether its
   literal text holds a space. Inside such text a config table, key, stream or event
   reference (`[vox].x`, `topos.encoder`, `soma:soma.report`, a TOML key at the start
@@ -788,15 +798,35 @@ checkpoint load and the dashboard smoke.
 - **Sleeps at shutdown.** The maturation gate counts sleeps once more when it stops,
   so a sleep completed after the last tick is not lost when the stream is renamed at
   the next start.
-- **The 6b cleanup command.** It lists every old stream name from the full map
-  (module output streams, the developmental and language streams, `STREAM_NAMES`),
-  shows each stream's length and memory use, deletes nothing by default, and
-  deletes only with an explicit confirmation.
-- **History continuity (built in 6b).** A reader that replays history falls back to
-  the old stream name once when the new stream is empty: the language module's
-  `sleep_index` backfill reads `hypnos.out` and the dashboard's conversation history
-  reads `lingua.external` from `0`. A helper returns the new name and its old name
-  from the table, so each reader states the fallback in one line.
+- **The 6b cleanup command.** Its candidates come from
+  `legacy_aliases.orphaned_stream_names(live)`: every old name in the stream map
+  (module output streams, the developmental and language streams, `STREAM_NAMES`)
+  minus every stream a producer writes now, and nothing at all while keys are
+  pending. A test runs the codemod over the real stream modules and checks that no
+  stream written after the flip is a candidate (it caught the shared
+  `perception.out`). The command shows each candidate's length and memory use,
+  deletes nothing by default, and deletes only with an explicit confirmation.
+- **History continuity (built in 6b).** Two readers replay history, and an empty new
+  stream is the wrong test for both, because the new stream receives events right
+  after the restart:
+  - The language module's `sleep_index` backfill looks for the last sleep event. It
+    reads the new sleep stream; when no sleep event is found there, it reads the old
+    stream (`hypnos.out`) for one, then continues on the new stream.
+  - The dashboard's conversation history reads the old stream (`lingua.external`)
+    and then the new one (`language.external`), merged in id order (ids are
+    time-ordered across both), for as long as the old stream exists, that is until
+    the cleanup command removes it.
+  A helper returns a stream's old name from the table, so each reader names its
+  fallback in one place.
+- **Rolling back across the flip is unsupported.** After 6b runs, a release from
+  before 6b would read the new names in config files, streams, bundles and run
+  records as unknown. The supported path is forward only; an operator who must go
+  back restores the backup taken before upgrading.
+- **Two UI names stay until the operator step.** The session-key header
+  `X-Nexus-Session-Key` (code, docstrings and the browser script) and the browser
+  storage key `nexus.preservation.events` are operator/UI names. Keep rules hold
+  them through the keys step so the server, its documentation and the browser keep
+  agreeing; PR 7 renames them with the other UI strings.
 
 ### PR sequence
 

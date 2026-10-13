@@ -738,3 +738,17 @@ def map_stream_keys(mapping: dict) -> dict:
         if new_key not in result:
             result[new_key] = value
     return result
+
+
+def orphaned_stream_names(live) -> list[str]:
+    """Old stream names the cleanup command may delete once the keys step is done.
+
+    Every old name in the stream map, minus every name in ``live`` (the streams
+    producers write now). Empty while the keys scope is pending, because the old
+    names are still the live ones then.
+    """
+    if not scope_done("keys"):
+        return []
+    live_names = set(live)
+    candidates = {entry["old"] for entry in _table().STREAM_NAMES if entry["old"] != entry["new"]}
+    return sorted(candidates - live_names)

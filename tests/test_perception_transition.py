@@ -30,7 +30,7 @@ from kaine.boot import (
     _stimulus_source_params,
     gather_perception_feed_descriptor,
 )
-from kaine.bus.streams import PERCEPTION_FEED_STREAM
+from kaine.bus.streams import PERCEPTION_FEED_SOURCE, PERCEPTION_FEED_STREAM
 from kaine.cycle.ignition_log import playlist_position_provider
 from kaine.lifecycle import stage as lifecycle_stage
 from kaine.modules.audition.feed import PlaylistAudioStream
@@ -977,7 +977,7 @@ async def test_outcome_events_are_published_on_the_perception_stream(tmp_path):
                 break
         events = [e for _, e in entries]
         assert [e.type for e in events] == ["perception.transition"] * 3
-        assert all(e.source == "perception" and e.salience == 0.0 for e in events)
+        assert all(e.source == PERCEPTION_FEED_SOURCE and e.salience == 0.0 for e in events)
         assert [e.payload for e in events] == [
             {"phase": "started", "transition_seconds": 4.0},
             {"phase": "completed", "transition_seconds": 4.0},

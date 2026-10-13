@@ -89,15 +89,10 @@ def canonical_module_streams() -> tuple[str, ...]:
 
 
 def _all_produced_streams() -> tuple[str, ...]:
-    """Canonical module streams plus additional produced streams.
-
-    The perception feed's stream is included once it differs from the
-    perceptual locus module's stream.
-    """
+    """Canonical module streams, additional produced streams and the perception feed's stream."""
     extras = list(_ADDITIONAL_PRODUCED_STREAMS)
     canonical = canonical_module_streams()
-    if PERCEPTION_FEED_STREAM not in canonical:
-        extras.append(PERCEPTION_FEED_STREAM)
+    extras.append(PERCEPTION_FEED_STREAM)
     return canonical + tuple(extras)
 
 

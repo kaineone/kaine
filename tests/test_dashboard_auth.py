@@ -25,6 +25,12 @@ from kaine.dashboard.auth import (
 )
 from kaine.dashboard.config import DashboardConfig
 
+
+def test_module_docstring_names_the_session_header():
+    """The auth module docstring names the session header."""
+    import kaine.dashboard.auth as auth_mod
+    assert f"``{auth_mod.SESSION_KEY_HEADER}``" in auth_mod.__doc__
+
 TOKEN = "s3cret-operator-token"
 HTML_ACCEPT = {"Accept": "text/html"}
 JSON_ACCEPT = {"Accept": "application/json"}

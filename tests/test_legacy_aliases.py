@@ -89,6 +89,25 @@ def test_normalize_config_layer_compound_table(caplog, monkeypatch) -> None:
     assert len(caplog.records) == 1
 
 
+def test_dotted_move_into_a_moved_table_runs_after_it(monkeypatch) -> None:
+    """Single-segment table moves must run before dotted ones."""
+    _set_scope(monkeypatch, "keys")
+    monkeypatch.setattr(
+        legacy_names,
+        "CONFIG_TABLES",
+        (
+            {"old": "oldt", "new": "newt", "scope": "keys"},
+            {"old": "other.sub", "new": "newt.sub", "scope": "keys"},
+        ),
+    )
+    monkeypatch.setattr(legacy_names, "CONFIG_KEYS", ())
+    monkeypatch.setattr(legacy_names, "CONFIG_VALUES", ())
+    monkeypatch.setattr(legacy_names, "STREAM_NAMES", ())
+    layer = {"oldt": {"k": 1}, "other": {"sub": {"y": 2}}}
+    result = legacy_aliases.normalize_config_layer(layer, "compound.toml")
+    assert result == {"newt": {"k": 1, "sub": {"y": 2}}}
+
+
 def test_normalize_config_layer_study_table(monkeypatch) -> None:
     _set_scope(monkeypatch, "keys")
     layer = {"syneidesis": {"x": 1}}
