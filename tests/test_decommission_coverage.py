@@ -175,18 +175,29 @@ def test_other_entity_fork_is_kept(tmp_path):
 
 def test_qdrant_in_use_and_api_key_resolution(tmp_path):
     """qdrant_in_use detects the backend and _qdrant_api_key resolves keys."""
-    assert qdrant_in_use({"mnemos": {"backend": "qdrant"}}) is True
-    # Social cognition still defaults to Qdrant when only [mnemos] moves off it.
-    assert qdrant_in_use({"mnemos": {"backend": "sqlite_vec"}}) is True
-    assert qdrant_in_use({"mnemos": {"qdrant": {"host": "h"}}}) is True
-    assert qdrant_in_use({"mnemos": {}}) is True
-    assert qdrant_in_use(None) is True
+    on = {"modules": {"mnemos": True}}
+    assert qdrant_in_use({**on, "mnemos": {"backend": "qdrant"}}) is True
+    # A module that is not enabled never counts, whatever its backend says.
+    assert qdrant_in_use({"mnemos": {"backend": "qdrant"}}) is False
+    assert qdrant_in_use({"modules": {"mnemos": False}, "mnemos": {"backend": "qdrant"}}) is False
+    # An enabled module without a backend key uses the runtime default, Qdrant.
+    assert qdrant_in_use({**on, "mnemos": {}}) is True
+    assert qdrant_in_use({**on}) is True
+    assert qdrant_in_use({**on, "mnemos": {"backend": "sqlite_vec"}}) is False
+    # The renamed module key counts too.
+    assert qdrant_in_use({"modules": {"episodic_memory": True}}) is True
+    # A module the tier does not support never counts.
     assert (
         qdrant_in_use(
-            {"mnemos": {"backend": "sqlite_vec"}, "empatheia": {"backend": "inmemory"}}
+            {
+                "modules": {"empatheia": True},
+                "empatheia": {"backend": "qdrant"},
+                "tier": {"unsupported_modules": ["empatheia"]},
+            }
         )
         is False
     )
+    assert qdrant_in_use(None) is False
 
     conn_key = {"api_key": "conn", "host": "h", "port": 1}
     assert _qdrant_api_key(conn_key, env={"KAINE_QDRANT_API_KEY": "env"}) == "conn"
@@ -206,7 +217,7 @@ def test_failed_qdrant_export_fails_the_backup(tmp_path, monkeypatch):
     (state_root / "eidolon").mkdir(parents=True, exist_ok=True)
     (state_root / "eidolon" / "self_model.json").write_text("{}", encoding="utf-8")
 
-    cfg = {"mnemos": {"backend": "qdrant"}}
+    cfg = {"modules": {"mnemos": True}, "mnemos": {"backend": "qdrant"}}
     collection = decommission._episodic_memory_collection_names(cfg)[0]
 
     class FakeClient:

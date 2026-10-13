@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from kaine import legacy_names
 from kaine.legacy_aliases import name_forms
 from kaine.lifecycle.identity import IdentityError, read_identity_sidecar
 
@@ -56,8 +57,12 @@ def _rebase(value: str, *, state_root: Path, data_root: Path) -> Path:
     return data_root.parent / Path(text)
 
 
-def _module_forms(path: Path, state_root: Path) -> tuple[Path, ...]:
-    """Return the path under every known form of its first module segment."""
+def _path_forms(path: Path, state_root: Path) -> tuple[Path, ...]:
+    """Return every known form of ``path`` under the state root.
+
+    Includes aliases for the first path segment and legacy renames of the
+    whole relative path, so files are found under both old and new names.
+    """
     try:
         relative = path.relative_to(state_root)
     except ValueError:
@@ -65,16 +70,47 @@ def _module_forms(path: Path, state_root: Path) -> tuple[Path, ...]:
     parts = relative.parts
     if not parts:
         return (path,)
-    segment = parts[0]
-    rest = parts[1:]
-    forms = name_forms(segment)
-    result: list[Path] = []
-    for form in forms:
-        candidate = state_root / form
+
+    def build(segment: str, rest: tuple[str, ...]) -> Path:
+        candidate = state_root / segment
         for part in rest:
             candidate = candidate / part
-        result.append(candidate)
-    return tuple(result)
+        return candidate
+
+    base_candidates = [build(form, parts[1:]) for form in name_forms(parts[0])]
+
+    def with_first_segment_alias(candidate: Path) -> list[Path]:
+        try:
+            rel = candidate.relative_to(state_root)
+        except ValueError:
+            return [candidate]
+        rel_parts = rel.parts
+        if not rel_parts:
+            return [candidate]
+        return [build(form, rel_parts[1:]) for form in name_forms(rel_parts[0])]
+
+    all_candidates = list(base_candidates)
+    for candidate in base_candidates:
+        candidate_rel = candidate.relative_to(state_root).as_posix()
+        for entry in legacy_names.STATE_PATHS:
+            counterpart_rel: str | None = None
+            if candidate_rel == entry["old"]:
+                counterpart_rel = entry["new"]
+            elif candidate_rel == entry["new"]:
+                counterpart_rel = entry["old"]
+            if counterpart_rel is None:
+                continue
+            counterpart = state_root / Path(counterpart_rel)
+            all_candidates.extend(with_first_segment_alias(counterpart))
+
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for candidate in all_candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        unique.append(candidate)
+    return tuple(unique)
 
 
 def _cfg(config: Mapping[str, Any] | None, dotted: str, default: Any) -> Any:
@@ -105,13 +141,22 @@ def entity_locations(
         if directory:
             path = path.parent
         if forms:
-            return _module_forms(path, state_root)
+            return _path_forms(path, state_root)
         return (path,)
 
     def files_in(
         base_dirs: tuple[Path, ...], filenames: tuple[str, ...]
     ) -> tuple[Path, ...]:
-        return tuple(base_dir / name for base_dir in base_dirs for name in filenames)
+        found: list[Path] = []
+        seen: set[Path] = set()
+        for base_dir in base_dirs:
+            for name in filenames:
+                for candidate in _path_forms(base_dir / name, state_root):
+                    if candidate in seen:
+                        continue
+                    seen.add(candidate)
+                    found.append(candidate)
+        return tuple(found)
 
     # 1. self model
     locations.append(
@@ -224,12 +269,13 @@ def entity_locations(
         sqlite_paths.append(db_path)
         sqlite_paths.append(db_path.parent / (db_path.name + "-wal"))
         sqlite_paths.append(db_path.parent / (db_path.name + "-shm"))
+        sqlite_paths.append(db_path.parent / (db_path.name + "-journal"))
     locations.append(
         Location(
             "episodic_memory.sqlite",
             BACKUP_DELETE,
             tuple(sqlite_paths),
-            "the episodic memory (sqlite-vec store and its write-ahead files)",
+            "the episodic memory (sqlite-vec store and its write-ahead and journal files)",
             bundle_dir="locations/episodic_memory.sqlite",
         )
     )
@@ -267,6 +313,7 @@ def entity_locations(
                     "birth_request.json",
                     "birth_ack.json",
                     "birth_pending",
+                    "maturation_pending",
                     "gestation_readout.json",
                     "gestation_progress.json",
                     "gestation_viability.json",
@@ -328,24 +375,41 @@ def entity_locations(
         )
     )
 
-    # 16. sleep voice alignment jobs
+    # 16. sleep voice alignment trainer workdir
+    trainer_workdir_paths = resolve(
+        _cfg(config, "hypnos.voice_alignment.trainer_workdir", "state/hypnos/voice_align_jobs")
+    )
     locations.append(
         Location(
-            "sleep.voice_align_jobs",
-            DELETE,
-            resolve(
-                _cfg(
-                    config,
-                    "hypnos.voice_alignment.trainer_jobs_dir",
-                    "state/hypnos/voice_align_jobs",
-                )
-            ),
-            "transient training pairs with private content",
+            "sleep.trainer_workdir",
+            BACKUP_DELETE,
+            trainer_workdir_paths,
+            "voice-alignment training pairs (pairs.jsonl holds private content)",
+            bundle_dir="locations/sleep.trainer_workdir",
             contents_only=True,
         )
     )
 
-    # 17. organ adapters
+    # 17. sleep voice alignment jobs (omitted when it shares a directory with the workdir)
+    job_paths = resolve(
+        _cfg(
+            config,
+            "hypnos.voice_alignment.trainer_jobs_dir",
+            "state/hypnos/voice_align_jobs",
+        )
+    )
+    if job_paths != trainer_workdir_paths:
+        locations.append(
+            Location(
+                "sleep.voice_align_jobs",
+                DELETE,
+                job_paths,
+                "transient training pairs with private content",
+                contents_only=True,
+            )
+        )
+
+    # 18. organ adapters
     locations.append(
         Location(
             "organ_adapters",
@@ -363,7 +427,7 @@ def entity_locations(
         )
     )
 
-    # 18. research raw bus archive
+    # 19. research raw bus archive
     locations.append(
         Location(
             "research.raw_bus_archive",
@@ -380,7 +444,7 @@ def entity_locations(
         )
     )
 
-    # 19. research external utterances
+    # 20. research external utterances
     locations.append(
         Location(
             "research.external_utterances",
@@ -397,7 +461,7 @@ def entity_locations(
         )
     )
 
-    # 20. evaluation replay
+    # 21. evaluation replay
     eval_logs = _rebase(
         _cfg(config, "evaluation.paths.evaluation_logs", "data/evaluation"),
         state_root=state_root,
@@ -423,7 +487,7 @@ def entity_locations(
             )
         )
 
-    # 21. dashboard record
+    # 22. dashboard record
     dashboard_log_dir = _rebase(
         _cfg(
             config,
@@ -453,7 +517,7 @@ def entity_locations(
             )
         )
 
-    # 22. perception
+    # 23. perception
     locations.append(
         Location(
             "perception",
@@ -463,7 +527,7 @@ def entity_locations(
         )
     )
 
-    # 23. cycle run state
+    # 24. cycle run state
     locations.append(
         Location(
             "cycle.run_state",
@@ -482,7 +546,7 @@ def entity_locations(
         )
     )
 
-    # 24. preservation divergence edge
+    # 25. preservation divergence edge
     locations.append(
         Location(
             "preservation.divergence_edge",
@@ -492,8 +556,15 @@ def entity_locations(
         )
     )
 
-    # 25. fork snapshots
-    own_snaps, other_snaps, unattributed_snaps = attribute_snapshots(fork_root, entity_id)
+    # 26. fork snapshots
+    merged_dir_value = _cfg(config, "lifecycle.adapter_merge.output_dir", None)
+    if merged_dir_value is None:
+        merged_dir = fork_root / "merged_adapters"
+    else:
+        merged_dir = _rebase(merged_dir_value, state_root=state_root, data_root=data_root)
+    own_snaps, other_snaps, unattributed_snaps = attribute_snapshots(
+        fork_root, entity_id, merged_dir=merged_dir
+    )
     locations.append(
         Location(
             "forks.own",
@@ -520,9 +591,9 @@ def entity_locations(
         )
     )
 
-    # 26. fork merged adapters
+    # 27. fork merged adapters
     own_adapters, kept_adapters = attribute_merged_adapters(
-        fork_root, own_snaps, other_snaps + unattributed_snaps
+        fork_root, own_snaps, other_snaps + unattributed_snaps, merged_dir=merged_dir
     )
     locations.append(
         Location(
@@ -542,7 +613,7 @@ def entity_locations(
         )
     )
 
-    # 27. retain-only entries
+    # 28. retain-only entries
     locations.append(
         Location(
             "cycle.incidents",
@@ -675,7 +746,10 @@ def read_snapshot_json(snap_dir: Path) -> dict[str, Any] | None:
 
 
 def attribute_snapshots(
-    fork_root: Path, entity_id: str | None
+    fork_root: Path,
+    entity_id: str | None,
+    *,
+    merged_dir: Path | None = None,
 ) -> tuple[list[Path], list[Path], list[Path]]:
     """Attribute fork snapshot directories to this entity, others, or neither.
 
@@ -694,6 +768,7 @@ def attribute_snapshots(
         if child.is_dir()
         and not child.is_symlink()
         and child.name != "merged_adapters"
+        and (merged_dir is None or child.resolve() != merged_dir.resolve())
         and (child / "snapshot.json").exists()
     ]
     candidates.sort(key=lambda c: c.name)
@@ -734,7 +809,11 @@ def attribute_snapshots(
 
 
 def attribute_merged_adapters(
-    fork_root: Path, own: list[Path], kept: list[Path]
+    fork_root: Path,
+    own: list[Path],
+    kept: list[Path],
+    *,
+    merged_dir: Path | None = None,
 ) -> tuple[list[Path], list[Path]]:
     """Partition merged adapter directories by whether any kept snapshot references them.
 
@@ -743,13 +822,13 @@ def attribute_merged_adapters(
     """
     own_adapters: list[Path] = []
     kept_adapters: list[Path] = []
-    merged_dir = fork_root / "merged_adapters"
-    if not merged_dir.exists():
+    adapters_dir = fork_root / "merged_adapters" if merged_dir is None else merged_dir
+    if not adapters_dir.exists():
         return own_adapters, kept_adapters
 
     children = [
         child
-        for child in merged_dir.iterdir()
+        for child in adapters_dir.iterdir()
         if child.is_dir() and not child.is_symlink()
     ]
     children.sort(key=lambda c: c.name)
@@ -814,7 +893,7 @@ def cancel_voice_alignment_jobs(
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> tuple[list[str], list[str]]:
-    """Cancel pending voice-alignment jobs and wait briefly for active ones to finish."""
+    """Cancel pending voice-alignment jobs and wait briefly for claimed jobs to finish."""
     cancelled: list[str] = []
     still_running: list[str] = []
     if not jobs_dir.exists():
@@ -829,10 +908,11 @@ def cancel_voice_alignment_jobs(
     for child in children:
         result_file = child / "result.json"
         cancelled_file = child / "CANCELLED"
-        if result_file.exists() or cancelled_file.exists():
+        if result_file.exists():
             continue
-        cancelled_file.write_text("")
-        cancelled.append(child.name)
+        if not cancelled_file.exists():
+            cancelled_file.write_text("")
+            cancelled.append(child.name)
         if (child / "CLAIMED").exists():
             if deadline is None:
                 deadline = monotonic() + wait_s
@@ -843,3 +923,67 @@ def cancel_voice_alignment_jobs(
                 sleep(poll_s)
 
     return cancelled, still_running
+
+
+def delete_roots(
+    config: Mapping[str, Any] | None,
+    *,
+    state_root: Path,
+    data_root: Path,
+    fork_root: Path,
+) -> tuple[Path, ...]:
+    """Every root a decommission deletion may touch: the state, data and fork roots, plus the configured directories that may live elsewhere."""
+    roots: list[Path] = []
+    seen: set[Path] = set()
+
+    def add(path: Path) -> None:
+        resolved = path.resolve()
+        if resolved not in seen:
+            seen.add(resolved)
+            roots.append(resolved)
+
+    add(state_root)
+    add(data_root)
+    add(fork_root)
+
+    merged_dir_value = _cfg(config, "lifecycle.adapter_merge.output_dir", None)
+    if merged_dir_value is None:
+        add(fork_root / "merged_adapters")
+    else:
+        add(_rebase(merged_dir_value, state_root=state_root, data_root=data_root))
+
+    add(
+        _rebase(
+            _cfg(config, "hypnos.voice_alignment.organ_adapters_dir", "/organ-adapters"),
+            state_root=state_root,
+            data_root=data_root,
+        )
+    )
+    add(
+        _rebase(
+            _cfg(config, "hypnos.voice_alignment.trainer_workdir", "state/hypnos/voice_align_jobs"),
+            state_root=state_root,
+            data_root=data_root,
+        )
+    )
+    add(
+        _rebase(
+            _cfg(config, "hypnos.voice_alignment.trainer_jobs_dir", "state/hypnos/voice_align_jobs"),
+            state_root=state_root,
+            data_root=data_root,
+        )
+    )
+
+    return tuple(roots)
+
+
+def within_delete_roots(path: Path, roots: tuple[Path, ...]) -> bool:
+    """True when path (a symlink judged by its own location, not its target) lies inside or at one of roots."""
+    if path.is_symlink():
+        judged = path.parent.resolve() / path.name
+    else:
+        judged = path.resolve()
+    for root in roots:
+        if judged == root or judged.is_relative_to(root):
+            return True
+    return False

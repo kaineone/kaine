@@ -437,7 +437,7 @@ def test_l4_get_collections_failure_records_error_and_skips_delete(tmp_path):
     ):
         result = delete_entity_state(
             state_root=state_root,
-            qdrant_cfg={"host": "127.0.0.1", "port": 6533},
+            qdrant_cfg={"modules": {"mnemos": True}, "host": "127.0.0.1", "port": 6533},
             dry_run=False,
         )
 
@@ -488,7 +488,7 @@ def test_l4_get_collections_success_deletes_normally(tmp_path):
     ):
         result = delete_entity_state(
             state_root=state_root,
-            qdrant_cfg={"host": "127.0.0.1", "port": 6533},
+            qdrant_cfg={"modules": {"mnemos": True}, "host": "127.0.0.1", "port": 6533},
             dry_run=False,
         )
 

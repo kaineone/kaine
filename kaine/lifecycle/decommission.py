@@ -40,15 +40,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from kaine import legacy_aliases
+from kaine import legacy_aliases, legacy_names
 from kaine.bus.config import load_secrets_doc
 from kaine.lifecycle.decommission_locations import (
     BACKUP_DELETE,
     DELETE,
     RETAIN,
     checkpoint_sqlite,
+    delete_roots,
     entity_locations,
     read_snapshot_json,
+    within_delete_roots,
 )
 from kaine.lifecycle.divergence import DivergenceAssessment
 from kaine.lifecycle.identity import IdentityError, load_identity
@@ -101,6 +103,11 @@ class DeleteResult:
     deleted_locations: list[str] = field(default_factory=list)
     retained_locations: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+
+    @property
+    def incomplete(self) -> bool:
+        """True when any removal, refusal or store step failed, so the entity is not fully deleted."""
+        return bool(self.errors) or bool(self.redis_failed)
 
 
 # ---------------------------------------------------------------------------
@@ -185,11 +192,13 @@ def _write_sensitive_sidecar(path: Path, plaintext_json: str) -> None:
     _atomic_write_text(path, text, mode=0o600)
 
 
-def _purge_plaintext_bundle(bundle_dir: Path, *, error: str) -> None:
+def _purge_plaintext_bundle(bundle_dir: Path, *, error: str, reason: str = "encryption") -> None:
     """Remove all plaintext bundle artifacts, leaving only an error marker.
 
-    Called when encryption was requested but FAILED: no plaintext entity content
-    (self-model, intent monologue, snapshot, sidecars, manifest) may linger.
+    Called when encryption was requested but FAILED, or when a backup step
+    failed after the bundle directory was created while state encryption is on:
+    no plaintext entity content (self-model, intent monologue, snapshot,
+    sidecars, manifest) may linger.
     """
     for child in list(bundle_dir.iterdir()):
         try:
@@ -199,13 +208,26 @@ def _purge_plaintext_bundle(bundle_dir: Path, *, error: str) -> None:
                 child.unlink()
         except OSError:
             log.warning("could not remove plaintext artifact %s", child, exc_info=True)
-    try:
-        _atomic_write_text(
-            bundle_dir / "ENCRYPTION_FAILED.txt",
+    if reason == "encryption":
+        marker_name = "ENCRYPTION_FAILED.txt"
+        marker_text = (
             "Bundle encryption was enabled but FAILED; all plaintext entity "
             "artifacts were removed so no plaintext entity content lingers on "
             "disk. Decommission was aborted (no state deleted). Resolve the "
-            f"encryption error and re-run the backup.\n\nError: {error}\n",
+            f"encryption error and re-run the backup.\n\nError: {error}\n"
+        )
+    else:
+        marker_name = "BACKUP_FAILED.txt"
+        marker_text = (
+            "The backup failed while state encryption is on, so every plaintext "
+            "entity artifact was removed and no plaintext entity content lingers "
+            "on disk. Decommission was aborted (no state deleted). Resolve the "
+            f"error and re-run the backup.\n\nError: {error}\n"
+        )
+    try:
+        _atomic_write_text(
+            bundle_dir / marker_name,
+            marker_text,
             mode=0o600,
         )
     except Exception:
@@ -217,13 +239,47 @@ def _episodic_memory_prefix(qdrant_cfg: dict[str, Any] | None) -> str:
     return str((cfg.get("mnemos") or {}).get("collection_prefix", "mnemos_"))
 
 
-def _episodic_memory_collection_names(qdrant_cfg: dict[str, Any] | None) -> list[str]:
+def _episodic_memory_prefix_forms(qdrant_cfg: dict[str, Any] | None) -> list[str]:
     cfg = qdrant_cfg or {}
     prefix = _episodic_memory_prefix(cfg)
-    names = [f"{prefix}{kind}" for kind in EPISODIC_MEMORY_COLLECTION_KINDS]
+    forms: list[str] = [prefix]
+    for mapping in legacy_names.COLLECTIONS:
+        old = mapping.get("old")
+        new = mapping.get("new")
+        if prefix == old and new is not None:
+            forms.append(str(new))
+        elif prefix == new and old is not None:
+            forms.append(str(old))
+    return forms
+
+
+def _episodic_memory_collection_names(qdrant_cfg: dict[str, Any] | None) -> list[str]:
+    cfg = qdrant_cfg or {}
+    names: list[str] = []
+    seen: set[str] = set()
+    for prefix in _episodic_memory_prefix_forms(cfg):
+        for kind in EPISODIC_MEMORY_COLLECTION_KINDS:
+            coll = f"{prefix}{kind}"
+            if coll not in seen:
+                seen.add(coll)
+                names.append(coll)
     social_cognition = str((cfg.get("empatheia") or {}).get("collection", "empatheia_agents"))
-    if social_cognition:
+    if social_cognition and social_cognition not in seen:
+        seen.add(social_cognition)
         names.append(social_cognition)
+    for mapping in legacy_names.COLLECTIONS:
+        old = mapping.get("old")
+        new = mapping.get("new")
+        if social_cognition == old and new is not None:
+            counterpart = str(new)
+            if counterpart not in seen:
+                seen.add(counterpart)
+                names.append(counterpart)
+        elif social_cognition == new and old is not None:
+            counterpart = str(old)
+            if counterpart not in seen:
+                seen.add(counterpart)
+                names.append(counterpart)
     return names
 
 
@@ -300,18 +356,46 @@ def _export_qdrant(
 
 
 def qdrant_in_use(config: Mapping[str, Any] | None) -> bool:
-    """Return True when episodic or social memory uses the Qdrant backend.
+    """Return True only when an enabled, supported memory module uses Qdrant.
 
-    Follows the runtime's own defaults (``kaine.extras``): a ``[mnemos]`` or
-    ``[empatheia]`` section without a ``backend`` key, or no section at all,
-    means Qdrant. Treating a missing key as "not used" would skip the export
-    and the deletion of a store the cycle actually wrote to.
+    Checks both the episodic memory module (``mnemos``) and the social
+    cognition module (``empatheia``). For a module to count as using Qdrant,
+    all of the following must hold:
+
+    * the module is enabled: at least one of its name forms is present in
+      ``[modules]`` with a truthy value (a missing ``[modules]`` table or key
+      means disabled);
+    * no form of the module appears in ``[tier].unsupported_modules`` when that
+      table and list exist;
+    * the module's own configuration section has ``backend == "qdrant"``. The
+      first name form that is present as a table is used; a missing backend key
+      defaults to ``"qdrant"`` (the runtime default). A missing section is also
+      treated as backend ``"qdrant"``.
     """
-    cfg = config or {}
-    for section_name in ("mnemos", "empatheia"):
-        section = cfg.get(section_name)
-        if not isinstance(section, Mapping):
-            section = {}
+    if not isinstance(config, Mapping):
+        return False
+    modules = config.get("modules")
+    tier = config.get("tier")
+    unsupported: set[str] = set()
+    if isinstance(tier, Mapping):
+        unsup = tier.get("unsupported_modules")
+        if isinstance(unsup, list):
+            unsupported = {str(x) for x in unsup}
+    for module in ("mnemos", "empatheia"):
+        forms = legacy_aliases.name_forms(module)
+        enabled = False
+        if isinstance(modules, Mapping):
+            enabled = any(modules.get(form) for form in forms)
+        if not enabled:
+            continue
+        if any(form in unsupported for form in forms):
+            continue
+        section: Mapping[str, Any] = {}
+        for form in forms:
+            candidate = config.get(form)
+            if isinstance(candidate, Mapping):
+                section = candidate
+                break
         if section.get("backend", "qdrant") == "qdrant":
             return True
     return False
@@ -417,6 +501,20 @@ def capture_backup(
             errors=[f"could not create backup dir: {type(exc).__name__}: {exc}"],
         )
 
+    def _fail(errs: list[str], **extra: Any) -> BackupResult:
+        reason = "; ".join(errs) or "backup failed"
+        encryption_on = True
+        try:
+            from kaine.security.crypto import get_state_encryptor
+            encryption_on = bool(get_state_encryptor().enabled)
+        except Exception:
+            encryption_on = True
+        if encryption_on:
+            _purge_plaintext_bundle(bundle_dir, error=reason, reason=extra.pop("purge_reason", "backup"))
+        else:
+            _harden_tree(bundle_dir)
+        return BackupResult(ok=False, backup_path=bundle_dir, errors=errs, **extra)
+
     # The Qdrant client reads its API key itself, so the key never enters the configuration.
     entity_id = identity.entity_id if identity is not None else None
     locations = entity_locations(
@@ -427,6 +525,27 @@ def capture_backup(
         entity_id=entity_id,
     )
 
+    if qdrant_in_use(qdrant_cfg):
+        client = _qdrant_client(qdrant_cfg)
+        if client is None:
+            return _fail(
+                ["qdrant: cannot reach or authenticate to Qdrant; nothing was deleted"],
+                inventory=inventory,
+            )
+        try:
+            try:
+                client.get_collections()
+            except Exception:
+                return _fail(
+                    ["qdrant: cannot reach or authenticate to Qdrant; nothing was deleted"],
+                    inventory=inventory,
+                )
+        finally:
+            try:
+                client.close()
+            except Exception:
+                log.debug("capture_backup: qdrant probe client close failed", exc_info=True)
+
     # --- 1. Self-model ------------------------------------------
     self_model_src = state_root / "eidolon" / "self_model.json"
     if self_model_src.is_file():
@@ -434,11 +553,7 @@ def capture_backup(
             shutil.copy2(self_model_src, bundle_dir / "self_model.json")
             inventory.append("self_model.json")
         except Exception as exc:
-            return BackupResult(
-                ok=False,
-                backup_path=bundle_dir,
-                errors=[f"copy self_model.json: {exc}"],
-            )
+            return _fail([f"copy self_model.json: {exc}"])
 
     # --- 2. Language intent expression log --------------------------------
     intent_src = state_root / "lingua" / "intent_expression.jsonl"
@@ -447,11 +562,7 @@ def capture_backup(
             shutil.copy2(intent_src, bundle_dir / "intent_expression.jsonl")
             inventory.append("intent_expression.jsonl")
         except Exception as exc:
-            return BackupResult(
-                ok=False,
-                backup_path=bundle_dir,
-                errors=[f"copy intent_expression.jsonl: {exc}"],
-            )
+            return _fail([f"copy intent_expression.jsonl: {exc}"])
 
     # --- 2b. Rotated intent log corpus ----------------------------------
     intent_corpus_src = state_root / "lingua" / "intent_log"
@@ -462,11 +573,7 @@ def capture_backup(
             )
             inventory.append("intent_log/")
         except Exception as exc:
-            return BackupResult(
-                ok=False,
-                backup_path=bundle_dir,
-                errors=[f"copy intent_log/: {exc}"],
-            )
+            return _fail([f"copy intent_log/: {exc}"])
 
     # Sleep voice adapters are copied by the generic "sleep.adapters" location step.
 
@@ -487,11 +594,7 @@ def capture_backup(
             )
             inventory.append("individuation/")
         except Exception as exc:
-            return BackupResult(
-                ok=False,
-                backup_path=bundle_dir,
-                errors=[f"could not copy individuation evidence: {type(exc).__name__}: {exc}"],
-            )
+            return _fail([f"could not copy individuation evidence: {type(exc).__name__}: {exc}"])
 
     # --- 5. Latest fork snapshot ----------------------------------------
     # Only snapshots attributed to this entity are eligible.
@@ -527,15 +630,15 @@ def capture_backup(
         # consistent and can be opened without the -wal file.
         if loc.key == "episodic_memory.sqlite":
             for path in loc.existing():
-                if path.name.endswith("-wal") or path.name.endswith("-shm"):
+                if (
+                    path.name.endswith("-wal")
+                    or path.name.endswith("-shm")
+                    or path.name.endswith("-journal")
+                ):
                     continue
                 checkpoint_error = checkpoint_sqlite(path)
                 if checkpoint_error is not None:
-                    return BackupResult(
-                        ok=False,
-                        backup_path=bundle_dir,
-                        errors=[f"checkpoint SQLite for {loc.key}: {checkpoint_error}"],
-                    )
+                    return _fail([f"checkpoint SQLite for {loc.key}: {checkpoint_error}"])
         copied_any = False
         for path in loc.existing():
             rel = _bundle_relpath(
@@ -550,11 +653,7 @@ def capture_backup(
                     shutil.copy2(path, dest)
                 copied_any = True
             except Exception as exc:
-                return BackupResult(
-                    ok=False,
-                    backup_path=bundle_dir,
-                    errors=[f"back up {loc.key}: {type(exc).__name__}: {exc}"],
-                )
+                return _fail([f"back up {loc.key}: {type(exc).__name__}: {exc}"])
         if copied_any:
             inventory.append(f"{loc.bundle_dir}/ ({loc.key})")
 
@@ -566,31 +665,19 @@ def capture_backup(
     else:
         client = _qdrant_client(qdrant_cfg)
         if client is None:
-            return BackupResult(
-                ok=False,
-                backup_path=bundle_dir,
-                errors=["qdrant: cannot reach or authenticate to Qdrant; nothing was deleted"],
-            )
+            return _fail(["qdrant: cannot reach or authenticate to Qdrant; nothing was deleted"])
         try:
             try:
                 existing_collections = {c.name for c in client.get_collections().collections}
             except Exception:
-                return BackupResult(
-                    ok=False,
-                    backup_path=bundle_dir,
-                    errors=["qdrant: cannot reach or authenticate to Qdrant; nothing was deleted"],
-                )
+                return _fail(["qdrant: cannot reach or authenticate to Qdrant; nothing was deleted"])
             collections = [
                 c for c in _episodic_memory_collection_names(qdrant_cfg) if c in existing_collections
             ]
             qdrant_dir = bundle_dir / "qdrant"
             qdrant_written, qdrant_errors = _export_qdrant(client, collections, qdrant_dir)
             if qdrant_errors:
-                return BackupResult(
-                    ok=False,
-                    backup_path=bundle_dir,
-                    errors=qdrant_errors,
-                )
+                return _fail(qdrant_errors)
             inventory.extend(qdrant_written)
         finally:
             try:
@@ -666,12 +753,7 @@ def capture_backup(
     try:
         _atomic_write_text(manifest_path, json.dumps(manifest, indent=2, sort_keys=True))
     except Exception as exc:
-        return BackupResult(
-            ok=False,
-            backup_path=bundle_dir,
-            inventory=inventory,
-            errors=errors + [f"write manifest.json: {exc}"],
-        )
+        return _fail(errors + [f"write manifest.json: {exc}"], inventory=inventory)
 
     # Re-harden perms on everything copied/written so far (copy2 preserves
     # source perms, often 0644). Dirs → 0700, files → 0600.
@@ -727,17 +809,17 @@ def capture_backup(
                 if child.exists():
                     # A partial removal leaves plaintext entity content at rest
                     # next to the encrypted archive; this is not a valid backup.
-                    return BackupResult(
-                        ok=False,
-                        backup_path=bundle_dir,
+                    return _fail(
+                        errors
+                        + [
+                            f"could not remove plaintext {child.name} after "
+                            f"encrypting the backup; unencrypted content remains"
+                        ],
                         manifest_path=None,
                         encrypted=False,
                         encryption_failed=True,
                         inventory=inventory,
-                        errors=errors + [
-                            f"could not remove plaintext {child.name} after "
-                            f"encrypting the backup; unencrypted content remains"
-                        ],
+                        purge_reason="encryption",
                     )
             encrypted = True
             inventory.append("bundle.tar.enc (encrypted)")
@@ -763,17 +845,13 @@ def capture_backup(
             bundle_dir,
             exc_info=True,
         )
-        _purge_plaintext_bundle(
-            bundle_dir, error=f"{type(exc).__name__}: {exc}"
-        )
-        return BackupResult(
-            ok=False,
-            backup_path=bundle_dir,
+        return _fail(
+            errors,
             manifest_path=None,
             encrypted=False,
             encryption_failed=True,
             inventory=inventory,
-            errors=errors,
+            purge_reason="encryption",
         )
 
     return BackupResult(
@@ -888,6 +966,9 @@ def delete_entity_state(
         data_root.parent.resolve(),
         fork_root.resolve(),
     }
+    roots = delete_roots(
+        qdrant_cfg, state_root=state_root, data_root=data_root, fork_root=fork_root
+    )
     # Resolve every location before anything is removed: one location can sit
     # inside another (the language outcomes live in the language directory),
     # and an inner location removed with its parent still counts as deleted.
@@ -903,6 +984,11 @@ def delete_entity_state(
                 # Already removed together with an enclosing location.
                 if loc.key not in result.deleted_locations:
                     result.deleted_locations.append(loc.key)
+                continue
+            if not within_delete_roots(path, roots):
+                result.errors.append(
+                    f"refused to delete {path}: outside the state, data and fork roots"
+                )
                 continue
             if path.resolve() in protected:
                 result.errors.append(f"refused to delete {path}: protected root")
@@ -937,16 +1023,25 @@ def delete_entity_state(
     # --- Qdrant collections (only when this deployment uses Qdrant) ---------
     if qdrant_in_use(qdrant_cfg):
         collections = _episodic_memory_collection_names(qdrant_cfg)
-        prefix = _episodic_memory_prefix(qdrant_cfg)
+        prefix_forms = _episodic_memory_prefix_forms(qdrant_cfg)
         stamp_coll = EPISODIC_MEMORY_STAMP_COLLECTION
-        stamp_key_str = stamp_key(prefix)
-        stamp_pid = stamp_point_id(stamp_key_str)
-        strength_key_str = strength_key(prefix)
-        strength_pid = stamp_point_id(strength_key_str)
+        stamp_meta = []
+        for prefix in prefix_forms:
+            stamp_key_str = stamp_key(prefix)
+            strength_key_str = strength_key(prefix)
+            stamp_meta.append(
+                (
+                    stamp_key_str,
+                    stamp_point_id(stamp_key_str),
+                    strength_key_str,
+                    stamp_point_id(strength_key_str),
+                )
+            )
         if dry_run:
             result.dropped_collections = list(collections)  # would-drop
-            result.dropped_collections.append(f"{stamp_coll}:{stamp_key_str}")
-            result.dropped_collections.append(f"{stamp_coll}:{strength_key_str}")
+            for stamp_key_str, _, strength_key_str, _ in stamp_meta:
+                result.dropped_collections.append(f"{stamp_coll}:{stamp_key_str}")
+                result.dropped_collections.append(f"{stamp_coll}:{strength_key_str}")
         else:
             client = _qdrant_client(qdrant_cfg)
             if client is not None:
@@ -960,10 +1055,8 @@ def delete_entity_state(
                         probe_ok = True
                     except Exception as probe_exc:
                         # get_collections() failed: we do NOT know which collections
-                        # exist.  Proceeding as if all were confirmed present would
-                        # silently delete (or attempt to delete) collections we cannot
-                        # verify exist, and would hide the probe failure.  Record the
-                        # error and skip deletion rather than assuming.
+                        # exist, so record the error and skip deletion rather than
+                        # assuming they are all present.
                         result.errors.append(
                             f"qdrant get_collections probe failed "
                             f"({type(probe_exc).__name__}: {probe_exc}); "
@@ -990,32 +1083,37 @@ def delete_entity_state(
                                 from qdrant_client import models
 
                                 if collection_drop_failed:
-                                    points = [stamp_pid]
                                     result.errors.append(
                                         "mnemos strength meta kept because a collection drop failed"
                                     )
-                                else:
-                                    points = [stamp_pid, strength_pid]
-                                client.delete(
-                                    collection_name=stamp_coll,
-                                    points_selector=models.PointIdsList(points=points),
-                                )
-                                result.dropped_collections.append(
-                                    f"{stamp_coll}:{stamp_key_str}"
-                                )
-                                if not collection_drop_failed:
-                                    result.dropped_collections.append(
-                                        f"{stamp_coll}:{strength_key_str}"
+                                for (
+                                    stamp_key_str,
+                                    stamp_pid,
+                                    strength_key_str,
+                                    strength_pid,
+                                ) in stamp_meta:
+                                    points = (
+                                        [stamp_pid]
+                                        if collection_drop_failed
+                                        else [stamp_pid, strength_pid]
                                     )
+                                    client.delete(
+                                        collection_name=stamp_coll,
+                                        points_selector=models.PointIdsList(points=points),
+                                    )
+                                    result.dropped_collections.append(
+                                        f"{stamp_coll}:{stamp_key_str}"
+                                    )
+                                    if not collection_drop_failed:
+                                        result.dropped_collections.append(
+                                            f"{stamp_coll}:{strength_key_str}"
+                                        )
                             except Exception as exc:
                                 result.errors.append(f"delete stamp {stamp_key_str}: {exc}")
                 finally:
                     try:
                         client.close()
                     except Exception:
-                        # Best-effort: deletion attempts above already recorded
-                        # their own outcomes; a failure to close the connection
-                        # doesn't change what was (or wasn't) dropped.
                         log.debug(
                             "delete_entity_state: qdrant client close failed",
                             exc_info=True,

@@ -96,7 +96,9 @@ def decommission_env(requirepass_redis, tmp_path, monkeypatch):
     """Provide unencrypted state, operator env, and a stopped cycle gate."""
     operator_path = tmp_path / "config" / "kaine.operator.toml"
     operator_path.parent.mkdir(parents=True, exist_ok=True)
-    operator_path.write_text("[operator]\n", encoding="utf-8")
+    # Module toggles come from the operator overlay (the default profile
+    # leaves the episodic memory module off).
+    operator_path.write_text("[modules]\nmnemos = true\n", encoding="utf-8")
     monkeypatch.setattr(kaine.config, "OPERATOR_CONFIG_PATH", str(operator_path))
     monkeypatch.setattr(lifecycle_main, "_cycle_process_running", lambda: False)
     monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")

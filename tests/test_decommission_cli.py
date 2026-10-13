@@ -334,11 +334,17 @@ def test_qdrant_unreachable_fails_before_deletion(tmp_path, monkeypatch):
         "I acknowledge the CAL welfare terms",
         "Kaine Nova",
     ]
+    cli_args = _args(
+        tmp_path,
+        extra_config='[mnemos]\nbackend = "qdrant"\n[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
+    )
+    # Module toggles come from the operator overlay (the default profile
+    # leaves the episodic memory module off).
+    (tmp_path / "config" / "kaine.operator.toml").write_text(
+        "[modules]\nmnemos = true\n", encoding="utf-8"
+    )
     rc = main(
-        _args(
-            tmp_path,
-            extra_config='[mnemos]\nbackend = "qdrant"\n[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
-        ),
+        cli_args,
         input_fn=_scripted_input(answers),
         out=out,
         err=err,

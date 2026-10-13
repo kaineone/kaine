@@ -161,7 +161,7 @@ def test_capture_backup_fails_when_qdrant_unreachable(tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=tmp_path / "forks",
-        qdrant_cfg={"mnemos": {"qdrant": {"host": "127.0.0.1", "port": 59999}}},
+        qdrant_cfg={"modules": {"mnemos": True}, "mnemos": {"qdrant": {"host": "127.0.0.1", "port": 59999}}},
         out_root=tmp_path / "backups",
         entity_name="Kaine Nova",
         assessment=_assessment(),

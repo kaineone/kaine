@@ -142,6 +142,7 @@ def test_decommission_deletes_stamp_point(tmp_path, monkeypatch):
     result = delete_entity_state(
         state_root=state_root,
         qdrant_cfg={
+            "modules": {"mnemos": True},
             "mnemos": {
                 "qdrant": {
                     "host": "127.0.0.1",
@@ -190,6 +191,7 @@ def test_decommission_keeps_strength_meta_when_a_drop_fails(tmp_path, monkeypatc
     result = delete_entity_state(
         state_root=state_root,
         qdrant_cfg={
+            "modules": {"mnemos": True},
             "mnemos": {
                 "qdrant": {
                     "host": "127.0.0.1",

@@ -30,8 +30,11 @@ Exit codes
 7  no entity state found at the resolved state root (nothing backed up or deleted)
 8  Qdrant could not be reached or authenticated (nothing was deleted), or the
    bus could not be reached or authenticated (nothing was deleted), or a
-   stream could not be deleted (the audit record names what was removed);
-   a missing or malformed bus configuration is a configuration error (6)
+   stream could not be deleted, or deletion was incomplete (a removal failed,
+   a path was refused as outside the state, data and fork roots or as a
+   protected root, or a Qdrant collection could not be dropped); the audit
+   record has outcome "incomplete" and names what was removed; a missing or
+   malformed bus configuration is a configuration error (6)
 """
 from __future__ import annotations
 
@@ -79,6 +82,21 @@ RUNTIME_FRESH_SECONDS = 5.0
 # A broadcast this recent means a cycle ran moments ago; wider than the
 # runtime-file window because a sleeping or dilated cycle broadcasts less often.
 BUS_FRESH_SECONDS = 60.0
+
+
+def _fork_root_from_config(config: dict[str, Any], state_root: Path) -> Path:
+    """The fork root from [lifecycle].snapshots_path, or state_root / "forks"."""
+    try:
+        value = config["lifecycle"]["snapshots_path"]
+    except (KeyError, TypeError):
+        return state_root / "forks"
+    if not isinstance(value, str) or not value:
+        return state_root / "forks"
+    if value.startswith("state/"):
+        return state_root / value[len("state/") :]
+    if Path(value).is_absolute():
+        return Path(value)
+    return resolve(value)
 
 
 # ---------------------------------------------------------------------------
@@ -375,7 +393,10 @@ def main(
     install_data_root(config)
 
     state_root = resolve(args.state_root)
-    fork_root = resolve(args.fork_root) if args.fork_root is not None else state_root / "forks"
+    if args.fork_root is not None:
+        fork_root = resolve(args.fork_root)
+    else:
+        fork_root = _fork_root_from_config(config, state_root)
     eval_root = resolve(args.eval_root)
     out_root = resolve(args.out_root)
     runtime_path = state_root / "cycle" / "runtime.json"
@@ -708,12 +729,15 @@ def main(
         )
         still_training: list[str] = []
         cancelled_names: list[str] = []
-        jobs_paths = [
-            path
-            for loc in voice_locs
-            if loc.key == "sleep.voice_align_jobs"
-            for path in loc.existing()
-        ]
+        jobs_paths: list[Path] = []
+        seen_jobs: set[str] = set()
+        for loc in voice_locs:
+            if loc.key in ("sleep.trainer_workdir", "sleep.voice_align_jobs"):
+                for path in loc.existing():
+                    real = os.path.realpath(path)
+                    if real not in seen_jobs:
+                        seen_jobs.add(real)
+                        jobs_paths.append(path)
         for vp in jobs_paths:
             c, s = cancel_voice_alignment_jobs(vp)
             cancelled_names.extend(c)
@@ -739,7 +763,7 @@ def main(
             dry_run=False,
         )
 
-        if result.redis_failed:
+        if result.incomplete:
             out.write("\nEntity state deletion INCOMPLETE.\n")
         else:
             out.write("\nEntity state deleted.\n")
@@ -761,7 +785,7 @@ def main(
         if result.rdb_snapshot is not None:
             out.write(f"  redis snapshot: {result.rdb_snapshot}\n")
         if result.errors:
-            out.write("  (non-fatal notes:)\n")
+            out.write("  errors (the entity is not fully deleted):\n")
             for e in result.errors:
                 out.write(f"    - {e}\n")
 
@@ -770,7 +794,7 @@ def main(
         record = {
             "at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "entity_id": entity_id,
-            "outcome": "failed" if result.redis_failed else "deleted",
+            "outcome": "incomplete" if result.incomplete else "deleted",
             "removed_paths": [
                 str(Path(p).relative_to(state_root))
                 if Path(p).is_relative_to(state_root)
@@ -791,8 +815,14 @@ def main(
         audit_path = write_decommission_audit(state_root, record)
         out.write(f"  audit record: {audit_path}\n")
 
-        if result.redis_failed:
-            out.write(f"FAILED: {result.redis_failed}\n")
+        if result.incomplete:
+            if result.redis_failed:
+                out.write(f"FAILED: {result.redis_failed}\n")
+            else:
+                out.write(
+                    "FAILED: some locations could not be deleted; "
+                    "see the errors above and the audit record\n"
+                )
             out.write(
                 f"\nThe transferable backup remains at:\n    {backup.backup_path}\n"
                 "Keep it safe and transfer it per CAL Article 4.2.\n"
