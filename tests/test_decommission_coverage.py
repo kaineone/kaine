@@ -17,6 +17,9 @@ from kaine.lifecycle.decommission import (
 from kaine.lifecycle.divergence import DivergenceAssessment
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
+# This deployment keeps no memory in Qdrant (the runtime default is Qdrant).
+_NO_QDRANT = {"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}}
+
 
 @pytest.fixture(autouse=True)
 def _disable_encryption():
@@ -55,7 +58,7 @@ def test_backup_copies_new_locations_and_delete_removes_them(tmp_path):
         state_root=state_root,
         fork_root=fork_root,
         data_root=data_root,
-        qdrant_cfg={},
+        qdrant_cfg=_NO_QDRANT,
         out_root=out_root,
         entity_name="Kaine Nova",
         assessment=_assessment(),
@@ -73,7 +76,7 @@ def test_backup_copies_new_locations_and_delete_removes_them(tmp_path):
 
     result = delete_entity_state(
         state_root=state_root,
-        qdrant_cfg={},
+        qdrant_cfg=_NO_QDRANT,
         fork_root=fork_root,
         data_root=data_root,
     )
@@ -111,7 +114,7 @@ def test_sqlite_store_is_checkpointed_and_backed_up(tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=tmp_path / "forks",
-        qdrant_cfg={},
+        qdrant_cfg=_NO_QDRANT,
         out_root=tmp_path / "backups",
         entity_name="Kaine Nova",
         assessment=_assessment(),
@@ -126,7 +129,7 @@ def test_sqlite_store_is_checkpointed_and_backed_up(tmp_path):
     assert set(rows) == {("row1",), ("row2",)}
     backed.close()
 
-    delete_entity_state(state_root=state_root, qdrant_cfg={})
+    delete_entity_state(state_root=state_root, qdrant_cfg=_NO_QDRANT)
     assert not db_path.exists()
     assert not (db_path.parent / (db_path.name + "-wal")).exists()
     assert not (db_path.parent / (db_path.name + "-shm")).exists()
@@ -154,7 +157,7 @@ def test_other_entity_fork_is_kept(tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=fork_root,
-        qdrant_cfg={},
+        qdrant_cfg=_NO_QDRANT,
         out_root=tmp_path / "backups",
         entity_name="Kaine Nova",
         assessment=_assessment(),
@@ -165,7 +168,7 @@ def test_other_entity_fork_is_kept(tmp_path):
     ).is_file()
     assert not (result.backup_path / "locations" / "forks.other").exists()
 
-    result = delete_entity_state(state_root=state_root, qdrant_cfg={}, fork_root=fork_root)
+    result = delete_entity_state(state_root=state_root, qdrant_cfg=_NO_QDRANT, fork_root=fork_root)
     assert not own.exists()
     assert other.exists()
 
@@ -173,9 +176,17 @@ def test_other_entity_fork_is_kept(tmp_path):
 def test_qdrant_in_use_and_key_folding(tmp_path):
     """qdrant_in_use detects the backend and with_qdrant_api_key folds keys."""
     assert qdrant_in_use({"mnemos": {"backend": "qdrant"}}) is True
-    assert qdrant_in_use({"mnemos": {"backend": "sqlite_vec"}}) is False
+    # Social cognition still defaults to Qdrant when only [mnemos] moves off it.
+    assert qdrant_in_use({"mnemos": {"backend": "sqlite_vec"}}) is True
     assert qdrant_in_use({"mnemos": {"qdrant": {"host": "h"}}}) is True
-    assert qdrant_in_use(None) is False
+    assert qdrant_in_use({"mnemos": {}}) is True
+    assert qdrant_in_use(None) is True
+    assert (
+        qdrant_in_use(
+            {"mnemos": {"backend": "sqlite_vec"}, "empatheia": {"backend": "inmemory"}}
+        )
+        is False
+    )
 
     original = {"mnemos": {"qdrant": {}}, "empatheia": {"qdrant": {}}}
     cfg = with_qdrant_api_key(original, env={"KAINE_QDRANT_API_KEY": "k"})
@@ -245,7 +256,10 @@ def test_contents_only_volume_keeps_its_directory(tmp_path):
         state_root=state_root,
         fork_root=tmp_path / "forks",
         data_root=tmp_path / "data",
-        qdrant_cfg={"hypnos": {"voice_alignment": {"organ_adapters_dir": str(organ)}}},
+        qdrant_cfg={
+            **_NO_QDRANT,
+            "hypnos": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
+        },
         out_root=tmp_path / "backups",
         entity_name="Kaine Nova",
         assessment=_assessment(),
@@ -258,7 +272,10 @@ def test_contents_only_volume_keeps_its_directory(tmp_path):
 
     delete_entity_state(
         state_root=state_root,
-        qdrant_cfg={"hypnos": {"voice_alignment": {"organ_adapters_dir": str(organ)}}},
+        qdrant_cfg={
+            **_NO_QDRANT,
+            "hypnos": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
+        },
     )
     assert not (organ / "active-1.gguf").exists()
     assert not (organ / "active.json").exists()

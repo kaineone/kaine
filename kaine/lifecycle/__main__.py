@@ -56,6 +56,9 @@ from kaine.lifecycle.decommission import (
     write_decommission_audit,
 )
 from kaine.lifecycle.decommission_locations import (
+    BACKUP_DELETE,
+    DELETE,
+    RETAIN,
     cancel_voice_alignment_jobs,
     entity_locations,
 )
@@ -231,6 +234,50 @@ def _resolve_entity_name(state_root: Path, config: dict[str, Any]) -> str:
         # real decommission gates below do not depend on it.
         log.debug("could not resolve entity name from self-model", exc_info=True)
     return "entity"
+
+
+def _entity_id(state_root: Path) -> str | None:
+    try:
+        identity = load_identity(state_root / "identity" / "entity.json")
+        return identity.entity_id if identity is not None else None
+    except IdentityError:
+        return None
+
+
+def _write_location_split(out, qcfg, *, state_root, data_dir, fork_root) -> None:
+    locs = [
+        loc
+        for loc in entity_locations(
+            qcfg,
+            state_root=state_root,
+            data_root=data_dir,
+            fork_root=fork_root,
+            entity_id=_entity_id(state_root),
+        )
+        if loc.existing()
+    ]
+    groups = {BACKUP_DELETE: [], DELETE: [], RETAIN: []}
+    for loc in locs:
+        groups[loc.decision].append(loc)
+    out.write("\nWhat decommission does with this entity's data:\n")
+    out.write("  backed up, then deleted:\n")
+    for loc in groups[BACKUP_DELETE]:
+        out.write(f"    - {loc.key}: {loc.reason}\n")
+    if not groups[BACKUP_DELETE]:
+        out.write("    (none)\n")
+    out.write("  deleted without a backup:\n")
+    for loc in groups[DELETE]:
+        out.write(f"    - {loc.key}: {loc.reason}\n")
+    if not groups[DELETE]:
+        out.write("    (none)\n")
+    out.write("  kept by design:\n")
+    for loc in groups[RETAIN]:
+        out.write(f"    - {loc.key}: {loc.reason}\n")
+    if not groups[RETAIN]:
+        out.write("    (none)\n")
+    out.write("  also deleted: this entity's bus streams\n")
+    if qdrant_in_use(qcfg):
+        out.write("  also exported, then deleted: the episodic memory collections in Qdrant\n")
 
 
 # ---------------------------------------------------------------------------
@@ -510,6 +557,7 @@ def main(
             except Exception:
                 pass
 
+    _write_location_split(out, qcfg, state_root=state_root, data_dir=data_dir, fork_root=fork_root)
     out.write("\n" + _NOTICE_GUARDIANS)
 
     # --- Branch on divergence ------------------------------------------
@@ -679,12 +727,7 @@ def main(
             )
             return 3
 
-        entity_id: str | None = None
-        try:
-            identity = load_identity(state_root / "identity" / "entity.json")
-            entity_id = identity.entity_id if identity is not None else None
-        except IdentityError:
-            entity_id = None
+        entity_id = _entity_id(state_root)
 
         result = delete_entity_state(
             state_root=state_root,

@@ -17,6 +17,9 @@ from kaine.memory_kinds import (
     strength_key,
 )
 
+# This deployment keeps no memory in Qdrant (the runtime default is Qdrant).
+_NO_QDRANT = {"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}}
+
 HAS_QDRANT = importlib.util.find_spec("qdrant_client") is not None
 
 
@@ -46,7 +49,7 @@ def test_dry_run_removes_nothing(tmp_path):
     state_root = tmp_path / "state"
     _seed(state_root)
     result = delete_entity_state(
-        state_root=state_root, qdrant_cfg={}, dry_run=True
+        state_root=state_root, qdrant_cfg=_NO_QDRANT, dry_run=True
     )
     assert result.dry_run is True
     assert result.removed_paths == []
@@ -85,7 +88,7 @@ def test_delete_removes_only_intended_paths(tmp_path):
 def test_delete_handles_missing_state(tmp_path):
     state_root = tmp_path / "state"  # never created
     result = delete_entity_state(
-        state_root=state_root, qdrant_cfg={}, dry_run=False
+        state_root=state_root, qdrant_cfg=_NO_QDRANT, dry_run=False
     )
     # No on-disk removals, no crash.
     assert result.removed_paths == []

@@ -18,6 +18,9 @@ from kaine.security.crypto import (
     set_state_encryptor,
 )
 
+# This deployment keeps no memory in Qdrant (the runtime default is Qdrant).
+_NO_QDRANT = {"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}}
+
 
 def _seed_state(state_root: Path) -> None:
     (state_root / "eidolon").mkdir(parents=True, exist_ok=True)
@@ -55,7 +58,7 @@ def test_capture_backup_copies_artifacts_and_manifest(tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=fork_root,
-        qdrant_cfg={},
+        qdrant_cfg=_NO_QDRANT,
         out_root=out_root,
         entity_name="Kaine Nova",
         assessment=_assessment(),
@@ -118,7 +121,7 @@ def test_capture_backup_encrypts_when_enabled(tmp_path, monkeypatch):
         result = capture_backup(
             state_root=state_root,
             fork_root=tmp_path / "forks",
-            qdrant_cfg={},
+            qdrant_cfg=_NO_QDRANT,
             out_root=tmp_path / "backups",
             entity_name="Kaine Nova",
             assessment=_assessment(),
@@ -162,7 +165,7 @@ def test_capture_backup_plaintext_when_disabled(tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=tmp_path / "forks",
-        qdrant_cfg={},
+        qdrant_cfg=_NO_QDRANT,
         out_root=tmp_path / "backups",
         entity_name="Kaine Nova",
         assessment=_assessment(),
@@ -181,7 +184,7 @@ def test_capture_backup_bundle_dir_is_owner_only(tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=tmp_path / "forks",
-        qdrant_cfg={},
+        qdrant_cfg=_NO_QDRANT,
         out_root=tmp_path / "backups",
         entity_name="Kaine Nova",
         assessment=_assessment(),
@@ -215,7 +218,7 @@ def test_capture_backup_purges_plaintext_on_encryption_failure(tmp_path):
         result = capture_backup(
             state_root=state_root,
             fork_root=tmp_path / "forks",
-            qdrant_cfg={},
+            qdrant_cfg=_NO_QDRANT,
             out_root=tmp_path / "backups",
             entity_name="Kaine Nova",
             assessment=_assessment(),

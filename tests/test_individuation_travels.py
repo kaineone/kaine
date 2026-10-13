@@ -243,7 +243,7 @@ async def test_decommission_backup_and_delete(real_encryptor, tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=tmp_path / "forks",
-        qdrant_cfg=None,
+        qdrant_cfg={"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}},  # no Qdrant: the runtime default would need a live store
         out_root=tmp_path / "backups",
         entity_name="decom",
         assessment=assessment,

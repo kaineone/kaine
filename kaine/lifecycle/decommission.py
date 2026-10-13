@@ -299,16 +299,19 @@ def _export_qdrant(
 
 
 def qdrant_in_use(config: Mapping[str, Any] | None) -> bool:
-    """Return True when episodic or social memory uses the Qdrant backend."""
-    if config is None:
-        return False
+    """Return True when episodic or social memory uses the Qdrant backend.
+
+    Follows the runtime's own defaults (``kaine.extras``): a ``[mnemos]`` or
+    ``[empatheia]`` section without a ``backend`` key, or no section at all,
+    means Qdrant. Treating a missing key as "not used" would skip the export
+    and the deletion of a store the cycle actually wrote to.
+    """
+    cfg = config or {}
     for section_name in ("mnemos", "empatheia"):
-        section = config.get(section_name)
-        if not isinstance(section, dict):
-            continue
-        if section.get("backend") == "qdrant":
-            return True
-        if "backend" not in section and isinstance(section.get("qdrant"), Mapping):
+        section = cfg.get(section_name)
+        if not isinstance(section, Mapping):
+            section = {}
+        if section.get("backend", "qdrant") == "qdrant":
             return True
     return False
 

@@ -137,7 +137,14 @@ def _args(tmp_path, *, dry_run=False, eval_root=None, extra_config=""):
     cfg_dir.mkdir(parents=True, exist_ok=True)
     cfg_path = cfg_dir / "kaine.toml"
     cfg_path.write_text(
-        "# minimal config\n[research_submission]\nenabled = false\n" + extra_config,
+        "# minimal config\n[research_submission]\nenabled = false\n"
+        # The runtime default memory backend is Qdrant; these tests keep none.
+        + (
+            ""
+            if "[mnemos]" in extra_config
+            else '[mnemos]\nbackend = "inmemory"\n[empatheia]\nbackend = "inmemory"\n'
+        )
+        + extra_config,
         encoding="utf-8",
     )
     a = [
@@ -789,3 +796,36 @@ def test_empty_subtree_dirs_only_refuses_decommission(tmp_path, monkeypatch):
     assert rc == 7
     assert "no entity state found" in err.getvalue().lower()
     assert not out_root.exists() or not any(out_root.iterdir())
+
+
+def test_location_split_printed_before_confirmation(tmp_path, monkeypatch):
+    """The location split is printed before any confirmation prompt."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    out = io.StringIO()
+    answers = iter([
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ])
+
+    def _input(prompt=""):
+        out.write("<<PROMPT>>")
+        return next(answers, "")
+
+    rc = main(
+        _args(tmp_path),
+        input_fn=_input,
+        out=out,
+        err=io.StringIO(),
+    )
+    assert rc == 0, out.getvalue()
+    text = out.getvalue()
+    split_idx = text.find("What decommission does with this entity's data:")
+    prompt_idx = text.find("<<PROMPT>>")
+    assert split_idx != -1
+    assert prompt_idx != -1
+    assert split_idx < prompt_idx
+    assert "backed up, then deleted:" in text
+    assert "- self_model:" in text
+    assert "- language:" in text
+    assert "kept by design:" in text

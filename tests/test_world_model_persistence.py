@@ -483,7 +483,7 @@ def test_decommission_backup_includes_world_model_checkpoint(tmp_path: Path, mon
     result = capture_backup(
         state_root=state_root,
         fork_root=tmp_path / "forks",
-        qdrant_cfg={},
+        qdrant_cfg={"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}},  # no Qdrant: the runtime default would need a live store
         out_root=tmp_path / "backups",
         entity_name="testkaine",
         assessment=DivergenceAssessment(diverged=False, signals={}, summary="t"),

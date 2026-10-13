@@ -641,3 +641,61 @@ def test_failed_qdrant_export_aborts_before_anything_is_deleted(
     assert not audit_path.exists()
 
     assert fake.dropped == []
+
+
+def test_seeded_content_never_reaches_logs(requirepass_redis, tmp_path, monkeypatch):
+    """Seeded secrets and continuity notes do not appear in log files."""
+    args, config_dict, roots = build_entity(tmp_path, requirepass_redis)
+
+    collection_names = decommission._episodic_memory_collection_names(config_dict)
+    fake = FakeQdrant(collection_names)
+    monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: fake)
+    monkeypatch.setattr(lifecycle_main, "_qdrant_client", lambda cfg: fake)
+
+    import logging
+
+    log_dir = roots.state_root / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "decommission-capture.log"
+    handler = logging.FileHandler(log_path)
+    handler.setLevel(logging.DEBUG)
+    root_logger = logging.getLogger()
+    old_level = root_logger.level
+    root_logger.setLevel(logging.DEBUG)
+    root_logger.addHandler(handler)
+
+    out = io.StringIO()
+    err = io.StringIO()
+    inputs = iter(
+        [
+            "It wished to persist and keep its memories.",
+            "n",
+            "I have preserved and will arrange safekeeping for this entity",
+            "Kaine Nova",
+        ]
+    )
+
+    def input_fn(prompt=""):
+        return next(inputs, "")
+
+    try:
+        rc = main(args, input_fn=input_fn, out=out, err=err)
+
+        if rc != 0:
+            print(out.getvalue())
+            print(err.getvalue())
+        assert rc == 0
+    finally:
+        root_logger.removeHandler(handler)
+        handler.close()
+        root_logger.setLevel(old_level)
+
+    combined = out.getvalue() + err.getvalue()
+    assert "SECRET-" not in combined
+
+    for log_file in (roots.state_root / "logs").rglob("*"):
+        if not log_file.is_file():
+            continue
+        text = log_file.read_text(encoding="utf-8", errors="replace")
+        assert "SECRET-" not in text
+        assert "It wished to persist" not in text

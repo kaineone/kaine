@@ -233,7 +233,7 @@ def test_m1_backup_encryption_failure_returns_not_ok(tmp_path, monkeypatch):
         result = capture_backup(
             state_root=state_root,
             fork_root=tmp_path / "forks",
-            qdrant_cfg={},
+            qdrant_cfg={"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}},
             out_root=tmp_path / "backups",
             entity_name="Test",
             assessment=_assessment(),
@@ -272,7 +272,7 @@ def test_m1_backup_encryption_success_still_ok(tmp_path, monkeypatch):
         result = capture_backup(
             state_root=state_root,
             fork_root=tmp_path / "forks",
-            qdrant_cfg={},
+            qdrant_cfg={"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}},
             out_root=tmp_path / "backups",
             entity_name="Test",
             assessment=_assessment(),
@@ -296,7 +296,7 @@ def test_m1_backup_plaintext_when_encryption_disabled_is_ok(tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=tmp_path / "forks",
-        qdrant_cfg={},
+        qdrant_cfg={"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}},
         out_root=tmp_path / "backups",
         entity_name="Test",
         assessment=_assessment(),

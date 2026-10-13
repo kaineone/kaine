@@ -247,7 +247,7 @@ def test_capture_backup_plaintext_includes_corpus(tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=fork_root,
-        qdrant_cfg={},
+        qdrant_cfg={"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}},  # no Qdrant: the runtime default would need a live store
         out_root=out_root,
         entity_name="Kaine Nova",
         assessment=_assessment(),
@@ -272,7 +272,7 @@ def test_capture_backup_encrypted_includes_corpus(monkeypatch, tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=fork_root,
-        qdrant_cfg={},
+        qdrant_cfg={"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}},  # no Qdrant: the runtime default would need a live store
         out_root=out_root,
         entity_name="Kaine Nova",
         assessment=_assessment(),
