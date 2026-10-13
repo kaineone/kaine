@@ -90,6 +90,20 @@ class _RegistryLike(Protocol):
         ...
 
 
+def _artifact_dirs_by_module(root: Path) -> dict[str, Path]:
+    """Map each artifact directory under ``root`` to its module key; a directory already under the current name wins over an old-named one."""
+    if not root.is_dir():
+        return {}
+    found: dict[str, Path] = {}
+    for p in sorted(root.iterdir()):
+        if not p.is_dir() or p.is_symlink():
+            continue
+        key = legacy_aliases.map_module_key(p.name)
+        if key not in found or p.name == key:
+            found[key] = p
+    return found
+
+
 class ForkManager:
     """Captures, restores, forks, and merges KAINE state snapshots.
 
@@ -438,16 +452,8 @@ class ForkManager:
         )
         a_root = snapshot_dir(self._root, snap_a.id) / ARTIFACTS_DIRNAME
         b_root = snapshot_dir(self._root, snap_b.id) / ARTIFACTS_DIRNAME
-        a_paths = {
-            legacy_aliases.map_module_key(p.name): p
-            for p in a_root.iterdir()
-            if p.is_dir() and not p.is_symlink()
-        } if a_root.is_dir() else {}
-        b_paths = {
-            legacy_aliases.map_module_key(p.name): p
-            for p in b_root.iterdir()
-            if p.is_dir() and not p.is_symlink()
-        } if b_root.is_dir() else {}
+        a_paths = _artifact_dirs_by_module(a_root)
+        b_paths = _artifact_dirs_by_module(b_root)
         sources: dict[str, str] = {}
         for name in sorted(a_paths.keys() | b_paths.keys()):
             if name == legacy_aliases.map_module_key("phantasia") and a_has and b_has:

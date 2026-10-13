@@ -127,6 +127,29 @@ async def test_merge_maps_old_artifact_directory_names(
     assert (merged_dir / "wm.bin").read_bytes() == b"b"
 
 
+def test_merge_prefers_artifacts_under_the_current_name(
+    monkeypatch, tmp_path: Path
+):
+    """A directory already under the current module key wins over an old-named one."""
+    _keys_done(monkeypatch)
+    fm = ForkManager(tmp_path / "forks")
+    snap_a = fm.snapshot(ModuleRegistry())
+    snap_b = fm.snapshot(ModuleRegistry())
+
+    new_name = legacy_aliases.map_module_key("thymos")
+    old_dir = artifacts_dir(fm.root, snap_a.id, "thymos")
+    new_dir = artifacts_dir(fm.root, snap_a.id, new_name)
+    old_dir.mkdir(parents=True, exist_ok=True)
+    new_dir.mkdir(parents=True, exist_ok=True)
+    (old_dir / "artifact.bin").write_bytes(b"old")
+    (new_dir / "artifact.bin").write_bytes(b"new")
+
+    merged = fm.merge(snap_a.id, snap_b.id)
+    assert merged.metadata["artifact_sources"] == {new_name: "a"}
+    merged_dir = artifacts_dir(fm.root, merged.id, new_name)
+    assert (merged_dir / "artifact.bin").read_bytes() == b"new"
+
+
 def test_viewing_analysis_maps_old_member_sources(monkeypatch, tmp_path: Path):
     """Coalition member sources written under old keys are counted under the new keys."""
     _keys_done(monkeypatch)

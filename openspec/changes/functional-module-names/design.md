@@ -645,8 +645,11 @@ are the ones the sections above leave open; each follows from those sections.
 ### Keys step, split in two (PR 6a and 6b)
 
 The keys step changes wire names, so it lands in two PRs. **6a** prepares and
-changes no behaviour: every reader it adds acts only once the keys scope is done,
-and the fast suite's outcomes match main's test by test. **6b** runs the codemod,
+changes no name on disk or on the bus: every reader it adds acts only once the keys
+scope is done, and the fast suite's outcomes match main's test by test. Its only
+runtime changes are deliberate: the maturation gate counts sleeps once more when
+it stops, the individuation refusal names the config key `[modules].lingua`, and
+merging snapshots prefers an artifact directory already under the current name. **6b** runs the codemod,
 moves the files, marks the keys scope done and so turns the readers on.
 
 What 6a decides, from a keys-scope dry run on main (72 moves, about 10.5k
