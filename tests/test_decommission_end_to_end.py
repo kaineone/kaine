@@ -26,11 +26,15 @@ except ModuleNotFoundError:
 import kaine.config
 import kaine.lifecycle.__main__ as lifecycle_main
 from kaine.lifecycle import decommission
-from kaine.lifecycle.__main__ import main
 from kaine.lifecycle.decommission_locations import BACKUP_DELETE, DELETE, RETAIN
 from kaine.lifecycle.identity import mint_identity, save_identity, write_identity_sidecar
 from kaine.modules.episodic_memory.storage import SqliteVecStorage
-from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
+from kaine.security.crypto import (
+    CryptoConfig,
+    StateEncryptor,
+    get_state_encryptor,
+    set_state_encryptor,
+)
 
 pytest.importorskip("sqlite_vec")
 
@@ -102,7 +106,8 @@ def decommission_env(requirepass_redis, tmp_path, monkeypatch):
     monkeypatch.delenv("KAINE_REDIS_PASSWORD", raising=False)
     monkeypatch.delenv("KAINE_QDRANT_API_KEY", raising=False)
 
-    original_encryptor = set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
+    original_encryptor = get_state_encryptor()
+    set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
     yield
     set_state_encryptor(original_encryptor)
 
@@ -502,7 +507,7 @@ def test_full_decommission_covers_every_location(requirepass_redis, tmp_path, mo
     def input_fn(prompt=""):
         return next(inputs, "")
 
-    rc = main(args, input_fn=input_fn, out=out, err=err)
+    rc = lifecycle_main.main(args, input_fn=input_fn, out=out, err=err)
 
     if rc != 0:
         print(out.getvalue())
@@ -625,7 +630,7 @@ def test_failed_qdrant_export_aborts_before_anything_is_deleted(
     def input_fn(prompt=""):
         return next(inputs, "")
 
-    rc = main(args, input_fn=input_fn, out=out, err=err)
+    rc = lifecycle_main.main(args, input_fn=input_fn, out=out, err=err)
 
     assert rc == 4
 
@@ -679,7 +684,7 @@ def test_seeded_content_never_reaches_logs(requirepass_redis, tmp_path, monkeypa
         return next(inputs, "")
 
     try:
-        rc = main(args, input_fn=input_fn, out=out, err=err)
+        rc = lifecycle_main.main(args, input_fn=input_fn, out=out, err=err)
 
         if rc != 0:
             print(out.getvalue())

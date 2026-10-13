@@ -696,6 +696,8 @@ def main(
                     try:
                         qclient.close()
                     except Exception:
+                        # Closing the preflight client is best effort; the
+                        # outcome above already decided the run.
                         pass
 
         voice_locs = entity_locations(

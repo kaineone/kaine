@@ -168,7 +168,7 @@ def test_other_entity_fork_is_kept(tmp_path):
     ).is_file()
     assert not (result.backup_path / "locations" / "forks.other").exists()
 
-    result = delete_entity_state(state_root=state_root, qdrant_cfg=_NO_QDRANT, fork_root=fork_root)
+    delete_entity_state(state_root=state_root, qdrant_cfg=_NO_QDRANT, fork_root=fork_root)
     assert not own.exists()
     assert other.exists()
 
