@@ -91,6 +91,11 @@ def test_decommission_dry_run_backup_under_data_root(tmp_path, monkeypatch):
     args, root = _root_args(tmp_path, dry_run=True)
     state_root = root / "state"
     _seed_state(state_root)
+    fakeredis = pytest.importorskip("fakeredis")
+    monkeypatch.setattr(
+        "kaine.lifecycle.__main__._open_bus_client",
+        lambda: fakeredis.FakeRedis(),
+    )
     out = io.StringIO()
     rc = main(args, input_fn=_scripted_input([]), out=out, err=io.StringIO())
     assert rc == 0

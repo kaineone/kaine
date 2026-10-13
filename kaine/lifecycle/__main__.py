@@ -28,7 +28,8 @@ Exit codes
    or state-encryption posture could not be installed)
 7  no entity state found at the resolved state root (nothing backed up or deleted)
 8  the bus could not be reached or authenticated (nothing was deleted), or a
-   stream could not be deleted (the audit record names what was removed)
+   stream could not be deleted (the audit record names what was removed);
+   a missing or malformed bus configuration is a configuration error (6)
 """
 from __future__ import annotations
 
@@ -443,6 +444,11 @@ def main(
         out.write(_NOTICE_DIVERGED if assessment.diverged else _NOTICE_NOT_DIVERGED)
         try:
             bus_client = _open_bus_client()
+        except BusConfigError as exc:
+            err.write(
+                f"decommission: configuration error: bus configuration: {exc}\n"
+            )
+            return 6
         except Exception as exc:
             out.write(
                 f"FAILED: cannot load the bus configuration ({type(exc).__name__}); nothing was deleted\n"
@@ -574,6 +580,11 @@ def main(
     # --- Delete --------------------------------------------------------
     try:
         bus_client = _open_bus_client()
+    except BusConfigError as exc:
+        err.write(
+            f"decommission: configuration error: bus configuration: {exc}\n"
+        )
+        return 6
     except Exception as exc:
         out.write(
             f"FAILED: cannot load the bus configuration ({type(exc).__name__}); nothing was deleted\n"

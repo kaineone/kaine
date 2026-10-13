@@ -871,7 +871,7 @@ def write_decommission_audit(state_root: Path, record: dict[str, Any]) -> Path:
     try:
         os.chmod(audit_dir, 0o700)
     except Exception:
-        log.debug("write_decommission_audit: could not chmod audit directory", exc_info=True)
+        log.warning("decommission audit: could not restrict the audit directory to the owner", exc_info=True)
 
     path = audit_dir / DECOMMISSION_AUDIT_RELPATH.name
     with path.open("a", encoding="utf-8") as fh:
@@ -880,7 +880,7 @@ def write_decommission_audit(state_root: Path, record: dict[str, Any]) -> Path:
     try:
         os.chmod(path, 0o600)
     except Exception:
-        log.debug("write_decommission_audit: could not chmod audit file", exc_info=True)
+        log.warning("decommission audit: could not restrict the audit file to the owner", exc_info=True)
 
     return path
 
@@ -1013,7 +1013,10 @@ def clear_entity_streams(client: Any, names: list[str], *, dry_run: bool) -> Str
         try:
             raw_cfg = client.config_get("appendonly")
             cfg = (
-                {k.decode() if isinstance(k, bytes) else k: v for k, v in raw_cfg.items()}
+                {
+                    k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v
+                    for k, v in raw_cfg.items()
+                }
                 if isinstance(raw_cfg, dict)
                 else {}
             )

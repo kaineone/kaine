@@ -253,6 +253,35 @@ def test_bus_auth_failure_deletes_nothing(tmp_path, monkeypatch):
     assert (tmp_path / "state" / "eidolon").exists()
 
 
+def test_missing_bus_config_is_a_configuration_error(tmp_path, monkeypatch):
+    """Missing or malformed bus configuration is a configuration error, not a reachability failure."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+
+    def _raise_bus_config_error():
+        raise BusConfigError("no password")
+
+    monkeypatch.setattr(
+        "kaine.lifecycle.__main__._open_bus_client",
+        _raise_bus_config_error,
+    )
+
+    out = io.StringIO()
+    err = io.StringIO()
+    answers = [
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ]
+    rc = main(
+        _args(tmp_path),
+        input_fn=_scripted_input(answers),
+        out=out,
+        err=err,
+    )
+    assert rc == 6, out.getvalue() + err.getvalue()
+    assert (tmp_path / "state" / "eidolon").exists()
+
+
 def test_non_diverged_wrong_ack_aborts(tmp_path, monkeypatch):
     monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
     _seed_state(tmp_path / "state")
