@@ -4,6 +4,7 @@
 """End-to-end decommission with a hand-written path inventory and a real password-protected Redis."""
 
 import asyncio
+import importlib
 import io
 import json
 import os
@@ -38,7 +39,7 @@ from kaine.security.crypto import (
 
 if os.environ.get("KAINE_REQUIRE_REDIS_SERVER") == "1":
     # CI installs the memory-edge extra; a missing sqlite_vec there is an error, not a skip.
-    import sqlite_vec  # noqa: F401
+    importlib.import_module("sqlite_vec")
 else:
     pytest.importorskip("sqlite_vec")
 
