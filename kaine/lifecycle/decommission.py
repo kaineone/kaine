@@ -1004,7 +1004,9 @@ def delete_entity_state(
                     result.removed_paths.append(str(path))
                 elif loc.contents_only and path.is_dir():
                     for child in path.iterdir():
-                        if child.is_dir():
+                        # A symlink is removed as a link; its target is never
+                        # walked, wherever it points.
+                        if child.is_dir() and not child.is_symlink():
                             shutil.rmtree(child)
                         else:
                             child.unlink()

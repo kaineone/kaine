@@ -457,3 +457,23 @@ def test_delete_refuses_paths_outside_the_roots(tmp_path):
     assert result2.errors == []
     assert organ.exists()
     assert not list(organ.iterdir())
+
+
+def test_symlink_in_contents_only_dir_is_unlinked_not_followed(tmp_path):
+    """A directory symlink inside a contents-only location is removed as a link; its target survives."""
+    outside = tmp_path / "shared" / "docs"
+    outside.mkdir(parents=True)
+    (outside / "keep.txt").write_text("KEEP", encoding="utf-8")
+    jobs = tmp_path / "state" / "hypnos" / "voice_align_jobs"
+    jobs.mkdir(parents=True)
+    (jobs / "escape").symlink_to(outside, target_is_directory=True)
+    result = decommission.delete_entity_state(
+        state_root=tmp_path / "state",
+        qdrant_cfg=_NO_QDRANT,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        dry_run=False,
+    )
+    assert result.errors == []
+    assert not (jobs / "escape").exists() and not (jobs / "escape").is_symlink()
+    assert (outside / "keep.txt").read_text(encoding="utf-8") == "KEEP"
