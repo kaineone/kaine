@@ -155,6 +155,12 @@ def attribute_job_dirs(
             for adapter_file in entry.rglob("adapter.gguf"):
                 if adapter_file.is_symlink() or not adapter_file.is_file():
                     continue
+                # previous_adapter/ is the adapter a job started from; another
+                # entity (a study line forked from this one) can start from a
+                # copy of this entity's adapter, so only the job's own output
+                # is evidence of who ran it.
+                if "previous_adapter" in adapter_file.relative_to(entry).parts:
+                    continue
                 digest = _sha256(adapter_file)
                 if digest in own:
                     attributed = True

@@ -248,6 +248,7 @@ Before the confirmation, the location split also says what happened with Qdrant:
 Known limits:
 
 - A subprocess voice-alignment trainer that outlives the cycle is not detected as running. Decommission still writes the `CANCELLED` marker into every unfinished job, and a trainer never promotes a cancelled job.
+- Organ files are attributed by checksum. If another entity, for example a study line forked from this one, has activated a byte-identical copy of one of this entity's adapters, that copy is attributed to this entity. A job is attributed only by the adapter it produced, never by the adapter it started from. The `per-entity-shared-volumes` change removes this limit.
 - Merged adapters are attributed only against this deployment's fork root. Do not share one `[lifecycle.adapter_merge].output_dir` between deployments with different fork roots: an adapter listed only by the other deployment's snapshots would look like this entity's.
 
 ### Exit codes

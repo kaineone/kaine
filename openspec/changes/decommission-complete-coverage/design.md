@@ -306,6 +306,10 @@ The implementation review settled these points:
   `--qdrant-absent`, and refuses `--qdrant-absent` when Qdrant answers.
 - `/trainer-jobs` is exempt from the top-level allow-list refusal by exact
   path, like `/organ-adapters`.
+- Known limit: organ files are attributed by checksum, so a byte-identical copy
+  of this entity's adapter activated by another entity (a forked study line) is
+  attributed to this entity. Jobs are attributed by the adapter they produced,
+  not the one they started from (`previous_adapter/`).
 - Known limit: a subprocess trainer that outlives the cycle is not detected,
   but the CANCELLED marker stops any promotion.
 - Known limit: merged adapters are attributed only against this fork root, so

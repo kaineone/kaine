@@ -1048,3 +1048,26 @@ def test_remote_failure_keeps_local_state(tmp_path, monkeypatch):
     assert (state_root / "eidolon" / "self_model.json").exists()
     assert result.incomplete
     assert any("local state kept because a remote store" in err for err in result.errors)
+
+
+def test_job_started_from_this_entitys_adapter_is_not_claimed(tmp_path):
+    """A job holding this entity's adapter only as previous_adapter belongs to whoever ran it, so it is kept."""
+    from kaine.lifecycle.decommission_locations import attribute_job_dirs
+
+    state_root = tmp_path / "state"
+    sha = _store_adapter(state_root, "a1", b"OWN-ADAPTER")
+    jobs = tmp_path / "jobs"
+    forked = jobs / "forked_line_job"
+    (forked / "previous_adapter").mkdir(parents=True)
+    (forked / "previous_adapter" / "adapter.gguf").write_bytes(b"OWN-ADAPTER")
+    (forked / "job.json").write_text(json.dumps({"adapter_output_dir": "out"}), encoding="utf-8")
+    ran_here = jobs / "ran_here"
+    (ran_here / "out" / "x").mkdir(parents=True)
+    (ran_here / "out" / "x" / "adapter.gguf").write_bytes(b"OWN-ADAPTER")
+
+    own, shared, _notes = attribute_job_dirs(
+        jobs, {sha}, (state_root / "hypnos" / "adapters",)
+    )
+    assert own == [ran_here]
+    assert shared == [forked]
+
