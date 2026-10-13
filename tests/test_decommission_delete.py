@@ -20,9 +20,10 @@ HAS_QDRANT = importlib.util.find_spec("qdrant_client") is not None
 
 
 def _seed(state_root: Path) -> None:
-    for sub in ("eidolon", "lingua", "perception", "forks"):
-        (state_root / sub).mkdir(parents=True, exist_ok=True)
-        (state_root / sub / "f.json").write_text("{}", encoding="utf-8")
+    for path in ("eidolon/f.json", "lingua/f.json", "perception/f.json", "forks/f.json"):
+        p = state_root / path
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("{}", encoding="utf-8")
     (state_root / "hypnos" / "adapters").mkdir(parents=True, exist_ok=True)
     (state_root / "hypnos" / "adapters" / "a.bin").write_bytes(b"w")
     (state_root / "cycle").mkdir(parents=True, exist_ok=True)
@@ -48,7 +49,7 @@ def test_dry_run_removes_nothing(tmp_path):
     assert (state_root / "hypnos" / "adapters" / "a.bin").exists()
     # The would-remove report lists the intended subtrees.
     joined = " ".join(result.would_remove_paths)
-    assert "eidolon" in joined and "forks" in joined and "adapters" in joined
+    assert str(state_root / "eidolon") in joined and "forks" in joined and "adapters" in joined
 
 
 def test_delete_removes_only_intended_paths(tmp_path):

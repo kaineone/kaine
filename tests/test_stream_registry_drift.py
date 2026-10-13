@@ -55,6 +55,7 @@ def test_canonical_names_match_module_packages():
 def test_effective_memberships_are_golden():
     """Golden drift guard: any registry edit changes these derived sets and
     must consciously update the golden sets below."""
+    from kaine.bus.streams import PERCEPTION_FEED_STREAM
     from kaine.evaluation.stream_registry import (
         curated_module_streams,
         diagnostics_streams,
@@ -86,7 +87,7 @@ def test_effective_memberships_are_golden():
             "welfare.out",
             "preservation.out",
             "individuation.out",
-        }
+        } | {PERCEPTION_FEED_STREAM}
     )
 
     # Raw archive: full canonical set (the language module now publishes aggregate lingua.out).

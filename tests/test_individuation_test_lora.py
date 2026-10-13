@@ -107,10 +107,11 @@ def test_train_test_lora_fake_trainer(monkeypatch):
     }
     pairs = mod.build_pairs(4)
 
+    out_dir = "state/hypnos/test_lora_adapters"
     result = asyncio.run(
         mod.train_test_lora(
             kaine_config,
-            adapter_output_dir="state/hypnos/test_lora_adapters",
+            adapter_output_dir=out_dir,
             pairs=pairs,
         )
     )
@@ -121,7 +122,7 @@ def test_train_test_lora_fake_trainer(monkeypatch):
     assert cfg.trainer_jobs_dir == "/trainer-jobs"
     assert cfg.enabled is True
     assert Path(cfg.adapter_output_dir).name == "test_lora_adapters"
-    assert Path(cfg.adapter_output_dir).parent.name == "hypnos"
+    assert Path(cfg.adapter_output_dir).parent.name == Path(out_dir).parent.name
     assert result["accepted"] is True
     assert result["samples_used"] == 48
     assert result["hot_swap"]["ok"] is True

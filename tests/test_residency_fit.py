@@ -52,7 +52,7 @@ def test_multiplex_respects_pin():
     assert report.domains[0].status == "multiplex"
     assert report.domains[0].pinned == "lingua"
     assert report.domains[0].shortfall_bytes == 1 * GIB
-    assert "lingua stays loaded" in report.domains[0].feel
+    assert f"{report.domains[0].pinned} stays loaded" in report.domains[0].feel
 
 
 def test_multiplex_pin_not_in_domain_uses_largest_interactive():
@@ -73,7 +73,7 @@ def test_multiplex_pin_not_in_domain_uses_largest_interactive():
     report = fit_report((budget,), needs, pin="lingua")
     assert report.domains[0].pinned == "vox"  # largest interactive that fits
     assert report.domains[0].status == "multiplex"
-    assert "vox stays loaded" in report.domains[0].feel
+    assert f"{report.domains[0].pinned} stays loaded" in report.domains[0].feel
 
 
 def test_does_not_fit():

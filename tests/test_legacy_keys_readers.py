@@ -34,15 +34,20 @@ class _FakeEntryPoint:
         self._plugin = plugin
 
     def load(self):
-        return self._plugin
+        return lambda: self._plugin
 
 
 def _keys_done(monkeypatch):
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "keys", "done")
 
 
-def test_normalizer_is_inert_while_pending():
+def _keys_pending(monkeypatch):
+    monkeypatch.setitem(legacy_names.SCOPE_STATUS, "keys", "pending")
+
+
+def test_normalizer_is_inert_while_pending(monkeypatch):
     """The normalizer returns the layer unchanged while the keys scope is pending."""
+    _keys_pending(monkeypatch)
     layer = {"thymos": {"soma_stream": "soma.out"}}
     assert legacy_aliases.normalize_config_layer(layer, "op.toml") is layer
 
@@ -125,6 +130,7 @@ def test_study_plan_read_old_keys_without_rewrite(tmp_path, monkeypatch):
 
 def test_study_plan_pending_no_rewrite(tmp_path, monkeypatch):
     """With the keys scope pending, load_plan leaves module names unchanged."""
+    _keys_pending(monkeypatch)
     path = tmp_path / "study.json"
     path.write_text(
         json.dumps(
@@ -144,6 +150,7 @@ def test_study_plan_pending_no_rewrite(tmp_path, monkeypatch):
 
 def test_freeze_source_maps_only_when_done(monkeypatch):
     """CycleControl maps legacy source names only after the keys scope is done."""
+    _keys_pending(monkeypatch)
     data = {"stack": [{"source": "spot", "reason": "r", "frozen_at": "t"}]}
     assert CycleControl.from_dict(data).stack[0]["source"] == "spot"
     _keys_done(monkeypatch)
@@ -209,7 +216,7 @@ def test_plugin_cannot_declare_one_seam_twice(monkeypatch):
     )
     plugin = _DupSeamPlugin()
     ep = _FakeEntryPoint(plugin)
-    with pytest.raises(PluginError):
+    with pytest.raises(PluginError, match="declares seam .* under two names"):
         load_plugins(
             {"plugins": {"enabled": ["p"]}},
             known_modules=["soma"],

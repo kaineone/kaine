@@ -130,6 +130,17 @@ async def _capture_module_state(module: Any) -> dict[str, Any]:
 BUNDLED_DEVELOPMENT_FILES = ("gestation_progress.json", "gestation_readout.json")
 DEVELOPMENT_STATE_FILES = BUNDLED_DEVELOPMENT_FILES + ("gestation_viability.json",)
 
+# Bundle member directories. The writer and every reader pass them through
+# legacy_aliases.map_bundle_member, so a bundle written before the keys step and
+# one written after it compare equal on either side of it.
+WORLD_MODEL_MEMBER = "phantasia"
+DEVELOPMENT_MEMBER = "gestation"
+
+
+def _member_dir(name: str) -> str:
+    """Return the bundle member directory for ``name`` under the current names."""
+    return legacy_aliases.map_bundle_member(f"{name}/").rstrip("/")
+
 
 async def preserve_live(
     registry: Any,
@@ -318,7 +329,8 @@ async def preserve_live(
         inventory.append(f"snapshot.json (preservation snapshot {snap.id})")
 
         # The world model module's learned-weight checkpoint (only when actually captured).
-        wm_member = "phantasia"
+        wm_member = _member_dir(WORLD_MODEL_MEMBER)
+        dev_member = _member_dir(DEVELOPMENT_MEMBER)
         if world_model_checkpoint is not None and world_model_checkpoint.is_file():
             (bundle_dir / wm_member).mkdir(mode=0o700, exist_ok=True)
             _chmod_quietly(bundle_dir / wm_member, 0o700)
@@ -357,15 +369,15 @@ async def preserve_live(
                 src = stage_source_path.parent / name
                 if src.is_file():
                     if not development_copied:
-                        (bundle_dir / "gestation").mkdir(
+                        (bundle_dir / dev_member).mkdir(
                             mode=0o700, parents=True, exist_ok=True
                         )
                         development_copied = True
-                    dest = bundle_dir / "gestation" / name
+                    dest = bundle_dir / dev_member / name
                     shutil.copy2(src, dest)
                     _chmod_quietly(dest, 0o600)
             if development_copied:
-                inventory.append("gestation/ (gestation progress and readout)")
+                inventory.append(f"{dev_member}/ (gestation progress and readout)")
         # Individuation evidence: encrypted maturation reference, ledger, reports,
         # and the stored maturation adapter. This evidence travels with the entity.
         if individuation_root.is_dir():
@@ -399,8 +411,8 @@ async def preserve_live(
             tar_member_names.append(wm_member)
         if (bundle_dir / "stage.json").is_file():
             tar_member_names.append("stage.json")
-        if (bundle_dir / "gestation").is_dir():
-            tar_member_names.append("gestation")
+        if (bundle_dir / dev_member).is_dir():
+            tar_member_names.append(dev_member)
         if (bundle_dir / "individuation").is_dir():
             tar_member_names.append("individuation")
         tar_bytes_path = bundle_dir / "_bundle.tar"
@@ -608,7 +620,7 @@ async def revive(bundle: Path, registry: Any) -> ForkSnapshot:
             ckpt_name = Path(
                 wm_record.get("checkpoint_path", "world_model.ckpt")
             ).name
-            sidecar_name = f"phantasia/{ckpt_name}.passes.json"
+            sidecar_name = f"{_member_dir(WORLD_MODEL_MEMBER)}/{ckpt_name}.passes.json"
             if sidecar_name in members:
                 try:
                     data = json.loads(members[sidecar_name].decode("utf-8"))
@@ -808,13 +820,14 @@ def extract_bundle_development(bundle: Path, dest_dir: Path) -> list[str]:
     try:
         with tarfile.open(fileobj=io.BytesIO(data), mode="r") as tar:
             targets = set(BUNDLED_DEVELOPMENT_FILES)
+            prefix = _member_dir(DEVELOPMENT_MEMBER) + "/"
             for member in tar.getmembers():
                 if not member.isfile():
                     continue
                 mapped = legacy_aliases.map_bundle_member(member.name)
-                if not mapped.startswith("gestation/"):
+                if not mapped.startswith(prefix):
                     continue
-                rest = mapped[len("gestation/") :]
+                rest = mapped[len(prefix) :]
                 basename = Path(legacy_aliases.map_state_path(f"lifecycle/{rest}")).name
                 if basename not in targets:
                     continue
@@ -1000,6 +1013,7 @@ def _read_bundle_members(bundle: Path) -> dict[str, Any]:
 
     encryptor = get_state_encryptor()
     members: dict[str, Any] = {}
+    wm_prefix = _member_dir(WORLD_MODEL_MEMBER) + "/"
 
     enc_tar = bundle / "bundle.tar.enc"
     plain_tar = bundle / "bundle.tar"
@@ -1030,7 +1044,7 @@ def _read_bundle_members(bundle: Path) -> dict[str, Any]:
                         members["snapshot.json"] = encryptor.maybe_decrypt(
                             data
                         ).decode("utf-8")
-                    elif name.startswith("phantasia/"):
+                    elif name.startswith(wm_prefix):
                         if name in members and name != member.name:
                             continue
                         members[name] = data
@@ -1071,15 +1085,16 @@ def _load_bundle_world_model_weights(
 
     from kaine.modules.world_model.checkpoint import load_checkpoint
 
+    wm_prefix = _member_dir(WORLD_MODEL_MEMBER) + "/"
     world_model_members = {
-        k: v for k, v in members.items() if k.startswith("phantasia/")
+        k: v for k, v in members.items() if k.startswith(wm_prefix)
     }
     if not world_model_members:
         return None
     recorded = wm_record.get("checkpoint_path")
     chosen_key: str | None = None
     if recorded:
-        want = f"phantasia/{Path(recorded).name}"
+        want = f"{wm_prefix}{Path(recorded).name}"
         if want in world_model_members:
             chosen_key = want
     if chosen_key is None:

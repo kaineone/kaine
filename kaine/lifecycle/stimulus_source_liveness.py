@@ -26,9 +26,11 @@ import dataclasses
 import math
 from typing import Any, Awaitable, Callable
 
+from kaine.bus.streams import DEVELOPMENT_SOURCE, DEVELOPMENT_STREAM
+
 DEFAULT_PRESENCE_WINDOW_S = 3.0
-STIMULUS_SOURCE_STREAM = "gestation.out"
-STIMULUS_SOURCE_SOURCE = "gestation"
+STIMULUS_SOURCE_STREAM = DEVELOPMENT_STREAM
+STIMULUS_SOURCE_SOURCE = DEVELOPMENT_SOURCE
 STIMULUS_SOURCE_PRESENCE_TYPE = "gestation.womb"
 
 

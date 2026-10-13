@@ -42,7 +42,7 @@
 
 ## 7. Keys and wire names (PR 6)
 
-- [x] 7.0 Prerequisites (PR 6a): complete the config-key table and readers, normalize raw TOML readers, keep stored and UI strings out of the keys run, decide the queued matches and collisions, refuse a plugin seam under two names, and audit stream cursors and Redis persistence.
+- [x] 7.0 Prerequisites (PR 6a): complete the config-key table and readers, normalize raw TOML readers, keep stored and UI strings out of the keys run, decide the queued matches and collisions, refuse a plugin seam under two names, audit stream cursors and Redis persistence, pin stored tags, and prove the flip in a scratch tree (fast suite, slow lane, dry boot, old-bundle revive, checkpoint load, dashboard smoke).
 - [ ] 7.1 Module `name` values, streams and event types, config tables, keys and values in the shipped config, profiles and studies, plugin seams, `STUDY_ALLOWED_TABLES`.
 - [ ] 7.2 Live spec folder names and the matching delta folders in active changes.
 - [ ] 7.3 Mark the config, seam, bundle-key and dataset aliases live; the kaine-cl1 plugin uses the new seams.

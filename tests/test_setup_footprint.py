@@ -29,6 +29,8 @@ from kaine.setup.footprint import (
     main,
 )
 
+_LANGUAGE = "lingua"
+
 
 def _raise_file_not_found(*args: Any, **kwargs: Any) -> Path:
     raise FileNotFoundError()
@@ -567,7 +569,7 @@ def test_language_llama_cpp_not_measured(capsys, tmp_path):
         "not measured: in-process llama_cpp organ calibration is not implemented yet"
         in out
     )
-    assert "Uncalibrated components: lingua" in out
+    assert f"Uncalibrated components: {_LANGUAGE}" in out
     assert not cat.exists()
 
 
@@ -647,7 +649,7 @@ def test_service_not_running_message(capsys, tmp_path, monkeypatch):
         "not measured: http://localhost:1234 is not running or not visible to this user; start it and rerun"
         in out
     )
-    assert "Uncalibrated components: lingua" in out
+    assert f"Uncalibrated components: {_LANGUAGE}" in out
     assert not cat.exists()
 
 
@@ -677,7 +679,7 @@ def test_container_port_forwarder_not_measured(capsys, tmp_path, monkeypatch):
     )
     assert code == 3
     assert "container port forwarder" in out
-    assert "Uncalibrated components: lingua" in out
+    assert f"Uncalibrated components: {_LANGUAGE}" in out
     assert not cat.exists()
 
 
@@ -789,7 +791,7 @@ def test_real_config_path_loads_and_stops_at_consent(capsys, tmp_path):
     assert code == 2
     assert "refusing to load models without consent" in err
     # The plan was printed, so the config really loaded: thesis_test enables the language module.
-    assert "lingua (" in out
+    assert f"{_LANGUAGE} (" in out
     assert not (tmp_path / "c.json").exists()
 
 

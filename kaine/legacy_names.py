@@ -225,6 +225,7 @@ UI_GLOBS = (
     "kaine/nexus/templates/*",
     "kaine/dashboard/static/*",
     "kaine/dashboard/templates/*",
+    "tests/js/*",
 )
 
 MODULE_LIST_FILES = (
@@ -896,6 +897,38 @@ RESOLUTIONS = [
         "pattern": r"\bSeed being\b",
         "why": "the glossary term for the seeded entity; links already point at #seed-entity",
     },
+    {
+        "name": "nexus",
+        "action": "keep",
+        "pattern": r"nexus\.test\b",
+        "why": "test hostname of the dashboard under test; renamed with the operator strings",
+    },
+    {
+        "name": "nexus",
+        "action": "keep",
+        "pattern": r"Requirement\(\s*\"[^\"]+\",\s*\"nexus\"",
+        "why": "pip extra name; renamed with the packaging in the operator step",
+    },
+    {
+        "name": "nexus",
+        "action": "keep",
+        "files": ["tests/test_extras.py"],
+        "pattern": r"(?:\.extra\s*==\s*|extra=)\"nexus\"",
+        "why": "pip extra name; renamed with the packaging in the operator step",
+    },
+    {
+        "name": "spot",
+        "action": "keep",
+        "files": ["tests/test_unattended_gate.py"],
+        "pattern": r"6_Spot_armed_and_self_tested",
+        "why": "check key built from the operator-facing condition label",
+    },
+    {
+        "name": "perception",
+        "action": "keep",
+        "pattern": r"PERCEPTION_FEED_SOURCE\s*=\s*\"perception\"",
+        "why": "the perception feed's own event source, not the locus module",
+    },
 ]
 
 KEY_OVERRIDES = (
@@ -1004,7 +1037,19 @@ PERSISTED_EXACT = {
     "replay_phantasia": "replay_world_model",
     "eidolon_accuracy": "self_model_accuracy",
     "nous_policy": "planning_policy",
-
+    # Stored tags: checkpoint headers, a reference and capture kind, a preservation
+    # reason and a study outcome written to disk. The keys step leaves them.
+    "kaine-phantasia-rssm-npz-v1": "kaine-world-model-rssm-npz-v1",
+    "phantasia-encoder-v1": "world-model-encoder-v1",
+    "birth": "maturation",
+    "failed:gestation_unviable": "failed:development_unviable",
+    # Episodic-memory collection names built from the stored "mnemos_" prefix.
+    "mnemos_episodic": "episodic_memory_episodic",
+    "mnemos_semantic": "episodic_memory_semantic",
+    "mnemos_procedural": "episodic_memory_procedural",
+    "mnemos_embedding_space": "episodic_memory_embedding_space",
+    "mnemos_strength": "episodic_memory_strength",
+    "mnemos_short_term": "episodic_memory_short_term",
 }
 
 # Strings an operator-facing template, page script or browser reads; they move with the UI strings in the operator step.
@@ -1069,6 +1114,8 @@ EXCLUDED_GLOBS = (
     "tests/test_rename_state.py",
     "tests/test_rename_state_guards.py",
     "tests/test_legacy_keys_readers.py",
+    "tests/test_legacy_reader_sites.py",
+    "tests/test_legacy_reader_state.py",
     # Golden pins on stored names that never change.
     "tests/test_stimulus_source_params_digest.py",
     # These documents record the rename itself and must keep the old names.
@@ -1328,13 +1375,18 @@ STREAM_NAMES = tuple(
     {"old": "nexus.snapshot", "new": "dashboard.snapshot", "scope": "keys"},
 )
 
+# Bus event types whose spelling looks like a file name; they move with the keys step.
+EVENT_TYPES = (
+    {"old": "spot.log", "new": "supervisor.log", "scope": "keys"},
+)
+
 # Stream names used as keys (the [bus.per_stream_maxlen] table).
 CONFIG_KEYS = CONFIG_KEYS + tuple(
     {"old": e["old"], "new": e["new"], "scope": e["scope"]} for e in STREAM_NAMES
 )
 
 RECORD_FIELDS = (
-    {"old": "thymos_state", "new": "affect_state", "scope": "keys"},
+    {"old": "thymos_state", "new": "affect_state", "scope": "persisted"},
 ) + tuple(
     {"old": k, "new": e["new_key"], "scope": "keys"} for k, e in MODULES.items()
 )
@@ -1369,6 +1421,13 @@ STATE_PATHS = (
 COLLECTIONS = (
     {"old": "mnemos_", "new": "episodic_memory_", "scope": "persisted"},
     {"old": "empatheia_agents", "new": "social_cognition_agents", "scope": "persisted"},
+)
+
+STORED_TAGS = (
+    {"old": "kaine-phantasia-rssm-npz-v1", "new": "kaine-world-model-rssm-npz-v1", "scope": "persisted"},
+    {"old": "phantasia-encoder-v1", "new": "world-model-encoder-v1", "scope": "persisted"},
+    {"old": "birth", "new": "maturation", "scope": "persisted"},
+    {"old": "failed:gestation_unviable", "new": "failed:development_unviable", "scope": "persisted"},
 )
 
 STAGE_VALUES = (

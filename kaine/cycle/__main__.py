@@ -201,7 +201,7 @@ def _individuation_refusal(kaine_config: dict[str, Any]) -> tuple[Any | None, st
     if not modules.get("lingua"):
         return (
             None,
-            "[individuation] is enabled but the lingua module is disabled",
+            "[individuation] is enabled but [modules].lingua is disabled",
         )
 
     return (cfg, None)

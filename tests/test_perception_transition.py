@@ -30,6 +30,7 @@ from kaine.boot import (
     _stimulus_source_params,
     gather_perception_feed_descriptor,
 )
+from kaine.bus.streams import PERCEPTION_FEED_STREAM
 from kaine.cycle.ignition_log import playlist_position_provider
 from kaine.lifecycle import stage as lifecycle_stage
 from kaine.modules.audition.feed import PlaylistAudioStream
@@ -971,7 +972,7 @@ async def test_outcome_events_are_published_on_the_perception_stream(tmp_path):
         entries = []
         for _ in range(50):
             await asyncio.sleep(0.01)
-            entries = await bus.read("perception.out")
+            entries = await bus.read(PERCEPTION_FEED_STREAM)
             if len(entries) >= 3:
                 break
         events = [e for _, e in entries]

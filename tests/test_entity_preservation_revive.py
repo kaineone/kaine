@@ -30,6 +30,7 @@ from typing import Any
 
 import pytest
 
+from kaine import legacy_aliases
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.experiment.run_context import RunContext, set_run_context
@@ -59,6 +60,9 @@ from kaine.security.crypto import (
     is_encrypted,
     set_state_encryptor,
 )
+
+# The world-model member directory under the current names.
+_WM_PREFIX = legacy_aliases.map_bundle_member("phantasia/")
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -337,7 +341,7 @@ async def test_preserve_live_then_revive_same_individual(bus: AsyncBus, tmp_path
     with _tarfile.open(bundle / "bundle.tar") as _tf:
         _names = _tf.getnames()
     assert "snapshot.json" in _names
-    assert "phantasia/wm.ckpt" in _names
+    assert legacy_aliases.map_bundle_member("phantasia/wm.ckpt") in _names
 
     # The live entity is untouched (read-only) and nothing was deleted.
     assert reg.get("eidolon").model.name == "Aria"
@@ -1029,7 +1033,7 @@ async def test_revive_fails_loud_when_captured_weights_absent_from_bundle(
         with tarfile.open(tar_path) as tf:
             snap_member = tf.getmember("snapshot.json")
             snap_bytes = tf.extractfile(snap_member).read()
-            assert any(n.startswith("phantasia/") for n in tf.getnames())
+            assert any(n.startswith(_WM_PREFIX) for n in tf.getnames())
         tar_path.unlink()
         with tarfile.open(tar_path, "w") as tf:
             info = tarfile.TarInfo("snapshot.json")
@@ -1039,7 +1043,7 @@ async def test_revive_fails_loud_when_captured_weights_absent_from_bundle(
             tf.addfile(info, _io.BytesIO(snap_bytes))
         # Sanity: the world model module's checkpoint really is gone from the bundle.
         with tarfile.open(tar_path) as tf:
-            assert not any(n.startswith("phantasia/") for n in tf.getnames())
+            assert not any(n.startswith(_WM_PREFIX) for n in tf.getnames())
 
         reg2 = ModuleRegistry()
         eid2 = SelfModel(bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60)

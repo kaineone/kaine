@@ -17,11 +17,12 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from kaine.bus.schema import Event
+from kaine.bus.streams import DEVELOPMENT_SOURCE
 
 if TYPE_CHECKING:
     from kaine.modules.vision.feed import StimulusSourceClock
 
-PRESENCE_SOURCE = "gestation"
+PRESENCE_SOURCE = DEVELOPMENT_SOURCE
 PRESENCE_TYPE = "gestation.womb"
 
 log = logging.getLogger(__name__)

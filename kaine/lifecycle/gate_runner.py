@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from kaine.bus.schema import Event
+from kaine.bus.streams import DEVELOPMENT_SOURCE
 from kaine.lifecycle import stage as lifecycle_stage
 from kaine.lifecycle.lived_time import LivedTimeAccumulator
 from kaine.lifecycle.maturation_gate import (
@@ -235,6 +236,15 @@ class MaturationGateRunner:
         except Exception:
             log.warning("maturation gate: failed to count hypnos sleeps", exc_info=True)
 
+    async def _final_sleep_count(self) -> None:
+        """Count sleep completions once more before stopping, so none are lost across a restart."""
+        if not self._staging_enabled or not self._stage.is_developing:
+            return
+        before = self._stage
+        await self._count_new_sleeps()
+        if self._stage != before:
+            self._persist_if_changed(before)
+
     def _accumulate_lived_time(self) -> None:
         """Add subjective elapsed time since the last tick.
 
@@ -275,7 +285,7 @@ class MaturationGateRunner:
                 self._stimulus_source_stream, start=str(start_ms), end="+"
             )
             for entry_id, event in reversed(entries):
-                if event.type != self._stimulus_source_type or event.source != "gestation":
+                if event.type != self._stimulus_source_type or event.source != DEVELOPMENT_SOURCE:
                     continue
                 if isinstance(event.payload, dict):
                     readout = event.payload.get("readout")
@@ -634,6 +644,8 @@ class MaturationGateRunner:
                 # Expected: cadence elapsed, evaluate again.
                 continue
 
+        await self._final_sleep_count()
+
     async def shutdown(self) -> None:
         if self._task is not None and not self._task.done():
             self._task.cancel()
@@ -641,4 +653,7 @@ class MaturationGateRunner:
                 await self._task
             except asyncio.CancelledError:
                 # Expected: we just cancelled the task.
+                await self._final_sleep_count()
                 return
+
+        await self._final_sleep_count()

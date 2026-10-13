@@ -10,7 +10,7 @@ import subprocess
 import sys
 
 from kaine import legacy_names
-from kaine.bus.streams import KNOWN_STREAMS
+from kaine.bus.streams import KNOWN_STREAMS, PERCEPTION_FEED_STREAM
 from kaine.evaluation.stream_registry import raw_archive_module_streams
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -81,3 +81,9 @@ def test_stream_names_complete(tmp_path):
                 missing.append(entry)
 
     assert missing == [], f"Missing STREAM_NAMES entries: {missing}"
+
+
+def test_perception_feed_stream_listed_once():
+    """The perception feed's stream appears exactly once among the produced streams."""
+    streams = raw_archive_module_streams()
+    assert streams.count(PERCEPTION_FEED_STREAM) == 1

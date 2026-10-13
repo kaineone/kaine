@@ -723,6 +723,78 @@ replacements in about 900 files):
   `"config_key_scheme": 2` in run manifests (absent means 1), so a comparison
   across the rename is explicitly different rather than silently different.
 
+### Keys step: review fixes and the flipped-tree proof (PR 6a)
+
+A review ran the 6b codemod over the 6a table in a scratch tree and found that
+boot, revive and the dashboard broke. 6a now carries these decisions, and a
+scratch flip (keys marked done, keys codemod applied, nothing else) passes the
+fast suite, the slow lane, a full-registry dry boot, an old-bundle revive, a
+checkpoint load and the dashboard smoke.
+
+- **World-model sub-table.** `[phantasia.world_model]` stays a sub-table named
+  `world_model` under the moved table, `[world_model.world_model]`; renaming it to
+  `backend` collided with the `[phantasia].backend` key and made invalid TOML.
+  The normalizer applies single-segment table moves before dotted ones. A copy of
+  the pre-rename shipped config, profiles and studies sits in
+  `tests/fixtures/legacy_config/`, and a sweep test checks that every layer
+  normalizes without conflict and that every config key the codemod renames has a
+  mapping.
+- **Stored tags.** Strings written to disk keep their spelling until the persisted
+  step: the world-model checkpoint header `kaine-phantasia-rssm-npz-v1`, the encoder
+  version `phantasia-encoder-v1`, the reference, capture and gate kind `birth`, the
+  preservation reason `birth`, the study outcome `failed:gestation_unviable`, and the
+  episodic-memory collection names built from the stored `mnemos_` prefix. They are
+  in `PERSISTED_EXACT`, the tags also in a `STORED_TAGS` table, and a test pins each
+  against the table. The `thymos_state` record field stays with its writers, so its
+  read-map moves to the persisted step.
+- **Bundle members.** The preservation writer and every reader name the world-model
+  and development members through one helper that maps them, so a bundle written
+  before 6b and one written after it compare equal on both sides.
+- **The developmental owner's bus identity moves with keys.** Its source is derived
+  from its stream literal (`DEVELOPMENT_SOURCE`), so source and stream rename
+  together while the stored stage value, the freeze source, the locus lock holder
+  and the study line of the same spelling stay. An external body adapter must
+  publish its presence under the new stream and source after 6b; 6b reads presence
+  from both streams until the alias release and logs a one-line deprecation when
+  the old one is used.
+- **The perception feed keeps its stream.** The feed publishes under its own source
+  (`PERCEPTION_FEED_SOURCE`), which stays `perception`, while the locus module moves
+  to `perceptual_locus`. The feed's stream becomes an additional produced stream
+  once the two differ, and 6b gives it a configured cap in `[bus.per_stream_maxlen]`.
+  The feed's transition events, all at salience zero, stop counting as the locus
+  module's drive source; that change is accepted.
+- **Text rules.** An f-string is classified like a plain string, by whether its
+  literal text holds a space. Inside such text a config table, key, stream or event
+  reference (`[vox].x`, `topos.encoder`, `soma:soma.report`, a TOML key at the start
+  of a line) moves with keys and takes the key form, while a bare word in a
+  sentence and a capitalized display label stay for the operator step. Kebab-case
+  names in Python strings (container and volume names, element ids, header names)
+  and HTML attributes inside Python strings are operator-facing. Bus event types
+  that look like file names (`spot.log`) are listed in `EVENT_TYPES` and move with
+  keys.
+- **Dashboard wire names (review item 6).** The two sides agree in every state. The
+  session-key header, the login element ids and the other UI strings stay old on
+  both sides until the operator step (PR 7). The bus sources and event types the
+  dashboard script matches (`msg.source === "thymos"`, `"soma.report"`,
+  `"nexus.snapshot"`, `"hypnos.sleep.started"`, `"spot.log"`) move with Python in
+  6b: in a dashboard script or test harness a quoted dotted wire name, or a quoted
+  name compared with a message source, belongs to the keys scope. The dashboard
+  smoke checks that the script sends the header the server checks, that the login
+  page has the ids the script reads, and that every wire name the script matches
+  is one the Python side names.
+- **Sleeps at shutdown.** The maturation gate counts sleeps once more when it stops,
+  so a sleep completed after the last tick is not lost when the stream is renamed at
+  the next start.
+- **The 6b cleanup command.** It lists every old stream name from the full map
+  (module output streams, the developmental and language streams, `STREAM_NAMES`),
+  shows each stream's length and memory use, deletes nothing by default, and
+  deletes only with an explicit confirmation.
+- **History continuity (built in 6b).** A reader that replays history falls back to
+  the old stream name once when the new stream is empty: the language module's
+  `sleep_index` backfill reads `hypnos.out` and the dashboard's conversation history
+  reads `lingua.external` from `0`. A helper returns the new name and its old name
+  from the table, so each reader states the fallback in one line.
+
 ### PR sequence
 
 Each PR runs the codemod (or adds infrastructure), passes

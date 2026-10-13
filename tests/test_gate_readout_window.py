@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from kaine.bus.schema import Event
+from kaine.bus.streams import DEVELOPMENT_SOURCE
 from kaine.lifecycle import stage as lifecycle_stage
 from kaine.lifecycle.gate_runner import (
     DEFAULT_STIMULUS_SOURCE_READOUT_STREAM,
@@ -112,10 +113,10 @@ async def test_default_stream_is_development_out():
 async def test_readout_found_behind_presence(tmp_path: Path):
     readout_payload = {"endogenous_self_sustain": True}
     stream_entries = [
-        _event("gestation", "gestation.readiness", {"readout": readout_payload}, 1_001_000),
-        _event("gestation", "gestation.womb", {}, 1_002_000),
-        _event("gestation", "gestation.womb", {}, 1_003_000),
-        _event("gestation", "gestation.womb", {}, 1_004_000),
+        _event(DEVELOPMENT_SOURCE, "gestation.readiness", {"readout": readout_payload}, 1_001_000),
+        _event(DEVELOPMENT_SOURCE, "gestation.womb", {}, 1_002_000),
+        _event(DEVELOPMENT_SOURCE, "gestation.womb", {}, 1_003_000),
+        _event(DEVELOPMENT_SOURCE, "gestation.womb", {}, 1_004_000),
     ]
     bus = _make_bus({"gestation.out": stream_entries}, boot_ms=1_000_000)
     runner = MaturationGateRunner(
@@ -134,7 +135,7 @@ async def test_readout_found_behind_presence(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_readout_older_than_max_age_ignored(tmp_path: Path):
     stream_entries = [
-        _event("gestation", "gestation.readiness", {"readout": {}}, 994_000),
+        _event(DEVELOPMENT_SOURCE, "gestation.readiness", {"readout": {}}, 994_000),
     ]
     bus = _make_bus({"gestation.out": stream_entries}, boot_ms=1_000_000)
     runner = MaturationGateRunner(
@@ -153,7 +154,7 @@ async def test_readout_older_than_max_age_ignored(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_readout_older_than_boot_ignored(tmp_path: Path):
     stream_entries = [
-        _event("gestation", "gestation.readiness", {"readout": {}}, 999_000),
+        _event(DEVELOPMENT_SOURCE, "gestation.readiness", {"readout": {}}, 999_000),
     ]
     bus = _make_bus({"gestation.out": stream_entries}, boot_ms=1_000_000)
     runner = MaturationGateRunner(

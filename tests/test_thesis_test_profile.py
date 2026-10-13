@@ -19,7 +19,7 @@ def test_enables_exactly_the_thesis_processors():
     # The base thesis is the four predictive processors plus language, affect (the
     # affective precision core whose arousal weights the competition) and sleep
     # (fatigue-triggered sleep; voice alignment stays off).
-    assert enabled == ["audition", "chronos", "hypnos", "lingua", "soma", "thymos", "topos"]
+    assert enabled == sorted(["audition", "chronos", "hypnos", "lingua", "soma", "thymos", "topos"])
     # Richer faculties stay off.
     for off in ("mnemos", "eidolon", "nous", "phantasia", "vox"):
         assert cfg["modules"][off] is False
