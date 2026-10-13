@@ -561,7 +561,7 @@ def test_tier0_with_shipped_endpoint_and_reachable_qdrant_is_clean(tmp_path, mon
         assessment=assessment,
     )
     assert backup.ok
-    assert backup.qdrant_unchecked is False
+    assert backup.qdrant_status == "exported"
     result = decommission.delete_entity_state(
         state_root=state_root,
         qdrant_cfg=config,
@@ -595,7 +595,7 @@ def test_module_off_collections_are_backed_up_then_dropped(tmp_path, monkeypatch
         assessment=assessment,
     )
     assert backup.ok
-    assert backup.qdrant_unchecked is False
+    assert backup.qdrant_status == "exported"
     for name in names[:2]:
         bundle = backup.backup_path / "qdrant" / f"{name}.jsonl"
         assert bundle.is_file()
@@ -606,14 +606,13 @@ def test_module_off_collections_are_backed_up_then_dropped(tmp_path, monkeypatch
         fork_root=tmp_path / "forks",
         data_root=tmp_path / "data",
         dry_run=False,
-        qdrant_unchecked_in_backup=False,
     )
     assert set(fake.dropped) == set(names[:2])
     assert result.errors == []
 
 
-def test_module_off_unreachable_qdrant_is_left_untouched(tmp_path, monkeypatch):
-    """Disabled module with unreachable Qdrant is flagged incomplete and untouched."""
+def test_module_off_unreachable_qdrant_fails_backup_and_absent_skips(tmp_path, monkeypatch):
+    """Unreachable Qdrant fails the backup; qdrant_absent skips it entirely."""
     config = {"mnemos": {"backend": "qdrant", "qdrant": {"host": "127.0.0.1", "port": 1}}}
     assert decommission.qdrant_in_use(config) is False
     assert decommission.qdrant_endpoint_configured(config) is True
@@ -631,31 +630,41 @@ def test_module_off_unreachable_qdrant_is_left_untouched(tmp_path, monkeypatch):
         entity_name="ModuleOffUnreachable",
         assessment=assessment,
     )
-    assert backup.ok
-    assert backup.qdrant_unchecked is True
+    assert backup.ok is False
+    assert any("Qdrant" in err for err in backup.errors)
+    backup_root = tmp_path / "backups"
+    if backup_root.exists():
+        assert not list(backup_root.rglob("self_model.json"))
 
-    class _TouchyQdrant:
-        def get_collections(self, *args, **kwargs):
-            raise AssertionError("Qdrant must not be contacted when unchecked")
+    calls = []
 
-        def delete_collection(self, *args, **kwargs):
-            raise AssertionError("Qdrant must not be contacted when unchecked")
+    def recording_factory(cfg):
+        calls.append(cfg)
+        return None
 
-        def close(self):
-            pass
-
-    monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: _TouchyQdrant())
+    monkeypatch.setattr(decommission, "_qdrant_client", recording_factory)
+    absent_backup = decommission.capture_backup(
+        state_root=state_root,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        qdrant_cfg=config,
+        out_root=tmp_path / "backups2",
+        entity_name="ModuleOffAbsent",
+        assessment=assessment,
+        qdrant_absent=True,
+    )
+    assert absent_backup.ok
+    assert absent_backup.qdrant_status == "absent (asserted)"
     result = decommission.delete_entity_state(
         state_root=state_root,
         qdrant_cfg=config,
         fork_root=tmp_path / "forks",
         data_root=tmp_path / "data",
         dry_run=False,
-        qdrant_unchecked_in_backup=True,
+        qdrant_absent=True,
     )
-    assert result.qdrant_unchecked is True
-    assert result.incomplete is True
-    assert any("not checked" in err for err in result.errors)
+    assert result.errors == []
+    assert calls == []
 
 
 def test_allow_list_refuses_dangerous_entries(tmp_path):
@@ -694,6 +703,30 @@ def test_allow_list_refuses_dangerous_entries(tmp_path):
         fork_root=fork_root,
     )
     assert refused == ()
+
+    config = {
+        "hypnos": {"voice_alignment": {"organ_adapters_dir": "/organ-adapters"}}
+    }
+    roots, refused = delete_roots(
+        config,
+        state_root=state_root,
+        data_root=data_root,
+        fork_root=fork_root,
+    )
+    assert refused == ()
+
+    for path in ("/organ-adapters2", "/organ"):
+        config = {"hypnos": {"voice_alignment": {"organ_adapters_dir": path}}}
+        roots, refused = delete_roots(
+            config,
+            state_root=state_root,
+            data_root=data_root,
+            fork_root=fork_root,
+        )
+        assert len(refused) == 1
+        refused_path, reason = refused[0]
+        assert str(refused_path) == path
+        assert reason == "a top-level directory"
 
     qdrant_cfg = {
         **_NO_QDRANT,
@@ -761,17 +794,20 @@ def test_backup_reports_probed_qdrant_collections(tmp_path, monkeypatch):
     assert "Qdrant collections" in out_text
     assert names[0] in out_text
 
+    # With --qdrant-absent asserted, Qdrant is skipped and the split says so.
     monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: None)
-    unchecked_backup = decommission.capture_backup(
+    absent_backup = decommission.capture_backup(
         qdrant_cfg=config,
+        qdrant_absent=True,
         state_root=state_root,
         data_root=tmp_path / "data",
         fork_root=tmp_path / "forks",
-        out_root=tmp_path / "backups_unchecked",
-        entity_name="Unchecked",
+        out_root=tmp_path / "backups_absent",
+        entity_name="Absent",
         assessment=DivergenceAssessment(diverged=False, signals={}, summary="x"),
     )
-    assert unchecked_backup.qdrant_unchecked is True
+    assert absent_backup.ok
+    assert absent_backup.qdrant_status == "absent (asserted)"
 
     out2 = io.StringIO()
     _write_location_split(
@@ -780,6 +816,6 @@ def test_backup_reports_probed_qdrant_collections(tmp_path, monkeypatch):
         state_root=state_root,
         data_dir=tmp_path / "data",
         fork_root=tmp_path / "forks",
-        backup=unchecked_backup,
+        backup=absent_backup,
     )
-    assert "could not be checked" in out2.getvalue()
+    assert "Qdrant: skipped" in out2.getvalue()

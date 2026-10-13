@@ -85,7 +85,7 @@ class BackupResult:
     # Set when the bundle was produced from a LIVE registry (preserve_live):
     # the id of the snapshot taken of the live modules so revive can locate it.
     live_snapshot_id: str | None = None
-    qdrant_unchecked: bool = False
+    qdrant_status: str = ""
     qdrant_collections: list[str] = field(default_factory=list)
 
 
@@ -105,7 +105,6 @@ class DeleteResult:
     deleted_locations: list[str] = field(default_factory=list)
     retained_locations: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
-    qdrant_unchecked: bool = False
 
     @property
     def incomplete(self) -> bool:
@@ -431,6 +430,47 @@ def qdrant_endpoint_configured(config: Mapping[str, Any] | None) -> bool:
     return False
 
 
+def qdrant_endpoint_label(config: Mapping[str, Any] | None) -> str:
+    """The configured Qdrant endpoint as text (url, or host:port), never the API key."""
+    if not isinstance(config, Mapping):
+        return "the configured Qdrant endpoint"
+    tier = config.get("tier")
+    unsupported: set[str] = set()
+    if isinstance(tier, Mapping):
+        unsup = tier.get("unsupported_modules")
+        if isinstance(unsup, list):
+            unsupported = {str(x) for x in unsup}
+    for module in ("mnemos", "empatheia"):
+        forms = legacy_aliases.name_forms(module)
+        if any(form in unsupported for form in forms):
+            continue
+        for form in forms:
+            section = config.get(form)
+            if not isinstance(section, Mapping):
+                continue
+            qdrant_sub = section.get("qdrant")
+            if isinstance(qdrant_sub, Mapping):
+                url = qdrant_sub.get("url")
+                if url:
+                    return str(url)
+                host = qdrant_sub.get("host")
+                if host:
+                    port = qdrant_sub.get("port")
+                    if port is not None:
+                        return f"{host}:{port}"
+                    return str(host)
+            url = section.get("url")
+            if url:
+                return str(url)
+            host = section.get("host")
+            if host:
+                port = section.get("port")
+                if port is not None:
+                    return f"{host}:{port}"
+                return str(host)
+    return "the configured Qdrant endpoint"
+
+
 def _qdrant_api_key(
     conn: Mapping[str, Any],
     *,
@@ -481,6 +521,7 @@ def capture_backup(
     fork_root: Path,
     data_root: Path | None = None,
     qdrant_cfg: dict[str, Any] | None,
+    qdrant_absent: bool = False,
     out_root: Path = Path("backups"),
     entity_name: str,
     assessment: DivergenceAssessment,
@@ -555,7 +596,6 @@ def capture_backup(
         entity_id=entity_id,
     )
 
-    qdrant_unchecked = False
     if qdrant_in_use(qdrant_cfg):
         client = _qdrant_client(qdrant_cfg)
         if client is None:
@@ -577,20 +617,28 @@ def capture_backup(
             except Exception:
                 log.debug("capture_backup: qdrant probe client close failed", exc_info=True)
     elif qdrant_endpoint_configured(qdrant_cfg):
-        client = _qdrant_client(qdrant_cfg)
-        try:
+        if qdrant_absent:
+            pass
+        else:
+            client = _qdrant_client(qdrant_cfg)
             if client is None:
-                qdrant_unchecked = True
-            else:
-                client.get_collections()
-        except Exception:
-            qdrant_unchecked = True
-        finally:
+                return _fail(
+                    ["qdrant: cannot reach or authenticate to Qdrant; nothing was deleted"],
+                    inventory=inventory,
+                )
             try:
-                if client is not None:
+                try:
+                    client.get_collections()
+                except Exception:
+                    return _fail(
+                        ["qdrant: cannot reach or authenticate to Qdrant; nothing was deleted"],
+                        inventory=inventory,
+                    )
+            finally:
+                try:
                     client.close()
-            except Exception:
-                log.debug("capture_backup: qdrant probe client close failed", exc_info=True)
+                except Exception:
+                    log.debug("capture_backup: qdrant probe client close failed", exc_info=True)
 
     # --- 1. Self-model ------------------------------------------
     self_model_src = state_root / "eidolon" / "self_model.json"
@@ -709,9 +757,9 @@ def capture_backup(
     if not qdrant_in_use(qdrant_cfg) and not qdrant_endpoint_configured(qdrant_cfg):
         inventory.append("qdrant: not used by this deployment")
         qdrant_status = "not used"
-    elif qdrant_unchecked:
-        inventory.append("qdrant: could not be checked (module off, Qdrant unreachable)")
-        qdrant_status = "unchecked"
+    elif not qdrant_in_use(qdrant_cfg) and qdrant_absent:
+        inventory.append("qdrant: skipped (--qdrant-absent asserts this host has no Qdrant server)")
+        qdrant_status = "absent (asserted)"
     else:
         client = _qdrant_client(qdrant_cfg)
         if client is None:
@@ -913,7 +961,7 @@ def capture_backup(
         encrypted=encrypted,
         inventory=inventory,
         errors=errors,
-        qdrant_unchecked=qdrant_unchecked,
+        qdrant_status=qdrant_status,
         qdrant_collections=qdrant_collections,
     )
 
@@ -975,7 +1023,7 @@ def delete_entity_state(
     qdrant_cfg: dict[str, Any] | None,
     bus_client: Any = None,
     dry_run: bool = False,
-    qdrant_unchecked_in_backup: bool = False,
+    qdrant_absent: bool = False,
     fork_root: Path | None = None,
     data_root: Path | None = None,
 ) -> DeleteResult:
@@ -1096,18 +1144,14 @@ def delete_entity_state(
                     stamp_point_id(strength_key_str),
                 )
             )
-        if dry_run:
+        if qdrant_absent and not qdrant_in_use(qdrant_cfg):
+            # The operator asserted there is no Qdrant server; skip it entirely.
+            pass
+        elif dry_run:
             result.dropped_collections = list(collections)  # would-drop
             for stamp_key_str, _, strength_key_str, _ in stamp_meta:
                 result.dropped_collections.append(f"{stamp_coll}:{stamp_key_str}")
                 result.dropped_collections.append(f"{stamp_coll}:{strength_key_str}")
-        elif qdrant_unchecked_in_backup:
-            # The backup could not reach Qdrant, so nothing there was saved:
-            # leave every collection alone and report the run as incomplete.
-            result.qdrant_unchecked = True
-            result.errors.append(
-                "qdrant was not checked during the backup; its collections were not touched"
-            )
         else:
             client = _qdrant_client(qdrant_cfg)
             if client is not None:
@@ -1120,7 +1164,6 @@ def delete_entity_state(
                         }
                         probe_ok = True
                     except Exception as probe_exc:
-                        result.qdrant_unchecked = True
                         # get_collections() failed: we do NOT know which collections
                         # exist, so record the error and skip deletion rather than
                         # assuming they are all present.
@@ -1186,7 +1229,6 @@ def delete_entity_state(
                             exc_info=True,
                         )
             else:
-                result.qdrant_unchecked = True
                 result.errors.append("qdrant unreachable; collections not dropped")
 
     # --- Redis entity streams (best-effort) --------------------------------

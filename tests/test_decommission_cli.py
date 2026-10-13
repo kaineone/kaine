@@ -873,72 +873,106 @@ def test_incomplete_deletion_exits_8_and_is_audited(tmp_path, monkeypatch):
     assert record["outcome"] == "incomplete"
 
 
-def test_module_off_unreachable_qdrant_exits_8_unchecked(tmp_path, monkeypatch):
-    """CLI exits 8 with an incomplete audit when Qdrant cannot be checked."""
+def _snapshot_tree(root):
+    return {str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+
+def test_module_off_unreachable_qdrant_refuses_before_anything(tmp_path, monkeypatch):
+    """CLI refuses to run when Qdrant is unreachable; nothing is touched."""
     monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
-    monkeypatch.setattr("kaine.lifecycle.decommission._qdrant_client", lambda cfg: None)
     _seed_state(tmp_path / "state")
+    before = _snapshot_tree(tmp_path / "state")
+    monkeypatch.setattr("kaine.lifecycle.decommission._qdrant_client", lambda cfg: None)
+    monkeypatch.setattr("kaine.lifecycle.__main__._qdrant_client", lambda cfg: None)
     out = io.StringIO()
     err = io.StringIO()
-    answers = [
+    answers = iter([
         "I acknowledge the CAL welfare terms",
         "Kaine Nova",
-    ]
-
-    class _Touchy:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            pass
-
-        def get_collections(self):
-            raise AssertionError("Qdrant must not be touched after an unchecked backup")
-
-        def delete_collection(self, collection_name):
-            raise AssertionError("Qdrant must not be touched after an unchecked backup")
-
-        def delete(self, *args, **kwargs):
-            raise AssertionError("Qdrant must not be touched after an unchecked backup")
-
-        def close(self):
-            pass
-
-    it = iter(answers)
-    first = True
-
-    def _guarded_input(prompt=""):
-        nonlocal first
-        if first:
-            first = False
-            monkeypatch.setattr(
-                "kaine.lifecycle.decommission._qdrant_client",
-                lambda cfg: _Touchy(),
-            )
-        return next(it)
-
+    ])
     rc = main(
         _args(tmp_path, extra_config='[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n'),
-        input_fn=_guarded_input,
+        input_fn=lambda prompt="": next(answers),
         out=out,
         err=err,
     )
     assert rc == 8, out.getvalue()
     text = out.getvalue()
-    assert "Qdrant could not be checked" in text
-    assert "INCOMPLETE" in text
+    assert "nothing was backed up or deleted" in text
+    assert "127.0.0.1:1" in text
+    assert "--qdrant-absent" in text
+    assert _snapshot_tree(tmp_path / "state") == before
+    assert not (tmp_path / "state" / "audit" / "decommission.jsonl").exists()
+    backup_root = tmp_path / "backups"
+    assert not backup_root.exists() or not any(backup_root.iterdir())
+
+
+def test_qdrant_absent_flag_skips_qdrant_and_deletes(tmp_path, monkeypatch):
+    """--qdrant-absent skips the Qdrant client entirely and deletes state."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    calls = []
+
+    def recording_factory(cfg):
+        calls.append(cfg)
+        return None
+
+    monkeypatch.setattr("kaine.lifecycle.decommission._qdrant_client", recording_factory)
+    monkeypatch.setattr("kaine.lifecycle.__main__._qdrant_client", recording_factory)
+    out = io.StringIO()
+    err = io.StringIO()
+    answers = iter([
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ])
+    rc = main(
+        _args(tmp_path, extra_config='[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n') + ["--qdrant-absent"],
+        input_fn=lambda prompt="": next(answers),
+        out=out,
+        err=err,
+    )
+    assert rc == 0, out.getvalue() + err.getvalue()
+    assert calls == []
     assert not (tmp_path / "state" / "eidolon").exists()
     audit_path = tmp_path / "state" / "audit" / "decommission.jsonl"
     assert audit_path.exists()
     lines = audit_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 1
     record = json.loads(lines[0])
-    assert record["qdrant_unchecked"] is True
-    assert record["outcome"] == "incomplete"
-    # The deletion skipped Qdrant because the backup could not check it; it
-    # never probed the (touchy) client, which would have left a probe error.
-    assert any("not checked during the backup" in e for e in record["errors"])
-    assert not any("probe failed" in e for e in record["errors"])
+    assert record["qdrant_absent_asserted"] is True
+    assert record["outcome"] == "deleted"
+    assert "Qdrant: skipped" in out.getvalue()
+
+
+def test_qdrant_absent_does_not_override_a_module_that_is_on(tmp_path, monkeypatch):
+    """--qdrant-absent is not allowed when a memory module is actually enabled."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    before = _snapshot_tree(tmp_path / "state")
+    monkeypatch.setattr("kaine.lifecycle.decommission._qdrant_client", lambda cfg: None)
+    monkeypatch.setattr("kaine.lifecycle.__main__._qdrant_client", lambda cfg: None)
+    out = io.StringIO()
+    err = io.StringIO()
+    base_args = _args(
+        tmp_path,
+        extra_config='[mnemos]\nbackend = "qdrant"\n[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
+    )
+    (tmp_path / "config" / "kaine.operator.toml").write_text(
+        "[modules]\nmnemos = true\n", encoding="utf-8"
+    )
+    answers = iter([
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ])
+    rc = main(
+        base_args + ["--qdrant-absent"],
+        input_fn=lambda prompt="": next(answers),
+        out=out,
+        err=err,
+    )
+    assert rc == 8, out.getvalue()
+    assert _snapshot_tree(tmp_path / "state") == before
+    assert not (tmp_path / "state" / "audit" / "decommission.jsonl").exists()
 
 
 def test_stuck_job_names_directory_and_trainer_stopped_proceeds(tmp_path, monkeypatch):

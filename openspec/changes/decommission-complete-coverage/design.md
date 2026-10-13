@@ -250,9 +250,13 @@ The implementation review settled these points:
   Qdrant backend (absent `backend` means Qdrant). Backup, preflight and
   deletion share the rule. With the module switched off, Qdrant is still
   checked whenever an endpoint is configured for a module the tier supports:
-  existing collections are backed up, then dropped; an unreachable Qdrant
-  leaves them untouched, records `qdrant_unchecked` and ends the run
-  INCOMPLETE (exit 8). No endpoint at all means Qdrant is never contacted.
+  existing collections are backed up, then dropped. If Qdrant does not
+  answer, the run stops before the backup with exit 8 and nothing deleted,
+  because deleting the local state first would orphan the memories (a later
+  run could not find the entity). `--qdrant-absent` asserts a host has no
+  Qdrant server: Qdrant is skipped, the audit records
+  `qdrant_absent_asserted`, and the flag never overrides a module that is on.
+  No endpoint at all means Qdrant is never contacted.
 - **Renamed names.** Paths take their old and new forms from
   `legacy_names.STATE_PATHS` (for example `mnemos/mnemos.db` and
   `episodic_memory/episodic_memory.db`, with `-wal`, `-shm` and `-journal`;

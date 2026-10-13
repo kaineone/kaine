@@ -28,7 +28,9 @@ Exit codes
 6  configuration error (missing/unreadable/unparsable config, malformed shape,
    or state-encryption posture could not be installed)
 7  no entity state found at the resolved state root (nothing backed up or deleted)
-8  Qdrant could not be reached or authenticated (nothing was deleted), or the
+8  Qdrant could not be reached or authenticated (nothing was deleted), or, with
+   the memory modules off, Qdrant is configured but did not answer (nothing was
+   backed up or deleted; --qdrant-absent asserts there is no Qdrant server), or the
    bus could not be reached or authenticated (nothing was deleted), or a
    stream could not be deleted, or deletion was incomplete (a removal failed,
    a path was refused as outside the state, data and fork roots or as a
@@ -55,6 +57,7 @@ from kaine.lifecycle.decommission import (
     capture_backup,
     delete_entity_state,
     qdrant_endpoint_configured,
+    qdrant_endpoint_label,
     qdrant_in_use,
     update_manifest_continuity_note,
     write_decommission_audit,
@@ -84,6 +87,25 @@ RUNTIME_FRESH_SECONDS = 5.0
 # A broadcast this recent means a cycle ran moments ago; wider than the
 # runtime-file window because a sleeping or dilated cycle broadcasts less often.
 BUS_FRESH_SECONDS = 60.0
+
+
+def _qdrant_problem(qcfg: dict[str, Any]) -> str | None:
+    """Probe Qdrant; None when it answers, else the name of what went wrong."""
+    client = _qdrant_client(qcfg)
+    if client is None:
+        return "no client"
+    try:
+        client.get_collections()
+        return None
+    except Exception as exc:
+        return type(exc).__name__
+    finally:
+        try:
+            client.close()
+        except Exception:
+            # Closing the probe client is best effort; the probe already
+            # decided the outcome.
+            pass
 
 
 def _fork_root_from_config(config: dict[str, Any], state_root: Path) -> Path:
@@ -295,8 +317,8 @@ def _write_location_split(out, qcfg, *, state_root, data_dir, fork_root, backup=
     if not groups[RETAIN]:
         out.write("    (none)\n")
     out.write("  also deleted: this entity's bus streams\n")
-    if backup is not None and backup.qdrant_unchecked:
-        out.write("  Qdrant: could not be checked (the memory module is off and Qdrant did not answer)\n")
+    if backup is not None and backup.qdrant_status == "absent (asserted)":
+        out.write("  Qdrant: skipped (--qdrant-absent asserts this host has no Qdrant server)\n")
     elif backup is not None and backup.qdrant_collections:
         out.write("  also backed up, then deleted: Qdrant collections " + ", ".join(backup.qdrant_collections) + "\n")
     elif qdrant_in_use(qcfg) or qdrant_endpoint_configured(qcfg):
@@ -376,6 +398,11 @@ def main(
         "--trainer-stopped",
         action="store_true",
         help="Assert that no voice-alignment trainer is running: claimed jobs without a result do not block deletion. Recorded in the audit record.",
+    )
+    parser.add_argument(
+        "--qdrant-absent",
+        action="store_true",
+        help="Assert that this host has no Qdrant server: with the memory modules off, skip Qdrant entirely. Recorded in the audit record. Has no effect when a memory module that uses Qdrant is on.",
     )
     args = parser.parse_args(argv)
 
@@ -512,11 +539,36 @@ def main(
     )
     out.write(f"\n{assessment.summary}\n")
 
+    # --- Qdrant preflight -------------------------------------------------
+    # Runs before the backup, so a Qdrant that should be there and does not
+    # answer stops the run with nothing copied and nothing deleted.
+    if qdrant_in_use(qcfg):
+        problem = _qdrant_problem(qcfg)
+        if problem is not None:
+            out.write(
+                f"FAILED: cannot reach or authenticate to Qdrant ({problem}); nothing was deleted\n"
+            )
+            return 8
+    elif qdrant_endpoint_configured(qcfg) and not args.qdrant_absent:
+        problem = _qdrant_problem(qcfg)
+        if problem is not None:
+            endpoint = qdrant_endpoint_label(qcfg)
+            names = ", ".join(_episodic_memory_collection_names(qcfg))
+            out.write(
+                f"FAILED: Qdrant did not answer at {endpoint}; nothing was backed up or deleted.\n"
+                "The memory modules are off, but this deployment configures Qdrant, so this entity's\n"
+                f"memories may be there, in these collections: {names}.\n"
+                "Start Qdrant and run again or, if this host has no Qdrant server, run again with\n"
+                "--qdrant-absent.\n"
+            )
+            return 8
+
     # --- Gate 3: capture backup (blocking) -----------------------------
     backup = capture_backup(
         state_root=state_root,
         fork_root=fork_root,
         qdrant_cfg=qcfg,
+        qdrant_absent=bool(args.qdrant_absent),
         data_root=data_dir,
         out_root=out_root,
         entity_name=entity_name,
@@ -538,15 +590,6 @@ def main(
         out.write("  (non-fatal notes:)\n")
         for e in backup.errors:
             out.write(f"    - {e}\n")
-    if backup.qdrant_unchecked:
-        out.write(
-            "\nQdrant could not be checked: the memory module is off and Qdrant did not\n"
-            "answer, so this entity's memories there (if any) are not backed up. To have\n"
-            "them backed up and deleted, stop now (do not type the confirmation token),\n"
-            "start Qdrant and run decommission again. If you continue, Qdrant is left\n"
-            "untouched and the run ends INCOMPLETE; once the local state is gone, a later\n"
-            "run cannot find these memories.\n"
-        )
 
     # --- Dry-run: preview only, no prompts, no deletion ----------------
     if args.dry_run:
@@ -572,6 +615,7 @@ def main(
                 qdrant_cfg=qcfg,
                 bus_client=bus_client,
                 dry_run=True,
+                qdrant_absent=bool(args.qdrant_absent),
             )
             out.write("\n[dry-run] Would remove:\n")
             for p in result.would_remove_paths:
@@ -789,7 +833,7 @@ def main(
             qdrant_cfg=qcfg,
             bus_client=bus_client,
             dry_run=False,
-            qdrant_unchecked_in_backup=backup.qdrant_unchecked,
+            qdrant_absent=bool(args.qdrant_absent),
         )
 
         if result.incomplete:
@@ -817,13 +861,6 @@ def main(
             out.write("  errors (the entity is not fully deleted):\n")
             for e in result.errors:
                 out.write(f"    - {e}\n")
-        if result.qdrant_unchecked:
-            out.write(
-                "  Qdrant could not be checked; this entity's memories may remain in these collections if they exist: "
-                + ", ".join(_episodic_memory_collection_names(qcfg))
-                + ".\n"
-            )
-
         import datetime
 
         record = {
@@ -844,7 +881,7 @@ def main(
             "rdb_snapshot": result.rdb_snapshot,
             "aof_rewrite": result.aof_rewrite,
             "errors": result.errors + ([result.redis_failed] if result.redis_failed else []),
-            "qdrant_unchecked": result.qdrant_unchecked,
+            "qdrant_absent_asserted": bool(args.qdrant_absent),
             "trainer_stopped_asserted": bool(args.trainer_stopped),
             "guardian_notice_reminder": "shown",
             "backup_path": str(backup.backup_path),
