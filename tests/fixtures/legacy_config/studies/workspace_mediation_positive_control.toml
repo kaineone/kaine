@@ -1,0 +1,24 @@
+# Study configuration: the positive control's runs before the live test (paper
+# §6.3, A.8). Select it for a run with KAINE_STUDY=workspace_mediation_positive_control.
+# It is applied after the operator config, so these settings hold for the run.
+# The run's seed comes from [experiment].seed; the boot refuses a seed that the
+# preliminary or a pilot run used.
+
+[lingua]
+# Greedy decoding in the planned runs (paper §6.1).
+temperature = 0.0
+
+[syneidesis]
+arm = "competitive"
+
+[planned_test]
+# The positive control's runs before the live test (paper §6.3, A.8); complete
+# runs are checked with `python -m kaine.experiment.positive_control <run ids>`,
+# and the live test runs only after it passes for every processor.
+role = "positive_control"
+settings_record = "config/studies/workspace_mediation_settings.json"
+
+[positive_control]
+enabled = true
+mode = "control"
+settings_record = "config/studies/workspace_mediation_settings.json"

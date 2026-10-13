@@ -638,7 +638,7 @@ def test_constructor_rejects_unknown_processor():
         t_learn_s=0.0,
     )
     with pytest.raises(ValueError, match="processor"):
-        PositiveControl("vision", settings)
+        PositiveControl("not_a_processor", settings)
 
 
 def test_constructor_rejects_disabled():

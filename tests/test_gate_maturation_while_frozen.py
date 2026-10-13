@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from kaine.bus.schema import Event
+from kaine.bus.streams import DEVELOPMENT_SOURCE
 from kaine.lifecycle import stage as lifecycle_stage
 from kaine.lifecycle.gate_runner import (
     DEFAULT_STIMULUS_SOURCE_READOUT_STREAM,
@@ -54,7 +55,7 @@ def _make_bus(
         return (
             f"{boot_ms + 1}-0",
             Event(
-                source="gestation",
+                source=DEVELOPMENT_SOURCE,
                 type="gestation.readiness",
                 payload={"readout": readout},
                 salience=0.5,

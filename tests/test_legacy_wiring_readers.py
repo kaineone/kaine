@@ -13,10 +13,17 @@ import pytest
 from kaine import legacy_aliases, legacy_names
 from kaine.evaluation.affect_correlation import correlate_from_log
 from kaine.experiment.run_records import load_run_records
-from kaine.lifecycle.preservation import _read_bundle_members, extract_bundle_development
+from kaine.lifecycle.preservation import (
+    WORLD_MODEL_MEMBER,
+    _read_bundle_members,
+    extract_bundle_development,
+)
 from kaine.lifecycle.snapshot import ForkSnapshot
 from kaine.security import crypto
 from kaine.security.crypto import CryptoConfig, StateEncryptor
+
+# The world-model bundle member under the names the code uses now.
+_WM = WORLD_MODEL_MEMBER
 
 
 def _plain_bundle(path: Path, members: dict[str, bytes]) -> Path:
@@ -38,14 +45,15 @@ def test_snapshot_modules_mapped_when_keys_done(monkeypatch):
 
 
 def test_snapshot_modules_unmapped_when_keys_pending(monkeypatch):
-    monkeypatch.setattr(legacy_names, "MODULES", {"oldwm": {"new_key": "phantasia"}})
+    monkeypatch.setitem(legacy_names.SCOPE_STATUS, "keys", "pending")
+    monkeypatch.setattr(legacy_names, "MODULES", {"oldwm": {"new_key": _WM}})
     snap = ForkSnapshot.from_dict({"modules": {"oldwm": {"a": 1}, "thymos": {"b": 2}}})
     assert snap.modules == {"oldwm": {"a": 1}, "thymos": {"b": 2}}
 
 
 def test_bundle_members_map_old_module_prefix(monkeypatch, tmp_path):
     monkeypatch.setattr(crypto, "_active", StateEncryptor(CryptoConfig(enabled=False)))
-    monkeypatch.setattr(legacy_names, "MODULES", {"oldwm": {"new_key": "phantasia"}})
+    monkeypatch.setattr(legacy_names, "MODULES", {"oldwm": {"new_key": _WM}})
     monkeypatch.setattr(legacy_names, "BUNDLE_MEMBERS", ())
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "keys", "done")
     bundle = tmp_path / "b" / "bundle.tar"
@@ -57,31 +65,32 @@ def test_bundle_members_map_old_module_prefix(monkeypatch, tmp_path):
         },
     )
     members = _read_bundle_members(bundle.parent)
-    assert members["phantasia/world_model.ckpt"] == b"old"
+    assert members[f"{_WM}/world_model.ckpt"] == b"old"
 
 
 @pytest.mark.parametrize("first, second", [("old", "new"), ("new", "old")])
 def test_bundle_members_new_name_beats_old(monkeypatch, tmp_path, first, second):
     monkeypatch.setattr(crypto, "_active", StateEncryptor(CryptoConfig(enabled=False)))
-    monkeypatch.setattr(legacy_names, "MODULES", {"oldwm": {"new_key": "phantasia"}})
+    monkeypatch.setattr(legacy_names, "MODULES", {"oldwm": {"new_key": _WM}})
     monkeypatch.setattr(legacy_names, "BUNDLE_MEMBERS", ())
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "keys", "done")
     bundle = tmp_path / "b" / "bundle.tar"
     ordered: dict[str, bytes] = {}
     if first == "old":
         ordered["oldwm/world_model.ckpt"] = b"old"
-        ordered["phantasia/world_model.ckpt"] = b"new"
+        ordered[f"{_WM}/world_model.ckpt"] = b"new"
     else:
-        ordered["phantasia/world_model.ckpt"] = b"new"
+        ordered[f"{_WM}/world_model.ckpt"] = b"new"
         ordered["oldwm/world_model.ckpt"] = b"old"
     _plain_bundle(bundle, ordered)
     members = _read_bundle_members(bundle.parent)
-    assert members["phantasia/world_model.ckpt"] == b"new"
+    assert members[f"{_WM}/world_model.ckpt"] == b"new"
 
 
 def test_bundle_members_pending_old_name_not_mapped(monkeypatch, tmp_path):
+    monkeypatch.setitem(legacy_names.SCOPE_STATUS, "keys", "pending")
     monkeypatch.setattr(crypto, "_active", StateEncryptor(CryptoConfig(enabled=False)))
-    monkeypatch.setattr(legacy_names, "MODULES", {"oldwm": {"new_key": "phantasia"}})
+    monkeypatch.setattr(legacy_names, "MODULES", {"oldwm": {"new_key": _WM}})
     monkeypatch.setattr(legacy_names, "BUNDLE_MEMBERS", ())
     bundle = tmp_path / "b" / "bundle.tar"
     _plain_bundle(

@@ -10,6 +10,8 @@ reads injected signals and triggers the monotonic maturation transition.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -18,6 +20,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from kaine.bus.schema import Event
+from kaine.bus.streams import DEVELOPMENT_SOURCE, SLEEP_STREAM
 from kaine.lifecycle import stage as lifecycle_stage
 from kaine.lifecycle.gate_runner import (
     DEFAULT_STIMULUS_SOURCE_READOUT_STREAM,
@@ -62,7 +65,7 @@ def _make_bus(
         return (
             f"{boot_ms + 1}-0",
             Event(
-                source="gestation",
+                source=DEVELOPMENT_SOURCE,
                 type="gestation.readiness",
                 payload={"readout": readout},
                 salience=0.5,
@@ -228,6 +231,234 @@ async def test_gate_keeps_developing_when_conditions_unmet(tmp_path: Path) -> No
 
     assert not published
     assert runner.stage.is_developing
+
+
+@pytest.mark.asyncio
+async def test_final_sleep_count_catches_sleeps_after_the_last_tick(tmp_path: Path) -> None:
+    """Final sleep count persists sleeps that arrived after the last evaluation tick."""
+    bus = _make_bus(sleep_count=4)
+    state = _fresh_development_state(tmp_path)
+    runner = MaturationGateRunner(
+        bus=bus,
+        config=MaturationConfig(enabled=True, gate_cadence_seconds=0.01),
+        registry=_make_registry(),
+        entity_clock=_make_clock(0.0),
+        stage_state=state,
+        staging_enabled=True,
+        stimulus_source_feed_configured=True,
+    )
+    runner._stage = dataclasses.replace(
+        runner._stage, hypnos_cursor="2-0", sleep_count=0
+    )
+
+    await runner._begin_boot()
+    await runner._final_sleep_count()
+
+    assert runner._stage.sleep_count == 2
+    assert runner._stage.hypnos_cursor == "4-0"
+    stage_file = lifecycle_stage.STAGE_PATH
+    assert json.loads(stage_file.read_text())["sleep_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_final_sleep_count_skips_without_stimulus_feed(tmp_path: Path) -> None:
+    """Final count ignores sleeps when no stimulus source feed is configured."""
+    bus = _make_bus(sleep_count=4)
+    state = _fresh_development_state(tmp_path)
+    runner = MaturationGateRunner(
+        bus=bus,
+        config=MaturationConfig(enabled=True, gate_cadence_seconds=0.01),
+        registry=_make_registry(),
+        entity_clock=_make_clock(0.0),
+        stage_state=state,
+        staging_enabled=True,
+        stimulus_source_feed_configured=False,
+    )
+    runner._stage = dataclasses.replace(
+        runner._stage, hypnos_cursor="2-0", sleep_count=0
+    )
+    await runner._begin_boot()
+
+    await runner._final_sleep_count()
+
+    assert runner._stage.sleep_count == 0
+    assert runner._stage.hypnos_cursor == "2-0"
+
+
+@pytest.mark.asyncio
+async def test_final_sleep_count_skips_before_boot_is_anchored(tmp_path: Path) -> None:
+    """Final count ignores sleeps until boot is anchored."""
+    bus = _make_bus(sleep_count=4)
+    state = _fresh_development_state(tmp_path)
+    runner = MaturationGateRunner(
+        bus=bus,
+        config=MaturationConfig(enabled=True, gate_cadence_seconds=0.01),
+        registry=_make_registry(),
+        entity_clock=_make_clock(0.0),
+        stage_state=state,
+        staging_enabled=True,
+        stimulus_source_feed_configured=True,
+    )
+    runner._stage = dataclasses.replace(
+        runner._stage, hypnos_cursor="2-0", sleep_count=0
+    )
+
+    await runner._final_sleep_count()
+
+    assert runner._stage.sleep_count == 0
+    assert runner._stage.hypnos_cursor == "2-0"
+
+
+@pytest.mark.asyncio
+async def test_final_sleep_count_skips_when_not_developing(tmp_path: Path) -> None:
+    """Final count ignores sleeps when the stage is not developing."""
+    bus = _make_bus(sleep_count=4)
+    state = _fresh_development_state(tmp_path)
+    runner = MaturationGateRunner(
+        bus=bus,
+        config=MaturationConfig(enabled=True, gate_cadence_seconds=0.01),
+        registry=_make_registry(),
+        entity_clock=_make_clock(0.0),
+        stage_state=state,
+        staging_enabled=True,
+        stimulus_source_feed_configured=True,
+    )
+    runner._stage = dataclasses.replace(
+        runner._stage,
+        stage=lifecycle_stage.EMBODIED,
+        hypnos_cursor="2-0",
+        sleep_count=0,
+    )
+    await runner._begin_boot()
+
+    await runner._final_sleep_count()
+
+    assert runner._stage.sleep_count == 0
+    assert runner._stage.hypnos_cursor == "2-0"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "stimulus_configured,boot_raises,stage",
+    [
+        (False, False, lifecycle_stage.DEVELOPMENT),
+        (True, True, lifecycle_stage.DEVELOPMENT),
+        (True, False, lifecycle_stage.EMBODIED),
+    ],
+)
+async def test_final_count_never_counts_what_a_tick_skipped(
+    tmp_path: Path,
+    stimulus_configured: bool,
+    boot_raises: bool,
+    stage: str,
+) -> None:
+    """A tick and the final count agree on whether a sleep cycle counts."""
+    bus = _make_bus(sleep_count=4)
+    if boot_raises:
+        bus.server_time_ms = AsyncMock(side_effect=RuntimeError("down"))
+    state = _fresh_development_state(tmp_path)
+    runner = MaturationGateRunner(
+        bus=bus,
+        config=MaturationConfig(enabled=True, gate_cadence_seconds=0.01),
+        registry=_make_registry(),
+        entity_clock=_make_clock(0.0),
+        stage_state=state,
+        staging_enabled=True,
+        stimulus_source_feed_configured=stimulus_configured,
+    )
+    runner._stage = dataclasses.replace(
+        runner._stage,
+        stage=stage,
+        hypnos_cursor="2-0",
+        sleep_count=0,
+    )
+
+    await runner._evaluate_once()
+    await runner._final_sleep_count()
+
+    assert runner._stage.sleep_count == 0
+    assert runner._stage.hypnos_cursor == "2-0"
+
+
+@pytest.mark.asyncio
+async def test_shutdown_cancel_path_runs_the_final_count(tmp_path: Path) -> None:
+    """Cancelling the run loop still runs the final sleep count before returning."""
+    bus = _make_bus(sleep_count=4)
+    state = _fresh_development_state(tmp_path)
+    runner = MaturationGateRunner(
+        bus=bus,
+        config=MaturationConfig(enabled=True, gate_cadence_seconds=3600.0),
+        registry=_make_registry(),
+        entity_clock=_make_clock(0.0),
+        stage_state=state,
+        staging_enabled=True,
+        stimulus_source_feed_configured=True,
+    )
+    await runner._begin_boot()
+    runner._stage = dataclasses.replace(
+        runner._stage, hypnos_cursor="2-0", sleep_count=0
+    )
+
+    runner._task = asyncio.create_task(runner.run(asyncio.Event()))
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    runner._stage = dataclasses.replace(
+        runner._stage, hypnos_cursor="2-0", sleep_count=0
+    )
+    await runner.shutdown()
+
+    assert runner._stage.sleep_count == 2
+
+
+@pytest.mark.asyncio
+async def test_old_stream_cursor_counts_only_sleeps_on_the_new_stream(tmp_path: Path) -> None:
+    """Sleeps are counted from the configured stream, ignoring an old-stream cursor."""
+    stream = SLEEP_STREAM
+    bus = _make_bus(sleep_stream=stream)
+    new_stream_events = [
+        (
+            f"2000-{i}",
+            Event(
+                source="hypnos",
+                type="hypnos.sleep.completed",
+                payload={},
+                salience=0.5,
+                timestamp=datetime.now(timezone.utc),
+            ),
+        )
+        for i in range(3)
+    ]
+
+    async def _read_entries(
+        stream_name: str, last_id: str = "0", count: int = 100, block_ms: int = 0
+    ) -> tuple[list[tuple[str, Event]], str | None]:
+        if stream_name != stream:
+            return [], None
+        start = tuple(int(part) for part in last_id.split("-")) if "-" in last_id else (0, 0)
+        newer = [e for e in new_stream_events if tuple(int(p) for p in e[0].split("-")) > start]
+        if not newer:
+            return [], None
+        return newer, newer[-1][0]
+
+    bus.read_entries = AsyncMock(side_effect=_read_entries)
+
+    state = _fresh_development_state(tmp_path)
+    state = dataclasses.replace(state, hypnos_cursor="1000-2")
+    runner = MaturationGateRunner(
+        bus=bus,
+        config=MaturationConfig(enabled=True, gate_cadence_seconds=0.01),
+        registry=_make_registry(),
+        entity_clock=_make_clock(0.0),
+        stage_state=state,
+        staging_enabled=True,
+        stimulus_source_feed_configured=True,
+        sleep_stream=stream,
+    )
+
+    await runner._count_new_sleeps()
+
+    assert runner._stage.sleep_count == 3
+    assert runner._stage.hypnos_cursor == "2000-2"
 
 
 @pytest.mark.asyncio

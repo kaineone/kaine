@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from kaine.boot.wiring import AFFECT_FACTOR_LABEL
 from kaine.bus.schema import Event
 from kaine.workspace.novelty import NoveltyTracker
 from kaine.workspace.salience import RuleBasedSalience
@@ -110,11 +111,11 @@ def test_downgraded_factors_emit_warning(caplog):
             novelty=NoveltyTracker(window=4),
             goal_scorer=StaticGoalScorer(),
             affect_modulator=StaticAffectModulator(),
-            downgraded_factors=["thymos_modulation (set to static)"],
+            downgraded_factors=[f"{AFFECT_FACTOR_LABEL} (set to static)"],
         )
     combined = " ".join(r.message for r in caplog.records)
     assert "downgraded" in combined.lower()
-    assert "thymos_modulation" in combined
+    assert AFFECT_FACTOR_LABEL in combined
 
 
 def test_static_scorers_without_downgrade_flag_are_silent(caplog):

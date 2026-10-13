@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 import pytest
 
 from kaine.boot import ConfigurationError, make_salience_factors
+from kaine.boot.wiring import AFFECT_FACTOR_LABEL
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
@@ -358,7 +359,7 @@ def test_make_salience_factors_affect_static_is_a_downgrade():
         _cfg(**{"salience_thymos_factor": "static"}), AffectStateProvider()
     )
     assert isinstance(affect, StaticAffectModulator)
-    assert any("thymos" in d for d in downgraded), downgraded
+    assert any(AFFECT_FACTOR_LABEL in d for d in downgraded), downgraded
 
 
 def test_make_salience_factors_goal_drive_relevance_activates_real_scorer():

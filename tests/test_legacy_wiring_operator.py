@@ -172,18 +172,29 @@ def test_study_table_alias_allowed_after_normalization(tmp_path, monkeypatch, _n
     assert merged["lingua"]["x"] == 1
 
 
+def _current_key(old: str) -> str:
+    """The module key the code uses now: the new key once the keys step is done."""
+    if legacy_names.SCOPE_STATUS.get("keys") == "done":
+        return legacy_names.MODULES[old]["new_key"]
+    return old
+
+
+_DASHBOARD = _current_key("nexus")
+_INTEROCEPTION = _current_key("soma")
+
+
 def test_dashboard_config_table_alias(tmp_path, monkeypatch):
     monkeypatch.setattr(
         legacy_names,
         "CONFIG_TABLES",
-        ({"old": "oldnexus", "new": "nexus", "scope": "keys"},),
+        ({"old": "oldnexus", "new": _DASHBOARD, "scope": "keys"},),
     )
     monkeypatch.setattr(legacy_names, "CONFIG_KEYS", ())
     monkeypatch.setattr(legacy_names, "CONFIG_VALUES", ())
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "keys", "done")
 
     shipped = tmp_path / "kaine.toml"
-    shipped.write_text("[nexus]\nport = 8088\n")
+    shipped.write_text(f"[{_DASHBOARD}]\nport = 8088\n")
     overlay = tmp_path / "kaine.operator.toml"
     overlay.write_text("[oldnexus]\nport = 9100\n")
 
@@ -348,7 +359,7 @@ def test_plugin_seam_alias(monkeypatch):
     monkeypatch.setattr(
         legacy_names,
         "PLUGIN_SEAMS",
-        ({"old": "oldsoma.forward_model", "new": "soma.forward_model", "scope": "keys"},),
+        ({"old": "oldsoma.forward_model", "new": f"{_INTEROCEPTION}.forward_model", "scope": "keys"},),
     )
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "keys", "done")
 
@@ -361,19 +372,19 @@ def test_plugin_seam_alias(monkeypatch):
 
     loaded = load_plugins(
         {"plugins": {"enabled": ["p"]}},
-        known_modules=["soma"],
+        known_modules=[_INTEROCEPTION],
         entry_points=_eps(FakeEP("p", lambda: plugin)),
     )
 
-    assert loaded.manifest_entry()["p"]["seams"] == ["soma.forward_model"]
-    assert loaded.injections_for("soma") == {"forward_model": forward_model}
+    assert loaded.manifest_entry()["p"]["seams"] == [f"{_INTEROCEPTION}.forward_model"]
+    assert loaded.injections_for(_INTEROCEPTION) == {"forward_model": forward_model}
 
 
 def test_plugin_seam_alias_pending_rejected(monkeypatch):
     monkeypatch.setattr(
         legacy_names,
         "PLUGIN_SEAMS",
-        ({"old": "oldsoma.forward_model", "new": "soma.forward_model", "scope": "keys"},),
+        ({"old": "oldsoma.forward_model", "new": f"{_INTEROCEPTION}.forward_model", "scope": "keys"},),
     )
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "keys", "pending")
 
@@ -387,7 +398,7 @@ def test_plugin_seam_alias_pending_rejected(monkeypatch):
     with pytest.raises(PluginError, match="unknown seam"):
         load_plugins(
             {"plugins": {"enabled": ["p"]}},
-            known_modules=["soma"],
+            known_modules=[_INTEROCEPTION],
             entry_points=_eps(FakeEP("p", lambda: plugin)),
         )
 

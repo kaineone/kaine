@@ -46,7 +46,7 @@ def test_build_registry_boots_exactly_the_three_modules(monkeypatch):
     bus = _bus()
     registry = build_registry(bus, _reduced_config())
     names = sorted(m.name for m in registry.all_modules())
-    assert names == ["chronos", "lingua", "soma"]
+    assert names == sorted(["chronos", "lingua", "soma"])
     # Disabled faculties are absent; the reduced set does not drag them in.
     for disabled in ("mnemos", "eidolon", "thymos", "perception", "audition", "topos"):
         assert disabled not in registry

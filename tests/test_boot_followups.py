@@ -15,6 +15,8 @@ import kaine.cycle.__main__ as cyc
 from kaine.config import ConfigShapeError, validate_config_shape
 from kaine.cycle.revive_boot import REVIVE_REFUSED_EXIT, ReviveRefused
 
+_VOCAL = "vox"
+
 
 def test_failing_phase_releases_resources_and_reraises(monkeypatch):
     async def _run():
@@ -159,4 +161,4 @@ def test_vocal_registry_default_is_chatterbox():
     import kaine.boot.factories.vocal as vocal_mod
 
     text = Path(vocal_mod.__file__).read_text(encoding="utf-8")
-    assert 'BackendRegistry[TTSClient]("vox", default="chatterbox")' in text
+    assert f'BackendRegistry[TTSClient]("{_VOCAL}", default="chatterbox")' in text

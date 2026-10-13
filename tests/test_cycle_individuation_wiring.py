@@ -32,7 +32,7 @@ def test_individuation_refusal_missing_self_model():
         {"individuation": {"enabled": True}, "modules": {"eidolon": True}}
     )
     assert reason is not None
-    assert "lingua" in reason
+    assert "[modules].lingua" in reason
     assert "eidolon" not in reason
 
 

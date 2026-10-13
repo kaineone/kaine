@@ -1446,7 +1446,7 @@ def test_entity_care_template_renders_blind_sensors(tmp_path):
     }
     output = template.render(entity_care=entity_care, welfare=welfare, **defaults)
     assert "sensor advisories" in output
-    assert "audition_acoustic, soma" in output
+    assert ", ".join(welfare["blind_sensors"]) in output
     assert "silent now" in output
     assert "topos" in output
 

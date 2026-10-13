@@ -36,6 +36,8 @@ def identifier_for_key(key: str) -> str:
 
 def key_for_identifier(name: str) -> str:
     """The module key for a package or identifier name (inverse of identifier_for_key)."""
+    if legacy_names.SCOPE_STATUS.get("keys") == "done":
+        return name
     for key, entry in legacy_names.MODULES.items():
         if entry.get("new_key") == name and identifier_for_key(key) == name:
             return key

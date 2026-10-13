@@ -1,0 +1,6 @@
+{
+  "args": ["--apply", "--scope", "keys", "--only", "vox,thymos,soma,mnemos,nexus,hypnos,spot"],
+  "expect_exit": 0,
+  "moves": [],
+  "report_contains": ["## moves (0)", "files=2"]
+}

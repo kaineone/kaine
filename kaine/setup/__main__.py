@@ -19,6 +19,7 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Callable, TextIO
 
+from kaine import legacy_aliases
 from kaine.config import OPERATOR_CONFIG_PATH, SHIPPED_CONFIG_PATH, load_kaine_config
 from kaine.defaults import DEFAULT_CHAT_URL, language_section_api_key, language_section_chat_url
 from kaine.hardware import device_consumers, recommend_tier
@@ -577,6 +578,7 @@ def main(
     try:
         with args.operator_path.open("rb") as fh:
             existing_raw = tomllib.load(fh)
+            existing_raw = legacy_aliases.normalize_config_layer(existing_raw, str(args.operator_path))
     except FileNotFoundError:
         existing_raw = {}
     except Exception as exc:

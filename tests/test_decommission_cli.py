@@ -120,6 +120,18 @@ def _disabled_state_encryption():
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_bus_client(monkeypatch):
+    """Provide an isolated in-memory Redis client for decommission tests."""
+    fakeredis = pytest.importorskip("fakeredis")
+    client = fakeredis.FakeRedis()
+    client.xadd("thymos.out", {"data": "1"})
+    monkeypatch.setattr(
+        "kaine.lifecycle.__main__._open_bus_client",
+        lambda: client,
+    )
+
+
 def _args(tmp_path, *, dry_run=False, eval_root=None):
     cfg_dir = tmp_path / "config"
     cfg_dir.mkdir(parents=True, exist_ok=True)
@@ -187,6 +199,87 @@ def test_non_diverged_ack_path_deletes(tmp_path, monkeypatch):
     assert "Entity state deleted" in out.getvalue()
     # Backup was written.
     assert list((tmp_path / "backups").glob("entity_*"))
+    assert "cleared stream: thymos.out" in out.getvalue()
+    audit_path = tmp_path / "state" / "audit" / "decommission.jsonl"
+    assert audit_path.exists()
+    lines = audit_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["outcome"] == "deleted"
+    assert "thymos.out" in record["cleared_streams"]
+    text = audit_path.read_text(encoding="utf-8")
+    assert '{"x":1}' not in text
+    assert "Kaine Nova" not in text
+
+
+def test_bus_auth_failure_deletes_nothing(tmp_path, monkeypatch):
+    """Bus authentication failure aborts deletion and leaves entity state intact."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+
+    class FailingClient:
+        def ping(self):
+            raise redis.exceptions.AuthenticationError("bad")
+
+        def type(self, name):
+            return b"none"
+
+        def unlink(self, *names):
+            return 0
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        "kaine.lifecycle.__main__._open_bus_client",
+        lambda: FailingClient(),
+    )
+
+    out = io.StringIO()
+    err = io.StringIO()
+    answers = [
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ]
+    rc = main(
+        _args(tmp_path),
+        input_fn=_scripted_input(answers),
+        out=out,
+        err=err,
+    )
+    output = out.getvalue() + err.getvalue()
+    assert rc == 8, output
+    assert "FAILED" in output
+    assert (tmp_path / "state" / "eidolon").exists()
+
+
+def test_missing_bus_config_is_a_configuration_error(tmp_path, monkeypatch):
+    """Missing or malformed bus configuration is a configuration error, not a reachability failure."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+
+    def _raise_bus_config_error():
+        raise BusConfigError("no password")
+
+    monkeypatch.setattr(
+        "kaine.lifecycle.__main__._open_bus_client",
+        _raise_bus_config_error,
+    )
+
+    out = io.StringIO()
+    err = io.StringIO()
+    answers = [
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ]
+    rc = main(
+        _args(tmp_path),
+        input_fn=_scripted_input(answers),
+        out=out,
+        err=err,
+    )
+    assert rc == 6, out.getvalue() + err.getvalue()
+    assert (tmp_path / "state" / "eidolon").exists()
 
 
 def test_non_diverged_wrong_ack_aborts(tmp_path, monkeypatch):
@@ -277,6 +370,7 @@ def test_dry_run_deletes_nothing(tmp_path, monkeypatch):
     assert rc == 0, out.getvalue()
     assert (tmp_path / "state" / "eidolon").exists()  # nothing deleted
     assert "dry-run" in out.getvalue().lower()
+    assert "redis stream: thymos.out" in out.getvalue()
 
 
 def test_bus_live_refusal(tmp_path, monkeypatch):

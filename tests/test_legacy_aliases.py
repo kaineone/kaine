@@ -17,8 +17,16 @@ def _set_scope(monkeypatch, scope: str) -> None:
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, scope, "done")
 
 
-def test_scope_done_initially_pending() -> None:
+def _pin_pending(monkeypatch, scope: str) -> None:
+    """Mark one codemod scope as pending for a single test, whatever the table says."""
+    monkeypatch.setitem(legacy_names.SCOPE_STATUS, scope, "pending")
+
+
+def test_scope_done_follows_scope_status(monkeypatch) -> None:
+    _pin_pending(monkeypatch, "keys")
     assert not legacy_aliases.scope_done("keys")
+    _set_scope(monkeypatch, "keys")
+    assert legacy_aliases.scope_done("keys")
 
 
 def test_active_filters_by_scope(monkeypatch) -> None:
@@ -30,7 +38,8 @@ def test_active_filters_by_scope(monkeypatch) -> None:
     assert legacy_aliases.active(entries) == [entries[0]]
 
 
-def test_normalize_config_layer_is_inert_while_pending(caplog) -> None:
+def test_normalize_config_layer_is_inert_while_pending(monkeypatch, caplog) -> None:
+    _pin_pending(monkeypatch, "keys")
     caplog.set_level(logging.WARNING, logger="kaine.legacy")
     layer = {"thymos": {"x": 1}, "modules": {"thymos": True}}
     result = legacy_aliases.normalize_config_layer(layer, "config.toml")
@@ -76,8 +85,27 @@ def test_normalize_config_layer_compound_table(caplog, monkeypatch) -> None:
     _set_scope(monkeypatch, "keys")
     layer = {"phantasia": {"world_model": {"y": 2}}}
     result = legacy_aliases.normalize_config_layer(layer, "compound.toml")
-    assert result == {"world_model": {"backend": {"y": 2}}}
+    assert result == {"world_model": {"world_model": {"y": 2}}}
     assert len(caplog.records) == 1
+
+
+def test_dotted_move_into_a_moved_table_runs_after_it(monkeypatch) -> None:
+    """Single-segment table moves must run before dotted ones."""
+    _set_scope(monkeypatch, "keys")
+    monkeypatch.setattr(
+        legacy_names,
+        "CONFIG_TABLES",
+        (
+            {"old": "oldt", "new": "newt", "scope": "keys"},
+            {"old": "other.sub", "new": "newt.sub", "scope": "keys"},
+        ),
+    )
+    monkeypatch.setattr(legacy_names, "CONFIG_KEYS", ())
+    monkeypatch.setattr(legacy_names, "CONFIG_VALUES", ())
+    monkeypatch.setattr(legacy_names, "STREAM_NAMES", ())
+    layer = {"oldt": {"k": 1}, "other": {"sub": {"y": 2}}}
+    result = legacy_aliases.normalize_config_layer(layer, "compound.toml")
+    assert result == {"newt": {"k": 1, "sub": {"y": 2}}}
 
 
 def test_normalize_config_layer_study_table(monkeypatch) -> None:
@@ -166,7 +194,8 @@ def test_normalize_config_layer_key_conflict(monkeypatch) -> None:
     assert new_key in message
 
 
-def test_getenv_is_inert_while_pending() -> None:
+def test_getenv_is_inert_while_pending(monkeypatch) -> None:
+    _pin_pending(monkeypatch, "operator")
     env = {"KAINE_NEXUS_PORT": "8080"}
     assert legacy_aliases.getenv("KAINE_NEXUS_PORT", environ=env) == "8080"
 
@@ -233,7 +262,8 @@ def test_getenv_unknown_name_passed_through(caplog, monkeypatch) -> None:
     assert caplog.records == []
 
 
-def test_add_cli_aliases_is_inert_while_pending() -> None:
+def test_add_cli_aliases_is_inert_while_pending(monkeypatch) -> None:
+    _pin_pending(monkeypatch, "operator")
     parser = argparse.ArgumentParser()
     parser.add_argument("--serve-dashboard", action="store_true")
     legacy_aliases.add_cli_aliases(parser)
@@ -276,7 +306,8 @@ def test_add_cli_aliases_skips_missing_new_option(caplog, monkeypatch) -> None:
     assert caplog.records == []
 
 
-def test_resolve_seam_is_inert_while_pending() -> None:
+def test_resolve_seam_is_inert_while_pending(monkeypatch) -> None:
+    _pin_pending(monkeypatch, "keys")
     assert legacy_aliases.resolve_seam("soma.forward_model") == "soma.forward_model"
 
 
@@ -295,7 +326,8 @@ def test_map_module_key_and_list(monkeypatch) -> None:
     assert legacy_aliases.map_module_list(["thymos", "audition"]) == ["affect", "audition"]
 
 
-def test_map_module_key_is_inert_while_pending() -> None:
+def test_map_module_key_is_inert_while_pending(monkeypatch) -> None:
+    _pin_pending(monkeypatch, "keys")
     assert legacy_aliases.map_module_key("thymos") == "thymos"
 
 
@@ -312,7 +344,8 @@ def test_map_module_keys(monkeypatch, caplog) -> None:
     assert len(conflict_records) == 1
 
 
-def test_map_module_keys_inert_while_pending() -> None:
+def test_map_module_keys_inert_while_pending(monkeypatch) -> None:
+    _pin_pending(monkeypatch, "keys")
     mapping = {"thymos": 1}
     assert legacy_aliases.map_module_keys(mapping) is mapping
 
@@ -337,7 +370,7 @@ def test_map_record(monkeypatch) -> None:
     expected = {
         "event_type": "affect.state",
         "source": "interoception",
-        "affect_state": {},
+        "thymos_state": {},
         "sequence": 1,
         "other": 2,
     }
@@ -352,7 +385,8 @@ def test_map_record(monkeypatch) -> None:
     }
 
 
-def test_map_record_is_inert_while_pending() -> None:
+def test_map_record_is_inert_while_pending(monkeypatch) -> None:
+    _pin_pending(monkeypatch, "keys")
     record = {"event_type": "thymos.state", "source": "soma"}
     assert legacy_aliases.map_record(record) is record
 
@@ -360,6 +394,7 @@ def test_map_record_is_inert_while_pending() -> None:
 def test_map_record_keeps_new_field_both_orders(monkeypatch, caplog) -> None:
     caplog.set_level(logging.WARNING, logger="kaine.legacy")
     _set_scope(monkeypatch, "keys")
+    _set_scope(monkeypatch, "persisted")
     monkeypatch.setattr(legacy_aliases, "_record_warnings_seen", set())
     for record in (
         {"thymos_state": "old", "affect_state": "new"},
@@ -376,7 +411,8 @@ def test_map_sidecar_dir(monkeypatch) -> None:
     assert legacy_aliases.map_sidecar_dir("nous_policy") == "planning_policy"
 
 
-def test_map_sidecar_dir_inert_while_pending() -> None:
+def test_map_sidecar_dir_inert_while_pending(monkeypatch) -> None:
+    _pin_pending(monkeypatch, "keys")
     assert legacy_aliases.map_sidecar_dir("nous_policy") == "nous_policy"
 
 
@@ -393,6 +429,7 @@ def test_map_bundle_member(monkeypatch) -> None:
 
 
 def test_map_bundle_member_is_inert_while_pending(monkeypatch) -> None:
+    _pin_pending(monkeypatch, "keys")
     assert legacy_aliases.map_bundle_member("gestation/x") == "gestation/x"
 
 
@@ -407,7 +444,8 @@ def test_map_stage_record(monkeypatch) -> None:
     assert legacy_aliases.map_stage_record(data) == expected
 
 
-def test_map_stage_record_is_inert_while_pending() -> None:
+def test_map_stage_record_is_inert_while_pending(monkeypatch) -> None:
+    _pin_pending(monkeypatch, "persisted")
     data = {"stage": "gestation"}
     assert legacy_aliases.map_stage_record(data) is data
 

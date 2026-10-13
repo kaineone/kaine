@@ -37,7 +37,7 @@ def test_world_error_renders_via_named_template():
     out = renderer.render_event(ev)
     # Not the generic key=value fallback.
     assert out != fallback_template("phantasia", "phantasia.world_error", payload)
-    assert "phantasia" in out.lower()
+    assert out.startswith("[Phantasia] ")
     assert "error" in out.lower()
     assert "0.42" in out
     assert "0.35" in out
@@ -55,7 +55,7 @@ def test_scenario_renders_via_named_template():
     ev = _event("phantasia.scenario", payload)
     out = renderer.render_event(ev)
     assert out != fallback_template("phantasia", "phantasia.scenario", payload)
-    assert "phantasia" in out.lower()
+    assert out.startswith("[Phantasia] ")
     assert "scenario" in out.lower()
     assert "8" in out  # horizon summary
 

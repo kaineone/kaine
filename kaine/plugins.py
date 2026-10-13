@@ -367,6 +367,10 @@ def load_plugins(
                         old_module = seam.split(".", 1)[0]
                         new_module = new_seam.split(".", 1)[0]
                     module_aliases[new_module] = old_module
+            if new_seam in resolved_seams:
+                raise PluginError(
+                    f"plugin {name} declares seam {new_seam} under two names"
+                )
             resolved_seams.add(new_seam)
         seams = resolved_seams
 

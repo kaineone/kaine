@@ -23,7 +23,7 @@ async def test_refuses_when_interoception_disabled():
     }
     result = await _check_local_stimulus_source(config, passing_probe)
     assert not result.live
-    assert "soma is disabled" in result.reason
+    assert "[modules].soma is disabled" in result.reason
 
 
 @pytest.mark.asyncio

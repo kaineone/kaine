@@ -16,7 +16,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | stream-wiring-quality | 18/20 (90%) | Clean up bus stream names, remove phantom reads and enforce the stream contract across modules. |
 | adapter-merge-out-of-process | 0/3 (0%) | Run the real adapter merge in a child process, so its non-float32 model load can never change a long-lived process's default dtype. Design only. |
 | chronos-scalar-timing | 1/3 (33%) | Test whether the sequence module's interval timing shows the scalar property (timing variability proportional to the interval), as a falsification test. Design only. |
-| functional-module-names | 25/37 (68%) | Replace the Greek and Latin module names with the paper's functional names (Vision, Affect, Episodic memory, Workspace and the rest) and the developmental terms (developmental phase, stimulus source, maturation, entity) through one reviewed codemod, reading old operator names for two releases and preserved state and recorded datasets under old names for good. Design only. |
+| functional-module-names | 26/38 (68%) | Replace the Greek and Latin module names with the paper's functional names (Vision, Affect, Episodic memory, Workspace and the rest) and the developmental terms (developmental phase, stimulus source, maturation, entity) through one reviewed codemod, reading old operator names for two releases and preserved state and recorded datasets under old names for good. Design only. |
 | decision-server | 3/10 (30%) | Serve the K1-Jev decision model on its own loopback llama-server, apart from the language organ, with a fail-closed client (the client is built). |
 | deterministic-grader-fixes | 13/15 (87%) | Replace bare substring matching in the capability, refusal and hedge graders with exact, tested rules; two tasks need organ runs. |
 | hypnos-sleep-like-replay | 1/3 (33%) | Protect what the small online learners learned from later interference with sleep-like replay (Wei, Krishnan and Bazhenov). Design only. |
@@ -49,6 +49,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | familiarity-and-reply-window | 4/4 (100%) | Familiarity reaches the affect module's coupling; the language module accepts the reply-window key. |
 | access-wording-in-code | 2/2 (100%) | Code comments use the paper's access terms. |
 | third-party-font-notices | 4/4 (100%) | The vendored dashboard fonts ship their copyright notices and licence text, and the third-party notices name the fonts on disk. |
+| decommission-clears-bus-streams | 8/8 (100%) | Decommission deletes the entity's bus streams by their real names. |
 | decommission-complete-coverage | 2/11 (18%) | Decommission backs up, deletes or keeps every location of an entity's data, by a reviewed decision for each. |
 | context-age-from-publication | 4/4 (100%) | Context age is entity time since the broadcast's publication. |
 | research-log-access-fields | 4/4 (100%) | The research log carries the access and context fields the planned test reads. |
@@ -100,6 +101,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 74 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 75 active changes, 268 archived changes and 104 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

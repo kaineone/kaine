@@ -225,6 +225,7 @@ UI_GLOBS = (
     "kaine/nexus/templates/*",
     "kaine/dashboard/static/*",
     "kaine/dashboard/templates/*",
+    "tests/js/*",
 )
 
 MODULE_LIST_FILES = (
@@ -296,6 +297,16 @@ GUARDED = {
                 "action": "keep",
                 "pattern": r"SPOT (?:RECOVERY|CRITICAL)",
                 "why": "dashboard banner text, renamed with the UI strings",
+            },
+            {
+                "action": "rename",
+                "pattern": r"invalid spot config",
+                "why": "names the config table, renamed with it",
+            },
+            {
+                "action": "keep",
+                "pattern": r"[\"']spot: \{",
+                "why": "freeze reason text stored in the control file",
             },
         ],
         "default": "queue",
@@ -369,13 +380,83 @@ GUARDED = {
                 "why": "EchoModule instances and subclasses in these tests",
             },
             {
+                "action": "rename",
+                "contexts": ["py_string"],
+                "pattern": r"[\"']echo[\"'](?=\s*:\s*(?:True|False|frozenset\())",
+                "why": "module flag or a map keyed by module",
+            },
+            {
+                "action": "rename",
+                "pattern": r"\[\s*[\"']modules[\"']\s*\]\s*\[\s*[\"']echo[\"']\s*\]",
+                "why": "module flag lookup",
+            },
+            {
+                "action": "rename",
+                "contexts": ["py_string"],
+                "files": [
+                    "tests/test_ignition_*.py",
+                    "tests/test_study_and_overlay_consistency.py",
+                    "tests/test_config_stream_wiring.py",
+                    "tests/test_drive_sources_from_modules.py",
+                    "tests/test_wizard_module_presets.py",
+                    "tests/test_no_nonblocking_dollar_reads.py",
+                    "tests/test_stream_registry_drift.py",
+                ],
+                "pattern": r"[\"']echo[\"']",
+                "why": "module key in a module list",
+            },
+            {
+                "action": "rename",
+                "pattern": r"source\s*==\s*[\"']echo[\"']",
+                "why": "the recorder module's event source",
+            },
+            {
+                "action": "rename",
+                "pattern": r"(?<![A-Za-z0-9_.-])echo\.ping\b",
+                "why": "the recorder module's event type",
+            },
+            {
+                "action": "rename",
+                "pattern": r"\[modules\]\.echo\b",
+                "why": "module flag",
+            },
+            {
+                "action": "keep",
+                "pattern": r"`\"echo\"`",
+                "why": "the recorder's default message label value",
+            },
+            {
+                "action": "rename",
+                "contexts": ["md_code", "md_prose"],
+                "files": [
+                    "docs/09-modules/README.md",
+                    "docs/09-modules/recorder.md",
+                    "docs/04-getting-started/first-boot.md",
+                    "docs/appendix-a-configuration/core.md",
+                    "openspec/specs/module-pattern/spec.md",
+                ],
+                "pattern": r"(?<![A-Za-z0-9_.-])echo(?![A-Za-z0-9_-])",
+                "why": "the recorder module key in module docs",
+            },
+            {
                 "action": "keep",
                 "pattern": r"(?<![A-Za-z0-9_])(?:EchoConditionedClient|_EchoModelClient|_NamedEcho)(?![A-Za-z0-9_])",
                 "why": "echo as a verbatim repeat, not the recorder module",
             },
             {
                 "action": "keep",
-                "contexts": ["py_name"],
+                "contexts": [
+                    "py_name",
+                    "py_string",
+                    "py_text",
+                    "comment",
+                    "docstring",
+                    "shell",
+                    "md_code",
+                    "md_prose",
+                    "toml_string",
+                    "toml_text",
+                ],
                 "why": "echo as a verbatim repeat, not the recorder module",
             },
         ],
@@ -493,9 +574,69 @@ GUARDED = {
                 "why": "PerceptionLocus local variable in integration tests",
             },
             {
+                "action": "rename",
+                "contexts": ["py_string"],
+                "files": [
+                    "kaine/evaluation/stream_registry.py",
+                    "kaine/modules/world_model/encoder.py",
+                    "kaine/research/ignition_study/analysis.py",
+                    "tests/test_ignition_*.py",
+                    "tests/test_study_and_overlay_consistency.py",
+                    "tests/test_config_stream_wiring.py",
+                    "tests/test_boot_wiring.py",
+                    "tests/test_drive_sources_from_modules.py",
+                    "tests/test_reduced_module_set_boot.py",
+                    "tests/test_revive_each_module.py",
+                    "tests/test_timing_dilation_phase2.py",
+                    "tests/test_wizard_module_presets.py",
+                    "tests/test_salience_factor_wiring.py",
+                ],
+                "pattern": r"[\"']perception[\"']",
+                "why": "the locus module key in a module list or a map keyed by module",
+            },
+            {
                 "action": "keep",
                 "pattern": r"(?<![A-Za-z0-9_])_perception_banner(?![A-Za-z0-9_])",
                 "why": "operator-facing template, not the locus module",
+            },
+            {
+                "action": "keep",
+                "pattern": r"source\s*=\s*=?\s*[\"']perception[\"']",
+                "why": "the perception feed's own event source",
+            },
+            {
+                "action": "keep",
+                "pattern": r"CheckResult\(\s*[\"']perception[\"']",
+                "why": "preboot check group",
+            },
+            {
+                "action": "keep",
+                "pattern": r"type_?\s*=\s*[\"']perception[\"']",
+                "why": "an Audition event type",
+            },
+            {
+                "action": "keep",
+                "pattern": r"/diagnostics/perception\b",
+                "why": "dashboard API route, renamed with the UI",
+            },
+            {
+                "action": "keep",
+                "pattern": r"\.\[perception\]",
+                "why": "pip extra",
+            },
+            {
+                "action": "keep",
+                "files": [
+                    "tests/test_container_deployment.py",
+                    "tests/test_decommission_delete.py",
+                ],
+                "why": "state and tmpfs directory names",
+            },
+            {
+                "action": "keep",
+                "contexts": ["py_string"],
+                "files": ["kaine/dashboard/diagnostics.py"],
+                "why": "template context name, renamed with the UI",
             },
             {
                 "action": "keep",
@@ -514,7 +655,19 @@ GUARDED = {
             },
             {
                 "action": "keep",
-                "contexts": ["py_name", "path", "md_code"],
+                "contexts": [
+                    "py_name",
+                    "path",
+                    "md_code",
+                    "md_prose",
+                    "py_string",
+                    "py_text",
+                    "comment",
+                    "docstring",
+                    "shell",
+                    "toml_string",
+                    "toml_text",
+                ],
                 "why": "the perception subsystem, not the locus module",
             },
         ],
@@ -744,11 +897,48 @@ RESOLUTIONS = [
         "pattern": r"\bSeed being\b",
         "why": "the glossary term for the seeded entity; links already point at #seed-entity",
     },
+    {
+        "name": "nexus",
+        "action": "keep",
+        "pattern": r"nexus\.test\b",
+        "why": "test hostname of the dashboard under test; renamed with the operator strings",
+    },
+    {
+        "name": "nexus",
+        "action": "keep",
+        "pattern": r"Requirement\(\s*\"[^\"]+\",\s*\"nexus\"",
+        "why": "pip extra name; renamed with the packaging in the operator step",
+    },
+    {
+        "name": "nexus",
+        "action": "keep",
+        "files": ["tests/test_extras.py"],
+        "pattern": r"(?:\.extra\s*==\s*|extra=)\"nexus\"",
+        "why": "pip extra name; renamed with the packaging in the operator step",
+    },
+    {
+        "name": "spot",
+        "action": "keep",
+        "files": ["tests/test_unattended_gate.py"],
+        "pattern": r"6_Spot_armed_and_self_tested",
+        "why": "check key built from the operator-facing condition label",
+    },
+    {
+        "name": "nexus",
+        "action": "keep",
+        "pattern": r"X-Nexus-Session-Key",
+        "why": "session-key HTTP header; renamed with the UI strings in the operator step",
+    },
+    {
+        "name": "nexus",
+        "action": "keep",
+        "pattern": r"nexus\.preservation\.events",
+        "why": "browser storage key; renamed with the UI strings in the operator step",
+    },
 ]
 
 KEY_OVERRIDES = (
     ("eidolon.self_model", "self_model.document"),
-    ("phantasia.world_model", "world_model.backend"),
     # kaine/workspace/syneidesis.py moves to kaine/workspace/core.py (PATH_OVERRIDES),
     # so its dotted import path and its path in text follow the same name.
     ("workspace.syneidesis", "workspace.core"),
@@ -784,9 +974,8 @@ PHRASES = (
 PATH_OVERRIDES = {
     "kaine/workspace/syneidesis.py": "kaine/workspace/core.py",
 
-    # The key override "phantasia.world_model" -> "world_model.backend" also renames
-    # the dotted import path kaine.modules.phantasia.world_model, so the file that
-    # holds WorldModelBackend moves to backend.py to match it.
+    # The phantasia world_model module moved to kaine/modules/world_model/backend.py
+    # in an earlier step, so its dotted import path and its path in text are updated.
     "kaine/modules/phantasia/world_model.py": "kaine/modules/world_model/backend.py",
 
     # Test files whose old name already said "sleep", "world_model", "effectors" or
@@ -817,7 +1006,60 @@ PERSISTED_EXACT = {
     "hypnos_cursor": "sleep_cursor",
     "empatheia_agents": "social_cognition_agents",
     "mnemos_": "episodic_memory_",
+    # Keys and values inside stored files; the keys run leaves them, the persisted step decides.
+    "thymos_state": "affect_state",
+    "hypnos_payload": "sleep_payload",
+    "empatheia_deviation": "social_cognition_deviation",
+    "nous_initiated": "planning_initiated",
+    "nous_initiated_entry_ids": "planning_initiated_entry_ids",
+    "nous_proposals_realized": "planning_proposals_realized",
+    "nous_proposals_declined": "planning_proposals_declined",
+    "nous_proposals_forwarded": "planning_proposals_forwarded",
+    "unrealizable_nous_intents": "unrealizable_planning_intents",
+    "eidolon_drift": "self_model_drift",
+    "eidolon_drift_count": "self_model_drift_count",
+    "eidolon_drift_signal": "self_model_drift_signal",
+    "eidolon_identity_history_len": "self_model_identity_history_len",
+    "eidolon_self_model_found": "self_model_found",
+    "hypnos_adapters_present": "sleep_adapters_present",
+    "soma_gain": "interoception_gain",
+    "soma_error": "interoception_error",
+    "topos_gain": "vision_gain",
+    "topos_error": "vision_error",
+    "soma_units": "interoception_units",
+    "topos_units": "vision_units",
+    "topos_lr": "vision_lr",
+    "phantasia_cue": "world_model_cue",
+    "lingua_revision": "language_revision",
+    "topos_encoder": "vision_encoder",
+    "womb_prediction_error": "stimulus_source_prediction_error",
+    "womb_lost": "stimulus_source_lost",
+    "womb_not_ready": "stimulus_source_not_ready",
+    "no_womb_feed_configured": "no_stimulus_source_feed_configured",
+    "spot_escalation": "supervisor_escalation",
+    "forked_being": "forked_entity",
+    "gestation_budget_seconds": "development_budget_seconds",
+    "replay_mnemos": "replay_episodic_memory",
+    "replay_phantasia": "replay_world_model",
+    "eidolon_accuracy": "self_model_accuracy",
+    "nous_policy": "planning_policy",
+    # Stored tags: checkpoint headers, a reference and capture kind, a preservation
+    # reason and a study outcome written to disk. The keys step leaves them.
+    "kaine-phantasia-rssm-npz-v1": "kaine-world-model-rssm-npz-v1",
+    "phantasia-encoder-v1": "world-model-encoder-v1",
+    "birth": "maturation",
+    "failed:gestation_unviable": "failed:development_unviable",
+    # Episodic-memory collection names built from the stored "mnemos_" prefix.
+    "mnemos_episodic": "episodic_memory_episodic",
+    "mnemos_semantic": "episodic_memory_semantic",
+    "mnemos_procedural": "episodic_memory_procedural",
+    "mnemos_embedding_space": "episodic_memory_embedding_space",
+    "mnemos_strength": "episodic_memory_strength",
+    "mnemos_short_term": "episodic_memory_short_term",
 }
+
+# Strings an operator-facing template, page script or browser reads; they move with the UI strings in the operator step.
+OPERATOR_EXACT = ("nexus_available", "nexus_error", "nexus_port", "nexus_running", "mnemos_store", "spot_state", "spot_escalated", "kaine_nexus_session")
 
 REPO_TOP_DIRS = (
     "kaine",
@@ -867,6 +1109,21 @@ EXCLUDED_GLOBS = (
     # Stored field names stay byte-identical for good.
     "kaine/lifecycle/stored_field_names.py",
     "tests/fixtures/rename_modules/",
+    # The pre-rename shipped configuration is preserved here for the sweep test.
+    "tests/fixtures/legacy_config/",
+    # These tests exercise the compatibility readers with the old names as literals,
+    # so the codemod must never rewrite them.
+    "tests/test_legacy_aliases.py",
+    "tests/test_legacy_wiring_operator.py",
+    "tests/test_legacy_wiring_readers.py",
+    "tests/test_legacy_local_data.py",
+    "tests/test_rename_state.py",
+    "tests/test_rename_state_guards.py",
+    "tests/test_legacy_keys_readers.py",
+    "tests/test_legacy_reader_sites.py",
+    "tests/test_legacy_reader_state.py",
+    # Golden pins on stored names that never change.
+    "tests/test_stimulus_source_params_digest.py",
     # These documents record the rename itself and must keep the old names.
     "openspec/changes/functional-module-names/",
     "docs/appendix-e-module-names.md",
@@ -955,6 +1212,43 @@ ACCEPTED_COLLISIONS = [
     ("tests/test_praxis_effectors.py", "effectors"),
     ("tests/test_praxis_module.py", "effectors"),
     ("tests/test_salience_factor_wiring.py", "workspace"),
+
+    # Keys step (module key strings, config tables, streams). Each was checked by hand.
+    # The new key already appears in the file with a different role and the two never
+    # meet as keys of one mapping: a pip extra named "vision" beside the module key
+    # (extras, wizard, setup steps), a device-map role "vision", a payload field
+    # "affect" beside the affect module's event names (faithful templates, episodic
+    # memory, their tests), the effectors module's own capability key "effectors",
+    # the world-model backend sub-table [world_model.world_model] read inside its own
+    # table, the dashboard package path segment, a "self_model" payload field the
+    # research log strips, and a test class name.
+    ("kaine/boot/factories/world_model.py", "world_model"),
+    ("kaine/extras.py", "vision"),
+    ("kaine/faithful/templates.py", "affect"),
+    ("kaine/modules/effectors/module.py", "effectors"),
+    ("kaine/modules/episodic_memory/module.py", "affect"),
+    ("kaine/organ_server/device_map.py", "vision"),
+    ("kaine/research/submission.py", "self_model"),
+    ("kaine/setup/hardware_steps.py", "vision"),
+    ("kaine/setup/web/app.py", "dashboard"),
+    ("kaine/setup/wizard_core.py", "vision"),
+    ("tests/test_boot_wiring.py", "effectors"),
+    ("tests/test_boot_wiring.py", "world_model"),
+    ("tests/test_dashboard_auth_js.py", "dashboard"),
+    ("tests/test_dashboard_observability.py", "affect"),
+    ("tests/test_dashboard_observability.py", "language"),
+    ("tests/test_dashboard_routers.py", "dashboard"),
+    ("tests/test_deterministic_cycle.py", "interoception"),
+    ("tests/test_episodic_memory_module.py", "EpisodicMemory"),
+    ("tests/test_episodic_memory_module.py", "affect"),
+    ("tests/test_extras.py", "dashboard"),
+    ("tests/test_extras.py", "interoception"),
+    ("tests/test_extras.py", "vision"),
+    ("tests/test_faithful_templates.py", "affect"),
+    ("tests/test_positive_control.py", "vision"),
+    ("tests/test_research_event_log.py", "self_model"),
+    ("tests/test_setup_device_map.py", "vision"),
+    ("tests/test_setup_wizard.py", "vision"),
 ]
 
 SURVEY_EXTRA = (
@@ -986,8 +1280,8 @@ GUARD_NAMES = tuple(
 CONFIG_TABLES = tuple(
     {"old": k, "new": e["new_key"], "scope": "keys"} for k, e in MODULES.items()
 ) + (
-    {"old": "phantasia.world_model", "new": "world_model.backend", "scope": "keys"},
     {"old": "perception_feed.womb", "new": "perception_feed.stimulus_source", "scope": "keys"},
+    {"old": "research_event_log.nexus_record", "new": "research_event_log.dashboard_record", "scope": "keys"},
 )
 
 CONFIG_KEYS = (
@@ -998,6 +1292,24 @@ CONFIG_KEYS = (
     {"old": "womb_presence_window_seconds", "new": "stimulus_source_presence_window_seconds", "scope": "keys"},
     {"old": "womb_prediction_error_ceiling", "new": "stimulus_source_prediction_error_ceiling", "scope": "keys"},
     {"old": "birth_transition_seconds", "new": "maturation_transition_seconds", "scope": "keys"},
+    {"old": "chronos_stream", "new": "sequence_stream", "scope": "keys"},
+    {"old": "hypnos_stream", "new": "sleep_stream", "scope": "keys"},
+    {"old": "lingua_external_stream", "new": "language_external_stream", "scope": "keys"},
+    {"old": "lingua_quiet_s", "new": "language_quiet_s", "scope": "keys"},
+    {"old": "mnemos_stream", "new": "episodic_memory_stream", "scope": "keys"},
+    {"old": "require_operator_ack_for_birth", "new": "require_operator_ack_for_maturation", "scope": "keys"},
+    {"old": "salience_thymos_factor", "new": "salience_affect_factor", "scope": "keys"},
+    {"old": "soma_stream", "new": "interoception_stream", "scope": "keys"},
+    {"old": "thymos_state_stream", "new": "affect_state_stream", "scope": "keys"},
+    {"old": "volition_stream", "new": "action_selection_stream", "scope": "keys"},
+    {"old": "nous_step_burst", "new": "planning_step_burst", "scope": "keys"},
+    {"old": "nexus_url", "new": "dashboard_url", "scope": "keys"},
+    {"old": "eidolon_accuracy_interval_hours", "new": "self_model_accuracy_interval_hours", "scope": "keys"},
+)
+
+# Module keys used as keys inside other tables (for example [evaluation.observers] or a plugin's backend table).
+CONFIG_KEYS = CONFIG_KEYS + tuple(
+    {"old": k, "new": e["new_key"], "scope": "keys"} for k, e in MODULES.items() if k not in GUARDED
 )
 
 CONFIG_VALUES = (
@@ -1055,7 +1367,12 @@ PLUGIN_SEAMS = tuple(
 STREAM_NAMES = tuple(
     {"old": f"{k}.out", "new": f"{e['new_key']}.out", "scope": "keys"}
     for k, e in MODULES.items()
+) + tuple(
+    {"old": f"{k}.out", "new": f"{e['new_key']}.out", "scope": "keys"}
+    for k, e in DEVELOPMENTAL.items()
 ) + (
+    {"old": "lingua.external", "new": "language.external", "scope": "keys"},
+    {"old": "lingua.internal", "new": "language.internal", "scope": "keys"},
     {"old": "eidolon.self_model", "new": "self_model.document", "scope": "keys"},
     {"old": "volition_feedback.out", "new": "action_selection_feedback.out", "scope": "keys"},
     {"old": "intent.perception.switch", "new": "intent.perceptual_locus.switch", "scope": "keys"},
@@ -1064,8 +1381,18 @@ STREAM_NAMES = tuple(
     {"old": "nexus.snapshot", "new": "dashboard.snapshot", "scope": "keys"},
 )
 
+# Bus event types whose spelling looks like a file name; they move with the keys step.
+EVENT_TYPES = (
+    {"old": "spot.log", "new": "supervisor.log", "scope": "keys"},
+)
+
+# Stream names used as keys (the [bus.per_stream_maxlen] table).
+CONFIG_KEYS = CONFIG_KEYS + tuple(
+    {"old": e["old"], "new": e["new"], "scope": e["scope"]} for e in STREAM_NAMES
+)
+
 RECORD_FIELDS = (
-    {"old": "thymos_state", "new": "affect_state", "scope": "keys"},
+    {"old": "thymos_state", "new": "affect_state", "scope": "persisted"},
 ) + tuple(
     {"old": k, "new": e["new_key"], "scope": "keys"} for k, e in MODULES.items()
 )
@@ -1100,6 +1427,13 @@ STATE_PATHS = (
 COLLECTIONS = (
     {"old": "mnemos_", "new": "episodic_memory_", "scope": "persisted"},
     {"old": "empatheia_agents", "new": "social_cognition_agents", "scope": "persisted"},
+)
+
+STORED_TAGS = (
+    {"old": "kaine-phantasia-rssm-npz-v1", "new": "kaine-world-model-rssm-npz-v1", "scope": "persisted"},
+    {"old": "phantasia-encoder-v1", "new": "world-model-encoder-v1", "scope": "persisted"},
+    {"old": "birth", "new": "maturation", "scope": "persisted"},
+    {"old": "failed:gestation_unviable", "new": "failed:development_unviable", "scope": "persisted"},
 )
 
 STAGE_VALUES = (

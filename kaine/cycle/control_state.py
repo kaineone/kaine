@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
+from kaine import legacy_aliases
 from kaine.state_io import write_json_atomic
 from kaine.storage import resolve
 
@@ -94,14 +95,20 @@ class CycleControl:
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "CycleControl":
         data = dict(data or {})
-        stack = tuple(
-            dict(e) for e in data.get("stack") or () if isinstance(e, dict)
-        )
+        stack = []
+        for e in data.get("stack") or ():
+            if not isinstance(e, dict):
+                continue
+            entry = dict(e)
+            if "source" in entry:
+                entry["source"] = legacy_aliases.map_freeze_source(entry["source"])
+            stack.append(entry)
+        stack = tuple(stack)
         if not stack and bool(data.get("frozen", False)):
             # Legacy single-slot file: promote it to a one-entry stack.
             stack = (
                 {
-                    "source": data.get("source", "operator"),
+                    "source": legacy_aliases.map_freeze_source(data.get("source", "operator")),
                     "reason": data.get("reason"),
                     "frozen_at": data.get("frozen_at"),
                 },

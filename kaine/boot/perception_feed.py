@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     from kaine.modules.stimulus_source_signal import StimulusSourceParams
     from kaine.modules.vision.feed import StimulusSourceClock
+from kaine.bus.streams import PERCEPTION_FEED_SOURCE
 from kaine.entity_clock import EntityClock
 
 log = logging.getLogger(__name__)
@@ -359,7 +360,7 @@ def _transition_event_publisher(bus: Any) -> Callable[[str, dict[str, Any]], Non
             )
             return
         event = validate_event(
-            source="perception",
+            source=PERCEPTION_FEED_SOURCE,
             type="perception.transition",
             payload=dict(payload),
             # Operational provenance, not a percept.

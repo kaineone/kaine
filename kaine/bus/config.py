@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlsplit
 
+from kaine import legacy_aliases
 from kaine.bus.errors import BusConfigError
 from kaine.config import OPERATOR_CONFIG_PATH, deep_merge
 
@@ -124,7 +125,7 @@ def _build_bus_config(
     kaine_toml = kaine_toml or root / DEFAULT_KAINE_TOML
     secrets_toml = secrets_toml or root / DEFAULT_SECRETS_TOML
 
-    kaine_doc = _read_toml(kaine_toml)
+    kaine_doc = legacy_aliases.normalize_config_layer(_read_toml(kaine_toml), str(kaine_toml))
 
     op_path = (
         operator_toml if operator_toml is not None else root / OPERATOR_CONFIG_PATH
@@ -142,6 +143,7 @@ def _build_bus_config(
             exc,
         )
         op_doc = {}
+    op_doc = legacy_aliases.normalize_config_layer(op_doc, str(op_path))
     if op_doc:
         kaine_doc = deep_merge(kaine_doc, op_doc)
 
