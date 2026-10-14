@@ -39,11 +39,13 @@ async def read_conversation_history(bus: Any, n: int) -> list[tuple[str, Event]]
     command removes it. Both are read and merged in Redis id order (ids are
     time-ordered across streams); old events are mapped to the new source and type.
     """
+    new_entries: list[tuple[str, Event]] = []
     try:
         new_entries = await bus.read(LANGUAGE_EXTERNAL_STREAM, last_id="0", count=n, block_ms=0)
     except Exception:
+        # Still try the old stream: a failed read of the new one must not hide
+        # the history written before the rename.
         log.exception("conversation history backfill failed")
-        return []
     old_entries: list[tuple[str, Event]] = []
     old_stream = legacy_aliases.old_stream_name(LANGUAGE_EXTERNAL_STREAM)
     if old_stream:

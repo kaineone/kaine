@@ -98,3 +98,19 @@ async def test_conversation_history_without_the_old_stream(bus):
     await bus.client.xadd("language.external", _fields("language", "language.external", {"text": "only"}))
     history = await read_conversation_history(bus, 10)
     assert [event.payload["text"] for _, event in history] == ["only"]
+
+
+async def test_conversation_history_survives_a_failed_new_stream_read(bus):
+    """A failed read of the new stream still returns the history from the old stream."""
+    old_source = OLD_EXTERNAL.split(".", 1)[0]
+    await bus.client.xadd(OLD_EXTERNAL, _fields(old_source, OLD_EXTERNAL, {"text": "before"}))
+    real_read = bus.read
+
+    async def flaky_read(stream, *args, **kwargs):
+        if stream == "language.external":
+            raise ConnectionError("new stream unavailable")
+        return await real_read(stream, *args, **kwargs)
+
+    bus.read = flaky_read
+    history = await read_conversation_history(bus, 10)
+    assert [event.payload["text"] for _, event in history] == ["before"]

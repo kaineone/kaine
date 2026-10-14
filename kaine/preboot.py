@@ -1174,8 +1174,9 @@ async def check_old_streams(config, *, probe=None) -> list[CheckResult]:
                 status=WARN,
                 detail=(
                     f"{len(to_delete)} old-named streams still hold {total} bytes "
-                    f"(for example {first}); nothing reads them now; "
-                    "run python -m kaine.bus.legacy_streams --delete"
+                    f"(for example {first}); only the dashboard's conversation history "
+                    "and the language module's first sleep-index lookup still read them; "
+                    "run python -m kaine.bus.legacy_streams --delete once the run has settled"
                 ),
             )
         ]
