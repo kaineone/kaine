@@ -75,11 +75,8 @@ def test_done_scope_is_clean(done_plan, table, scope):
     assert not messages, "\n".join(messages)
 
 
-def test_no_capitalized_old_name(codemod, table):
-    if any(table.SCOPE_STATUS[s] != "done" for s in table.SCOPES):
-        pytest.skip("scopes still pending")
-
-    files = [
+def _guarded_files(codemod, table) -> list[str]:
+    return [
         p
         for p in codemod.tracked_files(REPO_ROOT)
         if not (
@@ -89,7 +86,12 @@ def test_no_capitalized_old_name(codemod, table):
         )
     ]
 
-    found = scan_capitalized(REPO_ROOT, files, table.GUARD_NAMES)
+
+def test_no_capitalized_old_name(codemod, table):
+    if any(table.SCOPE_STATUS[s] != "done" for s in table.SCOPES):
+        pytest.skip("scopes still pending")
+
+    found = scan_capitalized(REPO_ROOT, _guarded_files(codemod, table), table.GUARD_NAMES)
     assert found == []
 
 
@@ -106,6 +108,26 @@ def scan_capitalized(root: pathlib.Path, files: list[str], names: tuple[str, ...
                 pattern = rf"(?<![A-Za-z]){re.escape(name)}(?![a-z])"
                 for _ in re.finditer(pattern, line):
                     found.append(f"{rel}:{line_no} {name}")
+    return found
+
+
+def scan_identifiers(root: pathlib.Path, files: list[str], keys: tuple[str, ...], kept: tuple[str, ...]) -> list[str]:
+    found: list[str] = []
+    key_set = set(keys)
+    kept_set = set(kept)
+    for rel in files:
+        path = root / rel
+        data = path.read_bytes()
+        if b"\x00" in data[:8192]:
+            continue
+        text = data.decode("utf-8", errors="replace")
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            for match in re.finditer(r"[A-Za-z0-9_]+", line):
+                token = match.group()
+                if token in kept_set or "_" not in token:
+                    continue
+                if any(part in key_set for part in token.split("_")):
+                    found.append(f"{rel}:{line_no} {token}")
     return found
 
 
@@ -136,3 +158,42 @@ def test_check_mode_flags_a_planted_name(codemod, table, tmp_path: pathlib.Path,
 
     assert exit_code == 1
     assert "docs/file.md" in out
+
+
+def test_no_identifier_names_an_old_module(codemod, table):
+    if any(table.SCOPE_STATUS[s] != "done" for s in table.SCOPES):
+        pytest.skip("scopes still pending")
+
+    keys = tuple(
+        k
+        for k in {*table.MODULES.keys(), *table.DEVELOPMENTAL.keys()}
+        if k not in table.GUARDED
+    )
+    found = scan_identifiers(REPO_ROOT, _guarded_files(codemod, table), keys, table.GUARD_KEPT_IDENTIFIERS)
+    assert found == []
+
+
+def test_identifier_scanner_flags_and_keeps(tmp_path: pathlib.Path, table):
+    key = next(k for k in table.MODULES.keys() if k not in table.GUARDED)
+    path = tmp_path / "x.py"
+    path.write_text(
+        "\n".join(
+            [
+                f"make_{key}()",
+                f"_phase_{key} = 1",
+                f"{key}_factory",
+                f"{key}x_y",
+                f"x{key}_y",
+                key,
+                "kept_" + key,
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert scan_identifiers(tmp_path, ["x.py"], (key,), ("kept_" + key,)) == [
+        f"x.py:1 make_{key}",
+        f"x.py:2 _phase_{key}",
+        f"x.py:3 {key}_factory",
+    ]
+

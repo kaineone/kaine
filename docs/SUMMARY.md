@@ -82,6 +82,7 @@
   - [Perception feed and sleep](appendix-a-configuration/perception-and-sleep.md)
   - [Lifecycle, evaluation and research](appendix-a-configuration/lifecycle-and-research.md)
   - [Security and Dashboard](appendix-a-configuration/security-and-dashboard.md)
+  - [Deprecated names](appendix-a-configuration/deprecated-names.md)
 - [Glossary](appendix-b-glossary.md)
 - [Licences](appendix-c-licences.md)
 - [Roadmap](appendix-d-roadmap.md)
