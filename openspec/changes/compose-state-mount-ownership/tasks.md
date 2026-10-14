@@ -6,7 +6,7 @@
 
 ## 2. State rename
 
-- [ ] 2.1 Before the first step, check write access to every directory a step writes into; refuse with exit code 14 and a message naming the directory, owner, mode and the fix.
+- [ ] 2.1 Before the first step, check write access to every directory a step writes into (the nearest existing ancestor for one not created yet); refuse with exit code 14 and a message naming the directory, owner, mode and the fix (`chown -R`). The mount-point check (2.2) runs first.
 - [ ] 2.2 When the old side holds data and the new side is an empty mount point, the refusal says so.
 - [ ] 2.3 Tests for both, mutation-checked.
 
