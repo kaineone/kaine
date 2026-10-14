@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Iterable, Optional
 
+from kaine import legacy_aliases, legacy_names
 from kaine.embedding_defaults import LEGACY_EMBEDDING_SPACE
 from kaine.entity_clock import EntityClock
 from kaine.memory_kinds import EPISODIC_MEMORY_COLLECTION_KINDS, stamp_key, strength_key
@@ -34,6 +35,11 @@ from kaine.modules.episodic_memory.storage import (
 from kaine.text_embedding import same_space
 
 log = logging.getLogger(__name__)
+
+# The collection prefix every release used before bundles stored their prefix.
+_PREFIX_BEFORE_STORED = next(
+    entry["old"] for entry in legacy_names.COLLECTIONS if entry["old"].endswith("_")
+)
 
 
 # Canonical memory-collection kinds. Sourced from the boundary-neutral
@@ -188,6 +194,52 @@ class EpisodicMemoryCore:
     def strength_key(self) -> str:
         return strength_key(self._prefix)
 
+    def _legacy_meta_keys(self, key: str) -> list[str]:
+        """Return legacy meta/stamp keys that may still hold this entity's records."""
+        keys: list[str] = []
+        if not key.startswith(self._prefix):
+            return keys
+        for entry in legacy_aliases.active(legacy_names.COLLECTIONS):
+            if entry.get("new") != self._prefix:
+                continue
+            old = entry.get("old", "")
+            if old == self._prefix:
+                continue
+            keys.append(old + key[len(self._prefix) :])
+        return keys
+
+    async def _read_meta_carried(self, key: str) -> dict | None:
+        value = await self._storage.read_meta(key)
+        if value is not None:
+            return value
+        for legacy_key in self._legacy_meta_keys(key):
+            value = await self._storage.read_meta(legacy_key)
+            if value is not None:
+                await self._storage.write_meta(key, value)
+                log.info(
+                    "episodic memory: carried the %s record over from %s",
+                    key,
+                    legacy_key,
+                )
+                return value
+        return None
+
+    async def _read_stamp_carried(self, key: str) -> dict | None:
+        value = await self._storage.read_stamp(key)
+        if value is not None:
+            return value
+        for legacy_key in self._legacy_meta_keys(key):
+            value = await self._storage.read_stamp(legacy_key)
+            if value is not None:
+                await self._storage.write_stamp(key, value)
+                log.info(
+                    "episodic memory: carried the %s record over from %s",
+                    key,
+                    legacy_key,
+                )
+                return value
+        return None
+
     @property
     def log_gain(self) -> float:
         return self._log_gain
@@ -268,7 +320,7 @@ class EpisodicMemoryCore:
 
     async def _check_embedding_space_stamp(self) -> None:
         space = self._embedder.space
-        stamp = await self._storage.read_stamp(self.stamp_key)
+        stamp = await self._read_stamp_carried(self.stamp_key)
         own_collections = self.persisted_collection_names()
 
         if stamp is not None:
@@ -332,7 +384,7 @@ class EpisodicMemoryCore:
     async def _init_strength(self) -> None:
         """Load strength meta and backfill old traces."""
         names = self.persisted_collection_names()
-        meta = await self._storage.read_meta(self.strength_key)
+        meta = await self._read_meta_carried(self.strength_key)
         fresh = False
         if meta is None:
             carried = 0
@@ -877,8 +929,11 @@ class EpisodicMemoryCore:
                     f"running embedder space {self._embedder.space}; cannot revive"
                 )
 
+            # The prefix names the collections inside the bundle, so it is never
+            # mapped. A bundle without one predates the stored prefix and holds
+            # its collections under the old default prefix.
             src_prefix = (
-                state["collection_prefix"] if "collection_prefix" in state else "episodic_memory_"
+                state["collection_prefix"] if "collection_prefix" in state else _PREFIX_BEFORE_STORED
             )
             persisted = state.get("persisted") or {}
             persisted_kinds = [k for k in DEFAULT_COLLECTIONS if k != "short_term"]

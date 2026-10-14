@@ -71,7 +71,7 @@ To answer session-spanning research questions, there is an opt-in durable event 
 
 ### Dashboard record (local only)
 
-`[research_event_log.dashboard_record]` ships disabled. It subscribes to the streams the dashboard bridge reads and writes exactly the payload the dashboard displays after its privacy filter, with numeric vectors removed, plus the stream name and entry id. It lands in `data/dashboard_record/` on the `kaine-dashboard-record` volume. Studies never enable it. Files are encrypted at rest when state encryption is on. `retention_days = 0` keeps records forever. This sink is local only and never exported.
+`[research_event_log.dashboard_record]` ships disabled. It subscribes to the streams the dashboard bridge reads and writes exactly the payload the dashboard displays after its privacy filter, with numeric vectors removed, plus the stream name and entry id. It lands in `data/nexus_record/` on the `kaine-dashboard-record` volume. Studies never enable it. Files are encrypted at rest when state encryption is on. `retention_days = 0` keeps records forever. This sink is local only and never exported.
 
 ### Ignition log (local only)
 

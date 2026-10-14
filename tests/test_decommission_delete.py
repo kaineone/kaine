@@ -110,6 +110,12 @@ class _DecommissionFakeQdrantClient:
         self.deleted_collections: list[str] = []
         self.deleted_points: list[tuple[str, list[str]]] = []
 
+    def get_aliases(self):
+        """No collection aliases (a store that was never renamed)."""
+        from types import SimpleNamespace
+
+        return SimpleNamespace(aliases=[])
+
     def get_collections(self):
         coll_type = type("Coll", (), {})
         out = []

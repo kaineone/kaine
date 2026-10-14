@@ -204,12 +204,26 @@ class QdrantAgentStore:
 
         self._client = await asyncio.to_thread(_open)
 
+    async def _collection_names(self) -> set[str]:
+        """Names that reach a collection: the collections and their aliases.
+
+        A store renamed by ``kaine.lifecycle.rename_state`` keeps its collections
+        under their old names and reaches them through aliases named like the new
+        ones, so an alias counts as an existing collection and is never created
+        again as a second, empty collection.
+        """
+        assert self._client is not None
+        existing = await self._client.get_collections()
+        names = {c.name for c in existing.collections}
+        aliases = await self._client.get_aliases()
+        names.update(a.alias_name for a in aliases.aliases)
+        return names
+
     async def _ensure_collection(self) -> None:
         from qdrant_client import models  # type: ignore[import-untyped]
 
         assert self._client is not None
-        existing = await self._client.get_collections()
-        existing_names = {c.name for c in existing.collections}
+        existing_names = await self._collection_names()
         if self._collection not in existing_names:
             await self._client.create_collection(
                 collection_name=self._collection,
@@ -363,8 +377,7 @@ class QdrantAgentStore:
             )
         async with self._get_lock():
             try:
-                existing = await self._client.get_collections()
-                existing_names = {c.name for c in existing.collections}
+                existing_names = await self._collection_names()
                 if self._collection in existing_names:
                     await self._client.delete_collection(collection_name=self._collection)
             except Exception as exc:

@@ -347,7 +347,7 @@ Optional local-only dashboard diagnostics recorder. Never export-eligible. Subsc
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `false` | Master gate. |
-| `log_dir` | string | `"data/dashboard_record"` | Directory for the diagnostics log. |
+| `log_dir` | string | `"data/nexus_record"` | Directory for the diagnostics log. |
 | `retention_days` | integer | `0` | Daily-rotated file retention window in days. `0` keeps every file. |
 
 ## `[ignition_log]`

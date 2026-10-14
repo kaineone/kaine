@@ -48,6 +48,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from kaine import legacy_aliases
 from kaine.bus.schema import validate_event
 from kaine.config import require_known_keys
 from kaine.cycle import control_state
@@ -67,6 +68,11 @@ from kaine.state_io import write_json_atomic
 from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
+
+
+def _map_arms(arms: list[Any]) -> frozenset[str]:
+    """Apply persisted aliases to stored divergence arm names."""
+    return frozenset(legacy_aliases.map_stored_value(str(a)) for a in arms)
 
 _MONITOR_OUT_SALIENCE = 0.5
 _INTEROCEPTION_STREAM = "interoception.out"
@@ -479,7 +485,7 @@ class DivergenceMonitor(_BaseSafetyMonitor):
             arms = data.get("arms", [])
             if not isinstance(arms, list):
                 raise ValueError("arms is not a list")
-            return frozenset(str(a) for a in arms)
+            return _map_arms(arms)
         except Exception as exc:
             log.warning(
                 "divergence monitor: edge state unreadable (%s); treating as empty",

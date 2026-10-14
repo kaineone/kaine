@@ -320,6 +320,12 @@ def test_qdrant_unreachable_fails_before_deletion(tmp_path, monkeypatch):
     _seed_state(tmp_path / "state")
 
     class FailingQdrant:
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         def get_collections(self):
             raise RuntimeError("connection refused")
 
@@ -327,6 +333,12 @@ def test_qdrant_unreachable_fails_before_deletion(tmp_path, monkeypatch):
             pass
 
     class WorkingQdrant:
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         def get_collections(self):
             return SimpleNamespace(collections=[])
 
@@ -1100,6 +1112,12 @@ def test_qdrant_failing_before_deletion_keeps_local_state(tmp_path, monkeypatch)
     config_path.write_text("[modules]\nmnemos = true\n", encoding="utf-8")
 
     class Reachable:
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         def get_collections(self):
             class Collections:
                 collections = []
@@ -1163,6 +1181,12 @@ def test_qdrant_absent_refused_when_qdrant_answers(tmp_path, monkeypatch):
     before = snapshot_files(tmp_path / "state")
 
     class Reachable:
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         def get_collections(self):
             class Collections:
                 collections = []
@@ -1291,6 +1315,12 @@ def test_reprobe_stops_module_off_run_before_deletion(tmp_path, monkeypatch):
     monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
 
     class _Reachable:
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         def get_collections(self):
             return SimpleNamespace(collections=[])
 

@@ -1110,6 +1110,36 @@ def delete_entity_state(
                             exc_info=True,
                         )
                     if probe_ok:
+                        # Aliases created by a legacy rename point new names at old
+                        # collections; drop them first so the collection loop only
+                        # operates on real collection names.
+                        try:
+                            aliases = client.get_aliases().aliases
+                        except Exception as alias_probe_exc:
+                            result.errors.append(
+                                f"qdrant get_aliases probe failed "
+                                f"({type(alias_probe_exc).__name__}: {alias_probe_exc}); "
+                                f"aliases not deleted"
+                            )
+                            aliases = []
+                        from qdrant_client import models
+
+                        for alias in aliases:
+                            name = alias.alias_name
+                            if name in collections:
+                                try:
+                                    client.update_collection_aliases(
+                                        change_aliases_operations=[
+                                            models.DeleteAliasOperation(
+                                                delete_alias=models.DeleteAlias(
+                                                    alias_name=name
+                                                )
+                                            )
+                                        ]
+                                    )
+                                    result.dropped_collections.append(f"alias:{name}")
+                                except Exception as exc:
+                                    result.errors.append(f"drop alias {name}: {exc}")
                         collection_drop_failed = False
                         for coll in collections:
                             if coll not in existing:

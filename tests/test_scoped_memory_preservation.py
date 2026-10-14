@@ -62,6 +62,12 @@ class _FakeAsyncQdrant:
         def __init__(self, names):
             self.collections = [type("C", (), {"name": n}) for n in names]
 
+    async def get_aliases(self):
+        """No collection aliases (a store that was never renamed)."""
+        from types import SimpleNamespace
+
+        return SimpleNamespace(aliases=[])
+
     async def get_collections(self):
         return self._Colls(list(self.store))
 

@@ -1927,7 +1927,7 @@ retention_days = 0
 #
 # Local only, never exported. Expected size ~2 GB per four-hour viewing.
 enabled = false
-log_dir = "data/dashboard_record"
+log_dir = "data/nexus_record"
 # 0 = keep forever.
 retention_days = 0
 

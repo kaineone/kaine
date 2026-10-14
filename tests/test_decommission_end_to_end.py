@@ -146,6 +146,12 @@ class FakeQdrant:
         self.fail_scroll = False
         self.closed = False
 
+    def get_aliases(self):
+        """No collection aliases (a store that was never renamed)."""
+        from types import SimpleNamespace
+
+        return SimpleNamespace(aliases=[])
+
     def get_collections(self):
         """Return the list of in-memory collection names."""
         return SimpleNamespace(
@@ -287,7 +293,7 @@ def build_entity(tmp_path, port):
         "data/evaluation/coherence/c.jsonl",
         "data/evaluation/welfare/w.jsonl",
         "data/ignition/i.jsonl",
-        "data/dashboard_record/n.jsonl",
+        "data/nexus_record/n.jsonl",
         "state/logs/cycle.log",
     ]
 

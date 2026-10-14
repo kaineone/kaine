@@ -416,6 +416,12 @@ def test_l4_get_collections_failure_records_error_and_skips_delete(tmp_path):
     from kaine.lifecycle.decommission import delete_entity_state
 
     class FailingQdrantClient:
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         def get_collections(self):
             raise ConnectionError("qdrant unavailable")
 
@@ -469,6 +475,12 @@ def test_l4_get_collections_success_deletes_normally(tmp_path):
                 self.collections = [
                     SuccessQdrantClient._Coll(n) for n in names
                 ]
+
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
 
         def get_collections(self):
             return self._Resp(expected_collections)

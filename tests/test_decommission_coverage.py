@@ -223,6 +223,12 @@ def test_failed_qdrant_export_fails_the_backup(tmp_path, monkeypatch):
     collection = decommission._episodic_memory_collection_names(cfg)[0]
 
     class FakeClient:
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         def get_collections(self):
             class Coll:
                 pass

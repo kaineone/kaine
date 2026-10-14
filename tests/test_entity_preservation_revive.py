@@ -232,6 +232,12 @@ class _FakeAsyncQdrant:
         def __init__(self, names):
             self.collections = [type("C", (), {"name": n}) for n in names]
 
+    async def get_aliases(self):
+        """No collection aliases (a store that was never renamed)."""
+        from types import SimpleNamespace
+
+        return SimpleNamespace(aliases=[])
+
     async def get_collections(self):
         return self._Colls(list(self.store))
 
@@ -297,6 +303,12 @@ async def test_qdrant_export_fails_loud_when_unreachable():
     pytest.importorskip("qdrant_client")
 
     class _Broken:
+        async def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         async def get_collections(self):
             raise ConnectionError("server unreachable")
 
@@ -605,6 +617,12 @@ async def test_preserve_live_then_revive_social_cognition_qdrant_replaces_stale(
 
         def __init__(self):
             self.store: dict[str, list[_FakeQdrantPoint]] = {}
+
+        async def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
 
         async def get_collections(self):
             return self._Colls(list(self.store))
@@ -932,6 +950,12 @@ async def test_preserve_live_fails_loud_when_memory_uncapturable(
     qs = QdrantStorage(latent_dim=4, api_key="k")
 
     class _Broken:
+        async def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         async def get_collections(self):
             raise ConnectionError("unreachable")
 

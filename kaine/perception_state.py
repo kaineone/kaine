@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from kaine import legacy_aliases
 from kaine.state_io import write_json_atomic
 from kaine.storage import resolve
 
@@ -60,7 +61,8 @@ def _coerce_locus(value: Any) -> str:
 
 
 def _coerce_locked_by(value: Any) -> str:
-    return value if value in LOCKED_BY else "operator"
+    mapped = legacy_aliases.map_stored_value(value)
+    return mapped if mapped in LOCKED_BY else "operator"
 
 
 @dataclass(frozen=True)

@@ -46,7 +46,7 @@ What does persist from live perception:
 - `state/perceptual_locus/runtime.json` and `state/perceptual_locus/desired.json`, which hold booleans and ISO timestamps only and no sensory content.
 - Standard logger lines for capture state transitions, never transcribed text.
 - The optional **external-utterance log** (`[research_event_log.external_utterances]`, `state/research/external_utterances/`). It holds the entity's spoken text and timestamps. It never holds inner speech or bystander input. It is local-only and never exported.
-- The optional **dashboard record** (`[research_event_log.dashboard_record]`, `data/dashboard_record/`). It holds privacy-filtered diagnostics payloads with numeric vectors removed, plus stream name and entry id. It is local-only and never exported.
+- The optional **dashboard record** (`[research_event_log.dashboard_record]`, `data/nexus_record/`). It holds privacy-filtered diagnostics payloads with numeric vectors removed, plus stream name and entry id. It is local-only and never exported.
 
 The on-air banner (microphone on / camera on) appears on both the console and the diagnostics page whenever a stream is active. The operator holds the hardware kill switch as the strongest guarantee.
 

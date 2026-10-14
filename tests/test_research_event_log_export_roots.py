@@ -27,7 +27,7 @@ def _drop_env_root(monkeypatch):
     [
         (RawArchiveConfig, "archive_dir", "state/research/raw_bus_archive"),
         (ExternalUtterancesConfig, "log_dir", "state/research/external_utterances"),
-        (DashboardRecordConfig, "log_dir", "data/dashboard_record"),
+        (DashboardRecordConfig, "log_dir", "data/nexus_record"),
     ],
 )
 def test_recorder_config_rejects_export_tree(cls, key, default, tmp_path):

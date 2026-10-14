@@ -332,6 +332,12 @@ def test_qdrant_probed_before_any_copy(tmp_path, monkeypatch):
     config = {"modules": {"episodic_memory": True}, "episodic_memory": {"backend": "qdrant"}}
 
     class BadQdrant:
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         def get_collections(self):
             raise ConnectionError("qdrant down")
 
@@ -517,6 +523,12 @@ class _FakeQdrant:
         self.deleted_calls = []
         self.fail_scroll = False
         self.closed = False
+
+    def get_aliases(self):
+        """No collection aliases (a store that was never renamed)."""
+        from types import SimpleNamespace
+
+        return SimpleNamespace(aliases=[])
 
     def get_collections(self):
         """Return the list of in-memory collection names."""

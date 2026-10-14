@@ -714,7 +714,7 @@ def entity_locations(
         _cfg(
             config,
             "research_event_log.dashboard_record.log_dir",
-            "data/dashboard_record",
+            "data/nexus_record",
         ),
         state_root=state_root,
         data_root=data_root,

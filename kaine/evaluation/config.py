@@ -197,7 +197,7 @@ class DashboardRecordConfig:
     """Parameters for the OPTIONAL local-only dashboard diagnostics recorder.
 
     Subscribes to the same streams as the dashboard diagnostics bridge and writes
-    one record per event to ``data/dashboard_record/``. Each record contains
+    one record per event to ``data/nexus_record/``. Each record contains
     exactly the payload produced by ``PrivacyFilter`` with
     ``dev_content_override=false`` (the same filter the bridge applies), plus
     stream name and entry id.
@@ -215,7 +215,7 @@ class DashboardRecordConfig:
     """
 
     enabled: bool = False
-    log_dir: str = "data/dashboard_record"
+    log_dir: str = "data/nexus_record"
     retention_days: int = 0
     export_roots: tuple[str, ...] = ()
 

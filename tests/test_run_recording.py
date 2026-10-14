@@ -288,7 +288,7 @@ def test_run_recording_configs_default_disabled():
     assert cfg.external_utterances.enabled is False
     assert cfg.dashboard_record.enabled is False
     assert cfg.external_utterances.log_dir == "state/research/external_utterances"
-    assert cfg.dashboard_record.log_dir == "data/dashboard_record"
+    assert cfg.dashboard_record.log_dir == "data/nexus_record"
     assert cfg.external_utterances.retention_days == 0
     assert cfg.dashboard_record.retention_days == 0
 
@@ -303,7 +303,7 @@ def test_run_recording_configs_parse_enabled_values():
             },
             "dashboard_record": {
                 "enabled": True,
-                "log_dir": "data/dashboard_record",
+                "log_dir": "data/nexus_record",
                 "retention_days": 14,
             },
         }
@@ -321,5 +321,5 @@ def test_run_recording_configs_refuse_export_allowlist():
         )
     with pytest.raises(RawArchiveConfinementError):
         DashboardRecordConfig.from_mapping(
-            {"log_dir": "data/evaluation/dashboard_record"}
+            {"log_dir": "data/evaluation/nexus_record"}
         )

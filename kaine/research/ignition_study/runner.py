@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.parse import quote, urlsplit
 
+from kaine import legacy_aliases
 from kaine.bus.config import load_bus_config, resolve_redis_auth
 from kaine.bus.errors import BusConfigError
 from kaine.cycle.preserve_watch import read_request, read_result
@@ -297,6 +298,7 @@ class StudyRunner:
             return None
         if not isinstance(data, dict):
             return None
+        data = legacy_aliases.map_stage_record(data)
         ends_at = data.get("maturation_bloom_ends_at")
         if not isinstance(ends_at, str):
             return None

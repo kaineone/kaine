@@ -84,6 +84,12 @@ async def test_qdrant_recent_points_scrolls_without_vectors():
             self.points = points
             self.calls = []
 
+        async def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         async def get_collections(self):
             return types.SimpleNamespace(
                 collections=[types.SimpleNamespace(name="c")]
@@ -221,6 +227,12 @@ async def test_qdrant_recent_points_ranks_non_finite_as_oldest():
         def __init__(self, points):
             self.points = points
             self.calls = []
+
+        async def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
 
         async def get_collections(self):
             return types.SimpleNamespace(

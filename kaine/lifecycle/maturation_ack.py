@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+from kaine import legacy_aliases
 from kaine.state_io import write_json_atomic
 from kaine.storage import resolve
 
@@ -79,6 +80,7 @@ def read_request(path: Path | None = None) -> MaturationRequest | None:
     data = _read_json_object(target)
     if data is None:
         return None
+    data = legacy_aliases.map_stage_record(data)
     request_id = data.get("request_id")
     requested_at = data.get("requested_at")
     development_started_at = data.get("development_started_at")
