@@ -15,8 +15,8 @@
 # - Verifies the rendered units with the podman quadlet generator if found.
 # - Never enables, starts, or restarts any unit.
 # - Removes a unit this script installed under a name that was since renamed
-#   (kaine-nexus.container is now kaine-dashboard.container), and refuses
-#   while the old service is still active.
+#   (kaine-nexus.container is now kaine-dashboard.container), and proceeds
+#   only when systemd reports the old service inactive or failed.
 #
 # Options:
 #   --root DIR       checkout root (default: the checkout containing this script)
@@ -177,8 +177,17 @@ for old in "${OLD_UNITS[@]}"; do
   old_path="$DEST/$old"
   [[ -e "$old_path" ]] || continue
   service="${old%.container}.service"
-  if command -v "$SYSTEMCTL" >/dev/null && "$SYSTEMCTL" --user is-active --quiet "$service" >/dev/null 2>&1; then
-    echo "install-quadlet: $service is still running under its old name; stop it first: systemctl --user stop $service" >&2
+  if ! command -v "$SYSTEMCTL" >/dev/null 2>&1; then
+    echo "install-quadlet: cannot tell whether $service is running ($SYSTEMCTL not found); stop it first: systemctl --user stop $service" >&2
+    exit 1
+  fi
+  if ! state="$("$SYSTEMCTL" --user show -p ActiveState --value "$service" 2>/dev/null)"; then
+    echo "install-quadlet: cannot tell whether $service is running (systemctl --user show failed); stop it first: systemctl --user stop $service" >&2
+    exit 1
+  fi
+  if [[ "$state" != "inactive" && "$state" != "failed" ]]; then
+    [[ -n "$state" ]] || state="unknown"
+    echo "install-quadlet: $service is $state, not stopped; stop it first: systemctl --user stop $service" >&2
     exit 1
   fi
   # Ours: it carries the project's licence header and was rendered from this

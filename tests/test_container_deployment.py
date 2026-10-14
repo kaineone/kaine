@@ -20,6 +20,8 @@ entity. They enforce the load-bearing invariants of the design:
 
 from __future__ import annotations
 
+import json
+import os
 import re
 import shutil
 import subprocess
@@ -913,3 +915,95 @@ def test_dashboard_record_dir_is_on_a_durable_volume_in_every_cycle_deployment()
     for unit in ("kaine-cycle.container", "kaine-cycle-unattended.container"):
         text = (_QUADLET / unit).read_text()
         assert f"Volume=kaine-nexus-record.volume:{target}" in text, unit
+
+
+def test_compose_dashboard_variables_fall_back_to_their_old_names():
+    text = _COMPOSE.read_text()
+    pattern = re.compile(r"\$\{(KAINE_DASHBOARD_[A-Z_]+):-")
+    matches = list(pattern.finditer(text))
+    assert matches, "no KAINE_DASHBOARD_ fallbacks found in compose file"
+
+    problems = []
+    for match in matches:
+        new_name = match.group(1)
+        try:
+            old_name = next(
+                e["old"] for e in legacy_names.ENV_VARS if e["new"] == new_name
+            )
+        except StopIteration:
+            problems.append(f"{new_name}: no legacy_names.ENV_VARS entry")
+            continue
+
+        tail = text[match.end() :]
+        if not tail.startswith(f"${{{old_name}:-") and not tail.startswith(
+            f"${{ {old_name}:-"
+        ):
+            problems.append(
+                f"{new_name}: fallback does not start with ${{{old_name}:-... }}"
+            )
+
+    assert not problems, "compose fallbacks: " + "; ".join(problems)
+
+
+def test_compose_renders_old_names_from_env(tmp_path: Path):
+    if not shutil.which("docker"):
+        pytest.skip("docker not available")
+    try:
+        subprocess.run(
+            ["docker", "compose", "version"],
+            check=True,
+            capture_output=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pytest.skip("docker compose not available")
+
+    host_port_new = "KAINE_DASHBOARD_HOST_PORT"
+    token_new = "KAINE_DASHBOARD_TOKEN"
+    host_port_old = next(
+        e["old"] for e in legacy_names.ENV_VARS if e["new"] == host_port_new
+    )
+    token_old = next(
+        e["old"] for e in legacy_names.ENV_VARS if e["new"] == token_new
+    )
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"{host_port_old}=9191\n{token_old}=old-token-for-test\n")
+
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if not k.startswith("KAINE_DASHBOARD_")
+    }
+    for entry in legacy_names.ENV_VARS:
+        env.pop(entry["old"], None)
+        env.pop(entry["new"], None)
+    env["KAINE_REDIS_PASSWORD"] = "x"
+    env["KAINE_QDRANT_API_KEY"] = "y"
+
+    result = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "--env-file",
+            str(env_file),
+            "-f",
+            str(_COMPOSE),
+            "config",
+            "--format",
+            "json",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr[:500]
+    config = json.loads(result.stdout)
+    dashboard = config["services"]["kaine-dashboard"]
+    dashboard_env = dashboard.get("environment", {})
+    assert dashboard_env.get("KAINE_DASHBOARD_TOKEN") == "old-token-for-test"
+    assert dashboard_env.get("KAINE_DASHBOARD_PUBLISHED_PORT") == "9191"
+    assert any(
+        str(p.get("published", "")) == "9191" for p in dashboard.get("ports", [])
+    )

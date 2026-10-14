@@ -418,3 +418,34 @@ async def test_post_maturation_ack_records_ack(tmp_path):
     assert ack.request_id == request_id
     assert request_path.read_bytes() == request_bytes
     assert stage_path.read_bytes() == b"stage"
+
+
+@pytest.mark.asyncio
+async def test_old_status_route_without_suffix_still_serves(tmp_path):
+    app, request_path, _, stage_path = _isolated_router(tmp_path)
+    stage_path.write_bytes(b"stage")
+    request_id = "a" * 32
+    requested_at = datetime.now(timezone.utc).isoformat()
+    write_request(
+        MaturationRequest(
+            request_id=request_id,
+            requested_at=requested_at,
+            gestation_started_at=None,
+        ),
+        path=request_path,
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
+        birth = await c.get(
+            "/diagnostics/birth",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        maturation = await c.get(
+            "/diagnostics/maturation",
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert birth.status_code == 200
+    assert maturation.status_code == 200
+    assert birth.json() == maturation.json()
