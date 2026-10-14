@@ -351,7 +351,7 @@ async def test_get_development_null_when_runtime_missing(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_get_maturation_json_matches_birth_json_alias(tmp_path):
+async def test_get_maturation_json_matches_the_old_route(tmp_path):
     app, request_path, _, stage_path = _isolated_router(tmp_path)
     stage_path.write_bytes(b"stage")
     request_id = "a" * 32

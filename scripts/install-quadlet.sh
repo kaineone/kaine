@@ -181,7 +181,10 @@ for old in "${OLD_UNITS[@]}"; do
     echo "install-quadlet: $service is still running under its old name; stop it first: systemctl --user stop $service" >&2
     exit 1
   fi
-  if grep -q '^# SPDX-License-Identifier: LicenseRef-CAL-0.4' "$old_path"; then
+  # Ours: it carries the project's licence header and was rendered from this
+  # checkout (the placeholder became this root path).
+  if grep -q '^# SPDX-License-Identifier: LicenseRef-CAL-0.4' "$old_path" \
+    && grep -qF "Volume=$ROOT_RESOLVED/config/kaine.operator.toml:" "$old_path"; then
     if [[ $DRY_RUN -eq 1 ]]; then
       echo "would remove old unit $old (renamed to kaine-dashboard.container)"
     else

@@ -996,6 +996,13 @@ RESOLUTIONS = [
     {
         "name": "nexus",
         "action": "keep",
+        "files": ["scripts/install-quadlet.sh"],
+        "pattern": r"kaine-nexus\.container",
+        "why": "the old unit the installer removes; the entry goes with the alias release",
+    },
+    {
+        "name": "nexus",
+        "action": "keep",
         "files": ["scripts/prepare-headless-host.sh"],
         "pattern": r"--serve-nexus(?:\)| is deprecated)",
         "why": "the old flag, accepted with a warning until the alias release",

@@ -433,7 +433,8 @@ def test_install_removes_old_renamed_unit_when_inactive(tmp_path: Path):
     dest = tmp_path / "dest"
     old_path = _make_dest_with_old_unit(
         dest,
-        "# SPDX-License-Identifier: LicenseRef-CAL-0.4\n[Container]\n",
+        "# SPDX-License-Identifier: LicenseRef-CAL-0.4\n[Container]\n"
+        f"Volume={checkout.resolve()}/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z\n",
     )
     code_file = tmp_path / "systemctl.code"
     code_file.write_text("3")
@@ -468,7 +469,8 @@ def test_install_refuses_when_old_renamed_unit_still_active(tmp_path: Path):
     dest = tmp_path / "dest"
     old_path = _make_dest_with_old_unit(
         dest,
-        "# SPDX-License-Identifier: LicenseRef-CAL-0.4\n[Container]\n",
+        "# SPDX-License-Identifier: LicenseRef-CAL-0.4\n[Container]\n"
+        f"Volume={checkout.resolve()}/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z\n",
     )
     code_file = tmp_path / "systemctl.code"
     code_file.write_text("0")
@@ -536,7 +538,8 @@ def test_install_dry_run_reports_old_renamed_unit_removal(tmp_path: Path):
     dest = tmp_path / "dest"
     old_path = _make_dest_with_old_unit(
         dest,
-        "# SPDX-License-Identifier: LicenseRef-CAL-0.4\n[Container]\n",
+        "# SPDX-License-Identifier: LicenseRef-CAL-0.4\n[Container]\n"
+        f"Volume={checkout.resolve()}/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z\n",
     )
     code_file = tmp_path / "systemctl.code"
     code_file.write_text("3")
@@ -561,3 +564,38 @@ def test_install_dry_run_reports_old_renamed_unit_removal(tmp_path: Path):
     assert result.returncode == 0, result.stderr
     assert old_path.exists()
     assert f"would remove old unit {OLD_UNIT} (renamed to kaine-dashboard.container)" in result.stdout
+
+
+def test_install_leaves_an_old_unit_rendered_from_another_checkout(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir()
+    checkout = tmp_path / "checkout"
+    script = _make_checkout(checkout)
+    dest = tmp_path / "dest"
+    old_path = _make_dest_with_old_unit(
+        dest,
+        "# SPDX-License-Identifier: LicenseRef-CAL-0.4\n[Container]\n"
+        "Volume=/elsewhere/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z\n",
+    )
+    code_file = tmp_path / "systemctl.code"
+    code_file.write_text("3")
+    fake_systemctl = _write_fake_systemctl(tmp_path)
+
+    result = _run(
+        script,
+        "--root",
+        str(checkout),
+        "--dest",
+        str(dest),
+        "--generator",
+        "none",
+        cwd=checkout,
+        env={
+            "KAINE_SYSTEMCTL": str(fake_systemctl),
+            "FAKE_SYSTEMCTL_CODE_FILE": str(code_file),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert old_path.exists()
+    assert "it was not installed by this script" in result.stderr
