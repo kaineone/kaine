@@ -17,7 +17,7 @@ SCOPE_STATUS = {
     "identifiers": "done",
     "keys": "done",
     "operator": "done",
-    "persisted": "pending",
+    "persisted": "done",
 }
 
 # The last release that still reads old operator-facing names (config tables and
@@ -963,10 +963,10 @@ RESOLUTIONS = [
     },
     {
         "name": "spot",
-        "action": "keep",
+        "action": "rename",
         "files": ["openspec/specs/unattended-boot/spec.md"],
         "pattern": r"event kind \"spot escalation\"",
-        "why": "names the stored caretaker event kind, which moves with the persisted names",
+        "why": "names the stored caretaker event kind, renamed in the persisted step",
     },
     {
         "name": "spot",
@@ -1009,28 +1009,37 @@ RESOLUTIONS = [
     },
     {
         "name": "birth",
-        "action": "keep",
+        "action": "rename",
         "files": ["tests/test_ignition_study_runner.py"],
         "pattern": r"wait_for_request\(state_dir, \"birth\"",
-        "why": "the stored preservation reason the runner requests, which moves with the persisted names",
+        "why": "the stored preservation reason the runner requests, renamed in the persisted step",
     },
     {
         "name": "gestation",
-        "action": "keep",
+        "action": "rename",
         "pattern": r"\"locked_by\": \"gestation\"",
-        "why": "the stored lock holder value, which moves with the persisted names",
+        "why": "the stored lock holder value, renamed in the persisted step",
     },
     {
         "name": "gestation",
-        "action": "keep",
+        "action": "rename",
         "pattern": r"gestation_started_at",
-        "why": "stored request field, which moves with the persisted names",
+        "why": "stored request field, renamed in the persisted step",
     },
     {
         "name": "birth",
-        "action": "keep",
+        "action": "rename",
         "pattern": r"birth_bloom_ends_at",
-        "why": "stored stage field, which moves with the persisted names",
+        "why": "stored stage field, renamed in the persisted step",
+    },
+    # Persisted step (PR 8): the perception scratch directory moves with the
+    # perceptual locus module's state directory.
+    {
+        "name": "perception",
+        "action": "rename",
+        "files": ["compose/*", "quadlet/*"],
+        "pattern": r"/app/state/perception\b",
+        "why": "the locus module's state directory, renamed in the persisted step",
     },
     {
         "name": "echo",
