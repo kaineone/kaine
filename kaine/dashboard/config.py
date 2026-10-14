@@ -182,6 +182,30 @@ def _extra_host_origins(
     return tuple(result)
 
 
+def _normalize_secrets_layer(layer: dict[str, Any]) -> dict[str, Any]:
+    """Read the secrets file's dashboard table under its old name too.
+
+    The secrets file holds the operator token, so it never goes through the
+    general normalizer, whose deprecation line quotes table paths and values.
+    Only the table name moves here, and the warning names no content.
+    """
+    forms = [form for form in legacy_aliases.name_forms("dashboard") if form != "dashboard"]
+    present = [form for form in forms if form in layer]
+    if not present or not legacy_aliases.scope_done("keys"):
+        return layer
+    if "dashboard" in layer:
+        raise DashboardConfigError(
+            "the dashboard secrets file sets the dashboard table under both its old and its new name"
+        )
+    result = dict(layer)
+    result["dashboard"] = result.pop(present[0])
+    log.warning(
+        "config: the dashboard secrets file uses a deprecated table name; "
+        "rename it to [dashboard]"
+    )
+    return result
+
+
 def _normalize_dashboard_layer(layer: dict[str, Any], source: Path | str) -> dict[str, Any]:
     """Apply legacy name aliases to a parsed TOML layer."""
     try:
@@ -292,7 +316,7 @@ def load_dashboard_config(
                     f"malformed Nexus secrets file: {secrets_target}"
                 ) from e
             # Name the file by role, never by path: the path is derived from the secrets location.
-            secrets_raw = _normalize_dashboard_layer(secrets_raw, "the dashboard secrets file")
+            secrets_raw = _normalize_secrets_layer(secrets_raw)
             secrets_token = (secrets_raw.get("dashboard") or {}).get("operator_token")
             if secrets_token:
                 token = str(secrets_token).strip()

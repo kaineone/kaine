@@ -584,3 +584,37 @@ def test_main_serves_with_diagnostics_only(monkeypatch):
 
     assert rc == 0
     assert uvicorn.calls == [(fake_app, config.host, config.port)]
+
+
+def _old_dashboard_table() -> str:
+    from kaine import legacy_aliases
+
+    return next(form for form in legacy_aliases.name_forms("dashboard") if form != "dashboard")
+
+
+def test_token_from_secrets_toml_under_the_old_table_name(monkeypatch, tmp_path, caplog):
+    """A secrets file that still uses the dashboard's old table name is read; the warning names no content."""
+    _clear_dashboard_env(monkeypatch)
+    base = tmp_path / "kaine.toml"
+    base.write_text("[dashboard]\n")
+    secrets = tmp_path / "secrets.toml"
+    secrets.write_text(f'[{_old_dashboard_table()}]\noperator_token = "{_LONG_TOKEN}-secrets"\n')
+    with caplog.at_level("WARNING"):
+        cfg = load_dashboard_config(base, secrets_path=secrets)
+    assert cfg.operator_token == f"{_LONG_TOKEN}-secrets"
+    assert "deprecated table name" in caplog.text
+    assert _LONG_TOKEN not in caplog.text
+
+
+def test_secrets_toml_with_both_table_names_is_refused(monkeypatch, tmp_path):
+    """A secrets file that sets the dashboard table under both names is refused."""
+    _clear_dashboard_env(monkeypatch)
+    base = tmp_path / "kaine.toml"
+    base.write_text("[dashboard]\n")
+    secrets = tmp_path / "secrets.toml"
+    secrets.write_text(
+        f'[{_old_dashboard_table()}]\noperator_token = "{_LONG_TOKEN}-a"\n'
+        f'[dashboard]\noperator_token = "{_LONG_TOKEN}-b"\n'
+    )
+    with pytest.raises(DashboardConfigError):
+        load_dashboard_config(base, secrets_path=secrets)
