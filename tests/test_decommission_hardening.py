@@ -18,7 +18,6 @@ from kaine.lifecycle.decommission_locations import (
     delete_roots,
     entity_locations,
 )
-from kaine.storage import trainer_jobs_dir
 from kaine.lifecycle.divergence import DivergenceAssessment
 from kaine.security.crypto import (
     CryptoConfig,

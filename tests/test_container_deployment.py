@@ -1064,10 +1064,7 @@ def test_cycle_trainer_jobs_mount_and_env():
     assert cycle["environment"]["KAINE_TRAINER_JOBS_DIR"] == "/trainer-jobs"
 
     for v in cycle["volumes"]:
-        if isinstance(v, str):
-            source, target = v.split(":")[:2]
-        else:
-            source, target = v.get("source", ""), v["target"]
+        target = v.split(":")[1] if isinstance(v, str) else v["target"]
         if target == "/app/state/perceptual_locus":
             continue
         assert target == "/app/state" or not target.startswith("/app/state/")

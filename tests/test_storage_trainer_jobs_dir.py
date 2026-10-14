@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-import pytest
 
 from kaine.storage import DEFAULT_TRAINER_JOBS_DIR, trainer_jobs_dir
 
