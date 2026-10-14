@@ -22,3 +22,11 @@
 ## 4. Docs
 
 - [x] 4.1 Audition, research event streams, experiments, configuration reference
+
+## 5. Tone events after T_learn (paper PR #41)
+
+- [x] 5.1 `audition.emotion` carries `entity_time_s`, and the research log keeps it
+- [x] 5.2 `tone_events(..., t_learn_s=...)` counts only events after T_learn and refuses a tone record without a finite entity time
+- [x] 5.3 Calibration: the tone statistics, tone bins and adjusted statistics count only events after T_learn, pooled over the tone-variant pilots on the counted seeds; blocked while T_learn is not known
+- [x] 5.4 Tests, mutation-checked
+- [x] 5.5 Docs: audition payloads, tone events in the research event streams
