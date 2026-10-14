@@ -2,7 +2,7 @@
 
 - [ ] 1.1 `compose/kaine.yml`: the cycle mounts `kaine-trainer-jobs` at `/trainer-jobs` and sets `KAINE_TRAINER_JOBS_DIR=/trainer-jobs`.
 - [ ] 1.2 One resolver for the jobs directory (`KAINE_TRAINER_JOBS_DIR`, then `[sleep.voice_alignment].trainer_jobs_dir`, then `state/sleep/voice_align_jobs`), called by the sleep factory, decommission (attribution and the deletable-directory list) and the pre-boot report; the run manifest records the resolved path.
-- [ ] 1.3 Decommission attribution maps a job's recorded paths through the rename table's state paths and treats the old and new jobs mount paths as one volume; a test attributes a job written under the old layout to its entity.
+- [ ] 1.3 Decommission attribution resolves a relative recorded path against the job's directory, maps an absolute one through the rename table's state paths, and maps a path under the old jobs mount path to the resolved jobs directory; tests attribute a job written under the old layout, and a job-queue job that records `out`, to its entity.
 - [ ] 1.4 Check the quadlet tmpfs at `/app/state/perceptual_locus` is writable by uid 10001 under rootless Podman, and set its mode if not.
 
 ## 2. State rename
