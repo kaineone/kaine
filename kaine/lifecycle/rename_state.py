@@ -26,8 +26,45 @@ from kaine.state_io import write_json_atomic
 
 log = logging.getLogger(__name__)
 
-# Tests monkeypatch this callable to simulate mount points.
-_is_mount = os.path.ismount
+def _mountinfo_points() -> set[str]:
+    """Mount points of this process's mount namespace, from /proc/self/mountinfo.
+
+    Field 5 of each line is the mount point, with spaces, tabs, newlines and
+    backslashes written as octal escapes.
+    """
+    points: set[str] = set()
+    try:
+        with open("/proc/self/mountinfo", encoding="utf-8", errors="surrogateescape") as fh:
+            for line in fh:
+                fields = line.split(" ")
+                if len(fields) > 4:
+                    raw = fields[4]
+                    for code, char in (("\\040", " "), ("\\011", "\t"), ("\\012", "\n"), ("\\134", "\\")):
+                        raw = raw.replace(code, char)
+                    points.add(raw)
+    except OSError:
+        pass
+    return points
+
+
+def _detect_mount(path) -> bool:
+    """Whether ``path`` is a mount point.
+
+    ``os.path.ismount`` misses a bind mount from the same filesystem, which is
+    how container runtimes mount named volumes, so the mount table is read too.
+    """
+    path = Path(path)
+    try:
+        if os.path.ismount(path):
+            return True
+        resolved = str(path.resolve(strict=True))
+    except (OSError, ValueError):
+        return False
+    return resolved in _mountinfo_points()
+
+
+# The mount check every rule calls; tests monkeypatch it to simulate mount points.
+_is_mount = _detect_mount
 
 MANIFEST_DIR = ".rename_state"
 MANIFEST_NAME = "manifest.json"
@@ -529,6 +566,13 @@ def plan(root: Path, *, qdrant: QdrantAliases | None = None) -> list[dict]:
             ) from exc
         if not stat.S_ISDIR(old_st.st_mode):
             continue
+        if _is_mount(old_dir) and not new_dir.exists():
+            # A mount point cannot be renamed; the operator mounts the volume at
+            # the new path instead.
+            raise RenameStateError(
+                f"rename_state: {old_key} under {root} is a mount point; mount it at "
+                f"{new_key} instead and re-run"
+            )
         if not new_dir.exists():
             created = _created_dirs_for_dst(root, new_key, planned)
             steps.append(_move_step(old_key, new_key, created))

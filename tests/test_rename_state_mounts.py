@@ -220,3 +220,26 @@ def test_a_mount_point_inside_the_old_directory_is_refused(tmp_path, monkeypatch
     with pytest.raises(rename_state.RenameStateError, match="mount point"):
         rename_state.migrate(root, no_qdrant=True)
     assert _snapshot(root) == before
+
+
+def test_a_bind_mount_from_the_same_filesystem_counts_as_a_mount(tmp_path, monkeypatch):
+    """Container runtimes bind-mount named volumes from the same filesystem, which
+    os.path.ismount does not see; the mount table does."""
+    volume = tmp_path / "state" / "sleep" / "voice_align_jobs"
+    volume.mkdir(parents=True)
+    plain = tmp_path / "state" / "sleep" / "plain"
+    plain.mkdir()
+    monkeypatch.setattr(rename_state, "_mountinfo_points", lambda: {str(volume.resolve())})
+    assert rename_state._detect_mount(volume)
+    assert not rename_state._detect_mount(plain)
+
+
+def test_an_old_directory_that_is_itself_a_mount_point_is_refused(tmp_path, monkeypatch):
+    root = tmp_path / "state"
+    mounts = _mount_checker(monkeypatch)
+    _write(root / OLD["sleep"] / "organ_window.json", b"window")
+    mounts.add((root / OLD["sleep"]).resolve())
+    before = _snapshot(root)
+    with pytest.raises(rename_state.RenameStateError, match="mount point"):
+        rename_state.migrate(root, no_qdrant=True)
+    assert _snapshot(root) == before
