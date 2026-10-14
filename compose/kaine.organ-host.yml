@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 #
 # `organ=host` override (design §5). Drops the containerized model server and
-# points the cycle/Nexus at a HOST-NATIVE OpenAI-compatible server on
+# points the cycle/dashboard at a HOST-NATIVE OpenAI-compatible server on
 # host.docker.internal:11434 (host.containers.internal for Podman). This
 # preserves the Unsloth "one server for inference AND training" property and is
 # the REQUIRED topology whenever the voice-alignment trainer is enabled, since
@@ -11,7 +11,7 @@
 #   docker compose -f compose/kaine.yml -f compose/kaine.organ-host.yml up -d
 #
 # Point KAINE at the host server via config/kaine.operator.toml:
-#   [lingua]
+#   [language]
 #   chat_url = "http://host.docker.internal:11434/v1"   # or host.containers.internal
 
 services:

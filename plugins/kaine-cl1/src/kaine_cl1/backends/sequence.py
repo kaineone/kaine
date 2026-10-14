@@ -19,7 +19,7 @@ population-code the temporal feature onto the sequence module's territory, run o
 tick of the closed loop, and decode the territory's firing into the hidden vector.
 the sequence module's own prediction head and error machinery then run on that hidden state.
 
-See `openspec/changes/chronos-on-wetware/`.
+See `openspec/changes/archive/2026-09-26-chronos-on-wetware/`.
 """
 from __future__ import annotations
 

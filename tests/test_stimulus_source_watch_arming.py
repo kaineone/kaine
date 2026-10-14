@@ -167,7 +167,7 @@ def test_arm_timeout_zero_raises(tmp_path):
 
 
 def test_boot_holds_for_the_stimulus_source_before_any_module_exists() -> None:
-    # maturation-gate-liveness 2.1: a gestating entity is never spawned without
+    # maturation-gate-liveness 2.1: a developing entity is never spawned without
     # a ready stimulus source. The boot cannot run in tests (it boots an entity), so pin
     # the order of its calls across the boot phases: the hold comes after the
     # bus exists and before the registry is built and any module initializes;

@@ -89,7 +89,7 @@ def test_tier0_profile_uses_no_qdrant(tmp_path, monkeypatch):
 
 
 def test_base_profile_with_memory_enabled_uses_qdrant(tmp_path):
-    """The default base profile routes episodic memory to Qdrant when mnemos is enabled."""
+    """The default base profile routes episodic memory to Qdrant when episodic memory is enabled."""
     op = tmp_path / "op.toml"
     op.write_text("[modules]\nmnemos = true\n", encoding="utf-8")
     config = load_runtime_config(

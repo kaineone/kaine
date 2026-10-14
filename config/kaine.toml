@@ -912,7 +912,7 @@ tone_rule = "categorical"
 #              by an external maternal state, over a low-passed soundscape carrying
 #              the same beat. One shared clock keeps the beat seen and heard
 #              together; the maternal trajectory continues across boots. For a
-#              gestating entity on a single host. See [perception_feed.stimulus_source].
+#              developing entity on a single host. See [perception_feed.stimulus_source].
 #   live     — the real camera + real microphone paths (NON-reproducible;
 #              operator-present demos only, never a research run).
 #   screen   — the entity sees a shared desktop/window and hears its audio monitor
@@ -964,7 +964,7 @@ colour_ramp_seconds = 3600      # lived seconds over which colour rises from gre
 lowpass_hz = 500                # soundscape low-pass corner (100-2000)
 
 [perception_feed.stimulus_source.readout]  # development readiness readout and its probe protocol
-# The probes briefly change the maternal drive a gestating being perceives, so
+# The probes briefly change the maternal drive a developing being perceives, so
 # they are bounded, announced on development.out (development.probe events), and
 # never run while the entity is frozen (including a welfare response), within
 # a readout period of boot or of a thaw, or within 60 s of another probe.
@@ -1414,7 +1414,7 @@ require_operator_ack_for_maturation = false  # autonomous by default; true for s
 # stimulus source before spawn and stimulus source loss (the stimulus-source-liveness interface):
 stimulus_source_ready_retry_seconds = 5      # boot re-checks a not-ready stimulus source this often; nothing spawns meanwhile
 stimulus_source_check_seconds = 1            # how often a running stimulus source's presence is checked
-stimulus_source_loss_after_seconds = 5       # sustained absence before a gestating entity is frozen
+stimulus_source_loss_after_seconds = 5       # sustained absence before a developing entity is frozen
 stimulus_source_arm_timeout_seconds = 120    # a stimulus source never seen live within this is lost
 stimulus_source_presence_window_seconds = 3  # presence must advance within this window
 

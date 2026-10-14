@@ -4,7 +4,7 @@
 the substrate proposes a policy from per-action channel groups, with DishBrain-style
 agreement feedback on two feedback channels. Shadow mode (default) never changes what the planning module
 does; drive mode acts on the proposal. On Cortical Labs' simulator this proves wiring only,
-since the simulator does not learn. See openspec/changes/nous-on-wetware/.
+since the simulator does not learn. See openspec/changes/archive/2026-09-26-nous-on-wetware/.
 """
 
 from __future__ import annotations

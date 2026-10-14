@@ -100,7 +100,7 @@ async def hold_until_stimulus_source_ready(
 
 
 class StimulusSourceLossWatcher:
-    """Cycle-layer watcher that freezes a gestating entity when the stimulus source is lost.
+    """Cycle-layer watcher that freezes a developing entity when the stimulus source is lost.
 
     The watcher arms itself on the first live observation of the stimulus source and
     does not judge transient quiet periods while the stimulus source is still starting.
@@ -155,7 +155,7 @@ class StimulusSourceLossWatcher:
         return self._lost
 
     async def _declare_loss(self, result: StimulusSourceLiveness) -> None:
-        """Freeze the gestating entity and publish/notify that the stimulus source is lost."""
+        """Freeze the developing entity and publish/notify that the stimulus source is lost."""
         try:
             push_freeze(
                 reason="stimulus source lost",

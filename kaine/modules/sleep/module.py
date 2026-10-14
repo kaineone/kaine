@@ -575,7 +575,7 @@ class Sleep(BaseModule):
     async def enter_sleep(self, trigger: Optional[str] = None) -> dict[str, Any]:
         """Run the five-phase sleep pipeline. Perception is suspended for the whole sleep."""
         if self._sleep_lock.locked():
-            raise SleepBusyError("Sleep sleep is already in progress")
+            raise SleepBusyError("Sleep is already in progress")
 
         async with self._sleep_lock:
             self._suspend_perception()

@@ -1193,7 +1193,7 @@ def _start_development_owner(
     *,
     is_paused: Callable[[], bool],
 ) -> "asyncio.Task[None] | None":
-    """Start the developmental readout owner for a gestating entity in the local stimulus source.
+    """Start the developmental readout owner for a developing entity in the local stimulus source.
 
     It needs the interoception module's self-rhythm and its maternal-drive provider. Without them
     there is nothing to measure: the readout stays absent and the maturation
@@ -1692,7 +1692,7 @@ async def _phase_bus(ctx: BootContext) -> int | None:
 
 
 async def _phase_stimulus_source_hold(ctx: BootContext) -> int | None:
-    """Announce a fresh developmental phase and hold a gestating entity until the stimulus source is ready."""
+    """Announce a fresh developmental phase and hold a developing entity until the stimulus source is ready."""
 
     # Emit the first-developmental-phase event now that the bus exists. This is the only
     # lifecycle event that fires at boot; the gate loop emits the rest on a
@@ -1715,7 +1715,7 @@ async def _phase_stimulus_source_hold(ctx: BootContext) -> int | None:
         await ctx.bus.publish(_lifecycle_event(type_, payload, salience=salience))
     ctx._publish_lifecycle = _publish_lifecycle
 
-    # Stimulus source before spawn (maturation-gate-liveness 2.1): a gestating entity is
+    # Stimulus source before spawn (maturation-gate-liveness 2.1): a developing entity is
     # never spawned without a stimulus source that is ready. Hold here, before any module
     # initializes, reporting stage.development.no_stimulus on every failed check.
     ctx.stimulus_source_ready = False
@@ -1762,7 +1762,7 @@ async def _phase_stimulus_source_hold(ctx: BootContext) -> int | None:
 
 
 async def _phase_registry(ctx: BootContext) -> int | None:
-    """Build and initialize the modules, hold effectors while gestating, and apply a revive."""
+    """Build and initialize the modules, hold effectors while developing, and apply a revive."""
 
     # Per-boot act-intent provenance secret (authenticate-intent-provenance,
     # Mechanism B). Generated HERE — the cycle composition root — and held ONLY
@@ -2452,7 +2452,7 @@ async def _phase_maturation(ctx: BootContext) -> int | None:
 
 async def _phase_stimulus_source_watch(ctx: BootContext) -> int | None:
     """Watch for stimulus source loss while developing."""
-    # Stimulus source loss (maturation-gate-liveness 2.2): freeze a gestating entity under
+    # Stimulus source loss (maturation-gate-liveness 2.2): freeze a developing entity under
     # its own holder when the stimulus source stops, and release it when the stimulus source returns.
     ctx.stimulus_source_watch_task = None
     if ctx.staging_enabled and ctx.stage_state.is_developing:

@@ -1040,7 +1040,7 @@ input:focus, select:focus, button:focus-visible {
 
 /* ---- Tables / definition lists ----------------------------------------- */
 
-/* Long logs/tables (sleep-cycle before/after, EFE series, eidolon accuracy, …)
+/* Long logs/tables (sleep-cycle before/after, EFE series, self-model accuracy, …)
    collapse to a manageable height and scroll instead of stretching the card. */
 .table-wrap { overflow: auto; max-height: var(--log-max, 24rem); }
 

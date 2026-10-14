@@ -364,7 +364,7 @@ class ForkManager:
         b_has = b_ph_dir.is_dir() and not b_ph_dir.is_symlink()
         if a_has and b_has and world_model_from is None:
             raise WorldModelChoiceRequiredError(
-                "both parents carry a World model world model; merge cannot average "
+                "both parents carry a world model; merge cannot average "
                 "two world models — pass world_model_from='a' or 'b' to choose "
                 "which parent's world model continues"
             )

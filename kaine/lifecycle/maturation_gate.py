@@ -413,7 +413,7 @@ def decide_maturation(
 ) -> MaturationDecision:
     """Combine developmental readiness with the embodiment-availability guard.
 
-    - not developmentally ready               -> keep gestating (report unmet Cn);
+    - not developmentally ready               -> keep developing (report unmet Cn);
     - with the embodiment module: ready but embodiment unavailable -> HOLD in the stimulus source, loud
       repeated ``stage.maturation.ready{awaiting_embodiment}`` (never born into an
       absent world, never a silent stall);

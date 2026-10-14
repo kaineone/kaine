@@ -23,6 +23,8 @@ compose/.env
 voices/
 **/*.wav
 **/*.flac
+state/sleep/adapters/
+# The pre-rename location, in case an old state tree is in the build context.
 state/hypnos/adapters/
 state/forks/merged_adapters/
 

@@ -481,14 +481,14 @@ class Audition(BaseModule):
                                     self._forward_model.suspended = True
                                 if self._acoustic_forward_model is not None:
                                     self._acoustic_forward_model.suspended = True
-                                log.debug("audition: adaptation suspended (sleep sleep started)")
+                                log.debug("audition: adaptation suspended (sleep started)")
                             elif event.type == "sleep.sleep.completed":
                                 self._in_sleep = False
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = False
                                 if self._acoustic_forward_model is not None:
                                     self._acoustic_forward_model.suspended = False
-                                log.debug("audition: adaptation resumed (sleep sleep completed)")
+                                log.debug("audition: adaptation resumed (sleep completed)")
                     else:
                         await asyncio.sleep(0.05)
                 except asyncio.CancelledError:

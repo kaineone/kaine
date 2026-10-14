@@ -8,7 +8,7 @@ There are two distinct moments:
 * ``check_stimulus_source_ready`` is called before spawn.  For ``mode == "stimulus_source"`` it runs
   the local, discard-only perception probe; for any other mode it checks
   the presence contract for an external provider.
-* ``check_stimulus_source_live`` is called while the entity is gestating.  It checks the
+* ``check_stimulus_source_live`` is called while the entity is developing.  It checks the
   presence contract for both local and external providers.
 
 A running local stimulus source is proven by

@@ -5,7 +5,7 @@
 The biological substrate replaces the interoception module's frozen CfC reservoir; the readout
 stays a small online linear model so prediction error keeps the silicon
 semantics (L2 in feature space) that the interoception module's salience, fatigue and warm-up depend
-on.  See `openspec/changes/soma-on-wetware/`.
+on.  See `openspec/changes/archive/2026-09-26-soma-on-wetware/`.
 """
 from __future__ import annotations
 

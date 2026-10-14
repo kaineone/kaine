@@ -828,7 +828,7 @@ TIER_CAPABILITIES: dict[int, dict[str, Any]] = {
         ),
         "present": ["interoception", "sequence", "planning", "episodic memory (sqlite-vec)", "self_model", "affect"],
         "degraded": ["language (sub-1B GGUF, slow)"],
-        "absent": ["vision vision", "speech in/out", "vocal emotion", "expressive TTS", "≥2B LLM"],
+        "absent": ["vision", "speech in/out", "vocal emotion", "expressive TTS", "≥2B LLM"],
     },
     1: {
         "name": "embodied CPU agent",
@@ -839,7 +839,7 @@ TIER_CAPABILITIES: dict[int, dict[str, Any]] = {
             "audio-in STT (Moonshine via sherpa-onnx)",
             "audio-out TTS (Kokoro via sherpa-onnx; plain)",
             "episodic memory embeddings (NumPy MiniLM)",
-            "vision vision (torch on CPU, periodic)",
+            "vision (torch on CPU, periodic)",
         ],
         "degraded": ["vision is periodic, not streaming", "short contexts"],
         "absent": ["expressive TTS", "vocal emotion", "streaming vision"],
@@ -850,7 +850,7 @@ TIER_CAPABILITIES: dict[int, dict[str, Any]] = {
         "summary": "full real-time multimodal (the untouched default)",
         "present": [
             "language (Qwen3.5-4B abliterated on GPU via llama-server)",
-            "vision vision (InternVideo-Next torch)",
+            "vision (InternVideo-Next torch)",
             "vocal emotion (emotion2vec+)",
             "audio-in STT (faster-whisper, >realtime)",
             "audio-out TTS (Chatterbox, expressive)",

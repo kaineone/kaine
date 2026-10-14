@@ -82,7 +82,7 @@ jobs:
 
       - name: The default vision encoder's modeling code loads from any directory
         run: |
-          # The shipped Topos backend is InternVideo-Next: its vendored code
+          # The vision module's shipped backend is InternVideo-Next: its vendored code
           # and dependencies must import in the image, from a child's cwd.
           docker run --rm -w /tmp kaine:${{ matrix.flavor }} python -c \
             "from kaine.modules.vision.internvideo_next_loader import _ensure_attention_backend, _import_vendored_classes; _ensure_attention_backend(); _import_vendored_classes(); print('vendored encoder imports')"

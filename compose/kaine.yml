@@ -3,7 +3,7 @@
 #
 # The KAINE service topology of record (design.md §2). One Compose project
 # stands up the full local instance — event bus, vector store, model server,
-# speech-to-text, text-to-speech, and the Nexus web UI — WITHOUT the cognitive
+# speech-to-text, text-to-speech, and the dashboard web UI — WITHOUT the cognitive
 # cycle. Every port is loopback-only, matching compose/redis.yml / qdrant.yml.
 #
 #   Default bring-up (no entity):
@@ -27,7 +27,7 @@
 name: kaine
 
 # Shared log rotation for every service: json-file capped at 50m x 3 files so
-# a chatty cycle or nexus cannot fill the host disk.
+# a chatty cycle or dashboard cannot fill the host disk.
 x-logging: &default-logging
   driver: json-file
   options:
@@ -43,8 +43,8 @@ x-kaine-image: &kaine-image
     target: runtime
     args:
       FLAVOR: ${KAINE_FLAVOR:-cuda}
-      # [full] carries every runtime extra (core, memory, nexus, vision, audio,
-      # reasoning, worldmodel, oscillator); [internvideo] adds the Topos encoder's
+      # [full] carries every runtime extra (core, memory, dashboard, vision, audio,
+      # reasoning, worldmodel, oscillator); [internvideo] adds the vision encoder's
       # einops/timm/easydict. Override to a leaner set for other deployments.
       KAINE_EXTRAS: ${KAINE_EXTRAS:-.[test,full,internvideo]}
       # Bake the source revision into the image (e.g. from
@@ -241,7 +241,7 @@ services:
       retries: 10
       start_period: 30s
 
-  # ---- Nexus web UI: always-up, holds NO entity (design §2) --------------
+  # ---- Dashboard web UI: always-up, holds NO entity (design §2) --------------
   kaine-dashboard:
     <<: *kaine-image
     container_name: kaine-dashboard
@@ -254,23 +254,23 @@ services:
       # operator config must not redirect container writes.
       KAINE_DATA_ROOT: /app
       KAINE_REDIS_PASSWORD: ${KAINE_REDIS_PASSWORD:?KAINE_REDIS_PASSWORD must be set (see compose/.env.example)}
-      # Bus by service name on the bridge network (see kaine-cycle). Nexus reaches
+      # Bus by service name on the bridge network (see kaine-cycle). The dashboard reaches
       # the bus through load_bus_config, which reads KAINE_REDIS_URL over the toml.
       KAINE_REDIS_URL: redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0
       KAINE_QDRANT_API_KEY: ${KAINE_QDRANT_API_KEY:?KAINE_QDRANT_API_KEY must be set (see compose/.env.example)}
       KAINE_MODEL_SERVER_API_KEY: ${KAINE_MODEL_SERVER_API_KEY:-}
       # Same at-rest posture as the cycle, so the "state encryption" health line is
-      # not DEGRADED and Nexus can read/write the shared encrypted fork/snapshots.
+      # not DEGRADED and the dashboard can read/write the shared encrypted fork/snapshots.
       KAINE_STATE_KEY: ${KAINE_STATE_KEY:-}
       # Bind the diagnostics server on all interfaces INSIDE the container so the
-      # published 127.0.0.1:8088 mapping can reach it; the shipped [nexus].host is
+      # published 127.0.0.1:8088 mapping can reach it; the shipped [dashboard].host is
       # 127.0.0.1, which binds the container's own loopback and is unreachable via
       # the port mapping. Publishing is still loopback-only (see ports:).
       KAINE_DASHBOARD_HOST: 0.0.0.0
       # The bind is all-interfaces inside the container; publishing stays 127.0.0.1-only.
-      # Nexus still refuses to start without a token.
+      # The dashboard still refuses to start without a token.
       KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED: "1"
-      # Open access (no sign-in) is the default: Nexus is published on 127.0.0.1 only.
+      # Open access (no sign-in) is the default: the dashboard is published on 127.0.0.1 only.
       # For the tailnet, run `tailscale serve --bg 8088` and set the machine's ts.net
       # name in KAINE_DASHBOARD_EXTRA_HOSTS in compose/.env (never committed).
       KAINE_DASHBOARD_ACCESS: ${KAINE_DASHBOARD_ACCESS:-${KAINE_NEXUS_ACCESS:-}}
@@ -288,7 +288,7 @@ services:
       # the durable state volume mounts at /app/state — NOT /state — or nothing
       # the entity writes would survive down/up.
       - kaine-state:/app/state
-      # Shared evaluation-data volume (see kaine-cycle) — Nexus reads the
+      # Shared evaluation-data volume (see kaine-cycle) — the dashboard reads the
       # admissibility manifest under runs/ and the evaluation tab's observer
       # output beside it.
       - kaine-eval-data:/app/data/evaluation
@@ -342,12 +342,12 @@ services:
       # them on the command line to boot the entity.
       KAINE_CYCLE_OPERATOR_PRESENT: ${KAINE_CYCLE_OPERATOR_PRESENT:-}
       KAINE_RESEARCH_MODE: ${KAINE_RESEARCH_MODE:-}
-      # Two-layer opt-in for Hypnos voice alignment.
+      # Two-layer opt-in for the sleep module's voice alignment.
       KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED: ${KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED:-}
     volumes:
       - ../config/kaine.operator.toml:/app/config/kaine.operator.toml:ro
       - ../config/secrets.toml:/app/config/secrets.toml:ro
-      # Durable entity state at /app/state (the app writes CWD-relative; see nexus).
+      # Durable entity state at /app/state (the app writes CWD-relative; see dashboard).
       - kaine-state:/app/state
       # Provisioned weights (InternVideo-Next encoder, MiniLM embedder, emotion2vec)
       # read-only from the shared model volume; HF_HOME=/models/hf is baked in.
@@ -358,21 +358,21 @@ services:
       # Job-queue backend for voice-alignment training: the cycle writes READY jobs,
       # kaine-trainer claims and runs them. Kept off the entity state volume.
       - kaine-trainer-jobs:/app/state/sleep/voice_align_jobs
-      # Evaluation outputs on a SHARED named volume so the Nexus admissibility probe
+      # Evaluation outputs on a SHARED named volume so the dashboard's admissibility probe
       # (runs_manifest_root = data/evaluation/runs) sees what the cycle writes —
-      # otherwise each container has its own ephemeral /app/data and Nexus reports
+      # otherwise each container has its own ephemeral /app/data and the dashboard reports
       # "manifest absent". kaine-eval-data subsumes the old kaine-runs mount at
       # /app/data/evaluation/runs (the parent dir covers it). Manifests/metadata
       # only — never raw sense data.
       - kaine-eval-data:/app/data/evaluation
-      # Workspace-trajectory records, likewise durable and shared with Nexus.
+      # Workspace-trajectory records, likewise durable and shared with the dashboard.
       - kaine-trajectory:/app/data/workspace_trajectory
       # Preservation bundles (durable, never raw sense data).
       - kaine-backups:/app/backups
       # Film-aligned ignition log records (durable, never raw sense data).
       - kaine-ignition:/app/data/ignition
-      # Nexus record (`[research_event_log.dashboard_record]`): local-only, never
-      # exported; what Nexus displays after its privacy filter. ~2 GB per
+      # Dashboard record (`[research_event_log.dashboard_record]`): local-only, never
+      # exported; what the dashboard displays after its privacy filter. ~2 GB per
       # four-hour viewing.
       - kaine-nexus-record:/app/data/nexus_record
       # Perception scratch: RAM-backed and ephemeral, NEVER a durable volume (zero
@@ -443,7 +443,7 @@ services:
       # them on the command line to boot the entity.
       KAINE_CYCLE_OPERATOR_PRESENT: ${KAINE_CYCLE_OPERATOR_PRESENT:-}
       KAINE_RESEARCH_MODE: ${KAINE_RESEARCH_MODE:-}
-      # Two-layer opt-in for Hypnos voice alignment.
+      # Two-layer opt-in for the sleep module's voice alignment.
       KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED: ${KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED:-}
     volumes:
       - ../config/kaine.operator.toml:/app/config/kaine.operator.toml:ro
@@ -510,7 +510,7 @@ services:
   # ---- setup one-shot: provision images + ALL model weights (design §6) --
   # Downloads the abliterated organ, distil-Whisper, Chatterbox, emotion2vec+,
   # the InternVideo-Next clip encoder (the shipped default vision backend; DINOv2
-  # only if [topos].encoder_backend = "dinov2"), and MiniLM BEFORE first boot, so
+  # only if [vision].encoder_backend = "dinov2"), and MiniLM BEFORE first boot, so
   # runtime reaches no network for models. Reuses the repo's `hf download`
   # organ provisioning. Runs under `--profile setup`, never at normal `up`.
   kaine-provision:
@@ -540,7 +540,7 @@ volumes:
   # NEVER an image layer.
   kaine-models:
     name: kaine-models
-  # Per-entity GGUF LoRAs promoted by Hypnos; read by the organ launcher.
+  # Per-entity GGUF LoRAs promoted by the sleep module; read by the organ launcher.
   kaine-organ-adapters:
     name: kaine-organ-adapters
   # Shared job directory for the voice-alignment trainer. The cycle/study write
@@ -554,13 +554,13 @@ volumes:
   kaine-state:
     name: kaine-state
   # Evaluation outputs (run manifests + artifacts), shared read/write between
-  # the cycle (writer) and Nexus (admissibility reader). Subsumes the old
+  # the cycle (writer) and the dashboard (admissibility reader). Subsumes the old
   # kaine-runs volume that covered only /app/data/evaluation/runs — operators
   # migrate by copying any existing runs data in. Metadata only — never raw
   # sense data.
   kaine-eval-data:
     name: kaine-eval-data
-  # Workspace-trajectory records, durable across down/up, shared with Nexus.
+  # Workspace-trajectory records, durable across down/up, shared with the dashboard.
   kaine-trajectory:
     name: kaine-trajectory
   # Study directories for the module-ignition study: plan, step log, per-line
@@ -574,7 +574,7 @@ volumes:
   # Film-aligned ignition log records (durable, never raw sense data).
   kaine-ignition:
     name: kaine-ignition
-  # Local-only record of what Nexus displays, after its privacy filter. Never
+  # Local-only record of what the dashboard displays, after its privacy filter. Never
   # exported. About 2 GB per four-hour viewing.
   kaine-nexus-record:
     name: kaine-nexus-record

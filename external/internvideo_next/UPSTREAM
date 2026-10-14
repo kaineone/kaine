@@ -44,7 +44,8 @@ that conflicts with KAINE's local-only / no-cloud posture and would weaken the
 source once, pinning the revision, and loading with `trust_remote_code=False`
 against a LOCAL directory removes that path entirely: no code is fetched or
 executed from the hub at runtime. See
-kaine/modules/topos/internvideo_next_loader.py and design.md §5.
+kaine/modules/vision/internvideo_next_loader.py and design.md §5 of
+openspec/changes/archive/2026-09-08-topos-temporal-video-encoder/.
 
 The Predictor "P" and Decoder "D" of InternVideo-Next's Encoder-Predictor-Decoder
 are training-time apparatus and are NOT distributed in this published checkpoint

@@ -10,7 +10,7 @@ module registry exist. It runs a periodic task during the developmental phase th
      the world model module's consolidation passes, EntityClock lived time).
   2. Evaluates the fail-closed readiness predicate C1∧C2∧C3.
   3. Decides whether to mature, hold awaiting embodiment, hold awaiting operator
-     ack, or keep gestating.
+     ack, or keep developing.
   4. Emits observable lifecycle events on ``lifecycle.out`` and writes the
      stage file on its first tick, when accumulated evidence changes, and at
      maturation.
@@ -61,7 +61,7 @@ DEFAULT_STIMULUS_SOURCE_READOUT_TYPE = "development.readiness"
 
 
 class MaturationGateRunner:
-    """Periodic maturation gate for a gestating entity."""
+    """Periodic maturation gate for a developing entity."""
 
     def __init__(
         self,

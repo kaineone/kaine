@@ -78,7 +78,7 @@ In token mode, the dashboard reads the operator token from the environment varia
 grep '^KAINE_DASHBOARD_TOKEN=' compose/.env | cut -d= -f2-
 
 # from the secrets file
-python -c "import tomllib; print(tomllib.load(open('config/secrets.toml','rb'))['nexus']['operator_token'])"
+python -c "import tomllib; print(tomllib.load(open('config/secrets.toml','rb'))['dashboard']['operator_token'])"
 ```
 
 If you lose the token, generate a new one with:

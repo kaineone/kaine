@@ -34,7 +34,7 @@ def test_security_md_exists() -> None:
 def test_security_md_mentions_self_model_self_model(security_text: str) -> None:
     """§4 must name the self-model file."""
     assert "self_model" in security_text, (
-        "SECURITY.md §4 does not mention the Self-model self-model "
+        "SECURITY.md §4 does not mention the self-model "
         "(expected substring 'self_model')"
     )
 

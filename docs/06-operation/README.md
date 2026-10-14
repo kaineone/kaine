@@ -7,7 +7,7 @@ This page covers normal operation of a running KAINE instance: starting and stop
 ### Normal start
 
 ```bash
-# Terminal 1: the Nexus dashboard
+# Terminal 1: the dashboard
 python -m kaine.dashboard
 
 # Terminal 2: the cognitive cycle (an operator is present)
