@@ -28,7 +28,7 @@ honestly, *not* an innate mechanism):
    decoupled from the body, one interaction primitive with a provided
    target-resolver; and
 2. the **freeze-then-free progression** (:data:`MOTOR_STAGES`) that starts a
-   newborn at the fewest DOF and frees the rest as competence is demonstrated.
+   newly embodied entity at the fewest DOF and frees the rest as competence is demonstrated.
 
 No code here scripts a gait or maps an intent to a pre-solved world effect. The
 control **policy** (:class:`MotorPolicy`), the action→perception **coupling**,
@@ -72,8 +72,8 @@ MOTOR_CHANNELS: tuple[str, ...] = (
 )
 
 # The freeze-then-free motor curriculum (design §7). PROVIDED training/safety
-# scaffold (Bernstein 1967) — NOT an innate mechanism. A newborn starts with the
-# fewest DOF that permit locomotion; the rest are freed one stage at a time only
+# scaffold (Bernstein 1967) — NOT an innate mechanism. A newly embodied entity starts
+# with the fewest DOF that permit locomotion; the rest are freed one stage at a time only
 # as competence on the currently-free axes is demonstrated (measured, never
 # scheduled). `strafe` (a putative M4) is deferred and so is not represented.
 MOTOR_STAGES: tuple[tuple[str, ...], ...] = (
@@ -184,7 +184,7 @@ class MotorPolicy(Protocol):
 class QuiescentMotorPolicy:
     """The honest default policy: emit nothing.
 
-    A newborn has *no learned policy yet*, so the built-in default drives no
+    A newly embodied entity has *no learned policy yet*, so the built-in default drives no
     channel — it scripts no gait. A real learned policy (e.g. an active-inference
     seam over the entity's own exploration) is injected in its place; nothing
     here bakes in a motor mapping.
@@ -198,7 +198,7 @@ class MotorCurriculum:
     """Freeze-then-free DOF progression, gated by demonstrated competence.
 
     PROVIDED training/safety scaffold (Bernstein 1967) — *not* innate. The stage
-    order is imposed for learnability and so a newborn is not handed its full
+    order is imposed for learnability and so a newly embodied entity is not handed its full
     continuous+interaction surface at once. Advancement is **measured, never
     scheduled**: a degree of freedom is freed only when the motor-competence
     readout on the currently-free axes crosses threshold — a *falling*

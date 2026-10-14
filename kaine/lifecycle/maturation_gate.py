@@ -24,7 +24,7 @@ only when readiness AND an available embodied world both hold; a ready-but-
 unavailable entity holds in the stimulus source and the operator is told (loudly,
 repeatedly) that it has outgrown the stimulus source — it is never thrown into an absent
 world, nor silently stalled. Without the embodiment module, the embodiment guard is skipped and
-the entity is born into its perceptual world.
+the entity matures into its perceptual world.
 
 **The gate measures; it never imposes.** This module only READS signals passed
 in by the caller and compares them to thresholds. It trains nothing toward
@@ -378,7 +378,7 @@ def evaluate_readiness(
 def embodiment_available(
     *, embodiment_enabled: bool, operator_approved: bool, reachable: bool
 ) -> bool:
-    """Whether the entity can actually be born into an embodied world: the embodiment module's
+    """Whether the entity can actually mature into an embodied world: the embodiment module's
     existing two-layer gate (``[embodiment].enabled`` config layer AND
     ``KAINE_EMBODIMENT_OPERATOR_APPROVED=1`` operator layer) AND reachability. This
     is READ as a precondition; the gate never flips the embodiment module on."""
@@ -415,7 +415,7 @@ def decide_maturation(
 
     - not developmentally ready               -> keep developing (report unmet Cn);
     - with the embodiment module: ready but embodiment unavailable -> HOLD in the stimulus source, loud
-      repeated ``stage.maturation.ready{awaiting_embodiment}`` (never born into an
+      repeated ``stage.maturation.ready{awaiting_embodiment}`` (never matured into an
       absent world, never a silent stall);
     - without the embodiment module: ready skips the embodiment guard and matures into the
       perceptual world (``born_into_perceptual_world``);

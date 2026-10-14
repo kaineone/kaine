@@ -1646,7 +1646,7 @@ def test_pinned_job_route_behaviour(tmp_path, monkeypatch):
 
 def test_build_job_specs_malformed_operator_toml_returns_no_dashboard(tmp_path):
     shipped = tmp_path / "shipped.toml"
-    shipped.write_text("[modules]\nlingua = false\n")
+    shipped.write_text("[modules]\nlanguage = false\n")
     operator = tmp_path / "operator.toml"
     operator.write_text("[[this is not valid toml")
 

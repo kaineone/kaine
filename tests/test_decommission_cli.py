@@ -367,7 +367,7 @@ def test_qdrant_unreachable_fails_before_deletion(tmp_path, monkeypatch):
     # Module toggles come from the operator overlay (the default profile
     # leaves the episodic memory module off).
     (tmp_path / "config" / "kaine.operator.toml").write_text(
-        "[modules]\nmnemos = true\n", encoding="utf-8"
+        "[modules]\nepisodic_memory = true\n", encoding="utf-8"
     )
     rc = main(
         cli_args,
@@ -990,7 +990,7 @@ def test_qdrant_absent_does_not_override_a_module_that_is_on(tmp_path, monkeypat
         extra_config='[episodic_memory]\nbackend = "qdrant"\n[episodic_memory.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
     )
     (tmp_path / "config" / "kaine.operator.toml").write_text(
-        "[modules]\nmnemos = true\n", encoding="utf-8"
+        "[modules]\nepisodic_memory = true\n", encoding="utf-8"
     )
     answers = iter([
         "I acknowledge the CAL welfare terms",
@@ -1109,7 +1109,7 @@ def test_qdrant_failing_before_deletion_keeps_local_state(tmp_path, monkeypatch)
 
     config_path = tmp_path / "config" / "kaine.operator.toml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text("[modules]\nmnemos = true\n", encoding="utf-8")
+    config_path.write_text("[modules]\nepisodic_memory = true\n", encoding="utf-8")
 
     class Reachable:
         def get_aliases(self):

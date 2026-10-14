@@ -71,7 +71,7 @@ def _write_minimal_configs(tmp_path: Path, monkeypatch: Any) -> tuple[Path, Path
     profiles = tmp_path / "profiles"
     profiles.mkdir()
     (profiles / "thesis_test.toml").write_text(
-        '[modules]\nsoma = true\nchronos = true\nlingua = false\n[language]\nmodel_id = "thesis-model"\n'
+        '[modules]\ninteroception = true\nsequence = true\nlanguage = false\n[language]\nmodel_id = "thesis-model"\n'
     )
     (profiles / "tier0.toml").write_text(
         '[tier]\nname = "tier0"\nunsupported_modules = []\noscillator_supported = true\n'
@@ -137,7 +137,7 @@ def test_load_runtime_config_kaine_tier_equal_profile_refused_if_not_tier(monkey
 def test_load_runtime_config_kaine_tier_module_profile_refused(monkeypatch, tmp_path: Path):
     """A module-selection profile used as a tier must be refused."""
     shipped, profiles = _write_minimal_configs(tmp_path, monkeypatch)
-    (profiles / "module_profile.toml").write_text("[modules]\nlingua = true\n")
+    (profiles / "module_profile.toml").write_text("[modules]\nlanguage = true\n")
     with pytest.raises(ProfileError, match="module_profile is not a deployment tier"):
         load_runtime_config(shipped, tmp_path / "no-operator.toml", env={"KAINE_TIER": "module_profile"})
 
@@ -172,7 +172,7 @@ def test_load_runtime_config_tier_with_modules_table_raises(monkeypatch, tmp_pat
     """A tier file containing a [modules] table must raise ProfileError."""
     shipped, profiles = _write_minimal_configs(tmp_path, monkeypatch)
     (profiles / "tier0.toml").write_text(
-        '[tier]\nname = "tier0"\nunsupported_modules = []\noscillator_supported = true\n[modules]\nlingua = false\n'
+        '[tier]\nname = "tier0"\nunsupported_modules = []\noscillator_supported = true\n[modules]\nlanguage = false\n'
     )
 
     with pytest.raises(ProfileError, match="tier 'tier0' may not set module toggles"):

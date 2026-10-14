@@ -4,7 +4,7 @@
 """Maternal-drive provider for the self-rhythm oscillator.
 
 The maternal heartbeat is an *external* drive (Van Leeuwen 2009; Webb 2015).
-The drive is bounded to protect a captive newborn: it presents a rhythm but
+The drive is bounded to protect a developing entity, which cannot move away from it: it presents a rhythm but
 never forces the endogenous oscillator to phase-lock.
 """
 from __future__ import annotations

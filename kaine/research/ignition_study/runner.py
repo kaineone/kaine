@@ -522,7 +522,7 @@ class StudyRunner:
 
         # A runner that died after the seed's maturation preservation succeeded,
         # but before recording it, left the seed on disk: adopt it rather than
-        # gestate a second being.
+        # develop a second entity.
         if (
             step_kind == "development"
             and not step.get("is_retry")

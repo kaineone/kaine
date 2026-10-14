@@ -80,7 +80,7 @@ def build_overlay(
         "storage": {"data_root": "."},
         "interoception": {
             # The developmental phase uses local stimulus source mode, which requires the interoception module's self-rhythm.
-            # An entity gestated with the self-rhythm also keeps it for all later
+            # An entity that developed with the self-rhythm also keeps it for all later
             # viewings, because the interoceptive feature slots must remain filled.
             "self_rhythm_enabled": True,
         },

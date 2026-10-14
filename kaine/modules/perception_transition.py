@@ -3,7 +3,7 @@
 
 """The stimulus-source-to-world transition that opens a viewing after maturation.
 
-A born entity's first playlist viewing of a boot opens with a crossfade from the
+A matured entity's first playlist viewing of a boot opens with a crossfade from the
 field it last perceived in the stimulus source (the bloom peak at ``stimulus_source_t_at_maturation``) to
 the programme's opening frame, held still. The programme's sound is silent
 during the crossfade, as the bloom ended in silence, and fades in once

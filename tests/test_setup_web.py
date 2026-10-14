@@ -1777,10 +1777,10 @@ def test_web_cl1_decline_removes_an_earlier_cl1_setup(tmp_path):
 
     operator_path = tmp_path / "kaine.operator.toml"
     operator_path.write_text(
-        "[modules]\nchronos = true\nsoma = true\n\n"
+        "[modules]\nsequence = true\ninteroception = true\n\n"
         "[plugins]\nenabled = [\"cl1\"]\n\n"
         "[plugins.cl1.substrate]\ntarget = \"simulator\"\naccelerated_time = true\n\n"
-        "[plugins.cl1.backends]\nchronos = \"cl1\"\nsoma = \"cl1\"\n",
+        "[plugins.cl1.backends]\nsequence = \"cl1\"\ninteroception = \"cl1\"\n",
         encoding="utf-8",
     )
     app = _mk_app(tmp_path, operator_path=operator_path)

@@ -1452,7 +1452,7 @@ async def _phase_stage(ctx: BootContext) -> int | None:
 
     # Developmental stage resolution. Done early so the developmental phase can gate locus and
     # embodiment before any module opens. With staging off (the shipped
-    # default) a boot is unaffected; with it on, a fresh spawn gestates even
+    # default) a boot is unaffected; with it on, a fresh spawn starts in the developmental phase even
     # beside other entities' records, and anything that has lived does not.
     ctx.stage_state, ctx.staging_enabled, ctx.fresh_development = _resolve_start_stage(ctx.kaine_config, ctx.revive, ctx.identity)
     if ctx.revive is not None and ctx.revive.stage_state is not None:
@@ -1609,7 +1609,7 @@ async def _phase_gates(ctx: BootContext) -> int | None:
 
     # Cooperative GPU headroom pre-flight (opt-in via [gpu_preflight].enabled).
     # Runs BEFORE the bus/modules open so a starved host refuses to boot cleanly
-    # rather than OOM-killing a just-born entity mid-init. It evicts only KAINE's
+    # rather than OOM-killing a just-spawned entity mid-init. It evicts only KAINE's
     # own idle Ollama models and never terminates a process; see preflight.py.
     gpu_cfg = GpuPreflightConfig.from_section(ctx.kaine_config.get("gpu_preflight") or {})
     if gpu_cfg.enabled:
@@ -2401,7 +2401,7 @@ async def _phase_maturation(ctx: BootContext) -> int | None:
     """Wire the maturation gate's pause sources and maturation hooks, and start the gate and individuation tasks."""
     # Time not awake is not lived time: the runner subtracts the subjective time
     # the cycle spends frozen or asleep (paper A.7).
-    # A frozen entity is never born, whoever froze it.
+    # A frozen entity never matures, whoever froze it.
     ctx.gate_runner.set_pause_sources(
         paused_seconds=ctx.cycle.unawake_subjective_seconds,
         is_paused=lambda: ctx.cycle.is_paused,
