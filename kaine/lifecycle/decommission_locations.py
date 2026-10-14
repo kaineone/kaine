@@ -486,6 +486,17 @@ def entity_locations(
         )
     )
 
+    # 11b. the state-rename manifest, which keeps byte copies of the stage file
+    locations.append(
+        Location(
+            "lifecycle.rename_manifest",
+            BACKUP_DELETE,
+            resolve("state/.rename_state"),
+            "the state-rename manifest and its copies of the stage file",
+            bundle_dir="locations/lifecycle.rename_manifest",
+        )
+    )
+
     # 12. identity
     locations.append(
         Location(

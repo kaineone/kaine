@@ -88,7 +88,9 @@ def test_map_stored_value_active_entries() -> None:
         assert map_stored_value(entry["old"]) == entry["new"]
     assert map_stored_value("unknown_string") == "unknown_string"
     assert map_stored_value(12345) == 12345
-    assert map_stored_value(["gestation"]) == ["gestation"]
+    # Only a string maps; a list holding an old value is returned as it is.
+    old_value = legacy_names.STAGE_VALUES[0]["old"]
+    assert map_stored_value([old_value]) == [old_value]
 
 
 def test_map_stored_value_identity_while_pending(

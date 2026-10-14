@@ -12,7 +12,6 @@ from unittest.mock import patch
 import pytest
 
 from kaine import legacy_names
-
 from kaine.lifecycle.identity import (
     IDENTITY_PATH,
     OWN_LIVED_ARTIFACTS,

@@ -151,6 +151,9 @@ The cycle entrypoint fails closed with a distinct exit code per gate:
 | `9` | Organ content gate: the served language organ returned no content (unless `KAINE_ALLOW_MUTE_ORGAN=1`) |
 | `10` | Individuation: `[individuation]` is misconfigured, or is enabled without the `language` module |
 | `11` | Entity identity: the identity file is unreadable, or a revive targets a state tree that already holds a different entity |
+| `12` | A live planned-test study lacks a valid settings record |
+| `13` | The stored developmental stage holds a value this release does not recognize; the stage file is left for an operator to inspect |
+| `14` | The state tree cannot be moved to the functional module names: it holds an old and a new name for one item, or a migration step failed. A refusal changes nothing |
 
 A running cycle can also halt with exit code `70` when the supervisor escalates.
 
