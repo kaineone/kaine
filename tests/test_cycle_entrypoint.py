@@ -65,6 +65,8 @@ def test_main_refuses_research_boot_without_safety_net(tmp_path):
 
     env = {k: v for k, v in os.environ.items() if k != "KAINE_CYCLE_OPERATOR_PRESENT"}
     env["KAINE_RESEARCH_MODE"] = "1"
+    # A synthetic key: the shipped config requires one, and this test is about the gate.
+    env["KAINE_STATE_KEY"] = "11" * 32
     env["PYTHONPATH"] = str(_REPO_ROOT)
     py = sys.executable
     result = subprocess.run(
@@ -146,6 +148,8 @@ def test_unattended_gate_refuses_in_subprocess(tmp_path):
         if k not in ("KAINE_CYCLE_OPERATOR_PRESENT", "KAINE_RESEARCH_MODE")
     }
     env["KAINE_CYCLE_UNATTENDED"] = "1"
+    # A synthetic key: the shipped config requires one, and this test is about the gate.
+    env["KAINE_STATE_KEY"] = "11" * 32
     # Import this checkout's kaine in the child, not whatever the venv's
     # editable install points at.
     env["PYTHONPATH"] = str(_REPO_ROOT)
@@ -177,6 +181,8 @@ def test_unattended_conflicts_with_operator_present(tmp_path):
         if k not in ("KAINE_RESEARCH_MODE",)
     }
     env["KAINE_CYCLE_UNATTENDED"] = "1"
+    # A synthetic key: the shipped config requires one, and this test is about the gate.
+    env["KAINE_STATE_KEY"] = "11" * 32
     # Import this checkout's kaine in the child, not whatever the venv's
     # editable install points at.
     env["PYTHONPATH"] = str(_REPO_ROOT)

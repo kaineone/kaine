@@ -148,7 +148,7 @@ def test_evaluate_safety_net(monkeypatch):
     }
     monkeypatch.setattr(
         "kaine.cycle.research_gate.run_preflight_self_check",
-        lambda: (True, None),
+        lambda **_kw: (True, None),
     )
 
     passing = evaluate_safety_net(base_cfg)

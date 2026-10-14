@@ -294,10 +294,10 @@ def evaluate_safety_net(config: dict[str, Any]) -> GateResult:
 
     preservation_cfg = PreservationConfig.from_section(config.get("preservation") or {})
 
-    # The ledger and reference cannot be read here, because state encryption is
-    # installed later in boot. Their readability is enforced at runtime, where
-    # unreadable individuation state counts as individuated and the entity is
-    # preserved.
+    # The cycle installs state encryption before this gate, but other callers of
+    # evaluate_safety_net may not have installed it yet. The ledger and reference
+    # readability stays enforced at runtime, where unreadable individuation state
+    # counts as individuated and the entity is preserved.
     try:
         individuation_cfg = IndividuationConfig.from_dict(
             config.get("individuation")
@@ -310,7 +310,12 @@ def evaluate_safety_net(config: dict[str, Any]) -> GateResult:
     except ValueError:
         individuation_enabled = False
 
-    self_check_ok, self_check_reason = run_preflight_self_check()
+    encryption_enabled = bool(
+        ((config.get("security") or {}).get("state_encryption") or {}).get("enabled", False)
+    )
+    self_check_ok, self_check_reason = run_preflight_self_check(
+        require_encryption=preservation_cfg.require_encryption and encryption_enabled
+    )
     if not self_check_ok and self_check_reason:
         log.error("research-gate self-check failed: %s", self_check_reason)
     # require_encryption is enforced at the runtime write boundary (preserve_live
@@ -318,9 +323,6 @@ def evaluate_safety_net(config: dict[str, Any]) -> GateResult:
     # encryption is required but [security.state_encryption] is off, so the run
     # never starts with a net that cannot persist. The key-present half is
     # enforced separately by install_state_encryption (fail-closed at boot).
-    encryption_enabled = bool(
-        ((config.get("security") or {}).get("state_encryption") or {}).get("enabled", False)
-    )
     encryption_satisfied = (not preservation_cfg.require_encryption) or encryption_enabled
     return evaluate_research_gate(
         preservation_enabled=preservation_cfg.divergence_monitor.enabled,

@@ -131,6 +131,11 @@ def test_cycle_refuses_to_boot_on_bad_stage(tmp_path: Path, monkeypatch, capsys,
 def test_cycle_boots_on_valid_embodied_stage(tmp_path: Path, monkeypatch, capsys) -> None:
     _hermetic_cwd(tmp_path, monkeypatch)
     monkeypatch.setenv("KAINE_CYCLE_OPERATOR_PRESENT", "1")
+    # The shipped config requires a state key; a synthetic one, never the keyring.
+    monkeypatch.setenv("KAINE_STATE_KEY", "11" * 32)
+    from kaine.security import crypto
+
+    monkeypatch.setattr(crypto, "_load_key_from_keyring", lambda: None)
     stage_path = tmp_path / "lifecycle" / "stage.json"
     stage_path.parent.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(stage, "STAGE_PATH", stage_path)

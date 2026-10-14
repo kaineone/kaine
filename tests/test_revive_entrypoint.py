@@ -53,6 +53,15 @@ def _hermetic_cwd(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
 
 
+@pytest.fixture(autouse=True)
+def _synthetic_state_key(monkeypatch):
+    """Provide a synthetic state key and disable the kernel keyring for tests."""
+    monkeypatch.setenv("KAINE_STATE_KEY", "11" * 32)
+    import kaine.security.crypto as crypto_module
+
+    monkeypatch.setattr(crypto_module, "_load_key_from_keyring", lambda: None)
+
+
 @pytest_asyncio.fixture
 async def bus():
     yield _NullBus()
@@ -604,3 +613,116 @@ def test_start_stage_uses_the_revive_session_stage(tmp_path, monkeypatch):
 
     from_file, _, _ = _resolve_start_stage(config, None)
     assert from_file.stage == "embodied"
+
+
+
+
+def test_main_revives_an_encrypted_bundle(tmp_path, self_model, monkeypatch):
+    _hermetic_cwd(tmp_path, monkeypatch)
+    monkeypatch.setenv("KAINE_CYCLE_OPERATOR_PRESENT", "1")
+
+    import kaine.security.crypto as crypto
+
+    crypto.install_from_section({"enabled": True})
+    bundle = asyncio.run(_make_bundle(tmp_path, self_model))
+    assert (bundle / "bundle.tar.enc").exists()
+
+    # Reset to a fresh-process default encryptor before invoking the entrypoint.
+    crypto._active = crypto.StateEncryptor(crypto.CryptoConfig())
+
+    from kaine.cycle import __main__ as cycle_main
+
+    calls = []
+
+    async def _fake_boot(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(cycle_main, "_boot_and_run", _fake_boot)
+
+    rc = cycle_main.main(["--revive", str(bundle)])
+    assert rc == 0
+    assert len(calls) == 1
+    assert isinstance(calls[0].get("revive"), ReviveSession)
+
+
+def test_main_refuses_an_encrypted_bundle_with_the_wrong_key(
+    tmp_path, self_model, monkeypatch
+):
+    _hermetic_cwd(tmp_path, monkeypatch)
+    monkeypatch.setenv("KAINE_CYCLE_OPERATOR_PRESENT", "1")
+
+    import kaine.security.crypto as crypto
+
+    crypto.install_from_section({"enabled": True})
+    bundle = asyncio.run(_make_bundle(tmp_path, self_model))
+    assert (bundle / "bundle.tar.enc").exists()
+
+    monkeypatch.setenv("KAINE_STATE_KEY", "22" * 32)
+    # Fresh default so the entrypoint installs the encryptor from the new env.
+    crypto._active = crypto.StateEncryptor(crypto.CryptoConfig())
+
+    from kaine.cycle import __main__ as cycle_main
+
+    calls = []
+
+    async def _fake_boot(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(cycle_main, "_boot_and_run", _fake_boot)
+
+    rc = cycle_main.main(["--revive", str(bundle)])
+    assert rc == 7
+    assert calls == []
+
+
+def test_main_refuses_to_boot_without_a_key(tmp_path, monkeypatch, capsys):
+    _hermetic_cwd(tmp_path, monkeypatch)
+    monkeypatch.setenv("KAINE_CYCLE_OPERATOR_PRESENT", "1")
+    monkeypatch.delenv("KAINE_STATE_KEY", raising=False)
+
+    import kaine.security.crypto as crypto
+
+    monkeypatch.setattr(crypto, "_load_key_from_keyring", lambda: None)
+
+    from kaine.cycle import __main__ as cycle_main
+
+    calls = []
+
+    async def _fake_boot(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(cycle_main, "_boot_and_run", _fake_boot)
+
+    rc = cycle_main.main([])
+    assert rc == 1
+    assert calls == []
+    captured = capsys.readouterr()
+    assert "state encryption" in captured.err
+
+
+def test_research_gate_runs_with_the_configured_encryptor(tmp_path, monkeypatch):
+    # The research gate's preflight round trip must see the configured encryptor,
+    # so main installs it before evaluating the gate.
+    _hermetic_cwd(tmp_path, monkeypatch)
+    monkeypatch.delenv("KAINE_CYCLE_OPERATOR_PRESENT", raising=False)
+    monkeypatch.setenv("KAINE_RESEARCH_MODE", "1")
+
+    import kaine.security.crypto as crypto
+    from kaine.cycle import __main__ as cycle_main
+    from kaine.cycle.research_gate import RESEARCH_GATE_EXIT_CODE, GateResult
+
+    crypto._active = crypto.StateEncryptor(crypto.CryptoConfig())
+    seen = []
+
+    def _gate(config):
+        seen.append(crypto.get_state_encryptor().enabled)
+        return GateResult(ok=False, failures=["test"], checks={})
+
+    monkeypatch.setattr(cycle_main, "_evaluate_research_safety_net", _gate)
+
+    rc = cycle_main.main([])
+    assert rc == RESEARCH_GATE_EXIT_CODE
+    assert seen == [True]
