@@ -633,14 +633,14 @@ def plan(root: Path, *, qdrant: QdrantAliases | None = None) -> list[dict]:
                 f"rename_state: {old_key} under {root} is a mount point; mount it at "
                 f"{new_key} instead and re-run"
             )
+        # Moving the directory, or a child of it in a merge, would carry a mount
+        # below it to the new path for this boot only; a mount holding data is
+        # mounted at its new path by the operator instead.
+        nested = _nested_mount_with_data(old_dir)
+        if nested is not None:
+            rel = nested.relative_to(root).as_posix()
+            _refuse_mount_with_data(root, rel, new_key + rel[len(old_key):])
         if not new_dir.exists():
-            # Renaming the directory would carry a mount below it to the new path
-            # for this boot only; a mount holding data is mounted at its new path
-            # by the operator instead.
-            nested = _nested_mount_with_data(old_dir)
-            if nested is not None:
-                rel = nested.relative_to(root).as_posix()
-                _refuse_mount_with_data(root, rel, new_key + rel[len(old_key):])
             created = _created_dirs_for_dst(root, new_key, planned)
             steps.append(_move_step(old_key, new_key, created))
         elif _vacant_old(old_dir):
@@ -964,7 +964,10 @@ def _run_remove_vacant(root: Path, step: dict) -> None:
                 if not _empty_dir(child):
                     _refuse(child, "a mount holding data")
                 continue
-            cst = os.lstat(child)
+            try:
+                cst = os.lstat(child)
+            except OSError as exc:
+                _refuse(child, exc.strerror or type(exc).__name__)
             if stat.S_ISLNK(cst.st_mode) or not stat.S_ISDIR(cst.st_mode):
                 _refuse(child, "it holds data")
             _collect(child)

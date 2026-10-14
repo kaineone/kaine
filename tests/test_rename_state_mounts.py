@@ -358,3 +358,14 @@ def test_a_removal_that_cannot_remove_an_empty_directory_refuses(tmp_path, monke
     with pytest.raises(rename_state.RenameStateError, match="cannot remove"):
         rename_state.migrate(root, no_qdrant=True)
     assert (root / OLD["perceptual_locus"]).is_dir()
+
+
+def test_a_deeper_mount_holding_data_refuses_a_merge(tmp_path, monkeypatch):
+    """A merge would move a child directory and carry a mount below it."""
+    root = tmp_path / "state"
+    mounts = _mount_checker(monkeypatch)
+    _write(root / OLD["sleep"] / "organ_window.json", b"window")
+    _write(root / OLD["sleep"] / "voice_align_jobs" / "sub" / "job1.json", b"{}")
+    mounts.add((root / OLD["sleep"] / "voice_align_jobs" / "sub").resolve())
+    (root / "sleep").mkdir(parents=True)
+    _refuses_unchanged(root)
