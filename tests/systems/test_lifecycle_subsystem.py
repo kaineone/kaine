@@ -44,7 +44,7 @@ def test_fork_with_shed(tmp_path):
             [FakeModule("interoception", {"a": 1}), FakeModule("vision", {"b": 2})]
         )
     )
-    child = fm.fork(parent.id, label="no-topos", shed=["vision"])
+    child = fm.fork(parent.id, label="no-vision", shed=["vision"])
     assert "vision" not in child.modules
     assert "interoception" in child.modules
 

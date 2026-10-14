@@ -776,7 +776,7 @@ async def test_phase3_with_real_episodic_memory_spans_two_periods(bus: AsyncBus)
 
     assert result.success is True, f"phase 3 failed: {result.error}"
     assert result.metadata["distinct_periods"] >= 2, (
-        f"Expected ≥2 distinct periods from real Mnemos, "
+        f"Expected ≥2 distinct periods from real Episodic memory, "
         f"got {result.metadata['distinct_periods']}: {result.metadata['periods_selected']}"
     )
     assert result.metadata["cross_period_traces"] >= 2

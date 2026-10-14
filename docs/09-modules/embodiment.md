@@ -8,7 +8,7 @@ The embodiment module is built and tested, and held: it is off in the shipped `c
 
 1. `[modules].embodiment = true` in the operator file `config/kaine.operator.toml`, so the module is constructed (the same flag in the shipped `config/kaine.toml` is overridden by the `thesis_test` profile);
 2. `[embodiment].enabled = true` (the shipped value), the configuration gate;
-3. `KAINE_MUNDUS_OPERATOR_APPROVED=1` in the environment, the operator gate.
+3. `KAINE_EMBODIMENT_OPERATOR_APPROVED=1` in the environment, the operator gate.
 
 `_enabled()` is false unless both the configuration flag and the environment variable are set. With either missing, the embodiment module logs which gate failed and `initialize()` returns without opening the body.
 
@@ -132,7 +132,7 @@ The core reads the current locus through `locus_reader()`, by default `perceptio
 
 ## Gates and what is kept
 
-- Both `[embodiment].enabled` and `KAINE_MUNDUS_OPERATOR_APPROVED=1` must be set, and while an entity is in its developmental phase the embodiment module stays dormant until maturation.
+- Both `[embodiment].enabled` and `KAINE_EMBODIMENT_OPERATOR_APPROVED=1` must be set, and while an entity is in its developmental phase the embodiment module stays dormant until maturation.
 - The core removes every raw sense buffer named in the descriptor from the event payload before publishing.
 - Symbolic families that change a world, and continuous channels, need the operator's opt-in.
 - The entity cannot use the real camera and microphone while the locus is `virtual`.

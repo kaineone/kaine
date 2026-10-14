@@ -65,10 +65,10 @@ The dashboard SHALL provide a login page at `/login` and a `POST /auth/login` en
 - **THEN** the dashboard responds 200
 
 ### Requirement: Operator token is read only from the environment or the secrets file
-The dashboard SHALL read the operator token from `KAINE_NEXUS_TOKEN` or from `[dashboard].operator_token` in `config/secrets.toml` (the environment wins), and SHALL refuse to start when a non-empty `operator_token` appears in the tracked `config/kaine.toml`. Token comparison SHALL use a constant-time comparison that does not reveal the token length. The dashboard SHALL refuse to start with a configured token shorter than 32 characters, SHALL strip surrounding whitespace from the environment token, and SHALL refuse to start on a malformed operator overlay or secrets file rather than silently ignoring it.
+The dashboard SHALL read the operator token from `KAINE_DASHBOARD_TOKEN` or from `[dashboard].operator_token` in `config/secrets.toml` (the environment wins), and SHALL refuse to start when a non-empty `operator_token` appears in the tracked `config/kaine.toml`. Token comparison SHALL use a constant-time comparison that does not reveal the token length. The dashboard SHALL refuse to start with a configured token shorter than 32 characters, SHALL strip surrounding whitespace from the environment token, and SHALL refuse to start on a malformed operator overlay or secrets file rather than silently ignoring it.
 
 #### Scenario: Token in secrets.toml
-- **WHEN** `config/secrets.toml` sets `[dashboard].operator_token` and `KAINE_NEXUS_TOKEN` is unset
+- **WHEN** `config/secrets.toml` sets `[dashboard].operator_token` and `KAINE_DASHBOARD_TOKEN` is unset
 - **THEN** the dashboard uses that token
 
 #### Scenario: Token committed to the tracked config

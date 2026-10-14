@@ -123,7 +123,7 @@ async def light_consolidation(
 
     # --- Consolidation (short-term to episodic; nothing is dropped) ---
     if episodic_memory is None:
-        metadata["consolidation_skipped"] = "no Mnemos available"
+        metadata["consolidation_skipped"] = "no Episodic memory available"
         return PhaseResult(
             phase="light_consolidation",
             success=True,
@@ -191,7 +191,7 @@ async def deep_consolidation(
     metadata: dict[str, Any] = {}
 
     if episodic_memory is None:
-        metadata["skipped"] = "no Mnemos available"
+        metadata["skipped"] = "no Episodic memory available"
         return PhaseResult(
             phase="deep_consolidation",
             success=True,
@@ -381,7 +381,7 @@ async def associative_replay(
     by_period: dict[str, list[Any]] = {}
     if episodic_memory is None or not hasattr(episodic_memory, "select_cross_period_traces"):
         metadata["cross_period_skipped"] = (
-            "no Mnemos cross-period surface available"
+            "no Episodic memory cross-period surface available"
         )
     else:
         try:
@@ -408,7 +408,7 @@ async def associative_replay(
     scenarios_consumed = 0
     reinjected = 0
     if world_model is None:
-        metadata["phantasia_cue"] = "no-op (Phantasia disabled/absent)"
+        metadata["phantasia_cue"] = "no-op (World model disabled/absent)"
     else:
         # Cue once per cross-period seed; if no seeds were selected, still
         # issue a single unseeded cue so an enabled world model module can extend the
@@ -418,8 +418,8 @@ async def associative_replay(
             try:
                 scenarios = await world_model.generate_scenario(seed_memory_id=seed)
             except Exception as exc:
-                log.exception("associative_replay: Phantasia cue failed")
-                errors.append(f"phantasia_cue: {type(exc).__name__}: {exc}")
+                log.exception("associative_replay: World model cue failed")
+                errors.append(f"world_model_cue: {type(exc).__name__}: {exc}")
                 continue
             for scenario in scenarios or []:
                 scenarios_consumed += 1
@@ -469,7 +469,7 @@ async def affective_reset(
             phase="affective_reset",
             success=True,
             elapsed_ms=_now_ms() - start,
-            metadata={"skipped": "no Thymos available"},
+            metadata={"skipped": "no Affect available"},
         )
     try:
         await affect.affective_reset()
@@ -516,7 +516,7 @@ async def consolidate_memory(episodic_memory: Optional[_SupportsEpisodicMemory])
             phase="memory_consolidation",
             success=True,
             elapsed_ms=_now_ms() - start,
-            metadata={"skipped": "no Mnemos available"},
+            metadata={"skipped": "no Episodic memory available"},
         )
     try:
         moved = await episodic_memory.consolidate_now()
@@ -554,7 +554,7 @@ async def recalibrate_time(sequence_resetters: list[Any]) -> PhaseResult:
             phase="temporal_recalibration",
             success=True,
             elapsed_ms=_now_ms() - start,
-            metadata={"skipped": "no Chronos resetters provided"},
+            metadata={"skipped": "no Sequence resetters provided"},
         )
     reset = 0
     errors: list[str] = []

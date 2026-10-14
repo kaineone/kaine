@@ -158,7 +158,7 @@ async def test_shutdown_waits_for_a_held_reset(bus, tmp_path):
     sleep._sleep_pending = True
     sleep._sleep_task = asyncio.create_task(
         sleep._interval_triggered_enter_sleep(),
-        name="hypnos-interval-sleep",
+        name="sleep-interval-sleep",
     )
 
     await asyncio.wait_for(entered.wait(), 5)
@@ -190,7 +190,7 @@ async def test_shutdown_wait_is_bounded(bus, tmp_path, monkeypatch, caplog):
     sleep._sleep_pending = True
     sleep._sleep_task = asyncio.create_task(
         sleep._interval_triggered_enter_sleep(),
-        name="hypnos-interval-sleep",
+        name="sleep-interval-sleep",
     )
 
     await asyncio.wait_for(entered.wait(), 5)

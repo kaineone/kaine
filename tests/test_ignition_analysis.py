@@ -576,7 +576,7 @@ def test_report_contains_no_payload_and_includes_limits(tmp_path: Path):
     assert "fixed order" in limits_text
     assert "mixes familiarity with module history" in limits_text
     assert "no rewatch-only line" in limits_text
-    assert "Praxis, Perception and Mundus" in limits_text
+    assert "Effectors, Perceptual locus and Embodiment" in limits_text
 
     md_path = study_dir / "analysis" / "report.md"
     md_text = md_path.read_text()

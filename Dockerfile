@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 #
 # One image, many hosts. A single multi-stage build produces the KAINE runtime
-# image for both `kaine-cycle` (the cognitive runtime) and `kaine-nexus` (the
+# image for both `kaine-cycle` (the cognitive runtime) and `kaine-dashboard` (the
 # web UI) — same image, different CMD. The accelerator-correct PyTorch wheel is
 # selected at BUILD time from a FLAVOR build-arg that reuses kaine.wheel_index's
 # single source of truth (its `--image-index <flavor>` table, run standalone

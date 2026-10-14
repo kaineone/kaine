@@ -121,8 +121,8 @@ async def test_escalation_after_max_attempts(bus, tmp_path):
     assert rebuild_calls["n"] == 5
 
     # A pre-restart snapshot AND an escalation snapshot were taken.
-    assert any(lbl.startswith("spot-pre-restart:") for lbl in snapshots)
-    assert any(lbl.startswith("spot-escalation:") for lbl in snapshots)
+    assert any(lbl.startswith("supervisor-pre-restart:") for lbl in snapshots)
+    assert any(lbl.startswith("supervisor-escalation:") for lbl in snapshots)
 
     # Every module was shut down at escalation.
     assert mod.shutdown_calls >= 1
@@ -164,7 +164,7 @@ async def test_run_loop_halts_on_internal_error(bus, tmp_path):
     )
 
     async def _boom(stop):
-        raise RuntimeError("internal spot error")
+        raise RuntimeError("internal supervisor error")
 
     supervisor._poll_once = _boom  # type: ignore[assignment]
     stop = asyncio.Event()

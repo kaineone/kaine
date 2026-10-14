@@ -76,7 +76,7 @@ class StimulusSourcePresencePublisher:
                 try:
                     await self._bus.publish(event)
                 except Exception:
-                    log.warning("womb presence publish failed", exc_info=True)
+                    log.warning("stimulus source presence publish failed", exc_info=True)
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=self._period_s)
             except asyncio.TimeoutError:

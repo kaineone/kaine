@@ -223,7 +223,7 @@ def write_desired_locus(
     target = resolve(path or DESIRED_PATH)
     cur = read_desired(path)
     if cur.locus_locked and cur.locked_by == "gestation" and locked_by != "gestation":
-        log.debug("locus held by gestation; ignoring non-gestation write")
+        log.debug("locus held by development; ignoring non-development write")
         return cur
     updated = replace(
         cur,
@@ -322,7 +322,7 @@ def evaluate_locus_switch(
         return False, "already in that locus"
     if locked:
         if _coerce_locked_by(locked_by) == "gestation":
-            return False, "locus locked by gestation gate"
+            return False, "locus locked by development gate"
         return False, "locus locked by operator"
     if not allow_self_switch:
         return False, "self-switch disabled by policy"

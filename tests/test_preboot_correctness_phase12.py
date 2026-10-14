@@ -215,7 +215,7 @@ def test_c2_welfare_pause_survives_supervisor_recovery(tmp_path: Path):
 
     # The supervisor recovers: it pops only its own entry.
     state = pop_freeze(path=path, source="supervisor")
-    assert state.frozen, "welfare freeze must survive a Spot recovery"
+    assert state.frozen, "welfare freeze must survive a Supervisor recovery"
     assert [e["source"] for e in state.stack] == ["operator", " welfare".strip()]
     assert state.source == "welfare"
     assert state.reason == "distress"

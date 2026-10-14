@@ -38,11 +38,13 @@ memory-edge = [
 speech-edge = [
     "sherpa-onnx>=1.13.8,<2",
 ]
-nexus = [
+dashboard = [
     "fastapi>=0.143.0,<1",
     "uvicorn[standard]>=0.54.0,<1",
     "jinja2>=3.1.6,<4",
 ]
+# The dashboard extra's old name, kept as an alias until the alias release.
+nexus = ["kaine[dashboard]"]
 nvidia = [
     "pynvml>=13.0.1,<14",
 ]
@@ -54,7 +56,7 @@ vision = [
     "Pillow>=12.3.0,<13",
 ]
 full = [
-    "kaine[core,memory,memory-edge,nexus,nvidia,vision,audio,reasoning,worldmodel,oscillator,internvideo]",
+    "kaine[core,memory,memory-edge,dashboard,nvidia,vision,audio,reasoning,worldmodel,oscillator,internvideo]",
 ]
 test = [
     "pytest>=8",
@@ -93,7 +95,7 @@ audio = [
 ]
 # Temporally-native InternVideo-Next clip encoder for the vision module
 # (topos-temporal-video-encoder). Required only when
-# [topos].encoder_backend = "internvideo_next" (the shipped default) AND the
+# [vision].encoder_backend = "internvideo_next" (the shipped default) AND the
 # encoder is actually loaded — the vendored modeling code (external/
 # internvideo_next, path a — see its UPSTREAM) imports these at forward time.
 # Lazy-imported: the build/test suite stays green without them (vision tests use
@@ -122,7 +124,7 @@ internvideo-flash = [
 # valid; this one name provisions both sense surfaces for a research install.
 perception = ["kaine[audio]", "kaine[vision]"]
 # Active-inference reasoning engine for the planning module (pymdp 1.0, JAX).
-# Required only when [modules].nous = true. Lazy-imported by the engine; the
+# Required only when [modules].planning = true. Lazy-imported by the engine; the
 # build/test suite stays green without it (module tests use a FakeEngine). The
 # REAL package is `inferactively-pymdp` (import name `pymdp`); the bare `pymdp`
 # PyPI name is an unrelated stub. JAX is pinned CPU-only — KAINE runs no cloud
@@ -132,7 +134,7 @@ reasoning = [
     "jax[cpu]>=0.10.2",
 ]
 # Voice-alignment DPO training stack (the sleep module's sleep-cycle phase).
-# Required only when [hypnos.voice_alignment].enabled = true AND
+# Required only when [sleep.voice_alignment].enabled = true AND
 # KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1. Lazy-imported by the
 # trainer; sleep cycle still completes cleanly if missing.
 # Pulls ~3-4 GB of weights and CUDA libs.
@@ -143,7 +145,7 @@ training = [
     "datasets>=2.20,<5",
 ]
 # DreamerV3 RSSM world model for the world model module (paper §3.3.2).
-# Required only when [phantasia].backend = "dreamerv3". Lazy-imported by the
+# Required only when [world_model].backend = "dreamerv3". Lazy-imported by the
 # world-model adapter; the build/test suite stays green without it (module
 # tests use FakeWorldModel). JAX is pinned CPU-only — KAINE runs no cloud or
 # CUDA at runtime; jax[cpu] logs a one-line GPU-fallback notice (expected).
@@ -368,7 +370,7 @@ forbidden_modules = ["kaine_cl1"]
 # internals (the operator UI). Keeping these decoupled means evaluation can run
 # headless and the dashboard stays a pure presentation seam.
 [[tool.importlinter.contracts]]
-name = "Evaluation must not import Nexus internals"
+name = "Evaluation must not import Dashboard internals"
 type = "forbidden"
 source_modules = ["kaine.evaluation"]
 forbidden_modules = ["kaine.dashboard"]

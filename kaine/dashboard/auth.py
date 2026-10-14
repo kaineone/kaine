@@ -5,13 +5,15 @@
 
 A single bearer-token scheme protects every state-changing endpoint and every
 privileged read surface. The token is configured in ``DashboardConfig.operator_token``
-(populated from ``KAINE_NEXUS_TOKEN`` or ``config/secrets.toml``) and is never
+(populated from ``KAINE_DASHBOARD_TOKEN`` or ``config/secrets.toml``) and is never
 logged.
 
 Browser clients that cannot send custom headers authenticate via a short-lived
 session cookie established through ``/login``. Because cookies are shared across
 all ports of a host, state-changing requests additionally require a per-session
-key delivered once at login and sent in ``X-Nexus-Session-Key``.
+key delivered once at login and sent in ``X-Dashboard-Session-Key``. The header's
+old name is still accepted until the alias release, with one deprecation line per
+process.
 """
 
 from __future__ import annotations
@@ -30,13 +32,46 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from kaine import legacy_aliases, legacy_names
 from kaine.dashboard.config import DashboardConfig
 
 log = logging.getLogger(__name__)
 
 _AUTH_HEADER_PREFIX = "Bearer "
-SESSION_COOKIE = "kaine_nexus_session"
-SESSION_KEY_HEADER = "X-Nexus-Session-Key"
+SESSION_COOKIE = "kaine_dashboard_session"
+SESSION_KEY_HEADER = "X-Dashboard-Session-Key"
+LEGACY_SESSION_KEY_HEADERS = tuple(
+    f"X-{form.capitalize()}-Session-Key"
+    for form in legacy_aliases.name_forms("dashboard")
+    if form != "dashboard"
+)
+_LOGGED_LEGACY_HEADERS: set[str] = set()
+
+
+def _presented_session_key(request: Request) -> Optional[str]:
+    """Return the session-key header value, accepting deprecated aliases.
+
+    The new header is preferred. Legacy headers are read once per process
+    with a single deprecation warning line.
+    """
+    presented = request.headers.get(SESSION_KEY_HEADER)
+    if presented is not None:
+        return presented
+    for legacy_header in LEGACY_SESSION_KEY_HEADERS:
+        legacy_value = request.headers.get(legacy_header)
+        if legacy_value is not None:
+            if legacy_header not in _LOGGED_LEGACY_HEADERS:
+                _LOGGED_LEGACY_HEADERS.add(legacy_header)
+                log.warning(
+                    "dashboard auth: the %s header is deprecated, use %s; it is read until %s",
+                    legacy_header,
+                    SESSION_KEY_HEADER,
+                    legacy_names.ALIAS_LAST_RELEASE,
+                )
+            return legacy_value
+    return None
+
+
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 _MAX_RATE_LIMIT_KEYS = 1024
 _MAX_LOGIN_BODY_BYTES = 4096
@@ -227,13 +262,13 @@ def require_operator_token(request: Request) -> None:
 
     A valid Bearer token authenticates any HTTP method. Otherwise a valid
     session cookie is sufficient for safe (read) methods; unsafe methods also
-    require the matching ``X-Nexus-Session-Key`` header.
+    require the matching ``X-Dashboard-Session-Key`` header.
     """
     config: Optional[DashboardConfig] = getattr(getattr(request, "app", None), "state", None)
     if config is not None:
         config = getattr(config, "config", None)
     if not isinstance(config, DashboardConfig):
-        log.warning("nexus auth: missing NexusConfig in app.state")
+        log.warning("dashboard auth: missing DashboardConfig in app.state")
         raise DashboardAuthError()
 
     if config.access == "open":
@@ -242,7 +277,7 @@ def require_operator_token(request: Request) -> None:
     expected = config.operator_token
     if not expected:
         # No token configured: every privileged request is rejected.
-        log.warning("nexus auth: request rejected because operator_token is not configured")
+        log.warning("dashboard auth: request rejected because operator_token is not configured")
         raise DashboardAuthError()
 
     auth = request.headers.get("Authorization", "")
@@ -250,7 +285,7 @@ def require_operator_token(request: Request) -> None:
         presented = auth[len(_AUTH_HEADER_PREFIX) :]
         if _tokens_match(presented, expected):
             return
-        log.warning("nexus auth: invalid operator token presented")
+        log.warning("dashboard auth: invalid operator token presented")
 
     sessions = getattr(request.app.state, "sessions", None)
     if sessions is not None:
@@ -258,7 +293,7 @@ def require_operator_token(request: Request) -> None:
         if sessions.validate(session_id):
             if request.method in _SAFE_METHODS:
                 return
-            presented_key = request.headers.get(SESSION_KEY_HEADER)
+            presented_key = _presented_session_key(request)
             if sessions.key_matches(session_id, presented_key):
                 return
 
@@ -320,14 +355,15 @@ def build_auth_router(config: DashboardConfig) -> APIRouter:
         html = (
             "<!DOCTYPE html>"
             "<html>"
-            "<head><title>Nexus Login</title></head>"
+            "<head><title>Dashboard Login</title></head>"
             "<body>"
-            f'<form id="nexus-login-form" method="post" action="/auth/login">'
-            "<p>Enter the operator token from KAINE_NEXUS_TOKEN or config/secrets.toml.</p>"
-            f'<input id="nexus-login-token" type="password" name="token" autocomplete="current-password" />'
+            f'<form id="dashboard-login-form" method="post" action="/auth/login">'
+            "<p>Enter the operator token from KAINE_DASHBOARD_TOKEN or config/secrets.toml.</p>"
+            f'<input id="dashboard-login-token" type="password" name="token" autocomplete="current-password" />'
             '<button type="submit">Log in</button>'
             "</form>"
-            f'<p id="nexus-login-error">{message}</p>'
+            f'<p id="dashboard-login-error">{message}</p>'
+            '<script src="/static/dashboard_legacy_storage.js"></script>'
             '<script src="/static/dashboard_auth.js"></script>'
             "</body>"
             "</html>"
@@ -474,7 +510,7 @@ def build_auth_router(config: DashboardConfig) -> APIRouter:
     async def logout(request: Request) -> RedirectResponse:
         sessions: SessionStore = request.app.state.sessions
         session_id = request.cookies.get(SESSION_COOKIE)
-        presented_key = request.headers.get(SESSION_KEY_HEADER)
+        presented_key = _presented_session_key(request)
         # Only revoke if the cookie and the matching one-time key are both
         # presented. A stolen cookie alone must not be able to log out.
         if sessions.key_matches(session_id, presented_key):

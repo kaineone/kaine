@@ -99,7 +99,7 @@ HEALTH_BLOCK_KEYS: tuple[str, ...] = (
     "model_server",
     "voice_alignment_window",
     "gpu_preflight",
-    "mnemos_store",
+    "episodic_memory_store",
     "backends",
 )
 
@@ -122,8 +122,8 @@ async def push_snapshots_periodically(
     """Background task: server-push a combined metrics+health snapshot over
     the single diagnostics SSE stream every ``interval_s`` seconds.
 
-    This is what retires the client-side ``NexusVitals``/``NexusMetrics``/
-    ``NexusSpot`` polling loops (task 2.2, completing the single-stream
+    This is what retires the client-side ``DashboardVitals``/``DashboardMetrics``/
+    ``DashboardSupervisor`` polling loops (task 2.2, completing the single-stream
     refactor of task 1.1): the browser now RECEIVES a ``dashboard.snapshot``
     event instead of fetching ``/diagnostics/metrics.json`` +
     ``/diagnostics/health.json`` on its own timer. The push cadence defaults
@@ -315,7 +315,7 @@ def build_diagnostics_router(
                 {
                     "forks": [],
                     "available": False,
-                    "reason": f"fork operations are disabled: {reason} (see the Nexus log)",
+                    "reason": f"fork operations are disabled: {reason} (see the Dashboard log)",
                 }
             )
         out = []

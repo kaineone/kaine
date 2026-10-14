@@ -1,5 +1,5 @@
 /* ==========================================================================
-   KAINE Nexus — retro-futurist operator console
+   KAINE dashboard — retro-futurist operator console
    Server-rendered Jinja2 + vanilla JS. No build step. No web-font download.
 
    A refined, modern retro-futurist console *evocation* —
@@ -418,7 +418,7 @@ h3 {
 }
 /* The CONSOLE is a single glanceable screen: it never scrolls (either axis).
    Boards fit the viewport — most collapsed to a header bar — and a long open
-   section CONTINUES into the next column (NexusFlow markers) rather than
+   section CONTINUES into the next column (DashboardFlow markers) rather than
    scrolling or running off-screen. Scoped to --console so the standalone
    diagnostics/evaluation pages keep their normal vertical scroll. */
 .page--console {
@@ -436,7 +436,7 @@ h3 {
 /* By default a section stays whole within a column (clean for the scrolling
    detail pages). On the CONSOLE, sections instead FLOW newspaper-style: a section
    too long for the rest of its column CONTINUES into the next column (a "▸
-   continued" marker is injected by NexusFlow) rather than running off-screen. */
+   continued" marker is injected by DashboardFlow) rather than running off-screen. */
 .board {
   break-inside: avoid;
   margin: 0 0 var(--row-gap, 1.25rem);
@@ -446,7 +446,7 @@ h3 {
 .page--console #board-presence { break-inside: avoid; }  /* canvas is one unit */
 
 /* A closed section leaves the screen entirely (summoned back from its rail
-   button by NexusSections, which animates the slide-in). */
+   button by DashboardSections, which animates the slide-in). */
 .board--closed { display: none; }
 /* Cosmetic enter/leave — slide from the rail side. The actual show/hide is a JS
    class toggle, so these animations can never strand a panel hidden. */
@@ -570,7 +570,7 @@ details.board { margin-bottom: 0.2rem; }
    column boundary, between cards, so a card is never sliced in half. */
 .board__cards > * { break-inside: avoid; }
 
-/* A situational section auto-expanded by NexusReveal flashes briefly so the eye
+/* A situational section auto-expanded by DashboardReveal flashes briefly so the eye
    is drawn to it (welfare need, divergence). Motion-gated — reduced-motion users
    get a steady accent tint instead of a pulse. */
 .board--flash > .board__title { animation: board-flash 0.55s ease-in-out 0s 4; }
@@ -621,7 +621,7 @@ details.board { margin-bottom: 0.2rem; }
 }
 .report-claim strong { color: var(--ink); }
 
-/* Continuation marker injected by NexusFlow at the top of a column where a
+/* Continuation marker injected by DashboardFlow at the top of a column where a
    section spilled over from the previous column. Reads as a faint tab so
    the continuation is clearly part of the same section. Stays glued to the card
    that follows it (break-after: avoid) so it is never stranded at a column end. */
@@ -757,7 +757,7 @@ details.board { margin-bottom: 0.2rem; }
 /* ---- Perception picture-in-picture + audio mute (dev override) ---------- */
 /* A small live view of WHAT THE ENTITY SEES, laid over the visualizer's
    bottom-right, plus a mute control for what it HEARS. The video only appears
-   under KAINE_PERCEPTION_PREVIEW=1 (NexusPreview toggles [hidden]); nothing is
+   under KAINE_PERCEPTION_PREVIEW=1 (DashboardPreview toggles [hidden]); nothing is
    recorded. */
 .perception-pip {
   position: absolute;
@@ -1111,7 +1111,7 @@ dl.kv dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); ov
 /* ---- Diagnostics-stream connection indicator ---------------------------- */
 /* Small always-visible badge (task 1.4): live / reconnecting / paused, so a
    dropped Tailscale link is OBVIOUS rather than the dashboard silently
-   freezing on stale numbers. Starts [hidden] in the markup; NexusConn.attach()
+   freezing on stale numbers. Starts [hidden] in the markup; DashboardConn.attach()
    reveals it only on pages that actually open the diagnostics stream. */
 .conn-status {
   position: fixed;
@@ -1148,14 +1148,14 @@ dl.kv dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); ov
   }
 }
 
-/* ---- Spot alert overlay ------------------------------------------------- */
+/* ---- Supervisor alert overlay ------------------------------------------------- */
 
-@keyframes spot-pulse {
+@keyframes supervisor-pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.55; }
 }
 
-.spot-alert {
+.supervisor-alert {
   position: fixed;
   inset: 0;
   pointer-events: none;
@@ -1163,23 +1163,23 @@ dl.kv dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); ov
   z-index: 9999;
   transition: border-color 0.3s ease, border-width 0.2s ease;
 }
-.spot-alert[data-state="recovery"] { border-width: 6px; border-color: var(--degraded); }
-.spot-alert[data-state="critical"] { border-width: 6px; border-color: var(--down); }
+.supervisor-alert[data-state="recovery"] { border-width: 6px; border-color: var(--degraded); }
+.supervisor-alert[data-state="critical"] { border-width: 6px; border-color: var(--down); }
 
 @media (prefers-reduced-motion: no-preference) {
-  .spot-alert[data-state="recovery"],
-  .spot-alert[data-state="critical"] {
-    animation: spot-pulse 2s ease-in-out infinite;
+  .supervisor-alert[data-state="recovery"],
+  .supervisor-alert[data-state="critical"] {
+    animation: supervisor-pulse 2s ease-in-out infinite;
   }
 }
 
 /* ---- Global RED-ALERT frame -------------------------------------------- */
 /* The whole console goes red when a freeze is initiated or a serious problem
-   appears (down service, spot critical escalation, failed preservation,
+   appears (down service, supervisor critical escalation, failed preservation,
    overrunning cycle). JS toggles `.red-alert` on `.shell`; this draws an
    unmistakable glowing frame. A fixed pseudo-element is used (not a plain inset
    box-shadow on .shell) so the rail/body backgrounds can't paint over the glow.
-   Sits just under the spot overlay (z 9999) so both can show together. */
+   Sits just under the supervisor overlay (z 9999) so both can show together. */
 .shell.red-alert::after {
   content: "";
   position: fixed;
@@ -1201,9 +1201,9 @@ dl.kv dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); ov
   .shell.red-alert::after { animation: red-alert-pulse 2.4s ease-in-out infinite; }
 }
 
-/* ---- Spot banner -------------------------------------------------------- */
+/* ---- Supervisor banner -------------------------------------------------------- */
 
-.spot-banner {
+.supervisor-banner {
   display: none;
   padding: 0.65rem 1rem;
   text-align: center;
@@ -1214,27 +1214,27 @@ dl.kv dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); ov
   justify-content: center;
   flex-wrap: wrap;
 }
-.spot-banner[data-state="recovery"],
-.spot-banner[data-state="critical"] { display: flex; }
-.spot-banner--recovery {
+.supervisor-banner[data-state="recovery"],
+.supervisor-banner[data-state="critical"] { display: flex; }
+.supervisor-banner--recovery {
   background: var(--degraded-bg);
   color: var(--degraded);
   border-bottom: 2px solid var(--degraded);
 }
-.spot-banner--critical {
+.supervisor-banner--critical {
   background: var(--down-bg);
   color: var(--down);
   border-bottom: 2px solid var(--down);
 }
-.spot-banner__label {
+.supervisor-banner__label {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   opacity: 0.85;
 }
-.spot-banner__msg { font-weight: normal; }
-.spot-banner__detail {
+.supervisor-banner__msg { font-weight: normal; }
+.supervisor-banner__detail {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   opacity: 0.75;
@@ -1282,9 +1282,9 @@ dl.kv dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); ov
   cursor: not-allowed;
 }
 
-/* ---- Spot console log --------------------------------------------------- */
+/* ---- Supervisor console log --------------------------------------------------- */
 
-.spot-console-log {
+.supervisor-console-log {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   background: var(--bg);
@@ -1297,12 +1297,12 @@ dl.kv dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); ov
   min-height: 3rem;
   color: var(--ink);          /* near-white — readable on the dark inset */
 }
-.spot-log-line { display: block; white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; }
-.spot-log-line.log-info     { color: var(--ink); }
-.spot-log-line.log-warn     { color: var(--degraded); }
-.spot-log-line.log-error    { color: var(--down); }
-.spot-log-line.log-critical { color: var(--down); font-weight: bold; }
-.spot-log-placeholder { color: var(--fg-dim); font-style: italic; }
+.supervisor-log-line { display: block; white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; }
+.supervisor-log-line.log-info     { color: var(--ink); }
+.supervisor-log-line.log-warn     { color: var(--degraded); }
+.supervisor-log-line.log-error    { color: var(--down); }
+.supervisor-log-line.log-critical { color: var(--down); font-weight: bold; }
+.supervisor-log-placeholder { color: var(--fg-dim); font-style: italic; }
 
 /* ---- Run identity / supervision / admissibility ------------------------- */
 .chip.recording     { color: var(--up);       background: var(--up-bg);       border-color: #1d5436; }

@@ -40,27 +40,27 @@ def ensure_dashboard_token(
     """Ensure a dashboard operator sign-in token exists.
 
     Without a token, the dashboard rejects every sign-in with 503. The environment
-    variable ``KAINE_NEXUS_TOKEN`` takes precedence; otherwise the token is read
+    variable ``KAINE_DASHBOARD_TOKEN`` takes precedence; otherwise the token is read
     from or written to ``[dashboard] operator_token`` in the secrets file.
     """
     env = os.environ if env is None else env
     out("\n")
 
     try:
-        env_token = (legacy_aliases.getenv("KAINE_NEXUS_TOKEN", "", environ=env) or "").strip()
+        env_token = (legacy_aliases.getenv("KAINE_DASHBOARD_TOKEN", "", environ=env) or "").strip()
     except legacy_aliases.LegacyNameConflict as exc:
         out(f"Dashboard sign-in token: {exc}. Nothing written.\n")
         return "conflict"
     if env_token:
         if len(env_token) < _MIN_DASHBOARD_TOKEN_LEN:
             out(
-                "Dashboard sign-in token: KAINE_NEXUS_TOKEN is shorter than "
+                "Dashboard sign-in token: KAINE_DASHBOARD_TOKEN is shorter than "
                 f"{_MIN_DASHBOARD_TOKEN_LEN} characters, so the dashboard will refuse it. "
                 "Unset it or replace it with a longer one.\n"
             )
             return "too_short"
         out(
-            "Dashboard sign-in token: provided by KAINE_NEXUS_TOKEN; nothing written.\n"
+            "Dashboard sign-in token: provided by KAINE_DASHBOARD_TOKEN; nothing written.\n"
         )
         return "env"
 
@@ -90,6 +90,17 @@ def ensure_dashboard_token(
             "was NOT generated.\n"
         )
         return "error"
+
+    tables = _table_names(secrets_path)
+    if "dashboard" in tables:
+        for form in legacy_aliases.name_forms("dashboard"):
+            if form != "dashboard" and form in tables:
+                out(
+                    f"{secrets_path} has both [dashboard] and [{form}] tables; the dashboard "
+                    f"refuses such a file. Move operator_token into [dashboard], delete [{form}], "
+                    "then re-run setup. Nothing written.\n"
+                )
+                return "conflict"
 
     if existing_table is not None and isinstance(existing_value, str) and existing_value.strip():
         # Never overwrite an operator's token, but say so when the dashboard would

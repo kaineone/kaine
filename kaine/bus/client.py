@@ -313,7 +313,7 @@ class AsyncBus:
     ) -> str:
         if source != WORKSPACE_SOURCE:
             raise ReservedStreamError(
-                f"only the syneidesis module may publish to {WORKSPACE_STREAM}"
+                f"only the workspace module may publish to {WORKSPACE_STREAM}"
             )
         return await self._client.xadd(
             WORKSPACE_STREAM,

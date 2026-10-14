@@ -97,7 +97,7 @@ def test_load_research_event_log_config_data_root_resolves_export_root(tmp_path)
             enabled = true
 
             [research_event_log.dashboard_record]
-            log_dir = "nexus"
+            log_dir = "dashboard"
             """
         ).strip()
         + "\n"
@@ -106,7 +106,7 @@ def test_load_research_event_log_config_data_root_resolves_export_root(tmp_path)
     operator.write_text("")
 
     cfg = load_research_event_log_config(shipped, operator_path=operator)
-    assert Path(cfg.dashboard_record.log_dir) == root.resolve() / "nexus"
+    assert Path(cfg.dashboard_record.log_dir) == root.resolve() / "dashboard"
     expected_eval = (root / "data" / "evaluation").resolve()
     assert len(cfg.dashboard_record.export_roots) == 1
     assert Path(cfg.dashboard_record.export_roots[0]).resolve() == expected_eval

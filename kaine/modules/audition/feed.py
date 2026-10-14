@@ -378,7 +378,7 @@ class StimulusSourceProceduralAudioStream:
             return
         self._stopped.clear()
         self._thread = threading.Thread(
-            target=self._produce, name="womb-audio-producer", daemon=True
+            target=self._produce, name="stimulus-source-audio-producer", daemon=True
         )
         self._thread.start()
 
@@ -410,7 +410,7 @@ class StimulusSourceProceduralAudioStream:
         k = None
         while not self._stopped.is_set():
             if self._clock.born():
-                log.info("womb audio: birth transition complete; the womb falls silent")
+                log.info("stimulus source audio: maturation transition complete; the stimulus source falls silent")
                 return
             now_k = int(self._clock.stimulus_source_seconds() / bs)
             k = self._advance(k, now_k)
@@ -421,7 +421,7 @@ class StimulusSourceProceduralAudioStream:
                 pcm = self.pcm_at(k, maturation_progress=self._clock.maturation_progress())
             except Exception:
                 log.error(
-                    "womb audio: synthesis failed at block %d; the womb audio stream stops",
+                    "stimulus source audio: synthesis failed at block %d; the stimulus source audio stream stops",
                     k,
                     exc_info=True,
                 )
@@ -431,7 +431,7 @@ class StimulusSourceProceduralAudioStream:
             try:
                 self._callback(pcm)
             except Exception:
-                log.debug("womb audio callback raised", exc_info=True)
+                log.debug("stimulus source audio callback raised", exc_info=True)
             else:
                 self._clock.mark_delivered("audio", k)
             k += 1

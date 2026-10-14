@@ -207,7 +207,7 @@ async def test_persistent_redis_failure_is_visible(caplog):
         for _ in range(5):
             await eng.consume_interoception_regulation("interoception.out")
     control_warns = [r for r in caplog.records if "control consumer read failed" in r.getMessage()]
-    interoception_warns = [r for r in caplog.records if "soma consumer read failed" in r.getMessage()]
+    interoception_warns = [r for r in caplog.records if "interoception consumer read failed" in r.getMessage()]
     assert len(control_warns) == 1, "exactly one rate-limited WARNING per window"
     assert len(interoception_warns) == 1, "exactly one rate-limited WARNING per window"
 

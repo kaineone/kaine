@@ -34,7 +34,7 @@ def test_security_md_exists() -> None:
 def test_security_md_mentions_self_model_self_model(security_text: str) -> None:
     """§4 must name the self-model file."""
     assert "self_model" in security_text, (
-        "SECURITY.md §4 does not mention the Eidolon self-model "
+        "SECURITY.md §4 does not mention the Self-model self-model "
         "(expected substring 'self_model')"
     )
 
@@ -50,8 +50,8 @@ def test_security_md_mentions_observer_jsonl(security_text: str) -> None:
 def test_security_md_mentions_world_model(security_text: str) -> None:
     """§4 must name the world-model checkpoints."""
     assert "world_model" in security_text, (
-        "SECURITY.md §4 does not mention the Phantasia checkpoints "
-        "(expected substring 'phantasia')"
+        "SECURITY.md §4 does not mention the World model checkpoints "
+        "(expected substring 'world model')"
     )
 
 

@@ -40,7 +40,7 @@ async def test_interoception_publishes_wellness_event():
             for ev in events
             if "wellness" in ev.payload or "metrics" in ev.payload
         ]
-        assert reports, "Soma should have emitted at least one wellness event"
+        assert reports, "Interoception should have emitted at least one wellness event"
         assert reports[0].source == "interoception"
         assert 0.0 <= reports[0].salience <= 1.0
 

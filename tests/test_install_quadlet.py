@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+from kaine import legacy_aliases
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _QUADLET_SRC = _REPO_ROOT / "quadlet"
 _SCRIPT_SRC = _REPO_ROOT / "scripts" / "install-quadlet.sh"
@@ -83,12 +85,12 @@ def test_install_renders_units_for_checkout(tmp_path: Path):
 
     installed = {p.name for p in dest.iterdir()}
     assert "kaine-cycle.container" in installed
-    assert "kaine-nexus.container" in installed
+    assert "kaine-dashboard.container" in installed
     assert "kaine-redis.container" in installed
     assert "kaine-qdrant.container" in installed
 
     cycle = (dest / "kaine-cycle.container").read_text()
-    dashboard = (dest / "kaine-nexus.container").read_text()
+    dashboard = (dest / "kaine-dashboard.container").read_text()
     assert f"Volume={checkout}/config/kaine.operator.toml" in cycle
     assert f"Volume={checkout}/config/kaine.operator.toml" in dashboard
     for p in dest.iterdir():
@@ -120,7 +122,7 @@ def test_secret_using_units_load_env_file(tmp_path: Path):
     for name in (
         "kaine-cycle.container",
         "kaine-model-server.container",
-        "kaine-nexus.container",
+        "kaine-dashboard.container",
         "kaine-redis.container",
         "kaine-qdrant.container",
     ):
@@ -395,3 +397,356 @@ def test_explicit_generator_not_executable_aborts(tmp_path: Path):
     assert result.returncode != 0
     assert f"generator not executable: {missing_gen}" in result.stderr
     assert _empty_dir(dest)
+
+
+OLD = next(f for f in legacy_aliases.name_forms("dashboard") if f != "dashboard")
+OLD_UNIT = f"kaine-{OLD}.container"
+OLD_SERVICE = f"kaine-{OLD}.service"
+
+
+def _old_unit_content(checkout: Path) -> str:
+    return (
+        "# SPDX-License-Identifier: LicenseRef-CAL-0.4\n[Container]\n"
+        f"Volume={checkout.resolve()}/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z\n"
+    )
+
+
+def _write_fake_systemctl(tmp_path: Path) -> Path:
+    script = tmp_path / "systemctl"
+    script.write_text(
+        "#!/usr/bin/env bash\n"
+        'state_file="${FAKE_SYSTEMCTL_STATE_FILE:-/dev/null}"\n'
+        'code_file="${FAKE_SYSTEMCTL_CODE_FILE:-/dev/null}"\n'
+        'state="inactive"\n'
+        'code=0\n'
+        'if [[ -f "$state_file" ]]; then\n'
+        '  state="$(cat "$state_file")"\n'
+        "fi\n"
+        'if [[ -f "$code_file" ]]; then\n'
+        '  code="$(cat "$code_file")"\n'
+        "fi\n"
+        'if [[ "$1" == "--user" && "$2" == "show" && "$3" == "-p" && "$4" == "ActiveState" && "$5" == "--value" ]]; then\n'
+        '  printf "%s\\n" "$state"\n'
+        '  exit "$code"\n'
+        "fi\n"
+        "exit 1\n"
+    )
+    script.chmod(0o755)
+    return script
+
+
+def _make_dest_with_old_unit(dest: Path, content: str) -> Path:
+    dest.mkdir(parents=True, exist_ok=True)
+    old_path = dest / OLD_UNIT
+    old_path.write_text(content)
+    return old_path
+
+
+def test_install_removes_old_renamed_unit_when_inactive(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir()
+    checkout = tmp_path / "checkout"
+    script = _make_checkout(checkout)
+    dest = tmp_path / "dest"
+    old_path = _make_dest_with_old_unit(dest, _old_unit_content(checkout))
+    state_file = tmp_path / "systemctl.state"
+    state_file.write_text("inactive")
+    code_file = tmp_path / "systemctl.code"
+    code_file.write_text("0")
+    fake_systemctl = _write_fake_systemctl(tmp_path)
+
+    result = _run(
+        script,
+        "--root",
+        str(checkout),
+        "--dest",
+        str(dest),
+        "--generator",
+        "none",
+        cwd=checkout,
+        env={
+            "KAINE_SYSTEMCTL": str(fake_systemctl),
+            "FAKE_SYSTEMCTL_STATE_FILE": str(state_file),
+            "FAKE_SYSTEMCTL_CODE_FILE": str(code_file),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not old_path.exists()
+    assert (dest / "kaine-dashboard.container").exists()
+    assert f"removed old unit {OLD_UNIT} (renamed to kaine-dashboard.container)" in result.stdout
+
+
+def test_install_refuses_when_old_renamed_unit_still_active(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir()
+    checkout = tmp_path / "checkout"
+    script = _make_checkout(checkout)
+    dest = tmp_path / "dest"
+    old_path = _make_dest_with_old_unit(dest, _old_unit_content(checkout))
+    state_file = tmp_path / "systemctl.state"
+    state_file.write_text("active")
+    code_file = tmp_path / "systemctl.code"
+    code_file.write_text("0")
+    fake_systemctl = _write_fake_systemctl(tmp_path)
+
+    result = _run(
+        script,
+        "--root",
+        str(checkout),
+        "--dest",
+        str(dest),
+        "--generator",
+        "none",
+        cwd=checkout,
+        env={
+            "KAINE_SYSTEMCTL": str(fake_systemctl),
+            "FAKE_SYSTEMCTL_STATE_FILE": str(state_file),
+            "FAKE_SYSTEMCTL_CODE_FILE": str(code_file),
+        },
+    )
+
+    assert result.returncode == 1
+    assert old_path.exists()
+    assert "systemctl --user stop" in result.stderr
+    assert not (dest / "kaine-dashboard.container").exists()
+
+
+def test_install_leaves_unmanaged_old_unit_in_place(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir()
+    checkout = tmp_path / "checkout"
+    script = _make_checkout(checkout)
+    dest = tmp_path / "dest"
+    old_path = _make_dest_with_old_unit(dest, "[Container]\n")
+    state_file = tmp_path / "systemctl.state"
+    state_file.write_text("inactive")
+    code_file = tmp_path / "systemctl.code"
+    code_file.write_text("0")
+    fake_systemctl = _write_fake_systemctl(tmp_path)
+
+    result = _run(
+        script,
+        "--root",
+        str(checkout),
+        "--dest",
+        str(dest),
+        "--generator",
+        "none",
+        cwd=checkout,
+        env={
+            "KAINE_SYSTEMCTL": str(fake_systemctl),
+            "FAKE_SYSTEMCTL_STATE_FILE": str(state_file),
+            "FAKE_SYSTEMCTL_CODE_FILE": str(code_file),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert old_path.exists()
+    assert "left" in result.stderr
+    assert "it was not installed by this script" in result.stderr
+    assert (dest / "kaine-dashboard.container").exists()
+
+
+def test_install_dry_run_reports_old_renamed_unit_removal(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir()
+    checkout = tmp_path / "checkout"
+    script = _make_checkout(checkout)
+    dest = tmp_path / "dest"
+    old_path = _make_dest_with_old_unit(dest, _old_unit_content(checkout))
+    state_file = tmp_path / "systemctl.state"
+    state_file.write_text("inactive")
+    code_file = tmp_path / "systemctl.code"
+    code_file.write_text("0")
+    fake_systemctl = _write_fake_systemctl(tmp_path)
+
+    result = _run(
+        script,
+        "--root",
+        str(checkout),
+        "--dest",
+        str(dest),
+        "--generator",
+        "none",
+        "--dry-run",
+        cwd=checkout,
+        env={
+            "KAINE_SYSTEMCTL": str(fake_systemctl),
+            "FAKE_SYSTEMCTL_STATE_FILE": str(state_file),
+            "FAKE_SYSTEMCTL_CODE_FILE": str(code_file),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert old_path.exists()
+    assert f"would remove old unit {OLD_UNIT} (renamed to kaine-dashboard.container)" in result.stdout
+
+
+def test_install_leaves_an_old_unit_rendered_from_another_checkout(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir()
+    checkout = tmp_path / "checkout"
+    script = _make_checkout(checkout)
+    dest = tmp_path / "dest"
+    old_path = _make_dest_with_old_unit(
+        dest,
+        "# SPDX-License-Identifier: LicenseRef-CAL-0.4\n[Container]\n"
+        "Volume=/elsewhere/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z\n",
+    )
+    state_file = tmp_path / "systemctl.state"
+    state_file.write_text("inactive")
+    code_file = tmp_path / "systemctl.code"
+    code_file.write_text("0")
+    fake_systemctl = _write_fake_systemctl(tmp_path)
+
+    result = _run(
+        script,
+        "--root",
+        str(checkout),
+        "--dest",
+        str(dest),
+        "--generator",
+        "none",
+        cwd=checkout,
+        env={
+            "KAINE_SYSTEMCTL": str(fake_systemctl),
+            "FAKE_SYSTEMCTL_STATE_FILE": str(state_file),
+            "FAKE_SYSTEMCTL_CODE_FILE": str(code_file),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert old_path.exists()
+
+
+def test_install_refuses_when_systemctl_state_cannot_be_determined(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir()
+    checkout = tmp_path / "checkout"
+    script = _make_checkout(checkout)
+    dest = tmp_path / "dest"
+    old_path = _make_dest_with_old_unit(dest, _old_unit_content(checkout))
+    state_file = tmp_path / "systemctl.state"
+    state_file.write_text("")
+    code_file = tmp_path / "systemctl.code"
+    code_file.write_text("1")
+    fake_systemctl = _write_fake_systemctl(tmp_path)
+
+    result = _run(
+        script,
+        "--root",
+        str(checkout),
+        "--dest",
+        str(dest),
+        "--generator",
+        "none",
+        cwd=checkout,
+        env={
+            "KAINE_SYSTEMCTL": str(fake_systemctl),
+            "FAKE_SYSTEMCTL_STATE_FILE": str(state_file),
+            "FAKE_SYSTEMCTL_CODE_FILE": str(code_file),
+        },
+    )
+
+    assert result.returncode == 1
+    assert old_path.exists()
+    assert not (dest / "kaine-dashboard.container").exists()
+    assert "systemctl --user stop" in result.stderr
+
+
+def test_install_refuses_when_old_service_is_activating(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir()
+    checkout = tmp_path / "checkout"
+    script = _make_checkout(checkout)
+    dest = tmp_path / "dest"
+    old_path = _make_dest_with_old_unit(dest, _old_unit_content(checkout))
+    state_file = tmp_path / "systemctl.state"
+    state_file.write_text("activating")
+    code_file = tmp_path / "systemctl.code"
+    code_file.write_text("0")
+    fake_systemctl = _write_fake_systemctl(tmp_path)
+
+    result = _run(
+        script,
+        "--root",
+        str(checkout),
+        "--dest",
+        str(dest),
+        "--generator",
+        "none",
+        cwd=checkout,
+        env={
+            "KAINE_SYSTEMCTL": str(fake_systemctl),
+            "FAKE_SYSTEMCTL_STATE_FILE": str(state_file),
+            "FAKE_SYSTEMCTL_CODE_FILE": str(code_file),
+        },
+    )
+
+    assert result.returncode == 1
+    assert old_path.exists()
+    assert not (dest / "kaine-dashboard.container").exists()
+    assert "systemctl --user stop" in result.stderr
+
+
+def test_install_refuses_when_systemctl_binary_is_missing(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir()
+    checkout = tmp_path / "checkout"
+    script = _make_checkout(checkout)
+    dest = tmp_path / "dest"
+    old_path = _make_dest_with_old_unit(dest, _old_unit_content(checkout))
+    missing_systemctl = tmp_path / "does-not-exist" / "systemctl"
+
+    result = _run(
+        script,
+        "--root",
+        str(checkout),
+        "--dest",
+        str(dest),
+        "--generator",
+        "none",
+        cwd=checkout,
+        env={"KAINE_SYSTEMCTL": str(missing_systemctl)},
+    )
+
+    assert result.returncode == 1
+    assert old_path.exists()
+    assert not (dest / "kaine-dashboard.container").exists()
+    assert "systemctl --user stop" in result.stderr
+
+
+def test_install_removes_old_renamed_unit_when_state_is_failed(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir()
+    checkout = tmp_path / "checkout"
+    script = _make_checkout(checkout)
+    dest = tmp_path / "dest"
+    old_path = _make_dest_with_old_unit(dest, _old_unit_content(checkout))
+    state_file = tmp_path / "systemctl.state"
+    state_file.write_text("failed")
+    code_file = tmp_path / "systemctl.code"
+    code_file.write_text("0")
+    fake_systemctl = _write_fake_systemctl(tmp_path)
+
+    result = _run(
+        script,
+        "--root",
+        str(checkout),
+        "--dest",
+        str(dest),
+        "--generator",
+        "none",
+        cwd=checkout,
+        env={
+            "KAINE_SYSTEMCTL": str(fake_systemctl),
+            "FAKE_SYSTEMCTL_STATE_FILE": str(state_file),
+            "FAKE_SYSTEMCTL_CODE_FILE": str(code_file),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not old_path.exists()
+    assert (dest / "kaine-dashboard.container").exists()
+    assert f"removed old unit {OLD_UNIT} (renamed to kaine-dashboard.container)" in result.stdout

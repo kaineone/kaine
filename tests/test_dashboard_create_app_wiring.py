@@ -82,7 +82,7 @@ def test_create_app_forwards_fork_manager_reason():
 
     expected_reason = (
         "fork operations are disabled: the state-encryption posture could not be "
-        "installed (see the Nexus log)"
+        "installed (see the Dashboard log)"
     )
 
     with TestClient(app, base_url="http://test") as client:

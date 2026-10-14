@@ -746,7 +746,7 @@ class SqliteVecStorage:
             return db
 
         executor = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="mnemos-sqlite"
+            max_workers=1, thread_name_prefix="episodic-memory-sqlite"
         )
         loop = asyncio.get_running_loop()
         try:
@@ -1811,7 +1811,7 @@ class QdrantStorage:
         if isinstance(vectors, dict):
             raise StorageError(
                 f"qdrant collection {collection!r} uses named vectors; "
-                "Mnemos never creates named vectors"
+                "Episodic memory never creates named vectors"
             )
         try:
             return int(vectors.size)

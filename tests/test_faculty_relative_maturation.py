@@ -412,7 +412,7 @@ async def test_base_thesis_maturations_into_perceptual_world(
     runner.set_pause_sources(paused_seconds=lambda: 0.0, is_paused=lambda: False)
 
     async def _explode() -> tuple[bool, bool, bool]:
-        raise RuntimeError("_mundus_availability must not be called")
+        raise RuntimeError("_embodiment_availability must not be called")
 
     runner._embodiment_availability = AsyncMock(side_effect=_explode)
 
@@ -514,7 +514,7 @@ async def test_status_reports_not_applicable_for_base_thesis(
     runner.set_pause_sources(paused_seconds=lambda: 0.0, is_paused=lambda: False)
 
     async def _explode() -> tuple[bool, bool, bool]:
-        raise RuntimeError("_mundus_availability must not be called")
+        raise RuntimeError("_embodiment_availability must not be called")
 
     runner._embodiment_availability = AsyncMock(side_effect=_explode)
 

@@ -75,9 +75,9 @@ async def hold_until_stimulus_source_ready(
                 reason=f"{type(exc).__name__}: {exc}",
             )
         if result.live:
-            log.info("womb is ready for spawn (%s)", result.provider)
+            log.info("stimulus source is ready for spawn (%s)", result.provider)
             return True
-        log.warning("womb not ready: %s", result.reason)
+        log.warning("stimulus source not ready: %s", result.reason)
         try:
             await publish(
                 "stage.development.no_stimulus",
@@ -158,16 +158,16 @@ class StimulusSourceLossWatcher:
         """Freeze the gestating entity and publish/notify that the stimulus source is lost."""
         try:
             push_freeze(
-                reason="womb lost",
+                reason="stimulus source lost",
                 path=self._control_path,
                 source=DEVELOPMENT_FREEZE_SOURCE,
             )
         except Exception:
-            log.warning("push_freeze on womb loss failed", exc_info=True)
+            log.warning("push_freeze on stimulus source loss failed", exc_info=True)
         self._lost = True
         self._live_streak = 0
         log.critical(
-            "womb lost for %s seconds; freezing gestating entity",
+            "stimulus source lost for %s seconds; freezing developing entity",
             self._loss_after_seconds,
         )
         try:
@@ -186,7 +186,7 @@ class StimulusSourceLossWatcher:
             try:
                 await self._notify("womb_lost")
             except Exception:
-                log.warning("notify womb_lost failed", exc_info=True)
+                log.warning("notify stimulus_source_lost failed", exc_info=True)
 
     async def step(self) -> None:
         """Perform a single stimulus-source-liveness check and update freeze state."""
@@ -195,7 +195,7 @@ class StimulusSourceLossWatcher:
                 try:
                     pop_freeze(self._control_path, source=DEVELOPMENT_FREEZE_SOURCE)
                 except Exception:
-                    log.warning("pop_freeze on gestation end failed", exc_info=True)
+                    log.warning("pop_freeze on development end failed", exc_info=True)
                 self._lost = False
             return
 
@@ -216,7 +216,7 @@ class StimulusSourceLossWatcher:
             if result.live:
                 self._armed = True
                 self._grace_until = now + self._window_s + 2 * self._check_seconds
-                log.info("womb live; loss watch armed")
+                log.info("stimulus source live; loss watch armed")
                 return
 
             if now - self._started_at < self._arm_timeout_seconds:
@@ -260,17 +260,17 @@ class StimulusSourceLossWatcher:
             if not development_present and not result.live:
                 try:
                     push_freeze(
-                        reason="womb lost",
+                        reason="stimulus source lost",
                         path=self._control_path,
                         source=DEVELOPMENT_FREEZE_SOURCE,
                     )
                     log.warning(
-                        "womb still lost after an unfreeze; "
-                        "freezing the gestating entity again"
+                        "stimulus source still lost after an unfreeze; "
+                        "freezing the developing entity again"
                     )
                 except Exception:
                     log.warning(
-                        "re-push gestation freeze after unfreeze failed",
+                        "re-push development freeze after unfreeze failed",
                         exc_info=True,
                     )
             if result.live:
@@ -280,14 +280,14 @@ class StimulusSourceLossWatcher:
                         pop_freeze(self._control_path, source=DEVELOPMENT_FREEZE_SOURCE)
                     except Exception:
                         log.warning(
-                            "pop_freeze on womb return failed",
+                            "pop_freeze on stimulus source return failed",
                             exc_info=True,
                         )
                     self._lost = False
                     self._not_live_since = None
                     self._live_streak = 0
                     self._grace_until = now + self._window_s + 2 * self._check_seconds
-                    log.info("womb returned; resuming gestation")
+                    log.info("stimulus source returned; resuming development")
                     try:
                         await self._publish(
                             STAGE_DEVELOPMENT_STIMULUS_SOURCE_RETURNED,
@@ -315,7 +315,7 @@ class StimulusSourceLossWatcher:
             try:
                 await self.step()
             except Exception:
-                log.warning("womb watcher step failed", exc_info=True)
+                log.warning("stimulus source watcher step failed", exc_info=True)
             try:
                 await asyncio.wait_for(
                     stop_event.wait(), timeout=self._check_seconds

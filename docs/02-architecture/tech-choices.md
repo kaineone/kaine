@@ -197,7 +197,7 @@ The dashboard is the operator-facing web UI. It is built with FastAPI, served by
 
 The diagnostics surface structurally excludes cognitive content such as message text, beliefs, memory bodies, internal speech, and affect reasons. That boundary is enforced at the bus-bridge layer. Content is only exposed when `dev_content_override = true`. The conversation surface is off by default (`conversation_enabled = false`) because nobody converses with a base-thesis entity. When conversation is off, `/` redirects to `/diagnostics/`.
 
-The shipped `[dashboard].access` is `"open"`: no token or sign-in is required, and viewing and control are both open. Setting it to `"token"` restores the operator token and session sign-in. `KAINE_NEXUS_ACCESS` overrides the config value. `[dashboard].read_only` and `KAINE_NEXUS_READ_ONLY` refuse every request except `GET`, `HEAD`, and `OPTIONS` with `403`. Host and Origin checks always apply. `KAINE_NEXUS_EXTRA_HOSTS` adds tailnet names.
+The shipped `[dashboard].access` is `"open"`: no token or sign-in is required, and viewing and control are both open. Setting it to `"token"` restores the operator token and session sign-in. `KAINE_DASHBOARD_ACCESS` overrides the config value. `[dashboard].read_only` and `KAINE_DASHBOARD_READ_ONLY` refuse every request except `GET`, `HEAD`, and `OPTIONS` with `403`. Host and Origin checks always apply. `KAINE_DASHBOARD_EXTRA_HOSTS` adds tailnet names.
 
 
 ## State encryption

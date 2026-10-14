@@ -93,7 +93,7 @@ def test_voice_id_prompt_is_bounded():
         assert len(calls) < 200, "the wizard kept re-asking"
         if ACK_PHRASE in prompt:
             return ACK_PHRASE
-        if "enable vox" in prompt.lower():
+        if "enable vocal" in prompt.lower():
             return "y"
         return ""
 
@@ -746,7 +746,7 @@ def _isolate_secrets_path(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         setup_main_module, "DEFAULT_SECRETS_PATH", tmp_path / "secrets.toml"
     )
-    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    monkeypatch.delenv("KAINE_DASHBOARD_TOKEN", raising=False)
 
 
 def test_dashboard_token_generated_on_fresh_install(tmp_path: Path) -> None:
@@ -797,7 +797,7 @@ def test_dashboard_token_env_var_wins(tmp_path: Path) -> None:
 
     path = tmp_path / "secrets.toml"
     out = io.StringIO()
-    env = {"KAINE_NEXUS_TOKEN": "y" * 40}
+    env = {"KAINE_DASHBOARD_TOKEN": "y" * 40}
     status = _ensure_dashboard_token(path, out=out.write, env=env)
     assert status == "env"
     assert not path.exists()
@@ -824,7 +824,7 @@ def test_dashboard_token_generated_token_is_accepted_by_dashboard(
     secrets_path = tmp_path / "secrets.toml"
     out = io.StringIO()
     assert _ensure_dashboard_token(secrets_path, out=out.write, env={}) == "generated"
-    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    monkeypatch.delenv("KAINE_DASHBOARD_TOKEN", raising=False)
     config = load_dashboard_config(
         tmp_path / "kaine.toml",
         operator_path=tmp_path / "none.toml",
@@ -875,7 +875,7 @@ def test_dashboard_token_too_short_env_is_reported(tmp_path: Path) -> None:
 
     out = io.StringIO()
     status = _ensure_dashboard_token(
-        tmp_path / "secrets.toml", out=out.write, env={"KAINE_NEXUS_TOKEN": "tiny"}
+        tmp_path / "secrets.toml", out=out.write, env={"KAINE_DASHBOARD_TOKEN": "tiny"}
     )
     assert status == "too_short"
     assert not (tmp_path / "secrets.toml").exists()
@@ -934,7 +934,7 @@ OLD_TABLE = next(form for form in legacy_aliases.name_forms("dashboard") if form
 
 
 def test_cli_setup_keeps_a_token_under_the_old_table(tmp_path, monkeypatch):
-    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    monkeypatch.delenv("KAINE_DASHBOARD_TOKEN", raising=False)
     secrets_path = tmp_path / "secrets.toml"
     token = "t" * 40
     secrets_path.write_text(f'[{OLD_TABLE}]\noperator_token = "{token}"\n')
@@ -953,7 +953,7 @@ def test_cli_setup_keeps_a_token_under_the_old_table(tmp_path, monkeypatch):
 
 
 def test_cli_setup_writes_a_new_token_under_dashboard(tmp_path, monkeypatch):
-    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    monkeypatch.delenv("KAINE_DASHBOARD_TOKEN", raising=False)
     secrets_path = tmp_path / "secrets.toml"
     secrets_path.write_text("")
     lines = []
@@ -965,7 +965,7 @@ def test_cli_setup_writes_a_new_token_under_dashboard(tmp_path, monkeypatch):
 
 
 def test_cli_setup_refuses_an_old_table_without_a_token(tmp_path, monkeypatch):
-    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    monkeypatch.delenv("KAINE_DASHBOARD_TOKEN", raising=False)
     secrets_path = tmp_path / "secrets.toml"
     secrets_path.write_text(f"[{OLD_TABLE}]\nother = 1\n")
     before = secrets_path.read_bytes()
@@ -973,3 +973,21 @@ def test_cli_setup_refuses_an_old_table_without_a_token(tmp_path, monkeypatch):
     status = _ensure_dashboard_token(secrets_path, out=lines.append)
     assert status == "conflict"
     assert secrets_path.read_bytes() == before
+
+
+def test_cli_setup_refuses_dashboard_and_old_table_together(tmp_path, monkeypatch):
+    monkeypatch.delenv("KAINE_DASHBOARD_TOKEN", raising=False)
+    secrets_path = tmp_path / "secrets.toml"
+    token = "t" * 40
+    secrets_path.write_text(
+        f'[dashboard]\noperator_token = "{token}"\n\n[{OLD_TABLE}]\noperator_token = "{token}"\n'
+    )
+    before = secrets_path.read_bytes()
+    lines = []
+    status = _ensure_dashboard_token(secrets_path, out=lines.append)
+    output = "".join(lines)
+    assert status == "conflict"
+    assert secrets_path.read_bytes() == before
+    assert "[dashboard]" in output
+    assert f"[{OLD_TABLE}]" in output
+    assert token not in output

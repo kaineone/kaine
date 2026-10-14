@@ -12,12 +12,12 @@ _LONG_TOKEN = "x" * 32
 
 def _clear_dashboard_env(monkeypatch):
     for name in (
-        "KAINE_NEXUS_HOST",
-        "KAINE_NEXUS_PORT",
-        "KAINE_NEXUS_CONVERSATION_ENABLED",
-        "KAINE_NEXUS_TOKEN",
-        "KAINE_NEXUS_NON_LOOPBACK_ALLOWED",
-        "KAINE_NEXUS_ALLOWED_ORIGINS",
+        "KAINE_DASHBOARD_HOST",
+        "KAINE_DASHBOARD_PORT",
+        "KAINE_DASHBOARD_CONVERSATION_ENABLED",
+        "KAINE_DASHBOARD_TOKEN",
+        "KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED",
+        "KAINE_DASHBOARD_ALLOWED_ORIGINS",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -97,12 +97,12 @@ def test_load_dashboard_config_missing_returns_defaults(tmp_path):
 
 def test_env_host_overrides_toml(tmp_path, monkeypatch):
     # Containers reach the dashboard via a published port that cannot reach a server bound
-    # to the container's own 127.0.0.1 (the shipped default). KAINE_NEXUS_HOST lets
+    # to the container's own 127.0.0.1 (the shipped default). KAINE_DASHBOARD_HOST lets
     # the deployment bind all interfaces without editing the baked config.
     config_file = tmp_path / "kaine.toml"
     config_file.write_text('[dashboard]\nhost = "127.0.0.1"\nport = 8088\n')
-    monkeypatch.setenv("KAINE_NEXUS_HOST", "0.0.0.0")
-    monkeypatch.delenv("KAINE_NEXUS_PORT", raising=False)
+    monkeypatch.setenv("KAINE_DASHBOARD_HOST", "0.0.0.0")
+    monkeypatch.delenv("KAINE_DASHBOARD_PORT", raising=False)
     cfg = load_dashboard_config(config_file)
     assert cfg.host == "0.0.0.0"
     assert cfg.port == 8088  # unchanged when only host is overridden
@@ -111,15 +111,15 @@ def test_env_host_overrides_toml(tmp_path, monkeypatch):
 def test_env_port_overrides_toml(tmp_path, monkeypatch):
     config_file = tmp_path / "kaine.toml"
     config_file.write_text('[dashboard]\nhost = "127.0.0.1"\nport = 8088\n')
-    monkeypatch.delenv("KAINE_NEXUS_HOST", raising=False)
-    monkeypatch.setenv("KAINE_NEXUS_PORT", "9099")
+    monkeypatch.delenv("KAINE_DASHBOARD_HOST", raising=False)
+    monkeypatch.setenv("KAINE_DASHBOARD_PORT", "9099")
     cfg = load_dashboard_config(config_file)
     assert cfg.host == "127.0.0.1"
     assert cfg.port == 9099
 
 
 def test_env_override_applies_without_toml(tmp_path, monkeypatch):
-    monkeypatch.setenv("KAINE_NEXUS_HOST", "0.0.0.0")
+    monkeypatch.setenv("KAINE_DASHBOARD_HOST", "0.0.0.0")
     cfg = load_dashboard_config(tmp_path / "nope.toml")
     assert cfg.host == "0.0.0.0"
 
@@ -127,8 +127,8 @@ def test_env_override_applies_without_toml(tmp_path, monkeypatch):
 def test_no_env_leaves_toml_host(tmp_path, monkeypatch):
     config_file = tmp_path / "kaine.toml"
     config_file.write_text('[dashboard]\nhost = "127.0.0.1"\n')
-    monkeypatch.delenv("KAINE_NEXUS_HOST", raising=False)
-    monkeypatch.delenv("KAINE_NEXUS_PORT", raising=False)
+    monkeypatch.delenv("KAINE_DASHBOARD_HOST", raising=False)
+    monkeypatch.delenv("KAINE_DASHBOARD_PORT", raising=False)
     cfg = load_dashboard_config(config_file)
     assert cfg.host == "127.0.0.1"
 
@@ -139,7 +139,7 @@ def test_env_conversation_enables_over_toml(tmp_path, monkeypatch):
     # copy has to be hand-maintained just to flip this one flag.
     config_file = tmp_path / "kaine.toml"
     config_file.write_text("[dashboard]\nconversation_enabled = false\n")
-    monkeypatch.setenv("KAINE_NEXUS_CONVERSATION_ENABLED", "true")
+    monkeypatch.setenv("KAINE_DASHBOARD_CONVERSATION_ENABLED", "true")
     cfg = load_dashboard_config(config_file)
     assert cfg.conversation_enabled is True
 
@@ -147,7 +147,7 @@ def test_env_conversation_enables_over_toml(tmp_path, monkeypatch):
 def test_env_conversation_disables_over_toml(tmp_path, monkeypatch):
     config_file = tmp_path / "kaine.toml"
     config_file.write_text("[dashboard]\nconversation_enabled = true\n")
-    monkeypatch.setenv("KAINE_NEXUS_CONVERSATION_ENABLED", "false")
+    monkeypatch.setenv("KAINE_DASHBOARD_CONVERSATION_ENABLED", "false")
     cfg = load_dashboard_config(config_file)
     assert cfg.conversation_enabled is False
 
@@ -155,7 +155,7 @@ def test_env_conversation_disables_over_toml(tmp_path, monkeypatch):
 def test_no_env_leaves_toml_conversation(tmp_path, monkeypatch):
     config_file = tmp_path / "kaine.toml"
     config_file.write_text("[dashboard]\nconversation_enabled = true\n")
-    monkeypatch.delenv("KAINE_NEXUS_CONVERSATION_ENABLED", raising=False)
+    monkeypatch.delenv("KAINE_DASHBOARD_CONVERSATION_ENABLED", raising=False)
     cfg = load_dashboard_config(config_file)
     assert cfg.conversation_enabled is True
 
@@ -167,7 +167,7 @@ def test_env_token_overrides_toml(tmp_path, monkeypatch):
     config_file.write_text("[dashboard]\n")
     secrets = tmp_path / "secrets.toml"
     secrets.write_text(f'[dashboard]\noperator_token = "{_LONG_TOKEN}-toml"\n')
-    monkeypatch.setenv("KAINE_NEXUS_TOKEN", f"{_LONG_TOKEN}-env")
+    monkeypatch.setenv("KAINE_DASHBOARD_TOKEN", f"{_LONG_TOKEN}-env")
     cfg = load_dashboard_config(config_file, secrets_path=secrets)
     assert cfg.operator_token == f"{_LONG_TOKEN}-env"
 
@@ -321,7 +321,7 @@ def test_env_token_wins_over_secrets_toml(monkeypatch, tmp_path):
     base.write_text("[dashboard]\n")
     secrets = tmp_path / "secrets.toml"
     secrets.write_text(f'[dashboard]\noperator_token = "{_LONG_TOKEN}-secrets"\n')
-    monkeypatch.setenv("KAINE_NEXUS_TOKEN", f"{_LONG_TOKEN}-env")
+    monkeypatch.setenv("KAINE_DASHBOARD_TOKEN", f"{_LONG_TOKEN}-env")
     cfg = load_dashboard_config(base, secrets_path=secrets)
     assert cfg.operator_token == f"{_LONG_TOKEN}-env"
 
@@ -332,7 +332,7 @@ def test_env_token_empty_falls_back_to_secrets_toml(monkeypatch, tmp_path):
     base.write_text("[dashboard]\n")
     secrets = tmp_path / "secrets.toml"
     secrets.write_text(f'[dashboard]\noperator_token = "{_LONG_TOKEN}-secrets"\n')
-    monkeypatch.setenv("KAINE_NEXUS_TOKEN", "   ")
+    monkeypatch.setenv("KAINE_DASHBOARD_TOKEN", "   ")
     cfg = load_dashboard_config(base, secrets_path=secrets)
     assert cfg.operator_token == f"{_LONG_TOKEN}-secrets"
 
@@ -349,7 +349,7 @@ def test_operator_token_in_kaine_toml_refused(monkeypatch, tmp_path):
     assert "kaine.toml" in msg
     assert f"{_LONG_TOKEN}-config" not in msg
     assert "config/secrets.toml" in msg
-    assert "KAINE_NEXUS_TOKEN" in msg
+    assert "KAINE_DASHBOARD_TOKEN" in msg
 
 
 def test_operator_token_in_explicit_path_refused(monkeypatch, tmp_path):
@@ -362,7 +362,7 @@ def test_operator_token_in_explicit_path_refused(monkeypatch, tmp_path):
     assert "kaine.toml" in msg
     assert f"{_LONG_TOKEN}-config" not in msg
     assert "config/secrets.toml" in msg
-    assert "KAINE_NEXUS_TOKEN" in msg
+    assert "KAINE_DASHBOARD_TOKEN" in msg
 
 
 def test_operator_token_in_overlay_refused(monkeypatch, tmp_path):
@@ -380,7 +380,7 @@ def test_operator_token_in_overlay_refused(monkeypatch, tmp_path):
     assert "kaine.operator.toml" in msg
     assert f"{_LONG_TOKEN}-overlay" not in msg
     assert "config/secrets.toml" in msg
-    assert "KAINE_NEXUS_TOKEN" in msg
+    assert "KAINE_DASHBOARD_TOKEN" in msg
 
 
 def test_overlay_dashboard_values_deep_merged(monkeypatch, tmp_path):
@@ -426,7 +426,7 @@ def test_short_env_token_refused(monkeypatch, tmp_path):
     _clear_dashboard_env(monkeypatch)
     base = tmp_path / "kaine.toml"
     base.write_text("[dashboard]\n")
-    monkeypatch.setenv("KAINE_NEXUS_TOKEN", "tok-9f3Q")
+    monkeypatch.setenv("KAINE_DASHBOARD_TOKEN", "tok-9f3Q")
     with pytest.raises(DashboardConfigError) as exc_info:
         load_dashboard_config(base)
     msg = str(exc_info.value)
@@ -451,7 +451,7 @@ def test_whitespace_stripped_env_token(monkeypatch, tmp_path):
     _clear_dashboard_env(monkeypatch)
     base = tmp_path / "kaine.toml"
     base.write_text("[dashboard]\n")
-    monkeypatch.setenv("KAINE_NEXUS_TOKEN", f"   {_LONG_TOKEN}   ")
+    monkeypatch.setenv("KAINE_DASHBOARD_TOKEN", f"   {_LONG_TOKEN}   ")
     cfg = load_dashboard_config(base)
     assert cfg.operator_token == _LONG_TOKEN
 
@@ -460,7 +460,7 @@ def test_derived_allowed_origins_follow_env_port(monkeypatch, tmp_path):
     _clear_dashboard_env(monkeypatch)
     base = tmp_path / "kaine.toml"
     base.write_text("[dashboard]\n")
-    monkeypatch.setenv("KAINE_NEXUS_PORT", "9000")
+    monkeypatch.setenv("KAINE_DASHBOARD_PORT", "9000")
     cfg = load_dashboard_config(base)
     assert cfg.allowed_origins == (
         "http://127.0.0.1:9000",
@@ -473,7 +473,7 @@ def test_env_allowed_origins_override(monkeypatch, tmp_path):
     _clear_dashboard_env(monkeypatch)
     base = tmp_path / "kaine.toml"
     base.write_text('[dashboard]\nallowed_origins = ["http://keep.com"]\n')
-    monkeypatch.setenv("KAINE_NEXUS_ALLOWED_ORIGINS", "http://a.com, http://b.com")
+    monkeypatch.setenv("KAINE_DASHBOARD_ALLOWED_ORIGINS", "http://a.com, http://b.com")
     cfg = load_dashboard_config(base)
     assert cfg.allowed_origins == ("http://a.com", "http://b.com")
 
@@ -482,7 +482,7 @@ def test_explicit_allowed_origins_kept(monkeypatch, tmp_path):
     _clear_dashboard_env(monkeypatch)
     base = tmp_path / "kaine.toml"
     base.write_text('[dashboard]\nallowed_origins = ["http://explicit:8088"]\n')
-    monkeypatch.setenv("KAINE_NEXUS_PORT", "7777")
+    monkeypatch.setenv("KAINE_DASHBOARD_PORT", "7777")
     cfg = load_dashboard_config(base)
     assert cfg.allowed_origins == ("http://explicit:8088",)
 
@@ -491,7 +491,7 @@ def test_env_non_loopback_allowed(monkeypatch, tmp_path):
     _clear_dashboard_env(monkeypatch)
     base = tmp_path / "kaine.toml"
     base.write_text("[dashboard]\nnon_loopback_allowed = false\n")
-    monkeypatch.setenv("KAINE_NEXUS_NON_LOOPBACK_ALLOWED", "1")
+    monkeypatch.setenv("KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED", "1")
     cfg = load_dashboard_config(base)
     assert cfg.non_loopback_allowed is True
 

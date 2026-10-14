@@ -109,7 +109,7 @@ FAMILY_DESCRIPTIONS: dict[str, str] = {
         "(non-negative)."
     ),
     "nous_policy": (
-        "Policy logs: numeric/categorical policy-decision records from the Nous "
+        "Policy logs: numeric/categorical policy-decision records from the Planning "
         "controller."
     ),
     "voice_alignment_divergence": (
@@ -500,9 +500,9 @@ def _render_readme(
     lines += [
         "## Excluded by construction (never present or reachable)",
         "",
-        "- intent log / internal monologue (Lingua intent_expression and the rotated intent_log corpus)",
+        "- intent log / internal monologue (Language intent_expression and the rotated intent_log corpus)",
         "- Mnemos/Qdrant memories (verbatim transcripts, episodic records)",
-        "- Eidolon self-model",
+        "- Self-model self-model",
         "- conversation content (any turn text)",
         "- replay logs",
         (
@@ -584,9 +584,9 @@ def preview_project(project: ClaudeScienceProject) -> str:
         "",
         "-" * 70,
         "EXCLUDED by construction (never in a Claude Science export):",
-        "  - intent log / internal monologue (Lingua intent_expression.jsonl)",
+        "  - intent log / internal monologue (Language intent_expression.jsonl)",
         "  - Mnemos/Qdrant memories (verbatim transcripts and episodic records)",
-        "  - Eidolon self-model (state/eidolon/self_model.json)",
+        "  - Self-model self-model (state/eidolon/self_model.json)",
         "  - conversation content (any turn text)",
         "  - replay logs",
         "  - the LOCAL-ONLY raw bus archive (state/research/raw_bus_archive/),",

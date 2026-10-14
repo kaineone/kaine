@@ -540,11 +540,11 @@ async def planning_health_probe(*, backend: str = "pymdp") -> tuple[str, str]:
                 engine.infer(encode_snapshot_default(engine.model))
                 engine.close()
             except Exception as exc:
-                return DOWN, f"nous numpy backend failed: {exc}"
-            return UP, "nous numpy backend built and ran one step"
+                return DOWN, f"planning numpy backend failed: {exc}"
+            return UP, "planning numpy backend built and ran one step"
 
         if backend != "pymdp":
-            return DEGRADED, f"nous backend {backend!r} is not recognised"
+            return DEGRADED, f"planning backend {backend!r} is not recognised"
 
         try:
             import jax  # noqa: F401

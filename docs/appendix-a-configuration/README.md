@@ -88,15 +88,15 @@ Environment variables override the merged TOML where the code reads them. They d
 | `KAINE_REDIS_USERNAME` | Redis username for ACL setups |
 | `KAINE_REDIS_MAXMEMORY` | Redis memory limit |
 | `KAINE_QDRANT_API_KEY` | Qdrant API key |
-| `KAINE_NEXUS_TOKEN` | Dashboard operator token |
-| `KAINE_NEXUS_HOST` | `[dashboard].host` |
-| `KAINE_NEXUS_PORT` | `[dashboard].port` |
-| `KAINE_NEXUS_CONVERSATION_ENABLED` | `[dashboard].conversation_enabled` |
-| `KAINE_NEXUS_NON_LOOPBACK_ALLOWED` | `[dashboard].non_loopback_allowed` |
-| `KAINE_NEXUS_ALLOWED_ORIGINS` | `[dashboard].allowed_origins` |
-| `KAINE_NEXUS_ACCESS` | `[dashboard].access` (`open` or `token`) |
-| `KAINE_NEXUS_READ_ONLY` | `[dashboard].read_only` |
-| `KAINE_NEXUS_EXTRA_HOSTS` | Extra tailnet or reverse-proxy host names |
+| `KAINE_DASHBOARD_TOKEN` | Dashboard operator token |
+| `KAINE_DASHBOARD_HOST` | `[dashboard].host` |
+| `KAINE_DASHBOARD_PORT` | `[dashboard].port` |
+| `KAINE_DASHBOARD_CONVERSATION_ENABLED` | `[dashboard].conversation_enabled` |
+| `KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED` | `[dashboard].non_loopback_allowed` |
+| `KAINE_DASHBOARD_ALLOWED_ORIGINS` | `[dashboard].allowed_origins` |
+| `KAINE_DASHBOARD_ACCESS` | `[dashboard].access` (`open` or `token`) |
+| `KAINE_DASHBOARD_READ_ONLY` | `[dashboard].read_only` |
+| `KAINE_DASHBOARD_EXTRA_HOSTS` | Extra tailnet or reverse-proxy host names |
 | `KAINE_STATE_KEY` | State encryption key |
 | `KAINE_MODEL_SERVER_API_KEY` | Model server API key, read when `[language].api_key` is unset |
 | `KAINE_ORGAN_URL` | Organ address for the sleep module trainer service, which runs without the config |
@@ -119,7 +119,7 @@ Environment variables override the merged TOML where the code reads them. They d
 
 ### Dashboard secrets
 
-Put the dashboard operator token under `[dashboard]` in `config/secrets.toml`, not in `config/kaine.toml` or `config/kaine.operator.toml`. If a non-empty `operator_token` appears in a non-secrets file, the dashboard refuses to start. When a token is set, it must be at least 32 characters long. The shipped `[dashboard].access` is `"open"`; set it to `"token"` (or set `KAINE_NEXUS_ACCESS=token`) to require the operator token. Full `[dashboard]` network and token settings are on the [Security and Dashboard](security-and-dashboard.md) page.
+Put the dashboard operator token under `[dashboard]` in `config/secrets.toml`, not in `config/kaine.toml` or `config/kaine.operator.toml`. If a non-empty `operator_token` appears in a non-secrets file, the dashboard refuses to start. When a token is set, it must be at least 32 characters long. The shipped `[dashboard].access` is `"open"`; set it to `"token"` (or set `KAINE_DASHBOARD_ACCESS=token`) to require the operator token. Full `[dashboard]` network and token settings are on the [Security and Dashboard](security-and-dashboard.md) page.
 
 ### Caretaker tokens
 

@@ -359,7 +359,7 @@ class TransitionController:
             self._update_locked(perceived, None)
             self._arm_locked()
         log.info(
-            "womb-to-world transition started by the %s surface (%.1f s of "
+            "stimulus-source-to-world transition started by the %s surface (%.1f s of "
             "perceived crossfade); the programme waits",
             surface,
             self._seconds,
@@ -386,7 +386,7 @@ class TransitionController:
                 self._finish_locked("completed", {})
         if done:
             self._pclock.resume(TRANSITION_HOLDER)
-            log.info("womb-to-world transition complete; programme time starts")
+            log.info("stimulus-source-to-world transition complete; programme time starts")
         self._flush()
         return done
 
@@ -402,7 +402,7 @@ class TransitionController:
             self._finish_locked("abandoned", {"reason": str(reason)})
         self._pclock.resume(TRANSITION_HOLDER)
         log.warning(
-            "womb-to-world transition abandoned (%s%s); the programme starts now",
+            "stimulus-source-to-world transition abandoned (%s%s); the programme starts now",
             reason,
             f": {detail}" if detail else "",
         )
@@ -577,7 +577,7 @@ class StimulusSourceWorldTransition:
                 or str(getattr(film, "dtype", "")) != "uint8"
             ):
                 reason = ABANDON_FIRST_FRAME_UNBLENDABLE
-                detail = f"shape {film_shape} against the womb's {stimulus_source_shape}"
+                detail = f"shape {film_shape} against the stimulus source's {stimulus_source_shape}"
             else:
                 stimulus_source = resize_bilinear(
                     self._stimulus_source_source, int(film_shape[0]), int(film_shape[1])

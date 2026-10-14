@@ -26,7 +26,7 @@ class _SlowProbeAdapter(StubAdapter):
 
 @pytest.mark.asyncio
 async def test_dormant_initialize_opens_nothing(fake_async_bus, monkeypatch) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     adapter = StubAdapter()
     embodiment = Embodiment(fake_async_bus, adapter=adapter, enabled=True, dormant=True)
 
@@ -39,7 +39,7 @@ async def test_dormant_initialize_opens_nothing(fake_async_bus, monkeypatch) -> 
 
 @pytest.mark.asyncio
 async def test_probe_available_true_while_dormant(fake_async_bus, monkeypatch) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     adapter = StubAdapter()
     embodiment = Embodiment(fake_async_bus, adapter=adapter, enabled=True, dormant=True)
 
@@ -49,7 +49,7 @@ async def test_probe_available_true_while_dormant(fake_async_bus, monkeypatch) -
 
 @pytest.mark.asyncio
 async def test_probe_available_false_when_not_approved(fake_async_bus, monkeypatch) -> None:
-    monkeypatch.delenv("KAINE_MUNDUS_OPERATOR_APPROVED", raising=False)
+    monkeypatch.delenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", raising=False)
     adapter = StubAdapter()
     embodiment = Embodiment(fake_async_bus, adapter=adapter, enabled=True, dormant=True)
 
@@ -58,7 +58,7 @@ async def test_probe_available_false_when_not_approved(fake_async_bus, monkeypat
 
 @pytest.mark.asyncio
 async def test_probe_available_false_when_probe_raises(fake_async_bus, monkeypatch) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     adapter = _FailingProbeAdapter()
     embodiment = Embodiment(fake_async_bus, adapter=adapter, enabled=True, dormant=True)
 
@@ -69,7 +69,7 @@ async def test_probe_available_false_when_probe_raises(fake_async_bus, monkeypat
 
 @pytest.mark.asyncio
 async def test_probe_available_false_when_probe_times_out(fake_async_bus, monkeypatch) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     adapter = _SlowProbeAdapter()
     embodiment = Embodiment(fake_async_bus, adapter=adapter, enabled=True, dormant=True)
 
@@ -80,7 +80,7 @@ async def test_probe_available_false_when_probe_times_out(fake_async_bus, monkey
 
 @pytest.mark.asyncio
 async def test_activate_starts_embodiment_and_returns_true(fake_async_bus, monkeypatch) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     adapter = StubAdapter()
     embodiment = Embodiment(fake_async_bus, adapter=adapter, enabled=True, dormant=True)
 
@@ -95,7 +95,7 @@ async def test_activate_starts_embodiment_and_returns_true(fake_async_bus, monke
 
 @pytest.mark.asyncio
 async def test_activate_when_not_approved_returns_false(fake_async_bus, monkeypatch) -> None:
-    monkeypatch.delenv("KAINE_MUNDUS_OPERATOR_APPROVED", raising=False)
+    monkeypatch.delenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", raising=False)
     adapter = StubAdapter()
     embodiment = Embodiment(fake_async_bus, adapter=adapter, enabled=True, dormant=True)
 
@@ -106,7 +106,7 @@ async def test_activate_when_not_approved_returns_false(fake_async_bus, monkeypa
 
 @pytest.mark.asyncio
 async def test_shutdown_cleans_up_after_activate(fake_async_bus, monkeypatch) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     adapter = StubAdapter()
     embodiment = Embodiment(fake_async_bus, adapter=adapter, enabled=True, dormant=True)
 
@@ -123,7 +123,7 @@ async def test_probe_result_false_means_unavailable(fake_async_bus, monkeypatch)
     from kaine.modules.embodiment.adapters.stub import StubAdapter
     from kaine.modules.embodiment.module import Embodiment
 
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
 
     class _NoBody(StubAdapter):
         closed = 0

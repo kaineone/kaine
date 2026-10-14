@@ -138,7 +138,7 @@ def _make_registry(
     world_model.successful_training_passes = consolidation_passes
     embodiment = MagicMock()
     # Public embodiment module API the gate uses (operator approval itself is read from
-    # KAINE_MUNDUS_OPERATOR_APPROVED; tests that need it set the variable).
+    # KAINE_EMBODIMENT_OPERATOR_APPROVED; tests that need it set the variable).
     embodiment.enabled_by_config = embodiment_enabled
     embodiment.probe_available = AsyncMock(
         return_value=embodiment_enabled and embodiment_approved and embodiment_reachable
@@ -175,7 +175,7 @@ def _fresh_development_state(tmp_path: Path) -> lifecycle_stage.StageState:
 async def test_maturation_deferred_while_frozen_then_maturations_when_unfrozen(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     readout = {
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
@@ -230,7 +230,7 @@ async def test_maturation_deferred_while_frozen_then_maturations_when_unfrozen(
 async def test_maturation_deferred_when_is_paused_raises(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     readout = {
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,

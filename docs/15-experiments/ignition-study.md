@@ -42,7 +42,7 @@ python -m kaine.research.ignition_study init \
     --programme-manifest /path/to/programme.toml \
     [--base-modules ...] [--order ...] \
     [--redis-base-url redis://127.0.0.1:6479] \
-    [--db-gestation 10 --db-branch 11 --db-repeat 12 --db-accumulate 13] \
+    [--db-development 10 --db-branch 11 --db-repeat 12 --db-accumulate 13] \
     [--min-free-gb 20.0] \
     [--voice-alignment-step accumulate:6] \
     [--study-dir /absolute/path]
@@ -56,9 +56,9 @@ All four commands (`init`, `run`, `status`, `analyse`) load the configuration, i
 
 - `--base-modules` and `--order` to override the module lists.
 - `--redis-base-url` for the Redis server (default `redis://127.0.0.1:6479`).
-- `--db-gestation`, `--db-branch`, `--db-repeat` and `--db-accumulate` to assign bus database numbers from 1 to 15 (defaults 10, 11, 12 and 13). The four numbers must be distinct. The runner refuses any plan whose numbers include database 0 or the database the bus resolves from `KAINE_REDIS_URL` or `config/secrets.toml [redis].url` (including a `?db=` fragment). If neither URL is set, the resolved database comes from `[redis].db`. `config/kaine.toml` and operator overlays are not consulted for the URL.
+- `--db-development`, `--db-branch`, `--db-repeat` and `--db-accumulate` to assign bus database numbers from 1 to 15 (defaults 10, 11, 12 and 13). The four numbers must be distinct. The runner refuses any plan whose numbers include database 0 or the database the bus resolves from `KAINE_REDIS_URL` or `config/secrets.toml [redis].url` (including a `?db=` fragment). If neither URL is set, the resolved database comes from `[redis].db`. `config/kaine.toml` and operator overlays are not consulted for the URL.
 - `--min-free-gb` (default 20.0) for the disk guard.
-- `--viewing-budget-seconds` (default 21600, six hours) and `--gestation-budget-seconds` (default 345600, 96 hours) for the timeouts behind `failed:timeout`.
+- `--viewing-budget-seconds` (default 21600, six hours) and `--development-budget-seconds` (default 345600, 96 hours) for the timeouts behind `failed:timeout`.
 - `--voice-alignment-step LINE:K` (repeatable) to register voice-alignment steps. By default only the final accumulate step is registered.
 - `--study-dir` to place the directory somewhere other than the default under the data root.
 
@@ -72,7 +72,7 @@ python -m kaine.research.ignition_study run --study-dir studies/<study-id>
 
 The runner runs one step at a time:
 
-1. `development`: the developmental stimulus with automatic maturation. The step runs until the maturation gate allows maturation. With `min_lived_seconds = 86400` that takes at least 24 hours of awake time (entity time during which the entity is awake and the cycle is not frozen), and the hard budget is 96 hours (`--gestation-budget-seconds`). Developmental-phase progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) is saved in `development_progress.json`, keyed to the entity, so a developmental phase that spans a restart continues where it left off. Once the entity matures, the runner waits for the maturation bloom to end and then preserves it. The bloom ends at the stage file's `maturation_bloom_ends_at`; without that value the runner waits the step's `[perception_feed.stimulus_source].maturation_transition_seconds` plus a margin, or 30 seconds plus the margin when that value cannot be read.
+1. `development`: the developmental stimulus with automatic maturation. The step runs until the maturation gate allows maturation. With `min_lived_seconds = 86400` that takes at least 24 hours of awake time (entity time during which the entity is awake and the cycle is not frozen), and the hard budget is 96 hours (`--development-budget-seconds`). Developmental-phase progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) is saved in `development_progress.json`, keyed to the entity, so a developmental phase that spans a restart continues where it left off. Once the entity matures, the runner waits for the maturation bloom to end and then preserves it. The bloom ends at the stage file's `maturation_bloom_ends_at`; without that value the runner waits the step's `[perception_feed.stimulus_source].maturation_transition_seconds` plus a margin, or 30 seconds plus the margin when that value cannot be read.
 2. `branch 0` from the seed, with the base set.
 3. `repeat` from the seed, with the base set.
 4. For k = 1 to K: `branch k` from the seed with the base set plus the first k modules of the order, then `accumulate k` with the same modules, from `branch 0` (k = 1) or `accumulate k-1`.

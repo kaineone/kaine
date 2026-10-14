@@ -10,7 +10,7 @@
 #   3. logging active ([evaluation] or [research_event_log])
 #   4. dry preserve -> revive round-trip passing
 #   5. encryption satisfied where [preservation].require_encryption is set
-#   6. Spot enabled and its scratch freeze/restart self-test passing
+#   6. Supervisor enabled and its scratch freeze/restart self-test passing
 #   7. a content-free start notice accepted by a [caretaker] channel
 #   8. a continuous perception input delivering a frame or audio block
 #   9. individuation producer enabled ([individuation].enabled and the lingua module)
@@ -24,7 +24,7 @@
 [Unit]
 Description=KAINE cognitive cycle, unattended (opt-in; gated by the unattended safety net)
 Requires=kaine-redis.service kaine-qdrant.service
-After=kaine-redis.service kaine-qdrant.service kaine-nexus.service
+After=kaine-redis.service kaine-qdrant.service kaine-dashboard.service
 Conflicts=kaine-cycle.service
 
 [Container]
@@ -66,7 +66,7 @@ Environment=KAINE_DATA_ROOT=/app
 # Secrets for ${...} expansion; maintained by the bootstrap scripts (mode 0600).
 EnvironmentFile=@KAINE_ROOT@/compose/.env
 # A refused gate stays refused and visible in `systemctl --user status`. Do not
-# loop; once the entity runs, restarts belong to Spot.
+# loop; once the entity runs, restarts belong to Supervisor.
 Restart=no
 
 [Install]

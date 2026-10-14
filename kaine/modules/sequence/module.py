@@ -82,7 +82,7 @@ class Sequence(BaseModule):
         self._network_injected = network is not None
         if self._network_injected and forward_prediction and getattr(network, "units", None) is None:
             raise ValueError(
-                "Chronos: an injected network must expose `units` (its hidden "
+                "Sequence: an injected network must expose `units` (its hidden "
                 "width) when forward prediction is enabled"
             )
         self._cfc_units = int(cfc_units)
@@ -160,7 +160,7 @@ class Sequence(BaseModule):
                 units = getattr(self._network, "units", None)
                 if units is None:
                     raise ValueError(
-                        "Chronos: an injected network must expose `units` (its "
+                        "Sequence: an injected network must expose `units` (its "
                         "hidden width) when forward prediction is enabled"
                     )
                 head_units = int(units)
@@ -204,7 +204,7 @@ class Sequence(BaseModule):
         )
         self._tasks.append(
             asyncio.create_task(
-                self._sleep_loop(), name=f"{self.name}-hypnos-consumer"
+                self._sleep_loop(), name=f"{self.name}-sleep-consumer"
             )
         )
 
@@ -314,7 +314,7 @@ class Sequence(BaseModule):
                             block_ms=0,
                         )
                     except Exception:
-                        log.exception("chronos user-input read failed for %s", stream)
+                        log.exception("sequence user-input read failed for %s", stream)
                         continue
                     if last_scanned is not None:
                         drained_any = True
@@ -350,18 +350,18 @@ class Sequence(BaseModule):
                                 self._in_sleep = True
                                 if self._pred_head is not None:
                                     self._pred_head.suspended = True
-                                log.debug("chronos: adaptation suspended (hypnos sleep started)")
+                                log.debug("sequence: adaptation suspended (sleep sleep started)")
                             elif event.type == "sleep.sleep.completed":
                                 self._in_sleep = False
                                 if self._pred_head is not None:
                                     self._pred_head.suspended = False
-                                log.debug("chronos: adaptation resumed (hypnos sleep completed)")
+                                log.debug("sequence: adaptation resumed (sleep sleep completed)")
                     else:
                         await asyncio.sleep(0.05)
                 except asyncio.CancelledError:
                     raise
                 except Exception:
-                    log.exception("chronos hypnos consumer iteration failed")
+                    log.exception("sequence sleep consumer iteration failed")
                     await asyncio.sleep(0.1)
         except asyncio.CancelledError:
             raise
@@ -393,7 +393,7 @@ class Sequence(BaseModule):
         else:
             self._featurizer.set_layout(1)
             log.info(
-                "chronos: being keeps featurizer layout 1 "
+                "sequence: being keeps featurizer layout 1 "
                 "(Audition shares the overflow bin)"
             )
         # Time the entity was not running is not time alone; restore the lived
@@ -424,7 +424,7 @@ class Sequence(BaseModule):
                 )
             else:
                 log.warning(
-                    "chronos: snapshot has no reservoir seed; the reservoir is new"
+                    "sequence: snapshot has no reservoir seed; the reservoir is new"
                 )
 
         if "pred_head" in state and self._pred_head is not None:

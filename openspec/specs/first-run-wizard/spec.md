@@ -212,12 +212,12 @@ of `config/secrets.toml`, mode 600, preserving the rest of the file. It SHALL
 NOT replace a token that is already configured, and SHALL NOT print the token.
 
 #### Scenario: A fresh install gets a token
-- **WHEN** setup runs, `config/secrets.toml` has no `[dashboard].operator_token`, and `KAINE_NEXUS_TOKEN` is unset
+- **WHEN** setup runs, `config/secrets.toml` has no `[dashboard].operator_token`, and `KAINE_DASHBOARD_TOKEN` is unset
 - **THEN** the file afterwards holds an `operator_token` of at least 32 characters
 - **AND** setup's output states where the token is stored without showing it
 
 #### Scenario: An existing token is kept
-- **WHEN** setup runs, and either `config/secrets.toml` already holds `[dashboard].operator_token` or `KAINE_NEXUS_TOKEN` is set
+- **WHEN** setup runs, and either `config/secrets.toml` already holds `[dashboard].operator_token` or `KAINE_DASHBOARD_TOKEN` is set
 - **THEN** `config/secrets.toml`'s token value is unchanged
 - **AND** no token is written
 

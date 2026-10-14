@@ -29,7 +29,7 @@ def make_embodiment(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         adapter = StubAdapter()
     else:
         raise ValueError(
-            f"mundus: unknown adapter {adapter_name!r}; no embodiment constructed "
+            f"embodiment: unknown adapter {adapter_name!r}; no embodiment constructed "
             "(fail-closed). Set [embodiment].adapter to a known adapter."
         )
 
@@ -84,7 +84,7 @@ def make_embodiment(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         kwargs["control_surface"] = ContinuousMotorSurface(curriculum=curriculum)
 
     # Constructed only when [modules].embodiment is on; the operational two-layer gate
-    # is [embodiment].enabled (default true here) AND KAINE_MUNDUS_OPERATOR_APPROVED=1.
+    # is [embodiment].enabled (default true here) AND KAINE_EMBODIMENT_OPERATOR_APPROVED=1.
     return Embodiment(
         bus,
         adapter=adapter,

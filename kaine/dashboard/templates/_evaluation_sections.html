@@ -1,6 +1,6 @@
 {# Evaluation boards. Shared by /diagnostics/evaluation/ and the unified
    console at `/`. Architecture-thesis instrumentation — NO message text shown.
-   `metrics` is the evaluation aggregate (see kaine.evaluation.nexus_tab); on
+   `metrics` is the evaluation aggregate (see kaine.evaluation.dashboard_tab); on
    the console it is aliased from the `evaluation` context var. Panel/chart ids
    are wired by dashboard.js — do not rename. #}
 
@@ -11,7 +11,7 @@
     {% if report_view %}<p class="report-claim">Does the assembled architecture become an
       <strong>individual</strong> — measurably distinct from the bare language model it is built
       on? A/B divergence and memory-probe advantage compare the running system to a bare-LLM
-      control; the eidolon self-model tracks self-knowledge accuracy; and the individuation
+      control; the self-model tracks self-knowledge accuracy; and the individuation
       boundary tests whether a fork's divergence exceeds a null distribution.</p>{% endif %}
 
     <section class="panel">
@@ -35,13 +35,13 @@
     </section>
 
     <section class="panel">
-      <h2>Eidolon self-model accuracy (recent)</h2>
-      <div id="chart-eidolon" class="chart" data-empty="no eidolon accuracy samples yet"></div>
+      <h2>Self-model accuracy (recent)</h2>
+      <div id="chart-self-model" class="chart" data-empty="no self-model accuracy samples yet"></div>
       <div class="table-wrap">
       <table>
         <thead><tr><th>ts</th><th>aggregate</th></tr></thead>
         <tbody>
-          {% for row in metrics.eidolon_accuracy[-20:] %}
+          {% for row in metrics.self_model_accuracy[-20:] %}
             <tr>
               <td>{{ row.ts }}</td>
               <td>{{ "%.3f"|format(row.aggregate) if row.aggregate is not none else "" }}</td>
@@ -89,8 +89,8 @@
     {% if report_view %}<p class="report-claim">What does each cognitive module
       <strong>contribute</strong> to behaviour? Attribution counts which module drives each
       action; the proactive-trigger distribution shows what initiates self-generated action;
-      Nous reports active-inference policy selection by expected free energy; and the
-      affect–output correlation matrix relates Thymos affect to behavioural output.</p>{% endif %}
+      Planning reports active-inference policy selection by expected free energy; and the
+      affect–output correlation matrix relates affect to behavioural output.</p>{% endif %}
 
     <section class="panel">
       <h2>Module attribution (running total)</h2>
@@ -135,8 +135,8 @@
     </section>
 
     <section class="panel">
-      <h2>Nous policy (active inference)</h2>
-      {% set np = metrics.nous_policy %}
+      <h2>Planning policy (active inference)</h2>
+      {% set np = metrics.planning_policy %}
       {% if np and np.source != "none" %}
         <p class="muted">{{ np.n }} policy events in rollup · source: {{ np.source }}</p>
         <dl class="kv">
@@ -166,7 +166,7 @@
           individuation and entity-care surfaces.
         </p>
       {% else %}
-        <p class="muted">No nous-policy data — Nous disabled or no policy events recorded.</p>
+        <p class="muted">No planning-policy data — Planning disabled or no policy events recorded.</p>
       {% endif %}
     </section>
 
@@ -175,7 +175,7 @@
       <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>thymos \ output</th>
+          <tr><th>affect \ output</th>
             {% for ck in (metrics.affect_correlation.values() | list | first | default({})).keys() %}
               <th>{{ ck }}</th>
             {% endfor %}

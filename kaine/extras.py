@@ -200,9 +200,9 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
         Requirement("jax", "worldmodel", predicate=_world_model_jax_engine),
     ),
     "dashboard": (
-        Requirement("fastapi", "nexus"),
-        Requirement("uvicorn", "nexus"),
-        Requirement("jinja2", "nexus", transitive_for="fastapi.templating"),
+        Requirement("fastapi", "dashboard"),
+        Requirement("uvicorn", "dashboard"),
+        Requirement("jinja2", "dashboard", transitive_for="fastapi.templating"),
     ),
 }
 

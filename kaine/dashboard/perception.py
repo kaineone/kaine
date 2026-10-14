@@ -233,7 +233,7 @@ def build_perception_router(
     async def set_locus(body: PerceptualLocusBody):
         new_desired = write_desired_locus(body.locus, body.locked, desired_path)
         log.info(
-            "perception locus set locus=%s locked=%s",
+            "perceptual locus set locus=%s locked=%s",
             new_desired.locus,
             new_desired.locus_locked,
         )

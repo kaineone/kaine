@@ -716,7 +716,7 @@ async def test_preserve_live_then_revive_social_cognition_qdrant_replaces_stale(
     result = await fm.preserve_live(
         reg,
         reason="scoped-memory-preservation",
-        label="test-empatheia-qdrant-revive",
+        label="test-social-cognition-qdrant-revive",
         out_root=tmp_path / "backups",
         entity_name="aria",
     )

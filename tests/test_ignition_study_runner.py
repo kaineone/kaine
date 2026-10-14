@@ -157,7 +157,7 @@ STANDIN_SCRIPT = textwrap.dedent(
         write_json(state_dir / "runtime.json", runtime)
 
         if not is_viewing:
-            # Born: the stage file names when the birth bloom ends (already
+            # Born: the stage file names when the maturation bloom ends (already
             # over unless IGNITION_STANDIN_BLOOM_SECONDS puts it ahead), or
             # omits the field when IGNITION_STANDIN_BLOOM_SECONDS is "none".
             (study_dir / "embodied_at.txt").write_text(str(time.time()))
@@ -1205,7 +1205,7 @@ DEVELOPING_SCRIPT = textwrap.dedent(
     import time
     from pathlib import Path
 
-    # A seed still gestating: it writes nothing and waits to be released.
+    # A seed still developing: it writes nothing and waits to be released.
     release = Path(sys.argv[1])
     deadline = time.monotonic() + 60
     while not release.exists() and time.monotonic() < deadline:
@@ -1306,7 +1306,7 @@ def test_an_earlier_childs_runtime_never_triggers_the_maturation_preservation(
             p.wait()
 
     assert polls[0] >= 5
-    assert not control_log.exists(), "a birth preservation was requested"
+    assert not control_log.exists(), "a maturation preservation was requested"
     record = exc_info.value.record
     assert record["line"] == "gestation"
     assert record["outcome"] == "failed:missing_preservation"

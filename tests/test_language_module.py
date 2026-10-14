@@ -321,7 +321,7 @@ def test_language_does_not_override_on_workspace():
     assert Language.on_workspace is BaseModule.on_workspace
 
 
-REAL_CHAT_ENV = "KAINE_LINGUA_RUN_REAL_CHAT"
+REAL_CHAT_ENV = "KAINE_LANGUAGE_RUN_REAL_CHAT"
 
 
 @pytest.mark.skipif(

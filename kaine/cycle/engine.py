@@ -633,7 +633,7 @@ class CognitiveCycle:
         except Exception as exc:
             error = True
             error_message = str(exc)
-            log.exception("syneidesis raised on tick %d", self._tick_index)
+            log.exception("workspace raised on tick %d", self._tick_index)
 
         if snapshot is not None and is_experiential:
             broadcast_ok = False
@@ -734,7 +734,7 @@ class CognitiveCycle:
         try:
             intents = self._action_selection.select(snapshot)
         except Exception:
-            log.exception("volition raised on tick %d", self._tick_index)
+            log.exception("action selection raised on tick %d", self._tick_index)
             return
         for intent in intents:
             event_type = INTENT_TYPES.get(intent.kind)
@@ -759,7 +759,7 @@ class CognitiveCycle:
             outcomes = self._action_selection.proposal_outcomes(snapshot)
         except Exception:
             log.exception(
-                "volition proposal_outcomes raised on tick %d", self._tick_index
+                "action selection proposal_outcomes raised on tick %d", self._tick_index
             )
             return
         for outcome in outcomes:
@@ -902,7 +902,7 @@ class CognitiveCycle:
             now = time.monotonic()
             if now - self._interoception_err_last_log >= 60.0:
                 self._interoception_err_last_log = now
-                log.warning("soma consumer read failed: %s", exc)
+                log.warning("interoception consumer read failed: %s", exc)
             return
         # H2 — advance by last_scanned so a poison batch cannot stall the
         # cursor.
@@ -951,7 +951,7 @@ class CognitiveCycle:
             elif action == "request_maintenance":
                 log.info(
                     "interoception.regulation advisory request_maintenance "
-                    "(severity=%s, reason=%r): flagging for Hypnos",
+                    "(severity=%s, reason=%r): flagging for Sleep",
                     severity,
                     reason,
                 )

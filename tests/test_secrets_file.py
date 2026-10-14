@@ -42,7 +42,7 @@ api_key = "REPLACE-ME-WITH-THE-KEY-IN-compose-env"
 # port = 6533
 
 [dashboard]
-# Operator token for the Nexus web UI / diagnostics. Must be at least 32 characters.
+# Operator token for the Dashboard web UI / diagnostics. Must be at least 32 characters.
 # Generate one with: python -c "import secrets; print(secrets.token_urlsafe(32))"
 # operator_token = "<32+ random characters>"
 

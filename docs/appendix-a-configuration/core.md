@@ -303,7 +303,7 @@ Security: clients must present `token` as `Authorization: Bearer <token>`; query
 | `social_cognition` | boolean | `false` | Social cognition. |
 | `world_model` | boolean | `false` | World model. |
 | `perception` | boolean | `false` | Perceptual locus arbiter (physical-XOR-virtual sense gating). |
-| `embodiment` | boolean | `false` | Embodiment control plane. The continuous control surface is built but inert at runtime; nothing drives its per-tick loop yet. Also requires `KAINE_MUNDUS_OPERATOR_APPROVED=1`. |
+| `embodiment` | boolean | `false` | Embodiment control plane. The continuous control surface is built but inert at runtime; nothing drives its per-tick loop yet. Also requires `KAINE_EMBODIMENT_OPERATOR_APPROVED=1`. |
 
 The guard test that enforces the all-off invariant is `tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled`.
 

@@ -3,22 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Nexus{% endblock %}</title>
+  <title>{% block title %}Dashboard{% endblock %}</title>
   <link rel="stylesheet" href="{{ asset('/static/vendor/uPlot.min.css') }}">
   <link rel="stylesheet" href="{{ asset('/static/style.css') }}">
+  <script src="{{ asset('/static/dashboard_legacy_storage.js') }}"></script>
   <script src="{{ asset('/static/dashboard_auth.js') }}"></script>
   <script src="{{ asset('/static/dashboard_caretaker.js') }}" defer></script>
   <script src="{{ asset('/static/dashboard_maturation.js') }}" defer></script>
 </head>
-<body data-nexus-layout="dashboard">
+<body data-dashboard-layout="dashboard">
   {# Fixed full-window alert border — JS drives data-state; CSS paints it. #}
-  <div id="spot-alert" class="spot-alert" data-state="ok" aria-hidden="true"></div>
+  <div id="supervisor-alert" class="supervisor-alert" data-state="ok" aria-hidden="true"></div>
   {# Diagnostics-stream connection indicator (task 1.4): live / reconnecting /
      paused, so a dropped link is visible rather than silently freezing the UI
-     on stale numbers. Starts hidden — NexusConn.attach() reveals it, and only
+     on stale numbers. Starts hidden — DashboardConn.attach() reveals it, and only
      pages that open the diagnostics stream (console, diagnostics) call it;
      the evaluation page (batch data only, no live stream) never shows it. #}
-  <div id="nexus-conn" class="conn-status" data-state="connecting" aria-live="polite"
+  <div id="dashboard-conn" class="conn-status" data-state="connecting" aria-live="polite"
        title="Diagnostics stream status" hidden>
     <span class="conn-status__dot" aria-hidden="true"></span>
     <span class="conn-status__label">connecting…</span>
@@ -40,7 +41,7 @@
         {% endif %}
         <a class="rail__seg{% if _path.startswith("/diagnostics/") and not _path.startswith("/diagnostics/evaluation") %} is-active{% endif %}" href="/diagnostics/">Diagnostics</a>
         <a class="rail__seg{% if _path.startswith("/diagnostics/evaluation") %} is-active{% endif %}" href="/diagnostics/evaluation/">Evaluation</a>
-        <button type="button" class="rail__seg rail__logout" id="nexus-logout">Log out</button>
+        <button type="button" class="rail__seg rail__logout" id="dashboard-logout">Log out</button>
       </nav>
       {% endblock %}
     </aside>
@@ -48,7 +49,7 @@
       <header>
         {% block header_extra %}{% endblock %}
       </header>
-      <main class="nexus-main">
+      <main class="dashboard-main">
         {% if request is defined and request and request.app.state.config is defined and request.app.state.config.read_only %}
         <div class="readonly-banner" role="status">Read-only view — controls are off</div>
         {% endif %}

@@ -21,8 +21,8 @@ var ACK_CONFIRM_ROW_ID = "dev-ack-confirm-row";
 var ACK_CONFIRM_ID = "dev-ack-confirm";
 var ACK_CANCEL_ID = "dev-ack-cancel";
 var ACK_MSG_ID = "dev-ack-msg";
-var STATUS_URL = "/diagnostics/birth.json";
-var ACK_URL = "/diagnostics/birth/ack";
+var STATUS_URL = "/diagnostics/maturation.json";
+var ACK_URL = "/diagnostics/maturation/ack";
 
 function makeElement(tag, attrs) {
   attrs = attrs || {};
@@ -506,10 +506,10 @@ var scenarios = [
     }
   },
   {
-    name: "uses NexusVisibility.pausable when available",
+    name: "uses DashboardVisibility.pausable when available",
     setup: function (sandbox) {
       var calls = [];
-      sandbox.window.NexusVisibility = {
+      sandbox.window.DashboardVisibility = {
         pausable: function (fn, ms) { calls.push({ fn: fn, ms: ms }); }
       };
       sandbox._visibilityCalls = calls;

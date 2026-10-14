@@ -702,7 +702,7 @@ def assess_divergence(
         if individuated:
             if ind["state"] == "latched":
                 reasons.append(
-                    "the being latched as individuated at a significant look"
+                    "the entity latched as individuated at a significant look"
                 )
             elif ind["state"] == "unreadable":
                 reasons.append(
@@ -733,7 +733,7 @@ def assess_divergence(
                 )
         if self_model_drift:
             reasons.append(
-                f"Eidolon recorded {drift_count} identity drift(s) with a non-empty history"
+                f"Self-model recorded {drift_count} identity drift(s) with a non-empty history"
             )
         if adapters_present:
             reasons.append("trained voice adapters are present")
@@ -745,7 +745,7 @@ def assess_divergence(
         )
     elif ind["state"] == "stale":
         summary = (
-            "NOT DIVERGED (STALE): the being has changed since its last "
+            "NOT DIVERGED (STALE): the entity has changed since its last "
             "individuation measurement, or the measurement is older than its "
             "freshness window, so the last result no longer describes it. Treat "
             "it as mature if you are unsure and choose the stricter "
@@ -765,7 +765,7 @@ def assess_divergence(
             and not adapters_present
         ):
             summary = (
-                "COULD NOT CONFIRM: no individuation measurement, Eidolon "
+                "COULD NOT CONFIRM: no individuation measurement, Self-model "
                 "self-model, consolidation record or voice adapters were found, "
                 "so individuation could not be assessed. Treat the entity as "
                 "mature if you are unsure and choose the stricter decommission "
@@ -774,7 +774,7 @@ def assess_divergence(
         else:
             summary = (
                 "NOT DIVERGED (NOT YET MEASURED): no individuation measurement "
-                "describes the being yet. Treat it as mature if you are unsure "
+                "describes the entity yet. Treat it as mature if you are unsure "
                 "and choose the stricter decommission path."
             )
     else:
@@ -789,12 +789,12 @@ def assess_divergence(
     ref_captured_at = ind["reference_captured_at"]
     if ref_kind == "capture" and ref_captured_at:
         summary += (
-            f" This being's reference was captured on {ref_captured_at}, after "
-            "its birth; drift before that date is not measured."
+            f" This entity's reference was captured on {ref_captured_at}, after "
+            "its maturation; drift before that date is not measured."
         )
     elif ref_kind == "reconstructed":
         summary += (
-            " This being's reference was reconstructed from its birth "
+            " This entity's reference was reconstructed from its maturation "
             "configuration."
         )
 

@@ -31,7 +31,7 @@ import numpy as np
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Record pymdp Nous golden fixtures for the NumPy engine."
+        description="Record pymdp Planning golden fixtures for the NumPy engine."
     )
     parser.add_argument(
         "--out",

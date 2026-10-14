@@ -48,7 +48,7 @@ async def self_model(tmp_path, bus):
     try:
         await eid.shutdown()
     except Exception as exc:  # teardown of an already-shut-down fixture
-        print(f"eidolon teardown ignored: {exc!r}")
+        print(f"self-model teardown ignored: {exc!r}")
 
 
 @pytest.mark.asyncio

@@ -196,7 +196,7 @@ def test_tier_unsupported_modules_elements_must_be_strings(tmp_path: Path):
     shipped, op = _write_config(
         tmp_path,
         '[modules]\nsoma = false\n',
-        '[tier]\nname = "tier0"\nunsupported_modules = ["lingua", 123]\noscillator_supported = false\n',
+        '[tier]\nname = "tier0"\nunsupported_modules = ["language", 123]\noscillator_supported = false\n',
     )
     with pytest.raises(ConfigShapeError, match=r"tier\.unsupported_modules.*expected.*string") as exc_info:
         load_kaine_config(shipped, op, strict_operator=True)

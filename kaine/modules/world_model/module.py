@@ -268,7 +268,7 @@ class WorldModel(BaseModule):
                 )
             except Exception:
                 log.error(
-                    "phantasia: failed to write pass-count sidecar %s after "
+                    "world model: failed to write pass-count sidecar %s after "
                     "restoring count %d — the counter is updated but will not "
                     "survive a restart until the next successful weight save",
                     sidecar,
@@ -282,7 +282,7 @@ class WorldModel(BaseModule):
         path = Path(self._checkpoint_path)
         if not path.is_file():
             log.info(
-                "phantasia: no world-model checkpoint at %s — starting from "
+                "world model: no world-model checkpoint at %s — starting from "
                 "fresh initialization (will save here)",
                 path,
             )
@@ -300,7 +300,7 @@ class WorldModel(BaseModule):
                 "revert the config/encoder change — refusing to silently "
                 "discard learned weights."
             ) from exc
-        log.info("phantasia: loaded world-model weights from %s", path)
+        log.info("world model: loaded world-model weights from %s", path)
 
         sidecar = self._passes_sidecar_path()
         if sidecar and sidecar.is_file():
@@ -308,20 +308,20 @@ class WorldModel(BaseModule):
                 data = json.loads(sidecar.read_text())
             except Exception:
                 log.warning(
-                    "phantasia: corrupt pass-count sidecar %s — resetting to 0",
+                    "world model: corrupt pass-count sidecar %s — resetting to 0",
                     sidecar,
                     exc_info=True,
                 )
                 return
             if not isinstance(data, dict):
                 log.warning(
-                    "phantasia: invalid pass-count sidecar %s — resetting to 0", sidecar
+                    "world model: invalid pass-count sidecar %s — resetting to 0", sidecar
                 )
                 return
             passes = data.get("successful_training_passes")
             if isinstance(passes, bool) or not isinstance(passes, int) or passes < 0:
                 log.warning(
-                    "phantasia: invalid pass count %r in sidecar %s — resetting to 0",
+                    "world model: invalid pass count %r in sidecar %s — resetting to 0",
                     passes,
                     sidecar,
                 )
@@ -341,7 +341,7 @@ class WorldModel(BaseModule):
             save_checkpoint(self._checkpoint_path, blob)
         except Exception:
             log.error(
-                "phantasia: FAILED to save world-model weights to %s (%s) — "
+                "world model: FAILED to save world-model weights to %s (%s) — "
                 "learned state since the last successful save is at risk",
                 self._checkpoint_path,
                 reason,
@@ -349,7 +349,7 @@ class WorldModel(BaseModule):
             )
             return False
         log.info(
-            "phantasia: saved world-model weights to %s (%s)",
+            "world model: saved world-model weights to %s (%s)",
             self._checkpoint_path,
             reason,
         )
@@ -365,7 +365,7 @@ class WorldModel(BaseModule):
                 )
             except Exception:
                 log.error(
-                    "phantasia: FAILED to write pass-count sidecar %s — "
+                    "world model: FAILED to write pass-count sidecar %s — "
                     "the saved pass count is stale until the next successful save",
                     sidecar,
                     exc_info=True,
@@ -639,7 +639,7 @@ class WorldModel(BaseModule):
             )
         except Exception:
             log.error(
-                "phantasia: failed to write pass-count sidecar %s for snapshot "
+                "world model: failed to write pass-count sidecar %s for snapshot "
                 "artifact — the snapshot carries weights but the pass count is "
                 "stale until the next successful save",
                 sidecar,
@@ -666,7 +666,7 @@ class WorldModel(BaseModule):
                     data = json.loads(sidecar.read_text())
                 except Exception:
                     log.warning(
-                        "phantasia: corrupt pass-count sidecar in snapshot %s — "
+                        "world model: corrupt pass-count sidecar in snapshot %s — "
                         "ignoring",
                         sidecar,
                         exc_info=True,
@@ -674,7 +674,7 @@ class WorldModel(BaseModule):
                     return
                 if not isinstance(data, dict):
                     log.warning(
-                        "phantasia: invalid pass-count sidecar in snapshot %s — "
+                        "world model: invalid pass-count sidecar in snapshot %s — "
                         "ignoring",
                         sidecar,
                     )
@@ -682,7 +682,7 @@ class WorldModel(BaseModule):
                 passes = data.get("successful_training_passes")
                 if isinstance(passes, bool) or not isinstance(passes, int) or passes < 0:
                     log.warning(
-                        "phantasia: invalid pass count %r in snapshot sidecar %s — "
+                        "world model: invalid pass count %r in snapshot sidecar %s — "
                         "ignoring",
                         passes,
                         sidecar,
@@ -691,7 +691,7 @@ class WorldModel(BaseModule):
                 self.restore_training_pass_count(passes)
         elif self._persist_weights and self._checkpoint_path:
             log.warning(
-                "phantasia: the restored snapshot carries no world model; this "
+                "world model: the restored snapshot carries no world model; this "
                 "instance starts from a fresh world model"
             )
 
@@ -725,7 +725,7 @@ class WorldModel(BaseModule):
             }
         if not self._save_weights(reason="preserve"):
             raise RuntimeError(
-                "phantasia: persist_weights is enabled but the world-model "
+                "world model: persist_weights is enabled but the world-model "
                 f"checkpoint save to {self._checkpoint_path!r} FAILED during "
                 "preservation — refusing to write a bundle that omits the "
                 "learned world model while claiming completeness"
@@ -748,7 +748,7 @@ class WorldModel(BaseModule):
         """
         if not (hasattr(self._wm, "import_params") and hasattr(self._wm, "export_params")):
             raise RuntimeError(
-                "phantasia: revive carries world-model weights but the running "
+                "world model: revive carries world-model weights but the running "
                 f"backend {self._backend!r} has no learned parameters to load "
                 "them into — refusing to produce a mismatched individual"
             )

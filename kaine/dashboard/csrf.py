@@ -133,11 +133,11 @@ class DashboardCSRFMiddleware(BaseHTTPMiddleware):
         if host is None:
             if _is_loopback(self._config.host):
                 return
-            log.warning("nexus csrf: rejected request without Host header")
+            log.warning("dashboard csrf: rejected request without Host header")
             raise DashboardCSRFError("host not allowed")
 
         if not _host_allowed(host, self._config.host_allowlist):
-            log.warning("nexus csrf: rejected request with host=%r", host)
+            log.warning("dashboard csrf: rejected request with host=%r", host)
             raise DashboardCSRFError("host not allowed")
 
         # State-changing methods additionally require Origin validation.
@@ -150,5 +150,5 @@ class DashboardCSRFMiddleware(BaseHTTPMiddleware):
         if _origin_matches(origin, self._config.allowed_origins):
             return
 
-        log.warning("nexus csrf: rejected cross-origin request")
+        log.warning("dashboard csrf: rejected cross-origin request")
         raise DashboardCSRFError("cross-origin request rejected")

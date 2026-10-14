@@ -162,7 +162,7 @@ class OpenAIChatClient:
             field = await self._lora_resolver.lora_field()
         except Exception:
             log.warning(
-                "lingua: lora resolver failed, sending request without lora",
+                "language: lora resolver failed, sending request without lora",
                 exc_info=True,
             )
             return
@@ -191,7 +191,7 @@ class OpenAIChatClient:
         from kaine.organ_window_state import organ_unloaded
 
         if organ_unloaded():
-            log.debug("lingua: organ resting (voice-alignment window); deferring generation")
+            log.debug("language: organ resting (voice-alignment window); deferring generation")
             return ChatResponse(
                 text="",
                 model=request.model,

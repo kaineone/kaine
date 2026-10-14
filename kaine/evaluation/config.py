@@ -232,8 +232,8 @@ class DashboardRecordConfig:
         # under the metrics-export allowlist root.
         _assert_path_outside_export_allowlist(
             log_dir,
-            "nexus_record log_dir",
-            "The Nexus diagnostics recorder captures the filtered diagnostics "
+            "dashboard_record log_dir",
+            "The Dashboard diagnostics recorder captures the filtered diagnostics "
             "display and is never export-eligible — set log_dir to a path OUTSIDE "
             f"{_EXPORT_ALLOWLIST_ROOT}/ and any configured evaluation_logs root.",
             export_roots=export_roots,
@@ -507,9 +507,9 @@ class EvaluationConfig:
             raise ValueError(
                 f"evaluation.chat_model_id ({explicit_model!r}) must equal the "
                 f"language organ's [language].model_id ({language_model_id!r}): the "
-                "A/B-divergence baseline must run the SAME model as Lingua, or the "
+                "A/B-divergence baseline must run the SAME model as Language, or the "
                 "divergence measures a model difference instead of the architecture. "
-                "Remove evaluation.chat_model_id (it derives from lingua) or set "
+                "Remove evaluation.chat_model_id (it derives from language) or set "
                 "them equal."
             )
         chat_model_id = str(explicit_model or language_model_id or cls.chat_model_id)

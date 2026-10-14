@@ -406,14 +406,14 @@ class Planning(BaseModule):
                 # A wrapping or third-party engine that does not take a seed
                 # keeps its own fallback; say so rather than drop it silently.
                 log.info(
-                    "nous: engine %s cannot take the restored posterior; "
+                    "planning: engine %s cannot take the restored posterior; "
                     "its timeout fallback is not seeded",
                     type(self._engine).__name__,
                 )
             elif callable(seed) and self._last_posterior:
                 if not seed(self._last_posterior):
                     log.warning(
-                        "nous: restored posterior does not match the model; "
+                        "planning: restored posterior does not match the model; "
                         "engine fallback unchanged"
                     )
         if "unknown_outcomes" in state:
@@ -424,13 +424,13 @@ class Planning(BaseModule):
             load = getattr(self._engine, "load_learned_state", None)
             if callable(load):
                 if not load(state["learned"]):
-                    log.warning("nous: could not restore learned model of actions")
+                    log.warning("planning: could not restore learned model of actions")
             else:
                 log.info(
-                    "nous: engine %s cannot restore a learned model of actions",
+                    "planning: engine %s cannot restore a learned model of actions",
                     type(self._engine).__name__,
                 )
         else:
             log.info(
-                "nous: snapshot has no learned model of its actions; starting from the prior"
+                "planning: snapshot has no learned model of its actions; starting from the prior"
             )

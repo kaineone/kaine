@@ -23,18 +23,21 @@ def test_base_template_loads_auth_script_first():
     scripts = re.findall(r"<script\b[^>]*>", head, re.IGNORECASE | re.DOTALL)
     assert scripts, "expected at least one <script> in <head>"
 
-    first_script = scripts[0]
-    assert "/static/dashboard_auth.js" in first_script, (
-        "dashboard_auth.js must be the first script loaded in <head>"
+    # The storage helper only defines a function and fetches nothing, so it may
+    # load first; dashboard_auth.js must still wrap fetch before any other script.
+    others = [s for s in scripts if "/static/dashboard_legacy_storage.js" not in s]
+    assert others, "expected dashboard_auth.js in <head>"
+    assert "/static/dashboard_auth.js" in others[0], (
+        "dashboard_auth.js must be the first script loaded in <head> after the storage helper"
     )
 
 
 def test_logout_button_in_base_template():
     html = BASE_TEMPLATE.read_text(encoding="utf-8")
-    assert 'id="nexus-logout"' in html, "rail logout button missing"
+    assert 'id="dashboard-logout"' in html, "rail logout button missing"
 
     match = re.search(
-        r'<button\b[^>]*\bid="nexus-logout"[^>]*>',
+        r'<button\b[^>]*\bid="dashboard-logout"[^>]*>',
         html,
         re.IGNORECASE | re.DOTALL,
     )
@@ -49,7 +52,7 @@ def test_logout_button_in_base_template():
 def test_dashboard_auth_js_required_content():
     text = AUTH_JS.read_text(encoding="utf-8")
 
-    for needle in ("X-Nexus-Session-Key", "kaine.nexus.sessionKey", "localStorage"):
+    for needle in ("X-Dashboard-Session-Key", "kaine.dashboard.sessionKey", "localStorage"):
         assert needle in text, f"{needle!r} missing from dashboard_auth.js"
 
     for forbidden in ("document.cookie", "eval("):

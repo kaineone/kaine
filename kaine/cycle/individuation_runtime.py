@@ -193,7 +193,7 @@ class IndividuationConfig:
             or not math.isfinite(language_quiet_s)
             or language_quiet_s <= 0
         ):
-            raise ValueError("lingua_quiet_s must be a finite number > 0")
+            raise ValueError("language_quiet_s must be a finite number > 0")
 
         probe_temperature = explicit.get("probe_temperature", cls.probe_temperature)
         if (
@@ -287,12 +287,12 @@ class IndividuationRuntime:
             await self.notify(kind)
 
     def on_maturation(self) -> None:
-        log.info("individuation birth hook: writing birth marker and requesting birth capture")
+        log.info("individuation maturation hook: writing maturation marker and requesting maturation capture")
         try:
             self.paths.root.mkdir(parents=True, exist_ok=True)
             self.paths.maturation_pending.write_text("1", encoding="utf-8")
         except OSError as exc:
-            log.warning("individuation failed to write birth marker: %s", exc)
+            log.warning("individuation failed to write maturation marker: %s", exc)
         self.scheduler.request_capture("birth")
 
     async def start(self) -> None:
@@ -303,7 +303,7 @@ class IndividuationRuntime:
                 if self.sleeping():
                     self.scheduler.notify_sleep_started()
             except Exception:
-                log.debug("hypnos_sleeping predicate failed, treating as awake")
+                log.debug("sleep_sleeping predicate failed, treating as awake")
 
         try:
             self.core.adopt_reference()
@@ -321,9 +321,9 @@ class IndividuationRuntime:
                 try:
                     self.paths.maturation_pending.unlink(missing_ok=True)
                 except OSError as exc:
-                    log.warning("individuation failed to remove stale birth marker: %s", exc)
+                    log.warning("individuation failed to remove stale maturation marker: %s", exc)
             elif self.paths.maturation_pending.exists():
-                log.info("individuation resuming pending birth capture")
+                log.info("individuation resuming pending maturation capture")
                 self.scheduler.request_capture("birth")
             elif not developing:
                 self.scheduler.request_capture("capture")
@@ -358,7 +358,7 @@ class IndividuationRuntime:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                log.warning("individuation hypnos watch init failed: %s", exc)
+                log.warning("individuation sleep watch init failed: %s", exc)
                 try:
                     await asyncio.sleep(5.0)
                 except asyncio.CancelledError:
@@ -374,7 +374,7 @@ class IndividuationRuntime:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                log.warning("individuation hypnos watch failed: %s", exc)
+                log.warning("individuation sleep watch failed: %s", exc)
                 try:
                     await asyncio.sleep(5.0)
                 except asyncio.CancelledError:
@@ -461,7 +461,7 @@ def build_runtime(
             try:
                 paths.maturation_pending.unlink(missing_ok=True)
             except OSError as exc:
-                log.warning("individuation failed to remove birth marker: %s", exc)
+                log.warning("individuation failed to remove maturation marker: %s", exc)
 
     scheduler = IndividuationScheduler(
         paths=paths,

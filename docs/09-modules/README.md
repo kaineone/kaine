@@ -26,7 +26,7 @@ The shipped `[modules]` block in [`config/kaine.toml`](../../config/kaine.toml) 
 | [Vision](vision.md) | Foveated vision: predicts the next clip embedding from earlier ones and the broadcast context. | Yes |
 | [Vocal](vocal.md) | Voice output: synthesizes external speech with prosody modulated by Affect. | No |
 
-`recorder` must stay disabled in production. `embodiment` also needs `KAINE_MUNDUS_OPERATOR_APPROVED=1` before it leaves the default stub body.
+`recorder` must stay disabled in production. `embodiment` also needs `KAINE_EMBODIMENT_OPERATOR_APPROVED=1` before it leaves the default stub body.
 
 The vision, audition, interoception, and sequence modules are the four predictive processors. In the base-thesis profile each one scales its prediction error by its own recent errors, reports an intensity graded by that ratio, and marks every report with a boolean `alert`. See each module's page and [The global workspace](../08-cognitive-cycle/global-workspace.md) for how the reports compete.
 

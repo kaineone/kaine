@@ -86,7 +86,7 @@ async def test_bundle_and_revive(real_encryptor, tmp_path):
 
     ind_root = tmp_path / "ind"
     ipaths = IndividuationPaths(root=ind_root)
-    save_ledger(ipaths, Ledger(reference_id="birth-ref", individuated=True))
+    save_ledger(ipaths, Ledger(reference_id="maturation-ref", individuated=True))
     (ind_root / "reports").mkdir(parents=True)
     (ind_root / "reports" / "x.jsonl").write_bytes(b'{"entry":1}\n')
 
@@ -110,7 +110,7 @@ async def test_bundle_and_revive(real_encryptor, tmp_path):
     restored_paths = IndividuationPaths(root=tmp_path / "restored")
     ledger = load_ledger(restored_paths)
     assert ledger.individuated is True
-    assert ledger.reference_id == "birth-ref"
+    assert ledger.reference_id == "maturation-ref"
     assert (tmp_path / "restored" / "reports" / "x.jsonl").read_bytes() == b'{"entry":1}\n'
 
 

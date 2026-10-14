@@ -10,7 +10,7 @@ First boot is operator-supervised by default. The shipped `config/kaine.toml` tu
 
 Read the operator-responsibility items in [Security and privacy](../13-security-and-privacy.md) before proceeding.
 
-The shipped `config/kaine.toml` has `[security.state_encryption] enabled = true`. If no encryption key is present, the cycle refuses to boot. The shipped `[dashboard].access` is `"open"`, so anyone who can reach the dashboard can view and control the entity without signing in; setting `access = "token"` restores the operator token and session sign-in. You can override the access mode at runtime with `KAINE_NEXUS_ACCESS`. Decide whether those defaults are appropriate for your deployment.
+The shipped `config/kaine.toml` has `[security.state_encryption] enabled = true`. If no encryption key is present, the cycle refuses to boot. The shipped `[dashboard].access` is `"open"`, so anyone who can reach the dashboard can view and control the entity without signing in; setting `access = "token"` restores the operator token and session sign-in. You can override the access mode at runtime with `KAINE_DASHBOARD_ACCESS`. Decide whether those defaults are appropriate for your deployment.
 
 ### Verify preconditions
 
@@ -78,7 +78,7 @@ python -m kaine.dashboard
 
 The dashboard starts on `http://127.0.0.1:8088/diagnostics/`. With the cycle not yet up, the page reports `cycle_status: not running`.
 
-The shipped `[dashboard].access` is `"open"`, so no sign-in is needed. You can override the access mode with `KAINE_NEXUS_ACCESS` (`open` or `token`), make the dashboard read-only with `KAINE_NEXUS_READ_ONLY=1`, or add Tailscale hostnames with `KAINE_NEXUS_EXTRA_HOSTS`. To require an operator token or to serve the dashboard over your tailnet, see [opening the dashboard](../05-dashboard.md).
+The shipped `[dashboard].access` is `"open"`, so no sign-in is needed. You can override the access mode with `KAINE_DASHBOARD_ACCESS` (`open` or `token`), make the dashboard read-only with `KAINE_DASHBOARD_READ_ONLY=1`, or add Tailscale hostnames with `KAINE_DASHBOARD_EXTRA_HOSTS`. To require an operator token or to serve the dashboard over your tailnet, see [opening the dashboard](../05-dashboard.md).
 
 If no Redis password is configured yet, the dashboard exits with a message naming `bash scripts/redis-bootstrap.sh` instead of starting.
 

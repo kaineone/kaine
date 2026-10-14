@@ -234,8 +234,8 @@ class CfCNetwork:
             device = select_device("cpu")
             if device != "cpu":
                 log.warning(
-                    "Chronos requested cpu but select_device returned %s; "
-                    "Chronos pins to cpu regardless to keep the network small "
+                    "Sequence requested cpu but select_device returned %s; "
+                    "Sequence pins to cpu regardless to keep the network small "
                     "and the cycle predictable",
                     device,
                 )

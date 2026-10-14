@@ -47,7 +47,7 @@ class PassiveDecay:
     async def suggest(self, state: DimensionalState) -> RegulationAdjustment:
         if not self._logged_once:
             log.debug(
-                "thymos regulation: PassiveDecay active — "
+                "affect regulation: PassiveDecay active — "
                 "no active regulation policy; homeostatic drift is the sole regulator"
             )
             self._logged_once = True

@@ -6,7 +6,7 @@
  * On localhost the browser shares cookies across ports on the same host, so the
  * HttpOnly session cookie by itself would authenticate any origin on the same
  * host. The session key is therefore kept only in origin-scoped localStorage
- * and sent explicitly via the X-Nexus-Session-Key header for state-changing
+ * and sent explicitly via the X-Dashboard-Session-Key header for state-changing
  * requests. The cookie is still required, but it alone must not authorize
  * mutations.
  */
@@ -15,21 +15,30 @@
   "use strict";
 
   // Guard against double-installation if the script is included more than once.
-  if (window.__nexusAuthInstalled) {
+  if (window.__dashboardAuthInstalled) {
     return;
   }
-  window.__nexusAuthInstalled = true;
+  window.__dashboardAuthInstalled = true;
 
-  var STORAGE_KEY = "kaine.nexus.sessionKey";
+  var STORAGE_KEY = "kaine.dashboard.sessionKey";
+
+  // Move a value stored under the key's old name before the rename (first load only).
+  if (window.DashboardLegacyStorage) {
+    try {
+      window.DashboardLegacyStorage.migrate(window.localStorage, STORAGE_KEY);
+    } catch (e) {
+      // Storage unavailable; nothing to migrate.
+    }
+  }
 
   // Clock hook for tests; defaults to the real clock.
-  if (typeof window.__nexusAuthNow !== "function") {
-    window.__nexusAuthNow = function () {
+  if (typeof window.__dashboardAuthNow !== "function") {
+    window.__dashboardAuthNow = function () {
       return Date.now();
     };
   }
-  function nexusNow() {
-    return window.__nexusAuthNow();
+  function dashboardNow() {
+    return window.__dashboardAuthNow();
   }
 
   function getStoredKey() {
@@ -61,12 +70,12 @@
   // ---------------------------------------------------------------------------
 
   function initLoginForm() {
-    var form = document.getElementById("nexus-login-form");
+    var form = document.getElementById("dashboard-login-form");
     if (!form) {
       return;
     }
 
-    var errorEl = document.getElementById("nexus-login-error");
+    var errorEl = document.getElementById("dashboard-login-error");
     var submitBtn = form.querySelector(
       'button[type="submit"], input[type="submit"]'
     );
@@ -74,7 +83,7 @@
     form.addEventListener("submit", function (event) {
       event.preventDefault();
 
-      var tokenInput = document.getElementById("nexus-login-token");
+      var tokenInput = document.getElementById("dashboard-login-token");
       var token = tokenInput ? tokenInput.value : "";
 
       clearStoredKey();
@@ -120,13 +129,13 @@
               errorEl.textContent =
                 "No operator token is configured on the server.";
             } else {
-              errorEl.textContent = "Could not reach Nexus.";
+              errorEl.textContent = "Could not reach the dashboard.";
             }
           }
         })
         .catch(function () {
           if (errorEl) {
-            errorEl.textContent = "Could not reach Nexus.";
+            errorEl.textContent = "Could not reach the dashboard.";
           }
         })
         .finally(function () {
@@ -138,12 +147,12 @@
   }
 
   function initLogoutButton() {
-    var btn = document.getElementById("nexus-logout");
+    var btn = document.getElementById("dashboard-logout");
     if (!btn) {
       return;
     }
     btn.addEventListener("click", function () {
-      window.NexusAuth.logout();
+      window.DashboardAuth.logout();
     });
   }
 
@@ -230,7 +239,7 @@
     return nextInit;
   }
 
-  window.fetch = function nexusFetch(input, init) {
+  window.fetch = function dashboardFetch(input, init) {
     var method = getMethod(input, init);
     var url = getRequestUrl(input);
     var key = getStoredKey();
@@ -244,7 +253,7 @@
       method !== "OPTIONS"
     ) {
       var headers = buildHeaders(input, init);
-      headers.set("X-Nexus-Session-Key", key);
+      headers.set("X-Dashboard-Session-Key", key);
       nextInit = cloneInitWithHeaders(init, headers);
     }
 
@@ -266,7 +275,7 @@
   // Public API
   // ---------------------------------------------------------------------------
 
-  window.NexusAuth = {
+  window.DashboardAuth = {
     logout: function () {
       fetch("/auth/logout", { method: "POST" })
         .then(function () {
@@ -292,52 +301,52 @@
   if (typeof window.EventSource !== "undefined" && window.EventSource) {
     var OriginalEventSource = window.EventSource;
 
-    class NexusEventSource extends OriginalEventSource {
+    class DashboardEventSource extends OriginalEventSource {
       constructor(...args) {
         super(...args);
-        this.__nexusErrors = 0;
-        this.__nexusLastProbe = null;
-        this.__nexusProbing = false;
+        this.__dashboardErrors = 0;
+        this.__dashboardLastProbe = null;
+        this.__dashboardProbing = false;
         var self = this;
         OriginalEventSource.prototype.addEventListener.call(
           this,
           "error",
           function (event) {
-            self.__nexusOnError(event);
+            self.__dashboardOnError(event);
           }
         );
       }
 
-      __nexusOnError(event) {
-        var now = nexusNow();
-        this.__nexusErrors += 1;
+      __dashboardOnError(event) {
+        var now = dashboardNow();
+        this.__dashboardErrors += 1;
         if (
           this.readyState === OriginalEventSource.CLOSED ||
-          this.__nexusErrors >= 3
+          this.__dashboardErrors >= 3
         ) {
-          this.__nexusMaybeProbe(now);
+          this.__dashboardMaybeProbe(now);
         }
       }
 
-      __nexusMaybeProbe(now) {
-        if (this.__nexusProbing) {
+      __dashboardMaybeProbe(now) {
+        if (this.__dashboardProbing) {
           return;
         }
-        if (typeof this.__nexusLastProbe === "number" && now - this.__nexusLastProbe < 30000) {
+        if (typeof this.__dashboardLastProbe === "number" && now - this.__dashboardLastProbe < 30000) {
           return;
         }
-        this.__nexusLastProbe = now;
-        this.__nexusProbing = true;
+        this.__dashboardLastProbe = now;
+        this.__dashboardProbing = true;
         var self = this;
         fetch("/diagnostics/perception.json", { cache: "no-store" })
           .catch(function () {})
           .finally(function () {
-            self.__nexusProbing = false;
+            self.__dashboardProbing = false;
           });
       }
     }
 
 
-    window.EventSource = NexusEventSource;
+    window.EventSource = DashboardEventSource;
   }
 })();

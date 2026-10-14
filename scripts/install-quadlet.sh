@@ -14,6 +14,9 @@
 #   is missing, naming the bootstrap step that creates each.
 # - Verifies the rendered units with the podman quadlet generator if found.
 # - Never enables, starts, or restarts any unit.
+# - Removes a unit this script installed under a name that was since renamed
+#   (kaine-nexus.container is now kaine-dashboard.container), and proceeds
+#   only when systemd reports the old service inactive or failed.
 #
 # Options:
 #   --root DIR       checkout root (default: the checkout containing this script)
@@ -28,7 +31,7 @@
 # After install, reload systemd, start the data services, and start the entity
 # only deliberately with operator presence:
 #   systemctl --user daemon-reload
-#   systemctl --user start kaine-redis kaine-qdrant kaine-nexus
+#   systemctl --user start kaine-redis kaine-qdrant kaine-dashboard
 #   systemctl --user set-environment KAINE_CYCLE_OPERATOR_PRESENT=1
 #   systemctl --user start kaine-cycle
 
@@ -164,6 +167,44 @@ else
   exit 1
 fi
 
+# The dashboard unit was renamed from kaine-nexus.container to
+# kaine-dashboard.container. Remove the old unit this script installed, but
+# only when its service is not running. This list goes with the alias release.
+OLD_UNITS=("kaine-nexus.container")
+SYSTEMCTL="${KAINE_SYSTEMCTL:-systemctl}"
+
+for old in "${OLD_UNITS[@]}"; do
+  old_path="$DEST/$old"
+  [[ -e "$old_path" ]] || continue
+  service="${old%.container}.service"
+  if ! command -v "$SYSTEMCTL" >/dev/null 2>&1; then
+    echo "install-quadlet: cannot tell whether $service is running ($SYSTEMCTL not found); stop it first: systemctl --user stop $service" >&2
+    exit 1
+  fi
+  if ! state="$("$SYSTEMCTL" --user show -p ActiveState --value "$service" 2>/dev/null)"; then
+    echo "install-quadlet: cannot tell whether $service is running (systemctl --user show failed); stop it first: systemctl --user stop $service" >&2
+    exit 1
+  fi
+  if [[ "$state" != "inactive" && "$state" != "failed" ]]; then
+    [[ -n "$state" ]] || state="unknown"
+    echo "install-quadlet: $service is $state, not stopped; stop it first: systemctl --user stop $service" >&2
+    exit 1
+  fi
+  # Ours: it carries the project's licence header and was rendered from this
+  # checkout (the placeholder became this root path).
+  if grep -q '^# SPDX-License-Identifier: LicenseRef-CAL-0.4' "$old_path" \
+    && grep -qF "Volume=$ROOT_RESOLVED/config/kaine.operator.toml:" "$old_path"; then
+    if [[ $DRY_RUN -eq 1 ]]; then
+      echo "would remove old unit $old (renamed to kaine-dashboard.container)"
+    else
+      rm -f "$old_path"
+      echo "removed old unit $old (renamed to kaine-dashboard.container)"
+    fi
+  else
+    echo "install-quadlet: left $DEST/$old in place; it was not installed by this script" >&2
+  fi
+done
+
 if [[ $DRY_RUN -eq 1 ]]; then
   for name in "${rendered[@]}"; do
     echo "would install $name"
@@ -183,7 +224,7 @@ cat <<'EOF'
 
 Next steps:
   systemctl --user daemon-reload
-  systemctl --user start kaine-redis kaine-qdrant kaine-nexus
+  systemctl --user start kaine-redis kaine-qdrant kaine-dashboard
   systemctl --user set-environment KAINE_CYCLE_OPERATOR_PRESENT=1
   systemctl --user start kaine-cycle
 

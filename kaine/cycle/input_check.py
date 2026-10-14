@@ -84,7 +84,7 @@ def check_input_condition(
                     name=CONDITION_NAMES[8],
                     ok=False,
                     reason=(
-                        "no perceiving module: enable topos or audition with capture_enabled"
+                        "no perceiving module: enable vision or audition with capture_enabled"
                     ),
                 )
 
@@ -106,7 +106,7 @@ def check_input_condition(
                     number=8,
                     name=CONDITION_NAMES[8],
                     ok=False,
-                    reason="no perceiving module: enable topos or audition",
+                    reason="no perceiving module: enable vision or audition",
                 )
 
             if vision_on:

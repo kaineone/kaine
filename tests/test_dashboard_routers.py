@@ -587,7 +587,7 @@ async def test_health_endpoint_shape():
 # ---------------------------------------------------------------------------
 # Snapshot pusher (task 2.2) — server-pushes a combined metrics+health
 # snapshot over the single diagnostics SSE stream, retiring the client-side
-# NexusVitals/NexusMetrics/NexusSpot poll loops.
+# DashboardVitals/DashboardMetrics/DashboardSupervisor poll loops.
 # ---------------------------------------------------------------------------
 
 
@@ -898,7 +898,7 @@ async def test_pages_share_dashboard_layout_marker():
             diag = await client.get("/diagnostics/", headers={"Authorization": "Bearer test-token"})
         for resp in (conv, diag):
             assert resp.status_code == 200
-            assert 'data-nexus-layout="dashboard"' in resp.text
+            assert 'data-dashboard-layout="dashboard"' in resp.text
 
 
 @pytest.mark.asyncio
@@ -986,8 +986,8 @@ def test_console_opens_exactly_one_sse_connection():
     """V.2: the console must open exactly ONE `EventSource` to the diagnostics
     stream, not the eight independent connections the pre-refactor console
     opened (subscribeMetrics, chart diagnostics, chart fatigue, supervisor, preservation,
-    vitals, NexusReveal, and the presence-affect inline script). Every feature
-    now subscribes through the single shared `NexusStream` dispatcher instead."""
+    vitals, DashboardReveal, and the presence-affect inline script). Every feature
+    now subscribes through the single shared `DashboardStream` dispatcher instead."""
     base = Path(__file__).resolve().parents[1] / "kaine" / "dashboard"
     dashboard_js = (base / "static" / "dashboard.js").read_text()
     dashboard_console_js = (base / "static" / "dashboard_console.js").read_text()
@@ -995,7 +995,7 @@ def test_console_opens_exactly_one_sse_connection():
     diagnostics_html = (base / "templates" / "diagnostics.html").read_text()
 
     # Exactly one `new EventSource(` construction across the whole client
-    # bundle — inside NexusStream, the shared dispatcher every feature below
+    # bundle — inside DashboardStream, the shared dispatcher every feature below
     # subscribes through.
     total = sum(
         src.count("new EventSource(")
@@ -1003,23 +1003,23 @@ def test_console_opens_exactly_one_sse_connection():
     )
     assert total == 1, (
         f"expected exactly one `new EventSource(` construction (the shared "
-        f"NexusStream dispatcher), found {total}"
+        f"DashboardStream dispatcher), found {total}"
     )
-    assert "window.NexusStream" in dashboard_js
+    assert "window.DashboardStream" in dashboard_js
     assert "new EventSource(url)" in dashboard_js
 
     # Every feature that used to open its own EventSource now goes through the
     # shared dispatcher instead.
-    assert "NexusStream.subscribe(" in dashboard_js
-    assert "NexusStream.subscribe(" in dashboard_console_js
-    start = dashboard_js.index("window.NexusStream = {")
+    assert "DashboardStream.subscribe(" in dashboard_js
+    assert "DashboardStream.subscribe(" in dashboard_console_js
+    start = dashboard_js.index("window.DashboardStream = {")
     end = dashboard_js.index("};", start)
     stream_export = dashboard_js[start:end]
     assert "init: init" in stream_export  # exposes init() for the page to call
 
-    # Both pages that open the stream call NexusStream.init exactly once.
+    # Both pages that open the stream call DashboardStream.init exactly once.
     for html in (console_html, diagnostics_html):
-        assert html.count('NexusStream.init("/diagnostics/stream")') == 1
+        assert html.count('DashboardStream.init("/diagnostics/stream")') == 1
 
 
 def test_fonts_served_locally_no_external_font_url():
@@ -1092,7 +1092,7 @@ async def test_health_json_supervisor_block_recovery(tmp_path):
     ctrl = {
         "frozen": True,
         "frozen_at": "2026-06-07T12:00:00+00:00",
-        "reason": "restarting soma",
+        "reason": "restarting interoception",
         "source": "supervisor",
     }
     (tmp_path / "control.json").write_text(json.dumps(ctrl))
@@ -1100,7 +1100,7 @@ async def test_health_json_supervisor_block_recovery(tmp_path):
     snap = await prober.snapshot(force=True)
     s = snap["supervisor"]
     assert s["state"] == "recovery"
-    assert s["message"] == "restarting soma"
+    assert s["message"] == "restarting interoception"
     assert s["since"] == "2026-06-07T12:00:00+00:00"
 
 
@@ -1113,7 +1113,7 @@ async def test_health_json_supervisor_block_critical(tmp_path):
         "attempts": 5,
         "snapshot_id": "snap-abc",
         "escalated_at": "2026-06-07T11:59:00+00:00",
-        "message": "nous failed 5 times; halting",
+        "message": "planning failed 5 times; halting",
     }
     (tmp_path / "escalation.json").write_text(json.dumps(esc))
     prober = _supervisor_prober(tmp_path)
@@ -1123,7 +1123,7 @@ async def test_health_json_supervisor_block_critical(tmp_path):
     assert s["module"] == "planning"
     assert s["attempts"] == 5
     assert s["snapshot_id"] == "snap-abc"
-    assert s["message"] == "nous failed 5 times; halting"
+    assert s["message"] == "planning failed 5 times; halting"
     assert s["since"] == "2026-06-07T11:59:00+00:00"
 
 
@@ -1152,9 +1152,9 @@ async def test_diagnostics_page_has_supervisor_alert_overlay(tmp_path):
         async with app.router.lifespan_context(app):
             r = await client.get("/diagnostics/", headers={"Authorization": "Bearer test-token"})
         assert r.status_code == 200
-        assert 'id="spot-alert"' in r.text
+        assert 'id="supervisor-alert"' in r.text
         assert "data-state" in r.text
-        assert 'id="spot-console"' in r.text
+        assert 'id="supervisor-console"' in r.text
 
 
 def test_supervisor_out_in_default_diagnostics_streams():

@@ -261,8 +261,8 @@ async def main(argv: Optional[list[str]] = None) -> int:
     vision_hz = float(vision_cfg.get("vision_sample_hz", 10.0))
     budget_ms = 1000.0 / vision_hz if vision_hz > 0 else float("inf")
 
-    print("KAINE foveation benchmark (topos-foveation task 1.7)")
-    print("Dry probe — no entity boot, no Volition, nothing persisted.\n")
+    print("KAINE foveation benchmark (vision-foveation task 1.7)")
+    print("Dry probe — no entity boot, no Action selection, nothing persisted.\n")
 
     res = await _run(cfg, args.iters, args.screen)
     print(f"source:      {res.get('source', '?')}")

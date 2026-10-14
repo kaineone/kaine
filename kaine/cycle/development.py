@@ -679,13 +679,13 @@ class DevelopmentOwner:
                     self._self_rhythm_baseline_count = max(0, count)
             elif self_baseline is not None or stored_key is not None:
                 log.info(
-                    "gestation: ignoring self-rhythm baseline from "
+                    "development: ignoring self-rhythm baseline from "
                     "mismatched being/run (stored_key=%s, current_key=%s)",
                     stored_key,
                     self._baseline_key,
                 )
         except Exception:
-            log.warning("gestation: could not load baseline", exc_info=True)
+            log.warning("development: could not load baseline", exc_info=True)
 
 
     def _persist_baseline(self) -> None:
@@ -711,7 +711,7 @@ class DevelopmentOwner:
             )
             os.replace(tmp, self._state_path)
         except Exception:
-            log.warning("gestation: could not persist baseline", exc_info=True)
+            log.warning("development: could not persist baseline", exc_info=True)
 
     def _load_progress(self) -> None:
         try:
@@ -723,7 +723,7 @@ class DevelopmentOwner:
             key = data.get("key")
             if key != self._baseline_key:
                 log.info(
-                    "gestation: ignoring progress from another being (%r != %r)",
+                    "development: ignoring progress from another being (%r != %r)",
                     key,
                     self._baseline_key,
                 )
@@ -766,9 +766,9 @@ class DevelopmentOwner:
                         from kaine.state_io import write_json_atomic
                         write_json_atomic(self._viability_path, verdict)
                     except Exception:
-                        log.warning("gestation: could not rewrite the restored viability verdict", exc_info=True)
+                        log.warning("development: could not rewrite the restored viability verdict", exc_info=True)
         except Exception:
-            log.warning("gestation: could not load progress", exc_info=True)
+            log.warning("development: could not load progress", exc_info=True)
 
     def _persist_progress(self) -> None:
         try:
@@ -784,7 +784,7 @@ class DevelopmentOwner:
             write_json_atomic(self._progress_path, data)
             self._last_progress_save_awake = self._active_lived_seconds
         except Exception:
-            log.warning("gestation: could not persist progress", exc_info=True)
+            log.warning("development: could not persist progress", exc_info=True)
 
     def _paused(self) -> bool:
         try:
@@ -798,14 +798,14 @@ class DevelopmentOwner:
                 latest = await self._bus.latest("vision.out")
                 self._vision_cursor = latest[0] if latest else "0"
             except Exception:
-                log.warning("gestation: failed to initialise topos cursor", exc_info=True)
+                log.warning("development: failed to initialise vision cursor", exc_info=True)
                 self._vision_cursor = "0"
         if self._interoception_cursor is None:
             try:
                 latest = await self._bus.latest("interoception.out")
                 self._interoception_cursor = latest[0] if latest else "0"
             except Exception:
-                log.warning("gestation: failed to initialise soma cursor", exc_info=True)
+                log.warning("development: failed to initialise interoception cursor", exc_info=True)
                 self._interoception_cursor = "0"
 
 
@@ -847,7 +847,7 @@ class DevelopmentOwner:
                 try:
                     await self.step()
                 except Exception:
-                    log.warning("gestation: step failed, continuing", exc_info=True)
+                    log.warning("development: step failed, continuing", exc_info=True)
                 try:
                     await asyncio.wait_for(
                         stop_event.wait(),
@@ -861,7 +861,7 @@ class DevelopmentOwner:
                 try:
                     self._drive.scale = self._config.baseline_drive_fraction
                 except Exception:
-                    log.warning("gestation: failed to restore drive on exit", exc_info=True)
+                    log.warning("development: failed to restore drive on exit", exc_info=True)
 
     def _sample(self, now: float) -> None:
         phase: float | None = None
@@ -874,7 +874,7 @@ class DevelopmentOwner:
         except Exception:
             # No self-rhythm reading this tick: the sample records None and the
             # marker windows skip it.
-            log.debug("gestation: self-rhythm read failed", exc_info=True)
+            log.debug("development: self-rhythm read failed", exc_info=True)
 
         activity: float | None = None
         try:
@@ -883,7 +883,7 @@ class DevelopmentOwner:
                 if raw is not None:
                     activity = float(raw)
         except Exception:
-            log.debug("gestation: self-rhythm activity read failed", exc_info=True)
+            log.debug("development: self-rhythm activity read failed", exc_info=True)
 
         beat: float | None = None
         try:
@@ -891,7 +891,7 @@ class DevelopmentOwner:
         except Exception:
             # No maternal beat phase this tick: the sample records None and the
             # phase-locking pairs skip it.
-            log.debug("gestation: beat phase read failed", exc_info=True)
+            log.debug("development: beat phase read failed", exc_info=True)
 
         surrogates: tuple | None = None
         if self._surrogate_beat_phases is not None:
@@ -900,7 +900,7 @@ class DevelopmentOwner:
                 if phases is not None:
                     surrogates = tuple(float(p) for p in phases)
             except Exception:
-                log.debug("gestation: surrogate beat read failed", exc_info=True)
+                log.debug("development: surrogate beat read failed", exc_info=True)
 
         self._samples.append(
             (now, phase, amplitude, beat, self._probe_state, activity, surrogates)
@@ -977,7 +977,7 @@ class DevelopmentOwner:
                 await self._compute_withdrawal_markers(start, end)
             except Exception:
                 log.warning(
-                    "gestation: withdrawal marker computation failed",
+                    "development: withdrawal marker computation failed",
                     exc_info=True,
                 )
                 self._entrain_then_autonomy = None
@@ -1030,7 +1030,7 @@ class DevelopmentOwner:
         try:
             await self._bus.publish(event)
         except Exception:
-            log.warning("gestation: failed to publish probe event", exc_info=True)
+            log.warning("development: failed to publish probe event", exc_info=True)
 
     async def _compute_withdrawal_markers(self, start: float, end: float) -> None:
         duration = end - start
@@ -1226,7 +1226,7 @@ class DevelopmentOwner:
                     write_json_atomic(self._viability_path, verdict)
                 except Exception as exc:  # pragma: no cover
                     logging.getLogger(__name__).warning(
-                        "Failed to write gestation viability verdict: %s", exc
+                        "Failed to write development viability verdict: %s", exc
                     )
                 event = Event(
                     source=SOURCE,
@@ -1239,10 +1239,10 @@ class DevelopmentOwner:
                     await self._bus.publish(event)
                 except Exception as exc:  # pragma: no cover
                     logging.getLogger(__name__).warning(
-                        "Failed to publish gestation viability event: %s", exc
+                        "Failed to publish development viability event: %s", exc
                     )
                 logging.getLogger(__name__).warning(
-                    "Gestation unviable (%s): %s", verdict["rule"], verdict["reason"]
+                    "Development unviable (%s): %s", verdict["rule"], verdict["reason"]
                 )
 
     async def _read_interoception_reports(self, now: float) -> None:
@@ -1275,7 +1275,7 @@ class DevelopmentOwner:
             if last_scanned is not None:
                 self._interoception_cursor = last_scanned
         except Exception:
-            log.warning("gestation: failed to read soma reports", exc_info=True)
+            log.warning("development: failed to read interoception reports", exc_info=True)
 
         cutoff = now - (self._config.recovery_cap_seconds + 120.0)
         while self._interoception_series and self._interoception_series[0][0] < cutoff:
@@ -1289,7 +1289,7 @@ class DevelopmentOwner:
                 "vision.out", last_id=self._vision_cursor, count=1000
             )
         except Exception:
-            log.warning("gestation: failed to read topos reports", exc_info=True)
+            log.warning("development: failed to read vision reports", exc_info=True)
             return []
 
         errors: list[float] = []
@@ -1368,7 +1368,7 @@ class DevelopmentOwner:
         try:
             await self._bus.publish(event)
         except Exception:
-            log.warning("gestation: failed to publish readiness", exc_info=True)
+            log.warning("development: failed to publish readiness", exc_info=True)
 
     def readout(self) -> dict[str, Any]:
         result: dict[str, Any] = {}

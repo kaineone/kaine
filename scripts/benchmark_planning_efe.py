@@ -61,7 +61,7 @@ def main() -> int:
         from kaine.modules.planning.engine import PymdpEngine
         from kaine.modules.planning.generative_model import build_generative_model
     except Exception as exc:  # pragma: no cover - import guard
-        print(f"FAIL: could not import Nous engine ({exc})", file=sys.stderr)
+        print(f"FAIL: could not import Planning engine ({exc})", file=sys.stderr)
         return 2
 
     cfg = _load_planning_config()
@@ -96,7 +96,7 @@ def main() -> int:
     median = statistics.median(samples_ms)
     p95 = sorted(samples_ms)[min(len(samples_ms) - 1, int(len(samples_ms) * 0.95))]
     print(
-        f"Nous EFE benchmark: iterations={len(samples_ms)} "
+        f"Planning EFE benchmark: iterations={len(samples_ms)} "
         f"median={median:.2f}ms p95={p95:.2f}ms threshold={args.threshold_ms:.0f}ms"
     )
     print(

@@ -35,7 +35,7 @@ If the dashboard uses cookies or CORS, they SHALL be configured with SameSite=St
 - **THEN** the server responds without CORS credentials and rejects the actual request
 
 ### Requirement: Host header is validated on every request
-The dashboard SHALL reject with HTTP 403 any request, including GET, whose `Host` header (parsed correctly for bracketed IPv6 literals such as `[::1]:8088`) is not in `[dashboard].host_allowlist`, so a DNS-rebinding page cannot read any dashboard surface. State-changing requests SHALL additionally pass the Origin check. When `allowed_origins` is not configured explicitly, it SHALL be derived from the configured port, and it SHALL be overridable with `KAINE_NEXUS_ALLOWED_ORIGINS` for deployments that publish the dashboard on a different host port.
+The dashboard SHALL reject with HTTP 403 any request, including GET, whose `Host` header (parsed correctly for bracketed IPv6 literals such as `[::1]:8088`) is not in `[dashboard].host_allowlist`, so a DNS-rebinding page cannot read any dashboard surface. State-changing requests SHALL additionally pass the Origin check. When `allowed_origins` is not configured explicitly, it SHALL be derived from the configured port, and it SHALL be overridable with `KAINE_DASHBOARD_ALLOWED_ORIGINS` for deployments that publish the dashboard on a different host port.
 
 #### Scenario: Rebinding GET is rejected
 - **WHEN** a GET request for `/diagnostics/metrics.json` arrives with `Host: attacker.example`
@@ -46,8 +46,8 @@ The dashboard SHALL reject with HTTP 403 any request, including GET, whose `Host
 - **THEN** the Host check passes
 
 ### Requirement: Containerised Dashboard starts with a loopback-only publish
-The shipped container deployments SHALL set the non-loopback opt-in and the operator token through the environment (`KAINE_NEXUS_NON_LOOPBACK_ALLOWED`, `KAINE_NEXUS_TOKEN`) while publishing the dashboard only on the host loopback interface, so the container starts and the dashboard remains unreachable from other hosts.
+The shipped container deployments SHALL set the non-loopback opt-in and the operator token through the environment (`KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED`, `KAINE_DASHBOARD_TOKEN`) while publishing the dashboard only on the host loopback interface, so the container starts and the dashboard remains unreachable from other hosts.
 
 #### Scenario: Compose deployment starts
-- **WHEN** the compose dashboard service starts with `KAINE_NEXUS_HOST=0.0.0.0`, `KAINE_NEXUS_NON_LOOPBACK_ALLOWED=1` and a token
+- **WHEN** the compose dashboard service starts with `KAINE_DASHBOARD_HOST=0.0.0.0`, `KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED=1` and a token
 - **THEN** the dashboard binds and the published port is `127.0.0.1` only

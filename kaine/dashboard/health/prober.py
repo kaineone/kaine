@@ -197,7 +197,7 @@ class HealthProber:
             "model_server": await self._model_server_block(),
             "voice_alignment_window": self._voice_alignment_window_block(),
             "gpu_preflight": self._gpu_preflight_block(),
-            "mnemos_store": self._episodic_memory_store_block(),
+            "episodic_memory_store": self._episodic_memory_store_block(),
             "preservation": self._preservation_block(),
             "welfare": self._welfare_block(),
             "admissibility": self._admissibility_block(),

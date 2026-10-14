@@ -1,5 +1,5 @@
 {% extends "_base.html" %}
-{% block title %}{{ entity_name }} — Nexus console{% endblock %}
+{% block title %}{{ entity_name }} — dashboard console{% endblock %}
 
 {# The left rail carries the wordmark, the four-state status chip, and in-page
    jump-nav to every section group. The console scrolls to its right. #}
@@ -9,14 +9,14 @@
   <span class="rail__label">Status</span>
   {# Four-state chip: OFFLINE > FROZEN > SLEEPING > AWAKE, computed live from
      the cycle_status + freeze flag (metrics push) and Hypnos sleep/wake events
-     by NexusVitals. The page-load DEFAULT is OFFLINE: before any live data
+     by DashboardVitals. The page-load DEFAULT is OFFLINE: before any live data
      arrives we do NOT know a cycle is up, so the old "awake" default was
-     wrong (it read awake with nothing running). NexusVitals overwrites this
+     wrong (it read awake with nothing running). DashboardVitals overwrites this
      the instant the first snapshot lands. #}
   <span class="badge offline" id="sleep-badge">offline</span>
 </div>
 {# Section toggles. A closed section leaves the screen entirely; its button
-   summons it back — it slides in from the button and expands (NexusSections).
+   summons it back — it slides in from the button and expands (DashboardSections).
    Active (on-screen) sections show their button lit. #}
 <nav class="rail__nav" aria-label="Sections">
   <button type="button" class="rail__seg" data-board="board-presence">Presence</button>
@@ -48,7 +48,7 @@
    COLLAPSED here (the console is a glanceable, single-screen surface); the
    standalone /diagnostics and /diagnostics/evaluation pages leave it unset, so
    they render fully expanded. JS auto-expands + flashes a board when it becomes
-   relevant (see NexusConsole in the scripts block). #}
+   relevant (see the console script in the scripts block). #}
 {% set console_view = true %}
 <div class="page page--console">
 
@@ -93,27 +93,27 @@
   // ONE multiplexed diagnostics SSE connection for the whole page (task 1.1) —
   // every feature below subscribes through it instead of opening its own
   // EventSource (this collapsed the console from 8 concurrent connections to
-  // 1). NexusConn renders its live/reconnecting/paused state (task 1.4).
-  NexusStream.init("/diagnostics/stream");
-  if (window.NexusConn) { NexusConn.attach(); }
+  // 1). DashboardConn renders its live/reconnecting/paused state (task 1.4).
+  DashboardStream.init("/diagnostics/stream");
+  if (window.DashboardConn) { DashboardConn.attach(); }
   // Diagnostics live metrics + charts + controls.
-  NexusSSE.subscribeMetrics();
-  if (window.NexusCharts) { NexusCharts.attachDiagnostics(); NexusCharts.attachFatigueChart(); }
-  if (window.NexusPerception) { NexusPerception.attach(); }
-  if (window.NexusControls) { NexusControls.attach(); }
-  if (window.NexusSpot) { NexusSpot.init(); }
-  if (window.NexusPreservation) { NexusPreservation.init(); }
-  if (window.NexusFreeze) { NexusFreeze.attach(); }
-  if (window.NexusMetrics) { NexusMetrics.attach(); }
+  DashboardSSE.subscribeMetrics();
+  if (window.DashboardCharts) { DashboardCharts.attachDiagnostics(); DashboardCharts.attachFatigueChart(); }
+  if (window.DashboardPerceptualLocus) { DashboardPerceptualLocus.attach(); }
+  if (window.DashboardControls) { DashboardControls.attach(); }
+  if (window.DashboardSupervisor) { DashboardSupervisor.init(); }
+  if (window.DashboardPreservation) { DashboardPreservation.init(); }
+  if (window.DashboardFreeze) { DashboardFreeze.attach(); }
+  if (window.DashboardMetrics) { DashboardMetrics.attach(); }
   // Live cycle vitals: refresh run-identity / pacing / banner / module activity
   // / awake pill in place so they never sit dead after the cycle starts. Kept
-  // live afterward by the server-pushed nexus.snapshot event (task 2.2), not a
+  // live afterward by the server-pushed dashboard.snapshot event (task 2.2), not a
   // poll loop.
-  if (window.NexusVitals) { NexusVitals.init(); }
+  if (window.DashboardVitals) { DashboardVitals.init(); }
   // Perception PiP (entity view) + audio mute over the visualizer.
-  if (window.NexusPreview) { NexusPreview.init(); }
+  if (window.DashboardPreview) { DashboardPreview.init(); }
   // Evaluation batch charts (summary.json 404s gracefully when disabled).
-  if (window.NexusCharts) { NexusCharts.attachEvaluation("/diagnostics/evaluation/summary.json"); }
+  if (window.DashboardCharts) { DashboardCharts.attachEvaluation("/diagnostics/evaluation/summary.json"); }
 </script>
 <script type="module">
   // Presence board: the ferrofluid visualizer (LevelMeter, GPL-3.0, vendored at
@@ -137,7 +137,7 @@
       try {
         meter = new LevelMeter(canvas);
         // No affect connected yet: show the cooler "waiting" idle mood until the
-        // first thymos.state arrives (honest — we are not yet receiving affect).
+        // first affect.state arrives (honest — we are not yet receiving affect).
         meter.setConnected(false);
         meter.start();
       } catch (e) {
@@ -156,12 +156,12 @@
       }
 
       // ── Live affect feed (read-only) ───────────────────────────────────────
-      // thymos.out already rides the shared diagnostics SSE stream; its
+      // affect.out already rides the shared diagnostics SSE stream; its
       // `affect.state` events carry derived {valence, arousal} — privacy-safe
       // metrics, NOT raw audio/content (those are never streamed). Feed them to
       // setMood. With no entity running no events arrive and the viz stays
       // calm/idle.
-      if (window.NexusStream) {
+      if (window.DashboardStream) {
         let lastAffectMs = 0;
         const IDLE_TEXT = "Idle — waiting for the entity. The visualizer reflects affect when a cycle is running.";
         setInterval(() => {
@@ -171,7 +171,7 @@
             meter.setConnected(false);
           }
         }, 4000);
-        NexusStream.subscribe((msg) => {
+        DashboardStream.subscribe((msg) => {
           if (!msg || msg.type !== "affect.state") return;
           const st = (msg.payload && msg.payload.state) || {};
           const v = st.valence, a = st.arousal;
@@ -189,7 +189,7 @@
         });
       }
       // NOTE: speech-level input (meter.pushAudio) is intentionally left
-      // unconnected — Nexus exposes no audio-level seam and we never stream raw
+      // unconnected — the dashboard exposes no audio-level seam and we never stream raw
       // audio (zero-raw-persistence). The fluid undulates calmly without it.
     });
   }

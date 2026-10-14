@@ -296,7 +296,7 @@ def _nine_module_argv(nine_module_plan, study_dir):
         nine_module_plan["programme"]["manifest"],
         "--redis-base-url",
         nine_module_plan["redis"]["base_url"],
-        "--db-gestation",
+        "--db-development",
         str(nine_module_plan["redis"]["db"]["gestation"]),
         "--db-branch",
         str(nine_module_plan["redis"]["db"]["branch"]),

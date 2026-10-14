@@ -114,8 +114,10 @@ def build_maturation_router(
 ) -> APIRouter:
     router = APIRouter(prefix="/diagnostics")
 
+    @router.get("/maturation.json", include_in_schema=False)
+    @router.get("/maturation")
     @router.get("/birth.json", include_in_schema=False)
-    @router.get("/birth")
+    @router.get("/birth", include_in_schema=False)
     async def maturation_json():
         return JSONResponse(
             maturation_snapshot(
@@ -126,15 +128,16 @@ def build_maturation_router(
             headers=NO_CACHE,
         )
 
-    @router.post("/birth/ack", dependencies=[Depends(require_operator_token)])
+    @router.post("/maturation/ack", dependencies=[Depends(require_operator_token)])
+    @router.post("/birth/ack", dependencies=[Depends(require_operator_token)], include_in_schema=False)
     async def maturation_ack(body: AckBody):
         request = read_request(path=request_path)
         if request is None:
-            raise HTTPException(status_code=409, detail="no birth awaiting acknowledgement")
+            raise HTTPException(status_code=409, detail="no maturation awaiting acknowledgement")
         if body.request_id != request.request_id:
             raise HTTPException(
                 status_code=409,
-                detail="request_id does not match the current birth request",
+                detail="request_id does not match the current maturation request",
             )
 
         ack = MaturationAck(
@@ -142,7 +145,7 @@ def build_maturation_router(
             acknowledged_at=datetime.now(timezone.utc).isoformat(),
         )
         write_ack(ack, path=ack_path)
-        log.info("operator acknowledged birth")
+        log.info("operator acknowledged maturation")
         return JSONResponse(
             maturation_snapshot(
                 request_path=request_path,

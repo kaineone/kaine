@@ -295,7 +295,7 @@ def test_audio_producer_stops_after_maturation(
             break
         time.sleep(0.005)
 
-    assert delivered, "no block delivered before birth"
+    assert delivered, "no block delivered before maturation"
 
     clock.mark_born()
     thread = stream._thread
@@ -313,7 +313,7 @@ def test_audio_producer_stops_after_maturation(
 async def test_gate_runner_calls_maturation_hook_once_after_embodied(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     readout = {
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
@@ -365,7 +365,7 @@ async def test_gate_runner_calls_maturation_hook_once_after_embodied(
 async def test_gate_runner_raising_maturation_hook_does_not_stop_maturation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     readout = {
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
@@ -399,7 +399,7 @@ async def test_gate_runner_raising_maturation_hook_does_not_stop_maturation(
     runner.set_pause_sources(paused_seconds=lambda: 0.0, is_paused=lambda: False)
 
     def bad_hook() -> None:
-        raise RuntimeError("birth hook failed")
+        raise RuntimeError("maturation hook failed")
 
     runner.set_maturation_hook(bad_hook)
 

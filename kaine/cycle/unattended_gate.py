@@ -90,7 +90,7 @@ CONDITION_NAMES: dict[int, str] = {
     3: "logging active",
     4: "preserve-revive round-trip",
     5: "encryption satisfied",
-    6: "Spot armed and self-tested",
+    6: "Supervisor armed and self-tested",
     7: "caretaker told",
     8: "continuous input",
     9: "individuation wired",
@@ -146,7 +146,7 @@ def conditions_from_safety_net(net: GateResult) -> list[Condition]:
         3: "neither [evaluation] nor [research_event_log] is enabled",
         4: "the dry preserve→revive round-trip did not pass on this install",
         5: "[preservation].require_encryption is true but [security.state_encryption] is off",
-        9: "[individuation].enabled is false, its configuration is invalid, or the lingua module is disabled",
+        9: "[individuation].enabled is false, its configuration is invalid, or the language module is disabled",
     }
     out: list[Condition] = []
     for key, number in SAFETY_NET_CONDITIONS.items():

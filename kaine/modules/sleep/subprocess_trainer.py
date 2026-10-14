@@ -360,14 +360,14 @@ def write_job_spec(
     if current_link.is_symlink() or current_link.exists():
         if current is None:
             raise SubprocessTrainerError(
-                f"the being's current adapter could not be read ({current_link} "
+                f"the entity's current adapter could not be read ({current_link} "
                 "does not resolve); refusing to train a fresh adapter in its place"
             )
         try:
             shutil.copytree(current, job_dir / "previous_adapter")
         except Exception as exc:
             raise SubprocessTrainerError(
-                f"the being's current adapter could not be read ({current}: "
+                f"the entity's current adapter could not be read ({current}: "
                 f"{type(exc).__name__}: {exc}); refusing to train a fresh adapter "
                 "in its place"
             ) from exc

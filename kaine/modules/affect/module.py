@@ -590,7 +590,7 @@ class Affect(BaseModule):
                 except asyncio.CancelledError:
                     raise
                 except Exception:
-                    log.exception("thymos state timer tick failed")
+                    log.exception("affect state timer tick failed")
         except asyncio.CancelledError:
             raise
 
@@ -777,7 +777,7 @@ class Affect(BaseModule):
             "ts": self._clock(),
         }
         log.debug(
-            "thymos coupling: recorded perceived emotion category=%s "
+            "affect coupling: recorded perceived emotion category=%s "
             "(pleasantness=%.2f, intensity=%.2f, weight=%.3f, familiarity=%.2f)",
             category, pleasantness, intensity, weight, familiarity,
         )

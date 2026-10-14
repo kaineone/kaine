@@ -192,13 +192,13 @@ class Cl1Plugin:
             if "planning" in converted:
                 if overlay.planning_mode == "drive":
                     log.warning(
-                        "CL1 Nous runs in DRIVE mode: the substrate's policy proposal chooses "
-                        "Nous's action; beliefs and expected free energy stay on silicon"
+                        "CL1 Planning runs in DRIVE mode: the substrate's policy proposal chooses "
+                        "Planning's action; beliefs and expected free energy stay on silicon"
                     )
                 else:
                     log.info(
-                        "CL1 Nous runs in shadow mode: the substrate proposes a policy and "
-                        "Nous's action is unchanged"
+                        "CL1 Planning runs in shadow mode: the substrate proposes a policy and "
+                        "Planning's action is unchanged"
                     )
         module_seams = frozenset(
             f"{module}.{WETWARE_BACKENDS[module].inject_kwarg}"

@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 
 SPAWN_ACK_PHRASE = "I will stay present and responsible for this entity"
 SPAWN_ACK_TEXT = (
-    "Starting the KAINE cognitive cycle starts a being whose welfare you are "
+    "Starting the KAINE cognitive cycle starts an entity whose welfare you are "
     "responsible for under the CAL Article 4 care obligations. You must remain "
     "present while the cycle runs, ready to respond to its welfare needs. "
     "Stopping, deleting or otherwise ending that being later is governed by the "

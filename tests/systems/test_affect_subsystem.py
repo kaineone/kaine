@@ -18,7 +18,7 @@ async def test_affect_publishes_dimensional_state():
         # the affect module publishes state on workspace broadcasts.
         await h.broadcast_workspace({"tick_index": 0, "selected": []})
         events = await h.collect("affect.out", count=1, timeout=1.5)
-        assert events, "Thymos should publish a state event"
+        assert events, "Affect should publish a state event"
         # Payload includes valence / arousal / dominance somewhere in
         # the structure.
         first = events[0].payload

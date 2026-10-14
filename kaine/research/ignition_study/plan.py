@@ -147,7 +147,7 @@ def _validate_voice_alignment_steps(steps: Any, order_len: int) -> None:
         if line not in LINES:
             raise ValueError(f"Invalid voice_alignment_steps entry: {entry!r}")
         if line == "gestation":
-            raise ValueError(f"gestation never trains the voice: {entry!r}")
+            raise ValueError(f"development never trains the voice: {entry!r}")
         if isinstance(k, bool) or not isinstance(k, int):
             raise ValueError(f"Invalid voice_alignment_steps entry: {entry!r}")
         if line == "branch" and not 0 <= k <= order_len:

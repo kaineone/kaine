@@ -31,7 +31,7 @@ def make_planning(
 
     if "engine" in injected and "engine_wrapper" in injected:
         raise ConfigurationError(
-            "nous cannot take both an injected engine and an engine wrapper"
+            "planning cannot take both an injected engine and an engine wrapper"
         )
 
     allowed = {
@@ -67,13 +67,13 @@ def make_planning(
 
     if factors < 1 or max_states < 1 or actions < 1 or horizon < 1:
         raise ConfigurationError(
-            "nous envelope values (factors, max_states_per_factor, actions, "
+            "planning envelope values (factors, max_states_per_factor, actions, "
             "planning_horizon) must all be >= 1"
         )
     product = factors * max_states * actions * horizon
     if product > _PLANNING_COMPLEXITY_THRESHOLD:
         raise ConfigurationError(
-            f"nous complexity envelope {factors}*{max_states}*{actions}*{horizon}"
+            f"planning complexity envelope {factors}*{max_states}*{actions}*{horizon}"
             f"={product} exceeds threshold {_PLANNING_COMPLEXITY_THRESHOLD}; "
             "EFE planning would risk overrunning the cycle budget"
         )
@@ -91,7 +91,7 @@ def make_planning(
     backend = str(cfg.pop("backend", "pymdp"))
     if backend not in {"pymdp", "numpy"}:
         raise ConfigurationError(
-            f"nous backend must be 'pymdp' or 'numpy', got {backend!r}"
+            f"planning backend must be 'pymdp' or 'numpy', got {backend!r}"
         )
 
     model = build_generative_model(
@@ -117,7 +117,7 @@ def make_planning(
         if not isinstance(wrapped, ActiveInferenceEngine):
             who = getattr(injected["engine_wrapper"], "plugin_name", "a plugin")
             raise ConfigurationError(
-                f"nous engine_wrapper from plugin {who} returned {type(wrapped).__name__}, "
+                f"planning engine_wrapper from plugin {who} returned {type(wrapped).__name__}, "
                 "which is not an ActiveInferenceEngine "
                 "(needs an actions property and a step method)"
             )

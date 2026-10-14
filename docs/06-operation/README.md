@@ -98,7 +98,7 @@ Module-specific prerequisites:
 | `world_model` | `[worldmodel]` extra installed for the DreamerV3 backend; the shipped defaults are `backend = "dreamerv3"`, `engine = "jax"`, `training_enabled = true`, `persist_weights = true` |
 | `effectors` | Shell whitelist is empty by default; fill it deliberately before enabling |
 | `perception` | No extras. It arbitrates whether the senses come from the physical or the virtual locus, never both. The shipped `[modules]` block has `perception = false`, so set it to `true` in your overlay |
-| `embodiment` | The shipped `config/kaine.toml` already has `[embodiment].enabled = true`. To enable the module, set `[modules].embodiment = true` and export `KAINE_MUNDUS_OPERATOR_APPROVED=1`. The only shipped adapter is the transport-free `stub`; a Paracosmic virtual-world adapter is planned |
+| `embodiment` | The shipped `config/kaine.toml` already has `[embodiment].enabled = true`. To enable the module, set `[modules].embodiment = true` and export `KAINE_EMBODIMENT_OPERATOR_APPROVED=1`. The only shipped adapter is the transport-free `stub`; a Paracosmic virtual-world adapter is planned |
 
 ## Monitoring
 

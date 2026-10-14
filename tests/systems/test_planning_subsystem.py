@@ -5,7 +5,7 @@
 
 Uses :class:`FakeEngine` (no pymdp / no JAX) so the subsystem suite is green
 without the reasoning extra. An opt-in real-pymdp check runs only when
-``KAINE_NOUS_RUN_REAL_PYMDP=1`` and the extra is installed.
+``KAINE_PLANNING_RUN_REAL_PYMDP=1`` and the extra is installed.
 """
 from __future__ import annotations
 
@@ -56,8 +56,8 @@ async def test_planning_publishes_belief_and_policy_on_broadcast():
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    os.environ.get("KAINE_NOUS_RUN_REAL_PYMDP") not in ("1", "true", "TRUE"),
-    reason="KAINE_NOUS_RUN_REAL_PYMDP not set; live pymdp contract test skipped",
+    os.environ.get("KAINE_PLANNING_RUN_REAL_PYMDP") not in ("1", "true", "TRUE"),
+    reason="KAINE_PLANNING_RUN_REAL_PYMDP not set; live pymdp contract test skipped",
 )
 async def test_planning_against_real_pymdp_engine():
     async with SubsystemHarness() as h:

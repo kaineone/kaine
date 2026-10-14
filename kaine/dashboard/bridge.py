@@ -94,7 +94,7 @@ class BusBridge:
         for stream in self._streams:
             if stream not in self._cursors:
                 self._cursors[stream] = "$"
-        self._task = asyncio.create_task(self._run(), name="nexus-bus-bridge")
+        self._task = asyncio.create_task(self._run(), name="dashboard-bus-bridge")
 
     async def stop(self) -> None:
         self._stopped.set()
@@ -115,7 +115,7 @@ class BusBridge:
         except asyncio.CancelledError:
             raise
         except Exception:
-            log.exception("nexus bus bridge crashed")
+            log.exception("dashboard bus bridge crashed")
 
     async def _tick_once(self) -> None:
         for stream in self._streams:
@@ -126,14 +126,14 @@ class BusBridge:
                 except Exception:
                     if stream not in self._resolve_warned:
                         log.warning(
-                            "nexus bridge cursor resolution failed for %s",
+                            "dashboard bridge cursor resolution failed for %s",
                             stream,
                             exc_info=True,
                         )
                         self._resolve_warned.add(stream)
                     else:
                         log.debug(
-                            "nexus bridge cursor resolution still failing for %s",
+                            "dashboard bridge cursor resolution still failing for %s",
                             stream,
                         )
                     continue
@@ -147,7 +147,7 @@ class BusBridge:
                     block_ms=0,
                 )
             except Exception:
-                log.warning("nexus bridge read failed for %s", stream, exc_info=True)
+                log.warning("dashboard bridge read failed for %s", stream, exc_info=True)
                 continue
             if last_scanned is None:
                 continue

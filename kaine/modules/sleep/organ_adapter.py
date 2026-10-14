@@ -220,9 +220,9 @@ class OrganAdapterResolver:
             return
         self._last_state = state
         if applied:
-            log.info("lingua organ adapter active: %s", reason)
+            log.info("language organ adapter active: %s", reason)
         else:
-            log.info("lingua organ adapter not active: %s", reason)
+            log.info("language organ adapter not active: %s", reason)
 
     async def lora_field(self) -> list[dict] | None:
         from kaine.modules.sleep.adapter_store import current_path

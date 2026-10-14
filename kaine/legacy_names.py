@@ -16,7 +16,7 @@ SCOPE_STATUS = {
     "prose": "pending",
     "identifiers": "done",
     "keys": "done",
-    "operator": "pending",
+    "operator": "done",
     "persisted": "pending",
 }
 
@@ -294,9 +294,9 @@ GUARDED = {
                 "why": "module key in a code span",
             },
             {
-                "action": "keep",
+                "action": "rename",
                 "pattern": r"SPOT (?:RECOVERY|CRITICAL)",
-                "why": "dashboard banner text, renamed with the UI strings",
+                "why": "dashboard banner text; renamed in the operator step",
             },
             {
                 "action": "rename",
@@ -719,33 +719,33 @@ _DASHBOARD_JS_GLOBALS = r"(?<![A-Za-z0-9_])Nexus(?:Auth|Birth|Caretaker|ChartRou
 RESOLUTIONS = [
     {
         "name": "nexus",
-        "action": "keep",
+        "action": "rename",
         "pattern": r"kaine\.nexus\.sessionKey",
-        "why": "browser storage key held in the operator's browser; renamed with the UI strings",
+        "why": "browser storage key; renamed in the operator step, and the page migrates the old key",
     },
     {
         "name": "nexus",
-        "action": "keep",
+        "action": "rename",
         "pattern": _DASHBOARD_JS_GLOBALS,
-        "why": "dashboard JavaScript global; renamed with the UI strings",
+        "why": "dashboard JavaScript global; renamed in the operator step",
     },
     {
         "name": "spot",
-        "action": "keep",
+        "action": "rename",
         "pattern": _DASHBOARD_JS_GLOBALS,
-        "why": "dashboard JavaScript global; renamed with the UI strings",
+        "why": "dashboard JavaScript global; renamed in the operator step",
     },
     {
         "name": "birth",
-        "action": "keep",
+        "action": "rename",
         "pattern": _DASHBOARD_JS_GLOBALS,
-        "why": "dashboard JavaScript global; renamed with the UI strings",
+        "why": "dashboard JavaScript global; renamed in the operator step",
     },
     {
         "name": "perception",
-        "action": "keep",
+        "action": "rename",
         "pattern": _DASHBOARD_JS_GLOBALS,
-        "why": "dashboard JavaScript global; renamed with the UI strings",
+        "why": "dashboard JavaScript global; renamed in the operator step",
     },
     {
         "name": "perception",
@@ -887,9 +887,9 @@ RESOLUTIONS = [
 
     {
         "name": "phantasia",
-        "action": "keep",
+        "action": "rename",
         "pattern": r"both parents carry a Phantasia world model",
-        "why": "a quoted error message the code still emits; it changes with the operator step",
+        "why": "a quoted error message; renamed in the operator step",
     },
     {
         "name": "being",
@@ -899,41 +899,144 @@ RESOLUTIONS = [
     },
     {
         "name": "nexus",
-        "action": "keep",
+        "action": "rename",
         "pattern": r"nexus\.test\b",
-        "why": "test hostname of the dashboard under test; renamed with the operator strings",
+        "why": "test hostname of the dashboard under test; renamed in the operator step",
     },
     {
         "name": "nexus",
-        "action": "keep",
+        "action": "rename",
         "pattern": r"Requirement\(\s*\"[^\"]+\",\s*\"nexus\"",
-        "why": "pip extra name; renamed with the packaging in the operator step",
+        "why": "pip extra name; renamed in the operator step, with nexus kept as an alias extra",
     },
     {
         "name": "nexus",
-        "action": "keep",
+        "action": "rename",
         "files": ["tests/test_extras.py"],
         "pattern": r"(?:\.extra\s*==\s*|extra=)\"nexus\"",
-        "why": "pip extra name; renamed with the packaging in the operator step",
+        "why": "pip extra name; renamed in the operator step, with nexus kept as an alias extra",
+    },
+    {
+        "name": "spot",
+        "action": "rename",
+        "files": ["tests/test_unattended_gate.py"],
+        "pattern": r"6_Spot_armed_and_self_tested",
+        "why": "check key built from the operator-facing condition label; renamed with the label",
+    },
+    {
+        "name": "nexus",
+        "action": "rename",
+        "pattern": r"X-Nexus-Session-Key",
+        "why": "session-key HTTP header; renamed in the operator step, and the server still accepts the old header",
+    },
+    {
+        "name": "nexus",
+        "action": "rename",
+        "pattern": r"nexus\.preservation\.events",
+        "why": "browser storage key; renamed in the operator step, and the page migrates the old key",
+    },
+    # Operator step (PR 7): the review queue decided.
+    {
+        "name": "nexus",
+        "action": "keep",
+        "pattern": r"kaine-nexus-record",
+        "why": "podman and compose volume name; renaming it would orphan the recorded data",
+    },
+    {
+        "name": "perception",
+        "action": "keep",
+        "files": ["kaine/dashboard/static/*", "kaine/dashboard/templates/*"],
+        "why": "the live perception subsystem the dashboard shows, not the locus module",
+    },
+    {
+        "name": "perception",
+        "action": "keep",
+        "files": ["compose/*", "quadlet/*"],
+        "pattern": r"#.*",
+        "why": "a comment about the perception subsystem, not the locus module",
     },
     {
         "name": "spot",
         "action": "keep",
-        "files": ["tests/test_unattended_gate.py"],
-        "pattern": r"6_Spot_armed_and_self_tested",
-        "why": "check key built from the operator-facing condition label",
+        "pattern": r"\blexical spot\b",
+        "why": "English: a place in the text",
+    },
+    {
+        "name": "spot",
+        "action": "keep",
+        "files": ["openspec/specs/unattended-boot/spec.md"],
+        "pattern": r"event kind \"spot escalation\"",
+        "why": "names the stored caretaker event kind, which moves with the persisted names",
+    },
+    {
+        "name": "spot",
+        "action": "rename",
+        "files": [
+            "kaine/cycle/*",
+            "kaine/dashboard/static/*",
+            "kaine/dashboard/templates/*",
+            "tests/test_supervisor_*.py",
+        ],
+        "why": "the supervisor, in an operator-facing message, label or UI name",
     },
     {
         "name": "nexus",
         "action": "keep",
-        "pattern": r"X-Nexus-Session-Key",
-        "why": "session-key HTTP header; renamed with the UI strings in the operator step",
+        "files": ["compose/*.yml"],
+        "pattern": r"\$\{KAINE_DASHBOARD_[A-Z_]+:-\$\{KAINE_NEXUS_[A-Z_]+:-[^}]*\}\}",
+        "why": "fallback to the old variable in an operator's compose/.env, read until the alias release",
     },
     {
         "name": "nexus",
         "action": "keep",
-        "pattern": r"nexus\.preservation\.events",
-        "why": "browser storage key; renamed with the UI strings in the operator step",
+        "files": ["pyproject.toml"],
+        "pattern": r"^nexus = \[\"kaine\[dashboard\]\"\]",
+        "why": "the old pip extra, kept as an alias of the dashboard extra until the alias release",
+    },
+    {
+        "name": "nexus",
+        "action": "keep",
+        "files": ["scripts/install-quadlet.sh"],
+        "pattern": r"kaine-nexus\.container",
+        "why": "the old unit the installer removes; the entry goes with the alias release",
+    },
+    {
+        "name": "nexus",
+        "action": "keep",
+        "files": ["scripts/prepare-headless-host.sh"],
+        "pattern": r"--serve-nexus(?:\)| is deprecated)",
+        "why": "the old flag, accepted with a warning until the alias release",
+    },
+    {
+        "name": "birth",
+        "action": "keep",
+        "files": ["tests/test_ignition_study_runner.py"],
+        "pattern": r"wait_for_request\(state_dir, \"birth\"",
+        "why": "the stored preservation reason the runner requests, which moves with the persisted names",
+    },
+    {
+        "name": "gestation",
+        "action": "keep",
+        "pattern": r"\"locked_by\": \"gestation\"",
+        "why": "the stored lock holder value, which moves with the persisted names",
+    },
+    {
+        "name": "gestation",
+        "action": "keep",
+        "pattern": r"gestation_started_at",
+        "why": "stored request field, which moves with the persisted names",
+    },
+    {
+        "name": "birth",
+        "action": "keep",
+        "pattern": r"birth_bloom_ends_at",
+        "why": "stored stage field, which moves with the persisted names",
+    },
+    {
+        "name": "echo",
+        "action": "keep",
+        "pattern": r"\becho >>",
+        "why": "the shell builtin",
     },
 ]
 
@@ -1126,6 +1229,11 @@ EXCLUDED_GLOBS = (
     # on purpose.
     "tests/test_legacy_streams_cleanup.py",
     "tests/test_keys_flip_dry_boot.py",
+    # PR 7: the browser storage helper and its tests name the old storage keys on
+    # purpose, so a browser that still holds them is migrated.
+    "kaine/dashboard/static/dashboard_legacy_storage.js",
+    "tests/js/dashboard_legacy_storage_harness.js",
+    "tests/test_dashboard_legacy_storage_js.py",
     # Golden pins on stored names that never change.
     "tests/test_stimulus_source_params_digest.py",
     # These documents record the rename itself and must keep the old names.
@@ -1245,6 +1353,8 @@ ACCEPTED_COLLISIONS = [
     ("tests/test_deterministic_cycle.py", "interoception"),
     ("tests/test_episodic_memory_module.py", "EpisodicMemory"),
     ("tests/test_episodic_memory_module.py", "affect"),
+    # PR 7: the dashboard service and its pip extra share the name "dashboard".
+    ("kaine/extras.py", "dashboard"),
     ("tests/test_extras.py", "dashboard"),
     ("tests/test_extras.py", "interoception"),
     ("tests/test_extras.py", "vision"),

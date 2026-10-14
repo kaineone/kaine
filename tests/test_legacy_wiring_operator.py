@@ -207,12 +207,6 @@ def test_dashboard_config_table_alias(tmp_path, monkeypatch):
 
 
 def test_dashboard_env_alias_conflict(monkeypatch, tmp_path):
-    monkeypatch.setattr(
-        legacy_names,
-        "ENV_VARS",
-        ({"old": "KAINE_OLDNEXUS_PORT", "new": "KAINE_NEXUS_PORT", "scope": "operator"},),
-    )
-    monkeypatch.setattr(legacy_names, "COMPOSE_VARS", ())
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "operator", "done")
     monkeypatch.setattr(legacy_aliases, "_env_warnings_seen", set())
 
@@ -220,48 +214,36 @@ def test_dashboard_env_alias_conflict(monkeypatch, tmp_path):
     shipped.write_text("[nexus]\nport = 8088\n")
     secrets = tmp_path / "none.toml"
 
-    monkeypatch.setenv("KAINE_OLDNEXUS_PORT", "9200")
-    monkeypatch.delenv("KAINE_NEXUS_PORT", raising=False)
+    monkeypatch.setenv("KAINE_NEXUS_PORT", "9200")
+    monkeypatch.delenv("KAINE_DASHBOARD_PORT", raising=False)
     cfg = load_dashboard_config(path=shipped, secrets_path=secrets)
     assert cfg.port == 9200
 
-    monkeypatch.setenv("KAINE_NEXUS_PORT", "9300")
+    monkeypatch.setenv("KAINE_DASHBOARD_PORT", "9300")
     with pytest.raises(DashboardConfigError) as exc_info:
         load_dashboard_config(path=shipped, secrets_path=secrets)
     msg = str(exc_info.value)
-    assert "KAINE_OLDNEXUS_PORT" in msg
     assert "KAINE_NEXUS_PORT" in msg
+    assert "KAINE_DASHBOARD_PORT" in msg
     assert "9200" not in msg
     assert "9300" not in msg
 
 
 def test_embodiment_operator_approved_alias(monkeypatch):
-    monkeypatch.setattr(
-        legacy_names,
-        "ENV_VARS",
-        (
-            {
-                "old": "KAINE_OLDMUNDUS_APPROVED",
-                "new": "KAINE_MUNDUS_OPERATOR_APPROVED",
-                "scope": "operator",
-            },
-        ),
-    )
-    monkeypatch.setattr(legacy_names, "COMPOSE_VARS", ())
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "operator", "done")
     monkeypatch.setattr(legacy_aliases, "_env_warnings_seen", set())
-    monkeypatch.delenv("KAINE_OLDMUNDUS_APPROVED", raising=False)
     monkeypatch.delenv("KAINE_MUNDUS_OPERATOR_APPROVED", raising=False)
+    monkeypatch.delenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", raising=False)
 
-    monkeypatch.setenv("KAINE_OLDMUNDUS_APPROVED", "1")
+    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
     assert operator_approved() is True
 
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "0")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "0")
     with pytest.raises(legacy_aliases.LegacyNameConflict) as exc_info:
         operator_approved()
     msg = str(exc_info.value)
-    assert "KAINE_OLDMUNDUS_APPROVED" in msg
     assert "KAINE_MUNDUS_OPERATOR_APPROVED" in msg
+    assert "KAINE_EMBODIMENT_OPERATOR_APPROVED" in msg
 
 
 def test_cycle_refuses_env_conflict(tmp_path, monkeypatch, capsys):
@@ -303,12 +285,6 @@ def test_cycle_refuses_env_conflict(tmp_path, monkeypatch, capsys):
 
 
 def test_setup_token_reads_old_env(monkeypatch, tmp_path):
-    monkeypatch.setattr(
-        legacy_names,
-        "ENV_VARS",
-        ({"old": "KAINE_OLDNEXUS_TOKEN", "new": "KAINE_NEXUS_TOKEN", "scope": "operator"},),
-    )
-    monkeypatch.setattr(legacy_names, "COMPOSE_VARS", ())
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "operator", "done")
     monkeypatch.setattr(legacy_aliases, "_env_warnings_seen", set())
 
@@ -317,28 +293,23 @@ def test_setup_token_reads_old_env(monkeypatch, tmp_path):
     source = ensure_dashboard_token(
         tmp_path / "secrets.toml",
         out=lines.append,
-        env={"KAINE_OLDNEXUS_TOKEN": token},
+        env={"KAINE_NEXUS_TOKEN": token},
     )
     assert source == "env"
 
 
 def test_cli_flag_alias(monkeypatch):
-    monkeypatch.setattr(
-        legacy_names,
-        "CLI_FLAGS",
-        ({"old": "--db-oldname", "new": "--db-gestation", "scope": "operator"},),
-    )
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "operator", "done")
 
     args = _build_parser().parse_args(
-        ["init", "--study-id", "s", "--programme-manifest", "m.json", "--db-oldname", "7"]
+        ["init", "--study-id", "s", "--programme-manifest", "m.json", "--db-gestation", "7"]
     )
     assert args.db_development == 7
 
     parser = _build_parser()
     sub_action = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
     init_parser = sub_action.choices["init"]
-    assert "--db-oldname" not in init_parser.format_help()
+    assert "--db-gestation" not in init_parser.format_help()
 
 
 def test_cli_flag_alias_pending_rejected(monkeypatch):
@@ -413,19 +384,13 @@ def test_wiring_inert_while_pending(monkeypatch):
 
 
 def test_setup_token_conflict_is_reported_not_raised(monkeypatch, tmp_path):
-    monkeypatch.setattr(
-        legacy_names,
-        "ENV_VARS",
-        ({"old": "KAINE_OLDNEXUS_TOKEN", "new": "KAINE_NEXUS_TOKEN", "scope": "operator"},),
-    )
-    monkeypatch.setattr(legacy_names, "COMPOSE_VARS", ())
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "operator", "done")
     monkeypatch.setattr(legacy_aliases, "_env_warnings_seen", set())
 
     lines = []
     env = {
-        "KAINE_OLDNEXUS_TOKEN": "a" * 40,
-        "KAINE_NEXUS_TOKEN": "b" * 40,
+        "KAINE_NEXUS_TOKEN": "a" * 40,
+        "KAINE_DASHBOARD_TOKEN": "b" * 40,
     }
     source = ensure_dashboard_token(
         tmp_path / "secrets.toml",
@@ -434,8 +399,8 @@ def test_setup_token_conflict_is_reported_not_raised(monkeypatch, tmp_path):
     )
     assert source == "conflict"
     output = "".join(lines)
-    assert "KAINE_OLDNEXUS_TOKEN" in output
     assert "KAINE_NEXUS_TOKEN" in output
+    assert "KAINE_DASHBOARD_TOKEN" in output
     assert "a" * 40 not in output
     assert "b" * 40 not in output
     assert not (tmp_path / "secrets.toml").exists()

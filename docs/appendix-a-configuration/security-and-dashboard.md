@@ -22,15 +22,15 @@ The dashboard web console is described in [the dashboard](../05-dashboard.md). T
 `[dashboard].access` chooses whether a token is required:
 
 - `"open"` (shipped default): no sign-in. Anyone who can reach the address can view and control the entity. The dashboard listens only on loopback by default, so "anyone" means programs and people on this computer, plus the operator's tailnet if they choose to serve it there. The Host allowlist and Origin checks still apply.
-- `"token"`: an operator token is required. Use it whenever the dashboard is reachable by anyone you do not fully trust. Override per launch with `KAINE_NEXUS_ACCESS=token`.
+- `"token"`: an operator token is required. Use it whenever the dashboard is reachable by anyone you do not fully trust. Override per launch with `KAINE_DASHBOARD_ACCESS=token`.
 
-In token mode, the operator token must be at least 32 characters and must live only in `KAINE_NEXUS_TOKEN` or in `config/secrets.toml` under `[dashboard] operator_token`. The dashboard refuses to start if a non-empty token appears in `config/kaine.toml` or `config/kaine.operator.toml` ([`kaine/dashboard/config.py`](../../kaine/dashboard/config.py)). If no token is configured in token mode, privileged endpoints return 401.
+In token mode, the operator token must be at least 32 characters and must live only in `KAINE_DASHBOARD_TOKEN` or in `config/secrets.toml` under `[dashboard] operator_token`. The dashboard refuses to start if a non-empty token appears in `config/kaine.toml` or `config/kaine.operator.toml` ([`kaine/dashboard/config.py`](../../kaine/dashboard/config.py)). If no token is configured in token mode, privileged endpoints return 401.
 
 A browser signs in once at `/login`. The session cookie authorizes page loads and reads, and every state-changing request also carries the per-session `X-Dashboard-Session-Key` header that the login page stores. Scripts can send `Authorization: Bearer <token>` instead.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `operator_token` | string | `""` | Token for token mode. Read only from `KAINE_NEXUS_TOKEN` or `config/secrets.toml` `[dashboard] operator_token`. Must be at least 32 characters. |
+| `operator_token` | string | `""` | Token for token mode. Read only from `KAINE_DASHBOARD_TOKEN` or `config/secrets.toml` `[dashboard] operator_token`. Must be at least 32 characters. |
 | `access` | string | `"open"` | `"open"` or `"token"`. The shipped file sets `"open"`; if the key is absent, the dashboard uses `"token"`. |
 | `session_idle_minutes` | integer | `720` | Minutes a session can be idle before expiry. |
 | `session_max_hours` | integer | `24` | Maximum session lifetime, regardless of activity. |
@@ -42,7 +42,7 @@ See [the configuration overview](./README.md) for how `config/secrets.toml` is l
 
 ### Read-only view
 
-`[dashboard].read_only = true` (or `KAINE_NEXUS_READ_ONLY=1`) makes the dashboard a viewer only: every control request is refused with 403, and a banner says so. Use it whenever the dashboard watches a research run, because some controls act on the running entity through its event bus, and any change to a running study makes it inadmissible. The study-view overlay sets it.
+`[dashboard].read_only = true` (or `KAINE_DASHBOARD_READ_ONLY=1`) makes the dashboard a viewer only: every control request is refused with 403, and a banner says so. Use it whenever the dashboard watches a research run, because some controls act on the running entity through its event bus, and any change to a running study makes it inadmissible. The study-view overlay sets it.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -56,7 +56,7 @@ See [the configuration overview](./README.md) for how `config/secrets.toml` is l
 | `allowed_origins` | list or comma-separated string | Derived from the final port after environment and overlay overrides; includes `http://127.0.0.1:<port>`, `http://localhost:<port>` and `http://[::1]:<port>` | Allowed `Origin` values for state-changing requests ([`kaine/dashboard/config.py`](../../kaine/dashboard/config.py)). Setting this key replaces the default. |
 | `non_loopback_allowed` | boolean | `false` | Explicit opt-in required to bind a non-loopback interface. When `false`, `python -m kaine.dashboard` exits if `host` is not loopback. |
 
-To add a tailnet host or reverse-proxy hostname, include it in both `host_allowlist` and `allowed_origins`, or set `KAINE_NEXUS_EXTRA_HOSTS` to a comma-separated list; the loader appends those hosts to `host_allowlist` and derives matching origins from the final port.
+To add a tailnet host or reverse-proxy hostname, include it in both `host_allowlist` and `allowed_origins`, or set `KAINE_DASHBOARD_EXTRA_HOSTS` to a comma-separated list; the loader appends those hosts to `host_allowlist` and derives matching origins from the final port.
 
 ### Environment overrides
 
@@ -64,16 +64,16 @@ These environment variables override the matching TOML keys. Boolean overrides a
 
 | Variable | Key / effect |
 |---|---|
-| `KAINE_NEXUS_HOST` | `host` |
-| `KAINE_NEXUS_PORT` | `port` (also rebuilds the default `allowed_origins`) |
-| `KAINE_NEXUS_CONVERSATION_ENABLED` | `conversation_enabled` |
-| `KAINE_NEXUS_NON_LOOPBACK_ALLOWED` | `non_loopback_allowed` |
-| `KAINE_NEXUS_READ_ONLY` | `read_only` |
-| `KAINE_NEXUS_ACCESS` | `access` (`open` or `token`) |
-| `KAINE_NEXUS_ALLOWED_ORIGINS` | `allowed_origins`; comma-separated, replaces the list |
-| `KAINE_NEXUS_EXTRA_HOSTS` | Comma-separated list of extra hosts added to `host_allowlist` and used to derive origins |
-| `KAINE_NEXUS_PUBLISHED_PORT` | Extra port used when deriving origins for `KAINE_NEXUS_EXTRA_HOSTS`, for a container whose published port differs from `port` |
-| `KAINE_NEXUS_TOKEN` | `operator_token`; takes priority over `config/secrets.toml` |
+| `KAINE_DASHBOARD_HOST` | `host` |
+| `KAINE_DASHBOARD_PORT` | `port` (also rebuilds the default `allowed_origins`) |
+| `KAINE_DASHBOARD_CONVERSATION_ENABLED` | `conversation_enabled` |
+| `KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED` | `non_loopback_allowed` |
+| `KAINE_DASHBOARD_READ_ONLY` | `read_only` |
+| `KAINE_DASHBOARD_ACCESS` | `access` (`open` or `token`) |
+| `KAINE_DASHBOARD_ALLOWED_ORIGINS` | `allowed_origins`; comma-separated, replaces the list |
+| `KAINE_DASHBOARD_EXTRA_HOSTS` | Comma-separated list of extra hosts added to `host_allowlist` and used to derive origins |
+| `KAINE_DASHBOARD_PUBLISHED_PORT` | Extra port used when deriving origins for `KAINE_DASHBOARD_EXTRA_HOSTS`, for a container whose published port differs from `port` |
+| `KAINE_DASHBOARD_TOKEN` | `operator_token`; takes priority over `config/secrets.toml` |
 
 ### Loading scope
 

@@ -327,10 +327,10 @@ var scenarios = [
     }
   },
   {
-    name: "uses NexusVisibility.pausable when available",
+    name: "uses DashboardVisibility.pausable when available",
     setup: function (sandbox) {
       var calls = [];
-      sandbox.window.NexusVisibility = {
+      sandbox.window.DashboardVisibility = {
         pausable: function (fn, ms) { calls.push({ fn: fn, ms: ms }); }
       };
       sandbox._visibilityCalls = calls;

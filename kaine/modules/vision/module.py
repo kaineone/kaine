@@ -308,7 +308,7 @@ class Vision(BaseModule):
 
         await super().initialize()
         self._tasks.append(
-            asyncio.create_task(self._sleep_loop(), name=f"{self.name}-hypnos-consumer")
+            asyncio.create_task(self._sleep_loop(), name=f"{self.name}-sleep-consumer")
         )
         if self._live_camera is not None:
             try:
@@ -331,7 +331,7 @@ class Vision(BaseModule):
         try:
             await self._encoder.shutdown()
         except Exception:
-            log.warning("topos encoder shutdown failed", exc_info=True)
+            log.warning("vision encoder shutdown failed", exc_info=True)
         # Drop any dev preview so no stale frame lingers once capture stops.
         self._preview_jpeg = None
         try:
@@ -421,7 +421,7 @@ class Vision(BaseModule):
         try:
             bias = self._top_down_bias_provider()
         except Exception:
-            log.debug("topos top-down bias provider failed (non-fatal)", exc_info=True)
+            log.debug("vision top-down bias provider failed (non-fatal)", exc_info=True)
             return None
         if bias is None:
             return None
@@ -443,7 +443,7 @@ class Vision(BaseModule):
         try:
             return float(self._arousal_provider())
         except Exception:
-            log.debug("topos arousal provider failed (non-fatal)", exc_info=True)
+            log.debug("vision arousal provider failed (non-fatal)", exc_info=True)
             return 0.0
 
     async def _encode_clip(self, frames: list[Any]) -> list[float]:
@@ -676,7 +676,7 @@ class Vision(BaseModule):
                 self._preview_jpeg = jpeg
                 perception_preview.set_video_jpeg(jpeg)
         except Exception:
-            log.debug("topos preview tap failed (non-fatal)", exc_info=True)
+            log.debug("vision preview tap failed (non-fatal)", exc_info=True)
 
         # A report without a defined error publishes none, so consumers such as
         # the affect module do not pool a made-up 0.
@@ -750,14 +750,14 @@ class Vision(BaseModule):
             # The control already has a terminal record; do not publish another.
             return
         log.error(
-            "topos: positive control %s; it is switched off for this run",
+            "vision: positive control %s; it is switched off for this run",
             reason,
         )
         try:
             await publish_result(self._bus, control.failure_result())
         except Exception:
             log.error(
-                "topos: could not publish the positive control's failure record; "
+                "vision: could not publish the positive control's failure record; "
                 "the run has no terminal record and cannot pass",
                 exc_info=True,
             )
@@ -771,7 +771,7 @@ class Vision(BaseModule):
         try:
             control.prepare(self._forward_model)
         except Exception:
-            log.exception("topos: positive control failed")
+            log.exception("vision: positive control failed")
             await self._fail_positive_control(control, "raised")
             return
         if not self._pc_queue.submit(
@@ -815,7 +815,7 @@ class Vision(BaseModule):
             if result is not None and self._positive_control is control:
                 await publish_result(self._bus, result)
         except Exception:
-            log.exception("topos: positive control failed")
+            log.exception("vision: positive control failed")
             await self._fail_positive_control(control, "raised")
 
     async def finish_positive_control(self) -> None:
@@ -848,7 +848,7 @@ class Vision(BaseModule):
             await publish_result(self._bus, control.final_result())
         except Exception:
             log.error(
-                "topos: could not publish the positive control's terminal record; "
+                "vision: could not publish the positive control's terminal record; "
                 "the run cannot pass",
                 exc_info=True,
             )
@@ -877,18 +877,18 @@ class Vision(BaseModule):
                                 self._in_sleep = True
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = True
-                                log.debug("topos: adaptation suspended (hypnos sleep started)")
+                                log.debug("vision: adaptation suspended (sleep sleep started)")
                             elif event.type == "sleep.sleep.completed":
                                 self._in_sleep = False
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = False
-                                log.debug("topos: adaptation resumed (hypnos sleep completed)")
+                                log.debug("vision: adaptation resumed (sleep sleep completed)")
                     else:
                         await asyncio.sleep(0.05)
                 except asyncio.CancelledError:
                     raise
                 except Exception:
-                    log.exception("topos hypnos consumer iteration failed")
+                    log.exception("vision sleep consumer iteration failed")
                     await asyncio.sleep(0.1)
         except asyncio.CancelledError:
             raise
@@ -912,7 +912,7 @@ class Vision(BaseModule):
         recorded = state.get("encoder_model_id")
         if recorded and recorded != self._encoder.model_id:
             log.warning(
-                "topos snapshot recorded encoder %s but this instance uses %s",
+                "vision snapshot recorded encoder %s but this instance uses %s",
                 recorded,
                 self._encoder.model_id,
             )
@@ -926,7 +926,7 @@ class Vision(BaseModule):
             # online adapter — safe) rather than raising a shape error.
             if not self._forward_model.matches_state_shape(fm_state):
                 log.warning(
-                    "topos: discarding forward-model checkpoint — its tensor "
+                    "vision: discarding forward-model checkpoint — its tensor "
                     "shapes do not match the running encoder latent_dim %d; the "
                     "online forward model will re-learn from scratch",
                     self._forward_model.latent_dim,

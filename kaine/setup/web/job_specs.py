@@ -125,7 +125,7 @@ def build_job_specs(
     specs.append(
         JobSpec(
             name="dashboard",
-            title="Start Nexus",
+            title="Start Dashboard",
             argv=(sys.executable, "-m", "kaine.dashboard"),
             detach=True,
             ready_probe=lambda port=dashboard_port: net.port_listening(port),

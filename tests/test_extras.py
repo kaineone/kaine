@@ -6,12 +6,14 @@ import importlib
 import importlib.util
 import io
 import sys
+import tomllib
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from kaine import extras as extras_module
+from kaine import legacy_aliases
 from kaine.boot import ConfigurationError, build_registry
 from kaine.extras import Missing, check, format_missing
 from tests._module_packages import identifier_for_key
@@ -392,11 +394,11 @@ def test_build_registry_raises_before_building_any_module(monkeypatch):
 
     monkeypatch.setattr("kaine.extras.check", lambda cfg: fake_missing)
     monkeypatch.setattr(
-        "kaine.extras.format_missing", lambda missing: "missing soma torch core"
+        "kaine.extras.format_missing", lambda missing: "missing interoception torch core"
     )
     with pytest.raises(ConfigurationError) as excinfo:
         build_registry(bus, config)
-    assert "missing soma torch core" in str(excinfo.value)
+    assert "missing interoception torch core" in str(excinfo.value)
 
 
 def test_build_registry_logs_warnings_and_continues(monkeypatch, caplog):
@@ -433,12 +435,12 @@ def test_dashboard_service_check_reports_missing_dashboard(monkeypatch):
     assert any(
         m.module == "dashboard"
         and m.import_name == "fastapi"
-        and m.extra == "nexus"
+        and m.extra == "dashboard"
         for m in missing
     )
     message = format_missing(missing)
     assert "dashboard" in message
-    assert 'pip install "kaine[nexus]"' in message
+    assert 'pip install "kaine[dashboard]"' in message
 
 
 def test_dashboard_main_refuses_without_dashboard(monkeypatch):
@@ -448,7 +450,7 @@ def test_dashboard_main_refuses_without_dashboard(monkeypatch):
         Missing(
             module="dashboard",
             import_name="fastapi",
-            extra="nexus",
+            extra="dashboard",
             severity="error",
         )
     ]
@@ -468,7 +470,7 @@ def test_dashboard_main_refuses_without_dashboard(monkeypatch):
         # SystemExit carrying the message: the interpreter prints it to stderr
         # and exits with status 1.
         assert "fastapi" in str(excinfo.value.code)
-        assert "kaine[nexus]" in str(excinfo.value.code)
+        assert "kaine[dashboard]" in str(excinfo.value.code)
     finally:
         sys.modules.pop("kaine.dashboard.__main__", None)
 
@@ -532,7 +534,7 @@ def test_dashboard_table_matches_real_imports():
             # installed for a direct dependency (e.g. jinja2 for fastapi.templating)
             continue
         assert req.import_name in imports, (
-            f"nexus declares {req.import_name!r} in extras table "
+            f"dashboard declares {req.import_name!r} in extras table "
             f"but kaine/dashboard does not import that name"
         )
 
@@ -565,3 +567,14 @@ def test_torch_requirement_fallback_to_project_dependencies(tmp_path):
     wheel_index = _load_wheel_index()
     spec = wheel_index.torch_requirement(pyproject)
     assert spec == "torch>=2.0"
+
+
+def test_dashboard_extra_and_legacy_reference():
+    old = next(f for f in legacy_aliases.name_forms("dashboard") if f != "dashboard")
+    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    with open(pyproject, "rb") as fh:
+        data = tomllib.load(fh)
+    extras = data["project"]["optional-dependencies"]
+    assert "dashboard" in extras
+    assert old in extras
+    assert extras[old] == ["kaine[dashboard]"]

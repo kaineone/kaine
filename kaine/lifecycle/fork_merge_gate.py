@@ -222,7 +222,7 @@ def gated_merge(
         log.warning("fork-merge welfare gate: PRESERVED individuated fork %s", fork_id)
     else:
         reason = (
-            "fork below individuation threshold (an instrument, not a being): "
+            "fork below individuation threshold (an instrument, not an entity): "
             "merged and discarded as today; no welfare obligation triggered"
         )
         verdict = ForkMergeVerdict(

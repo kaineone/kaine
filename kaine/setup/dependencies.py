@@ -68,7 +68,7 @@ DEPENDENCIES: tuple[DepSpec, ...] = (
     ),
     DepSpec(
         name="model_server",
-        role="language organ (lingua) — OpenAI-compatible model server",
+        role="language organ (language) — OpenAI-compatible model server",
         modules=("language",),
         binary=None,
         port=SERVICE_PORTS["model_server"],
@@ -87,7 +87,7 @@ DEPENDENCIES: tuple[DepSpec, ...] = (
     ),
     DepSpec(
         name="qdrant",
-        role="vector memory (mnemos, empatheia)",
+        role="vector memory (episodic memory, social cognition)",
         modules=("episodic_memory", "social_cognition"),
         # Containerised: no host binary to look for. Uses DEFAULT_QDRANT_PORT,
         # the KAINE-owned container's host port (compose/qdrant.yml), not upstream's default.
@@ -114,7 +114,7 @@ DEPENDENCIES: tuple[DepSpec, ...] = (
     ),
     DepSpec(
         name="chatterbox",
-        role="text-to-speech (vox)",
+        role="text-to-speech (vocal)",
         modules=("vocal",),
         binary=None,
         port=SERVICE_PORTS["chatterbox"],

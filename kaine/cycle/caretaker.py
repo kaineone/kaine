@@ -42,11 +42,11 @@ _EVENT_TITLE = {
     "starting_unattended": "starting unattended",
     "unattended_refused": "unattended start refused",
     "reminder": "acknowledgement reminder",
-    "spot_escalation": "Spot escalation",
+    "spot_escalation": "Supervisor escalation",
     "supervision_lost": "supervision lost",
     "welfare_response": "welfare response fired",
     "input_lost": "input lost",
-    "womb_lost": "womb lost",
+    "womb_lost": "stimulus source lost",
     "boot_failed": "boot failed",
     "individuation_inconclusive": "individuation assessment stalled",
     "individuation_conditions_changed": "individuation conditions changed (looks refused)",
@@ -275,7 +275,7 @@ def render_text(notice: dict) -> tuple[str, str]:
         failed = [name for name, ok in conditions.items() if not ok]
         if failed:
             parts.append("Failed gate conditions: " + ", ".join(failed))
-    parts.append(f"Nexus: {notice['dashboard_url']}")
+    parts.append(f"Dashboard: {notice['dashboard_url']}")
     return title, "\n".join(parts)
 
 

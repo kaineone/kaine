@@ -377,7 +377,7 @@ async def preserve_live(
                     shutil.copy2(src, dest)
                     _chmod_quietly(dest, 0o600)
             if development_copied:
-                inventory.append(f"{dev_member}/ (gestation progress and readout)")
+                inventory.append(f"{dev_member}/ (development progress and readout)")
         # Individuation evidence: encrypted maturation reference, ledger, reports,
         # and the stored maturation adapter. This evidence travels with the entity.
         if individuation_root.is_dir():
@@ -391,7 +391,7 @@ async def preserve_live(
                     for f in files:
                         _chmod_quietly(Path(root) / f, 0o600)
                 inventory.append(
-                    "individuation/ (birth reference, ledger, reports)"
+                    "individuation/ (maturation reference, ledger, reports)"
                 )
             except Exception as exc:
                 raise PreservationError(
@@ -490,7 +490,7 @@ async def preserve_live(
                 "Self-contained preservation bundle. Entity-interior content "
                 "(snapshot.json — every module's full preservation state: "
                 "self-model, memories, affect/drive, adapter paths, "
-                "individuation/ birth reference + ledger + reports — plus "
+                "individuation/ maturation reference + ledger + reports — plus "
                 "phantasia/ world-model weights when captured) is tarred into "
                 "bundle.tar(.enc); when state encryption is enabled the tar is "
                 "StateEncryptor-encrypted (bundle.tar.enc). Revive via "
@@ -839,7 +839,7 @@ def extract_bundle_development(bundle: Path, dest_dir: Path) -> list[str]:
         raise
     except Exception as exc:
         raise ReviveError(
-            f"revive: could not read gestation files from bundle {bundle} ({type(exc).__name__}: {exc})"
+            f"revive: could not read development files from bundle {bundle} ({type(exc).__name__}: {exc})"
         ) from exc
 
     if not restored:

@@ -100,7 +100,7 @@ async def run_supervisor_selftest(
     try:
         cfg = SupervisorConfig.from_section(supervisor_section)
     except Exception as exc:
-        return SelftestResult(False, f"invalid spot config: {exc}")
+        return SelftestResult(False, f"invalid supervisor config: {exc}")
 
     if not cfg.enabled:
         return SelftestResult(False, "not enabled")
@@ -111,7 +111,7 @@ async def run_supervisor_selftest(
     steps: list[tuple[str, float]] = []
     last_step = "armed"
 
-    with tempfile.TemporaryDirectory(prefix="kaine-spot-selftest-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="kaine-supervisor-selftest-") as tmp:
         tmp_path = Path(tmp)
         control_path = tmp_path / "control.json"
         escalation_path = tmp_path / "escalation.json"
@@ -254,13 +254,13 @@ async def run_supervisor_selftest(
                 await probe.shutdown()
             except Exception:
                 log.warning(
-                    "spot selftest probe shutdown failed", exc_info=True
+                    "supervisor selftest probe shutdown failed", exc_info=True
                 )
             try:
                 await supervisor._incident_log.stop()
             except Exception:
                 log.warning(
-                    "spot selftest incident log stop failed", exc_info=True
+                    "supervisor selftest incident log stop failed", exc_info=True
                 )
 
 
@@ -273,7 +273,7 @@ def check_supervisor_condition(
         cfg = SupervisorConfig.from_section(supervisor_section)
     except Exception as exc:
         return Condition(
-            6, CONDITION_NAMES[6], False, f"invalid spot config: {exc}"
+            6, CONDITION_NAMES[6], False, f"invalid supervisor config: {exc}"
         )
 
     if not cfg.enabled:

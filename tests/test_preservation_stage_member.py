@@ -59,7 +59,7 @@ async def self_model(tmp_path):
     try:
         await eid.shutdown()
     except Exception as exc:  # teardown of an already-shut-down fixture
-        print(f"eidolon teardown ignored: {exc!r}")
+        print(f"self-model teardown ignored: {exc!r}")
 
 
 async def _preserve_bundle(tmp_path, self_model, *, monkeypatch_stage: Path | None = None):

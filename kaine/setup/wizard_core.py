@@ -360,7 +360,7 @@ def _cl1_substrate_step(
     line("-" * 70)
     line("Biological substrate plugin (optional, off by default)")
     line("-" * 70)
-    line("KAINE can run the forward models of Chronos and Soma on Cortical Labs'")
+    line("KAINE can run the forward models of Sequence and Interoception on Cortical Labs'")
     line("CL1, cultured neurons on a 64-electrode array, through the optional")
     line("plugin in plugins/kaine-cl1. It needs Cortical Labs' cl-sdk, which KAINE")
     line("does not ship or install: you install it yourself, it is licensed")
@@ -375,7 +375,7 @@ def _cl1_substrate_step(
     modules = [m for m in ("sequence", "interoception") if (cfg.get("modules") or {}).get(m)]
     if not modules:
         line(
-            "Neither Chronos nor Soma is enabled, so there is nothing for the "
+            "Neither Sequence nor Interoception is enabled, so there is nothing for the "
             "plugin to convert; it was left off."
         )
         return

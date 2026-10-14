@@ -99,8 +99,8 @@ def create_app(
     async def lifespan(_app: FastAPI):
         await bridge.start()
         # Task 2.2: server-push a combined metrics+health snapshot over the
-        # single diagnostics stream (retires the client-side NexusVitals/
-        # NexusMetrics/NexusSpot poll loops — see push_snapshots_periodically).
+        # single diagnostics stream (retires the client-side DashboardVitals/
+        # DashboardMetrics/DashboardSupervisor poll loops — see push_snapshots_periodically).
         # Only started when the diagnostics router (and thus /diagnostics/
         # stream) is actually mounted.
         pusher_task: asyncio.Task[None] | None = None
@@ -111,7 +111,7 @@ def create_app(
                     metrics_snapshot=metrics_snapshot,
                     health_prober=health_prober,
                 ),
-                name="nexus-snapshot-pusher",
+                name="dashboard-snapshot-pusher",
             )
         try:
             yield
@@ -158,7 +158,7 @@ def create_app(
         async def read_only_middleware(request, call_next):
             if request.method not in ("GET", "HEAD", "OPTIONS"):
                 return JSONResponse(
-                    {"detail": "Nexus is in read-only mode: controls are off"},
+                    {"detail": "Dashboard is in read-only mode: controls are off"},
                     status_code=403,
                 )
             return await call_next(request)

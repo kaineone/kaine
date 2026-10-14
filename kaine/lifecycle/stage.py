@@ -379,7 +379,7 @@ def record_maturation_stimulus_source(
         ValueError: if ``state`` is not already ``embodied``.
     """
     if not state.is_embodied:
-        raise ValueError("record_birth_womb: state must be embodied")
+        raise ValueError("record_maturation_stimulus_source: state must be embodied")
     return replace(
         state,
         womb_t_at_birth=womb_t_at_birth,

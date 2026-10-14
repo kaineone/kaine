@@ -93,7 +93,7 @@ class SelfModelAccuracyRunner(BaseObserver):
             )
         except Exception:
             description = ""
-            log.warning("eidolon accuracy query failed", exc_info=True)
+            log.warning("self-model accuracy query failed", exc_info=True)
         claims = parse_claims(description)
         signals = self._signals_snapshot()
         scored = {claim: self._score_claim(claim, signals) for claim in claims}
@@ -200,7 +200,7 @@ class SelfModelAccuracyRunner(BaseObserver):
             try:
                 await self.run_once()
             except Exception:
-                log.warning("eidolon accuracy iteration failed", exc_info=True)
+                log.warning("self-model accuracy iteration failed", exc_info=True)
             await self._sleep_or_stop(initial_delay=True)
 
     async def _sleep_or_stop(self, *, initial_delay: bool) -> None:

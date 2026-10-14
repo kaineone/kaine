@@ -150,7 +150,7 @@ def _make_maturation_hook(clock, feed, maturation_seconds, *, now=lambda: dateti
             )
         except Exception as exc:
             log.warning(
-                "birth hook: could not record womb state at birth: %s", exc
+                "maturation hook: could not record stimulus source state at maturation: %s", exc
             )
 
     return _maturation_hook
@@ -221,7 +221,7 @@ def _compose_maturation_hooks(*hooks):
             try:
                 hook()
             except Exception:
-                log.exception("birth hook %r failed", hook)
+                log.exception("maturation hook %r failed", hook)
 
     return _composed
 
@@ -356,7 +356,7 @@ def _wire_vision_arousal(registry, affect_provider) -> bool:
     if not hasattr(vision, "set_arousal_provider"):
         return False
     vision.set_arousal_provider(lambda: affect_provider.dimensional_state().arousal)
-    log.info("wired topos fovea size to live thymos arousal")
+    log.info("wired vision fovea size to live affect arousal")
     return True
 
 
@@ -378,7 +378,7 @@ def _wire_audition_arousal(registry, affect_provider) -> bool:
     if not hasattr(audition, "set_arousal_provider"):
         return False
     audition.set_arousal_provider(lambda: affect_provider.dimensional_state().arousal)
-    log.info("wired audition attentional window to live thymos arousal")
+    log.info("wired audition attentional window to live affect arousal")
     return True
 
 
@@ -710,7 +710,7 @@ async def _freeze_watch_loop(
                     )
                 else:
                     log.info(
-                        "freezing cycle (gestation)%s",
+                        "freezing cycle (development)%s",
                         f": {control.reason}" if control.reason else "",
                     )
                 await cycle.pause()
@@ -743,7 +743,7 @@ async def _freeze_watch_loop(
                         except Exception:
                             log.warning("perception restore on resume failed", exc_info=True)
                         desired_snapshot = None
-                        log.info("perception is back on so the womb can return")
+                        log.info("perception is back on so the stimulus source can return")
 
             elif not control.frozen and cycle.is_paused:
                 log.info("resuming cycle (operator)")
@@ -831,7 +831,7 @@ async def _write_runtime_state(
         elif control.frozen and control.source == "supervisor":
             supervisor_state = "recovery"
     except Exception:
-        log.debug("could not read spot state for runtime.json", exc_info=True)
+        log.debug("could not read supervisor state for runtime.json", exc_info=True)
     payload = {
         "pid": os.getpid(),
         "tick_index": cycle.tick_index,
@@ -858,8 +858,8 @@ async def _write_runtime_state(
         "frozen": cycle.is_paused,
         "frozen_at": control.frozen_at if cycle.is_paused else None,
         "frozen_reason": control.reason if cycle.is_paused else None,
-        "spot_state": supervisor_state,
-        "spot_escalated": supervisor_escalated,
+        "supervisor_state": supervisor_state,
+        "supervisor_escalated": supervisor_escalated,
         # Deterministic mode: when true the engine stamps events from a logical
         # clock so chart timestamps are not wall-clock. Non-content operational
         # flag; the dashboard uses it to show a "logical time" indicator.
@@ -1121,7 +1121,7 @@ def _hold_effectors_for_development(registry) -> list[str]:
         if name in registry and hasattr(registry.get(name), "set_dormant"):
             registry.get(name).set_dormant(True)
             held.append(name)
-            log.info("gestation: %s held dormant until birth", name)
+            log.info("development: %s held dormant until maturation", name)
     return held
 
 
@@ -1203,8 +1203,8 @@ def _start_development_owner(
     drive = getattr(interoception, "maternal_drive", None) if interoception is not None else None
     if interoception is None or drive is None or getattr(interoception, "self_rhythm_state", None) is None:
         log.warning(
-            "gestation readout unavailable: Soma with its self-rhythm and the "
-            "maternal drive is required; birth will wait (C1 fails closed)"
+            "development readout unavailable: Interoception with its self-rhythm and the "
+            "maternal drive is required; maturation will wait (C1 fails closed)"
         )
         return None
     from kaine.boot import _shared_stimulus_source_objects, _stimulus_source_params
@@ -1742,7 +1742,7 @@ async def _phase_stimulus_source_hold(ctx: BootContext) -> int | None:
                     # Nothing was installed on this loop, so there is nothing to remove.
                     continue
         if not ctx.stimulus_source_ready:
-            log.info("shutdown requested while waiting for the womb; nothing was spawned")
+            log.info("shutdown requested while waiting for the stimulus source; nothing was spawned")
             await _stop_welfare_producer(ctx.welfare_producer)
             await ctx.bus.close()
             return 0
@@ -1751,7 +1751,7 @@ async def _phase_stimulus_source_hold(ctx: BootContext) -> int | None:
         _ps.write_desired_locus("virtual", locked=True, locked_by="gestation")
         _ps.write_desired_audio(True)
         _ps.write_desired_video(True)
-        log.info("gestation: womb ready; pinned locus to the virtual womb (locked by gestation)")
+        log.info("development: stimulus source ready; pinned locus to the virtual stimulus source (locked by development)")
     return None
 
 
@@ -2599,7 +2599,7 @@ async def _run_until_stopped(ctx: BootContext) -> None:
         if ctx.supervision_mode == "unattended":
             if ctx.supervisor_task is None:
                 log.critical(
-                    "Spot supervision task was never started; escalating"
+                    "Supervisor supervision task was never started; escalating"
                 )
                 await ctx.supervisor.escalate_supervision_lost(
                     "supervision task never started"
@@ -2608,7 +2608,7 @@ async def _run_until_stopped(ctx: BootContext) -> None:
                 break
             if ctx.supervisor_task.done() and not ctx.supervisor.escalated:
                 log.critical(
-                    "Spot supervision task ended unexpectedly; escalating"
+                    "Supervisor supervision task ended unexpectedly; escalating"
                 )
                 await ctx.supervisor.escalate_supervision_lost(
                     "supervision task ended"
@@ -2648,9 +2648,9 @@ async def _shutdown(ctx: BootContext) -> None:
             await ctx.stimulus_source_presence_task
         except asyncio.CancelledError:
             # Expected: we just cancelled it.
-            log.debug("womb presence task cancelled at shutdown")
+            log.debug("stimulus source presence task cancelled at shutdown")
         except Exception:
-            log.exception("womb presence task shutdown failed")
+            log.exception("stimulus source presence task shutdown failed")
     if ctx.input_watch_task is not None:
         ctx.input_watch_task.cancel()
         try:
@@ -2708,7 +2708,7 @@ async def _shutdown(ctx: BootContext) -> None:
         except asyncio.CancelledError:
             pass  # expected: we just cancelled it
         except Exception:
-            log.warning("spot watchdog task raised during shutdown", exc_info=True)
+            log.warning("supervisor watchdog task raised during shutdown", exc_info=True)
     for monitor_task in (
         ctx.divergence_task, ctx.welfare_task, ctx.gate_task, ctx.stimulus_source_watch_task, ctx.development_task, ctx.preserve_task, ctx.programme_end_task, ctx.individuation_task
     ):

@@ -66,7 +66,7 @@ class ExpectedErrorModel:
             self._expected = [0.0] * new_width
             self._spread = [0.0] * new_width
             log.info(
-                "soma expected error: channel count %d -> %d; estimates start fresh",
+                "interoception expected error: channel count %d -> %d; estimates start fresh",
                 old_width,
                 new_width,
             )

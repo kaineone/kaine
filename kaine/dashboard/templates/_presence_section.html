@@ -1,6 +1,6 @@
 {# Presence board: the entity's affect made visible. A Three.js "ferrofluid"
    visualizer (LevelMeter, vendored under /static/vendor/, GPL-3.0) idles calm
-   when no entity is running and shifts its mood-ring from live thymos.out affect
+   when no entity is running and shifts its mood-ring from live affect.out affect
    (derived valence/arousal — never raw audio/content) when a cycle is up.
    Ids (#board-presence, #presence-canvas, #presence-status) are wired by the
    module script in console.html — do not rename. #}
@@ -14,7 +14,7 @@
         {# Picture-in-picture over the visualizer's bottom-right: WHAT THE ENTITY
            SEES (live) + a MUTE control for what it HEARS. The video frame only
            appears under the dev override (KAINE_PERCEPTION_PREVIEW=1) and only
-           while a frame exists; otherwise it stays hidden (NexusPreview). The
+           while a frame exists; otherwise it stays hidden (DashboardPreview). The
            mute control works regardless — it flips the audio desired-state. #}
         <div class="perception-pip" id="perception-pip" hidden>
           <img id="perception-pip-img" class="perception-pip__img" alt="What the entity currently sees (live)">

@@ -68,7 +68,7 @@ def test_active_excludes_completed_and_abandoned():
 def test_relevance_for_overlapping_event():
     ledger = GoalLedger()
     ledger.add("explore the garden", priority=0.8)
-    r = ledger.relevance("soma report from the garden module")
+    r = ledger.relevance("interoception report from the garden module")
     assert r > 0
 
 

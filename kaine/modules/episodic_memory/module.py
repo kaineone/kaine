@@ -146,7 +146,7 @@ class EpisodicMemory(BaseModule):
                 if backend == "qdrant":
                     if not qdrant_api_key:
                         raise ValueError(
-                            "Mnemos backend=qdrant requires qdrant_api_key — "
+                            "Episodic memory backend=qdrant requires qdrant_api_key — "
                             "set [qdrant].api_key in config/secrets.toml"
                         )
                     storage = QdrantStorage(
@@ -208,7 +208,7 @@ class EpisodicMemory(BaseModule):
         try:
             await self._core.shutdown()
         except Exception:
-            log.warning("mnemos core shutdown failed", exc_info=True)
+            log.warning("episodic memory core shutdown failed", exc_info=True)
 
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         text = _serialize_snapshot(snapshot)
@@ -294,14 +294,14 @@ class EpisodicMemory(BaseModule):
                     "dominance": dominance,
                 }
             except Exception:
-                log.warning("mnemos: failed to parse affect.state payload", exc_info=True)
+                log.warning("episodic memory: failed to parse affect.state payload", exc_info=True)
         elif stream == self._sleep_stream:
             # The window is opened by the sleep module through open_replay_window(),
             # so a late sleep.started on the bus cannot reopen it after the sleep ended.
             if event.type == "sleep.sleep.completed":
                 self._replay_engine.close_window()
                 self._core.clear_last_consolidated()
-                log.debug("mnemos: Hypnos maintenance window closed")
+                log.debug("episodic memory: Sleep maintenance window closed")
 
     @property
     def cached_affect(self) -> dict[str, Any] | None:
@@ -386,7 +386,7 @@ class EpisodicMemory(BaseModule):
             )
         except StorageError as exc:
             log.error(
-                "mnemos recall failed (storage error) — not publishing fake empty result: %s",
+                "episodic memory recall failed (storage error) — not publishing fake empty result: %s",
                 exc,
             )
             await self.publish(

@@ -370,9 +370,9 @@ def test_spawn_confirm_refuses_failing_preboot(tmp_path, monkeypatch):
             [
                 {
                     "group": "SERVICES",
-                    "name": "Nexus (live)",
+                    "name": "Dashboard (live)",
                     "status": "FAIL",
-                    "detail": "Nexus is not running on port 11111; start it before spawning",
+                    "detail": "Dashboard is not running on port 11111; start it before spawning",
                 },
                 {
                     "group": "ORGAN",
@@ -394,7 +394,7 @@ def test_spawn_confirm_refuses_failing_preboot(tmp_path, monkeypatch):
 
         r2 = _confirm_post(client, nonce)
         assert r2.status_code == 409
-        assert "Nexus (live)" in r2.text
+        assert "Dashboard (live)" in r2.text
         assert "mute" in r2.text
 
 
@@ -408,7 +408,7 @@ def test_spawn_full_run_starts_once(tmp_path, monkeypatch, spawn_fakes):
 
         r2 = _confirm_post(client, nonce)
         assert r2.status_code == 200
-        assert "Open Nexus" in r2.text
+        assert "Open Dashboard" in r2.text
 
         assert len(spawn_fakes) == 1
         assert spawn_fakes[0]["keep_info"] is True
@@ -755,13 +755,13 @@ def test_preboot_dashboard_live_row(monkeypatch):
 
     monkeypatch.setattr(preboot, "port_listening", lambda port, timeout_s=1.0: True)
     results = asyncio.run(preboot.check_services())
-    dashboard = next(r for r in results if r.name == "Nexus (live)")
+    dashboard = next(r for r in results if r.name == "Dashboard (live)")
     assert dashboard.status == preboot.PASS
     assert "listening" in dashboard.detail
 
     monkeypatch.setattr(preboot, "port_listening", lambda port, timeout_s=1.0: False)
     results = asyncio.run(preboot.check_services())
-    dashboard = next(r for r in results if r.name == "Nexus (live)")
+    dashboard = next(r for r in results if r.name == "Dashboard (live)")
     assert dashboard.status == preboot.FAIL
     assert "not running" in dashboard.detail
 
@@ -771,7 +771,7 @@ def test_preboot_dashboard_live_row(monkeypatch):
         lambda *a, **k: (_ for _ in ()).throw(ValueError("boom")),
     )
     results = asyncio.run(preboot.check_services())
-    dashboard = next(r for r in results if r.name == "Nexus (live)")
+    dashboard = next(r for r in results if r.name == "Dashboard (live)")
     assert dashboard.status == preboot.FAIL
     assert "could not be read" in dashboard.detail
     assert "ValueError" in dashboard.detail

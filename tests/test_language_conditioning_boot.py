@@ -113,7 +113,7 @@ async def test_make_language_threads_persona_and_budget_config(bus, tmp_path):
     assert "CUSTOM-EXTERNAL-PERSONA." in req.system
     # Working memory (the conscious coalition) is rendered into the prompt...
     assert AWARENESS_HEADING in req.prompt
-    assert "Soma reports" in req.prompt
+    assert "Interoception reports" in req.prompt
     # ...alongside the triggering input, and it is not the bare utterance alone.
     assert "hello there" in req.prompt
     assert req.prompt.strip() != "hello there"
@@ -138,7 +138,7 @@ async def test_context_max_events_config_bounds_the_coalition(bus, tmp_path):
     await language.speak("status?", snapshot=snap)
 
     req = language.chat_client.requests[-1]
-    assert "Soma reports" in req.prompt          # highest salience kept
+    assert "Interoception reports" in req.prompt          # highest salience kept
     assert "a low-salience aside" not in req.prompt  # dropped by the cap of 1
 
 
@@ -176,7 +176,7 @@ async def test_wire_language_self_model_noop_without_self_model(bus, tmp_path):
 
     req = language.chat_client.requests[-1]
     assert req.system  # non-empty minimal invariant
-    assert "I am this being" in req.system
+    assert "I am this entity" in req.system
 
 
 @pytest.mark.asyncio

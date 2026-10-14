@@ -329,7 +329,7 @@ world_model = false
 # Embodiment helpers. The perceptual locus module arbitrates the physical-XOR-virtual sense
 # locus; the embodiment module routes intents/perception to a body through a pluggable adapter
 # (the shipped default is the transport-free `stub` reference body). Both off by
-# default; Embodiment additionally requires KAINE_MUNDUS_OPERATOR_APPROVED=1.
+# default; Embodiment additionally requires KAINE_EMBODIMENT_OPERATOR_APPROVED=1.
 perceptual_locus = false
 embodiment = false
 
@@ -1361,7 +1361,7 @@ port = 8089
 # body through a pluggable adapter; `adapter` selects exactly one, and only that
 # adapter's nested `[embodiment.<adapter>]` table is read. Enabled via [modules].embodiment
 # AND the two-layer operational gate: this `enabled` flag (config layer) AND the
-# KAINE_MUNDUS_OPERATOR_APPROVED=1 environment variable (operator layer). Both
+# KAINE_EMBODIMENT_OPERATOR_APPROVED=1 environment variable (operator layer). Both
 # must be true before any action reaches a body.
 enabled = true
 # `stub` is the shipped reference body: a transport-free, wholly local adapter
@@ -1737,12 +1737,12 @@ dev_content_override = false
 # required (use for any wider exposure); the Host allowlist and Origin checks
 # apply in both.
 access = "open"
-# Operator authentication. The token lives ONLY in KAINE_NEXUS_TOKEN or in
+# Operator authentication. The token lives ONLY in KAINE_DASHBOARD_TOKEN or in
 # config/secrets.toml [dashboard] operator_token (at least 32 characters); the dashboard
 # refuses to start if operator_token appears in this file or in
 # config/kaine.operator.toml. Browsers sign in once at /login: the session
 # cookie authorizes page loads and reads, and every state-changing request also
-# carries the per-session X-Nexus-Session-Key header the login page stores.
+# carries the per-session X-Dashboard-Session-Key header the login page stores.
 # Scripts may send Authorization: Bearer <token> instead.
 session_idle_minutes = 720
 session_max_hours = 24

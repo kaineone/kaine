@@ -611,7 +611,7 @@ async def test_capture_conditioning_change_writes_nothing(tmp_path: Path) -> Non
     conditioning = FakeConditioning()
     conditioning.sequence = ["sha-a", "sha-b"]
     adapter = tmp_path / "adapter.gguf"
-    adapter.write_bytes(b"birth adapter")
+    adapter.write_bytes(b"maturation adapter")
     core, paths = make_core(
         tmp_path,
         sampler=sampler,
@@ -629,16 +629,16 @@ async def test_capture_conditioning_change_writes_nothing(tmp_path: Path) -> Non
 
 async def test_capture_copies_maturation_adapter_only_for_maturation(tmp_path: Path) -> None:
     adapter = tmp_path / "adapter.gguf"
-    adapter.write_bytes(b"birth adapter")
+    adapter.write_bytes(b"maturation adapter")
     core, paths = make_core(tmp_path, maturation_adapter_file=lambda: adapter)
     await core.capture_reference("birth")
-    assert paths.maturation_adapter.read_bytes() == b"birth adapter"
+    assert paths.maturation_adapter.read_bytes() == b"maturation adapter"
 
     adapter.write_bytes(b"later adapter")
     doc, reason = await core.capture_reference("capture", regenerate=True)
     assert reason is None
     assert doc.reference_kind == "capture"
-    assert paths.maturation_adapter.read_bytes() == b"birth adapter"
+    assert paths.maturation_adapter.read_bytes() == b"maturation adapter"
 
 
 async def test_capture_refuses_existing_reference_before_sampling(

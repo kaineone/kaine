@@ -99,7 +99,7 @@ def _init_args(plan: dict) -> list[str]:
         plan["programme"]["manifest"],
         "--redis-base-url",
         plan["redis"]["base_url"],
-        "--db-gestation",
+        "--db-development",
         str(plan["redis"]["db"]["gestation"]),
         "--db-branch",
         str(plan["redis"]["db"]["branch"]),

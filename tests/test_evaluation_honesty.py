@@ -468,7 +468,7 @@ async def test_social_cognition_observer_skips_missing_confidence(tmp_path):
     await asyncio.sleep(0.15)
     await obs.stop()
     assert sink.records == [], (
-        "empatheia observer must not write a record when confidence is absent"
+        "social cognition observer must not write a record when confidence is absent"
     )
 
 

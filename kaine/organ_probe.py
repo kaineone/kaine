@@ -92,7 +92,7 @@ async def verify_organ_generates(
                 f"organ '{model_id}' is SERVED but MUTE — returned empty content. "
                 "Most likely its chain-of-thought is not suppressed (the model "
                 "reasons to exhaustion and emits no visible answer). Verify the "
-                "Lingua client sends chat_template_kwargs.enable_thinking=false."
+                "Language client sends chat_template_kwargs.enable_thinking=false."
             ),
         )
     return OrganContentResult(

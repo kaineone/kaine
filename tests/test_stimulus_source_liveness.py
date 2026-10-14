@@ -107,7 +107,7 @@ async def test_ready_local_stimulus_source_not_live_when_probe_returns_no_rows()
     }
     result = await check_stimulus_source_ready(config, None, perception_check=fake_check)
     assert not result.live
-    assert "configuration alone is not a womb" in result.reason
+    assert "configuration alone is not a stimulus source" in result.reason
 
 
 @pytest.fixture

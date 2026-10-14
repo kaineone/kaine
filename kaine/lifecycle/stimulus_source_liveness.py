@@ -86,19 +86,19 @@ async def _check_local_stimulus_source(
         return StimulusSourceLiveness(
             False,
             "local",
-            "[modules].vision is disabled — the womb cannot be seen",
+            "[modules].vision is disabled — the stimulus source cannot be seen",
         )
     if not modules.get("audition"):
         return StimulusSourceLiveness(
             False,
             "local",
-            "[modules].audition is disabled — the womb cannot be heard",
+            "[modules].audition is disabled — the stimulus source cannot be heard",
         )
     if not modules.get("interoception"):
         return StimulusSourceLiveness(
             False,
             "local",
-            "[modules].interoception is disabled — the womb's self-rhythm has no host",
+            "[modules].interoception is disabled — the stimulus source's self-rhythm has no host",
         )
 
     interoception_section = dict(config.get("interoception") or {})
@@ -106,7 +106,7 @@ async def _check_local_stimulus_source(
         return StimulusSourceLiveness(
             False,
             "local",
-            "[interoception].self_rhythm_enabled is off — a gestating entity needs its own rhythm",
+            "[interoception].self_rhythm_enabled is off — a developing entity needs its own rhythm",
         )
 
     from kaine.oscillator import snntorch_available
@@ -146,7 +146,7 @@ async def _check_local_stimulus_source(
         if getattr(r, "status", "") != "PASS"
     ]
     if not rows:
-        reason = "perception probe returned no rows — configuration alone is not a womb"
+        reason = "perception probe returned no rows — configuration alone is not a stimulus source"
     elif not video_pass and not audio_pass:
         reason = "no video or audio PASS row; " + "; ".join(failing)
     elif not video_pass:
@@ -214,7 +214,7 @@ async def _check_presence(
         return StimulusSourceLiveness(
             False,
             provider_label,
-            "only one presence event in the window; a live womb cannot be told from a stalled one",
+            "only one presence event in the window; a live stimulus source cannot be told from a stalled one",
         )
     if qualifying[-1] <= qualifying[0]:
         return StimulusSourceLiveness(

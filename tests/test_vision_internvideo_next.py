@@ -671,13 +671,13 @@ class FakeSmall:
 # --------------------------------------------------------------------------
 # Opt-in real-encoder test (task 6.3). Requires a CUDA host, the [internvideo]
 # extra (einops/timm/flash_attn/easydict), and the fetched weights. Skipped
-# unless KAINE_TOPOS_RUN_REAL_ENCODER=1 — CI never loads the 182 MB model.
+# unless KAINE_VISION_RUN_REAL_ENCODER=1 — CI never loads the 182 MB model.
 # --------------------------------------------------------------------------
 
 
 @pytest.mark.skipif(
-    os.environ.get("KAINE_TOPOS_RUN_REAL_ENCODER") != "1",
-    reason="set KAINE_TOPOS_RUN_REAL_ENCODER=1 (+ weights, CUDA, [internvideo]) to run",
+    os.environ.get("KAINE_VISION_RUN_REAL_ENCODER") != "1",
+    reason="set KAINE_VISION_RUN_REAL_ENCODER=1 (+ weights, CUDA, [internvideo]) to run",
 )
 @pytest.mark.asyncio
 async def test_real_internvideo_next_produces_768_from_16_frame_clip():

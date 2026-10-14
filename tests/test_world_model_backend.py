@@ -117,7 +117,7 @@ def test_load_world_model_fake_backend():
 
 
 def test_load_world_model_unknown_backend_raises():
-    with pytest.raises(ValueError, match="unknown phantasia backend"):
+    with pytest.raises(ValueError, match="unknown world model backend"):
         load_world_model("totally-not-real", obs_dim=4)
 
 

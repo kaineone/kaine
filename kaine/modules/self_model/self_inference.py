@@ -168,13 +168,13 @@ class SelfInferenceEngine:
             lines = Path(self._seed_path).read_text(encoding="utf-8").splitlines()
         except FileNotFoundError:
             log.warning(
-                "eidolon self-inference: seed_path %s not found; skipping",
+                "self-model self-inference: seed_path %s not found; skipping",
                 self._seed_path,
             )
             return model
         except Exception:
             log.warning(
-                "eidolon self-inference: failed to read seed_path %s",
+                "self-model self-inference: failed to read seed_path %s",
                 self._seed_path,
                 exc_info=True,
             )
@@ -188,7 +188,7 @@ class SelfInferenceEngine:
             try:
                 obj = json.loads(line)
             except json.JSONDecodeError:
-                log.debug("eidolon seed: skipping non-JSON line")
+                log.debug("self-model seed: skipping non-JSON line")
                 continue
             if not isinstance(obj, dict):
                 continue
@@ -222,7 +222,7 @@ class SelfInferenceEngine:
         if updates:
             model = model.with_updates(**updates)
             log.info(
-                "eidolon self-inference: seed applied (%d fields)", len(updates)
+                "self-model self-inference: seed applied (%d fields)", len(updates)
             )
         return model
 

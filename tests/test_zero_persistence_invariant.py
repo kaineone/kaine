@@ -283,7 +283,7 @@ def test_escalation_state_only_contains_operational_keys(tmp_path):
             attempts=5,
             snapshot_id="abc123",
             escalated_at="2026-06-07T00:00:00+00:00",
-            message="Module 'lingua' failed to recover. Reboot. Do NOT auto-retry.",
+            message="Module 'language' failed to recover. Reboot. Do NOT auto-retry.",
         ),
         path,
     )

@@ -97,7 +97,7 @@ def make_vocal(
 
     if backend not in ("chatterbox", "sherpa_onnx"):
         raise ConfigurationError(
-            f"unknown vox backend {raw_backend!r}; "
+            f"unknown vocal backend {raw_backend!r}; "
             "must be 'chatterbox' or 'sherpa_onnx'"
         )
 

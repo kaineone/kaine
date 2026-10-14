@@ -165,7 +165,7 @@ Nothing your adapter does reaches the body unless every gate below passes. You d
 | Gate | Rule |
 |---|---|
 | Perceptual locus | Symbolic actions and continuous commands for a body that declares `continuous_channels` flow only when the locus is `virtual` (`perception_state.read_desired().locus`). In `physical` or `off`, in-world action is suppressed. Selecting `virtual` also turns off the real camera and microphone (mutual exclusion). |
-| Two-layer operational gate | The body opens and drives only when `[embodiment].enabled = true` (config layer) and `KAINE_MUNDUS_OPERATOR_APPROVED=1` (operator/env layer). If either is absent, the embodiment module logs which gate failed and never calls `open()`. `[modules].embodiment = true` is additionally required to construct the module at all. |
+| Two-layer operational gate | The body opens and drives only when `[embodiment].enabled = true` (config layer) and `KAINE_EMBODIMENT_OPERATOR_APPROVED=1` (operator/env layer). If either is absent, the embodiment module logs which gate failed and never calls `open()`. `[modules].embodiment = true` is additionally required to construct the module at all. |
 | Per-family exposure | Each symbolic family is gated by its exposure flag; world-mutating or consent-sensitive verbs default to `False`. |
 | Per-channel exposure | Every declared continuous channel defaults unexposed and is dropped until explicitly exposed. |
 
@@ -225,7 +225,7 @@ The recipe:
 5. Unsupported/symbolic-only. If your body has no continuous channels, assert `apply_setpoints` receives the raw dict and the core treats setpoints as unsupported when you return `False`.
 6. Probe and lifecycle. If you implement `probe()`, assert it does not leave the adapter open and that `close()` is safe after a probe-time `open()`. Assert a dormant embodiment module calls `open()` only after `activate()`.
 
-The core tests use a `fakeredis`-backed bus fixture and set `KAINE_MUNDUS_OPERATOR_APPROVED=1` via `monkeypatch` (copy that fixture). Because `EmbodimentAdapter` is `runtime_checkable`, you can assert `isinstance(adapter, EmbodimentAdapter)` as a structural conformance check.
+The core tests use a `fakeredis`-backed bus fixture and set `KAINE_EMBODIMENT_OPERATOR_APPROVED=1` via `monkeypatch` (copy that fixture). Because `EmbodimentAdapter` is `runtime_checkable`, you can assert `isinstance(adapter, EmbodimentAdapter)` as a structural conformance check.
 
 ## Worked example of a robot over a local socket
 
@@ -340,7 +340,7 @@ class RobotAdapter:
     async def _read_message(self) -> dict[str, Any] | None: ...  # TODO
 ```
 
-The adapter above is a complete, contract-conformant body. To bring it up: add the `robot` branch to `make_embodiment`, set `[embodiment].adapter = "robot"` and its `[embodiment.robot]` table, pass the two-layer gate (`[embodiment].enabled = true` and `KAINE_MUNDUS_OPERATOR_APPROVED=1`), put the locus in `virtual`, and expose the channels and families you want. Then conformance-test it transport-free exactly as the stub is tested.
+The adapter above is a complete, contract-conformant body. To bring it up: add the `robot` branch to `make_embodiment`, set `[embodiment].adapter = "robot"` and its `[embodiment.robot]` table, pass the two-layer gate (`[embodiment].enabled = true` and `KAINE_EMBODIMENT_OPERATOR_APPROVED=1`), put the locus in `virtual`, and expose the channels and families you want. Then conformance-test it transport-free exactly as the stub is tested.
 
 ## Checklist
 

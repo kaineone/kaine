@@ -4,7 +4,7 @@
 """Opt-in real DINOv2 encoder test.
 
 Loads facebook/dinov2-small from HuggingFace on first run (~85 MB
-download). Skipped unless `KAINE_TOPOS_RUN_REAL_ENCODER=1` is set.
+download). Skipped unless `KAINE_VISION_RUN_REAL_ENCODER=1` is set.
 """
 import os
 
@@ -12,7 +12,7 @@ import pytest
 
 from kaine.modules.vision.encoder import DINOv2Encoder
 
-REAL_ENCODER_ENV = "KAINE_TOPOS_RUN_REAL_ENCODER"
+REAL_ENCODER_ENV = "KAINE_VISION_RUN_REAL_ENCODER"
 
 
 @pytest.mark.skipif(

@@ -43,7 +43,7 @@ LIMITS = [
     "The noise floor is a single repeat of branch 0: differences smaller than it are not evidence.",
     "Modules are added in one fixed order, so each effect is conditional on the earlier ones.",
     "The accumulate line mixes familiarity with module history; there is no rewatch-only line.",
-    "Praxis, Perception and Mundus have no input channel on this host and are expected nulls; they are flagged when their share is zero.",
+    "Effectors, Perceptual locus and Embodiment have no input channel on this host and are expected nulls; they are flagged when their share is zero.",
 ]
 
 VIEWING_LINES = ("branch", "repeat", "accumulate")
@@ -624,7 +624,7 @@ def _build_markdown(report: dict[str, Any], viewings: list[ViewingResult]) -> st
     lines.append("")
     lines.append(
         "Time dilation lowers the number of ignitions per film minute "
-        "without changing the being; any viewing whose time_scale changed "
+        "without changing the entity; any viewing whose time_scale changed "
         "must therefore be compared per tick, not per minute."
     )
     lines.append("")

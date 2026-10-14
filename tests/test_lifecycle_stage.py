@@ -132,5 +132,5 @@ def test_has_prior_lived_history_true_for_stage_file(tmp_path: Path) -> None:
     identity = mint_identity()
     stage = tmp_path / "lifecycle" / "stage.json"
     stage.parent.mkdir(parents=True)
-    stage.write_text('{"stage": "gestation"}')
+    stage.write_text('{"stage": "development"}')
     assert st.has_prior_lived_history(identity, state_root=tmp_path) is True

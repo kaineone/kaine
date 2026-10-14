@@ -379,7 +379,7 @@ def _print_next_steps(
     if (config.get("sleep") or {}).get("voice_alignment") and modules.get("sleep"):
         line("  KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1  (if voice-alignment training)")
     if modules.get("embodiment"):
-        line("  KAINE_MUNDUS_OPERATOR_APPROVED=1      (required when mundus is enabled)")
+        line("  KAINE_EMBODIMENT_OPERATOR_APPROVED=1      (required when embodiment is enabled)")
     if enc_enabled:
         line("  KAINE_STATE_KEY=<32-byte key>         (required: encryption is enabled)")
 
@@ -530,7 +530,7 @@ def main(
         "--secrets-path",
         type=Path,
         default=None,
-        help="secrets file that receives a generated Nexus token (default: config/secrets.toml)",
+        help="secrets file that receives a generated Dashboard token (default: config/secrets.toml)",
     )
     parser.add_argument(
         "--web",

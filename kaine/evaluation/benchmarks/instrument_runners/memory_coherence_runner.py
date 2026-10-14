@@ -191,7 +191,7 @@ def _classify(
     if win:
         detail = (
             "full-system retrieval beats the bare arm on planted facts; the "
-            "advantage is retrieval (it vanishes when Mnemos is emptied) and a "
+            "advantage is retrieval (it vanishes when Episodic memory is emptied) and a "
             "never-stored fact yields honest non-recall"
         )
     else:
@@ -323,7 +323,7 @@ def format_summary(result: dict[str, Any]) -> str:
         metric_lines=[
             f"min retrieval advantage  = {summary['min_advantage']:.4f}",
             f"mean retrieval advantage = {summary['mean_advantage']:.4f}",
-            f"advantage vanishes on empty Mnemos = {summary['advantage_vanishes_on_empty']}",
+            f"advantage vanishes on empty Episodic memory = {summary['advantage_vanishes_on_empty']}",
         ],
         verdict=summary["verdict"],
         win_note=(

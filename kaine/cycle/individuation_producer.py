@@ -177,7 +177,7 @@ class IndividuationCore:
 
         if regenerate and kind == "birth":
             raise ValueError(
-                "regenerating a birth reference needs the stored birth configuration, "
+                "regenerating a maturation reference needs the stored maturation configuration, "
                 "which is not supported yet"
             )
 

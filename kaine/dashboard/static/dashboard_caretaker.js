@@ -92,10 +92,10 @@
 
   function scheduleRefresh() {
     if (
-      window.NexusVisibility &&
-      typeof window.NexusVisibility.pausable === "function"
+      window.DashboardVisibility &&
+      typeof window.DashboardVisibility.pausable === "function"
     ) {
-      window.NexusVisibility.pausable(refresh, POLL_MS);
+      window.DashboardVisibility.pausable(refresh, POLL_MS);
     } else {
       setInterval(refresh, POLL_MS);
     }
@@ -113,5 +113,5 @@
     init();
   }
 
-  window.NexusCaretaker = { refresh: refresh, attach: attach };
+  window.DashboardCaretaker = { refresh: refresh, attach: attach };
 })();

@@ -481,20 +481,20 @@ class Audition(BaseModule):
                                     self._forward_model.suspended = True
                                 if self._acoustic_forward_model is not None:
                                     self._acoustic_forward_model.suspended = True
-                                log.debug("audition: adaptation suspended (hypnos sleep started)")
+                                log.debug("audition: adaptation suspended (sleep sleep started)")
                             elif event.type == "sleep.sleep.completed":
                                 self._in_sleep = False
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = False
                                 if self._acoustic_forward_model is not None:
                                     self._acoustic_forward_model.suspended = False
-                                log.debug("audition: adaptation resumed (hypnos sleep completed)")
+                                log.debug("audition: adaptation resumed (sleep sleep completed)")
                     else:
                         await asyncio.sleep(0.05)
                 except asyncio.CancelledError:
                     raise
                 except Exception:
-                    log.exception("audition hypnos consumer iteration failed")
+                    log.exception("audition sleep consumer iteration failed")
                     await asyncio.sleep(0.1)
         except asyncio.CancelledError:
             raise
@@ -620,7 +620,7 @@ class Audition(BaseModule):
         # otherwise a literal "$" under a non-blocking XREAD never advances.
         self._sleep_cursor = await self._bus.last_entry_id(self._SLEEP_STREAM)
         self._tasks.append(
-            asyncio.create_task(self._sleep_loop(), name=f"{self.name}-hypnos-consumer")
+            asyncio.create_task(self._sleep_loop(), name=f"{self.name}-sleep-consumer")
         )
         if self._live_mic is not None:
             try:

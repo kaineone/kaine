@@ -502,7 +502,7 @@ def test_trainer_env_withholds_secrets_and_forces_offline():
             "PATH": "/usr/bin",
             "KAINE_STATE_KEY": "secret",
             "KAINE_ORGAN_API_KEY": "secret",
-            "KAINE_NEXUS_TOKEN": "secret",
+            "KAINE_DASHBOARD_TOKEN": "secret",
             "CUDA_VISIBLE_DEVICES": "0",
         }
     )

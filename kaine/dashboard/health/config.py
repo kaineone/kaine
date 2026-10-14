@@ -172,7 +172,7 @@ def build_dependency_specs(
         speech_rows.append(
             DependencySpec(
                 name="Chatterbox (TTS)",
-                role="Vox",
+                role="Vocal",
                 module="vocal",
                 probe=lambda: probe_chatterbox(base_url=chatterbox_url),
             )
@@ -181,7 +181,7 @@ def build_dependency_specs(
         speech_rows.append(
             DependencySpec(
                 name="sherpa-onnx (Kokoro)",
-                role="Vox",
+                role="Vocal",
                 module="vocal",
                 probe=(
                     lambda _mdir=_vocal_sherpa_model_dir(),
@@ -199,8 +199,8 @@ def build_dependency_specs(
     else:
         speech_rows.append(
             DependencySpec(
-                name=f"Vox backend {vocal_backend!r}",
-                role="Vox",
+                name=f"Vocal backend {vocal_backend!r}",
+                role="Vocal",
                 module="vocal",
                 probe=lambda: _async_degraded(
                     f"unknown [vocal].backend {vocal_backend!r}; expected \"chatterbox\" or \"sherpa_onnx\""
@@ -219,7 +219,7 @@ def build_dependency_specs(
         ),
         DependencySpec(
             name="Qdrant",
-            role="Mnemos (memory)",
+            role="Episodic memory (memory)",
             module="episodic_memory",
             probe=lambda: probe_qdrant(
                 host=qdrant_host, port=qdrant_port, api_key=qdrant_secret_key
@@ -227,7 +227,7 @@ def build_dependency_specs(
         ),
         DependencySpec(
             name="Chat LLM",
-            role="Lingua / Hypnos",
+            role="Language / Sleep",
             module="language",
             probe=lambda: probe_chat_llm(
                 base_url=chat_url, model_id=model_id, api_key=chat_api_key
@@ -240,9 +240,9 @@ def build_dependency_specs(
                 if planning_backend == "pymdp"
                 else "NumPy active inference"
                 if planning_backend == "numpy"
-                else f"Nous backend {planning_backend!r}"
+                else f"Planning backend {planning_backend!r}"
             ),
-            role="Nous (active inference)",
+            role="Planning (active inference)",
             module="planning",
             probe=lambda: planning_health_probe(backend=planning_backend),
         ),

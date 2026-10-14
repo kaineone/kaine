@@ -227,7 +227,7 @@ def _build_runner(
 async def test_first_evaluation_holds_writes_request(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     readout = _ready_readout()
     published: list[Event] = []
     bus = _make_bus(published=published, readout=readout, sleep_count=1)
@@ -249,7 +249,7 @@ async def test_first_evaluation_holds_writes_request(
 async def test_wrong_ack_does_not_maturation(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     readout = _ready_readout()
     published: list[Event] = []
     bus = _make_bus(published=published, readout=readout, sleep_count=1)
@@ -277,7 +277,7 @@ async def test_wrong_ack_does_not_maturation(
 async def test_matching_ack_maturations_and_clears_files(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     readout = _ready_readout()
     published: list[Event] = []
     bus = _make_bus(published=published, readout=readout, sleep_count=1)
@@ -311,7 +311,7 @@ async def test_matching_ack_maturations_and_clears_files(
 async def test_old_request_ack_pair_does_not_maturation(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     request_path = tmp_path / "birth_request.json"
     ack_path = tmp_path / "birth_ack.json"
     old_id = "c" * 32
@@ -354,7 +354,7 @@ async def test_old_request_ack_pair_does_not_maturation(
 async def test_readiness_lost_clears_request(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     readout = _ready_readout()
     published: list[Event] = []
     bus = _make_bus(published=published, readout=readout, sleep_count=1)

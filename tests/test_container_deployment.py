@@ -20,6 +20,8 @@ entity. They enforce the load-bearing invariants of the design:
 
 from __future__ import annotations
 
+import json
+import os
 import re
 import shutil
 import subprocess
@@ -33,7 +35,11 @@ import yaml
 from kaine import legacy_names
 
 _DASHBOARD_COMMAND_MODULE = next(
-    e["old"] for e in legacy_names.PACKAGING if e["kind"] == "module_shim" and e["old"].count(".") == 1
+    e["new"] for e in legacy_names.PACKAGING if e["kind"] == "module_shim" and e["old"].count(".") == 1
+)
+# The old dashboard variable a compose/.env written before the rename may still set.
+_OLD_HOST_PORT_VAR = next(
+    e["old"] for e in legacy_names.ENV_VARS if e["new"] == "KAINE_DASHBOARD_HOST_PORT"
 )
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -172,7 +178,7 @@ def test_compose_parses():
         "kaine-model-server",
         "kaine-speaches",
         "kaine-chatterbox",
-        "kaine-nexus",
+        "kaine-dashboard",
         "kaine-cycle",
         "kaine-provision",
     }
@@ -183,7 +189,7 @@ def test_cycle_is_profile_gated_out_of_default_up():
     assert doc["services"]["kaine-cycle"].get("profiles") == ["cycle"]
     assert doc["services"]["kaine-provision"].get("profiles") == ["setup"]
     # The dashboard is NOT profile-gated — it is always-up and holds no entity.
-    assert "profiles" not in doc["services"]["kaine-nexus"]
+    assert "profiles" not in doc["services"]["kaine-dashboard"]
 
 
 def test_cycle_defaults_no_gate_var_permissive():
@@ -206,20 +212,23 @@ def test_all_published_ports_are_loopback_only():
 
 def test_compose_dashboard_has_privacy_hardening_environment():
     doc = _load_compose()
-    env = doc["services"]["kaine-nexus"]["environment"]
+    env = doc["services"]["kaine-dashboard"]["environment"]
     # Non-loopback binding is explicitly enabled inside the container (publishing
     # stays loopback-only).
-    assert env["KAINE_NEXUS_NON_LOOPBACK_ALLOWED"] in ("1", "true", "yes")
+    assert env["KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED"] in ("1", "true", "yes")
     # The env token entry exists (empty falls through to the mounted secrets.toml).
-    assert "KAINE_NEXUS_TOKEN" in env
+    assert "KAINE_DASHBOARD_TOKEN" in env
     # Allowed Origins must reflect the host-published port, not the in-container 8088.
-    assert "KAINE_NEXUS_ALLOWED_ORIGINS" in env
-    assert "${KAINE_NEXUS_HOST_PORT:-8088}" in env["KAINE_NEXUS_ALLOWED_ORIGINS"]
+    assert "KAINE_DASHBOARD_ALLOWED_ORIGINS" in env
+    assert (
+        f"${{KAINE_DASHBOARD_HOST_PORT:-${{{_OLD_HOST_PORT_VAR}:-8088}}}}"
+        in env["KAINE_DASHBOARD_ALLOWED_ORIGINS"]
+    )
 
 
 def test_cycle_and_dashboard_depend_on_healthy_data_services():
     doc = _load_compose()
-    for svc_name in ("kaine-cycle", "kaine-nexus"):
+    for svc_name in ("kaine-cycle", "kaine-dashboard"):
         deps = doc["services"][svc_name]["depends_on"]
         for dep in ("kaine-redis", "kaine-qdrant"):
             assert deps[dep]["condition"] == "service_healthy", (svc_name, dep)
@@ -227,7 +236,7 @@ def test_cycle_and_dashboard_depend_on_healthy_data_services():
 
 def test_dashboard_and_cycle_share_image_different_command():
     doc = _load_compose()
-    dashboard = doc["services"]["kaine-nexus"]
+    dashboard = doc["services"]["kaine-dashboard"]
     cycle = doc["services"]["kaine-cycle"]
     # Both build from the same Dockerfile (via the shared x-kaine-image anchor).
     assert dashboard["build"]["dockerfile"] == "Dockerfile"
@@ -243,7 +252,7 @@ def test_state_is_named_volume_and_config_bind_mounts_are_readonly():
     doc = _load_compose()
     assert "kaine-state" in doc["volumes"]
     assert "kaine-models" in doc["volumes"]
-    for svc_name in ("kaine-cycle", "kaine-nexus"):
+    for svc_name in ("kaine-cycle", "kaine-dashboard"):
         vols = doc["services"][svc_name]["volumes"]
         # Entity state persists at /app/state — the app writes state CWD-relative
         # under WORKDIR /app, so a /state mount would capture nothing it writes.
@@ -354,17 +363,17 @@ def test_quadlet_cycle_has_no_install_section():
     )
     assert "Restart=no" in text
     # The data/dashboard units, by contrast, ARE enabled for reboot survival.
-    assert _has_section((_QUADLET / "kaine-nexus.container").read_text(), "[Install]")
+    assert _has_section((_QUADLET / "kaine-dashboard.container").read_text(), "[Install]")
     assert _has_section((_QUADLET / "kaine-redis.container").read_text(), "[Install]")
 
 
 def test_quadlet_dashboard_privacy_hardening_and_python_healthcheck():
-    text = (_QUADLET / "kaine-nexus.container").read_text()
+    text = (_QUADLET / "kaine-dashboard.container").read_text()
     # The dashboard binds all-interfaces inside the container; the published port is loopback-only.
-    assert "Environment=KAINE_NEXUS_HOST=0.0.0.0" in text
-    assert "Environment=KAINE_NEXUS_NON_LOOPBACK_ALLOWED=1" in text
+    assert "Environment=KAINE_DASHBOARD_HOST=0.0.0.0" in text
+    assert "Environment=KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED=1" in text
     assert (
-        "Environment=KAINE_NEXUS_ALLOWED_ORIGINS=http://127.0.0.1:8088,http://localhost:8088"
+        "Environment=KAINE_DASHBOARD_ALLOWED_ORIGINS=http://127.0.0.1:8088,http://localhost:8088"
         in text
     )
     assert "PublishPort=127.0.0.1:" in text
@@ -553,7 +562,7 @@ def test_quadlet_generator_renders_redis_wrapper(tmp_path: Path):
 def test_quadlet_cycle_and_dashboard_have_redis_url():
     url = "Environment=KAINE_REDIS_URL=redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0"
     assert url in (_QUADLET / "kaine-cycle.container").read_text()
-    assert url in (_QUADLET / "kaine-nexus.container").read_text()
+    assert url in (_QUADLET / "kaine-dashboard.container").read_text()
 
 
 def _section(text: str, section: str) -> str:
@@ -906,3 +915,95 @@ def test_dashboard_record_dir_is_on_a_durable_volume_in_every_cycle_deployment()
     for unit in ("kaine-cycle.container", "kaine-cycle-unattended.container"):
         text = (_QUADLET / unit).read_text()
         assert f"Volume=kaine-nexus-record.volume:{target}" in text, unit
+
+
+def test_compose_dashboard_variables_fall_back_to_their_old_names():
+    text = _COMPOSE.read_text()
+    pattern = re.compile(r"\$\{(KAINE_DASHBOARD_[A-Z_]+):-")
+    matches = list(pattern.finditer(text))
+    assert matches, "no KAINE_DASHBOARD_ fallbacks found in compose file"
+
+    problems = []
+    for match in matches:
+        new_name = match.group(1)
+        try:
+            old_name = next(
+                e["old"] for e in legacy_names.ENV_VARS if e["new"] == new_name
+            )
+        except StopIteration:
+            problems.append(f"{new_name}: no legacy_names.ENV_VARS entry")
+            continue
+
+        tail = text[match.end() :]
+        if not tail.startswith(f"${{{old_name}:-") and not tail.startswith(
+            f"${{ {old_name}:-"
+        ):
+            problems.append(
+                f"{new_name}: fallback does not start with ${{{old_name}:-... }}"
+            )
+
+    assert not problems, "compose fallbacks: " + "; ".join(problems)
+
+
+def test_compose_renders_old_names_from_env(tmp_path: Path):
+    if not shutil.which("docker"):
+        pytest.skip("docker not available")
+    try:
+        subprocess.run(
+            ["docker", "compose", "version"],
+            check=True,
+            capture_output=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pytest.skip("docker compose not available")
+
+    host_port_new = "KAINE_DASHBOARD_HOST_PORT"
+    token_new = "KAINE_DASHBOARD_TOKEN"
+    host_port_old = next(
+        e["old"] for e in legacy_names.ENV_VARS if e["new"] == host_port_new
+    )
+    token_old = next(
+        e["old"] for e in legacy_names.ENV_VARS if e["new"] == token_new
+    )
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"{host_port_old}=9191\n{token_old}=old-token-for-test\n")
+
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if not k.startswith("KAINE_DASHBOARD_")
+    }
+    for entry in legacy_names.ENV_VARS:
+        env.pop(entry["old"], None)
+        env.pop(entry["new"], None)
+    env["KAINE_REDIS_PASSWORD"] = "x"
+    env["KAINE_QDRANT_API_KEY"] = "y"
+
+    result = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "--env-file",
+            str(env_file),
+            "-f",
+            str(_COMPOSE),
+            "config",
+            "--format",
+            "json",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr[:500]
+    config = json.loads(result.stdout)
+    dashboard = config["services"]["kaine-dashboard"]
+    dashboard_env = dashboard.get("environment", {})
+    assert dashboard_env.get("KAINE_DASHBOARD_TOKEN") == "old-token-for-test"
+    assert dashboard_env.get("KAINE_DASHBOARD_PUBLISHED_PORT") == "9191"
+    assert any(
+        str(p.get("published", "")) == "9191" for p in dashboard.get("ports", [])
+    )

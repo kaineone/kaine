@@ -231,7 +231,7 @@ class IndividuationScheduler:
         if self._capture_kind == "birth":
             self._capture_kind = "capture"
             log.info(
-                "individuation birth capture downgraded to capture after sleep"
+                "individuation maturation capture downgraded to capture after sleep"
             )
             self._notify_capture_kind_change("capture")
         self._schedule_look(

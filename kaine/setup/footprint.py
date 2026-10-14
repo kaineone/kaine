@@ -453,7 +453,7 @@ def _select_components(
                     kind="not_measured",
                     backend=backend,
                     model_id="",
-                    message=f"not measured: unknown vox backend {backend!r}",
+                    message=f"not measured: unknown vocal backend {backend!r}",
                 )
             )
 
@@ -581,7 +581,7 @@ def _select_components(
                     kind="not_measured",
                     backend=backend,
                     model_id="",
-                    message=f"not measured: unknown topos encoder backend {backend!r}",
+                    message=f"not measured: unknown vision encoder backend {backend!r}",
                 )
             )
 

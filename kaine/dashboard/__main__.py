@@ -307,7 +307,7 @@ async def _build():
                     embedder=make_text_embedder(kaine_config),
                 )
             except Exception:
-                logging.debug("sidecar registry unavailable at nexus boot", exc_info=True)
+                logging.debug("sidecar registry unavailable at dashboard boot", exc_info=True)
 
             def evaluation_provider() -> dict[str, Any]:
                 return aggregate_evaluation_metrics(
@@ -367,13 +367,13 @@ def main() -> int:
     try:
         app, config = loop.run_until_complete(_build())
     except DashboardConfigError as exc:
-        log.error("nexus: %s", exc)
+        log.error("dashboard: %s", exc)
         return 1
     except BusConfigError as exc:
         # A fresh clone has no Redis password until the bootstrap has run; say
         # what to do instead of dumping a traceback.
         log.error(
-            "nexus: the event bus is not set up yet (%s). "
+            "dashboard: the event bus is not set up yet (%s). "
             "Run: bash scripts/redis-bootstrap.sh",
             exc,
         )
@@ -383,7 +383,7 @@ def main() -> int:
 
     if not (config.conversation_enabled or config.diagnostics_enabled):
         log.error(
-            "nexus: no console is enabled; set [dashboard].diagnostics_enabled "
+            "dashboard: no console is enabled; set [dashboard].diagnostics_enabled "
             "(or conversation_enabled) to true, since signing in would lead nowhere"
         )
         return 1
@@ -391,15 +391,15 @@ def main() -> int:
     if not _is_loopback_host(config.host):
         if not config.non_loopback_allowed:
             log.error(
-                "nexus: refusing to bind non-loopback host %s without "
+                "dashboard: refusing to bind non-loopback host %s without "
                 "[dashboard].non_loopback_allowed = true",
                 config.host,
             )
             return 1
         if config.access == "token" and not config.operator_token:
             log.error(
-                "nexus: refusing to bind non-loopback host %s without a "
-                "configured operator_token (KAINE_NEXUS_TOKEN or "
+                "dashboard: refusing to bind non-loopback host %s without a "
+                "configured operator_token (KAINE_DASHBOARD_TOKEN or "
                 "config/secrets.toml [dashboard] operator_token)",
                 config.host,
             )
@@ -407,13 +407,13 @@ def main() -> int:
 
     if config.access == "open":
         log.info(
-            "nexus: open access — no sign-in; anyone who can reach this address "
+            "dashboard: open access — no sign-in; anyone who can reach this address "
             "can view and control the entity. Accepted hosts: %s",
             ", ".join(config.host_allowlist),
         )
 
     if config.read_only:
-        log.info("nexus: read-only mode — every control is refused")
+        log.info("dashboard: read-only mode — every control is refused")
 
     uvicorn.run(app, host=config.host, port=config.port)
     return 0

@@ -330,7 +330,7 @@ def run_suite(
         # Shared cross-experiment verdict schema (experiment-run-identity).
         "verdict": Verdict(
             outcome=Outcome(suite_verdict),
-            detail="AIF (Nous active inference) vs RL (tabular Q-learning) suite",
+            detail="AIF (Planning active inference) vs RL (tabular Q-learning) suite",
             metrics={"n_tasks": len(verdicts)},
         ).to_dict(),
         "per_task": [
@@ -355,7 +355,7 @@ def format_summary_table(result: dict[str, Any]) -> str:
     """Human-readable summary table; states NULL/NEGATIVE plainly."""
     summary = result["summary"]
     lines: list[str] = []
-    lines.append("AIF (Nous active inference) vs RL (tabular Q-learning) benchmark")
+    lines.append("AIF (Planning active inference) vs RL (tabular Q-learning) benchmark")
     lines.append("=" * 70)
     header = f"{'task':<20} {'epistemic':<10} {'AIF':>8} {'RL':>8} {'p':>8} {'effect':>8}  verdict"
     lines.append(header)

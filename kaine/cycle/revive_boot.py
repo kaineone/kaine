@@ -287,7 +287,7 @@ class ReviveSession:
                     log.warning(
                         "revive: bundle carried no individuation evidence; "
                         "existing tree %s moved to %s so the revived being does "
-                        "not inherit another being's evidence",
+                        "not inherit another entity's evidence",
                         target,
                         replaced,
                     )
@@ -358,7 +358,7 @@ class ReviveSession:
                 _preservation.extract_bundle_development(self._plan.bundle, development_dir)
             except Exception as exc:
                 raise ReviveRefused(
-                    f"could not restore gestation progress: {type(exc).__name__}: {exc}"
+                    f"could not restore development progress: {type(exc).__name__}: {exc}"
                 ) from exc
 
             try:

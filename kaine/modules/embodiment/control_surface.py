@@ -365,7 +365,7 @@ class ContinuousMotorSurface:
         active. Idempotent.
         """
         if not self._active:
-            log.info("mundus/control: birth handoff — embodiment surface active")
+            log.info("mundus/control: maturation handoff — embodiment surface active")
         self._active = True
 
     def deactivate(self) -> None:

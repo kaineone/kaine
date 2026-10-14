@@ -40,7 +40,7 @@ def main(argv: list[str] | None = None, *, out=None, err=None) -> int:
 
     parser = argparse.ArgumentParser(
         prog="python -m kaine.lifecycle.episodic_memory_recover",
-        description="Clear a pending Mnemos import flag and rescan the store.",
+        description="Clear a pending Episodic memory import flag and rescan the store.",
     )
     parser.add_argument(
         "--config",
@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None, *, out=None, err=None) -> int:
     args = parser.parse_args(argv)
 
     if not args.confirm_keep_current_store:
-        err.write("mnemos-recover: no --confirm-keep-current-store flag.\n\n")
+        err.write("episodic-memory-recover: no --confirm-keep-current-store flag.\n\n")
         err.write(
             "The store will be kept exactly as it stands. Strengths of traces the "
             "interrupted import wrote are relative to the pre-import log gain. "
@@ -84,7 +84,7 @@ def main(argv: list[str] | None = None, *, out=None, err=None) -> int:
         tomllib.TOMLDecodeError,
     ) as exc:
         err.write(
-            f"mnemos-recover: configuration error: {type(exc).__name__}: {exc}\n"
+            f"episodic-memory-recover: configuration error: {type(exc).__name__}: {exc}\n"
         )
         return 6
 
@@ -97,7 +97,7 @@ def main(argv: list[str] | None = None, *, out=None, err=None) -> int:
     cycle_state = cycle_process_state()
     if cycle_state is True or cycle_state is None:
         err.write(
-            "mnemos-recover: the cycle appears to be running; stop the entity first\n"
+            "episodic-memory-recover: the cycle appears to be running; stop the entity first\n"
         )
         return 3
 
@@ -126,7 +126,7 @@ def main(argv: list[str] | None = None, *, out=None, err=None) -> int:
             api_key = load_secrets_doc().get("qdrant", {}).get("api_key")
         if not api_key:
             err.write(
-                "mnemos-recover: qdrant backend needs an api_key in "
+                "episodic-memory-recover: qdrant backend needs an api_key in "
                 "[episodic_memory.qdrant], KAINE_QDRANT_API_KEY, or [qdrant] of "
                 "secrets.toml\n"
             )
@@ -141,7 +141,7 @@ def main(argv: list[str] | None = None, *, out=None, err=None) -> int:
         storage = SqliteVecStorage(latent_dim=DEFAULT_LATENT_DIM)
     else:
         err.write(
-            f"mnemos-recover: backend {backend!r} persists nothing; "
+            f"episodic-memory-recover: backend {backend!r} persists nothing; "
             "there is nothing to recover\n"
         )
         return 6
@@ -167,7 +167,7 @@ def main(argv: list[str] | None = None, *, out=None, err=None) -> int:
         result = asyncio.run(_run())
     except StorageError as exc:
         err.write(
-            f"mnemos-recover: storage error: {type(exc).__name__}: {exc}\n"
+            f"episodic-memory-recover: storage error: {type(exc).__name__}: {exc}\n"
         )
         return 4
 
