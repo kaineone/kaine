@@ -266,3 +266,19 @@ def test_runner_reads_old_maturation_bloom_field(tmp_path: Path) -> None:
 
     deadline = runner._read_maturation_bloom_deadline(line_dir)
     assert deadline == datetime.fromisoformat(ts).timestamp()
+
+
+def test_loose_legacy_bundle_world_model_dir_is_found(tmp_path, monkeypatch):
+    """A loose bundle from before the rename keeps its world-model directory under the old name."""
+    from kaine.lifecycle import preservation
+    from kaine.security import crypto
+    from kaine.security.crypto import CryptoConfig, StateEncryptor
+
+    monkeypatch.setattr(crypto, "_active", StateEncryptor(CryptoConfig(enabled=False)))
+    old_dir = next(k for k, e in legacy_names.MODULES.items() if e["new_key"] == "world_model")
+    bundle = tmp_path / "bundle"
+    (bundle / old_dir).mkdir(parents=True)
+    (bundle / old_dir / "wm.ckpt").write_bytes(b"weights")
+    (bundle / "snapshot.json").write_text("{}")
+    members = preservation._read_bundle_members(bundle)
+    assert members["world_model/wm.ckpt"] == b"weights"

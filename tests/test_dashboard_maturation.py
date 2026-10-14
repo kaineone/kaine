@@ -12,10 +12,15 @@ import httpx
 import pytest
 from fastapi import Depends, FastAPI
 
+from kaine import legacy_names
 from kaine.dashboard.auth import require_operator_token
 from kaine.dashboard.config import DashboardConfig
 from kaine.dashboard.maturation import build_maturation_router
 from kaine.lifecycle.maturation_ack import MaturationRequest, read_ack, write_request
+
+# The routes' old name, taken from the table so a rename run cannot fold it into
+# the new one.
+OLD_ROUTE = next(e["old"] for e in legacy_names.STORED_TAGS if e["new"] == "maturation")
 
 
 def _isolated_router(tmp_path):
@@ -367,8 +372,8 @@ async def test_get_maturation_json_matches_the_old_route(tmp_path):
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
-        maturation = await c.get(
-            "/diagnostics/maturation.json",
+        old = await c.get(
+            f"/diagnostics/{OLD_ROUTE}.json",
             headers={"Authorization": "Bearer test-token"},
         )
         maturation = await c.get(
@@ -376,9 +381,9 @@ async def test_get_maturation_json_matches_the_old_route(tmp_path):
             headers={"Authorization": "Bearer test-token"},
         )
 
+    assert old.status_code == 200
     assert maturation.status_code == 200
-    assert maturation.status_code == 200
-    assert maturation.json() == maturation.json()
+    assert maturation.json() == old.json()
 
 
 @pytest.mark.asyncio
@@ -437,8 +442,8 @@ async def test_old_status_route_without_suffix_still_serves(tmp_path):
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
-        maturation = await c.get(
-            "/diagnostics/maturation",
+        old = await c.get(
+            f"/diagnostics/{OLD_ROUTE}",
             headers={"Authorization": "Bearer test-token"},
         )
         maturation = await c.get(
@@ -446,6 +451,6 @@ async def test_old_status_route_without_suffix_still_serves(tmp_path):
             headers={"Authorization": "Bearer test-token"},
         )
 
+    assert old.status_code == 200
     assert maturation.status_code == 200
-    assert maturation.status_code == 200
-    assert maturation.json() == maturation.json()
+    assert maturation.json() == old.json()

@@ -1448,3 +1448,56 @@ def test_rerun_names_the_earlier_qdrant_export(tmp_path, monkeypatch):
     lines2 = (audit2 / "decommission.jsonl").read_text().strip().split("\n")
     assert len(lines2) == 2
     assert json.loads(lines2[1])["earlier_qdrant_export_backup"] is None
+
+
+def _old_key(new_key: str) -> str:
+    """The module's directory name before the rename, from the table."""
+    from kaine import legacy_names
+
+    return next(k for k, e in legacy_names.MODULES.items() if e["new_key"] == new_key)
+
+
+def _seed_old_state(state_root: Path) -> None:
+    """A state tree last written before the stored-name rename."""
+    old_self_model = state_root / _old_key("self_model")
+    old_self_model.mkdir(parents=True, exist_ok=True)
+    (old_self_model / "self_model.json").write_text(
+        json.dumps({"name": "Kaine Nova", "drift_count": 0, "identity_history": []}),
+        encoding="utf-8",
+    )
+    old_language = state_root / _old_key("language")
+    old_language.mkdir(parents=True, exist_ok=True)
+    (old_language / "intent_expression.jsonl").write_text('{"x":1}\n', encoding="utf-8")
+
+
+def test_an_old_tree_is_moved_before_decommission_reads_it(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_old_state(tmp_path / "state")
+    eval_root = _make_diverged(tmp_path)
+    out = io.StringIO()
+    rc = main(
+        _args(tmp_path, eval_root=eval_root),
+        input_fn=_scripted_input(["decline"]),
+        out=out,
+        err=io.StringIO(),
+    )
+    assert rc == 5
+    assert "state tree moved to the current names" in out.getvalue()
+    assert (tmp_path / "state" / "self_model" / "self_model.json").is_file()
+    assert not (tmp_path / "state" / _old_key("self_model")).exists()
+
+
+def test_a_dry_run_refuses_an_old_tree_and_changes_nothing(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_old_state(tmp_path / "state")
+    before = _snapshot_tree(tmp_path / "state")
+    err = io.StringIO()
+    rc = main(
+        _args(tmp_path, dry_run=True),
+        input_fn=_scripted_input([]),
+        out=io.StringIO(),
+        err=err,
+    )
+    assert rc == 6
+    assert "before the module rename" in err.getvalue()
+    assert _snapshot_tree(tmp_path / "state") == before

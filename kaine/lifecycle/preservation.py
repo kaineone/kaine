@@ -1063,11 +1063,17 @@ def _read_bundle_members(bundle: Path) -> dict[str, Any]:
         members["snapshot.json"] = encryptor.maybe_decrypt(
             snap_path.read_bytes()
         ).decode("utf-8")
-    world_model_dir = bundle / "world_model"
-    if world_model_dir.is_dir():
+    # The loose layout predates the module rename, so its world-model directory
+    # carries the old module name. Look under every name form; a file under the
+    # new name wins over the same file under the old one.
+    for form in legacy_aliases.name_forms(WORLD_MODEL_MEMBER):
+        world_model_dir = bundle / form
+        if not world_model_dir.is_dir():
+            continue
         for p in sorted(world_model_dir.iterdir()):
             if p.is_file():
-                members[legacy_aliases.map_bundle_member(f"world_model/{p.name}")] = p.read_bytes()
+                name = legacy_aliases.map_bundle_member(f"{form}/{p.name}")
+                members.setdefault(name, p.read_bytes())
     return members
 
 

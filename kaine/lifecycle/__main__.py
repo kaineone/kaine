@@ -491,6 +491,45 @@ def main(
             )
         return 3
 
+    # --- Gate 2.2: the state tree uses the current names ----------------
+    # A tree last written before the stored-name rename is moved first, the way the
+    # cycle moves it at start (renames in place; a tree holding both names for one
+    # item is refused unchanged), so the divergence assessment, the backup and the
+    # deletion all read one set of names. A dry run changes nothing: it reports a
+    # tree that still needs the move and stops.
+    import sqlite3
+
+    from kaine.lifecycle import rename_state
+
+    try:
+        if args.dry_run:
+            pending = rename_state.migrate(state_root, no_qdrant=True, dry_run=True).steps
+            if pending:
+                err.write(
+                    "decommission: the state tree still uses the names from before the "
+                    f"module rename ({len(pending)} moves pending). Start the cycle once, "
+                    "or run this command without --dry-run, which moves it first; "
+                    "nothing was changed.\n"
+                )
+                return 6
+        else:
+            # Files and the SQLite store only: decommission drops the Qdrant
+            # collections under both name forms itself, and checks Qdrant in its own
+            # gate below.
+            moved = rename_state.migrate(state_root, no_qdrant=True)
+            if moved.status != "noop":
+                out.write(
+                    f"state tree moved to the current names ({len(moved.steps)} steps)\n"
+                )
+    except rename_state.RenameStateError as exc:
+        err.write(f"decommission: the state tree cannot be moved to the current names: {exc}\n")
+        return 6
+    except (OSError, sqlite3.Error, ImportError) as exc:
+        err.write(
+            f"decommission: moving the state tree failed: {type(exc).__name__}: {exc}\n"
+        )
+        return 6
+
     # --- Load config and install state encryption BEFORE any destructive work
     from kaine.security.crypto import get_state_encryptor, install_from_section
 

@@ -231,7 +231,7 @@ The decommission CLI implements the CAL Article 4.2 and 4.3 care duties. It neve
 
 ### What decommission removes, keeps and backs up
 
-Every location is resolved through the configuration (including `[lifecycle].snapshots_path`, `[lifecycle.adapter_merge].output_dir` and `[sleep.voice_alignment].trainer_workdir`) and the rename table in `kaine/legacy_names.py`, so a renamed directory or file (`episodic_memory/episodic_memory.db` with its `-wal`, `-shm` and `-journal` files, `development_*` and `maturation_*`) is found as well as its old name. The registry lives in `kaine/lifecycle/decommission_locations.py`.
+Every location is resolved through the configuration (including `[lifecycle].snapshots_path`, `[lifecycle.adapter_merge].output_dir` and `[sleep.voice_alignment].trainer_workdir`) and the rename table in `kaine/legacy_names.py`, so a renamed directory or file (`episodic_memory/episodic_memory.db` with its `-wal`, `-shm` and `-journal` files, `development_*` and `maturation_*`) is found as well as its old name. The registry lives in `kaine/lifecycle/decommission_locations.py`. A state tree last written before the stored-name rename is first moved to the current names, as the cycle does at start, so the assessment, the backup and the deletion read one set of names; a dry run changes nothing, reports such a tree and stops with exit `6`.
 
 | Decision | Locations | Why |
 | --- | --- | --- |
@@ -260,7 +260,7 @@ Known limits:
 | `3` | Cycle appears to be running, the bus could not be reached to confirm it is stopped, a voice-alignment job is still training, or a pending voice-alignment job cannot be attributed (pass `--keep-unattributed-jobs` to keep it) |
 | `4` | Backup failed; nothing deleted |
 | `5` | Operator declined a required acknowledgement or confirmation |
-| `6` | Configuration or encryption error |
+| `6` | Configuration or encryption error, or a state tree that cannot be moved to the current names (a dry run also stops here on a tree that still needs the move) |
 | `7` | No entity state at the resolved state root |
 | `8` | The bus or Qdrant could not be reached or refused its credentials (nothing deleted), or deletion was incomplete (the audit outcome is `incomplete`) |
 
