@@ -69,13 +69,20 @@ in the requested scope would change.
 
 ### Requirement: Old names do not come back
 A test SHALL fail when, for any scope the table marks done, the codemod's
-`--check` would change a file, or when a capitalized old module name appears in
+`--check` would change a file, when a capitalized old module name appears in
 a tracked file outside the exclusions, the mapping table and the codemod's
-fixtures. The failure SHALL name each file and line.
+fixtures, or when a snake_case identifier in such a file has an old module or
+developmental key as one of its underscore-separated parts and is not one of
+the identifiers the table keeps for good. The failure SHALL name each file and
+line.
 
 #### Scenario: An old name reappears
 - **WHEN** a new docs page says "Thymos" after the prose scope is done
 - **THEN** the guard test fails and names that page and line
+
+#### Scenario: A comment names an old factory
+- **WHEN** a docstring names `make_lingua` after every scope is done
+- **THEN** the guard test fails and names that file, line and identifier
 
 ### Requirement: Deprecated operator names are read for a bounded window
 Old config tables, keys and values, operator environment variables, CLI flags,
