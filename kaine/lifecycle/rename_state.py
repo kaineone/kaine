@@ -515,6 +515,57 @@ def _move_step(src: str, dst: str, created_dirs: list[str], *, companion: bool =
     }
 
 
+def _check_writable(root: Path, steps: list[dict]) -> None:
+    """Raise RenameStateError if any directory a pending step writes into is not
+    writable and executable by the current process.
+    """
+    root = Path(root)
+    dirs_to_check: list[Path] = []
+
+    def _add(path: Path) -> None:
+        path = Path(path)
+        if path not in dirs_to_check:
+            dirs_to_check.append(path)
+
+    for step in steps:
+        if step.get("status") == "done":
+            continue
+        kind = step["kind"]
+        if kind == "move":
+            _add((root / step["src"]).parent)
+            dst_parent = (root / step["dst"]).parent
+            existing = dst_parent
+            while not existing.exists():
+                existing = existing.parent
+            _add(existing)
+        elif kind in ("stage", "sqlite"):
+            _add((root / step["path"]).parent)
+        elif kind == "remove_vacant":
+            path = root / step["path"]
+            _add(path.parent)
+            if path.exists():
+                _add(path)
+        # qdrant_alias writes no filesystem directories.
+
+    for d in dirs_to_check:
+        # A directory an earlier step creates does not exist yet; its nearest
+        # existing ancestor is where it will be created.
+        while not d.exists() and d != root and d != d.parent:
+            d = d.parent
+        if not os.access(d, os.W_OK | os.X_OK):
+            st = os.stat(d)
+            rel = d.relative_to(root).as_posix() if d != root else "."
+            mode = stat.S_IMODE(st.st_mode)
+            raise RenameStateError(
+                f"rename_state: cannot write {rel} under {root} "
+                f"(owner {st.st_uid}:{st.st_gid}, mode {mode:o}); the cycle runs as "
+                f"{os.getuid()}:{os.getgid()}. Give the directory to that user and "
+                f"re-run; for a container volume, run chown from the deployment's own "
+                f"KAINE image: docker run --rm --user 0 --entrypoint chown -v "
+                f"<state volume>:/s <KAINE image> -R {os.getuid()}:{os.getgid()} /s/{rel}"
+            )
+
+
 def _translate_path(path: str, module_map: dict[str, str]) -> str:
     """Apply module renames to the first segment of ``path``."""
     parts = path.split("/")
@@ -610,8 +661,10 @@ def _plan_merge(
                 # Old empty mount-point directory can be left behind.
                 continue
             raise RenameStateError(
-                f"rename_state: both {child_rel} and {target_rel} exist under {root} "
-                "and hold data; move one aside and re-run"
+                f"rename_state: {target_rel} under {root} is a mount point and "
+                f"{child_rel} holds data; a move cannot land on a mount point. "
+                f"Move the content of {child_rel} into the volume mounted at "
+                f"{target_rel}, or aside, and re-run"
             )
         elif (
             _vacant_new(target_path)
@@ -701,6 +754,13 @@ def plan(root: Path, *, qdrant: QdrantAliases | None = None) -> list[dict]:
             if _removable(old_dir):
                 steps.append(_remove_vacant_step(old_key))
         else:
+            if _is_mount(new_dir):
+                raise RenameStateError(
+                    f"rename_state: {new_key} under {root} is a mount point and "
+                    f"{old_key} holds data; a move cannot land on a mount point. "
+                    f"Move the content of {old_key} into the volume mounted at "
+                    f"{new_key}, or aside, and re-run"
+                )
             raise RenameStateError(
                 f"rename_state: both {old_key} and {new_key} exist under {root}; "
                 "move one aside and re-run"
@@ -1175,6 +1235,7 @@ def migrate(
         )
     if dry_run:
         steps = plan(root, qdrant=qdrant)
+        _check_writable(root, steps)
         return RenameResult("dry_run", tuple(steps))
 
     _refuse_symlink(root / MANIFEST_DIR, what="manifest directory")
@@ -1193,12 +1254,14 @@ def migrate(
         if existing["status"] == "reverting":
             raise RenameStateError("a previous rename is mid-revert; run --revert first")
         if existing["status"] == "in_progress":
+            _check_writable(root, existing_steps)
             _execute(root, existing_steps, qdrant, manifest_path, resuming=True)
             return RenameResult("resumed", tuple(existing_steps))
 
     steps = plan(root, qdrant=qdrant)
     if not steps:
         return RenameResult("noop", ())
+    _check_writable(root, steps)
 
     if existing is not None and existing["status"] == "complete":
         # Stage steps carried over from a complete manifest must keep their own
