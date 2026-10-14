@@ -3,19 +3,14 @@
 
 import pytest
 
-from kaine import legacy_names
+from kaine import legacy_aliases, legacy_names
 from kaine.bus.legacy_streams import OldStream
 from kaine.preboot import PASS, SKIP, WARN, check_old_streams
 
 
 @pytest.fixture
 def keys_done(monkeypatch):
-    monkeypatch.setattr(legacy_names, "SCOPE_STATUS", {"keys": "done"})
-    monkeypatch.setattr(
-        legacy_names,
-        "STREAM_NAMES",
-        [{"scope": "keys", "old": "hypnos.out", "new": "sleep.out"}],
-    )
+    monkeypatch.setitem(legacy_names.SCOPE_STATUS, "keys", "done")
 
 
 @pytest.mark.asyncio
@@ -23,7 +18,7 @@ async def test_check_old_streams_warns_when_deletable_exist(keys_done):
     async def probe():
         return [
             OldStream(
-                old="hypnos.out",
+                old=legacy_aliases.old_stream_name("sleep.out"),
                 new="sleep.out",
                 present=True,
                 is_stream=True,

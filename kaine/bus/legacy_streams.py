@@ -4,7 +4,7 @@
 """One-time cleanup of Redis streams left under their old names.
 
 After the ``keys`` codemod scope renames every module bus stream (for example
-``hypnos.out`` to ``sleep.out``), the old streams remain in Redis as capped
+the sleep module's stream now ends up at ``sleep.out``), the old streams remain in Redis as capped
 orphans. Because KAINE runs Redis with ``noeviction``, nothing ever evicts them
 and they continue to consume memory. This module surveys the old names once,
 reports what is safe to delete, and deletes it after an explicit confirmation.

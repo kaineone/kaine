@@ -1122,6 +1122,10 @@ EXCLUDED_GLOBS = (
     "tests/test_legacy_keys_readers.py",
     "tests/test_legacy_reader_sites.py",
     "tests/test_legacy_reader_state.py",
+    # 6b: the old-stream cleanup and the dry boot of old-named files use old names
+    # on purpose.
+    "tests/test_legacy_streams_cleanup.py",
+    "tests/test_keys_flip_dry_boot.py",
     # Golden pins on stored names that never change.
     "tests/test_stimulus_source_params_digest.py",
     # These documents record the rename itself and must keep the old names.
