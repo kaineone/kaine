@@ -1111,6 +1111,16 @@ def migrate_at_boot(config: Mapping[str, Any], state_root: Path) -> RenameResult
         adapter = QdrantClientAliases(client)
         try:
             result = migrate(state_root, qdrant=adapter)
+        except (RenameStateError, OSError, sqlite3.Error):
+            raise
+        except Exception as exc:
+            # A Qdrant client raises its own error types (an unreachable server, a
+            # refused key). Report them as a refusal, not a traceback; a run
+            # interrupted after its manifest resumes on the next start.
+            raise RenameStateError(
+                f"rename_state: Qdrant could not be used ({type(exc).__name__}: {exc}); "
+                "check that Qdrant is running and re-run"
+            ) from exc
         finally:
             try:
                 client.close()

@@ -127,3 +127,23 @@ def test_cycle_main_refuses_a_conflicting_tree(tmp_path, monkeypatch, capsys):
     assert not calls
     assert (state_dir / OLD_SLEEP).exists()
     assert (state_dir / "sleep").exists()
+
+
+def test_migrate_at_boot_reports_an_unreachable_qdrant_as_a_refusal(tmp_path, monkeypatch):
+    state_root = tmp_path / "state"
+    state_root.mkdir()
+
+    class _Unreachable:
+        def get_collections(self):
+            raise RuntimeError("qdrant refused the key")
+
+        def get_aliases(self):
+            raise RuntimeError("qdrant refused the key")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(decommission, "qdrant_in_use", lambda _cfg: True)
+    monkeypatch.setattr(decommission, "_qdrant_client", lambda _cfg: _Unreachable())
+    with pytest.raises(rename_state.RenameStateError, match="Qdrant could not be used"):
+        rename_state.migrate_at_boot({}, state_root)
