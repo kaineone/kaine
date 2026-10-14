@@ -15,6 +15,6 @@ The voice-alignment jobs directory SHALL be resolved by one function, from `KAIN
 - **THEN** decommission lists and attributes the jobs in `/trainer-jobs`
 
 #### Scenario: A job written under the old layout
-- **WHEN** a job's `job.json` records its adapter output directory as `/app/state/hypnos/adapters` and the entity's adapters now live in `state/sleep/adapters`
+- **WHEN** a job's `job.json` records its adapter output directory under the old sleep module directory (`/app/state/<old sleep directory>/adapters`) and the entity's adapters now live in `state/sleep/adapters`
 - **THEN** decommission attributes the job to the entity
 
