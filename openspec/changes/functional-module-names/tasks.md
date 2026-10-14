@@ -59,8 +59,11 @@
 
 ## 9. Persisted names (PR 8)
 
-- [ ] 9.1 State paths, file names, collection names and stage values in code; `rename_state` runs at boot.
+- [ ] 9.0 Prerequisites: list `individuation/birth_pending` and the other persisted names the earlier steps found; every reader of a stored value (stage value and fields, freeze source, lock holder, preservation reason, study outcome, checkpoint header, encoder version, record fields, the episodic memory module's stored collection prefix) maps the old value on read; the study runner reads `birth_bloom_ends_at` through the stage reader; the queued matches are decided.
+- [ ] 9.1 State paths, file names, collection names and stage values in code; `rename_state` runs at boot under the state lock before the identity and stage reads, with the configured Qdrant client or `no_qdrant=True`, and on a revived or merged fork tree and an extracted bundle before import. A tree that holds an old and a new name for one item fails the boot and changes nothing; a migrated tree is a no-op.
 - [ ] 9.2 Check that the K1-Jev gold files and `data/evaluation/` are byte-identical before and after.
+- [ ] 9.3 Proof: a state tree written by main is upgraded and booted with nothing lost, and a second boot is a no-op; bundles and world-model checkpoints written before the rename revive and load byte-equal; the `womb_params_digest` golden and the stage round-trip are unchanged; decommission finds and deletes both forms; a dry boot of an old-named study; the guard is clean for every scope but prose; the gate is green; a sweep of the test diffs finds no collapsed literals.
+- [ ] 9.4 Docs: rolling back across this step is unsupported; take the backup first (`python -m kaine.lifecycle.backup` or the documented backup step) and restore it to go back.
 
 ## 10. Close-out (PR 9)
 
