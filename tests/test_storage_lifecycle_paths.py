@@ -61,7 +61,9 @@ def _root_args(tmp_path, *, dry_run=False):
         "[storage]\n"
         f'data_root = "{root.as_posix()}"\n'
         "[research_submission]\n"
-        "enabled = false\n",
+        "enabled = false\n"
+        # No Qdrant here: the runtime default backend would need a live store.
+        '[mnemos]\nbackend = "inmemory"\n[empatheia]\nbackend = "inmemory"\n',
         encoding="utf-8",
     )
     a = ["--config", str(cfg_path)]

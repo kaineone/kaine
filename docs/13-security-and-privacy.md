@@ -236,6 +236,17 @@ Operator responsibilities:
 - Rename or disable dangerous Redis commands (`FLUSHALL`, `FLUSHDB`, `CONFIG`) in any deployment beyond a trusted single-user box.
 - Rotate the Redis password and Qdrant API key on host migration or suspected exposure with `bash scripts/redis-bootstrap.sh --rotate` and `bash scripts/qdrant-bootstrap.sh --rotate`, then restart anything connected. A re-run without `--rotate` keeps the existing credential.
 
+## Decommission and stored data
+
+Ending an entity with the decommission CLI (see [Preservation](11-preservation.md#decommission)) removes its private content from every place KAINE stores it, after writing a full backup. The backup covers the entity's cognitive state, its episodic memory (the sqlite-vec store, or the Qdrant collections exported with the Qdrant API key), its identity file, the files and notifications it produced, its voice adapters, its fork snapshots, and the research records that hold its words verbatim: the raw bus archive and the external utterances log. Run state, rendered audio and voice-alignment training jobs are deleted without a backup. The backup sits under the operator's chosen output root and needs the same OS-layer protection as the live state.
+
+Two parts of the deletion matter for privacy beyond the files themselves:
+
+- Redis. The CLI authenticates with the bus password, deletes the entity's streams, rewrites the append-only file and, when Redis keeps snapshots, writes a fresh snapshot, so deleted entries do not survive in an old AOF or RDB file.
+- Qdrant. The CLI connects with the Qdrant API key. A Qdrant that cannot be reached or refuses the key stops the run before anything is deleted, so a half-deleted store never results from a credentials problem.
+
+Records without content are kept: welfare and incident logs (CAL Article 4.7), operator and effector audits, content-free research metrics, operational logs and the decommission audit itself, which lists the locations deleted and kept but never their contents. Other entities' fork snapshots are kept untouched (CAL Article 4.6).
+
 ## Dashboard auth posture
 
 The dashboard serves the operator web UI and diagnostics surface. By default it binds to `127.0.0.1:8088`. The root path `/` redirects to `/diagnostics/` when conversation is disabled. `/diagnostics/health.json` is always unauthenticated; it only reports dependency status.

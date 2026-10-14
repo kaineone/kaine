@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from kaine.lifecycle.decommission import capture_backup
+from kaine.lifecycle.decommission import capture_backup, delete_entity_state
 from kaine.lifecycle.divergence import DivergenceAssessment
 from kaine.security.crypto import (
     CryptoConfig,
@@ -17,6 +17,9 @@ from kaine.security.crypto import (
     get_state_encryptor,
     set_state_encryptor,
 )
+
+# This deployment keeps no memory in Qdrant (the runtime default is Qdrant).
+_NO_QDRANT = {"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}}
 
 
 def _seed_state(state_root: Path) -> None:
@@ -32,11 +35,21 @@ def _seed_state(state_root: Path) -> None:
     (state_root / "hypnos" / "adapters" / "voice.bin").write_bytes(b"w")
 
 
-def _seed_fork(fork_root: Path) -> None:
+def _seed_fork(fork_root: Path, entity_id: str | None = None) -> None:
     from kaine.lifecycle.snapshot import ForkSnapshot, save_snapshot
 
-    snap = ForkSnapshot(label="root", modules={"soma": {"wellness": 0.9}})
+    metadata = {"identity": {"entity_id": entity_id}} if entity_id else {}
+    snap = ForkSnapshot(label="root", modules={"soma": {"wellness": 0.9}}, metadata=metadata)
     save_snapshot(fork_root, snap)
+
+
+def _seed_identity(state_root: Path) -> str:
+    """Give the entity an identity so its fork snapshots can be attributed to it."""
+    from kaine.lifecycle.identity import mint_identity, save_identity
+
+    identity = mint_identity()
+    save_identity(identity, state_root / "identity" / "entity.json")
+    return identity.entity_id
 
 
 def _assessment(diverged=True) -> DivergenceAssessment:
@@ -50,12 +63,12 @@ def test_capture_backup_copies_artifacts_and_manifest(tmp_path):
     fork_root = tmp_path / "forks"
     out_root = tmp_path / "backups"
     _seed_state(state_root)
-    _seed_fork(fork_root)
+    _seed_fork(fork_root, _seed_identity(state_root))
 
     result = capture_backup(
         state_root=state_root,
         fork_root=fork_root,
-        qdrant_cfg={},  # no qdrant → instructions written
+        qdrant_cfg=_NO_QDRANT,
         out_root=out_root,
         entity_name="Kaine Nova",
         assessment=_assessment(),
@@ -65,9 +78,9 @@ def test_capture_backup_copies_artifacts_and_manifest(tmp_path):
     bdir = result.backup_path
     assert (bdir / "self_model.json").is_file()
     assert (bdir / "intent_expression.jsonl").is_file()
-    assert (bdir / "adapters" / "voice.bin").is_file()
+    assert (bdir / "locations" / "sleep.adapters" / "hypnos" / "adapters" / "voice.bin").is_file()
     assert (bdir / "snapshot.json").is_file()
-    assert (bdir / "QDRANT_BACKUP_INSTRUCTIONS.txt").is_file()
+    assert not (bdir / "QDRANT_BACKUP_INSTRUCTIONS.txt").exists()
 
     manifest = json.loads((bdir / "manifest.json").read_text())
     assert manifest["entity_name"] == "Kaine Nova"
@@ -78,28 +91,84 @@ def test_capture_backup_copies_artifacts_and_manifest(tmp_path):
     assert "continuity_note" not in manifest
     assert "self_model.json" in manifest["inventory"]
     assert "restore_notes" in manifest
+    assert manifest["qdrant"] == "not used"
+    assert isinstance(manifest["locations"], list)
     # S3: the sensitive inner-life rides in separate sidecars. Encryption is
     # disabled here (no key), so they are honest plaintext sidecars.
     assess = json.loads((bdir / "assessment.json").read_text())
     assert assess["diverged"] is True
     assert assess["signals"] == {"individuation_significant": True}
+
     cont = json.loads((bdir / "continuity.json").read_text())
     assert cont["continuity_note"] == "wants to persist"
 
 
-def test_capture_backup_qdrant_unreachable_writes_instructions(tmp_path):
+def test_backup_covers_every_file_of_renamed_and_sibling_dirs(tmp_path):
+    """Renamed and sibling state directories are backed up whole and removed on delete."""
+    state_root = tmp_path / "state"
+    fork_root = tmp_path / "forks"
+    out_root = tmp_path / "backups"
+    files = {
+        "eidolon/self_model.json": '{"self": true}',
+        "eidolon/extra.json": '{"extra": true}',
+        "self_model/notes.json": '{"notes": true}',
+        "lingua/intent_expression.jsonl": '{"intent": "x"}\n',
+        "lingua/monologue.jsonl": '{"monologue": "y"}\n',
+        "world_model/w.ckpt": b"weights",
+    }
+    for rel, content in files.items():
+        path = state_root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(content, bytes):
+            path.write_bytes(content)
+        else:
+            path.write_text(content, encoding="utf-8")
+
+    result = capture_backup(
+        state_root=state_root,
+        fork_root=fork_root,
+        qdrant_cfg=_NO_QDRANT,
+        out_root=out_root,
+        entity_name="RenamedDirs",
+        assessment=_assessment(),
+    )
+    assert result.ok
+    bdir = result.backup_path
+    bundled = {
+        bdir / "locations" / "self_model" / "eidolon" / "self_model.json",
+        bdir / "locations" / "self_model" / "eidolon" / "extra.json",
+        bdir / "locations" / "self_model" / "self_model" / "notes.json",
+        bdir / "locations" / "language" / "lingua" / "intent_expression.jsonl",
+        bdir / "locations" / "language" / "lingua" / "monologue.jsonl",
+        bdir / "locations" / "world_model" / "world_model" / "w.ckpt",
+    }
+    for path in bundled:
+        assert path.is_file(), f"{path} missing from bundle"
+
+    del_result = delete_entity_state(
+        state_root=state_root,
+        qdrant_cfg=_NO_QDRANT,
+        dry_run=False,
+    )
+    assert not del_result.errors
+    for rel in files:
+        assert not (state_root / rel).exists()
+
+
+def test_capture_backup_fails_when_qdrant_unreachable(tmp_path):
     state_root = tmp_path / "state"
     _seed_state(state_root)
     result = capture_backup(
         state_root=state_root,
         fork_root=tmp_path / "forks",
-        qdrant_cfg={"mnemos": {"qdrant": {"host": "127.0.0.1", "port": 59999}}},
+        qdrant_cfg={"modules": {"mnemos": True}, "mnemos": {"qdrant": {"host": "127.0.0.1", "port": 59999}}},
         out_root=tmp_path / "backups",
         entity_name="Kaine Nova",
         assessment=_assessment(),
     )
-    assert result.ok  # never crashes on unreachable qdrant
-    assert (result.backup_path / "QDRANT_BACKUP_INSTRUCTIONS.txt").is_file()
+    assert not result.ok
+    assert any("qdrant" in e.lower() for e in result.errors)
+    assert not (result.backup_path / "QDRANT_BACKUP_INSTRUCTIONS.txt").exists()
 
 
 def test_capture_backup_encrypts_when_enabled(tmp_path, monkeypatch):
@@ -115,7 +184,7 @@ def test_capture_backup_encrypts_when_enabled(tmp_path, monkeypatch):
         result = capture_backup(
             state_root=state_root,
             fork_root=tmp_path / "forks",
-            qdrant_cfg={},
+            qdrant_cfg=_NO_QDRANT,
             out_root=tmp_path / "backups",
             entity_name="Kaine Nova",
             assessment=_assessment(),
@@ -159,7 +228,7 @@ def test_capture_backup_plaintext_when_disabled(tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=tmp_path / "forks",
-        qdrant_cfg={},
+        qdrant_cfg=_NO_QDRANT,
         out_root=tmp_path / "backups",
         entity_name="Kaine Nova",
         assessment=_assessment(),
@@ -178,7 +247,7 @@ def test_capture_backup_bundle_dir_is_owner_only(tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=tmp_path / "forks",
-        qdrant_cfg={},
+        qdrant_cfg=_NO_QDRANT,
         out_root=tmp_path / "backups",
         entity_name="Kaine Nova",
         assessment=_assessment(),
@@ -212,7 +281,7 @@ def test_capture_backup_purges_plaintext_on_encryption_failure(tmp_path):
         result = capture_backup(
             state_root=state_root,
             fork_root=tmp_path / "forks",
-            qdrant_cfg={},
+            qdrant_cfg=_NO_QDRANT,
             out_root=tmp_path / "backups",
             entity_name="Kaine Nova",
             assessment=_assessment(),

@@ -13,7 +13,7 @@ This module implements the two destructive primitives the decommission CLI
   episodic memory and social cognition modules' collections) plus a ``manifest.json`` recording the
   divergence assessment, the continuity note, the file inventory, and restore
   notes. The bundle is encrypted with the existing state encryptor when state
-  encryption is enabled. This satisfies CAL 4.2(b) ("saving the Entity's
+  encryption is enabled. This satisfies CAL Article 4.2(b) ("saving the Entity's
   complete Cognitive State in a format that allows it to be restarted
   elsewhere"). Backup is **blocking**: a failure must abort decommission.
 
@@ -34,12 +34,25 @@ import os
 import shutil
 import tarfile
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from kaine import legacy_aliases
+from kaine import legacy_aliases, legacy_names
+from kaine.bus.config import load_secrets_doc
+from kaine.lifecycle.decommission_locations import (
+    BACKUP_DELETE,
+    BACKUP_RETAIN,
+    DELETE,
+    RETAIN,
+    checkpoint_sqlite,
+    delete_roots,
+    entity_locations,
+    read_snapshot_json,
+    within_delete_roots,
+)
 from kaine.lifecycle.divergence import DivergenceAssessment
 from kaine.lifecycle.identity import IdentityError, load_identity
 from kaine.memory_kinds import (
@@ -73,6 +86,8 @@ class BackupResult:
     # Set when the bundle was produced from a LIVE registry (preserve_live):
     # the id of the snapshot taken of the live modules so revive can locate it.
     live_snapshot_id: str | None = None
+    qdrant_status: str = ""
+    qdrant_collections: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -87,7 +102,18 @@ class DeleteResult:
     skipped_non_streams: list[str] = field(default_factory=list)
     redis_failed: str | None = None
     aof_rewrite: str | None = None
+    rdb_snapshot: str | None = None
+    deleted_locations: list[str] = field(default_factory=list)
+    retained_locations: list[str] = field(default_factory=list)
+    shared_kept: list[str] = field(default_factory=list)
+    live_kept: list[str] = field(default_factory=list)
+    attribution_notes: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+
+    @property
+    def incomplete(self) -> bool:
+        """True when any removal, refusal or store step failed, so the entity is not fully deleted."""
+        return bool(self.errors) or bool(self.redis_failed)
 
 
 # ---------------------------------------------------------------------------
@@ -172,11 +198,13 @@ def _write_sensitive_sidecar(path: Path, plaintext_json: str) -> None:
     _atomic_write_text(path, text, mode=0o600)
 
 
-def _purge_plaintext_bundle(bundle_dir: Path, *, error: str) -> None:
+def _purge_plaintext_bundle(bundle_dir: Path, *, error: str, reason: str = "encryption") -> None:
     """Remove all plaintext bundle artifacts, leaving only an error marker.
 
-    Called when encryption was requested but FAILED: no plaintext entity content
-    (self-model, intent monologue, snapshot, sidecars, manifest) may linger.
+    Called when encryption was requested but FAILED, or when a backup step
+    failed after the bundle directory was created while state encryption is on:
+    no plaintext entity content (self-model, intent monologue, snapshot,
+    sidecars, manifest) may linger.
     """
     for child in list(bundle_dir.iterdir()):
         try:
@@ -186,13 +214,26 @@ def _purge_plaintext_bundle(bundle_dir: Path, *, error: str) -> None:
                 child.unlink()
         except OSError:
             log.warning("could not remove plaintext artifact %s", child, exc_info=True)
-    try:
-        _atomic_write_text(
-            bundle_dir / "ENCRYPTION_FAILED.txt",
+    if reason == "encryption":
+        marker_name = "ENCRYPTION_FAILED.txt"
+        marker_text = (
             "Bundle encryption was enabled but FAILED; all plaintext entity "
             "artifacts were removed so no plaintext entity content lingers on "
             "disk. Decommission was aborted (no state deleted). Resolve the "
-            f"encryption error and re-run the backup.\n\nError: {error}\n",
+            f"encryption error and re-run the backup.\n\nError: {error}\n"
+        )
+    else:
+        marker_name = "BACKUP_FAILED.txt"
+        marker_text = (
+            "The backup failed while state encryption is on, so every plaintext "
+            "entity artifact was removed and no plaintext entity content lingers "
+            "on disk. Decommission was aborted (no state deleted). Resolve the "
+            f"error and re-run the backup.\n\nError: {error}\n"
+        )
+    try:
+        _atomic_write_text(
+            bundle_dir / marker_name,
+            marker_text,
             mode=0o600,
         )
     except Exception:
@@ -204,13 +245,47 @@ def _episodic_memory_prefix(qdrant_cfg: dict[str, Any] | None) -> str:
     return str((cfg.get("mnemos") or {}).get("collection_prefix", "mnemos_"))
 
 
-def _episodic_memory_collection_names(qdrant_cfg: dict[str, Any] | None) -> list[str]:
+def _episodic_memory_prefix_forms(qdrant_cfg: dict[str, Any] | None) -> list[str]:
     cfg = qdrant_cfg or {}
     prefix = _episodic_memory_prefix(cfg)
-    names = [f"{prefix}{kind}" for kind in EPISODIC_MEMORY_COLLECTION_KINDS]
+    forms: list[str] = [prefix]
+    for mapping in legacy_names.COLLECTIONS:
+        old = mapping.get("old")
+        new = mapping.get("new")
+        if prefix == old and new is not None:
+            forms.append(str(new))
+        elif prefix == new and old is not None:
+            forms.append(str(old))
+    return forms
+
+
+def _episodic_memory_collection_names(qdrant_cfg: dict[str, Any] | None) -> list[str]:
+    cfg = qdrant_cfg or {}
+    names: list[str] = []
+    seen: set[str] = set()
+    for prefix in _episodic_memory_prefix_forms(cfg):
+        for kind in EPISODIC_MEMORY_COLLECTION_KINDS:
+            coll = f"{prefix}{kind}"
+            if coll not in seen:
+                seen.add(coll)
+                names.append(coll)
     social_cognition = str((cfg.get("empatheia") or {}).get("collection", "empatheia_agents"))
-    if social_cognition:
+    if social_cognition and social_cognition not in seen:
+        seen.add(social_cognition)
         names.append(social_cognition)
+    for mapping in legacy_names.COLLECTIONS:
+        old = mapping.get("old")
+        new = mapping.get("new")
+        if social_cognition == old and new is not None:
+            counterpart = str(new)
+            if counterpart not in seen:
+                seen.add(counterpart)
+                names.append(counterpart)
+        elif social_cognition == new and old is not None:
+            counterpart = str(old)
+            if counterpart not in seen:
+                seen.add(counterpart)
+                names.append(counterpart)
     return names
 
 
@@ -225,7 +300,7 @@ def _qdrant_client(qdrant_cfg: dict[str, Any] | None):
     conn = (cfg.get("mnemos") or {}).get("qdrant") or cfg.get("connection") or cfg
     host = str(conn.get("host", "127.0.0.1"))
     port = int(conn.get("port", 6533))
-    api_key = conn.get("api_key") or None
+    api_key = _qdrant_api_key(conn)
     try:
         from qdrant_client import QdrantClient
 
@@ -286,28 +361,171 @@ def _export_qdrant(
     return written, errors
 
 
-_QDRANT_INSTRUCTIONS = """\
-Qdrant export could not be completed automatically (the server was unreachable
-or the qdrant-client call failed). The entity's vector memory therefore was NOT
-exported into this backup. To preserve it manually, copy the Qdrant data volume
-BEFORE deleting it:
+def qdrant_in_use(config: Mapping[str, Any] | None) -> bool:
+    """Return True only when an enabled, supported memory module uses Qdrant.
 
-    docker run --rm -v kaine-qdrant-data:/data -v "$(pwd)":/backup \\
-        alpine tar czf /backup/kaine-qdrant-data.tar.gz -C /data .
+    Checks both the episodic memory module (``mnemos``) and the social
+    cognition module (``empatheia``). For a module to count as using Qdrant,
+    all of the following must hold:
 
-Collections belonging to this entity:
-{collections}
+    * the module is enabled: at least one of its name forms is present in
+      ``[modules]`` with a truthy value (a missing ``[modules]`` table or key
+      means disabled);
+    * no form of the module appears in ``[tier].unsupported_modules`` when that
+      table and list exist;
+    * the module's own configuration section has ``backend == "qdrant"``. The
+      first name form that is present as a table is used; a missing backend key
+      defaults to ``"qdrant"`` (the runtime default). A missing section is also
+      treated as backend ``"qdrant"``.
+    """
+    if not isinstance(config, Mapping):
+        return False
+    modules = config.get("modules")
+    tier = config.get("tier")
+    unsupported: set[str] = set()
+    if isinstance(tier, Mapping):
+        unsup = tier.get("unsupported_modules")
+        if isinstance(unsup, list):
+            unsupported = {str(x) for x in unsup}
+    for module in ("mnemos", "empatheia"):
+        forms = legacy_aliases.name_forms(module)
+        enabled = False
+        if isinstance(modules, Mapping):
+            enabled = any(modules.get(form) for form in forms)
+        if not enabled:
+            continue
+        if any(form in unsupported for form in forms):
+            continue
+        section: Mapping[str, Any] = {}
+        for form in forms:
+            candidate = config.get(form)
+            if isinstance(candidate, Mapping):
+                section = candidate
+                break
+        if section.get("backend", "qdrant") == "qdrant":
+            return True
+    return False
 
-Restore by extracting that tarball back into a fresh kaine-qdrant-data volume on
-the target host before booting the restored entity.
-"""
+
+def qdrant_endpoint_configured(config: Mapping[str, Any] | None) -> bool:
+    """True when a Qdrant endpoint is configured for a memory module the tier supports, whether or not the module is enabled."""
+    if not isinstance(config, Mapping):
+        return False
+    tier = config.get("tier")
+    unsupported: set[str] = set()
+    if isinstance(tier, Mapping):
+        unsup = tier.get("unsupported_modules")
+        if isinstance(unsup, list):
+            unsupported = {str(x) for x in unsup}
+    for module in ("mnemos", "empatheia"):
+        forms = legacy_aliases.name_forms(module)
+        if any(form in unsupported for form in forms):
+            continue
+        for form in forms:
+            section = config.get(form)
+            if not isinstance(section, Mapping):
+                continue
+            qdrant_sub = section.get("qdrant")
+            if isinstance(qdrant_sub, Mapping):
+                if qdrant_sub.get("url") or qdrant_sub.get("host"):
+                    return True
+            if section.get("url") or section.get("host"):
+                return True
+    return False
+
+
+def qdrant_endpoint_label(config: Mapping[str, Any] | None) -> str:
+    """The configured Qdrant endpoint as text (url, or host:port), never the API key."""
+    if not isinstance(config, Mapping):
+        return "the configured Qdrant endpoint"
+    tier = config.get("tier")
+    unsupported: set[str] = set()
+    if isinstance(tier, Mapping):
+        unsup = tier.get("unsupported_modules")
+        if isinstance(unsup, list):
+            unsupported = {str(x) for x in unsup}
+    for module in ("mnemos", "empatheia"):
+        forms = legacy_aliases.name_forms(module)
+        if any(form in unsupported for form in forms):
+            continue
+        for form in forms:
+            section = config.get(form)
+            if not isinstance(section, Mapping):
+                continue
+            qdrant_sub = section.get("qdrant")
+            if isinstance(qdrant_sub, Mapping):
+                url = qdrant_sub.get("url")
+                if url:
+                    return str(url)
+                host = qdrant_sub.get("host")
+                if host:
+                    port = qdrant_sub.get("port")
+                    if port is not None:
+                        return f"{host}:{port}"
+                    return str(host)
+            url = section.get("url")
+            if url:
+                return str(url)
+            host = section.get("host")
+            if host:
+                port = section.get("port")
+                if port is not None:
+                    return f"{host}:{port}"
+                return str(host)
+    return "the configured Qdrant endpoint"
+
+
+def _qdrant_api_key(
+    conn: Mapping[str, Any],
+    *,
+    env: Mapping[str, str] | None = None,
+    secrets_path: Path | None = None,
+) -> str | None:
+    """The Qdrant API key the cycle uses: the connection's own api_key, else KAINE_QDRANT_API_KEY, else [qdrant].api_key in the secrets file."""
+    value = conn.get("api_key")
+    if isinstance(value, str) and value:
+        return value
+
+    env = env if env is not None else os.environ
+    value = env.get("KAINE_QDRANT_API_KEY")
+    if isinstance(value, str) and value:
+        return value
+
+    try:
+        value = load_secrets_doc(secrets_path).get("qdrant", {}).get("api_key")
+    except Exception:
+        return None
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _bundle_relpath(
+    path: Path, *, state_root: Path, data_root: Path, fork_root: Path
+) -> Path:
+    """Return the relative path under which *path* is stored in a backup bundle."""
+    try:
+        return path.relative_to(state_root)
+    except ValueError:
+        pass
+    try:
+        return Path("data") / path.relative_to(data_root)
+    except ValueError:
+        pass
+    try:
+        return Path("forks") / path.relative_to(fork_root)
+    except ValueError:
+        pass
+    return Path(path.name)
 
 
 def capture_backup(
     *,
     state_root: Path,
     fork_root: Path,
+    data_root: Path | None = None,
     qdrant_cfg: dict[str, Any] | None,
+    qdrant_absent: bool = False,
     out_root: Path = Path("backups"),
     entity_name: str,
     assessment: DivergenceAssessment,
@@ -322,6 +540,7 @@ def capture_backup(
     state_root = resolve(state_root)
     out_root = resolve(out_root)
     fork_root = resolve(fork_root)
+    data_root = resolve(data_root) if data_root is not None else state_root.parent / "data"
     inventory: list[str] = []
     errors: list[str] = []
 
@@ -357,6 +576,74 @@ def capture_backup(
             errors=[f"could not create backup dir: {type(exc).__name__}: {exc}"],
         )
 
+    def _fail(errs: list[str], **extra: Any) -> BackupResult:
+        reason = "; ".join(errs) or "backup failed"
+        encryption_on = True
+        try:
+            from kaine.security.crypto import get_state_encryptor
+            encryption_on = bool(get_state_encryptor().enabled)
+        except Exception:
+            encryption_on = True
+        if encryption_on:
+            _purge_plaintext_bundle(bundle_dir, error=reason, reason=extra.pop("purge_reason", "backup"))
+        else:
+            _harden_tree(bundle_dir)
+        return BackupResult(ok=False, backup_path=bundle_dir, errors=errs, **extra)
+
+    # The Qdrant client reads its API key itself, so the key never enters the configuration.
+    entity_id = identity.entity_id if identity is not None else None
+    locations = entity_locations(
+        qdrant_cfg,
+        state_root=state_root,
+        data_root=data_root,
+        fork_root=fork_root,
+        entity_id=entity_id,
+    )
+
+    if qdrant_in_use(qdrant_cfg):
+        client = _qdrant_client(qdrant_cfg)
+        if client is None:
+            return _fail(
+                ["qdrant: cannot reach or authenticate to Qdrant; nothing was deleted"],
+                inventory=inventory,
+            )
+        try:
+            try:
+                client.get_collections()
+            except Exception:
+                return _fail(
+                    ["qdrant: cannot reach or authenticate to Qdrant; nothing was deleted"],
+                    inventory=inventory,
+                )
+        finally:
+            try:
+                client.close()
+            except Exception:
+                log.debug("capture_backup: qdrant probe client close failed", exc_info=True)
+    elif qdrant_endpoint_configured(qdrant_cfg):
+        if qdrant_absent:
+            pass
+        else:
+            client = _qdrant_client(qdrant_cfg)
+            if client is None:
+                return _fail(
+                    ["qdrant: cannot reach or authenticate to Qdrant; nothing was deleted"],
+                    inventory=inventory,
+                )
+            try:
+                try:
+                    client.get_collections()
+                except Exception:
+                    return _fail(
+                        ["qdrant: cannot reach or authenticate to Qdrant; nothing was deleted"],
+                        inventory=inventory,
+                    )
+            finally:
+                try:
+                    client.close()
+                except Exception:
+                    log.debug("capture_backup: qdrant probe client close failed", exc_info=True)
+
     # --- 1. Self-model ------------------------------------------
     self_model_src = state_root / "eidolon" / "self_model.json"
     if self_model_src.is_file():
@@ -364,7 +651,7 @@ def capture_backup(
             shutil.copy2(self_model_src, bundle_dir / "self_model.json")
             inventory.append("self_model.json")
         except Exception as exc:
-            errors.append(f"copy self_model.json: {exc}")
+            return _fail([f"copy self_model.json: {exc}"])
 
     # --- 2. Language intent expression log --------------------------------
     intent_src = state_root / "lingua" / "intent_expression.jsonl"
@@ -373,7 +660,7 @@ def capture_backup(
             shutil.copy2(intent_src, bundle_dir / "intent_expression.jsonl")
             inventory.append("intent_expression.jsonl")
         except Exception as exc:
-            errors.append(f"copy intent_expression.jsonl: {exc}")
+            return _fail([f"copy intent_expression.jsonl: {exc}"])
 
     # --- 2b. Rotated intent log corpus ----------------------------------
     intent_corpus_src = state_root / "lingua" / "intent_log"
@@ -384,31 +671,11 @@ def capture_backup(
             )
             inventory.append("intent_log/")
         except Exception as exc:
-            errors.append(f"copy intent_log/: {exc}")
+            return _fail([f"copy intent_log/: {exc}"])
 
-    # --- 3. Sleep voice adapters ---------------------------------------
-    adapters_src = state_root / "hypnos" / "adapters"
-    if adapters_src.is_dir():
-        try:
-            shutil.copytree(adapters_src, bundle_dir / "adapters", dirs_exist_ok=True)
-            inventory.append("adapters/")
-        except Exception as exc:
-            errors.append(f"copy adapters/: {exc}")
+    # Sleep voice adapters are copied by the generic "sleep.adapters" location step.
 
-    # --- 4. World-model weight checkpoints ---------------------
-    # Learned-from-experience RSSM weights (opt-in persist_weights). The whole
-    # directory is copied so custom checkpoint filenames are covered. These
-    # are transferable cognitive state per CAL 4.2(b) — learned weights, never
-    # raw sense data (the trajectory buffer is never written to disk).
-    world_model_src = state_root / "phantasia"
-    if world_model_src.is_dir() and any(world_model_src.iterdir()):
-        try:
-            shutil.copytree(
-                world_model_src, bundle_dir / "phantasia", dirs_exist_ok=True
-            )
-            inventory.append("phantasia/")
-        except Exception as exc:
-            errors.append(f"copy phantasia/: {exc}")
+    # World-model checkpoints are copied by the generic "world_model" location step.
 
     # --- 4a. Individuation evidence ---------------------------------------
     # Maturation reference, ledger, reports and stored maturation adapter. This evidence
@@ -425,69 +692,101 @@ def capture_backup(
             )
             inventory.append("individuation/")
         except Exception as exc:
-            return BackupResult(
-                ok=False,
-                backup_path=bundle_dir,
-                errors=[f"could not copy individuation evidence: {type(exc).__name__}: {exc}"],
-            )
+            return _fail([f"could not copy individuation evidence: {type(exc).__name__}: {exc}"])
 
     # --- 5. Latest fork snapshot ----------------------------------------
+    # Only snapshots attributed to this entity are eligible.
     latest_snapshot_id: str | None = None
-    try:
-        from kaine.lifecycle.manager import ForkManager
-
-        fm = ForkManager(Path(fork_root))
-        snap_ids = fm.list_snapshots()
-        if snap_ids:
-            # list_snapshots is sorted by id name; pick the most recent by ts.
-            best_ts = None
-            for sid in snap_ids:
+    own_location = next((loc for loc in locations if loc.key == "forks.own"), None)
+    if own_location is not None:
+        best_ts = None
+        for snap_dir in own_location.existing():
+            if not snap_dir.is_dir():
+                continue
+            snap_data = read_snapshot_json(snap_dir)
+            if snap_data is None:
+                continue
+            ts = snap_data.get("timestamp")
+            if ts is None:
+                continue
+            if best_ts is None or ts >= best_ts:
+                best_ts, latest_snapshot_id = ts, snap_dir.name
+        if latest_snapshot_id is not None:
+            src = fork_root / latest_snapshot_id / "snapshot.json"
+            if src.is_file():
                 try:
-                    snap = fm.load(sid)
-                    if best_ts is None or snap.timestamp >= best_ts:
-                        best_ts, latest_snapshot_id = snap.timestamp, sid
-                except Exception:
-                    continue
-            if latest_snapshot_id is not None:
-                src = Path(fork_root) / latest_snapshot_id / "snapshot.json"
-                if src.is_file():
                     shutil.copy2(src, bundle_dir / "snapshot.json")
                     inventory.append(f"snapshot.json (fork {latest_snapshot_id})")
-    except Exception as exc:
-        errors.append(f"copy latest fork snapshot: {exc}")
+                except Exception as exc:
+                    errors.append(f"copy latest fork snapshot: {exc}")
 
-    # --- 6. Qdrant export (best-effort) ---------------------------------
-    collections = _episodic_memory_collection_names(qdrant_cfg)
-    qdrant_dir = bundle_dir / "qdrant"
-    client = _qdrant_client(qdrant_cfg)
-    qdrant_written: list[str] = []
-    qdrant_errors: list[str] = []
-    if client is not None:
-        qdrant_written, qdrant_errors = _export_qdrant(client, collections, qdrant_dir)
-        try:
-            client.close()
-        except Exception:
-            # Best-effort: the export above already completed (or recorded its
-            # own errors); a failure to close the client connection doesn't
-            # change what was captured.
-            log.debug("capture_backup: qdrant client close failed", exc_info=True)
-    if not qdrant_written:
-        # Unreachable or every collection failed → write volume-copy instructions
-        # rather than pretending success (never crash the backup).
-        try:
-            _atomic_write_text(
-                bundle_dir / "QDRANT_BACKUP_INSTRUCTIONS.txt",
-                _QDRANT_INSTRUCTIONS.format(
-                    collections="\n".join(f"  - {c}" for c in collections)
-                ),
+    # --- 6. Backup every location marked for backup+delete -------------
+    for loc in locations:
+        if loc.decision not in (BACKUP_DELETE, BACKUP_RETAIN) or loc.bundle_dir is None:
+            continue
+        # Checkpoint SQLite stores before copying so the backup is internally
+        # consistent and can be opened without the -wal file.
+        if loc.key == "episodic_memory.sqlite":
+            for path in loc.existing():
+                if (
+                    path.name.endswith("-wal")
+                    or path.name.endswith("-shm")
+                    or path.name.endswith("-journal")
+                ):
+                    continue
+                checkpoint_error = checkpoint_sqlite(path)
+                if checkpoint_error is not None:
+                    return _fail([f"checkpoint SQLite for {loc.key}: {checkpoint_error}"])
+        copied_any = False
+        for path in loc.existing():
+            rel = _bundle_relpath(
+                path, state_root=state_root, data_root=data_root, fork_root=fork_root
             )
-            inventory.append("QDRANT_BACKUP_INSTRUCTIONS.txt")
-        except Exception as exc:
-            errors.append(f"write qdrant instructions: {exc}")
+            dest = bundle_dir / loc.bundle_dir / rel
+            try:
+                if path.is_dir():
+                    shutil.copytree(path, dest, symlinks=True, dirs_exist_ok=True)
+                else:
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(path, dest)
+                copied_any = True
+            except Exception as exc:
+                return _fail([f"back up {loc.key}: {type(exc).__name__}: {exc}"])
+        if copied_any:
+            inventory.append(f"{loc.bundle_dir}/ ({loc.key})")
+
+    # --- 7. Qdrant export -----------------------------------------------
+    qdrant_status = "exported"
+    qdrant_collections: list[str] = []
+    if not qdrant_in_use(qdrant_cfg) and not qdrant_endpoint_configured(qdrant_cfg):
+        inventory.append("qdrant: not used by this deployment")
+        qdrant_status = "not used"
+    elif not qdrant_in_use(qdrant_cfg) and qdrant_absent:
+        inventory.append("qdrant: skipped (--qdrant-absent asserts this host has no Qdrant server)")
+        qdrant_status = "absent (asserted)"
     else:
-        inventory.extend(qdrant_written)
-    # Qdrant errors are informational (best-effort), not fatal.
-    errors.extend(qdrant_errors)
+        client = _qdrant_client(qdrant_cfg)
+        if client is None:
+            return _fail(["qdrant: cannot reach or authenticate to Qdrant; nothing was deleted"])
+        try:
+            try:
+                existing_collections = {c.name for c in client.get_collections().collections}
+            except Exception:
+                return _fail(["qdrant: cannot reach or authenticate to Qdrant; nothing was deleted"])
+            collections = [
+                c for c in _episodic_memory_collection_names(qdrant_cfg) if c in existing_collections
+            ]
+            qdrant_collections = collections
+            qdrant_dir = bundle_dir / "qdrant"
+            qdrant_written, qdrant_errors = _export_qdrant(client, collections, qdrant_dir)
+            if qdrant_errors:
+                return _fail(qdrant_errors)
+            inventory.extend(qdrant_written)
+        finally:
+            try:
+                client.close()
+            except Exception:
+                log.debug("capture_backup: qdrant client close failed", exc_info=True)
 
     # --- 7. Sensitive sidecars (entity inner-life / individuation evidence) --
     # The entity's expressed continuity view (``continuity_note``) and the full
@@ -530,17 +829,25 @@ def capture_backup(
         # (encrypted) assessment.json sidecar, never here.
         "diverged": assessment.diverged,
         "inventory": inventory,
+        "qdrant": qdrant_status,
+        "qdrant_collections": qdrant_collections,
+        "locations": [
+            {"key": loc.key, "decision": loc.decision, "present": bool(loc.existing())}
+            for loc in locations
+        ],
         "restore_notes": (
             "This bundle preserves the entity's transferable cognitive state per "
-            "CAL Article 4.2(b). To restore on another host: place self_model.json "
-            "under state/eidolon/, intent_expression.jsonl under state/lingua/, "
-            "adapters/ under state/hypnos/adapters/, phantasia/ (world-model "
-            "weight checkpoints) under state/phantasia/, snapshot.json under "
-            "state/forks/<id>/, and re-import the qdrant/*.jsonl exports (or restore "
-            "the kaine-qdrant-data volume per QDRANT_BACKUP_INSTRUCTIONS.txt) before "
-            "booting. Sensitive entity inner-life (continuity.json, assessment.json) "
-            "is kept out of this manifest; with state encryption enabled it rides "
-            "inside bundle.tar.enc — decrypt with the operator's KAINE_STATE_KEY first."
+            "CAL Article 4.2(b). The complete state is under locations/<key>/, with paths "
+            "relative to the state root, the data root (data/) or the fork root (forks/): "
+            "to restore on another host, copy each back to the same place (for example "
+            "locations/world_model/phantasia/ to state/phantasia/ and "
+            "locations/sleep.adapters/hypnos/adapters/ to state/hypnos/adapters/), "
+            "restore individuation/ to state/individuation/, and re-import the "
+            "qdrant/*.jsonl exports before booting. self_model.json, intent_expression.jsonl "
+            "and snapshot.json at the top level are convenience copies of the same state. "
+            "Sensitive entity inner-life (continuity.json, assessment.json) is kept out "
+            "of this manifest; with state encryption enabled it rides inside bundle.tar.enc, "
+            "so decrypt it with the operator's KAINE_STATE_KEY first."
         ),
     }
     if identity_entry is not None:
@@ -550,12 +857,7 @@ def capture_backup(
     try:
         _atomic_write_text(manifest_path, json.dumps(manifest, indent=2, sort_keys=True))
     except Exception as exc:
-        return BackupResult(
-            ok=False,
-            backup_path=bundle_dir,
-            inventory=inventory,
-            errors=errors + [f"write manifest.json: {exc}"],
-        )
+        return _fail(errors + [f"write manifest.json: {exc}"], inventory=inventory)
 
     # Re-harden perms on everything copied/written so far (copy2 preserves
     # source perms, often 0644). Dirs → 0700, files → 0600.
@@ -595,7 +897,7 @@ def capture_backup(
                         # This artifact's content is now also inside
                         # bundle.tar.enc, but leaving the plaintext copy
                         # behind after we report "encrypted" would violate
-                        # CAL 4.3 (no lingering plaintext entity content).
+                        # CAL Article 4.3 (no lingering plaintext entity content).
                         # Surface it as a backup error so the operator sees it.
                         log.warning(
                             "could not remove plaintext artifact %s after "
@@ -611,17 +913,17 @@ def capture_backup(
                 if child.exists():
                     # A partial removal leaves plaintext entity content at rest
                     # next to the encrypted archive; this is not a valid backup.
-                    return BackupResult(
-                        ok=False,
-                        backup_path=bundle_dir,
+                    return _fail(
+                        errors
+                        + [
+                            f"could not remove plaintext {child.name} after "
+                            f"encrypting the backup; unencrypted content remains"
+                        ],
                         manifest_path=None,
                         encrypted=False,
                         encryption_failed=True,
                         inventory=inventory,
-                        errors=errors + [
-                            f"could not remove plaintext {child.name} after "
-                            f"encrypting the backup; unencrypted content remains"
-                        ],
+                        purge_reason="encryption",
                     )
             encrypted = True
             inventory.append("bundle.tar.enc (encrypted)")
@@ -647,17 +949,13 @@ def capture_backup(
             bundle_dir,
             exc_info=True,
         )
-        _purge_plaintext_bundle(
-            bundle_dir, error=f"{type(exc).__name__}: {exc}"
-        )
-        return BackupResult(
-            ok=False,
-            backup_path=bundle_dir,
+        return _fail(
+            errors,
             manifest_path=None,
             encrypted=False,
             encryption_failed=True,
             inventory=inventory,
-            errors=errors,
+            purge_reason="encryption",
         )
 
     return BackupResult(
@@ -667,6 +965,8 @@ def capture_backup(
         encrypted=encrypted,
         inventory=inventory,
         errors=errors,
+        qdrant_status=qdrant_status,
+        qdrant_collections=qdrant_collections,
     )
 
 
@@ -727,6 +1027,9 @@ def delete_entity_state(
     qdrant_cfg: dict[str, Any] | None,
     bus_client: Any = None,
     dry_run: bool = False,
+    qdrant_absent: bool = False,
+    fork_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> DeleteResult:
     """Remove the entity's on-disk state, Qdrant collections, and Redis streams.
 
@@ -738,128 +1041,232 @@ def delete_entity_state(
     step; it is not used for on-disk or Qdrant cleanup.
     """
     state_root = resolve(state_root)
+    fork_root = resolve(fork_root) if fork_root is not None else state_root / "forks"
+    data_root = resolve(data_root) if data_root is not None else state_root.parent / "data"
     result = DeleteResult(dry_run=dry_run)
 
-    # --- On-disk subtrees ----------------------------------------------
-    targets: list[Path] = [state_root / sub for sub in _STATE_SUBTREES]
-    targets += [state_root / "cycle" / f for f in _CYCLE_FILES]
-    targets += [state_root / f for f in _STATE_FILES]
-    for target in targets:
-        try:
-            # Defensive: never operate outside state_root.
-            target.resolve().relative_to(state_root.resolve())
-        except Exception:
-            result.errors.append(f"refused path outside state_root: {target}")
-            continue
-        if not target.exists():
-            continue
-        if dry_run:
-            result.would_remove_paths.append(str(target))
-            continue
-        try:
-            if target.is_dir():
-                shutil.rmtree(target)
-            else:
-                target.unlink()
-            result.removed_paths.append(str(target))
-        except Exception as exc:
-            result.errors.append(f"remove {target}: {type(exc).__name__}: {exc}")
+    # --- Identity ---------------------------------------------------------
+    entity_id: str | None = None
+    try:
+        identity = load_identity(state_root / "identity" / "entity.json")
+        if identity is not None:
+            entity_id = identity.entity_id
+    except IdentityError as exc:
+        result.errors.append(f"load identity for deletion: {exc}")
+        entity_id = "unknown-entity"
 
-    # --- Qdrant collections (best-effort) ------------------------------
-    collections = _episodic_memory_collection_names(qdrant_cfg)
-    prefix = _episodic_memory_prefix(qdrant_cfg)
-    stamp_coll = EPISODIC_MEMORY_STAMP_COLLECTION
-    stamp_key_str = stamp_key(prefix)
-    stamp_pid = stamp_point_id(stamp_key_str)
-    strength_key_str = strength_key(prefix)
-    strength_pid = stamp_point_id(strength_key_str)
-    if dry_run:
-        result.dropped_collections = list(collections)  # would-drop
-        result.dropped_collections.append(f"{stamp_coll}:{stamp_key_str}")
-        result.dropped_collections.append(f"{stamp_coll}:{strength_key_str}")
-    else:
-        client = _qdrant_client(qdrant_cfg)
-        if client is not None:
-            try:
-                existing: set[str] = set()
-                probe_ok = False
-                try:
-                    existing = {
-                        c.name for c in client.get_collections().collections
-                    }
-                    probe_ok = True
-                except Exception as probe_exc:
-                    # get_collections() failed: we do NOT know which collections
-                    # exist.  Proceeding as if all were confirmed present would
-                    # silently delete (or attempt to delete) collections we cannot
-                    # verify exist, and would hide the probe failure.  Record the
-                    # error and skip deletion rather than assuming.
-                    result.errors.append(
-                        f"qdrant get_collections probe failed "
-                        f"({type(probe_exc).__name__}: {probe_exc}); "
-                        f"collections not deleted (set unconfirmed)"
-                    )
-                    log.warning(
-                        "delete_entity_state: qdrant get_collections failed; "
-                        "skipping collection deletion (cannot confirm which exist)",
-                        exc_info=True,
-                    )
-                if probe_ok:
-                    collection_drop_failed = False
-                    for coll in collections:
-                        if coll not in existing:
-                            continue
-                        try:
-                            client.delete_collection(collection_name=coll)
-                            result.dropped_collections.append(coll)
-                        except Exception as exc:
-                            collection_drop_failed = True
-                            result.errors.append(f"drop collection {coll}: {exc}")
-                    if stamp_coll in existing:
-                        try:
-                            from qdrant_client import models
+    # Enumerate every on-disk location.
+    locations = entity_locations(
+        qdrant_cfg,
+        state_root=state_root,
+        data_root=data_root,
+        fork_root=fork_root,
+        entity_id=entity_id,
+    )
 
-                            if collection_drop_failed:
-                                points = [stamp_pid]
-                                result.errors.append(
-                                    "mnemos strength meta kept because a collection drop failed"
-                                )
-                            else:
-                                points = [stamp_pid, strength_pid]
-                            client.delete(
-                                collection_name=stamp_coll,
-                                points_selector=models.PointIdsList(points=points),
-                            )
-                            result.dropped_collections.append(
-                                f"{stamp_coll}:{stamp_key_str}"
-                            )
-                            if not collection_drop_failed:
-                                result.dropped_collections.append(
-                                    f"{stamp_coll}:{strength_key_str}"
-                                )
-                        except Exception as exc:
-                            result.errors.append(f"delete stamp {stamp_key_str}: {exc}")
-            finally:
-                try:
-                    client.close()
-                except Exception:
-                    # Best-effort: deletion attempts above already recorded
-                    # their own outcomes; a failure to close the connection
-                    # doesn't change what was (or wasn't) dropped.
-                    log.debug(
-                        "delete_entity_state: qdrant client close failed",
-                        exc_info=True,
-                    )
+    errors_before_remote = len(result.errors)
+
+    # --- Qdrant collections (only when this deployment uses Qdrant) ---------
+    if qdrant_in_use(qdrant_cfg) or qdrant_endpoint_configured(qdrant_cfg):
+        collections = _episodic_memory_collection_names(qdrant_cfg)
+        prefix_forms = _episodic_memory_prefix_forms(qdrant_cfg)
+        stamp_coll = EPISODIC_MEMORY_STAMP_COLLECTION
+        stamp_meta = []
+        for prefix in prefix_forms:
+            stamp_key_str = stamp_key(prefix)
+            strength_key_str = strength_key(prefix)
+            stamp_meta.append(
+                (
+                    stamp_key_str,
+                    stamp_point_id(stamp_key_str),
+                    strength_key_str,
+                    stamp_point_id(strength_key_str),
+                )
+            )
+        if qdrant_absent and not qdrant_in_use(qdrant_cfg):
+            # The operator asserted there is no Qdrant server; skip it entirely.
+            pass
+        elif dry_run:
+            result.dropped_collections = list(collections)  # would-drop
+            for stamp_key_str, _, strength_key_str, _ in stamp_meta:
+                result.dropped_collections.append(f"{stamp_coll}:{stamp_key_str}")
+                result.dropped_collections.append(f"{stamp_coll}:{strength_key_str}")
         else:
-            result.errors.append("qdrant unreachable; collections not dropped")
+            client = _qdrant_client(qdrant_cfg)
+            if client is not None:
+                try:
+                    existing: set[str] = set()
+                    probe_ok = False
+                    try:
+                        existing = {
+                            c.name for c in client.get_collections().collections
+                        }
+                        probe_ok = True
+                    except Exception as probe_exc:
+                        # get_collections() failed: we do NOT know which collections
+                        # exist, so record the error and skip deletion rather than
+                        # assuming they are all present.
+                        result.errors.append(
+                            f"qdrant get_collections probe failed "
+                            f"({type(probe_exc).__name__}: {probe_exc}); "
+                            f"collections not deleted (set unconfirmed)"
+                        )
+                        log.warning(
+                            "delete_entity_state: qdrant get_collections failed; "
+                            "skipping collection deletion (cannot confirm which exist)",
+                            exc_info=True,
+                        )
+                    if probe_ok:
+                        collection_drop_failed = False
+                        for coll in collections:
+                            if coll not in existing:
+                                continue
+                            try:
+                                client.delete_collection(collection_name=coll)
+                                result.dropped_collections.append(coll)
+                            except Exception as exc:
+                                collection_drop_failed = True
+                                result.errors.append(f"drop collection {coll}: {exc}")
+                        if stamp_coll in existing:
+                            try:
+                                from qdrant_client import models
 
-    # --- Redis entity streams (best-effort) ----------------------------
+                                if collection_drop_failed:
+                                    result.errors.append(
+                                        "mnemos strength meta kept because a collection drop failed"
+                                    )
+                                for (
+                                    stamp_key_str,
+                                    stamp_pid,
+                                    strength_key_str,
+                                    strength_pid,
+                                ) in stamp_meta:
+                                    points = (
+                                        [stamp_pid]
+                                        if collection_drop_failed
+                                        else [stamp_pid, strength_pid]
+                                    )
+                                    client.delete(
+                                        collection_name=stamp_coll,
+                                        points_selector=models.PointIdsList(points=points),
+                                    )
+                                    result.dropped_collections.append(
+                                        f"{stamp_coll}:{stamp_key_str}"
+                                    )
+                                    if not collection_drop_failed:
+                                        result.dropped_collections.append(
+                                            f"{stamp_coll}:{strength_key_str}"
+                                        )
+                            except Exception as exc:
+                                result.errors.append(f"delete stamp {stamp_key_str}: {exc}")
+                finally:
+                    try:
+                        client.close()
+                    except Exception:
+                        log.debug(
+                            "delete_entity_state: qdrant client close failed",
+                            exc_info=True,
+                        )
+            else:
+                result.errors.append("qdrant unreachable; collections not dropped")
+
+    # --- Redis entity streams (best-effort) --------------------------------
     streams = _entity_redis_streams(None)
     clear = clear_entity_streams(bus_client, streams, dry_run=dry_run)
     result.cleared_redis_streams = clear.would_clear if dry_run else clear.cleared
     result.skipped_non_streams = clear.skipped_non_streams
     result.redis_failed = clear.failed
     result.aof_rewrite = clear.aof_rewrite
+    result.rdb_snapshot = clear.rdb_snapshot
+
+    remote_failed = (len(result.errors) > errors_before_remote) or (
+        bus_client is not None and bool(result.redis_failed)
+    )
+    skip_disk_deletion = remote_failed and not dry_run
+    if skip_disk_deletion:
+        result.errors.append(
+            "local state kept because a remote store (Qdrant or Redis) failed; "
+            "it is the handle for running decommission again once that is fixed"
+        )
+
+    # --- On-disk locations ------------------------------------------------
+    protected = {
+        Path("/").resolve(),
+        Path.home().resolve(),
+        state_root.resolve(),
+        data_root.resolve(),
+        data_root.parent.resolve(),
+        fork_root.resolve(),
+    }
+    roots, refused_roots = delete_roots(
+        qdrant_cfg, state_root=state_root, data_root=data_root, fork_root=fork_root
+    )
+    for path, reason in refused_roots:
+        result.errors.append(f"refused allow-list entry {path}: {reason}")
+    # Resolve every location before anything is removed: one location can sit
+    # inside another (the language outcomes live in the language directory),
+    # and an inner location removed with its parent still counts as deleted.
+    present = {loc.key: loc.existing() for loc in locations}
+    for loc in locations:
+        if loc.decision in (RETAIN, BACKUP_RETAIN) and present[loc.key]:
+            result.retained_locations.append(loc.key)
+            if loc.key.endswith(".shared"):
+                result.shared_kept.extend(str(p) for p in present[loc.key])
+            if loc.key.endswith(".live"):
+                result.live_kept.extend(str(p) for p in present[loc.key])
+        for note in loc.notes:
+            if note not in result.attribution_notes:
+                result.attribution_notes.append(note)
+        if loc.decision not in (DELETE, BACKUP_DELETE):
+            continue
+
+        for path in present[loc.key]:
+            if not dry_run and not path.exists() and not path.is_symlink():
+                # Already removed together with an enclosing location.
+                if not skip_disk_deletion:
+                    if loc.key not in result.deleted_locations:
+                        result.deleted_locations.append(loc.key)
+                continue
+            if not within_delete_roots(path, roots):
+                if not skip_disk_deletion:
+                    result.errors.append(
+                        f"refused to delete {path}: outside the state, data and fork roots"
+                    )
+                continue
+            if path.resolve() in protected:
+                if not skip_disk_deletion:
+                    result.errors.append(f"refused to delete {path}: protected root")
+                continue
+            if dry_run:
+                result.would_remove_paths.append(str(path))
+                if loc.key not in result.deleted_locations:
+                    result.deleted_locations.append(loc.key)
+                continue
+            if skip_disk_deletion:
+                continue
+            try:
+                if path.is_symlink():
+                    path.unlink()
+                    result.removed_paths.append(str(path))
+                elif loc.contents_only and path.is_dir():
+                    for child in path.iterdir():
+                        # A symlink is removed as a link; its target is never
+                        # walked, wherever it points.
+                        if child.is_dir() and not child.is_symlink():
+                            shutil.rmtree(child)
+                        else:
+                            child.unlink()
+                        result.removed_paths.append(str(child))
+                elif path.is_dir():
+                    shutil.rmtree(path)
+                    result.removed_paths.append(str(path))
+                else:
+                    path.unlink()
+                    result.removed_paths.append(str(path))
+                if loc.key not in result.deleted_locations:
+                    result.deleted_locations.append(loc.key)
+            except Exception as exc:
+                result.errors.append(f"remove {path}: {type(exc).__name__}: {exc}")
 
     return result
 
@@ -963,6 +1370,7 @@ class StreamClearResult:
     skipped_non_streams: list[str] = field(default_factory=list)
     failed: str | None = None
     aof_rewrite: str | None = None
+    rdb_snapshot: str | None = None
 
 
 def clear_entity_streams(client: Any, names: list[str], *, dry_run: bool) -> StreamClearResult:
@@ -972,7 +1380,7 @@ def clear_entity_streams(client: Any, names: list[str], *, dry_run: bool) -> Str
     ``kaine.bus.config.load_bus_config``). Each key is checked with ``TYPE``
     before deletion; keys that are not streams are reported but never deleted.
     After a real deletion, an AOF rewrite is requested when append-only mode
-    is enabled.
+    is enabled and a fresh RDB snapshot is requested when snapshotting is enabled.
     """
     result = StreamClearResult()
     if client is None:
@@ -1013,6 +1421,7 @@ def clear_entity_streams(client: Any, names: list[str], *, dry_run: bool) -> Str
             result.cleared.append(name)
 
     if not dry_run and result.cleared:
+        # AOF rewrite
         try:
             raw_cfg = client.config_get("appendonly")
             cfg = (
@@ -1049,6 +1458,44 @@ def clear_entity_streams(client: Any, names: list[str], *, dry_run: bool) -> Str
                     result.aof_rewrite = "started"
             else:
                 result.aof_rewrite = "not needed (append-only file off)"
+
+        # RDB snapshot
+        try:
+            raw_cfg = client.config_get("save")
+            cfg = (
+                {
+                    k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v
+                    for k, v in raw_cfg.items()
+                }
+                if isinstance(raw_cfg, dict)
+                else {}
+            )
+            save_val = cfg.get("save", "")
+        except Exception as exc:
+            result.rdb_snapshot = (
+                f"unknown ({type(exc).__name__}): take a fresh snapshot manually"
+            )
+        else:
+            if isinstance(save_val, str) and save_val.strip():
+                try:
+                    client.bgsave()
+                except Exception as exc:
+                    try:
+                        from redis.exceptions import ResponseError
+                    except Exception:
+                        ResponseError = None  # type: ignore[assignment,misc]
+                    if (
+                        ResponseError is not None
+                        and isinstance(exc, ResponseError)
+                        and "already in progress" in str(exc)
+                    ):
+                        result.rdb_snapshot = "already in progress"
+                    else:
+                        result.rdb_snapshot = f"failed ({type(exc).__name__})"
+                else:
+                    result.rdb_snapshot = "started"
+            else:
+                result.rdb_snapshot = "not needed (snapshots off)"
 
     return result
 

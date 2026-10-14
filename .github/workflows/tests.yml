@@ -152,13 +152,22 @@ jobs:
             echo "slow=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Install redis-server
+        # The decommission end-to-end and Redis authentication tests start their
+        # own password-protected redis-server on a free port; without the binary
+        # they would skip. KAINE_REQUIRE_REDIS_SERVER below turns that skip into
+        # a failure.
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends redis-server
+
       - name: Run the offline test suite
         # In parallel, one worker per CPU, each test file kept on one worker so
         # tests that share module state stay together. A test that runs longer
         # than 10 minutes dumps every thread's stack to the log (pytest's
         # built-in faulthandler), so a hang names itself instead of ending as a
         # silent job timeout.
-        run: python -m pytest -q -n auto --dist loadfile -m "not slow" -o faulthandler_timeout=600
+        env:
+          KAINE_REQUIRE_REDIS_SERVER: "1"
+        run: python -m pytest -q -n auto --dist loadfile -m "not slow" -o faulthandler_timeout=600 -rs
 
       - name: Run the slow tests
         if: steps.lane.outputs.slow == 'true'
