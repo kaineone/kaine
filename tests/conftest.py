@@ -402,3 +402,12 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "integration" in item.keywords:
             item.add_marker(skip_integration)
+
+
+def pytest_sessionstart(session):
+    """With KAINE_REQUIRE_SQLITE_VEC=1 (set in CI), a missing sqlite-vec fails the
+    session instead of letting the SQLite store and rename tests skip."""
+    import os
+
+    if os.environ.get("KAINE_REQUIRE_SQLITE_VEC") == "1":
+        import sqlite_vec  # noqa: F401  (raises ImportError: the extra is required here)

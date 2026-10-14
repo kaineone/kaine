@@ -357,7 +357,7 @@ services:
       - kaine-organ-adapters:/organ-adapters
       # Job-queue backend for voice-alignment training: the cycle writes READY jobs,
       # kaine-trainer claims and runs them. Kept off the entity state volume.
-      - kaine-trainer-jobs:/app/state/hypnos/voice_align_jobs
+      - kaine-trainer-jobs:/app/state/sleep/voice_align_jobs
       # Evaluation outputs on a SHARED named volume so the Nexus admissibility probe
       # (runs_manifest_root = data/evaluation/runs) sees what the cycle writes —
       # otherwise each container has its own ephemeral /app/data and Nexus reports

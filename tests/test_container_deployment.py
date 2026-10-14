@@ -1010,3 +1010,46 @@ def test_compose_renders_old_names_from_env(tmp_path: Path):
     assert any(
         str(p.get("published", "")) == "9191" for p in dashboard.get("ports", [])
     )
+
+
+def _old_state_dir_names() -> set[str]:
+    """State directory names from before the rename, from the table: old module keys
+    whose directory moved, and the old developmental terms."""
+    names = {k for k, e in legacy_names.MODULES.items() if e["new_key"] != k}
+    names |= {k for k, e in legacy_names.DEVELOPMENTAL.items() if e["new_key"] != k}
+    return names
+
+
+def _state_targets() -> list[tuple[str, str]]:
+    """Every container mount or tmpfs target under /app/state/, with where it is declared."""
+    found: list[tuple[str, str]] = []
+    for compose_file in sorted((_REPO_ROOT / "compose").glob("*.yml")):
+        doc = yaml.safe_load(compose_file.read_text()) or {}
+        for name, svc in (doc.get("services") or {}).items():
+            targets = [str(t).split(":")[0] for t in svc.get("tmpfs", []) or []]
+            targets += [_mount_target_and_tmpfs(v)[0] for v in svc.get("volumes", []) or []]
+            found += [(t, f"{compose_file.name}:{name}") for t in targets if t.startswith("/app/state/")]
+    for unit in sorted(_QUADLET.glob("*.container")):
+        for line in unit.read_text().splitlines():
+            key, _, value = line.partition("=")
+            if key.strip() in ("Volume", "Tmpfs", "Mount"):
+                for part in value.split(":"):
+                    if part.startswith("/app/state/"):
+                        found.append((part.split(",")[0], unit.name))
+    for line in _DOCKERFILE.read_text().splitlines():
+        found += [(t, "Dockerfile") for t in re.findall(r"/app/state/[A-Za-z0-9_./-]+", line)]
+    return found
+
+
+def test_no_container_target_under_state_uses_an_old_module_name():
+    # The boot migration renames the old directories; a mount point the runtime
+    # recreates under an old name would sit beside the renamed one on every boot.
+    old = _old_state_dir_names()
+    targets = _state_targets()
+    assert targets, "expected mount targets under /app/state/"
+    bad = [
+        f"{where}: {target}"
+        for target, where in targets
+        if any(part in old for part in target[len("/app/state/"):].split("/"))
+    ]
+    assert not bad, bad

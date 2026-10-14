@@ -151,7 +151,7 @@ RUN if ! command -v python3.12 >/dev/null 2>&1; then \
 # a freshly created named volume to inherit owner-only perms. /app/studies is
 # the module-ignition study volume's mountpoint, kaine-owned for the same reason.
 RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin kaine \
- && mkdir -p /app/state /app/studies /models /organ-adapters /trainer-jobs /app/state/hypnos/voice_align_jobs \
+ && mkdir -p /app/state /app/studies /models /organ-adapters /trainer-jobs /app/state/sleep/voice_align_jobs \
  && chown -R kaine:kaine /app /models /organ-adapters /trainer-jobs
 
 COPY --from=build /opt/venv /opt/venv

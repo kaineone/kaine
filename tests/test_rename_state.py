@@ -629,7 +629,9 @@ def test_main_dry_run(tmp_path):
 
 def test_main_conflict(tmp_path, capsys):
     _make_tree(tmp_path)
+    # Data under both names: an empty new directory alone would be merged into.
     (tmp_path / "episodic_memory").mkdir()
+    (tmp_path / "episodic_memory" / "other.json").write_text("{}")
     ret = rename_state.main([str(tmp_path), "--no-qdrant"])
     assert ret == 2
     captured = capsys.readouterr()

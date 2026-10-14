@@ -167,6 +167,9 @@ jobs:
         # silent job timeout.
         env:
           KAINE_REQUIRE_REDIS_SERVER: "1"
+          # The SQLite store and the state-rename tests need sqlite-vec (memory-edge
+          # extra); a missing package fails the run instead of skipping them.
+          KAINE_REQUIRE_SQLITE_VEC: "1"
         run: python -m pytest -q -n auto --dist loadfile -m "not slow" -o faulthandler_timeout=600 -rs
 
       - name: Run the slow tests

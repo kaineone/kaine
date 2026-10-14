@@ -109,7 +109,9 @@ def test_cycle_main_refuses_a_conflicting_tree(tmp_path, monkeypatch, capsys):
 
     state_dir = tmp_path / "state"
     (state_dir / OLD_SLEEP).mkdir(parents=True)
+    (state_dir / OLD_SLEEP / "organ_window.json").write_text("old")
     (state_dir / "sleep").mkdir(parents=True)
+    (state_dir / "sleep" / "other.json").write_text("new")
 
     calls = []
 
